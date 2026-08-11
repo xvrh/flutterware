@@ -9,6 +9,7 @@ import '../utils/daemon/events.dart';
 import '../utils/daemon/protocol.dart';
 import '../utils/flutter_sdk.dart';
 import '../utils/run_dir.dart';
+import 'guest_entrypoint.dart';
 import 'handle.dart';
 
 final _logger = Logger('run_launch');
@@ -84,6 +85,16 @@ Future<RunHandle> launchApp({
     // must not stop a launch. It only means the window above is open again.
     _logger.warning('Could not clear $logPath before launching: $e');
   }
+  // The guest wrapper is what makes the app driveable; without it the run is
+  // inspect-only over the bare VM service. The handle keeps the *user's*
+  // entrypoint either way — the wrapper is a launch detail, not an identity.
+  var guestTarget = writeGuestEntrypoint(
+    packageRoot: packageRoot,
+    entrypoint: entrypoint,
+  );
+  if (!guestTarget.guest) {
+    _logger.info('Launching without the run guest: ${guestTarget.reason}');
+  }
   var command = [
     sdk.flutter,
     'run',
@@ -91,7 +102,7 @@ Future<RunHandle> launchApp({
     '--device-id',
     device,
     '--target',
-    entrypoint,
+    guestTarget.target,
     // Before the defines, because a flavor decides which variant is built and
     // the defines only decide what goes into it.
     if (flavor != null) ...['--flavor', flavor],

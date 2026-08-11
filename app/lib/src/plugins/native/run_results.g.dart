@@ -187,3 +187,30 @@ Map<String, dynamic> _$RunInspectResultToJson(RunInspectResult instance) =>
       'log': ?instance.log,
       'note': ?instance.note,
     };
+
+Map<String, dynamic> _$RunActResultToJson(RunActResult instance) =>
+    <String, dynamic>{
+      'device': instance.device,
+      'entrypoint': instance.entrypoint,
+      'worktree': ?instance.worktree,
+      'verb': instance.verb,
+      'target': ?instance.target,
+      'ok': instance.ok,
+      'error': ?instance.error,
+      'failure': ?instance.failure,
+      'attempts': ?instance.attempts,
+      'elapsedMs': ?instance.elapsedMs,
+      'settled': ?instance.settled,
+      'settleMs': ?instance.settleMs,
+      'frames': ?instance.frames,
+      'framesEnabled': ?instance.framesEnabled,
+      'lifecycle': ?instance.lifecycle,
+      'texts': ?instance.texts,
+      'tree': ?instance.tree,
+      'nodes': ?instance.nodes,
+      'screenshot': ?instance.screenshot,
+      'logs': ?instance.logs?.map((e) => e.toJson()).toList(),
+      'errors': ?instance.errors?.map((e) => e.toJson()).toList(),
+      'journal': ?instance.journal,
+      'note': ?instance.note,
+    };

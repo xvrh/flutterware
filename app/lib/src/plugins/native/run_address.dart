@@ -42,6 +42,10 @@ enum RunViewKind {
   /// The picture and the widget tree, side by side.
   screen,
 
+  /// The run's journal — every tool step, with its screenshot. Readable even
+  /// while the app is building or after it died: the journal is a file.
+  steps,
+
   logs;
 
   static RunViewKind? byName(String name) {

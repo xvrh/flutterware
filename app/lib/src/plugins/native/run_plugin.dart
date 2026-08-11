@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -13,6 +15,7 @@ import '../../run/entrypoints.dart';
 import '../../run/flavors.dart';
 import '../../run/handle.dart';
 import '../../run/inventory.dart';
+import '../../run/journal.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
 import '../../inspect/elements_view.dart';
@@ -299,22 +302,23 @@ class _RunViewState extends State<_RunView> {
         ),
         const Divider(height: 1),
         Expanded(
-          child: !state.canInspect
-              ? _NotYet(state: state, handle: handle)
-              : switch (view) {
-                  RunViewKind.screen => _ScreenTab(
-                    key: _screen,
-                    core: core,
-                    handle: handle,
-                    onReadingChanged: () {
-                      setState(() {});
-                      widget.onReading(
-                        _screen.currentState?.isReading ?? false,
-                      );
-                    },
-                  ),
-                  RunViewKind.logs => _LogsTab(core: core, handle: handle),
-                },
+          child: switch (view) {
+            // The journal is a file: it answers while the app builds and
+            // after it dies, which is exactly when a post-mortem review
+            // wants it.
+            RunViewKind.steps => _StepsTab(handle: handle),
+            _ when !state.canInspect => _NotYet(state: state, handle: handle),
+            RunViewKind.screen => _ScreenTab(
+              key: _screen,
+              core: core,
+              handle: handle,
+              onReadingChanged: () {
+                setState(() {});
+                widget.onReading(_screen.currentState?.isReading ?? false);
+              },
+            ),
+            RunViewKind.logs => _LogsTab(core: core, handle: handle),
+          },
         ),
       ],
     );
@@ -572,11 +576,14 @@ class _ViewTabs extends StatelessWidget {
     return InspectTabStrip(
       tabs: const [
         InspectDockTab(id: 'screen', label: 'Screen', body: _unused),
+        InspectDockTab(id: 'steps', label: 'Steps', body: _unused),
         InspectDockTab(id: 'logs', label: 'Logs', body: _unused),
       ],
       current: view.name,
       onSelect: (id) {
-        if (!enabled) return;
+        // Steps is a file, like the log — readable before the app answers
+        // and after it dies — so it never waits for the app.
+        if (!enabled && id != 'steps') return;
         AddressScope.write(context).setSegments(
           runSegments(runKey, view: RunViewKind.byName(id) ?? view),
         );
@@ -1007,6 +1014,338 @@ class _LogRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The run's journal, reviewable: what the tools did to this app, step by
+/// step, each with its screenshot.
+///
+/// The human half of co-driving. An agent taps, types, reloads and observes
+/// from CLI or MCP; its steps land here with their pictures, so "then I look
+/// and confirm" is a scroll rather than an act of faith. A file like the log,
+/// polled like the log, and readable while the app builds and after it dies.
+class _StepsTab extends StatefulWidget {
+  const _StepsTab({required this.handle});
+
+  final RunHandle handle;
+
+  @override
+  State<_StepsTab> createState() => _StepsTabState();
+}
+
+class _StepsTabState extends State<_StepsTab> {
+  var _entries = const <JournalEntry>[];
+
+  /// Which step is open. Null follows the newest as more arrive — the state
+  /// the tab opens in, and returns to when you select the last row.
+  int? _selected;
+
+  Timer? _poll;
+
+  @override
+  void initState() {
+    super.initState();
+    _reread();
+    _poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _reread());
+  }
+
+  @override
+  void didUpdateWidget(_StepsTab old) {
+    super.didUpdateWidget(old);
+    if (old.handle.key != widget.handle.key) {
+      _selected = null;
+      _reread();
+    }
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  /// Not in `build`, for the same reason the log tab says: the journal is a
+  /// file, and the panel rebuilds far more often than the file changes.
+  void _reread() {
+    if (!mounted) return;
+    var entries = readJournal(widget.handle, tail: 500);
+    setState(() => _entries = entries);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var entries = _entries;
+    if (entries.isEmpty) {
+      return const _Hint(
+        'Nothing has driven this run yet. Steps land here when an agent — '
+        'or fw — taps, types, reloads or observes.',
+      );
+    }
+    var selected = (_selected ?? entries.length - 1).clamp(
+      0,
+      entries.length - 1,
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: 300,
+          // `reverse` pins the newest step, which is the one anybody opening
+          // the journal came to see — the log tab's argument, unchanged.
+          child: ListView.builder(
+            reverse: true,
+            padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
+            itemCount: entries.length,
+            itemBuilder: (context, i) {
+              var index = entries.length - 1 - i;
+              return _StepRow(
+                entry: entries[index],
+                ordinal: index + 1,
+                selected: index == selected,
+                onTap: () => setState(
+                  () => _selected = index == entries.length - 1 ? null : index,
+                ),
+              );
+            },
+          ),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(child: _StepDetail(entry: entries[selected])),
+      ],
+    );
+  }
+}
+
+class _StepRow extends StatelessWidget {
+  const _StepRow({
+    required this.entry,
+    required this.ordinal,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final JournalEntry entry;
+  final int ordinal;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var caption = [
+      ?entry.actor,
+      _clock(entry.at),
+      if ((entry.attempts ?? 1) > 1) '${entry.attempts} tries',
+      if (entry.settled == false) 'did not settle',
+    ].join(' · ');
+    return Tappable.builder(
+      onTap: onTap,
+      builder: (context, hovered) => Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.md,
+          vertical: FwSpacing.xs,
+        ),
+        color: selected
+            ? colors.accentSoft
+            : hovered
+            ? colors.hoverOverlay
+            : null,
+        child: Row(
+          children: [
+            _thumbnail(context),
+            const Gap(FwSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$ordinal · ${stepSentence(entry)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.type.bodySmall.copyWith(
+                      color: entry.error != null ? colors.red : colors.ink,
+                    ),
+                  ),
+                  Text(
+                    caption,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.type.micro.copyWith(color: colors.mut3),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _thumbnail(BuildContext context) {
+    var path = entry.screenshot;
+    if (path != null && File(path).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: Image.file(
+          File(path),
+          width: 44,
+          height: 32,
+          fit: BoxFit.cover,
+          cacheWidth: 88,
+          gaplessPlayback: true,
+        ),
+      );
+    }
+    return SizedBox(
+      width: 44,
+      height: 32,
+      child: Icon(_verbIcon(entry.verb), size: 18, color: context.colors.mut2),
+    );
+  }
+}
+
+/// The step's face: the screenshot big, the facts above it, the refusal in
+/// red when there was one, and the text projection when there is no picture.
+class _StepDetail extends StatefulWidget {
+  const _StepDetail({required this.entry});
+
+  final JournalEntry entry;
+
+  @override
+  State<_StepDetail> createState() => _StepDetailState();
+}
+
+class _StepDetailState extends State<_StepDetail> {
+  List<String>? _texts;
+  String? _textsPath;
+
+  /// Reads the step's texts artifact once per step — the step-page's rule:
+  /// the file is already on disk and small, so a synchronous read from the
+  /// lifecycle, never a spinner.
+  void _loadTexts() {
+    var path = widget.entry.texts;
+    if (path == _textsPath) return;
+    _textsPath = path;
+    _texts = null;
+    if (path == null) return;
+    try {
+      _texts = (jsonDecode(File(path).readAsStringSync()) as List)
+          .cast<String>();
+    } on Object {
+      _texts = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _loadTexts();
+    var entry = widget.entry;
+    var colors = context.colors;
+    var facts = [
+      if (entry.actor case var actor?) 'by $actor',
+      if ((entry.attempts ?? 1) > 1) '${entry.attempts} tries',
+      if (entry.settleMs case var ms?) 'settled in ${ms}ms',
+      if (entry.settled == false) 'still animating when observed',
+      if (entry.lifecycle case var lifecycle? when lifecycle != 'resumed')
+        lifecycle,
+      if (entry.logLines case var lines? when lines > 0)
+        '$lines log line${lines == 1 ? '' : 's'}',
+      if (entry.errorCount case var count? when count > 0)
+        '$count error${count == 1 ? '' : 's'}',
+    ];
+    var screenshot = entry.screenshot;
+    var hasShot = screenshot != null && File(screenshot).existsSync();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            FwSpacing.lg,
+            FwSpacing.md,
+            FwSpacing.lg,
+            0,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(stepSentence(entry), style: context.type.body),
+              if (facts.isNotEmpty) ...[
+                const Gap(FwSpacing.xxs),
+                Text(
+                  facts.join(' · '),
+                  style: context.type.caption.copyWith(color: colors.mut2),
+                ),
+              ],
+              if (entry.error case var error?) ...[
+                const Gap(FwSpacing.sm),
+                SelectableText(
+                  error,
+                  style: context.type.bodySmall.copyWith(color: colors.red),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const Gap(FwSpacing.md),
+        Expanded(
+          child: hasShot
+              ? Container(
+                  color: colors.bg,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.all(FwSpacing.md),
+                  child: Image.file(
+                    File(screenshot),
+                    fit: BoxFit.contain,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.medium,
+                  ),
+                )
+              : _texts == null
+              ? const _Hint('This step kept no picture.')
+              : ListView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FwSpacing.lg,
+                    vertical: FwSpacing.sm,
+                  ),
+                  children: [
+                    for (var text in _texts!)
+                      if (text.isNotEmpty)
+                        SelectableText(text, style: _mono(context)),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// `tap "Pay"` — the one spelling the errors, the journal and the strip
+/// share.
+String stepSentence(JournalEntry entry) =>
+    entry.target == null ? entry.verb : '${entry.verb} ${entry.target}';
+
+IconData _verbIcon(String verb) => switch (verb) {
+  'tap' || 'longPress' => Icons.touch_app_outlined,
+  'drag' => Icons.swipe_outlined,
+  'scrollTo' => Icons.swap_vert,
+  'enterText' => Icons.keyboard_outlined,
+  'back' => Icons.arrow_back,
+  'wait' => Icons.hourglass_empty,
+  'observe' => Icons.visibility_outlined,
+  'navigate' => Icons.route_outlined,
+  'reload' => Icons.bolt_outlined,
+  'restart' => Icons.restart_alt,
+  'stop' => Icons.stop_outlined,
+  'launch' => Icons.play_arrow_outlined,
+  _ => Icons.circle_outlined,
+};
+
+/// `14:03:59` from an ISO timestamp, local time — enough to line steps up
+/// against the log.
+String _clock(String iso) {
+  var time = DateTime.tryParse(iso)?.toLocal();
+  if (time == null) return '';
+  String pad(int n) => n.toString().padLeft(2, '0');
+  return '${pad(time.hour)}:${pad(time.minute)}:${pad(time.second)}';
 }
 
 /// Pick an entry point, pick a device it can run on, fill its defines, start.

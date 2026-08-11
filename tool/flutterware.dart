@@ -121,6 +121,23 @@ void main() => Flutterware.configure((fw) {
   fw.use(
     Run(
       packages: [
+        // The GUI itself, on the worktree shell. Launching it through Run is
+        // what makes it *driveable* — the launch wraps the entry point in the
+        // run guest — and driving the GUI with its own drive verbs is this
+        // repo's dogfood loop.
+        .new(
+          app,
+          entrypoints: [
+            Entrypoint(
+              'lib/main_dev.dart',
+              name: 'Studio (dev)',
+              description:
+                  'The flutterware GUI on the worktree shell — the '
+                  'edit-reload-drive inner loop for GUI work',
+              platforms: [RunPlatform.desktop],
+            ),
+          ],
+        ),
         .new(
           example,
           entrypoints: [

@@ -2311,6 +2311,149 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'RunActResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunActResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{'name': 'worktree', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'verb', 'type': 'String'},
+      <String, Object?>{
+        'name': 'target',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The target as the guest described it — the same spelling the refusal and the journal use.',
+      },
+      <String, Object?>{
+        'name': 'ok',
+        'type': 'bool',
+        'doc': 'The verb landed.',
+      },
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The refusal, written to say what to do next.',
+      },
+      <String, Object?>{
+        'name': 'failure',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Which way it was refused: `notFound`, `multiple`, `covered`, `offscreen`.',
+      },
+      <String, Object?>{
+        'name': 'attempts',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'Resolve attempts the actionability retry ladder spent; 1 when the first try reached the target.',
+      },
+      <String, Object?>{
+        'name': 'elapsedMs',
+        'type': 'int',
+        'optional': true,
+        'doc': 'The whole transaction: retries + act + settle.',
+      },
+      <String, Object?>{
+        'name': 'settled',
+        'type': 'bool',
+        'optional': true,
+        'doc':
+            'False means the settle budget ran out with the app still animating — a spinner, an infinite animation.',
+      },
+      <String, Object?>{'name': 'settleMs', 'type': 'int', 'optional': true},
+      <String, Object?>{'name': 'frames', 'type': 'int', 'optional': true},
+      <String, Object?>{
+        'name': 'framesEnabled',
+        'type': 'bool',
+        'optional': true,
+        'doc':
+            'False when the platform has the window hidden or occluded: every frame was forced, and what a human sees on screen may lag what these fields describe.',
+      },
+      <String, Object?>{
+        'name': 'lifecycle',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'texts',
+        'type': 'List<String>',
+        'optional': true,
+        'doc':
+            'Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.',
+      },
+      <String, Object?>{
+        'name': 'tree',
+        'type': 'Map<String, Object?>',
+        'optional': true,
+        'doc': 'The widget tree, when asked for.',
+      },
+      <String, Object?>{'name': 'nodes', 'type': 'int', 'optional': true},
+      <String, Object?>{
+        'name': 'screenshot',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Where the step\'s PNG was written — under the run\'s journal directory, one file per step.',
+      },
+      <String, Object?>{
+        'name': 'logs',
+        'type': 'List<RunLogEntry>',
+        'optional': true,
+        'doc':
+            'What the app printed during this step — since the previous act call, not since launch.',
+        'shape': <String, Object?>{
+          'type': 'RunLogEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'source',
+              'type': 'String',
+              'doc':
+                  '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+            },
+            <String, Object?>{'name': 'text', 'type': 'String'},
+            <String, Object?>{
+              'name': 'error',
+              'type': 'bool',
+              'doc': 'The launcher marked it as an error.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'errors',
+        'type': 'List<RunLogEntry>',
+        'optional': true,
+        'doc': 'Framework errors this step produced or repeated.',
+        'shape': <String, Object?>{
+          'type': 'RunLogEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'source',
+              'type': 'String',
+              'doc':
+                  '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+            },
+            <String, Object?>{'name': 'text', 'type': 'String'},
+            <String, Object?>{
+              'name': 'error',
+              'type': 'bool',
+              'doc': 'The launcher marked it as an error.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'journal',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The run\'s journal file this step was appended to.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
   'RunAppEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'RunAppEntry',
     'fields': <Object?>[

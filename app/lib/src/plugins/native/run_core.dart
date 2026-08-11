@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -7,15 +8,18 @@ import 'package:flutterware/plugins.dart';
 import 'package:flutterware/src/inspect/node.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
+import 'package:vm_service/vm_service.dart' show RPCError;
 
 import '../../run/connection.dart';
 import '../../run/define_scripts.dart';
 import '../../run/defines.dart';
+import '../../run/drive_session.dart';
 import '../../run/entrypoints.dart';
 import '../../run/flavors.dart';
 import '../../run/handle.dart';
 import '../../run/inspect.dart';
 import '../../run/inventory.dart';
+import '../../run/journal.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
 import '../../utils/daemon/device.dart';
@@ -817,6 +821,145 @@ class RunCore extends PluginCore {
           ],
         ),
         PluginAction(
+          'act',
+          'Act',
+          returns: RunActResult,
+          description:
+              'One drive transaction against a running app: resolve the '
+              'target, check the pointer can reach it (retrying through '
+              'route transitions until a deadline), perform the verb, settle, '
+              'and observe — texts, a screenshot, what was printed — all in '
+              'one reply describing one moment. Needs the app to have been '
+              'launched by flutterware (the launch wraps it in the drive '
+              'guest); anything else is inspect-only. A refusal still '
+              'observes: the error comes back with the screen it happened '
+              "on. Every step is appended to the run's journal.",
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'verb',
+              'Verb',
+              kind: ActionParameterKind.choice,
+              description: 'What to do',
+              options: [
+                ActionOption('tap'),
+                ActionOption('longPress'),
+                ActionOption('drag'),
+                ActionOption('scrollTo'),
+                ActionOption('enterText'),
+                ActionOption('back'),
+                ActionOption('wait'),
+                ActionOption('observe'),
+                ActionOption('navigate'),
+              ],
+            ),
+            const ActionParameter(
+              'target',
+              'Target',
+              required: false,
+              description:
+                  'What to act on. Bare text matches a visible string; JSON '
+                  'names the rest: {"key": …}, {"label": …}, {"tooltip": …}, '
+                  '{"containing": …}, {"within": {"scope": …, "child": …}}, '
+                  '{"nth": {"target": …, "index": …}}. Resolved inside the '
+                  'app at act time, and refused loudly on zero or several '
+                  'matches — never a silent wrong-target tap.',
+            ),
+            const ActionParameter(
+              'text',
+              'Text',
+              required: false,
+              description: 'What enterText types, as one editing value',
+            ),
+            const ActionParameter(
+              'dx',
+              'Drag dx',
+              required: false,
+              description: 'Horizontal drag distance, logical pixels',
+            ),
+            const ActionParameter(
+              'dy',
+              'Drag dy',
+              required: false,
+              description:
+                  'Vertical drag distance. Negative moves the finger up the '
+                  'screen, the touch convention.',
+            ),
+            const ActionParameter(
+              'within',
+              'Scroll within',
+              required: false,
+              description:
+                  'For scrollTo: which scrollable to walk, as a target. The '
+                  'first one on screen when omitted.',
+            ),
+            const ActionParameter(
+              'route',
+              'Route',
+              required: false,
+              description:
+                  "For navigate: the route the app's registered navigation "
+                  'handler understands',
+            ),
+            const ActionParameter(
+              'waitMs',
+              'Wait',
+              kind: ActionParameterKind.integer,
+              required: false,
+              description: 'For wait: real milliseconds to let the app run',
+            ),
+            ..._observationParameters,
+            const ActionParameter(
+              'actor',
+              'Actor',
+              required: false,
+              defaultValue: 'agent',
+              description: 'Who this step is journaled as',
+            ),
+          ],
+        ),
+        PluginAction(
+          'observe',
+          'Observe',
+          returns: RunActResult,
+          description:
+              'The act-less transaction: settle the running app and look — '
+              'texts, a screenshot, what it printed since the last step. The '
+              'opening move of a drive loop, and the call to make after a '
+              'hot reload. Same reply shape and same journal as act.',
+          parameters: [
+            ..._appSelector,
+            ..._observationParameters,
+            const ActionParameter(
+              'actor',
+              'Actor',
+              required: false,
+              defaultValue: 'agent',
+              description: 'Who this step is journaled as',
+            ),
+          ],
+        ),
+        PluginAction(
+          'navigate',
+          'Navigate',
+          returns: RunActResult,
+          description:
+              'Jumps the running app straight to a screen, through the '
+              'navigation handler the app registered (router_outlet does, '
+              'and any router can in one line: GuestDrive.navigator = …). '
+              'Refuses plainly when the app declares none — it never falls '
+              'back to hunting the UI with taps.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'route',
+              'Route',
+              description: "The route, as the app's handler understands it",
+            ),
+            ..._observationParameters,
+          ],
+        ),
+        PluginAction(
           'emulators',
           'Emulators',
           returns: RunEmulatorsResult,
@@ -1039,6 +1182,52 @@ class RunCore extends PluginCore {
     ),
   ];
 
+  /// What every drive transaction lets you tune about its observation.
+  static const _observationParameters = [
+    ActionParameter(
+      'settleMs',
+      'Settle budget',
+      kind: ActionParameterKind.integer,
+      required: false,
+      defaultValue: '800',
+      description:
+          'Milliseconds to wait for the app to stop animating before '
+          'observing. Running out is reported (settled: false), never an '
+          'error — a spinner would otherwise hang every step.',
+    ),
+    ActionParameter(
+      'screenshot',
+      'Screenshot',
+      kind: ActionParameterKind.boolean,
+      required: false,
+      defaultValue: 'true',
+      description:
+          "Write the step's PNG under the run's journal directory and "
+          'return its path. On by default — the picture is what makes the '
+          'loop self-verifying.',
+    ),
+    ActionParameter(
+      'tree',
+      'Widget tree',
+      kind: ActionParameterKind.boolean,
+      required: false,
+      defaultValue: 'false',
+      description:
+          'Include the widget tree in the reply. Off by default because a '
+          'real app is thousands of tokens of tree; the texts ride along '
+          'either way.',
+    ),
+    ActionParameter(
+      'maxSide',
+      'Screenshot cap',
+      kind: ActionParameterKind.integer,
+      required: false,
+      description:
+          "Cap the screenshot's longest side, in pixels — the render is "
+          'scaled, not re-encoded. Full resolution when omitted.',
+    ),
+  ];
+
   @override
   Future<Object?> invoke(
     String actionId, {
@@ -1054,6 +1243,9 @@ class RunCore extends PluginCore {
       'stop' => _controlAction('stop', arguments),
       'inspect' => _inspectAction(arguments),
       'screenshot' => _screenshotAction(arguments),
+      'act' => _actAction(arguments),
+      'observe' => _actAction({...arguments, 'verb': 'observe'}),
+      'navigate' => _actAction({...arguments, 'verb': 'navigate'}),
       'emulators' => _emulatorsAction(),
       'bootEmulator' => _bootEmulatorAction(arguments),
       _ => super.invoke(actionId, arguments: arguments),
@@ -1541,6 +1733,17 @@ class RunCore extends PluginCore {
     var started = DateTime.now();
     try {
       await control(action, handle);
+      // Reloads and restarts are steps in the run's story too: the strip
+      // that shows what the agent tapped should show what it reloaded
+      // between the taps.
+      appendJournal(
+        handle,
+        JournalEntry(
+          at: started.toUtc().toIso8601String(),
+          verb: action,
+          elapsedMs: DateTime.now().difference(started).inMilliseconds,
+        ),
+      );
       return RunControlResult(
         action: action,
         device: handle.device,
@@ -1592,6 +1795,7 @@ class RunCore extends PluginCore {
           // The app first, then its launcher. The other order leaves an
           // orphaned app running on the phone with nothing able to reload it,
           // which is the worst of both.
+          unawaited(_driveSessions.remove(_driveKey(handle))?.close());
           await connection?.exitApp();
           if (isProcessAlive(handle.launcherPid)) {
             Process.killPid(handle.launcherPid, ProcessSignal.sigterm);
@@ -1922,6 +2126,229 @@ class RunCore extends PluginCore {
   static RunLogEntry _logEntry(RunLogLine line) =>
       RunLogEntry(source: line.source.name, text: line.text, error: line.error);
 
+  /// Held drive connections, one per run — the loop's fast path. A session
+  /// drops its connection on any error and reconnects on the next call;
+  /// closed here on stop and on dispose.
+  final _driveSessions = <String, DriveSession>{};
+
+  String _driveKey(RunHandle handle) =>
+      handle.handlePath ?? handle.vmService ?? handle.entrypoint;
+
+  DriveSession _driveSessionFor(RunHandle handle) =>
+      _driveSessions[_driveKey(handle)] ??= DriveSession(handle);
+
+  /// Stands in for the guest wire so the act path can be pumped in a test —
+  /// the same seam [debugRead] is for inspect.
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function(RunHandle, Map<String, String>)?
+  debugAct;
+
+  /// `act`, `observe` and `navigate` — one funnel, because the last two are
+  /// the first with the verb fixed.
+  Future<RunActResult> _actAction(Map<String, Object?> arguments) async {
+    var handle = await _selectRunningApp(arguments);
+    var verb = arguments['verb'] as String? ?? 'observe';
+    var actor = arguments['actor'] as String? ?? 'agent';
+    var wantsTree = _boolArgument(arguments['tree']);
+    var wantsShot = arguments['screenshot'] == null
+        ? true
+        : _boolArgument(arguments['screenshot']);
+    // The tree is requested from the guest regardless of [wantsTree]: it is
+    // persisted as a journal artifact either way — a reviewer of the step
+    // strip gets the same three legs a scenario step has — and only *returned*
+    // inline when asked, because a real app is thousands of tokens of tree.
+    var wire = <String, String>{
+      'verb': verb,
+      if (!wantsShot) 'screenshot': 'false',
+      for (var key in const [
+        'target',
+        'text',
+        'dx',
+        'dy',
+        'within',
+        'step',
+        'maxScrolls',
+        'route',
+        'waitMs',
+        'settleMs',
+        'actTimeoutMs',
+        'maxSide',
+      ])
+        if (arguments[key] case var value?) key: '$value',
+    };
+    var started = DateTime.now();
+
+    Map<String, dynamic> reply;
+    try {
+      reply =
+          await (debugAct?.call(handle, wire) ??
+              _driveSessionFor(handle).act(wire));
+    } on Object catch (e) {
+      // -32601: the extension does not exist — the app runs without the
+      // guest, which is a fact about how it was launched, not a fault.
+      var error = e is RPCError && e.code == -32601
+          ? 'This app is running without the drive guest, so it can be '
+                'inspected but not driven. Launch it through flutterware '
+                '(the GUI, `fw run launch`, or MCP) to get a driveable run.'
+          : '$e';
+      appendJournal(
+        handle,
+        JournalEntry(
+          at: started.toUtc().toIso8601String(),
+          verb: verb,
+          actor: actor,
+          target: arguments['target'] as String?,
+          error: error,
+        ),
+      );
+      return RunActResult(
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        worktree: handle.worktreeName,
+        verb: verb,
+        ok: false,
+        error: error,
+        journal: journalPathFor(handle),
+      );
+    }
+
+    var step = (reply['step'] as Map?)?.cast<String, Object?>();
+    var settle = (step?['settle'] as Map?)?.cast<String, Object?>();
+    var error = reply['error'] as String?;
+    var treeJson = (reply['tree'] as Map?)?.cast<String, Object?>();
+    var texts = (reply['texts'] as List?)?.cast<String>();
+    var logs = (reply['logs'] as List?)?.cast<Map>();
+    var guestErrors = (reply['errors'] as List?)?.cast<Map>();
+    var framesEnabled = settle?['framesEnabled'] as bool?;
+
+    String? shotPath;
+    String? treePath;
+    String? textsPath;
+    if (journalArtifactsDirFor(handle) case var dir?) {
+      var stem = p.join(dir, '${started.millisecondsSinceEpoch}-$pid');
+      File? write(String path, List<int> bytes) {
+        var file = File(path);
+        file.parent.createSync(recursive: true);
+        file.writeAsBytesSync(bytes);
+        return file;
+      }
+
+      if ((reply['screenshot'] as Map?)?['base64'] case String data) {
+        shotPath = write('$stem.png', base64Decode(data))?.absolute.path;
+      }
+      if (treeJson != null) {
+        treePath = write(
+          '$stem.tree.json',
+          utf8.encode(jsonEncode(treeJson)),
+        )?.absolute.path;
+      }
+      if (texts != null) {
+        textsPath = write(
+          '$stem.texts.json',
+          utf8.encode(jsonEncode(texts)),
+        )?.absolute.path;
+      }
+    }
+
+    appendJournal(
+      handle,
+      JournalEntry(
+        at: started.toUtc().toIso8601String(),
+        verb: (step?['verb'] as String?) ?? verb,
+        actor: actor,
+        target:
+            step?['target'] as String? ??
+            arguments['target'] as String? ??
+            arguments['route'] as String?,
+        error: error,
+        failure: reply['failure'] as String?,
+        attempts: step?['attempts'] as int?,
+        elapsedMs: step?['elapsedMs'] as int?,
+        settled: settle?['settled'] as bool?,
+        settleMs: settle?['elapsedMs'] as int?,
+        lifecycle: reply['lifecycle'] as String?,
+        screenshot: shotPath,
+        tree: treePath,
+        texts: textsPath,
+        logLines: logs?.length,
+        errorCount: guestErrors?.length,
+      ),
+    );
+
+    return RunActResult(
+      device: handle.device,
+      entrypoint: handle.entrypoint,
+      worktree: handle.worktreeName,
+      verb: (step?['verb'] as String?) ?? verb,
+      target: step?['target'] as String? ?? arguments['target'] as String?,
+      screenshotArtifact: shotPath == null
+          ? null
+          : Artifact(
+              kind: Artifact.png,
+              address: Address(
+                worktree: host.worktree.name,
+                plugin: runPluginId,
+                segments: [handle.key, 'steps'],
+              ),
+              path: shotPath,
+              meta: {
+                'verb': (step?['verb'] as String?) ?? verb,
+                if (step?['target'] case String target) 'target': target,
+                if (settle?['settled'] == false) 'settled': false,
+              },
+            ),
+      ok: error == null,
+      error: error,
+      failure: reply['failure'] as String?,
+      attempts: step?['attempts'] as int?,
+      elapsedMs: step?['elapsedMs'] as int?,
+      settled: settle?['settled'] as bool?,
+      settleMs: settle?['elapsedMs'] as int?,
+      frames: settle?['frames'] as int?,
+      framesEnabled: framesEnabled,
+      lifecycle: reply['lifecycle'] as String?,
+      texts: texts,
+      tree: wantsTree ? treeJson : null,
+      nodes: treeJson == null ? null : _countNodes(treeJson['root']),
+      screenshot: shotPath,
+      logs: logs == null
+          ? null
+          : [
+              for (var line in logs)
+                RunLogEntry(source: 'app', text: line['text'] as String? ?? ''),
+            ],
+      errors: guestErrors == null
+          ? null
+          : [
+              for (var guestError in guestErrors)
+                RunLogEntry(
+                  source: 'app',
+                  text: [
+                    guestError['exception'] as String? ?? '',
+                    if (guestError['context'] case String context) '($context)',
+                    if (guestError['count'] case int count when count > 1)
+                      '×$count',
+                  ].join(' '),
+                  error: true,
+                ),
+            ],
+      journal: journalPathFor(handle),
+      note: framesEnabled == false
+          ? 'The window is hidden or occluded; every frame this step saw was '
+                'forced. What a human sees on screen may lag this reply.'
+          : null,
+    );
+  }
+
+  static int? _countNodes(Object? node) {
+    if (node is! Map) return null;
+    var count = 1;
+    for (var child in (node['children'] as List?) ?? const []) {
+      count += _countNodes(child) ?? 0;
+    }
+    return count;
+  }
+
   static String? _inspectNote({required bool up, required bool wanted}) {
     if (up) return null;
     return wanted
@@ -1940,10 +2367,12 @@ class RunCore extends PluginCore {
             handle,
     ];
     if (matches.isEmpty) {
+      // The next move rides in the refusal: this is an agent's first contact
+      // with a cold machine, and "what now" should not cost a discovery call.
       throw StateError(
-        device == null
-            ? 'Nothing is running.'
-            : 'Nothing is running on "$device".',
+        '${device == null ? 'Nothing is running.' : 'Nothing is running on "$device".'} '
+        '`launch` starts an app; `status` lists devices and declared entry '
+        'points.',
       );
     }
     if (matches.length > 1) {
@@ -2075,6 +2504,10 @@ class RunCore extends PluginCore {
 
   @override
   void dispose() {
+    for (var session in _driveSessions.values) {
+      unawaited(session.close());
+    }
+    _driveSessions.clear();
     _probeTimer?.cancel();
     unawaited(_daemonChanges?.cancel());
     // Give the lease back rather than stopping the daemon: another open

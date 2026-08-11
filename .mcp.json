@@ -1,9 +1,11 @@
 {
   "mcpServers": {
     "flutterware": {
-      "command": "fw",
+      "command": "fvm",
       "args": [
-        "mcp"
+        "dart",
+        "run",
+        "flutterware_app:mcp"
       ]
     }
   }

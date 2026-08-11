@@ -85,6 +85,25 @@ Run one plugin action. Argument keys are the parameter ids reported by flutterwa
 | `action` | yes | Action id. |
 | `arguments` | no | Action arguments, keyed by parameter id. |
 
+### `flutterware_act`
+
+One transaction against the running app — the loop tool for live work: edit code, hot-reload (flutterware_invoke run.reload), then act or observe here. Every reply is one settled moment of the app: screenshot, visible texts, what it printed since the last step — nothing to correlate. Targets resolve inside the app at act time, retry through route transitions, and are refused loudly with the screen they were refused on; a silent wrong-target tap cannot happen. `settled: false` means the budget ran out with the app still animating — normal for a spinner, act anyway. Needs an app launched by flutterware (run.launch); every step lands in the run's journal, reviewable in the GUI's Steps tab. For flows expressible headlessly, scenarios are milliseconds and deterministic — reach for this tool when it must be the real thing: real backend, real data, real device, or the flutterware GUI itself.
+
+| argument | required | |
+|---|---|---|
+| `verb` | yes | tap \| longPress \| drag \| scrollTo \| enterText \| back \| wait \| observe \| navigate. observe is the act-less transaction — the opening move, and the call after a reload. |
+| `target` | no | Bare text matches a visible string. JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. |
+| `text` | no | What enterText types, as one editing value. |
+| `route` | no | For navigate — needs the app to have registered a navigation handler. |
+| `dx` | no | Drag distance, logical px. |
+| `dy` | no | Drag distance; negative moves the finger up. |
+| `waitMs` | no | For wait: real milliseconds. |
+| `settleMs` | no | Settle budget, default 800. Running out is reported, never an error. |
+| `tree` | no | Include the widget tree inline. Off by default — thousands of tokens on a real app; the texts ride along either way. |
+| `maxSide` | no | Cap the screenshot's longest side in pixels. Default 1200 here. |
+| `device` | no | Which device, when more than one app is running. |
+| `entrypoint` | no | Which entry point, when a device runs more than one. |
+
 ## Plugins
 
 ### `flutterware.assets`
@@ -514,6 +533,170 @@ note: String?
 | `source` | choice | no | — | Whose lines: the app's own output, or `flutter run` talking about the build. Both when omitted. |
 | `lines` | integer | no | 200 | How many of the most recent lines to return |
 | `errors` | boolean | no | true | Report the lines the launcher marked as errors — never guessed from the text. On by default, and with no other flag it is the whole answer. |
+
+#### `act` — Act
+
+One drive transaction against a running app: resolve the target, check the pointer can reach it (retrying through route transitions until a deadline), perform the verb, settle, and observe — texts, a screenshot, what was printed — all in one reply describing one moment. Needs the app to have been launched by flutterware (the launch wraps it in the drive guest); anything else is inspect-only. A refusal still observes: the error comes back with the screen it happened on. Every step is appended to the run's journal.
+
+```sh
+fw run run act [--device=…] [--entrypoint=…] --verb=<choice> [--target=…] [--text=…] [--dx=…] [--dy=…] [--within=…] [--route=…] [--waitMs=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
+```
+
+Returns `RunActResult`:
+
+```
+device: String
+entrypoint: String
+worktree: String?
+verb: String
+target: String?   # The target as the guest described it — the same spelling the refusal and the journal use.
+ok: bool   # The verb landed.
+error: String?   # The refusal, written to say what to do next.
+failure: String?   # Which way it was refused: `notFound`, `multiple`, `covered`, `offscreen`.
+attempts: int?   # Resolve attempts the actionability retry ladder spent; 1 when the first try reached the target.
+elapsedMs: int?   # The whole transaction: retries + act + settle.
+settled: bool?   # False means the settle budget ran out with the app still animating — a spinner, an infinite animation.
+settleMs: int?
+frames: int?
+framesEnabled: bool?   # False when the platform has the window hidden or occluded: every frame was forced, and what a human sees on screen may lag what these fields describe.
+lifecycle: String?
+texts: List<String>?   # Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.
+tree: Map<String, Object?>?   # The widget tree, when asked for.
+nodes: int?
+screenshot: String?   # Where the step's PNG was written — under the run's journal directory, one file per step.
+logs: List<RunLogEntry>?   # What the app printed during this step — since the previous act call, not since launch.
+  source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
+  text: String
+  error: bool   # The launcher marked it as an error.
+errors: List<RunLogEntry>?   # Framework errors this step produced or repeated.
+  source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
+  text: String
+  error: bool   # The launcher marked it as an error.
+journal: String?   # The run's journal file this step was appended to.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `verb` | choice | yes | — | What to do |
+| `target` | string | no | — | What to act on. Bare text matches a visible string; JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. Resolved inside the app at act time, and refused loudly on zero or several matches — never a silent wrong-target tap. |
+| `text` | string | no | — | What enterText types, as one editing value |
+| `dx` | string | no | — | Horizontal drag distance, logical pixels |
+| `dy` | string | no | — | Vertical drag distance. Negative moves the finger up the screen, the touch convention. |
+| `within` | string | no | — | For scrollTo: which scrollable to walk, as a target. The first one on screen when omitted. |
+| `route` | string | no | — | For navigate: the route the app's registered navigation handler understands |
+| `waitMs` | integer | no | — | For wait: real milliseconds to let the app run |
+| `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
+| `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |
+| `tree` | boolean | no | false | Include the widget tree in the reply. Off by default because a real app is thousands of tokens of tree; the texts ride along either way. |
+| `maxSide` | integer | no | — | Cap the screenshot's longest side, in pixels — the render is scaled, not re-encoded. Full resolution when omitted. |
+| `actor` | string | no | agent | Who this step is journaled as |
+
+#### `observe` — Observe
+
+The act-less transaction: settle the running app and look — texts, a screenshot, what it printed since the last step. The opening move of a drive loop, and the call to make after a hot reload. Same reply shape and same journal as act.
+
+```sh
+fw run run observe [--device=…] [--entrypoint=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
+```
+
+Returns `RunActResult`:
+
+```
+device: String
+entrypoint: String
+worktree: String?
+verb: String
+target: String?   # The target as the guest described it — the same spelling the refusal and the journal use.
+ok: bool   # The verb landed.
+error: String?   # The refusal, written to say what to do next.
+failure: String?   # Which way it was refused: `notFound`, `multiple`, `covered`, `offscreen`.
+attempts: int?   # Resolve attempts the actionability retry ladder spent; 1 when the first try reached the target.
+elapsedMs: int?   # The whole transaction: retries + act + settle.
+settled: bool?   # False means the settle budget ran out with the app still animating — a spinner, an infinite animation.
+settleMs: int?
+frames: int?
+framesEnabled: bool?   # False when the platform has the window hidden or occluded: every frame was forced, and what a human sees on screen may lag what these fields describe.
+lifecycle: String?
+texts: List<String>?   # Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.
+tree: Map<String, Object?>?   # The widget tree, when asked for.
+nodes: int?
+screenshot: String?   # Where the step's PNG was written — under the run's journal directory, one file per step.
+logs: List<RunLogEntry>?   # What the app printed during this step — since the previous act call, not since launch.
+  source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
+  text: String
+  error: bool   # The launcher marked it as an error.
+errors: List<RunLogEntry>?   # Framework errors this step produced or repeated.
+  source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
+  text: String
+  error: bool   # The launcher marked it as an error.
+journal: String?   # The run's journal file this step was appended to.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
+| `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |
+| `tree` | boolean | no | false | Include the widget tree in the reply. Off by default because a real app is thousands of tokens of tree; the texts ride along either way. |
+| `maxSide` | integer | no | — | Cap the screenshot's longest side, in pixels — the render is scaled, not re-encoded. Full resolution when omitted. |
+| `actor` | string | no | agent | Who this step is journaled as |
+
+#### `navigate` — Navigate
+
+Jumps the running app straight to a screen, through the navigation handler the app registered (router_outlet does, and any router can in one line: GuestDrive.navigator = …). Refuses plainly when the app declares none — it never falls back to hunting the UI with taps.
+
+```sh
+fw run run navigate [--device=…] [--entrypoint=…] --route=<string> [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…]
+```
+
+Returns `RunActResult`:
+
+```
+device: String
+entrypoint: String
+worktree: String?
+verb: String
+target: String?   # The target as the guest described it — the same spelling the refusal and the journal use.
+ok: bool   # The verb landed.
+error: String?   # The refusal, written to say what to do next.
+failure: String?   # Which way it was refused: `notFound`, `multiple`, `covered`, `offscreen`.
+attempts: int?   # Resolve attempts the actionability retry ladder spent; 1 when the first try reached the target.
+elapsedMs: int?   # The whole transaction: retries + act + settle.
+settled: bool?   # False means the settle budget ran out with the app still animating — a spinner, an infinite animation.
+settleMs: int?
+frames: int?
+framesEnabled: bool?   # False when the platform has the window hidden or occluded: every frame was forced, and what a human sees on screen may lag what these fields describe.
+lifecycle: String?
+texts: List<String>?   # Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.
+tree: Map<String, Object?>?   # The widget tree, when asked for.
+nodes: int?
+screenshot: String?   # Where the step's PNG was written — under the run's journal directory, one file per step.
+logs: List<RunLogEntry>?   # What the app printed during this step — since the previous act call, not since launch.
+  source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
+  text: String
+  error: bool   # The launcher marked it as an error.
+errors: List<RunLogEntry>?   # Framework errors this step produced or repeated.
+  source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
+  text: String
+  error: bool   # The launcher marked it as an error.
+journal: String?   # The run's journal file this step was appended to.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `route` | string | yes | — | The route, as the app's handler understands it |
+| `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
+| `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |
+| `tree` | boolean | no | false | Include the widget tree in the reply. Off by default because a real app is thousands of tokens of tree; the texts ride along either way. |
+| `maxSide` | integer | no | — | Cap the screenshot's longest side, in pixels — the render is scaled, not re-encoded. Full resolution when omitted. |
 
 #### `emulators` — Emulators
 

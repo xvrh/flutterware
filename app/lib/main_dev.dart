@@ -11,6 +11,7 @@ import 'src/app/project_view.dart' show enableDrawingPath;
 import 'src/devbar.dart';
 import 'src/plugins/manifest_loader.dart';
 import 'src/plugins/native/registry.dart';
+import 'src/shell/drive_navigator.dart';
 import 'src/shell/shell_controller.dart';
 import 'src/shell/shell_view.dart';
 import 'src/utils/debug.dart';
@@ -50,6 +51,7 @@ void main() async {
       dartExecutable: p.join(flutterSdk.root, 'bin', 'dart'),
     ),
   );
+  registerDriveNavigator(shell);
 
   runApp(
     AppDevbar(
