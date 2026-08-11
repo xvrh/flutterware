@@ -590,15 +590,17 @@ the wrong one presented as fact.
 ├────────────────────────┬─────────────────────────────────────────────────┤
 │ ⌕ Filter paths         │ ranking.dart  app/lib/src/changes/               │
 │                        │ ▁▊▊▁▂   modified · +309 −0 · uncommitted · 4 hunks│
-│ LOOK HERE FIRST  1 file├─────────────────────────────────────────────────┤
-│ A 0042_stream_log.sql  │ @@ -1,6 +1,9 @@ class Ranking {                  │
-│   matches **/migr…** ·8│  one                                            │
-│                        │ +import 'dart:io';                              │
-│ CHANGES                │ …                                               │
-│ M ranking.dart    +309 │                                                 │
-│   app/lib/src/changes  │                                                 │
-│ M diff_view.dart  +440 │                                                 │
-│ ⌄ 11 low-signal, +55   │                                                 │
+│ Look here first 1 file ├─────────────────────────────────────────────────┤
+│ A 0042_stream_log.sql 8│ @@ -1,6 +1,9 @@ class Ranking {                  │
+│   db/migrations        │  one                                            │
+│   matches **/migr…**   │ +import 'dart:io';                              │
+│ ⌄ 11 low-signal, +55   │ …                                               │
+│ ▾ app              46  │                                                 │
+│   ▾ lib/src/changes 12 │                                                 │
+│     M diff_view.dart   │                                                 │
+│     M ranking.dart     │                                                 │
+│   ▸ test           19  │                                                 │
+│ ▸ docs              2  │                                                 │
 │ UNTRACKED              │                                                 │
 │ ? scratch.txt          │                                                 │
 └────────────────────────┴─────────────────────────────────────────────────┘
@@ -631,9 +633,18 @@ Gone, and why:
   "where is the weight" (the first row of the index says that, with a
   filename), "click to jump" (a third door to what the index is), and dimming
   during a filter (real, and niche). It cost 60 px at the top of every visit.
-- **The directory tree.** With ranking, a tree is a second ordering competing
-  with *look here first*. The filter covers "only show me `app/lib`", and each
-  row carries its directory.
+- ~~**The directory tree.**~~ **Put back the same day**, and the reasoning
+  above was wrong. It is not a competing ordering, it is a different *question*:
+  a flat column of fifty-three basenames answers "what should I look at" and
+  says nothing about the shape of the branch — that 27 of them are under
+  `app/lib`, that `docs` was touched once. The two coexist without a tab:
+  **the pins are a short band at the top**, because an alert you have to
+  navigate to is not an alert, and **the tree below is ordered by weight**
+  rather than alphabetically, so the module an agent hammered still sorts
+  first. Alphabetical is right for a file explorer, where you know the name you
+  want; here you do not, which is the whole reason the screen exists. A file
+  never appears in both, and a file inside the tree does not repeat its
+  directory — its position says it.
 - **The keyboard.** `↑↓ ↵ ←→` were built and removed the same day: they worked
   in every test that pumped the panel alone and did nothing in a window,
   because the shell around it takes the keys first. It will come back tested

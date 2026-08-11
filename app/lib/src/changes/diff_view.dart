@@ -32,6 +32,7 @@ class IndexFileRow extends StatelessWidget {
     required this.uncommitted,
     required this.onTap,
     this.reason,
+    this.showDirectory = true,
     super.key,
   });
 
@@ -41,6 +42,11 @@ class IndexFileRow extends StatelessWidget {
   final bool selected;
   final bool uncommitted;
   final VoidCallback onTap;
+
+  /// False inside the tree, where the row's position already says where the
+  /// file is and repeating the path is the noise the tree exists to remove.
+  /// True in the pinned band, which is flat and has no other way to say it.
+  final bool showDirectory;
 
   /// Why this file was pinned or demoted, in the words the rule was written in.
   final String? reason;
@@ -83,7 +89,7 @@ class IndexFileRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     softWrap: false,
                   ),
-                  if (directory.isNotEmpty)
+                  if (showDirectory && directory.isNotEmpty)
                     Text(
                       directory,
                       style: context.type.micro.copyWith(color: colors.mut2),

@@ -113,10 +113,8 @@ diff --git a/lib/b.dart b/lib/b.dart
         (r) => r.file.path == 'lib/b.dart',
       );
       expect(pinned.reason, 'matches a rule');
-      var ordinary = rows.whereType<FileRow>().firstWhere(
-        (r) => r.file.path == 'lib/a.dart',
-      );
-      expect(ordinary.reason, isNull);
+      // The ordinary one is the tree's, and a tree row has no rule to name.
+      expect(rows.whereType<FileRow>(), hasLength(1));
     });
 
     test('noise collapses to one row, and the count is the information', () {
@@ -129,8 +127,9 @@ diff --git a/lib/b.dart b/lib/b.dart
       expect(drawer.open, isFalse);
       expect(drawer.added, 1);
       expect(drawer.removed, 1);
-      // Collapsed means the file has no row of its own.
-      expect(rows.whereType<FileRow>().map((r) => r.file.path), ['lib/a.dart']);
+      // Collapsed means the file is nowhere: not a flat row, not in the tree.
+      expect(rows.whereType<FileRow>(), isEmpty);
+      expect(treeFiles(set).map((f) => f.path), ['lib/a.dart']);
     });
 
     test('opening the drawer lists them, and never loses one', () {
@@ -139,7 +138,7 @@ diff --git a/lib/b.dart b/lib/b.dart
       var rows = buildIndexRows(set, noiseOpen: true);
 
       expect(rows.whereType<NoiseDrawerRow>().single.open, isTrue);
-      expect(rows.whereType<FileRow>().map((r) => r.file.path), [
+      expect(treeFiles(set, noiseOpen: true).map((f) => f.path), [
         'lib/a.dart',
         'lib/b.dart',
       ]);
@@ -148,15 +147,17 @@ diff --git a/lib/b.dart b/lib/b.dart
       expect(set.changed, hasLength(2));
     });
 
-    test('a noise file in the open drawer still has a body to read', () {
+    test('a noise file in the open drawer joins the tree, and has a body', () {
       var patch = index(twoFiles);
-      var rows = buildIndexRows(
-        setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'})),
-        noiseOpen: true,
+      var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
+      expect(
+        treeFiles(set, noiseOpen: true).map((f) => f.path),
+        contains('lib/b.dart'),
       );
       expect(
-        rows.whereType<FileRow>().map((r) => r.file.path),
-        contains('lib/b.dart'),
+        treeFiles(set).map((f) => f.path),
+        isNot(contains('lib/b.dart')),
+        reason: 'and stays out of it while the drawer is shut',
       );
       var body = buildFileRows(
         patch.files.firstWhere((f) => f.path == 'lib/b.dart'),
@@ -205,9 +206,10 @@ diff --git a/lib/b.dart b/lib/b.dart
       // branch look bigger than it is.
       var untracked = rows.whereType<UntrackedRow>().toList();
       expect(untracked, hasLength(3));
+      // No `Changes` heading any more: what it used to label is the tree, and
+      // the tree names its own directories.
       expect(rows.whereType<SectionRow>().map((r) => r.label), [
         'Look here first',
-        'Changes',
         'Untracked',
       ]);
     });
@@ -233,18 +235,22 @@ diff --git a/lib/b.dart b/lib/b.dart
         rows.whereType<SectionRow>().map((r) => r.label),
         isNot(contains('Look here first')),
       );
-      // …and the one file that did is still there.
-      expect(rows.whereType<FileRow>().single.file.path, 'lib/a.dart');
+      // …and the one file that did is still there, in the tree.
+      expect(treeFiles(set, visible: {'lib/a.dart'}).single.path, 'lib/a.dart');
     });
   });
 
   group('rows', () {
-    test('the index is one row per file and never a line of diff', () {
-      var rows = buildIndexRows(setOf(index(twoFiles)));
-      expect(rows.whereType<FileRow>(), hasLength(2));
+    test('the index holds no diff, and ordinary files belong to the tree', () {
+      var set = setOf(index(twoFiles));
+      var rows = buildIndexRows(set);
+
+      // Nothing pinned, nothing noisy, nothing untracked: the flat part is
+      // empty and every file is the tree's.
+      expect(rows, isEmpty);
+      expect(treeFiles(set), hasLength(2));
       expect(rows.whereType<DiffLineRow>(), isEmpty);
       expect(rows.whereType<HunkRow>(), isEmpty);
-      expect(rows, hasLength(2));
     });
 
     test('a body is its hunks and every line, and only that file', () {
@@ -284,7 +290,7 @@ diff --git a/lib/b.dart b/lib/b.dart
       expect(all.whereType<UntrackedRow>(), hasLength(1));
 
       var filtered = buildIndexRows(set, visible: {'lib/b.dart'});
-      expect(filtered.whereType<FileRow>(), hasLength(1));
+      expect(treeFiles(set, visible: {'lib/b.dart'}), hasLength(1));
       expect(
         filtered.whereType<UntrackedRow>(),
         isEmpty,

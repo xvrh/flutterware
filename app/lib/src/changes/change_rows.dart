@@ -116,7 +116,15 @@ final class UntrackedRow extends ChangeRow {
   final bool selected;
 }
 
-/// The **index**: every path in the delta, ranked, with nothing to read.
+/// The index's **flat parts**: what is pinned, what is noise, what is
+/// untracked. Everything else is in the tree.
+///
+/// **The split is the answer to two orderings of one set of files.** *Look here
+/// first* is an alert and has to be seen without being asked for, so it is a
+/// short band at the top, in rank order. Everything else is navigation, and
+/// navigation wants structure, so it is a directory tree below — ordered by
+/// weight, so the ranking is still doing its work inside it. A tab would have
+/// been the other way to reconcile them, and it hides the alert half the time.
 ///
 /// [visible] is null when nothing is filtering.
 List<ChangeRow> buildIndexRows(
@@ -142,7 +150,6 @@ List<ChangeRow> buildIndexRows(
   ];
 
   var attention = kept(RankTier.attention);
-  var ordinary = kept(RankTier.ordinary);
   var noise = kept(RankTier.noise);
 
   // An untracked file that matched a rule belongs in the pinned section even
@@ -166,16 +173,9 @@ List<ChangeRow> buildIndexRows(
       rows.add(UntrackedRow(entry, selected: entry.path == selected));
     }
   }
-  if (ordinary.isNotEmpty) {
-    // **A heading only when there is a section above to separate from.** With
-    // nothing pinned, a lone `Changes` sits at the top of the list with its
-    // counterpart — the drawer — below the fold, so it labels a distinction
-    // nobody can see. The drawer names itself; this does not name it twice.
-    if (attention.isNotEmpty || pinnedUntracked.isNotEmpty) {
-      rows.add(const SectionRow('Changes'));
-    }
-    ordinary.forEach(addFile);
-  }
+  // **The ordinary files are not here.** They are the tree's, which is the
+  // whole point of putting one back: a flat list of fifty-three basenames says
+  // nothing about the shape of the branch.
   if (noise.isNotEmpty) {
     rows.add(
       NoiseDrawerRow(
@@ -185,7 +185,6 @@ List<ChangeRow> buildIndexRows(
         open: noiseOpen,
       ),
     );
-    if (noiseOpen) noise.forEach(addFile);
   }
 
   // The pinned ones are drawn above; listing them twice would make the branch
@@ -203,6 +202,22 @@ List<ChangeRow> buildIndexRows(
 
   return rows;
 }
+
+/// The files the **tree** holds: everything that is not pinned, plus the noise
+/// once its drawer is open.
+///
+/// Pinned files are deliberately not in it. They are drawn above, and a file in
+/// both places makes the branch look bigger than it is — the same rule the
+/// untracked section has followed since the first slice.
+List<FileChange> treeFiles(
+  ChangeSet set, {
+  Set<String>? visible,
+  bool noiseOpen = false,
+}) => [
+  for (var tier in [RankTier.ordinary, if (noiseOpen) RankTier.noise])
+    for (var ranked in set.ordered(tier))
+      if (visible == null || visible.contains(ranked.file.path)) ranked.file,
+];
 
 /// The **body**: one file's diff, and nothing else.
 ///

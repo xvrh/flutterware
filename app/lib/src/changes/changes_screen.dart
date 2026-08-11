@@ -8,6 +8,7 @@ import 'change_rows.dart';
 import 'change_set.dart';
 import 'changes_config_cache.dart';
 import 'changes_controller.dart';
+import 'changes_tree.dart';
 import 'diff_lines.dart';
 import 'diff_view.dart';
 import 'hunk_ruler.dart';
@@ -255,6 +256,9 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         rows: rows,
                         controller: _index,
                         query: _query,
+                        selected: _selected,
+                        visible: _visible(set),
+                        noiseOpen: _noiseOpen,
                         onQuery: (q) => setState(() => _query = q),
                         onSelect: _show,
                         onToggleNoise: () =>
@@ -504,28 +508,55 @@ class _Summary extends StatelessWidget {
 /// Navigation only. Nothing here is content, which is the whole point of the
 /// split — the list stays where you left it while you read, and a live re-probe
 /// that adds a file changes this column without moving a line of what is open.
+/// The **index**: filter, what to look at first, and the tree of everything
+/// else.
+///
+/// Navigation only. Nothing here is content, which is the whole point of the
+/// split — the list stays where you left it while you read, and a live re-probe
+/// that adds a file changes this column without moving a line of what is open.
+///
+/// **Two orderings, both kept.** *Look here first* is an alert: short, in rank
+/// order, and pinned to the top where it cannot be missed. Everything else is
+/// navigation, and navigation wants structure, so it is a directory tree —
+/// ordered by weight, so an agent's heaviest module is still the first thing
+/// under it. Tabs were the other way to reconcile the two, and a tab hides the
+/// alert half the time.
 class _IndexPane extends StatelessWidget {
   const _IndexPane({
     required this.set,
     required this.rows,
     required this.controller,
     required this.query,
+    required this.selected,
     required this.onQuery,
     required this.onSelect,
     required this.onToggleNoise,
+    required this.noiseOpen,
+    required this.visible,
   });
 
   final ChangeSet set;
+
+  /// The flat parts: pinned, the noise drawer, untracked.
   final List<ChangeRow> rows;
+
   final ScrollController controller;
   final String query;
+  final String? selected;
   final ValueChanged<String> onQuery;
   final ValueChanged<String> onSelect;
   final VoidCallback onToggleNoise;
+  final bool noiseOpen;
+  final Set<String>? visible;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    var tree = buildTree(
+      treeFiles(set, visible: visible, noiseOpen: noiseOpen),
+    );
+    var nothing = rows.isEmpty && tree.totalFiles == 0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -549,7 +580,7 @@ class _IndexPane extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: rows.isEmpty
+          child: nothing
               ? Center(
                   child: Text(
                     set.changed.isEmpty
@@ -558,80 +589,192 @@ class _IndexPane extends StatelessWidget {
                     style: context.type.bodySmall.copyWith(color: colors.mut2),
                   ),
                 )
-              : ListView.builder(
+              // **Not virtualised, deliberately.** The index is the file count,
+              // not the line count — a 228-file branch is a few hundred rows,
+              // where the list it replaced could be four thousand. A tree that
+              // remembers which folders are open cannot be rebuilt by index
+              // anyway.
+              : ListView(
                   key: changesListKey,
                   controller: controller,
-                  itemCount: rows.length,
-                  itemBuilder: (context, index) => switch (rows[index]) {
-                    SectionRow(:var label, :var detail) => Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        FwSpacing.md,
-                        FwSpacing.lg,
-                        FwSpacing.md,
-                        FwSpacing.xs,
-                      ),
-                      child: Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              label,
-                              style: context.type.caption,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (detail case var it?) ...[
-                            const Gap(FwSpacing.sm),
-                            Text(
-                              it,
-                              style: context.type.micro.copyWith(
-                                color: colors.mut3,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    NoiseDrawerRow(
-                      :var files,
-                      :var added,
-                      :var removed,
-                      :var open,
-                    ) =>
-                      NoiseDrawerLine(
-                        files: files,
-                        added: added,
-                        removed: removed,
-                        open: open,
-                        onTap: onToggleNoise,
-                      ),
-                    FileRow(
-                      :var file,
-                      :var selected,
-                      :var uncommitted,
-                      :var reason,
-                    ) =>
-                      IndexFileRow(
-                        file: file,
+                  children: [
+                    for (var row in rows) _flat(context, row),
+                    if (tree.totalFiles > 0)
+                      _TreeNodeView(
+                        node: tree,
+                        depth: 0,
                         selected: selected,
-                        uncommitted: uncommitted,
-                        reason: reason,
-                        onTap: () => onSelect(file.path),
+                        uncommitted: set.uncommitted,
+                        onSelect: onSelect,
+                        // Open at the top, shut further down: a branch that
+                        // touched one module wants that module visible, and a
+                        // repo of forty directories does not want all of them
+                        // unfolded at once.
+                        openDepth: 1,
                       ),
-                    UntrackedRow(:var entry, :var selected) =>
-                      IndexUntrackedRow(
-                        entry: entry,
-                        selected: selected,
-                        onTap: entry.isDirectory
-                            ? null
-                            : () => onSelect(entry.path),
-                      ),
-                    // The body's rows never reach the index.
-                    HunkRow() ||
-                    DiffLineRow() ||
-                    FileNoticeRow() => const SizedBox.shrink(),
-                  },
+                  ],
                 ),
         ),
+      ],
+    );
+  }
+
+  Widget _flat(BuildContext context, ChangeRow row) => switch (row) {
+    SectionRow(:var label, :var detail) => Padding(
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.md,
+        FwSpacing.lg,
+        FwSpacing.md,
+        FwSpacing.xs,
+      ),
+      child: Row(
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              style: context.type.caption,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (detail case var it?) ...[
+            const Gap(FwSpacing.sm),
+            Text(
+              it,
+              style: context.type.micro.copyWith(color: context.colors.mut3),
+            ),
+          ],
+        ],
+      ),
+    ),
+    NoiseDrawerRow(:var files, :var added, :var removed, :var open) =>
+      NoiseDrawerLine(
+        files: files,
+        added: added,
+        removed: removed,
+        open: open,
+        onTap: onToggleNoise,
+      ),
+    FileRow(:var file, :var selected, :var uncommitted, :var reason) =>
+      IndexFileRow(
+        file: file,
+        selected: selected,
+        uncommitted: uncommitted,
+        reason: reason,
+        onTap: () => onSelect(file.path),
+      ),
+    UntrackedRow(:var entry, :var selected) => IndexUntrackedRow(
+      entry: entry,
+      selected: selected,
+      onTap: entry.isDirectory ? null : () => onSelect(entry.path),
+    ),
+    // The body's rows never reach the index.
+    HunkRow() || DiffLineRow() || FileNoticeRow() => const SizedBox.shrink(),
+  };
+}
+
+/// One directory, and everything under it.
+///
+/// Stateful for the same reason the version before the rewrite was: which
+/// folders you have opened is yours, and it has to survive the rebuild that a
+/// live re-probe causes every couple of seconds.
+class _TreeNodeView extends StatefulWidget {
+  const _TreeNodeView({
+    required this.node,
+    required this.depth,
+    required this.selected,
+    required this.uncommitted,
+    required this.onSelect,
+    required this.openDepth,
+  });
+
+  final TreeNode node;
+  final int depth;
+  final String? selected;
+  final Set<String> uncommitted;
+  final ValueChanged<String> onSelect;
+  final int openDepth;
+
+  @override
+  State<_TreeNodeView> createState() => _TreeNodeViewState();
+}
+
+class _TreeNodeViewState extends State<_TreeNodeView> {
+  /// `<=`, not `<`: depth 0 is the root, which is the tree rather than a row in
+  /// it, so the first directory anybody sees is at depth 1. Off by that one and
+  /// every top-level folder opens shut, which looks exactly like an empty
+  /// index.
+  late var _open = widget.depth <= widget.openDepth;
+
+  @override
+  Widget build(BuildContext context) {
+    var node = widget.node;
+    var colors = context.colors;
+    // The root is the tree, not a row in it.
+    var isRoot = widget.depth == 0 && node.path.isEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!isRoot)
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: FwSpacing.md + (widget.depth - 1) * FwSpacing.lg,
+                right: FwSpacing.md,
+                top: FwSpacing.xxs,
+                bottom: FwSpacing.xxs,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _open ? Icons.expand_more : Icons.chevron_right,
+                    size: 14,
+                    color: colors.mut3,
+                  ),
+                  Expanded(
+                    child: Text(
+                      node.name,
+                      style: context.type.bodySmall.copyWith(color: colors.mut),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const Gap(FwSpacing.xs),
+                  Text(
+                    '${node.totalFiles}',
+                    style: context.type.micro.copyWith(color: colors.mut3),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (isRoot || _open) ...[
+          for (var child in node.sortedChildren)
+            _TreeNodeView(
+              node: child,
+              depth: widget.depth + 1,
+              selected: widget.selected,
+              uncommitted: widget.uncommitted,
+              onSelect: widget.onSelect,
+              openDepth: widget.openDepth,
+            ),
+          for (var file in node.sortedFiles)
+            Padding(
+              padding: EdgeInsets.only(
+                left: isRoot ? 0 : widget.depth * FwSpacing.lg,
+              ),
+              child: IndexFileRow(
+                file: file,
+                selected: file.path == widget.selected,
+                uncommitted: widget.uncommitted.contains(file.path),
+                // **No directory line under a file in the tree.** Its position
+                // already says where it is, and repeating the path is the noise
+                // the tree exists to remove.
+                showDirectory: false,
+                onTap: () => widget.onSelect(file.path),
+              ),
+            ),
+        ],
       ],
     );
   }

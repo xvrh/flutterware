@@ -172,14 +172,14 @@ void main() {
     );
     expect(find.textContaining('from lib/old.dart'), findsOneWidget);
 
-    // …and the directory is on its own line, not trailing the flags, which is
-    // what made *where a file lives* the first thing to be truncated.
+    // Both files live under one directory, and the tree says so once rather
+    // than repeating it on every row.
     expect(
       find.descendant(
         of: find.byKey(changesListKey),
         matching: find.text('lib'),
       ),
-      findsNWidgets(2),
+      findsOneWidget,
     );
   });
 
