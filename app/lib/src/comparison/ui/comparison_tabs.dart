@@ -22,6 +22,9 @@ Key comparisonTabKey(String id) => ValueKey('changes.tab.$id');
 /// The tab ids, which are also their first address segment.
 const filesTabId = 'files';
 
+/// Every tab id, so a reader of the address can tell a tab from a file path.
+const comparisonTabIds = {filesTabId, 'previews', 'scenarios'};
+
 /// **`fw:///worktrees/<worktree>/changes`** — what this branch did.
 ///
 /// Three renderings of one delta against one base: the files that changed,
@@ -107,12 +110,32 @@ class _ComparisonTabsState extends State<ComparisonTabs>
   }
 
   Future<void> _open() async {
-    var session = widget.shell.selectedSession;
-    if (session == null) return;
+    // **The addressed worktree's session, not the selected one.** This screen
+    // renders for a checkout that has no tab, which is precisely a checkout
+    // `selectedSession` knows nothing about.
+    var session = widget.shell.sessionFor(widget.worktree);
+    if (session == null) {
+      // Not open, so there are no cores and no comparison — only the file
+      // diff, which needs none. Said rather than waited on: leaving `_loading`
+      // true made this the one screen a window capture could never settle.
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _unavailable = 'Open this worktree to compare its previews.';
+        });
+      }
+      return;
+    }
     var environment = await SessionComparisonEnvironment.open(
       session: session,
       flutterSdk: widget.shell.flutterSdk,
       appToolDirectory: widget.shell.appContext.appToolDirectory.path,
+      // **The project's own answer, not a second one.** The file diff resolves
+      // its base as `fw.changes(base:)` first and inference after; a comparison
+      // that only ever inferred would compare against `master` on a screen
+      // whose other tab says `develop`, and the design's one-definition rule
+      // exists precisely to stop that.
+      baseRef: widget.shell.manifestFor(widget.worktree)?.changes?.base,
     );
     if (!mounted) return;
     setState(() {
@@ -155,8 +178,25 @@ class _ComparisonTabsState extends State<ComparisonTabs>
   ];
 
   void _select(String id) {
-    widget.shell.selectChanges(tab: id);
+    widget.shell.selectChangesTab(tab: id);
     _openSelectedTab();
+  }
+
+  /// Findings only, and merged across both halves: one preview that broke and
+  /// one scenario that broke is two broken things, and which half they came
+  /// from is the second question.
+  Map<ComparedState, int> _counts(ComparisonController controller) {
+    var counts = <ComparedState, int>{};
+    for (var state in [
+      for (var row in controller.previews.rows) row.state,
+      for (var scenario in controller.scenarios.scenarios) scenario.state,
+    ]) {
+      if (state.isFinding) counts[state] = (counts[state] ?? 0) + 1;
+    }
+    return Map.fromEntries(
+      counts.entries.toList()
+        ..sort((a, b) => a.key.index.compareTo(b.key.index)),
+    );
   }
 
   void _openSelectedTab() {
@@ -180,8 +220,13 @@ class _ComparisonTabsState extends State<ComparisonTabs>
       key: comparisonTabsKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _Header(controller),
-        _TabStrip(tabs: tabs, selected: selected.id, onSelect: _select),
+        _TabStrip(
+          tabs: tabs,
+          selected: selected.id,
+          onSelect: _select,
+          base: controller.environment.baseLabel,
+          counts: _counts(controller),
+        ),
         Expanded(
           child: selected.half == null
               ? Builder(builder: widget.files)
@@ -192,7 +237,7 @@ class _ComparisonTabsState extends State<ComparisonTabs>
                   selected: widget.shell.address.segments.skip(1).isEmpty
                       ? null
                       : widget.shell.address.segments.skip(1).join('/'),
-                  onSelect: (id) => widget.shell.selectChanges(
+                  onSelect: (id) => widget.shell.selectChangesTab(
                     tab: selected.id,
                     segments: id.split('/'),
                   ),
@@ -223,71 +268,6 @@ class _Tab {
   final ComparisonHalf? half;
 }
 
-/// Both sides, and what the comparison found.
-class _Header extends StatelessWidget {
-  const _Header(this.controller);
-
-  final ComparisonController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var counts = _counts();
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(
-        FwSpacing.xxxl,
-        FwSpacing.xxl,
-        FwSpacing.xxxl,
-        FwSpacing.lg,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Changes', style: context.type.pageTitle),
-                const Gap(FwSpacing.xs),
-                Text(
-                  'against ${controller.environment.baseLabel}',
-                  style: context.type.caption.copyWith(color: colors.mut),
-                ),
-              ],
-            ),
-          ),
-          if (counts.isNotEmpty)
-            Wrap(
-              spacing: FwSpacing.sm,
-              children: [
-                for (var entry in counts.entries)
-                  StateChip(entry.key, count: entry.value),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Findings only, and merged across both halves: one preview that broke and
-  /// one scenario that broke is two broken things, and which half they came
-  /// from is the second question.
-  Map<ComparedState, int> _counts() {
-    var counts = <ComparedState, int>{};
-    for (var state in [
-      for (var row in controller.previews.rows) row.state,
-      for (var scenario in controller.scenarios.scenarios) scenario.state,
-    ]) {
-      if (state.isFinding) counts[state] = (counts[state] ?? 0) + 1;
-    }
-    return Map.fromEntries(
-      counts.entries.toList()
-        ..sort((a, b) => a.key.index.compareTo(b.key.index)),
-    );
-  }
-}
-
 /// `[ files ][ previews · 14 of 213 ][ scenarios · 5 of 43 ]`
 ///
 /// The estimate rides on the tab because that is where it has to arrive
@@ -299,11 +279,19 @@ class _TabStrip extends StatelessWidget {
     required this.tabs,
     required this.selected,
     required this.onSelect,
+    required this.base,
+    required this.counts,
   });
 
   final List<_Tab> tabs;
   final String selected;
   final void Function(String id) onSelect;
+
+  /// What all three tabs are against.
+  final String base;
+
+  /// Findings across both halves, worst first.
+  final Map<ComparedState, int> counts;
 
   @override
   Widget build(BuildContext context) {
@@ -312,7 +300,7 @@ class _TabStrip extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: colors.line)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xxxl),
+      padding: const EdgeInsets.only(left: FwSpacing.xxxl, right: FwSpacing.xl),
       child: Row(
         children: [
           for (var tab in tabs)
@@ -321,6 +309,22 @@ class _TabStrip extends StatelessWidget {
               selected: tab.id == selected,
               onTap: () => onSelect(tab.id),
             ),
+          const Spacer(),
+          // **No title of its own.** The sidebar row says "Changes" and the
+          // file diff writes its own header inside its tab; a third one over
+          // the top of both said the same word twice on one screen. What is
+          // left is the two things the strip is the only place for: what all
+          // three tabs are against, and what they found between them.
+          for (var entry in counts.entries)
+            Padding(
+              padding: const EdgeInsets.only(left: FwSpacing.xs),
+              child: StateChip(entry.key, count: entry.value),
+            ),
+          const Gap(FwSpacing.md),
+          Text(
+            'against $base',
+            style: context.type.micro.copyWith(color: colors.mut),
+          ),
         ],
       ),
     );

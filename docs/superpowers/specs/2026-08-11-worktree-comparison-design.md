@@ -427,7 +427,13 @@ something that transient belongs.
 ## 9. Where it lives — corrected (2026-08-11)
 
 **Not its own space. Three tabs on the worktree's changes panel**, alongside the
-file diff:
+file diff. **Merged with that panel on 2026-08-11**, when #88 landed it — which
+had independently chosen the same `changes` slot, the same reservation shape,
+and the same `fw capture` fix (`shownScreenId`). What differs is that its screen
+reads git and so renders for a worktree **nobody has opened**, which these two
+halves cannot: they need the previews and scenarios cores, and those need a
+resolved config. So the files tab stands alone there and the other two say to
+open the checkout.
 
 ```
 [ files ][ previews · 14 of 213 ][ scenarios · 5 ]
@@ -455,6 +461,12 @@ everything after its own segment:
 fw:///worktrees/<name>/<changes>/previews/demo/card.dart#card
 fw:///worktrees/<name>/<changes>/scenarios/test/shop.dart#Checkout/signed in/3
 ```
+
+The base is **the project's**, not a second answer: `fw.changes(base:)` is read
+before anything is inferred, because a comparison against `master` on a screen
+whose other tab says `develop` is exactly what §1's one-definition rule forbids.
+The inference *fallback* still differs in detail between the two — both take the
+default branch, by slightly different routes — and that is the remaining gap.
 
 `fw:///comparisons/…` is **not** spent. It is where the deferred `agent-a..agent-b`
 case goes — the one that genuinely has no worktree to live in — so the space

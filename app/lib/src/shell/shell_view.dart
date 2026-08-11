@@ -7,6 +7,7 @@ import 'package:flutterware/plugins.dart';
 
 import '../address/address_scope.dart';
 import '../changes/changes_screen.dart';
+import '../comparison/ui/comparison_tabs.dart';
 import '../capture/capture_mode.dart';
 import '../capture/capture_request.dart';
 import '../plugins/native_plugin.dart';
@@ -1468,16 +1469,24 @@ class _Panel extends StatelessWidget {
     if (shell.isExplorer) {
       body = _Explorer(shell);
     } else if (changesFor != null) {
-      body = ChangesScreen(
-        key: ValueKey(changesFor.path),
+      // **Three renderings of one delta, and the file diff is the first of
+      // them.** `ComparisonTabs` owns the strip and the two halves that need a
+      // session; the files tab is handed in, because it is a screen of its own
+      // with its own master, detail and index tabs — and because it renders for
+      // a checkout nobody has opened, which the other two cannot.
+      body = ComparisonTabs(
+        key: ValueKey('changes::${changesFor.path}'),
+        shell: shell,
         worktree: changesFor,
-        isOpen: shell.isOpen(changesFor),
-        repoRoot: shell.repoRoot,
-        initialPath: shell.address.segments.isEmpty
-            ? null
-            : shell.address.segments.join('/'),
-        onPathChanged: (path) => shell.selectChangesFile(changesFor, path),
-        gitMoved: shell.gitMoved,
+        files: (context) => ChangesScreen(
+          key: ValueKey(changesFor.path),
+          worktree: changesFor,
+          isOpen: shell.isOpen(changesFor),
+          repoRoot: shell.repoRoot,
+          initialPath: _changesFilePath(shell),
+          onPathChanged: (path) => shell.selectChangesFile(changesFor, path),
+          gitMoved: shell.gitMoved,
+        ),
       );
     } else if (worktree == null) {
       body = const _Message(title: 'No worktree open');
@@ -1512,6 +1521,22 @@ class _Panel extends StatelessWidget {
 
     return Container(color: colors.bg, child: body);
   }
+}
+
+/// The file the address names, with the tab segment taken off the front.
+///
+/// `changes/files/app/lib/foo.dart` and `changes/app/lib/foo.dart` both mean
+/// the same file: the first is what the tabs write now, the second is what this
+/// screen's addresses looked like before there were any, and both still have to
+/// resolve. Anything under another tab names nothing here.
+String? _changesFilePath(ShellController shell) {
+  var segments = shell.address.segments;
+  if (segments.isEmpty) return null;
+  if (comparisonTabIds.contains(segments.first)) {
+    if (segments.first != filesTabId) return null;
+    segments = segments.skip(1).toList();
+  }
+  return segments.isEmpty ? null : segments.join('/');
 }
 
 /// Mounts the explorer, and refreshes it on the way in.
