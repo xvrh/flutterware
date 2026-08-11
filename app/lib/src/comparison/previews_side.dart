@@ -110,7 +110,10 @@ class PreviewsSide implements ComparisonSide {
       // happens is version skew, because the base is rendered with the *head's*
       // tooling (see the design doc's §11a). Nothing about that is per entry,
       // and reporting it per entry produced twenty-four rows of one sentence.
-      throw SideDidNotCompile('$error'.split('\n').first);
+      // **Whole, not the first line.** A refusal you cannot act on is barely
+      // better than the twenty-four rows it replaced, and the compiler puts
+      // its diagnostics on the lines after the summary.
+      throw SideDidNotCompile('$error');
     }
     return {...batch.failed, ...threw};
   }

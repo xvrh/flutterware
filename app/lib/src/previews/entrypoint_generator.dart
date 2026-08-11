@@ -1,5 +1,12 @@
 import 'dart:io';
 
+// The pure-Dart file, not `previews_guest.dart`. This is on the compiler
+// daemon's import closure, and the daemon must never reach Flutter — going
+// through the barrel took `package:flutter` with it and made the daemon
+// unloadable in a plain VM, which `entry_point_purity_test.dart` exists to
+// catch and duly did. `clock.dart` imports `package:clock` and nothing else.
+// ignore: implementation_imports
+import 'package:flutterware/src/ui_catalog/clock.dart' show previewClockOrigin;
 import 'package:path/path.dart' as p;
 
 import 'catalog_entry.dart';
@@ -137,10 +144,15 @@ class EntrypointGenerator {
       imports.writeln("import 'entry_$index.dart' as fw$index;");
     }
     var activeIndex = _wrapperIndex[active.id]!;
+    var origin = previewClockOrigin;
+    var clockLiteral =
+        'DateTime(${origin.year}, ${origin.month}, ${origin.day}, '
+        '${origin.hour}, ${origin.minute})';
 
     return '''
 // GENERATED — do not edit.
-${emitProbe ? "import 'dart:async';\n" : ''}import 'package:flutter/widgets.dart';
+${emitProbe ? "import 'dart:async';\n" : ''}import 'package:clock/clock.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/previews_guest.dart';
 
@@ -164,7 +176,7 @@ String get _entryId => r'${active.id}';
 // demo reads the clock from `build`, which runs in whatever zone the binding
 // captured. A preview showing today's date would otherwise differ from
 // yesterday's screenshot of itself.
-void main() => withPreviewClock(() => GuestLogs.instance.install(() {
+void main() => withClock(Clock.fixed($clockLiteral), () => GuestLogs.instance.install(() {
   WidgetsFlutterBinding.ensureInitialized();
   // Before anything can be typed, keys have to arrive at all: the framework
   // parks every one of them waiting for a legacy platform message this guest

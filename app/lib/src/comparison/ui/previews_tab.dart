@@ -55,6 +55,12 @@ class _PreviewsTabState extends State<PreviewsTab> {
   void initState() {
     super.initState();
     _shots.addListener(_onShots);
+    // **Listened to, not diffed.** `ComparisonHalf.rows` is mutated in place,
+    // so `didUpdateWidget` compares a list against itself and can never see a
+    // row arrive: the first load ran against an empty list, found nothing, and
+    // nothing ever asked again — a stage that said "neither side rendered"
+    // over two frames sitting in the cache.
+    widget.half.addListener(_onRows);
     widget.settle.add(_shots);
     _loadSelected();
   }
@@ -62,10 +68,15 @@ class _PreviewsTabState extends State<PreviewsTab> {
   @override
   void didUpdateWidget(PreviewsTab old) {
     super.didUpdateWidget(old);
-    if (old.selected != widget.selected ||
-        old.half.rows.length != widget.half.rows.length) {
-      _loadSelected();
+    if (!identical(old.half, widget.half)) {
+      old.half.removeListener(_onRows);
+      widget.half.addListener(_onRows);
     }
+    if (old.selected != widget.selected) _loadSelected();
+  }
+
+  void _onRows() {
+    if (mounted) _loadSelected();
   }
 
   void _onShots() {
@@ -130,6 +141,7 @@ class _PreviewsTabState extends State<PreviewsTab> {
 
   @override
   void dispose() {
+    widget.half.removeListener(_onRows);
     widget.settle.remove(_shots);
     _shots
       ..removeListener(_onShots)

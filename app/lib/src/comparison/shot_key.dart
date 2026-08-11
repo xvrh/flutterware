@@ -15,6 +15,20 @@ import 'package:crypto/crypto.dart';
 /// and a wrong picture in a comparison is worse than no comparison — it is a
 /// regression reported as clean.
 class ShotKey {
+  /// What the *tooling* renders like, as opposed to what the code says.
+  ///
+  /// **Bump this whenever a change to the renderer changes a pixel** — the
+  /// generated entrypoint, the capture settings, the guest's own setup. None of
+  /// those are in the closure of the entry being rendered, so without it a
+  /// picture taken by last week's generator is served against one taken by
+  /// today's, and the comparison reports a difference in the tooling as a
+  /// difference in the branch. Measured: a warm cache answered *2 changed*
+  /// where a cold one answered *3*, twice.
+  ///
+  /// v2 — the generated entrypoint pins the clock through `package:clock`
+  /// rather than through flutterware's own wrapper.
+  static const revision = 'v2';
+
   /// [closure] is a [SourceClosure.fingerprint]; [sdk] identifies the engine
   /// (see `SdkIdentity`); [axes] and [knobs] are whatever was applied.
   ///
@@ -32,7 +46,7 @@ class ShotKey {
     Map<String, String> extra = const {},
   }) {
     var buffer = StringBuffer()
-      ..writeln('v1')
+      ..writeln(revision)
       ..writeln(kind)
       ..writeln(entryId)
       ..writeln(closure)
