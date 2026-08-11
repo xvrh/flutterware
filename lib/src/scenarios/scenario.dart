@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meta/meta.dart';
 
+import 'events.dart';
 import 'profile.dart';
 import 'run_args.dart';
 import 'run_listener.dart';
@@ -421,8 +422,13 @@ class ScenarioTester {
   /// teardown pump, so tearing the tree down is never anybody's stray frame.
   var _framesAtLastStep = _frames;
 
-  Future<void> pumpWidget(Widget widget, {Shot? shot, Settle? settle}) =>
-      _step(shot, settle, () => tester.pumpWidget(widget));
+  Future<void> pumpWidget(Widget widget, {Shot? shot, Settle? settle}) => _step(
+    shot,
+    settle,
+    () => tester.pumpWidget(widget),
+    verb: 'pumpWidget',
+    target: '${widget.runtimeType}',
+  );
 
   /// Taps [target] — a `Finder`, a `String` (visible text), a `Key`, an
   /// `IconData`, a `Type`, or a [Target] for the rest (a semantics label, a
@@ -438,6 +444,8 @@ class ScenarioTester {
     // already decided reachability — and loudly, where the SDK's warning is a
     // console line the flow sails past.
     () async => tester.tap(await _resolve(target, 'tap'), warnIfMissed: false),
+    verb: 'tap',
+    target: describeTarget(target),
   );
 
   Future<void> longPress(dynamic target, {Shot? shot, Settle? settle}) => _step(
@@ -447,6 +455,8 @@ class ScenarioTester {
       await _resolve(target, 'longPress'),
       warnIfMissed: false,
     ),
+    verb: 'longPress',
+    target: describeTarget(target),
   );
 
   Future<void> enterText(
@@ -458,6 +468,8 @@ class ScenarioTester {
     shot,
     settle,
     () async => tester.enterText(await _resolve(target, 'enterText'), text),
+    verb: 'enterText',
+    target: describeTarget(target),
   );
 
   /// Drags [target] by [by] — a swipe, a dismiss, a slider, a sheet pulled
@@ -472,6 +484,8 @@ class ScenarioTester {
           by,
           warnIfMissed: false,
         ),
+        verb: 'drag',
+        target: describeTarget(target),
       );
 
   /// Scrolls until [target] is on screen, then captures it there.
@@ -491,40 +505,46 @@ class ScenarioTester {
     int maxScrolls = 50,
     Shot? shot,
     Settle? settle,
-  }) => _step(shot, settle, () async {
-    var scrollable = within == null
-        ? find.byType(Scrollable)
-        : find.descendant(
-            of: finderForTarget(within),
-            matching: find.byType(Scrollable),
-            matchRoot: true,
-          );
-    if (scrollable.evaluate().isEmpty) {
-      throw ScenarioTargetError(
-        within == null
-            ? 'nothing on screen scrolls, so `s.scrollTo` has nothing to walk.'
-            : 'nothing under $within scrolls, so `s.scrollTo` has nothing to '
-                  'walk.',
-      );
-    }
-    try {
-      await tester.scrollUntilVisible(
-        finderForTarget(target),
-        step,
-        // The first, as `flutter_test` itself defaults to: nested scrollables
-        // are ordinary, and `within` is how a scenario says which one.
-        scrollable: scrollable.first,
-        maxScrolls: maxScrolls,
-      );
-    } on StateError {
-      throw ScenarioTargetError(
-        'scrolled $maxScrolls times by $step without reaching '
-        '${target is String ? '"$target"' : target}. '
-        'Wrong direction (try a negative step), wrong scrollable (name one '
-        'with `within:`), or it is not in this list at all.',
-      );
-    }
-  });
+  }) => _step(
+    shot,
+    settle,
+    () async {
+      var scrollable = within == null
+          ? find.byType(Scrollable)
+          : find.descendant(
+              of: finderForTarget(within),
+              matching: find.byType(Scrollable),
+              matchRoot: true,
+            );
+      if (scrollable.evaluate().isEmpty) {
+        throw ScenarioTargetError(
+          within == null
+              ? 'nothing on screen scrolls, so `s.scrollTo` has nothing to walk.'
+              : 'nothing under $within scrolls, so `s.scrollTo` has nothing to '
+                    'walk.',
+        );
+      }
+      try {
+        await tester.scrollUntilVisible(
+          finderForTarget(target),
+          step,
+          // The first, as `flutter_test` itself defaults to: nested scrollables
+          // are ordinary, and `within` is how a scenario says which one.
+          scrollable: scrollable.first,
+          maxScrolls: maxScrolls,
+        );
+      } on StateError {
+        throw ScenarioTargetError(
+          'scrolled $maxScrolls times by $step without reaching '
+          '${describeTarget(target)}. '
+          'Wrong direction (try a negative step), wrong scrollable (name one '
+          'with `within:`), or it is not in this list at all.',
+        );
+      }
+    },
+    verb: 'scrollTo',
+    target: describeTarget(target),
+  );
 
   /// The platform's back gesture — Android's button, iOS's edge swipe, the
   /// thing that pops a route without a widget to tap.
@@ -540,6 +560,7 @@ class ScenarioTester {
       const JSONMethodCodec().encodeMethodCall(const MethodCall('popRoute')),
       null,
     ),
+    verb: 'back',
   );
 
   /// Advances the clock by [duration].
@@ -548,15 +569,20 @@ class ScenarioTester {
   /// no frames, so a splash screen that navigates after three seconds needs
   /// the clock moved rather than settled. Instant either way — the clock is
   /// fake.
-  Future<void> wait(Duration duration, {Shot? shot, Settle? settle}) =>
-      _step(shot, settle, () => tester.pump(duration));
+  Future<void> wait(Duration duration, {Shot? shot, Settle? settle}) => _step(
+    shot,
+    settle,
+    () => tester.pump(duration),
+    verb: 'wait',
+    target: '$duration',
+  );
 
   /// Captures a named screen without performing an action.
   Future<void> screen(
     String name, {
     List<String> tags = const [],
     Settle? settle,
-  }) => _step(Shot(name, tags: tags), settle, () async {});
+  }) => _step(Shot(name, tags: tags), settle, () async {}, verb: 'screen');
 
   /// One verb: act, wait per the policy, capture. The settle result rides the
   /// step, so a screen that never stopped animating says so instead of
@@ -564,8 +590,10 @@ class ScenarioTester {
   Future<void> _step(
     Shot? shot,
     Settle? settle,
-    Future<void> Function() action,
-  ) async {
+    Future<void> Function() action, {
+    String? verb,
+    String? target,
+  }) async {
     // Frames since the previous verb finished: nothing this scenario's verbs
     // drew, so they came from `s.tester` — and whatever they showed is not in
     // the flow. Read before the action, reported on the step it precedes.
@@ -582,7 +610,13 @@ class ScenarioTester {
       rethrow;
     }
     _framesAtLastStep = _frames;
-    await _afterStep(shot, settled: settled, stray: stray);
+    await _afterStep(
+      shot,
+      settled: settled,
+      stray: stray,
+      verb: verb,
+      target: target,
+    );
   }
 
   /// Forks the scenario: every branch runs, each in its own replay of the
@@ -651,10 +685,21 @@ class ScenarioTester {
     Shot? shot, {
     required bool settled,
     required int stray,
+    String? verb,
+    String? target,
   }) async {
+    // Nothing captures, so nothing drains: what the app did during this verb
+    // belongs to whichever step captures next, which is the transition a
+    // reader of that step will be looking at.
     if (identical(shot, Shot.skip)) return;
     if (shot == null && shots == Shots.manual) return;
-    await _capture(shot, settled: settled, stray: stray);
+    await _capture(
+      shot,
+      settled: settled,
+      stray: stray,
+      verb: verb,
+      target: target,
+    );
   }
 
   /// [error] with the split branch that reached it, when there was one.
@@ -675,7 +720,7 @@ class ScenarioTester {
     }
     var finder = finderFor(target);
     var count = finder.evaluate().length;
-    var described = target is String ? '"$target"' : '$target';
+    var described = describeTarget(target);
     if (count == 1) {
       await _ensureReachable(finder, described, verb);
       return finder;
@@ -768,6 +813,8 @@ class ScenarioTester {
     Shot? shot, {
     bool settled = true,
     int stray = 0,
+    String? verb,
+    String? target,
   }) async {
     // Where this capture sits in the scenario's shape: the split choices
     // taken so far plus the count since the last one. Replays of a shared
@@ -777,7 +824,11 @@ class ScenarioTester {
     var parent = _lastPosition == null ? null : _state.emitted[_lastPosition!];
     if (_state.emitted.containsKey(position)) {
       // Already captured on an earlier replay — skip the rendering entirely,
-      // but keep our place so the next new step's parent is right.
+      // but keep our place so the next new step's parent is right. The events
+      // this replay collected on the way go with it: the step they belong to
+      // was emitted on the first pass, with the events of *that* pass, and
+      // appending these would multiply a shared prefix once per branch.
+      scenarioEventBuffer?.discard();
       _lastPosition = position;
       _pendingBranch = null;
       return;
@@ -794,6 +845,8 @@ class ScenarioTester {
       shot: shot,
       settled: settled,
       stray: stray,
+      verb: verb,
+      target: target,
     );
   }
 
@@ -829,10 +882,17 @@ class ScenarioTester {
     required Shot? shot,
     required bool settled,
     int stray = 0,
+    String? verb,
+    String? target,
     String? failure,
   }) async {
     var listener = scenarioRunListener;
     var destination = _screenshotsDestination;
+    // Drained here rather than inside `runAsync`: the capture itself sends
+    // platform messages (and the spy records them), and those belong to the
+    // *next* transition, not to the one being closed.
+    var (events, dropped) =
+        scenarioEventBuffer?.drain() ?? (const <ScenarioEvent>[], 0);
     await tester.runAsync(() async {
       var view = tester.binding.renderViews.single;
       var layer = view.debugLayer! as OffsetLayer;
@@ -885,6 +945,10 @@ class ScenarioTester {
             texts: visibleTexts(),
             statusBrightness: style?.statusBarIconBrightness?.name,
             navBrightness: style?.systemNavigationBarIconBrightness?.name,
+            verb: verb,
+            target: target,
+            events: events,
+            eventsDropped: dropped,
             settled: settled,
             strayFrames: stray,
             failure: failure,

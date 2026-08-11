@@ -13,6 +13,7 @@ import '../inspect/pick_region.dart';
 import '../plugins/native/scenarios_results.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
+import 'events_view.dart';
 import 'framed_shot.dart';
 import '../inspect/semantics_node.dart';
 import '../inspect/semantics_view.dart';
@@ -82,6 +83,12 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
   SemanticsSnapshotNode? _semantics;
   String? _semanticsError;
 
+  /// The transition's events, read from its `.events.json`. Empty for a quiet
+  /// transition and for a run that predates the capture; [_eventsPlaceholder]
+  /// tells the two apart.
+  var _events = const <Map<String, Object?>>[];
+  String? _eventsPlaceholder;
+
   @override
   void initState() {
     super.initState();
@@ -136,6 +143,26 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
       _semanticsError =
           'No semantics captured for this step — the run predates the '
           'capture, or the app disabled semantics.';
+    }
+    _events = const [];
+    _eventsPlaceholder = null;
+    if (widget.step.eventsFile case var file? when file.existsSync()) {
+      try {
+        _events = [
+          for (var event in jsonDecode(file.readAsStringSync()) as List)
+            (event as Map).cast<String, Object?>(),
+        ];
+      } catch (error) {
+        _eventsPlaceholder = 'The events could not be read:\n$error';
+      }
+    } else {
+      // A quiet transition is the common case and reads as one; a step with a
+      // count but no file is a run whose artifacts have moved.
+      _eventsPlaceholder = widget.step.hasEvents
+          ? 'This step recorded ${widget.step.eventCount} events, but the '
+                'file is gone. Run the scenario again.'
+          : 'Nothing happened on the way to this step — no logs, no requests, '
+                'no platform calls.';
     }
   }
 
@@ -272,6 +299,17 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
                   root: _semantics,
                   placeholder: _semanticsError ?? 'No semantics captured.',
                   highlight: _semanticsHighlight,
+                ),
+              ),
+              InspectDockTab(
+                id: 'events',
+                label: 'Events',
+                badge: widget.step.notableEventCount,
+                body: (context) => ScenarioEventsView(
+                  events: _events,
+                  transition: scenarioStepTransition(widget.step),
+                  dropped: widget.step.eventsDropped ?? 0,
+                  placeholder: _eventsPlaceholder ?? 'No events captured.',
                 ),
               ),
               InspectDockTab(

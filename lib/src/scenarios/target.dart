@@ -25,6 +25,24 @@ Finder finderForTarget(dynamic target) {
   };
 }
 
+/// How a verb's target reads back to a human — quoted when it is the visible
+/// text the author wrote, bare otherwise.
+///
+/// One function because two places need the same spelling: the error a verb
+/// throws when its target matches nothing or several, and the target recorded
+/// on the captured step. A step that says `tap "Pay"` and an error that says
+/// `tap 'Pay'` would be describing the same line two ways.
+///
+/// A `ValueKey` gets its value rather than its `toString`, which is
+/// `[<'shop.getStarted'>]` — three kinds of bracket around the only part
+/// anybody wrote. Said as `key 'shop.getStarted'` it stays distinct from the
+/// quoted visible-text form, which means something else entirely.
+String describeTarget(dynamic target) => switch (target) {
+  String() => '"$target"',
+  ValueKey(:var value) => "key '$value'",
+  _ => '$target',
+};
+
 /// The targets the plain vocabulary cannot express: the ones that need a
 /// property other than visible text, a scope, or an index.
 ///

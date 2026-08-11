@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'events.dart';
+
 /// One captured step, handed from [ScenarioTester]'s capture to whoever is
 /// listening — the harness, when a scenario runs under the flutterware
 /// runner.
@@ -17,6 +19,10 @@ class ScenarioStepCapture {
     required this.texts,
     required this.statusBrightness,
     required this.navBrightness,
+    this.verb,
+    this.target,
+    this.events = const [],
+    this.eventsDropped = 0,
     this.settled = true,
     this.strayFrames = 0,
     this.failure,
@@ -50,6 +56,21 @@ class ScenarioStepCapture {
 
   /// The visible `Text` widgets, in tree order — the text projection.
   final List<String> texts;
+
+  /// The verb that produced this step (`tap`, `enterText`, `screen`, …) and
+  /// what it was aimed at, when it was aimed at anything. Together they say
+  /// what the transition *into* this step was, which is what turns an edge in
+  /// the flow from an arrow into a sentence.
+  final String? verb;
+  final String? target;
+
+  /// What the app did on the way here: everything recorded between the
+  /// previous capture and this one, in the order it happened.
+  final List<ScenarioEvent> events;
+
+  /// Events dropped to stay inside the per-step or per-run cap. Reported
+  /// rather than swallowed — silence would read as "the app did nothing".
+  final int eventsDropped;
 
   /// The app's declared `SystemUiOverlayStyle` icon brightness at capture
   /// time (`light`/`dark`), or null when it never declared one. What the

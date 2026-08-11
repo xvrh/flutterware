@@ -138,6 +138,53 @@ void main() {
         scratch.deleteSync();
       }
 
+      // The transition events, end to end through a real tester: the three
+      // automatic lanes and the reported one, on the step each belongs to.
+      var signIn = await runner.run(
+        outDir: outDir,
+        file: 'test/scenarios/events_test.dart',
+        scenario: 'Signing in',
+      );
+      var signInOutcome = (signIn['scenarios']! as List).single as Map;
+      expect(signInOutcome['ok'], isTrue, reason: '${signInOutcome['errors']}');
+      var signInSteps = (signInOutcome['steps']! as List).cast<Map>();
+      // Every step names the transition into it, which is what the flow's
+      // arrows and the Events tab's header both read.
+      expect(
+        [for (var step in signInSteps) '${step['verb']} ${step['target']}'],
+        [
+          'pumpWidget _SignInApp',
+          'enterText TextField',
+          'tap "Sign in"',
+          'screen null',
+        ],
+      );
+      // The tap is the interesting transition: the app logged, the fake
+      // reported a request, a query and an analytics event, and the framework
+      // talked to `flutter/textinput` on the way.
+      var tapped = signInSteps[2];
+      expect(tapped['eventChannels'], containsPair('log', 1));
+      expect(tapped['eventChannels'], containsPair('network', 1));
+      expect(tapped['eventChannels'], containsPair('db', 1));
+      expect(tapped['eventChannels'], containsPair('analytics', 1));
+      // Captured, and left out of the inline digest, which is the whole
+      // policy: the volume is real and the reader filters it away.
+      expect(tapped['eventChannels'], contains('system'));
+      expect(
+        (tapped['eventTitles']! as List).cast<String>(),
+        containsAll(<String>['POST /sessions → 200', 'sign_in']),
+      );
+      var events =
+          jsonDecode(File(tapped['events']! as String).readAsStringSync())
+              as List;
+      expect(
+        [
+          for (var event in events.cast<Map>())
+            if (event['channel'] == 'db') event['body'],
+        ],
+        ['INSERT INTO sessions (email) VALUES (?)'],
+      );
+
       // The `new` action's scaffold, run as written. It is the only
       // documentation of the scenario API that executes, so it is checked
       // where a real tester already is: change `tap` or `Shot` and this is

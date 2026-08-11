@@ -765,6 +765,13 @@ packages: List<ScenarioRunPackage>
       tree: String   # The widget-tree JSON captured at the same moment, relative like [image].
       semantics: String?   # The semantics-tree JSON — what a screen reader gets — relative like [image].
       texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
+      verb: String?   # The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.
+      target: String?
+      events: String?   # What the app did on the way here — logs, prints, platform channel messages, and whatever the project's fakes reported through `recordScenarioEvent`.
+      eventCount: int?   # How many, and on which channels — `{platform: 3, print: 1}`.
+      eventChannels: Map<String, int>?
+      eventTitles: List<String>?   # The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].
+      eventsDropped: int?   # Events dropped to stay inside the per-step or per-run cap.
       address: String   # The step's `fw://` address.
       statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
       navBrightness: String?

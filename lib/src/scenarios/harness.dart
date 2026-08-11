@@ -6,16 +6,19 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 import 'package:test_api/src/backend/declarer.dart';
 import 'package:test_api/src/backend/group.dart';
 import 'package:test_api/src/backend/group_entry.dart';
 import 'package:test_api/src/backend/live_test.dart';
+import 'package:test_api/src/backend/message.dart';
 import 'package:test_api/src/backend/runtime.dart';
 import 'package:test_api/src/backend/suite.dart';
 import 'package:test_api/src/backend/suite_platform.dart';
 import 'package:test_api/src/backend/test.dart';
 
 import '../inspect/guest_inspect.dart';
+import 'events.dart';
 import 'profile.dart';
 import 'run_args.dart';
 import 'scenario.dart';
@@ -23,6 +26,12 @@ import 'run_listener.dart';
 import '../inspect/semantics_capture.dart';
 
 // ignore_for_file: implementation_imports
+
+/// How many event summaries ride inline on a step. The full list is always on
+/// disk beside the pixels; this is the part a reader gets without asking, and
+/// a screen that logs in a build method must not turn one step's record into
+/// a wall.
+const _maxInlineTitles = 12;
 
 /// The scenario harness `main`, called by the generated entrypoint the runner
 /// compiles into `flutter_tester`:
@@ -126,6 +135,111 @@ class _HarnessBinding extends AutomatedTestWidgetsFlutterBinding {
   void scheduleWarmUpFrame() {
     if (inTest) super.scheduleWarmUpFrame();
   }
+
+  @override
+  TestDefaultBinaryMessenger createBinaryMessenger() =>
+      _SpyMessenger(super.createBinaryMessenger());
+}
+
+/// Every platform message, as a transition event.
+///
+/// Under the test binding all channel traffic passes through the messenger the
+/// binding constructs, so this is where a plugin's conversation with its host
+/// becomes visible with no cooperation from the app. What it does *not* see is
+/// traffic that never happens: a plugin whose platform interface is gated on
+/// the dart plugin registrant (sqflite) throws before sending, and an ffi
+/// implementation never sends at all
+/// (`2026-08-11-scenario-events-spike-findings.md`).
+class _SpyMessenger extends TestDefaultBinaryMessenger {
+  /// The configured messenger becomes the **delegate**, not the donor.
+  ///
+  /// It carries outbound handlers the binding installed — `flutter/keyboard`
+  /// among them — and those are private. Rebuilding around its `delegate`
+  /// instead drops them, `getKeyboardState` then goes to the engine, is never
+  /// answered, and every run hangs. Measured, at length, by the spike.
+  _SpyMessenger(super.inner);
+
+  @override
+  Future<ByteData?>? send(String channel, ByteData? message) {
+    var system = channel.startsWith('flutter/');
+    var call = _decode(message);
+    recordScenarioEvent(
+      ScenarioEvent.custom(
+        channel: system ? ScenarioChannel.system : ScenarioChannel.platform,
+        title: call == null ? channel : '$channel ${call.method}',
+        detail: call == null ? '${message?.lengthInBytes ?? 0} bytes' : null,
+        data: _arguments(call),
+      ),
+    );
+    var result = super.send(channel, message);
+    if (system) return result;
+    // Replies are recorded only when they say something went wrong. A
+    // successful envelope in a widget test is either empty or a mock's canned
+    // value — the spike measured nine identical 6-byte success envelopes from
+    // one `enterText` — and a channel with nobody on the other end is the
+    // "your fake is not wired" diagnostic worth keeping.
+    result?.then(
+      (reply) {
+        if (reply == null) {
+          recordScenarioEvent(
+            ScenarioEvent.custom(
+              channel: ScenarioChannel.platform,
+              title: '$channel — no implementation',
+              detail: call?.method,
+              error: true,
+            ),
+          );
+          return;
+        }
+        try {
+          const StandardMethodCodec().decodeEnvelope(reply);
+        } catch (error) {
+          recordScenarioEvent(
+            ScenarioEvent.custom(
+              channel: ScenarioChannel.platform,
+              title: '$channel ${call?.method ?? ''} failed'.trim(),
+              body: '$error',
+              error: true,
+            ),
+          );
+        }
+      },
+      onError: (Object error) => recordScenarioEvent(
+        ScenarioEvent.custom(
+          channel: ScenarioChannel.platform,
+          title: '$channel ${call?.method ?? ''} threw'.trim(),
+          body: '$error',
+          error: true,
+        ),
+      ),
+    );
+    return result;
+  }
+
+  /// The two codecs the framework and its plugins actually use, in the order
+  /// they are common. A message neither decodes is reported by its size —
+  /// binary payloads (`flutter/assets`) have nothing else to say.
+  MethodCall? _decode(ByteData? message) {
+    if (message == null) return null;
+    try {
+      return const StandardMethodCodec().decodeMethodCall(message);
+    } catch (_) {
+      try {
+        return const JSONMethodCodec().decodeMethodCall(message);
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+
+  Map<String, Object?> _arguments(MethodCall? call) =>
+      switch (call?.arguments) {
+        null => const {},
+        Map<Object?, Object?> map => {
+          for (var entry in map.entries) '${entry.key}': entry.value,
+        },
+        var other => {'arguments': other},
+      };
 }
 
 /// Loads every font the asset bundle's `FontManifest.json` declares — the
@@ -612,6 +726,27 @@ Future<Map<String, Object?>> _runOne(
     if (semantics != null) {
       File('$base.semantics.json').writeAsStringSync(jsonEncode(semantics));
     }
+    // And the fifth: what the app *did* on the way to this frame. A file like
+    // the trees, for the same reason — a run's response stays readable, and
+    // the payloads are fetched by whoever opens the step. What rides in the
+    // record is the digest.
+    if (capture.events.isNotEmpty) {
+      File('$base.events.json').writeAsStringSync(
+        jsonEncode(
+          [for (var event in capture.events) event.toJson()],
+          // An event's payload is whatever the reporter had in hand — a
+          // channel's decoded arguments, a fake's own objects — and the one
+          // thing this may not do is throw. A viewer that cannot encode a
+          // value shows what it printed as; a `JsonUnsupportedObjectError`
+          // here would fail the step it was only describing.
+          toEncodable: (value) => '$value',
+        ),
+      );
+    }
+    var counts = <String, int>{};
+    for (var event in capture.events) {
+      counts[event.channel] = (counts[event.channel] ?? 0) + 1;
+    }
     var step = {
       'index': capture.index,
       'parent': ?capture.parent,
@@ -628,6 +763,24 @@ Future<Map<String, Object?>> _runOne(
       'texts': capture.texts,
       'statusBrightness': ?capture.statusBrightness,
       'navBrightness': ?capture.navBrightness,
+      // The transition into this step: the verb that caused it, and what the
+      // app did on the way.
+      'verb': ?capture.verb,
+      'target': ?capture.target,
+      if (capture.events.isNotEmpty) ...{
+        'events': '$base.events.json',
+        'eventCount': capture.events.length,
+        'eventChannels': counts,
+        // The one-line summaries, inline and capped: the part an agent
+        // reasons about without opening a file. `system` is left out — it is
+        // the channel a reader filters away, and it is most of the volume.
+        'eventTitles': [
+          for (var event in capture.events)
+            if (event.channel != ScenarioChannel.system)
+              '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
+        ].take(_maxInlineTitles).toList(),
+      },
+      if (capture.eventsDropped > 0) 'eventsDropped': capture.eventsDropped,
       // Both omitted in the healthy case, so a normal step's record stays the
       // size it was.
       if (!capture.settled) 'settled': false,
@@ -664,10 +817,46 @@ Future<Map<String, Object?>> _runOne(
     });
   };
 
+  // The three automatic lanes, installed **here** and not around the scenario
+  // body: out here it is ordinary async, once per run rather than once per
+  // split replay. Inside the body they would be under FakeAsync, where
+  // `await subscription.cancel()` never returns — cancel hands back a
+  // root-zone future and the fake clock does not drain the real microtask
+  // queue. That hangs the whole run, silently, including scenarios that log
+  // nothing (`2026-08-11-scenario-events-spike-findings.md`).
+  scenarioEventBuffer = ScenarioEventBuffer();
+  var records = Logger.root.onRecord.listen(
+    (record) => recordScenarioEvent(
+      ScenarioEvent.log(
+        record.message,
+        level: record.level.name,
+        logger: record.loggerName.isEmpty ? null : record.loggerName,
+      ),
+    ),
+  );
+  // Prints need no zone of ours. `test_api`'s Invoker already forks one with
+  // its own print spec — which does not delegate upward, so a zone here would
+  // see nothing — and republishes each line on this stream. Nobody used to
+  // listen, which is why a `print` inside a scenario went nowhere at all.
+  var messages = live.onMessage.listen((message) {
+    // The stream also carries `skip` — the reason a skipped test gives — which
+    // is a fact about the test, not something the app printed.
+    if (message.type != MessageType.print) return;
+    recordScenarioEvent(
+      ScenarioEvent.custom(channel: ScenarioChannel.print, title: message.text),
+    );
+  });
+
   var watch = Stopwatch()..start();
   try {
     await live.run();
   } finally {
+    await records.cancel();
+    await messages.cancel();
+    // Whatever the app did after the last capture goes with it: there is no
+    // step for it to belong to, and inventing one would put teardown —
+    // `TextInput.clearClient` and its like — on the flow.
+    scenarioEventBuffer = null;
     reportTestException = priorReporter;
     scenarioRunListener = null;
   }

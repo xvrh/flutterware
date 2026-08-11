@@ -163,6 +163,41 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
               ..color = context.colors.mut3
               ..style = PaintingStyle.stroke
               ..strokeWidth = 3.5,
+            // What the arrow has to say, in two registers. The split's branch
+            // label goes on the arrow that forks — dev_studio's placement, and
+            // the one that reads: a fan-out is several arrows leaving one
+            // node, and the question is which arrow is which. Under it, the
+            // transition itself: the verb that caused the next frame and how
+            // many events the app fired getting there, so the flow reads as
+            // `tap "Pay" › 4 events › Receipt` rather than as two pictures.
+            edgeTooltip: (from, to) {
+              var step = byId[to];
+              if (step == null) return null;
+              var transition = scenarioStepTransition(step);
+              // Spelled out on its own line rather than iconified: the gap
+              // between two nodes is narrow, a glyph there reads as an
+              // artifact, and `7 events` needs no legend.
+              var count = step.notableEventCount;
+              var events = count == 0
+                  ? ''
+                  : '\n$count event${count == 1 ? '' : 's'}';
+              if (step.branch == null && transition == null) return null;
+              return EdgeTooltip(
+                step.branch,
+                // Sized like the node labels, for the same reason: the canvas
+                // opens at half scale.
+                style: context.type.body.copyWith(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.accent,
+                ),
+                subtitle: transition == null ? null : '$transition$events',
+                subtitleStyle: context.type.body.copyWith(
+                  fontSize: 18,
+                  color: context.colors.mut,
+                ),
+              );
+            },
           ),
         ),
         Positioned(
@@ -198,19 +233,6 @@ class _StepNode extends StatelessWidget {
       onTap: onTap,
       child: Column(
         children: [
-          // The split's branch label, worn by the branch's first step — how
-          // the fan-out says which arm is which.
-          if (step.branch case var branch?)
-            Text(
-              branch,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: context.type.body.copyWith(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                color: context.colors.accent,
-              ),
-            ),
           Text(
             '${step.index} · ${scenarioStepLabel(step)}',
             maxLines: 1,
