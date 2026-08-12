@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 1024 1024"
+   width="1024"
+   height="1024"
+   version="1.1"
+   id="svg3"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <!-- The tile a project's icon is composited into. Generated; see
+       docs/superpowers/specs/2026-08-12-project-identity-design.md. -->
+  <defs
+     id="defs3">
+    <filter
+       id="sh"
+       x="-0.040776699"
+       y="-0.040776699"
+       width="1.0815534"
+       height="1.0961165">
+      <feFlood
+         flood-color="#0a1a33"
+         flood-opacity="0.30"
+         result="c"
+         id="feFlood1" />
+      <feComposite
+         in="c"
+         in2="SourceAlpha"
+         operator="in"
+         result="s"
+         id="feComposite1" />
+      <feOffset
+         in="s"
+         dy="12"
+         result="so"
+         id="feOffset1" />
+      <feGaussianBlur
+         in="so"
+         stdDeviation="14"
+         result="sb"
+         id="feGaussianBlur1" />
+      <feMerge
+         id="feMerge2">
+        <feMergeNode
+           in="sb"
+           id="feMergeNode1" />
+        <feMergeNode
+           in="SourceGraphic"
+           id="feMergeNode2" />
+      </feMerge>
+    </filter>
+    <linearGradient
+       id="bg"
+       x1="0"
+       y1="0"
+       x2="0.35"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#1e3350"
+         id="stop2" />
+      <stop
+         offset="1"
+         stop-color="#0c1826"
+         id="stop3" />
+    </linearGradient>
+  </defs>
+  <g
+     filter="url(#sh)"
+     id="g3">
+    <rect
+       x="100"
+       y="100"
+       width="824"
+       height="824"
+       rx="185.4"
+       ry="185.4"
+       fill="url(#bg)"
+       id="rect3" />
+  </g>
+  <path
+     d="M 288.752,875.472 V 1000 H 226.488 V 875.472 h -22.36 v -51.944 h 22.36 V 797.04 q 0,-22.016 4.128,-35.088 3.44,-11.008 11.008,-20.296 7.568,-9.632 17.544,-16.512 10.32,-6.88 22.016,-10.664 11.696,-3.784 23.048,-3.784 7.912,0 14.448,1.72 6.88,1.72 13.76,4.816 v 54.352 q -6.192,-3.096 -11.696,-4.472 -5.16,-1.72 -11.008,-1.72 -3.784,0 -7.912,1.376 -3.784,1.032 -7.224,4.816 -3.44,3.784 -4.816,11.008 -1.032,6.88 -1.032,18.92 v 22.016 h 43.688 v 51.944 z m 101.24026,-51.944 42.312,92.88 44.032,-92.88 h 39.216 l 44.032,95.632 44.376,-95.632 h 69.144 L 580.91226,1000 h -41.624 l -44.032,-96.664 -41.968,96.664 h -42.312 l -90.472,-176.472 z"
+     id="text3"
+     style="font-weight:700;font-size:344px;font-family:Futura;letter-spacing:-14;fill:#ffffff"
+     transform="translate(-83.6,-343.3)"
+     aria-label="fw" />
+  <!-- Where the project's icon goes. Never painted; read by tool/icon/generate.dart. -->
+  <rect
+     id="chip-slot"
+     x="672.0"
+     y="425.2"
+     width="231.4"
+     height="231.4"
+     fill="none"
+     stroke="none" />
+</svg>

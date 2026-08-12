@@ -13,6 +13,7 @@ import 'src/plugins/native/registry.dart';
 import 'src/shell/shell_controller.dart';
 import 'src/shell/shell_view.dart';
 import 'src/utils/flutter_sdk.dart';
+import 'src/identity/dock_icon.dart';
 import 'src/utils/window_title.dart';
 
 // ignore_for_file: implementation_imports
@@ -72,6 +73,9 @@ void main() async {
   // Named here rather than before `runApp`, which is what initialises the
   // binding the channel goes through.
   await WindowTitle.setForProject(projectPath);
+
+  // And the tile, which is what a user actually scans.
+  DockIcon.follow(shell);
 
   // No welcome banner. It used to be printed here, and this process has no
   // terminal to print it to — `fw` owns the one it inherits, knows the plugin

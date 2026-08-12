@@ -47,6 +47,18 @@ class MainFlutterWindow: NSWindow {
         }
         self?.title = title
         result(nil)
+      // Which project this window is, in the Dock and in ⌘-Tab. Measured: the
+      // switcher does follow applicationIconImage, and neither surface honours
+      // per-size representations — so one image is all there is to send.
+      case "setIcon":
+        guard let png = call.arguments as? FlutterStandardTypedData,
+              let image = NSImage(data: png.data) else {
+          result(FlutterError(code: "bad_args",
+                              message: "png bytes required", details: nil))
+          return
+        }
+        NSApplication.shared.applicationIconImage = image
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }

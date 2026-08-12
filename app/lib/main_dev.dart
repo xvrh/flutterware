@@ -14,6 +14,7 @@ import 'src/shell/shell_controller.dart';
 import 'src/shell/shell_view.dart';
 import 'src/utils/debug.dart';
 import 'src/utils/flutter_sdk.dart';
+import 'src/identity/dock_icon.dart';
 import 'src/utils/window_title.dart';
 
 final _logger = Logger('main_dev');
@@ -54,6 +55,9 @@ void main() async {
   runApp(AppDevbar(flags: const [], child: ShellApp(shell)));
 
   await WindowTitle.setForProject('..');
+
+  // And the tile, which is what a user actually scans.
+  DockIcon.follow(shell);
 
   // Discovery runs a subprocess; the shell renders its empty state until it
   // resolves rather than blocking the first frame. The path is walked up to the
