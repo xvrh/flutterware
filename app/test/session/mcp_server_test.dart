@@ -125,6 +125,21 @@ void main() {
     expect(text, isNot(contains('Unhandled')));
   });
 
+  test('the act tool teaches the layer it can address', () async {
+    // The forwarding test above catches a dropped argument; it cannot catch a
+    // parameter an agent never learns exists. `layer` reached the plugin
+    // action before it reached this schema, and in that window the native
+    // layer was built, working, and unaskable.
+    var act = (await connection.listTools()).tools.singleWhere(
+      (tool) => tool.name == 'flutterware_act',
+    );
+    expect(
+      '${act.inputSchema.properties!['layer']}',
+      contains('native'),
+      reason: 'the tool description is where an agent learns the layer exists',
+    );
+  });
+
   test('status reports every declared plugin, loaded', () async {
     var result = await connection.callTool(
       CallToolRequest(name: 'flutterware_status'),

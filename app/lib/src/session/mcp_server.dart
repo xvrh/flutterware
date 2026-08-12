@@ -397,8 +397,12 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         "run's journal, reviewable in the GUI's Steps tab. On a phone, keep "
         'the app in the foreground: iOS suspends a backgrounded app and it '
         'answers nothing until somebody brings it back — you get a timeout '
-        'saying exactly that. A hidden desktop window and a backgrounded '
-        'Android app both drive fine. For flows '
+        'saying exactly that, and `{"verb": "foreground", "layer": '
+        '"native"}` is how you fix it yourself. A hidden desktop window and '
+        'a backgrounded Android app both drive fine. When a target is '
+        'refused for something you can see in the screenshot but not in the '
+        "texts — a permission dialog, a webview's contents — retry it with "
+        'layer: native. For flows '
         'expressible headlessly, scenarios are milliseconds and '
         'deterministic — reach for this tool when it must be the real '
         'thing: real backend, real data, real device, or the flutterware '
@@ -409,7 +413,24 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
           description:
               'tap | longPress | drag | scrollTo | enterText | back | wait '
               '| observe | navigate. observe is the act-less transaction — '
-              'the opening move, and the call after a reload.',
+              'the opening move, and the call after a reload. On '
+              'layer: native: observe | tap | enterText | foreground.',
+        ),
+        'layer': Schema.string(
+          description:
+              "Which tree to address. Omit for the app's own widget tree — "
+              'fast, exact, and where everything Flutter draws lives. '
+              '"native" addresses the platform\'s accessibility tree '
+              'instead: slower (Android ~4s a step, iOS simulator ~0.6s) but '
+              'it sees what Flutter cannot — permission dialogs and other '
+              'native popups, the contents of a webview or map, another app '
+              'the flow jumped to — and its screenshot is the real device '
+              'screen rather than a raster of the Flutter layer. Two limits '
+              'worth knowing: on Android the tree is the focused window, so '
+              'a dialog is fully there but the soft keyboard is not; on '
+              'macOS it sees native chrome only, because a Flutter app '
+              'publishes none of its own widgets to macOS accessibility. '
+              'Use verb: foreground here to bring back a suspended iOS app.',
         ),
         'target': Schema.string(
           description:
@@ -418,7 +439,10 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               '{"within": {"scope": …, "child": …}}, '
               '{"nth": {"target": …, "index": …}}. A reply text ending in … '
               'was truncated — target it with {"containing": <prefix>}, not '
-              'the truncated string.',
+              'the truncated string. On layer: native the same grammar minus '
+              'key/tooltip/within, plus {"role": …} and {"at": {"x": …, '
+              '"y": …}} for a point no element covers — divide a point read '
+              "off the screenshot by the reply's screenshotScale first.",
         ),
         'text': Schema.string(
           description: 'What enterText types, as one editing value.',
@@ -477,6 +501,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
   /// becomes a dead end — so a test asserts they stay equal.
   static const actArguments = [
     'verb',
+    'layer',
     'target',
     'text',
     'route',

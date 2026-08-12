@@ -216,6 +216,11 @@ Map<String, dynamic> _$RunActResultToJson(RunActResult instance) =>
       'errors': ?instance.errors?.map((e) => e.toJson()).toList(),
       'journal': ?instance.journal,
       'note': ?instance.note,
+      'layer': ?instance.layer,
+      'coordinateSpace': ?instance.coordinateSpace,
+      'screenshotScale': ?instance.screenshotScale,
+      'nativeTree': ?instance.nativeTree,
+      'reconciled': ?instance.reconciled,
     };
 
 Map<String, dynamic> _$RunPanelsResultToJson(RunPanelsResult instance) =>

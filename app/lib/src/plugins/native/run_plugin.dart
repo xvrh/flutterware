@@ -1236,6 +1236,11 @@ class _StepRow extends StatelessWidget {
     var colors = context.colors;
     var caption = [
       ?entry.actor,
+      // Which tree the step addressed belongs in the caption, not a detail
+      // pane: a native tap and a widget tap look identical in a thumbnail,
+      // and "the agent went below the widget tree" is usually the
+      // interesting part of a review rather than a footnote.
+      ?entry.layer,
       _clock(entry.at),
       if ((entry.attempts ?? 1) > 1) '${entry.attempts} tries',
       if (entry.settled == false) 'did not settle',
@@ -1345,6 +1350,9 @@ class _StepDetailState extends State<_StepDetail> {
     var colors = context.colors;
     var facts = [
       if (entry.actor case var actor?) 'by $actor',
+      if (entry.layer case var layer?) 'through the $layer layer',
+      if (entry.reconciled case var count? when count > 0)
+        '$count of its own taps came back as human input, and were dropped',
       if ((entry.attempts ?? 1) > 1) '${entry.attempts} tries',
       if (entry.settleMs case var ms?) 'settled in ${ms}ms',
       if (entry.settled == false) 'still animating when observed',
