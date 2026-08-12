@@ -8,30 +8,27 @@ on:
 jobs:
   analyze_and_test:
     name: Flutter analyze
-    strategy:
-      matrix:
-        flutter: ['beta']
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: ${{ matrix.flutter }}
-      - run: flutter --version
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
+      # The committed wrapper downloads the SDK flutter_version pins — CI runs
+      # the exact toolchain the repo records, not whatever a setup action
+      # resolves the channel to today.
+      - run: ./fw flutter --version
+      - run: ./fw flutter pub get
+      - run: ./fw flutter analyze
+      - run: ../fw flutter test
         working-directory: app
       # The root package's own tests. Separate because a pub workspace does not
       # run its members' suites — without this line `test/` here is analyzed
       # and never executed, which is how the inspection wire format sat
       # unguarded while looking covered.
-      - run: flutter test
-      - run: flutter pub run tool/prepare_submit.dart
+      - run: ./fw flutter test
+      - run: ./fw dart tool/prepare_submit.dart
       - name: "check for uncommitted changes"
         run: |
           git diff --exit-code --stat -- . ':(exclude)*pubspec.lock' \
-          || (echo "##[error] found changed files after build. please run 'fvm dart tool/prepare_submit.dart'" \
+          || (echo "##[error] found changed files after build. please run './fw dart tool/prepare_submit.dart'" \
                    "and check in all changes" \
               && exit 1)
         shell: bash
@@ -57,7 +54,7 @@ jobs:
         # `check` and not `screenshot` so this can *block*: it stops at the
         # daemon handshake, launching no guest, so it needs no GPU — which is
         # exactly why the step below cannot block.
-        run: dart run ../../app/bin/fw.dart run previews check
+        run: ../../fw dart run ../../app/bin/fw.dart run previews check
         working-directory: examples/example
 
       - name: "and finds it when started by package name"
@@ -72,7 +69,7 @@ jobs:
         # session down the same daemon handshake and can say so with an exit
         # code; talking MCP from a workflow step would test the transport, not
         # the resolution.
-        run: dart run flutterware_app:fw run previews check
+        run: ../../fw dart run flutterware_app:fw run previews check
         working-directory: examples/example
 
       - name: "the compiler daemon, as a process"
@@ -91,5 +88,5 @@ jobs:
         # is what lets this step block: a check nobody can fail is not a check,
         # and the step it replaces was `continue-on-error` from the day it was
         # written to the day it was deleted.
-        run: dart test integration_test --exclude-tags gpu
+        run: ../fw dart test integration_test --exclude-tags gpu
         working-directory: app

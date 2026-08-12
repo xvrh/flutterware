@@ -1,0 +1,158 @@
+#!/bin/sh
+# flutterware wrapper v1
+#
+# Committed on purpose: teammates and CI run these exact bytes, so no globally
+# installed tool can change what this repo does. The Flutter version is pinned
+# in the flutter_version file next to this script — edit that file to upgrade
+# the SDK. A newer wrapper template ships inside the flutterware package;
+# `./fw wrapper` rewrites this script and the diff is committed like any other.
+#
+#   ./fw flutter <args>    the pinned SDK's flutter
+#   ./fw dart <args>       the pinned SDK's dart
+#   ./fw <anything else>   dart run flutterware <args> under the pinned SDK
+#
+# FW_FLUTTER_SDK=<path>  use that SDK instead of the pin (escape hatch)
+# FW_SDK_CACHE=<dir>     where SDKs are cached (default ~/.flutterware/sdks)
+set -eu
+
+fail() {
+  echo "fw: $*" >&2
+  exit 1
+}
+
+root=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+
+if [ -n "${FW_FLUTTER_SDK:-}" ]; then
+  sdk=$FW_FLUTTER_SDK
+  [ -x "$sdk/bin/flutter" ] || fail "FW_FLUTTER_SDK=$sdk is not a Flutter SDK"
+else
+  [ -f "$root/flutter_version" ] || fail "no flutter_version file in $root"
+  version=$(tr -d ' \t\r\n' < "$root/flutter_version")
+  [ -n "$version" ] || fail "$root/flutter_version is empty"
+  cache=${FW_SDK_CACHE:-$HOME/.flutterware/sdks}
+  sdk=$cache/$version
+fi
+
+install_sdk() {
+  [ "$(uname -s)" = Darwin ] || fail 'this wrapper only supports macOS so far'
+  case $(uname -m) in
+    arm64) arch=arm64 ;;
+    x86_64) arch=x64 ;;
+    *) fail "unsupported architecture: $(uname -m)" ;;
+  esac
+
+  mkdir -p "$cache"
+  # The holder writes its pid into the lock; waiters wait only while that pid
+  # is alive. A killed install (kill -9 skips the traps) must not wedge every
+  # later run — a dead owner's lock is taken over, and so is one that never
+  # gains an owner: three looks covers the gap between a holder's mkdir and
+  # its pid write.
+  lock=$cache/.lock-$version
+  announced=0
+  ownerless=0
+  until mkdir "$lock" 2>/dev/null; do
+    owner=$(cat "$lock/pid" 2>/dev/null || true)
+    if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
+      ownerless=0
+      if [ "$announced" -eq 0 ]; then
+        echo "fw: another fw is installing Flutter $version — waiting…" >&2
+        announced=1
+      fi
+    elif [ -n "$owner" ]; then
+      echo "fw: the fw holding the install lock died — taking over" >&2
+      rm -rf "$lock"
+      continue
+    else
+      ownerless=$((ownerless + 1))
+      if [ "$ownerless" -ge 3 ]; then
+        echo "fw: an install lock with no owner — taking over" >&2
+        rm -rf "$lock"
+        continue
+      fi
+    fi
+    sleep 5
+  done
+  echo "$$" >"$lock/pid"
+  tmp=$(mktemp -d "$cache/.install-$version-XXXXXX")
+  # The script ends in exec, which skips EXIT traps — the trap only covers
+  # failures (fail exits, curl/unzip errors); success paths clean up here.
+  trap 'rm -rf "$tmp" "$lock"' EXIT
+  cleanup() {
+    rm -rf "$tmp" "$lock"
+    trap - EXIT
+  }
+
+  # Someone else finished the install while we waited for the lock.
+  if [ -x "$sdk/bin/flutter" ]; then
+    cleanup
+    return
+  fi
+
+  base=${FLUTTER_STORAGE_BASE_URL:-https://storage.googleapis.com}
+  base=$base/flutter_infra_release/releases
+
+  echo "fw: Flutter $version is not installed, fetching the release index" >&2
+  curl -fsSL "$base/releases_macos.json" -o "$tmp/releases.json" ||
+    fail "could not download the release index from $base"
+
+  # One release per '}'-separated record: entries hold no nested objects, so
+  # this works in BSD awk (macOS), which only honors the first character of RS.
+  entry=$(awk -v RS='}' -v v="\"version\": \"$version\"" \
+    -v a="\"dart_sdk_arch\": \"$arch\"" \
+    'index($0, v) && index($0, a) { print; exit }' "$tmp/releases.json")
+  [ -n "$entry" ] ||
+    fail "Flutter $version ($arch) is not in the macOS release index — check $root/flutter_version"
+  archive=$(printf '%s\n' "$entry" |
+    sed -n 's/^[[:space:]]*"archive": "\(.*\)",\{0,1\}$/\1/p')
+  sha256=$(printf '%s\n' "$entry" |
+    sed -n 's/^[[:space:]]*"sha256": "\(.*\)",\{0,1\}$/\1/p')
+  [ -n "$archive" ] && [ -n "$sha256" ] ||
+    fail 'could not read the archive location from the release index'
+
+  echo "fw: downloading $base/$archive" >&2
+  if [ -t 2 ]; then progress=--progress-bar; else progress=-sS; fi
+  curl -fL $progress "$base/$archive" -o "$tmp/flutter.zip" ||
+    fail 'download failed'
+
+  echo "$sha256  $tmp/flutter.zip" | shasum -a 256 -c - >/dev/null 2>&1 ||
+    fail 'checksum mismatch — the download is corrupt, try again'
+
+  echo "fw: unpacking to $sdk" >&2
+  unzip -q "$tmp/flutter.zip" -d "$tmp/unpacked" || fail 'unpack failed'
+  [ -x "$tmp/unpacked/flutter/bin/flutter" ] ||
+    fail 'the archive did not contain a Flutter SDK'
+  mv "$tmp/unpacked/flutter" "$sdk"
+  cleanup
+}
+
+[ -x "$sdk/bin/flutter" ] || install_sdk
+
+case ${1:-} in
+  flutter)
+    shift
+    case ${1:-} in
+      upgrade | downgrade)
+        fail "the SDK is pinned — edit $root/flutter_version instead"
+        ;;
+      channel)
+        [ $# -le 1 ] ||
+          fail "the SDK is pinned — edit $root/flutter_version instead"
+        ;;
+    esac
+    exec "$sdk/bin/flutter" "$@"
+    ;;
+  dart)
+    shift
+    exec "$sdk/bin/dart" "$@"
+    ;;
+  *)
+    # From the repo root, not from where the user is standing: `dart run
+    # <package>` from a subdirectory runs the build hooks and then fails to
+    # resolve (the global walker documents the measurement). Nothing is lost
+    # — the session walks up to the repo root anyway. Passthrough above stays
+    # in the user's cwd on purpose: `../fw flutter test` inside app/ must run
+    # app's tests.
+    cd "$root"
+    exec "$sdk/bin/dart" run flutterware "$@"
+    ;;
+esac

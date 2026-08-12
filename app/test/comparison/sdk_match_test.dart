@@ -33,12 +33,26 @@ void main() {
     return dir.path;
   }
 
-  /// A checkout pinning [target] the way fvm does.
-  String checkout(String name, {String? pinning}) {
+  /// A checkout with an SDK link the way fvm writes one, and optionally the
+  /// committed pins — `flutter_version` (the fw wrapper's) and `.fvmrc`.
+  String checkout(
+    String name, {
+    String? pinning,
+    String? claims,
+    String? fvmrc,
+  }) {
     var dir = Directory(p.join(root.path, name))..createSync(recursive: true);
     if (pinning != null) {
       var fvm = Directory(p.join(dir.path, '.fvm'))..createSync();
       Link(p.join(fvm.path, 'flutter_sdk')).createSync(pinning);
+    }
+    if (claims != null) {
+      File(p.join(dir.path, 'flutter_version')).writeAsStringSync('$claims\n');
+    }
+    if (fvmrc != null) {
+      File(
+        p.join(dir.path, '.fvmrc'),
+      ).writeAsStringSync('{"flutter": "$fvmrc"}');
     }
     return dir.path;
   }
@@ -112,4 +126,37 @@ void main() {
     expect(match.same, isFalse);
     expect(match.reason, contains('base'));
   });
+
+  // The exact case the seeded link papers over: a base checkout is handed the
+  // head's SDK so it can build, but its own commit pins something else. The
+  // committed claim outranks the link.
+  test('the flutter_version claim outranks a seeded link', () async {
+    var head = sdk('beta', version: '3.47.0');
+    var match = await SdkMatch.of(
+      baseRoot: checkout('base', pinning: head, claims: '3.44.0'),
+      headRoot: checkout('head', pinning: head, claims: '3.47.0'),
+    );
+
+    expect(match.same, isFalse);
+    expect(match.reason, contains('3.44.0'));
+    expect(match.reason, contains('3.47.0'));
+  });
+
+  test(
+    'flutter_version wins over .fvmrc when a checkout carries both',
+    () async {
+      var pinned = sdk('beta', version: '3.47.0');
+      var match = await SdkMatch.of(
+        baseRoot: checkout(
+          'base',
+          pinning: pinned,
+          claims: '3.47.0',
+          fvmrc: '3.44.0',
+        ),
+        headRoot: checkout('head', pinning: pinned, claims: '3.47.0'),
+      );
+
+      expect(match.same, isTrue);
+    },
+  );
 }
