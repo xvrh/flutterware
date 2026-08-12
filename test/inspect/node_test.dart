@@ -33,6 +33,101 @@ void main() {
         '/sdk/flutter/widgets.dart:1:1',
       );
     });
+
+    /// What a VM-service tree is full of above the user's code, and the whole
+    /// reason the pane wrapped an SDK path over six lines.
+    test('folds a Flutter SDK path to a package URI', () {
+      var source = const InspectSource(
+        file:
+            'file:///Users/x/.flutterware/sdks/3.47.0-0.1.pre/packages/'
+            'flutter/lib/src/widgets/binding.dart',
+        line: 1673,
+        column: 24,
+      );
+      expect(
+        source.describe(relativeTo: '/repo'),
+        'package:flutter/src/widgets/binding.dart:1673:24',
+      );
+    });
+
+    test('folds a pub cache path, version stamp and all', () {
+      var source = const InspectSource(
+        file:
+            'file:///Users/x/.pub-cache/hosted/pub.dev/provider-6.1.2%2B1/'
+            'lib/src/provider.dart',
+        line: 4,
+        column: 2,
+      );
+      expect(
+        source.describe(relativeTo: '/repo'),
+        'package:provider/src/provider.dart:4:2',
+      );
+    });
+
+    test('folds a git cache path', () {
+      var source = InspectSource(
+        file:
+            'file:///Users/x/.pub-cache/git/some_dep-${'a1b2c3d4' * 5}/'
+            'lib/some_dep.dart',
+        line: 1,
+        column: 1,
+      );
+      expect(
+        source.describe(relativeTo: '/repo'),
+        'package:some_dep/some_dep.dart:1:1',
+      );
+    });
+
+    /// A path dependency beside the worktree looks like any other directory.
+    /// Naming it `package:something` would be a confident guess about a real
+    /// file, so it stays as it is.
+    test('leaves a lib/ path with no cache marker alone', () {
+      var source = const InspectSource(
+        file: 'file:///Users/x/projects/sibling/lib/thing.dart',
+        line: 9,
+        column: 3,
+      );
+      expect(
+        source.describe(relativeTo: '/repo'),
+        '/Users/x/projects/sibling/lib/thing.dart:9:3',
+      );
+    });
+
+    /// Both could apply to a vendored copy. The checkout wins: it is the path
+    /// the reader can open.
+    test('prefers the worktree over a package URI', () {
+      var source = const InspectSource(
+        file: 'file:///repo/packages/inner/lib/thing.dart',
+        line: 2,
+        column: 1,
+      );
+      expect(
+        source.describe(relativeTo: '/repo'),
+        'packages/inner/lib/thing.dart:2:1',
+      );
+    });
+
+    /// The web export has no checkout to shorten against and passes `''`.
+    /// Every path starts with the empty string, so the old branch matched,
+    /// stripped nothing, and took the leading slash with it.
+    test('an empty root folds packages and keeps the path whole', () {
+      expect(
+        const InspectSource(
+          file: 'file:///sdk/packages/flutter/lib/src/widgets/binding.dart',
+          line: 1,
+          column: 1,
+        ).describe(relativeTo: ''),
+        'package:flutter/src/widgets/binding.dart:1:1',
+      );
+      expect(
+        const InspectSource(
+          file: 'file:///a/b.dart',
+          line: 1,
+          column: 1,
+        ).describe(relativeTo: ''),
+        '/a/b.dart:1:1',
+      );
+    });
   });
 
   group('InspectConstraints', () {
@@ -75,7 +170,22 @@ void main() {
           minHeight: 0,
           maxHeight: 700,
         ).describe(),
-        'w 0.0..∞, h 0.0..700.0',
+        'w 0..∞, h 0..700',
+      );
+    });
+
+    /// The detail pane prints this two lines under `size 573 × 101`, which
+    /// drops the `.0`. Two notations for one measurement read as two kinds of
+    /// number.
+    test('drops the .0, and keeps a real fraction', () {
+      expect(
+        const InspectConstraints(
+          minWidth: 0,
+          maxWidth: 573,
+          minHeight: 47.5,
+          maxHeight: 100,
+        ).describe(),
+        'w 0..573, h 47.5..100',
       );
     });
   });

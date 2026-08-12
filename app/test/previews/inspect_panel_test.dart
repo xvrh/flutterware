@@ -395,8 +395,9 @@ void main() {
       );
       // Half of every layout question: a box that is 0 wide because it was
       // given `maxWidth: 0` is a different bug from one that chose to be.
-      expect(find.textContaining('w 0.0..320.0'), findsAtLeastNWidgets(1));
-      expect(find.textContaining('h 0.0..∞'), findsAtLeastNWidgets(1));
+      // Whole pixels without the `.0`, like the size two lines above it.
+      expect(find.textContaining('w 0..320'), findsAtLeastNWidgets(1));
+      expect(find.textContaining('h 0..∞'), findsAtLeastNWidgets(1));
     });
   });
 

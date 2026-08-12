@@ -876,6 +876,10 @@ class _ScreenTabState extends State<_ScreenTab> {
                 // detail pane rather than on every row — which is what the
                 // shared view does and what the run panel's own tree did not.
                 displayRoot: widget.core.host.worktree.path,
+                // The VM service hands out structure and creation locations;
+                // a box or a widget's own diagnostics need to be inside the
+                // app. Said here rather than inferred from empty fields.
+                readsWidgets: false,
               ),
             ),
           ],
