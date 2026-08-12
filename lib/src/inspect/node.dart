@@ -35,14 +35,68 @@ class InspectSource {
   ///
   /// An absolute URI is the truth and a relative path is what anyone reading
   /// the output wants, so this keeps the first and prints the second.
+  ///
+  /// A tree read over the VM service reaches *above* the user's code into the
+  /// framework, and those files are genuinely outside the worktree — so
+  /// [relativeTo] has nothing to strip and the reader got the whole of
+  /// `/Users/…/.flutterware/sdks/3.47.0-0.1.pre/packages/flutter/lib/src/widgets/binding.dart`,
+  /// six wrapped lines of it in a detail pane. [_packageUri] folds those back
+  /// to `package:flutter/src/widgets/binding.dart`: shorter, and the name a
+  /// reader would have used anyway.
+  ///
+  /// The worktree wins when both could apply. A path inside the checkout is
+  /// one the reader can open, and `app/lib/src/shell/shell_view.dart` says
+  /// where it *is* where a package URI only says what it belongs to.
   String describe({String? relativeTo}) {
     var path = Uri.tryParse(file)?.toFilePath() ?? file;
-    if (relativeTo != null && path.startsWith(relativeTo)) {
-      path = path.substring(relativeTo.length);
-      if (path.startsWith('/')) path = path.substring(1);
+    // Non-empty, because the web export passes `''` — every path starts with
+    // the empty string, so the old test matched, stripped nothing, and then
+    // ate the leading slash on its way out.
+    if (relativeTo != null && relativeTo.isNotEmpty) {
+      if (path.startsWith(relativeTo)) {
+        path = path.substring(relativeTo.length);
+        if (path.startsWith('/')) path = path.substring(1);
+        return '$path:$line:$column';
+      }
     }
-    return '$path:$line:$column';
+    return '${_packageUri(path) ?? path}:$line:$column';
   }
+
+  /// `package:foo/bar.dart` for a path in a place packages are *kept*, or null.
+  ///
+  /// **It recognises a layout; it does not resolve a package config.** The
+  /// three it knows are the Flutter SDK (`…/packages/flutter/lib/…`), the pub
+  /// cache (`…/hosted/pub.dev/provider-6.1.2/lib/…`) and the git cache
+  /// (`…/git/foo-<sha>/lib/…`) — each one a marker segment away from certainty,
+  /// which is why a marker is required rather than "the directory above `lib`
+  /// is the package". A path dependency checked out beside the worktree looks
+  /// exactly like an ordinary directory, and guessing a package name off it
+  /// would put a confident wrong label on a real file. Those stay absolute.
+  static String? _packageUri(String path) {
+    var parts = path.split('/');
+    for (var i = 0; i < parts.length; i++) {
+      var at = switch (parts[i]) {
+        'packages' || 'git' => i + 1,
+        // `hosted` is followed by the server the package came from.
+        'hosted' => i + 2,
+        _ => -1,
+      };
+      // The directory, then `lib`, then at least one segment of file.
+      if (at < 0 || at + 2 >= parts.length || parts[at + 1] != 'lib') continue;
+      if (_packageNamed(parts[at]) case var name?) {
+        return 'package:$name/${parts.sublist(at + 2).join('/')}';
+      }
+    }
+    return null;
+  }
+
+  /// A package name straight, or `foo-1.2.3+4` / `foo-<40 hex>` as the caches
+  /// spell one, or null when the directory is not named after a package at all.
+  static String? _packageNamed(String dir) =>
+      _bare.firstMatch(dir)?.group(1) ?? _stamped.firstMatch(dir)?.group(1);
+
+  static final _bare = RegExp(r'^([a-z_][a-z0-9_]*)$');
+  static final _stamped = RegExp(r'^([a-z_][a-z0-9_]*)-(?:\d.*|[0-9a-f]{40})$');
 
   Map<String, Object?> toJson() => {
     'file': file,
@@ -185,8 +239,15 @@ class InspectConstraints {
   String describe() =>
       'w ${_n(minWidth)}..${_n(maxWidth)}, h ${_n(minHeight)}..${_n(maxHeight)}';
 
-  static String _n(double value) =>
-      value.isInfinite ? '∞' : value.toStringAsFixed(1);
+  /// Whole pixels without the `.0`, which is what every other number in the
+  /// detail pane does. This one printed `w 573.0..573.0` two lines under
+  /// `size 573 × 101` — the same measurement of the same widget in two
+  /// notations, which reads as two different kinds of number.
+  static String _n(double value) => switch (value) {
+    _ when value.isInfinite => '∞',
+    _ when value == value.roundToDouble() => '${value.round()}',
+    _ => value.toStringAsFixed(1),
+  };
 }
 
 /// A `Row`, `Column` or `Flex`, as its children experience it.

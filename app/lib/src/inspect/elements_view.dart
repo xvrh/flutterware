@@ -22,6 +22,7 @@ class ElementsView extends StatefulWidget {
     required this.placeholder,
     required this.highlight,
     required this.displayRoot,
+    required this.readsWidgets,
   });
 
   /// The tree, or null while the host has nothing — the [placeholder] says
@@ -39,6 +40,18 @@ class ElementsView extends StatefulWidget {
 
   /// What a source path is shortened against.
   final String displayRoot;
+
+  /// Whether whatever produced this tree can see the widgets themselves —
+  /// their boxes and their own diagnostics — or only the structure.
+  ///
+  /// False for the run cockpit, whose trees come over the VM service: reaching
+  /// a `RenderObject` or a `Widget` needs to be *inside* the app, so
+  /// [InspectNode.layout] and [InspectNode.properties] arrive empty there for
+  /// every node (`app/lib/src/run/inspect.dart`). Without this the pane read
+  /// that emptiness as an answer and told the reader that `Scaffold` lays
+  /// nothing out — a statement about the widget, made from a fact about the
+  /// reader.
+  final bool readsWidgets;
 
   @override
   State<ElementsView> createState() => _ElementsViewState();
@@ -107,6 +120,7 @@ class _ElementsViewState extends State<ElementsView> {
                   node: selected,
                   selectedId: selectedId,
                   displayRoot: widget.displayRoot,
+                  readsWidgets: widget.readsWidgets,
                 ),
               ),
             ],
@@ -455,12 +469,17 @@ class _Detail extends StatelessWidget {
     required this.node,
     required this.selectedId,
     required this.displayRoot,
+    required this.readsWidgets,
   });
 
   final InspectNode? node;
 
   /// What a source path is shortened against.
   final String displayRoot;
+
+  /// See [ElementsView.readsWidgets] — what separates "it has no box" from
+  /// "nobody looked".
+  final bool readsWidgets;
 
   /// Told apart from [node] being null: an id that resolves to nothing is a
   /// selection that outlived the tree it named, which is worth saying rather
@@ -504,10 +523,12 @@ class _Detail extends StatelessWidget {
               style: context.type.caption.copyWith(color: colors.mut),
             ),
           const SizedBox(height: FwSpacing.md),
-          // The id is the thing an agent is handed and the thing it hands
-          // back — `screenshot --node`, `tree --node` — so it is selectable
-          // rather than decorative.
-          _Pair(label: 'id', value: it.id.isEmpty ? '(root)' : it.id),
+          // **No id row.** It is the `node` address parameter, so the address
+          // bar at the foot of the window is already showing it — selectable
+          // and copyable there, and part of a link that reopens this exact
+          // selection. Printing it here too said the same synthetic string
+          // twice on one screen. An agent asking `tree --node` reads it out of
+          // the JSON rather than off a pixel pane, so nothing lost it.
           if (it.offstage)
             // Why the rect below must not be trusted against the picture: it
             // is where this was, the last time it was on one.
@@ -551,7 +572,7 @@ class _Detail extends StatelessWidget {
               ),
             if (layout.isRepaintBoundary)
               _Pair(label: 'paints', value: 'repaint boundary'),
-          ] else ...[
+          ] else if (readsWidgets) ...[
             const SizedBox(height: FwSpacing.md),
             Text(
               // Not zero-filled, because "it has no box" and "its box is
@@ -559,12 +580,24 @@ class _Detail extends StatelessWidget {
               'Lays nothing out of its own — a provider or a builder.',
               style: context.type.caption.copyWith(color: colors.mut),
             ),
+          ] else ...[
+            const SizedBox(height: FwSpacing.md),
+            Text(
+              // **Whose silence it is.** A reader that cannot see widgets has
+              // no box for *any* node, so the sentence above would have said
+              // `Scaffold` lays nothing out — and it did. Saying who is not
+              // looking beats both lying and leaving a pane that stops after
+              // the source line, where the gap reads as a broken tool.
+              'Structure and source only — a tree read from outside the app '
+              'carries no box and no properties.',
+              style: context.type.caption.copyWith(color: colors.mut),
+            ),
           ],
           // What the widget says about itself — its diagnostics, already
-          // filtered at capture. Absent for the run cockpit's trees, which
-          // cannot read widgets, so the section says nothing rather than
-          // "none": no properties and unknowable properties look the same
-          // here, and only one of them deserves a statement.
+          // filtered at capture. Empty for a tree read from outside the app,
+          // where the line above has already accounted for it; for every other
+          // reader an empty map means the widget said nothing, which is not
+          // worth a line of its own.
           if (it.properties.isNotEmpty) ...[
             const SizedBox(height: FwSpacing.md),
             for (var MapEntry(key: name, value: value) in it.properties.entries)

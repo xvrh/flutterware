@@ -183,6 +183,9 @@ class _InspectPanelState extends State<InspectPanel> {
                 : 'Reading the tree…',
             highlight: widget.highlight,
             displayRoot: session.displayRoot,
+            // The guest walks its own tree, so a node with no box really has
+            // none.
+            readsWidgets: true,
           ),
         ),
         InspectDockTab(

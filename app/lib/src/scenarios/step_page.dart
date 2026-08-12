@@ -442,6 +442,10 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
                   placeholder: _treeError ?? 'No tree captured for this step.',
                   highlight: _highlight,
                   displayRoot: widget.displayRoot,
+                  // Recorded by the guest during the run — including in a web
+                  // export, which replays what the guest wrote rather than
+                  // reading an app of its own.
+                  readsWidgets: true,
                 ),
               ),
               InspectDockTab(

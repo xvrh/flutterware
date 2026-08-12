@@ -145,6 +145,16 @@ void main() {
     expect(find.text('MyApp'), findsOneWidget);
     expect(find.byType(Image), findsOneWidget);
 
+    // **The detail pane must not read this reader's blindness as the widget's
+    // shape.** A VM-service tree carries no layout for any node, and the pane
+    // used to answer that with "lays nothing out of its own — a provider or a
+    // builder" on every one of them, `Scaffold` included. It says who is not
+    // looking instead.
+    await tester.tap(find.text('MyApp'));
+    await tester.pump();
+    expect(find.textContaining('Lays nothing out'), findsNothing);
+    expect(find.textContaining('Structure and source only'), findsOneWidget);
+
     // The design's tabs, and the header above them — the run named as one
     // phrase and the controls spelled out. No capability pill here: this run
     // is reloadable, which is the normal state; the pill only appears when
