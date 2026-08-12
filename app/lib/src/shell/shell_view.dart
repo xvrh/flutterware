@@ -271,6 +271,7 @@ class _Band extends StatelessWidget {
         // leave two empty strips side by side.
         _SidebarButton(shell),
         const Gap(FwSpacing.xs),
+        _ProjectFaceChip(shell),
         _ExplorerTab(shell),
         Expanded(
           child: ListView(
@@ -774,6 +775,50 @@ class _ExplorerTab extends StatelessWidget {
 /// The key a worktree's tab carries, so a test can point at the tab rather than
 /// at a name the home screen also shows.
 Key worktreeTabKey(Worktree worktree) => ValueKey('tab:${worktree.path}');
+
+/// The open project's own launcher icon, in the window chrome.
+///
+/// **Once per window, not once per tab.** Tabs are worktrees and a window holds
+/// one repository's worktrees, so a chip on every tab would repeat the same
+/// picture down the band. Here it says what this *window* is, which is the
+/// question several identical windows raise.
+///
+/// Nothing when the project declares no identity, names a package that is not
+/// there, or still ships the `flutter create` icon — see [resolveProjectFace].
+/// An absent chip is the shell as it was, which is the right amount of noise for
+/// a project that has not said anything.
+class _ProjectFaceChip extends StatelessWidget {
+  const _ProjectFaceChip(this.shell);
+
+  final ShellController shell;
+
+  @override
+  Widget build(BuildContext context) {
+    var face = shell.selectedSession?.face;
+    if (face == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(right: FwSpacing.xs),
+      child: Tooltip(
+        message: '${face.package} · ${face.role.label}',
+        child: ClipRRect(
+          // The chip's own corner ratio, the same 0.225 the launcher icon uses.
+          borderRadius: BorderRadius.circular(_faceChipSize * 0.225),
+          child: Image.file(
+            face.file,
+            width: _faceChipSize,
+            height: _faceChipSize,
+            filterQuality: FilterQuality.medium,
+            // A project icon that will not decode is not worth a red box in the
+            // chrome; the window simply goes back to having no chip.
+            errorBuilder: (context, _, _) => const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const _faceChipSize = 20.0;
 
 class _WorktreeTab extends StatelessWidget {
   _WorktreeTab(this.shell, this.worktree)

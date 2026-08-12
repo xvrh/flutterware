@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutterware/plugins.dart';
 
 import '../session/job.dart';
+import '../identity/project_face.dart';
 import '../session/session.dart';
 import '../shell/workspace.dart';
 import '../shell/worktree.dart';
@@ -68,6 +69,17 @@ class WorktreeSession extends ChangeNotifier {
   final Session session;
 
   Worktree get worktree => session.worktree;
+
+  /// The picture that stands for this project, or null when it has none.
+  ///
+  /// Lazy on purpose: resolving it walks a package's platform directories, and
+  /// most of what builds a session — every widget test in this suite — never
+  /// asks. Computed once per session, so a reload is what re-reads it, which is
+  /// also the moment the icon on disk could have changed.
+  late final ProjectFace? face = resolveProjectFace(
+    worktreeRoot: session.root,
+    manifest: session.manifest,
+  );
 
   /// The resolved panels, in the order `tool/flutterware.dart` declared them.
   final List<NativePlugin> plugins;
