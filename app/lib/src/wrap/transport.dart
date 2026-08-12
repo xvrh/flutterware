@@ -1,39 +1,25 @@
 import 'dart:async';
 import 'dart:io';
 
-import '../passthrough/passthrough_command.dart';
-
 /// Runs [executable] with [arguments], streaming I/O to the parent and
 /// teeing all output into [captureSink].
 ///
-/// Uses a PTY when the parent stdin is a terminal (an interactive CLI run),
-/// and plain pipes otherwise (an IDE / `--machine` run, whose stdin/stdout
-/// carry the daemon JSON-RPC protocol). Neither mode parses the stream.
+/// Plain pipes, always. There used to be a PTY branch for interactive runs
+/// (the deleted `src/passthrough/` tree carried the bindings); if wrap ever
+/// needs a child that believes it has a terminal again, that is the history
+/// to resurrect. The pipes are the mode every wired caller used — an IDE /
+/// `--machine` run whose stdin/stdout carry the daemon JSON-RPC protocol.
 Future<int> runIntercepted({
   required String executable,
   required List<String> arguments,
   required IOSink captureSink,
   String? workingDirectory,
-}) async {
-  // `stdinIsInteractive` rather than `hasTerminal`: the latter is true for
-  // `/dev/null`, which would send a non-interactive run down the PTY path and
-  // straight into the ENODEV crash. See its own note.
-  if (stdinIsInteractive) {
-    return runUnderPty(
-      executable: executable,
-      arguments: arguments,
-      workingDirectory: workingDirectory,
-      printSummary: false,
-      captureSink: captureSink,
-    );
-  }
-  return _runPiped(
-    executable: executable,
-    arguments: arguments,
-    workingDirectory: workingDirectory,
-    captureSink: captureSink,
-  );
-}
+}) => _runPiped(
+  executable: executable,
+  arguments: arguments,
+  workingDirectory: workingDirectory,
+  captureSink: captureSink,
+);
 
 Future<int> _runPiped({
   required String executable,

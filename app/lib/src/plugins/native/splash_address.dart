@@ -1,13 +1,9 @@
-/// How the splash previewer writes itself into an address, and how it reads
-/// itself back out.
+/// How the splash previewer writes itself into an address.
 ///
-/// **Both directions in one file**, for the reason `assets_address.dart` gives
-/// at its own top: the address is written by the matrix, by search and by
-/// whoever pastes one; it is read by the panel deciding which cell to show.
-/// Drift between the two does not throw — it shows you a different splash.
-///
-/// The round trip is the contract, and [splashSegments] and [splashPlace] are
-/// inverses with a test that says so.
+/// The reading half lives in the panel itself, which rebuilds its place from
+/// `AddressScope` directly — the inverse parser this file used to carry had
+/// no production caller and was deleted rather than left as a second reader
+/// to drift.
 library;
 
 import '../../splash/model/surface.dart';
@@ -98,26 +94,3 @@ Map<String, String> splashAxes({
   if (theme != null) 'theme': theme.name,
   if (size != null && size.isNotEmpty) 'size': size,
 };
-
-/// The inverse of [splashSegments] and [splashAxes].
-///
-/// An unknown axis value reads back as null rather than throwing: an address is
-/// a thing people type, and a typo should land you on the package showing
-/// everything rather than on an error.
-SplashPlace? splashPlace(
-  List<String> segments, [
-  Map<String, String> axes = const {},
-]) {
-  if (segments.isEmpty) return null;
-  var flavor = segments.length > 1 ? segments[1] : null;
-  var size = axes['size'];
-  return SplashPlace(
-    segments.first,
-    flavor: flavor == null || flavor.isEmpty ? null : flavor,
-    surface: axes['surface'] == null
-        ? null
-        : SplashSurface.byName(axes['surface']!),
-    theme: axes['theme'] == null ? null : SplashTheme.byName(axes['theme']!),
-    size: size == null || size.isEmpty ? null : size,
-  );
-}

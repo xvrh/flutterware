@@ -1,10 +1,9 @@
-/// How the launcher-icon viewer writes itself into an address, and how it reads
-/// itself back out.
+/// How the launcher-icon viewer writes itself into an address.
 ///
-/// **Both directions in one file**, for the reason `splash_address.dart` gives
-/// at its own top: the address is written by the panel, by search and by
-/// whoever pastes one; it is read by the panel deciding what to show. Drift
-/// between the two does not throw — it shows you a different icon.
+/// The reading half lives in the panel itself, which rebuilds its place from
+/// `AddressScope` directly — the inverse parser this file used to carry had
+/// no production caller and was deleted rather than left as a second reader
+/// to drift.
 library;
 
 import '../../launcher_icon/model/role.dart';
@@ -69,22 +68,3 @@ Map<String, String> iconAxes({IconRole? role, AdaptiveMask? mask}) => {
   if (role != null) 'role': role.id,
   if (mask != null) 'mask': mask.name,
 };
-
-/// The inverse of [iconSegments] and [iconAxes].
-///
-/// An unknown axis value reads back as null rather than throwing: an address is
-/// a thing people type, and a typo should land you on the package showing
-/// everything rather than on an error.
-IconPlace? iconPlace(
-  List<String> segments, [
-  Map<String, String> axes = const {},
-]) {
-  if (segments.isEmpty) return null;
-  var flavor = segments.length > 1 ? segments[1] : null;
-  return IconPlace(
-    segments.first,
-    flavor: flavor == null || flavor.isEmpty ? null : flavor,
-    role: axes['role'] == null ? null : IconRole.byId(axes['role']!),
-    mask: axes['mask'] == null ? null : AdaptiveMask.byName(axes['mask']!),
-  );
-}

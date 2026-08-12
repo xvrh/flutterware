@@ -40,23 +40,4 @@ class SplashImageFacts {
 
   /// `1024×1024`, or null when it could not be read.
   String? get dimensions => isMeasured ? '$pixelWidth×$pixelHeight' : null;
-
-  Map<String, Object?> toJson() => {
-    'path': path,
-    'exists': exists,
-    if (absolutePath != null) 'absolutePath': absolutePath,
-    if (pixelWidth != null) 'width': pixelWidth,
-    if (pixelHeight != null) 'height': pixelHeight,
-    if (exists) 'png': isPng,
-  };
-
-  static SplashImageFacts fromJson(Map<String, Object?> json) =>
-      SplashImageFacts(
-        path: json['path']! as String,
-        exists: json['exists'] == true,
-        absolutePath: json['absolutePath'] as String?,
-        pixelWidth: json['width'] as int?,
-        pixelHeight: json['height'] as int?,
-        isPng: json['png'] == true,
-      );
 }

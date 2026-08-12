@@ -4,7 +4,8 @@ import '../support/dart_executable.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-/// Locate the `dart` executable (see passthrough_command_test for why).
+/// `Platform.resolvedExecutable` under `flutter test` is the tester, not
+/// `dart`, so the executable has to be located rather than assumed.
 void main() {
   final dart = resolveDartExecutable();
   // Use absolute path so `dart run` finds the script regardless of the
