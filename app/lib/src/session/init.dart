@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../identity/face_guess.dart';
 import '../shell/repo_layout.dart';
 import '../utils/flutter_sdk.dart';
 
@@ -395,6 +396,7 @@ import 'package:flutterware/plugins.dart';
 const app = Pkg('.');
 
 void main() => Flutterware.configure((fw) {
+${_identityLine(root)}
   fw.use(Dependencies(packages: [.new(app)]));
 
   // Renders the widgets you have annotated with `@Preview`, from `demo/` — add
@@ -409,6 +411,33 @@ void main() => Flutterware.configure((fw) {
 ''');
     return true;
   }
+}
+
+/// The `fw.identity(...)` the scaffold writes, with a guess already filled in.
+///
+/// **The guess belongs here and nowhere else.** Which package represents a
+/// repository is a claim only its author can make — a monorepo holds several
+/// real apps and no obvious answer — so inferring it at every launch would be a
+/// rule nobody could see. Written into the config once, it is a starting point
+/// somebody reads and corrects.
+///
+/// A repository where nothing has a real icon yet gets the line commented out:
+/// there is nothing true to put in it, and an empty default teaches nobody that
+/// the setting exists.
+String _identityLine(String root) {
+  const preamble =
+      '  // Which package stands for this repository. Its launcher icon is what\n'
+      '  // the window and the Dock show, so several checkouts open at once can\n'
+      '  // be told apart.';
+  var guessed = guessFacePackage(root);
+  if (guessed == null) {
+    return '$preamble Nothing here has a launcher icon of\n'
+        '  // its own yet, so this is left for you to fill in.\n'
+        "  // fw.identity(const ProjectIdentity(package: Pkg('.')));\n";
+  }
+  return '$preamble Guessed from the icons found\n'
+      '  // here — change it if that is the wrong app.\n'
+      "  fw.identity(const ProjectIdentity(package: Pkg('$guessed')));\n";
 }
 
 /// The leading whitespace of the line [offset] sits on.

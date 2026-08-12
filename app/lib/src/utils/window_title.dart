@@ -43,4 +43,20 @@ class WindowTitle {
       return;
     }
   }
+
+  /// Replaces the window's Dock tile — and its ⌘-Tab entry, which follows the
+  /// same image — with [png].
+  ///
+  /// Unlike the title, this one reaches the surfaces a user scans *first*. It
+  /// also cannot be undone by us: macOS keeps the app's own icon until the
+  /// process exits, so passing null is not a thing to offer. Whoever calls this
+  /// owns what the window looks like for the rest of its life.
+  static Future<void> setIcon(Uint8List png) async {
+    if (!isSupported) return;
+    try {
+      await _channel.invokeMethod<void>('setIcon', png);
+    } on MissingPluginException {
+      return;
+    }
+  }
 }

@@ -154,6 +154,68 @@ void main() {
     });
   });
 
+  group('the project identity rides the manifest', () {
+    PluginManifest emitted(void Function(FlutterwareConfig fw) build) {
+      late String line;
+      Flutterware.configure(build, emit: (it) => line = it);
+      return PluginManifest.parse(line);
+    }
+
+    test('survives being printed and parsed back', () {
+      var manifest = emitted(
+        (fw) => fw.identity(const ProjectIdentity(package: Pkg('app'))),
+      );
+      expect(manifest.identity?.package, const Pkg('app'));
+    });
+
+    test('a config that declares none reports none', () {
+      expect(emitted((fw) {}).identity, isNull);
+    });
+
+    test('declaring it twice is refused rather than silently merged', () {
+      expect(
+        () => Flutterware.configure((fw) {
+          fw
+            ..identity(const ProjectIdentity(package: Pkg('a')))
+            ..identity(const ProjectIdentity(package: Pkg('b')));
+        }, emit: (_) {}),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('a manifest written by an older flutterware still parses', () {
+      // No `identity` key at all, which is every manifest before this landed.
+      var manifest = PluginManifest.parse('{"version":1,"plugins":[]}');
+      expect(manifest.identity, isNull);
+    });
+
+    test('a wrong shape is no identity, never a throw', () {
+      // A window that looks like every other window is where the project
+      // started; refusing to open it would be the worse answer.
+      expect(ProjectIdentity.fromJson(const {}), isNull);
+      expect(ProjectIdentity.fromJson(const {'package': 42}), isNull);
+      expect(ProjectIdentity.fromJson(const {'package': ''}), isNull);
+      expect(
+        PluginManifest.parse(
+          '{"version":1,"plugins":[],"identity":"packages/web_app"}',
+        ).identity,
+        isNull,
+      );
+    });
+
+    test('it names a package no plugin has to mention', () {
+      // Identity is about the repository, not about what is mounted in it, so
+      // it does not have to appear in the derived package list.
+      var manifest = emitted((fw) {
+        fw
+          ..identity(const ProjectIdentity(package: Pkg('packages/web_app')))
+          ..use(Dependencies(packages: DependenciesPackage.each([app])));
+      });
+      expect(manifest.identity?.package.path, 'packages/web_app');
+      expect(manifest.packages.map((p) => p.path), ['app']);
+    });
+  });
+
   test("a plugin's own per-package options are untouched", () {
     var manifest = manifestOf([
       Previews(packages: [PreviewsPackage(app, directory: 'tool/catalog')]),

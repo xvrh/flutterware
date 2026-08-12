@@ -18,6 +18,7 @@ export 'src/plugins/fuzzy.dart';
 export 'src/plugins/guard.dart';
 export 'src/plugins/manifest.dart';
 export 'src/plugins/package.dart';
+export 'src/plugins/project_identity.dart';
 export 'src/plugins/plugin.dart';
 export 'src/plugins/plugin_result.dart';
 export 'src/plugins/report.dart';

@@ -1,6 +1,8 @@
 # Project identity: telling one running instance from another
 
-**Status:** designed, not started. #114 has landed; nothing blocks P1.
+**Status:** built. P0–P6 all landed; S1 and S2 answered and one of them changed
+the design before it was written. What is left is in *Open questions* at the
+bottom — none of it blocks anything.
 
 A user runs one flutterware instance per repository, and several at once. #114
 gave the app a real name and a per-project window title, which fixed *what the
@@ -94,7 +96,7 @@ as #113 and is rename-safe: it globs `.endsWith('.app')` and identifies the
 bundle by which process is running, so #114 renaming `app.app` to
 `Flutterware.app` did not break it. Nothing here is outstanding.
 
-### P1 — The declaration
+### P1 — The declaration — done
 
 Mirror `fw.changes(...)`: a project-level declaration that is **not** a plugin,
 and refuses a second call rather than merging.
@@ -112,7 +114,7 @@ Plumb through `FlutterwareConfig.toManifest()` and expose a resolved value on th
 worktree session. Unit tests for: absent, present, double call, package that does
 not exist.
 
-### P2 — Bootstrap at `init`
+### P2 — Bootstrap at `init` — done
 
 The launcher already scaffolds `tool/flutterware.dart` when a project has none.
 That is where the guess belongs — its output is a line the user reads and edits,
@@ -130,7 +132,7 @@ and left `service_manager` (a macOS-only utility) fourth.
 
 Ship the default-icon hashes with it.
 
-### P3 — Resolve the icon
+### P3 — Resolve the icon — done
 
 Given the declared package, find its best available icon (the launcher-icon scan
 already knows the per-platform paths), decode, cache per worktree session.
@@ -138,7 +140,7 @@ already knows the per-platform paths), decode, cache per worktree session.
 Must handle, because all three occur in the wild: no icon at all; a stock Flutter
 icon; a logo with a transparent or non-solid background.
 
-### P4 — Compose the tile
+### P4 — Compose the tile — done
 
 Do **not** re-draw the wordmark at runtime. Add a fourth source to
 `app/tool/icon/generate.dart` — the tile with no cursor — and ship it as a PNG
@@ -151,13 +153,13 @@ by the generator into a small Dart constant so the two cannot drift.
 One image, not a set — see S2. Compose at 512px or 1024px and let macOS scale;
 there is nothing to gain from supplying more representations.
 
-### P5 — The Dock
+### P5 — The Dock — done
 
 Extend the `flutterware/window` channel (added in #114) with `setIcon(bytes)`,
 calling `NSApplication.shared.applicationIconImage`. Set after first frame; re-set
 when the identity or worktree changes.
 
-### P6 — In-app
+### P6 — In-app — done
 
 One chip at the leading edge of the tab band, in `_bandContent`
 (`app/lib/src/shell/shell_view.dart`), after `_SidebarButton`. **Once per window,
