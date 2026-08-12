@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/native/adb_driver.dart';
 import 'package:flutterware_app/src/run/native/native_driver.dart';
+import 'package:flutterware_app/src/run/native/native_session.dart';
+import 'package:path/path.dart' as p;
 
 /// A dump from the Android emulator this feature was built against — the real
 /// bytes, trimmed to one screen: a Flutter app whose semantics the dump armed
@@ -173,6 +178,158 @@ void main() {
           'OK',
         ).resolve(AdbNativeDriver.debugParse(collapsed)),
         throwsA(isA<NativeRefusal>()),
+      );
+    });
+  });
+
+  group('the macOS bundle is the one that is running', () {
+    late Directory worktree;
+
+    /// A worktree whose `Products` holds every configuration in
+    /// [configurations], each with an `app.app` in it.
+    String products(List<String> configurations) {
+      var root = p.join(
+        worktree.path,
+        'app',
+        'build',
+        'macos',
+        'Build',
+        'Products',
+      );
+      for (var configuration in configurations) {
+        Directory(
+          p.join(root, configuration, 'app.app', 'Contents', 'MacOS'),
+        ).createSync(recursive: true);
+      }
+      return root;
+    }
+
+    String executable(String configuration) => p.join(
+      products(const []),
+      configuration,
+      'app.app',
+      'Contents',
+      'MacOS',
+      'app',
+    );
+
+    NativeSession session({String? flavor}) => NativeSession(
+      RunHandle(
+        worktree: worktree.path,
+        worktreeName: 'wt',
+        device: 'macos',
+        entrypoint: 'lib/main_dev.dart',
+        package: 'app',
+        flavor: flavor,
+        launcherPid: 1,
+        startedAt: DateTime.utc(2026),
+      ),
+    );
+
+    setUp(() {
+      worktree = Directory.systemTemp.createTempSync('fw_native_bundle');
+    });
+
+    tearDown(() => worktree.deleteSync(recursive: true));
+
+    test('a Release directory does not outrank the running Debug app', () async {
+      // The bug, exactly: a checkout that has ever been released keeps Release
+      // next to Debug, and walking `Products` in filesystem order handed the
+      // helper a bundle nothing was running from — so `layer: native` refused
+      // with notFound on the one case it exists for, the debug inner loop.
+      // Only Release is on disk, so nothing about the directory can produce
+      // this answer: the process table is what decides, and a scan of any
+      // ordering has one wrong bundle to offer.
+      products(const ['Release']);
+      expect(
+        await session().macosBundle(executables: [executable('Debug')]),
+        endsWith('/Debug/app.app'),
+      );
+    });
+
+    test('a process in another worktree is not this run', () async {
+      // Several worktrees run identically-named apps at once; only the path
+      // separates them, which is why the process table is read by path.
+      products(const ['Debug']);
+      var elsewhere = p.join(
+        Directory.systemTemp.path,
+        'other',
+        'app',
+        'build',
+        'macos',
+        'Build',
+        'Products',
+        'Debug',
+        'app.app',
+        'Contents',
+        'MacOS',
+        'app',
+      );
+      expect(
+        await session().macosBundle(executables: [elsewhere]),
+        endsWith('/Debug/app.app'),
+        reason:
+            'the other worktree contributes nothing, so this falls through '
+            'to the build directory rather than attaching to it',
+      );
+    });
+
+    test(
+      'nothing running falls back to the configuration a launch uses',
+      () async {
+        // Still building, or already stopped. `flutter run` takes no mode flag
+        // here, so Debug is what a launch from this plugin would have written.
+        products(const ['Release', 'Debug']);
+        expect(
+          await session().macosBundle(executables: const []),
+          endsWith('/Debug/app.app'),
+        );
+      },
+    );
+
+    test('a flavored run names its own configuration', () async {
+      products(const ['Debug', 'Debug-staging', 'Release-staging']);
+      expect(
+        await session(flavor: 'staging').macosBundle(executables: const []),
+        endsWith('/Debug-staging/app.app'),
+      );
+    });
+
+    test('an unbuilt worktree has no bundle to name', () async {
+      expect(await session().macosBundle(executables: const []), isNull);
+    });
+
+    test('the walk up stops at the bundle, not at the products root', () {
+      expect(
+        NativeSession.runningBundleUnder('/w/Products', const [
+          '/w/Products/Debug/app.app/Contents/MacOS/app',
+        ]),
+        '/w/Products/Debug/app.app',
+      );
+      expect(
+        NativeSession.runningBundleUnder('/w/Products', const [
+          '/w/Products/Debug/some_tool',
+        ]),
+        isNull,
+        reason: 'a loose executable is in no bundle at all',
+      );
+    });
+
+    test('configuration preference is order-independent', () {
+      expect(
+        NativeSession.preferredConfiguration(const ['Release', 'Debug']),
+        'Debug',
+      );
+      expect(
+        NativeSession.preferredConfiguration(const ['Debug', 'Release']),
+        'Debug',
+      );
+      expect(
+        NativeSession.preferredConfiguration(const ['Release']),
+        isNull,
+        reason:
+            'this plugin never launches release, so naming one would be a '
+            'guess dressed as an answer',
       );
     });
   });
