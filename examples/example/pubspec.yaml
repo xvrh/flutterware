@@ -51,6 +51,9 @@ dependencies:
   shared_preferences:
   # For bin/example_server.dart — the server-inspection example.
   shelf:
+  # For lib/src/database/app_database.dart — the db-panel dogfood.
+  sqlite3_flutter_libs:
+  sqlite_async:
 
 dev_dependencies:
   flutter_lints:

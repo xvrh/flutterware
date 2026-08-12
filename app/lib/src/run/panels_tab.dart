@@ -9,6 +9,7 @@ import '../ui/design/spacing.dart';
 import '../ui/design/tokens.dart';
 import 'channel_client.dart';
 import 'connection.dart';
+import 'database_panel_view.dart';
 import 'flag_memory.dart';
 import 'handle.dart';
 import 'panel_client.dart';
@@ -116,9 +117,13 @@ class _PanelsTabState extends State<PanelsTab> {
       var connection = await (widget.connect ?? RunConnection.connect)(wsUri);
       // One peer id per cockpit pane: an MCP call attached to the same app gets
       // its own queue and its own replay rather than racing this one.
+      // The nonce matters: a re-created pane racing its predecessor's async
+      // detach must not share a peer id, or the detach tears down the new
+      // attachment and every in-flight reply dies with it — found by the
+      // database panel's schema read, 2026-08-12.
       var client = await RunChannelClient.attach(
         connection,
-        peer: 'cockpit:${widget.handle.key}',
+        peer: 'cockpit:${widget.handle.key}:${identityHashCode(this)}',
       );
       if (!mounted) {
         await client.close();
@@ -236,36 +241,37 @@ class _PanelsTabState extends State<PanelsTab> {
         // Only when there is a choice to make: one panel is the ordinary case,
         // and a chooser over a single entry is furniture.
         if (_descriptors.length > 1)
-          Padding(
-            padding: const EdgeInsets.all(FwSpacing.md),
-            child: Wrap(
-              spacing: FwSpacing.md,
-              children: [
-                for (var option in _descriptors)
-                  ChoiceChip(
-                    label: Text(option.label),
-                    selected: option.id == current,
-                    onSelected: (_) => setState(() => _selected = option.id),
-                  ),
-              ],
-            ),
+          _PanelStrip(
+            panels: _descriptors,
+            current: current,
+            onSelect: (id) => setState(() => _selected = id),
           ),
         Expanded(
-          child: PanelView(
-            descriptor: panel,
-            events: _feedEvents(panel),
-            onKnob: (name, value) => _setKnob(panel.id, name, value),
-            onAction: (id, args) => unawaited(_run(panel.id, id, args)),
-            // An item action carries the id of the event it was pressed on and
-            // nothing else — see `Panel.emit`, which hands the app that same id
-            // so it can look up what the row was about.
-            onItemAction: (id, event) =>
-                unawaited(_run(panel.id, id, {'event': event})),
-            onReadState: (id) => unawaited(_read(panel.id, id)),
-            states: _states,
-            busy: _busy,
-            results: _results,
-          ),
+          // A database earns a bespoke browser; everything else renders from
+          // its descriptor. The `db:` prefix is `DatabasePanelSource.panelId`.
+          child: panel.id.startsWith('db:')
+              ? DatabasePanelView(
+                  key: ValueKey(panel.id),
+                  panels: _panels!,
+                  descriptor: panel,
+                  events: _feedEvents(panel),
+                  details: (eventId) => _client!.details(eventId),
+                )
+              : PanelView(
+                  descriptor: panel,
+                  events: _feedEvents(panel),
+                  onKnob: (name, value) => _setKnob(panel.id, name, value),
+                  onAction: (id, args) => unawaited(_run(panel.id, id, args)),
+                  // An item action carries the id of the event it was pressed on and
+                  // nothing else — see `Panel.emit`, which hands the app that same id
+                  // so it can look up what the row was about.
+                  onItemAction: (id, event) =>
+                      unawaited(_run(panel.id, id, {'event': event})),
+                  onReadState: (id) => unawaited(_read(panel.id, id)),
+                  states: _states,
+                  busy: _busy,
+                  results: _results,
+                ),
         ),
       ],
     );
@@ -303,5 +309,65 @@ class _PanelsTabState extends State<PanelsTab> {
       if (!mounted) return;
       setState(() => _states[stateId] = {'error': '$e'});
     }
+  }
+}
+
+/// Which of the app's panels is showing — the dock strip's own idiom, so it
+/// reads as the App tab's second level rather than as widgets from another
+/// design system.
+class _PanelStrip extends StatelessWidget {
+  const _PanelStrip({
+    required this.panels,
+    required this.current,
+    required this.onSelect,
+  });
+
+  final List<PanelDescriptor> panels;
+  final String current;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+        decoration: BoxDecoration(
+          color: context.colors.panel,
+          border: Border(bottom: BorderSide(color: context.colors.line)),
+        ),
+        child: Row(
+          children: [
+            for (var panel in panels)
+              InkWell(
+                onTap: () => onSelect(panel.id),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: panel.id == current
+                            ? context.colors.accent
+                            : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    panel.label,
+                    style: context.type.caption.copyWith(
+                      color: panel.id == current
+                          ? context.colors.ink
+                          : context.colors.mut,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -7,6 +7,9 @@ export 'src/devbar/devbar.dart'
         DevbarPluginFactory;
 export 'src/devbar/feature_flag.dart' show FeatureFlag, FeatureFlagValue;
 export 'src/devbar/panel_source.dart' show DevbarPanelSource;
+export 'src/devbar/plugins/database.dart'
+    show DatabaseAdapter, DatabaseQuery, DatabaseWatch;
+export 'src/devbar/plugins/database_plugin.dart' show DatabasePlugin;
 export 'src/ui_catalog/knobs.dart' show Knobs;
 export 'src/devbar/knobs/knobs.dart' show AddDevbarKnobs;
 export 'src/devbar/ui/button.dart'

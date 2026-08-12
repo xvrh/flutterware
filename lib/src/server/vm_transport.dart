@@ -107,10 +107,17 @@ class VmServiceTransport {
 
   final _peers = <String, _QueuedPeer>{};
 
-  /// True while an extension call is being served, so the frames it produces
-  /// are answered rather than nudged about. Without this every attach would
-  /// post a nudge for the replay it is already returning.
-  var _inCall = false;
+  /// The peer whose extension call is being served, so the frames that call
+  /// produces are answered rather than nudged about. Without this every attach
+  /// would post a nudge for the replay it is already returning.
+  ///
+  /// **Per peer, not a bool** — found by the database panel, 2026-08-12. An
+  /// event broadcast while *another* peer's exchange was in flight (a panel
+  /// action invoked over MCP, say) queued on this peer but was never nudged
+  /// about, because the global flag said "a call will answer it" when that
+  /// call was draining a different queue. The frame then sat unread until the
+  /// next unrelated pull — for a cockpit quietly watching a feed, forever.
+  _QueuedPeer? _serving;
 
   var _registered = false;
 
@@ -155,7 +162,7 @@ class VmServiceTransport {
     );
     // Held across the pause, so a frame that lands during it is answered by
     // this call rather than nudged about and then drained anyway.
-    _inCall = true;
+    _serving = peer;
     try {
       var encoded = params['frame'];
       if (encoded != null) {
@@ -165,12 +172,12 @@ class VmServiceTransport {
       await Future<void>.delayed(Duration.zero);
       return peer.drain();
     } finally {
-      _inCall = false;
+      _serving = null;
     }
   }
 
   void _onQueued(_QueuedPeer peer) {
-    if (_inCall || peer.nudged) return;
+    if (identical(peer, _serving) || peer.nudged) return;
     peer.nudged = true;
     _postEvent(channelNudgeKind, {'peer': peer.id});
   }
