@@ -9,12 +9,28 @@ import '../ui/action_button.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
 
-/// The stack, as one block: a section line, an answer, and its evidence.
+/// Which surface is drawing the stack.
 ///
-/// **One widget, two homes.** The worktree home mounts it so "is my stack up"
-/// costs no navigation, and the plugin panel mounts it above its commands and
-/// output. Sharing the widget is what stops the two from disagreeing — a second
-/// rendering of a state machine is a second set of six states to keep right.
+/// Not a density flag: the two are different chrome around the same sentence.
+/// A [strip] is a line on a screen about something else; a [band] is the header
+/// of the screen about the stack.
+enum DevStackForm {
+  /// The worktree overview — one tinted line, and the line is the way in.
+  strip,
+
+  /// The plugin panel's header — the same answer at panel width, with the
+  /// provenance the overview has no room for.
+  band,
+}
+
+/// The stack's state, as one widget with two forms.
+///
+/// **One widget, two homes.** The worktree home mounts the [DevStackForm.strip]
+/// so "is my stack up" costs no navigation, and the panel mounts the
+/// [DevStackForm.band] above its services, commands and console. Sharing the
+/// widget is what stops the two from disagreeing — a second rendering of a state
+/// machine is a second set of six states to keep right — so the forms differ
+/// only in chrome. Every word and every colour comes from the same methods.
 ///
 /// It owns the subscription: mounting starts polling, unmounting stops it. That
 /// is why [DevStackCore.watch] is reference-counted rather than a one-way
@@ -23,55 +39,76 @@ import '../ui/theme.dart';
 ///
 /// ## The layout, and what it is answering
 ///
-/// See `docs/superpowers/specs/2026-08-11-dev-stack-ui-study.md`. The first
-/// draft set the state, the address, the pid and the reading's age on one line
-/// with identical separators and identical weight, under a heading, above a
-/// `Tear down` button that was the loudest control on the whole worktree
-/// overview. Four rules came out of redrawing it:
+/// See `docs/superpowers/specs/2026-08-11-dev-stack-ui-study.md` for the six
+/// rules — one word one colour, answer before evidence, anatomical constancy,
+/// the safe direction gets the weight — and
+/// `2026-08-12-dev-stack-ui-study-2.md` for the pass that turned the card into
+/// a strip. Two rules were added there:
 ///
-/// - **One state, one word, one colour, one place.** The state word is the only
-///   thing here rendered in a tone colour, and it is set at heading size. Ports,
-///   ages and paths go neutral.
-/// - **Answer, then evidence.** The answer is the state and the one fact you act
-///   on — the address, or the reason, or the failure. Services, freshness and
-///   provenance are evidence: smaller, muted, and skippable.
-/// - **Anatomical constancy.** Every state fills the same slots in the same
-///   order, so the eye lands in the same spot whether the news is good or bad.
-///   A failure takes the address's slot; it does not rearrange the block.
-/// - **The safe direction gets the weight.** `Bring up` is filled when we know
-///   the stack is down. `Tear down` is never anything but a quiet outline.
+/// - **The tint is the frame.** State was carried by a 3px rail against neutral
+///   chrome, and the card existed mostly to give the rail an edge to be. A wash
+///   of the state's own tone reads from across the desk and needs no card, so
+///   142px of overview became 40.
+/// - **A glance surface may only carry controls whose result is visible on it.**
+///   The block used to promote the project's first argument-less command — in
+///   practice `Logs` — to a link beside `Tear down`. Pressing it ran the command
+///   and printed the output into the *panel*, a screen you were not on, so the
+///   button read as doing nothing. Commands live in the panel now, next to the
+///   console they write to.
 class DevStackBlock extends StatefulWidget {
   const DevStackBlock(
     this.plugin, {
     super.key,
-    this.compact = false,
+    this.form = DevStackForm.band,
     this.onOpenPanel,
   });
 
   final DevStackPlugin plugin;
 
-  /// The worktree home's form: no probe provenance, and a way into the panel
-  /// instead of the commands the panel carries.
-  ///
-  /// It no longer drops the service list. That was the old compact form's worst
-  /// idea — the one screen you glance at was the one that could not say *what*
-  /// was up, while the panel you have to navigate to could.
-  final bool compact;
+  final DevStackForm form;
 
-  /// Navigates to this plugin's panel. Only used when [compact].
+  /// Navigates to this plugin's panel. On a [DevStackForm.strip] the whole line
+  /// is this, and the chevron says so; null for a caller with no shell, which
+  /// then draws a line that is not a link rather than a link that does nothing.
   final VoidCallback? onOpenPanel;
 
   @override
   State<DevStackBlock> createState() => _DevStackBlockState();
 }
 
-/// How wide the block is allowed to get.
+/// How wide the strip is allowed to get.
 ///
 /// A card has a reading width the same way a paragraph does. Left to fill a
 /// maximised window it stretched to eleven hundred pixels, which put the
 /// `Tear down` button most of a screen away from the `up` it belongs to — the
 /// two halves of one statement, too far apart to be read as one.
 const _maxWidth = 720.0;
+
+/// The panel's content column, shared by every band of it.
+///
+/// **One right edge for the whole page.** The header's controls, a service's
+/// state, a command's `Run` and the console's `Copy` are all trailing content,
+/// and they were landing on three different edges because the sections capped
+/// their width and the full-bleed bands did not. Whichever number is right, it
+/// has to be the same number, so it is one widget rather than a constant three
+/// files agree to remember.
+class DevStackColumn extends StatelessWidget {
+  const DevStackColumn({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerLeft,
+    child: ConstrainedBox(
+      // Through an [Align], because a stretched column hands its children a
+      // tight width and a bare [ConstrainedBox] would have that width enforced
+      // right back over it.
+      constraints: const BoxConstraints(maxWidth: 1040),
+      child: child,
+    ),
+  );
+}
 
 class _DevStackBlockState extends State<DevStackBlock> {
   DevStackCore get _core => widget.plugin.core;
@@ -162,232 +199,322 @@ class _DevStackBlockState extends State<DevStackBlock> {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.plugin,
-    builder: (context, _) => _build(context),
+    builder: (context, _) => switch (widget.form) {
+      DevStackForm.strip => _strip(context, _shownState()),
+      DevStackForm.band => _band(context, _shownState()),
+    },
   );
 
-  Widget _build(BuildContext context) {
-    var state = _shownState();
+  // ── the strip ────────────────────────────────────────────────────────────
+
+  /// One line: the answer, the evidence that still fits, the one control that
+  /// changes what the line says, and the way in.
+  Widget _strip(BuildContext context, StackState state) {
+    var colors = context.colors;
+    var tone = _tone(colors, state);
+    var openable = widget.onOpenPanel != null;
     return Align(
       alignment: Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: _maxWidth),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _sectionLine(context),
-            const Gap(FwSpacing.md),
-            _card(context, state),
-          ],
+        child: Tappable.builder(
+          onTap: widget.onOpenPanel,
+          builder: (context, hovered) => AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.lg,
+              vertical: FwSpacing.md,
+            ),
+            decoration: BoxDecoration(
+              color: Color.alphaBlend(
+                hovered && openable ? colors.hoverOverlay : Colors.transparent,
+                tone == null ? colors.panel : colors.statusFill(tone),
+              ),
+              border: Border.all(
+                color: tone == null ? colors.line : colors.statusBorder(tone),
+              ),
+              borderRadius: BorderRadius.circular(context.radii.radius),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _stripLine(context, state),
+                // The one state that is allowed a second line. A failure
+                // ellipsised at 200px is a failure nobody can act on, and the
+                // height is spent on the day it buys something rather than
+                // every day.
+                if (_failure(state) case var failure?) ...[
+                  const Gap(FwSpacing.xs),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8 + FwSpacing.md),
+                    child: Text(
+                      failure,
+                      style: context.type.caption.copyWith(color: colors.red),
+                    ),
+                  ),
+                ],
+                if (state.isMoving) ...[
+                  const Gap(FwSpacing.md),
+                  _progress(context),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  /// What labels the block rather than what is inside it.
-  ///
-  /// The name, the directory whose CLI is in charge, and how old the reading is
-  /// all moved up here. They are facts *about* the answer, and beside it they
-  /// were competing with it — `just now` set in the same weight as `up` reads as
-  /// though the state were in doubt.
-  Widget _sectionLine(BuildContext context) {
+  Widget _stripLine(BuildContext context, StackState state) {
+    var colors = context.colors;
     var type = context.type;
-    var label = _core.label;
-    var subject = [
-      if (label != 'Dev stack') label,
-      ?_core.declaredDirectory,
-    ].join(' · ');
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
       children: [
-        Text(
-          'DEV STACK',
-          style: type.fieldLabel.copyWith(color: context.colors.mut),
-        ),
-        if (subject.isNotEmpty) ...[
-          const Gap(FwSpacing.md),
-          Flexible(
-            child: Text(
-              subject,
-              style: type.caption,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-        const Spacer(),
+        _StateDot(state, muted: _isUnconfirmed),
         const Gap(FwSpacing.md),
-        Text(_freshness(), style: type.caption),
+        Text(
+          _word(state),
+          style: type.bodyStrong.copyWith(
+            color: _isUnconfirmed ? colors.mut2 : _wordColor(colors, state),
+          ),
+        ),
+        const Gap(FwSpacing.lg),
+        // One run of text rather than three laid-out slots, so it truncates in
+        // priority order — the services go before the detail, and the detail
+        // before the name.
+        Expanded(
+          child: Text.rich(
+            TextSpan(children: _summary(context, state)),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const Gap(FwSpacing.lg),
+        ..._controls(context, state),
+        if (widget.onOpenPanel != null) ...[
+          const Gap(FwSpacing.sm),
+          Icon(Icons.chevron_right, size: 16, color: colors.mut2),
+        ],
       ],
+    );
+  }
+
+  /// The name, what makes the state actionable, and what is under it — in the
+  /// order you would drop them.
+  List<InlineSpan> _summary(BuildContext context, StackState state) {
+    var colors = context.colors;
+    var type = context.type;
+    var detail = _detail(context, state);
+    var services = _serviceLine();
+    var parts = <InlineSpan>[
+      if (_core.label != 'Dev stack')
+        TextSpan(text: _core.label, style: type.body),
+      // A failure has its own line; repeating it here would spend the whole
+      // width saying the same thing twice.
+      if (detail != null && _failure(state) == null)
+        TextSpan(
+          text: detail.$1,
+          style: type.body.copyWith(color: detail.$2),
+        ),
+      if (services != null)
+        TextSpan(
+          text: services,
+          style: type.caption.copyWith(color: colors.mut2),
+        ),
+    ];
+    var separator = TextSpan(
+      text: '  ·  ',
+      style: type.caption.copyWith(color: colors.mut3),
+    );
+    return [
+      for (var (i, part) in parts.indexed) ...[if (i > 0) separator, part],
+    ];
+  }
+
+  /// `http :8080 · db :5432` — what is under the stack, at glance width.
+  ///
+  /// Deliberately one muted run with no per-service tone: the headline already
+  /// says `up, 1 of 2` when they disagree, and colouring names here would put a
+  /// second tone colour on a line whose whole design is that there is one. The
+  /// per-service breakdown is a table on the panel.
+  String? _serviceLine() {
+    var services = _core.reading.services;
+    if (services.isEmpty) return null;
+    return [
+      for (var service in services)
+        service.port == null
+            ? service.name
+            : '${service.name} :${service.port}',
+    ].join(' · ');
+  }
+
+  // ── the band ─────────────────────────────────────────────────────────────
+
+  /// The panel's header: the same answer, at panel width.
+  ///
+  /// Shaped after the Run cockpit's header — name in ink, facts muted beneath,
+  /// controls flush right — because they are the same kind of screen and were
+  /// arriving at it differently.
+  Widget _band(BuildContext context, StackState state) {
+    var colors = context.colors;
+    var type = context.type;
+    var tone = _tone(colors, state);
+    var detail = _detail(context, state);
+    var failure = _failure(state);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.xxxl,
+        vertical: FwSpacing.xl,
+      ),
+      decoration: BoxDecoration(
+        color: tone == null ? colors.panel : colors.statusFill(tone),
+        border: Border(bottom: BorderSide(color: colors.line)),
+      ),
+      child: DevStackColumn(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              // Centred against the whole block, the way the Run cockpit's
+              // header sets its controls: aligned to the *top* they hang off
+              // the title line and leave the second line unbalanced beneath
+              // them, and the link and the button — different heights — do not
+              // even agree with each other.
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          _StateDot(state, muted: _isUnconfirmed),
+                          const Gap(FwSpacing.md),
+                          Flexible(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              // The name is 16px and the state word 13px, so
+                              // they sit on one baseline rather than centred on
+                              // each other's boxes. The dot stays out of this
+                              // row — a circle has no baseline to sit on.
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    _core.label,
+                                    style: type.heading,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const Gap(FwSpacing.md),
+                                Text(
+                                  _word(state),
+                                  style: type.bodyStrong.copyWith(
+                                    color: _isUnconfirmed
+                                        ? colors.mut2
+                                        : _wordColor(colors, state),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Gap(FwSpacing.xs),
+                      Padding(
+                        // Hangs under the name rather than under the dot, so
+                        // the two lines read as one statement.
+                        padding: const EdgeInsets.only(left: 8 + FwSpacing.md),
+                        child: Text(
+                          [
+                            if (failure == null && detail != null) detail.$1,
+                            ?_core.declaredDirectory,
+                            // A stale reading has already said its age in the
+                            // detail — `last seen 1m ago · checking now` — and
+                            // repeating it as `checked 1m ago` reads as two
+                            // different facts about the same probe.
+                            if (!_isUnconfirmed) _freshness(),
+                          ].join(' · '),
+                          style: type.caption,
+                        ),
+                      ),
+                      if (failure != null) ...[
+                        const Gap(FwSpacing.xs),
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            left: 8 + FwSpacing.md,
+                          ),
+                          child: Text(
+                            failure,
+                            style: type.caption.copyWith(color: colors.red),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Gap(FwSpacing.lg),
+                ..._controls(context, state),
+              ],
+            ),
+            if (state.isMoving) ...[
+              const Gap(FwSpacing.lg),
+              _progress(context),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
   String _freshness() {
     var age = stackAge(_core.reading.at);
-    var every = widget.compact
-        ? ''
-        : ' · every ${_core.pollInterval.inSeconds}s';
     if (age == null) return _core.isProbing ? 'checking…' : 'never checked';
-    return 'checked $age$every';
+    return 'checked $age, every ${_core.pollInterval.inSeconds}s';
   }
 
-  /// The railed container: hairline all round, and one edge carrying the tone.
-  ///
-  /// State is encoded twice — the rail and the dot — because a colour is the
-  /// first thing read and the last thing trusted. The rail is what makes a
-  /// broken stack visible from the corner of the eye on a screen you opened for
-  /// something else.
-  Widget _card(BuildContext context, StackState state) {
+  // ── shared parts ─────────────────────────────────────────────────────────
+
+  Widget _progress(BuildContext context) {
     var colors = context.colors;
-    var evidence = _evidence(context, state);
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.panel,
-        border: Border.all(color: colors.line),
-        borderRadius: BorderRadius.circular(context.radii.radius),
-      ),
-      // Clipped rather than a coloured left border: Flutter refuses a
-      // borderRadius on a border whose sides differ, so the rail is a child
-      // cut to the corner radius instead.
-      clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(width: 3, color: _railColor(colors, state)),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(FwSpacing.xl),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _answerRow(context, state),
-                    if (state.isMoving) ...[
-                      const Gap(FwSpacing.lg),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          minHeight: 3,
-                          backgroundColor: colors.line,
-                          color: colors.amber,
-                        ),
-                      ),
-                    ],
-                    if (evidence != null) ...[
-                      const Gap(FwSpacing.lg),
-                      // The rule only earns its place when there is a list
-                      // under it. Above a row holding nothing but the way out,
-                      // it draws a compartment around an empty space.
-                      Container(
-                        padding: EdgeInsets.only(
-                          top: _core.reading.services.isEmpty
-                              ? 0
-                              : FwSpacing.lg,
-                        ),
-                        decoration: _core.reading.services.isEmpty
-                            ? null
-                            : BoxDecoration(
-                                border: Border(
-                                  top: BorderSide(color: colors.line),
-                                ),
-                              ),
-                        child: evidence,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: LinearProgressIndicator(
+        minHeight: 3,
+        backgroundColor: colors.statusBorder(colors.amber),
+        color: colors.amber,
       ),
     );
   }
 
-  /// The answer on the left, what to do about it on the right.
-  Widget _answerRow(BuildContext context, StackState state) {
-    var colors = context.colors;
-    var type = context.type;
-    var detail = _detail(context, state);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  _StateDot(state, muted: _isUnconfirmed),
-                  const Gap(FwSpacing.md),
-                  Flexible(
-                    child: Text(
-                      _word(state),
-                      style: type.heading.copyWith(
-                        fontSize: type.sizeHeadlineMedium,
-                        color: _isUnconfirmed
-                            ? colors.mut2
-                            : _wordColor(colors, state),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              if (detail != null) ...[
-                const Gap(FwSpacing.xs),
-                Padding(
-                  // Hangs under the word rather than under the dot, so the two
-                  // lines read as one statement.
-                  padding: const EdgeInsets.only(left: 8 + FwSpacing.md),
-                  child: Text(
-                    detail.$1,
-                    style: type.caption.copyWith(color: detail.$2),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        const Gap(FwSpacing.lg),
-        _controls(context, state),
-      ],
-    );
-  }
-
-  /// One link and one button, in that order, right-aligned.
+  /// `Check now`, then the control that changes the state. Never a project
+  /// command — see the class comment.
   ///
-  /// The link is `Check now` whenever the *reading* is the problem — the probe
-  /// failed, or what we hold is old — because then re-reading is the next move.
-  /// Otherwise the compact form offers the stack's first one-click command,
-  /// which is the thing worth having beside a running stack when the panel with
-  /// the rest of them is a navigation away; the panel offers `Check now`, since
-  /// its commands are already on screen below.
-  Widget _controls(BuildContext context, StackState state) {
+  /// The strip offers the re-check only when the *reading* is the problem — the
+  /// probe failed, or what we hold is history — because that is when re-reading
+  /// is the next move, and a glance line has no room for a control that is
+  /// rarely the answer. The panel offers it always: it is the screen you open
+  /// when you doubt what the other one said.
+  List<Widget> _controls(BuildContext context, StackState state) {
     var busy = _core.busy != null;
-    var shortcut = _shortcutCommand(state);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        if (shortcut != null) ...[
-          _Link(shortcut.$1, enabled: !busy, onTap: shortcut.$2),
-          const Gap(FwSpacing.lg),
-        ],
-        ?_primary(state),
+    var primary = _primary(state);
+    return [
+      if (widget.form == DevStackForm.band ||
+          state == StackState.unavailable ||
+          _isUnconfirmed) ...[
+        _Link(
+          'Check now',
+          enabled: !busy,
+          onTap: () => unawaited(_core.refresh()),
+        ),
+        if (primary != null) const Gap(FwSpacing.lg),
       ],
-    );
-  }
-
-  (String, VoidCallback)? _shortcutCommand(StackState state) {
-    if (state == StackState.unavailable || _isUnconfirmed || !widget.compact) {
-      return ('Check now', () => unawaited(_core.refresh()));
-    }
-    var command = _core.commands.where((c) => c.argument == null).firstOrNull;
-    if (command == null) return ('Check now', () => unawaited(_core.refresh()));
-    return (command.label, () => unawaited(_core.runCommand(command.id)));
+      ?primary,
+    ];
   }
 
   /// The control that changes the state, or null when the project declared
@@ -427,49 +554,6 @@ class _DevStackBlockState extends State<DevStackBlock> {
     );
   }
 
-  /// Services and the way into the panel. Null when there is neither.
-  Widget? _evidence(BuildContext context, StackState state) {
-    var colors = context.colors;
-    var type = context.type;
-    var services = _core.reading.services;
-    var openPanel = widget.compact && widget.onOpenPanel != null;
-    if (services.isEmpty && !openPanel) return null;
-    return Row(
-      children: [
-        Expanded(
-          child: Wrap(
-            spacing: FwSpacing.xl,
-            runSpacing: FwSpacing.sm,
-            children: [
-              for (var service in services)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _StateDot(
-                      service.state ?? StackState.unknown,
-                      size: 6,
-                      muted: _isUnconfirmed,
-                    ),
-                    const Gap(FwSpacing.sm),
-                    Text(
-                      service.port == null
-                          ? service.name
-                          : '${service.name} :${service.port}',
-                      style: type.caption.copyWith(color: colors.mut),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ),
-        if (openPanel) ...[
-          const Gap(FwSpacing.lg),
-          _Link('Open panel →', quiet: true, onTap: widget.onOpenPanel!),
-        ],
-      ],
-    );
-  }
-
   /// What to show, which is not always what the last probe said — a transition
   /// in flight wins, because during those seconds the probe is the stale one.
   StackState _shownState() => switch (_core.busy) {
@@ -483,6 +567,11 @@ class _DevStackBlockState extends State<DevStackBlock> {
   /// for the half-second until the first probe of the session lands.
   bool get _isUnconfirmed =>
       _core.busy == null && (!_core.reading.isKnown || _core.isStale);
+
+  /// The probe's own words about why it cannot be believed, or null.
+  String? _failure(StackState state) => state == StackState.unavailable
+      ? (_core.reading.failure ?? 'the check could not be run')
+      : null;
 
   String _word(StackState state) {
     var reading = _core.reading;
@@ -498,11 +587,8 @@ class _DevStackBlockState extends State<DevStackBlock> {
     };
   }
 
-  /// The line under the word: the one fact that makes the state actionable.
-  ///
-  /// Every state fills it, which is the whole reason it is a slot rather than a
-  /// suffix — a failure lands where the address was, and the eye does not have
-  /// to go looking.
+  /// The one fact that makes the state actionable — the address when up, the
+  /// reason when down, the clock during a transition.
   (String, Color)? _detail(BuildContext context, StackState state) {
     var colors = context.colors;
     var reading = _core.reading;
@@ -541,21 +627,23 @@ class _DevStackBlockState extends State<DevStackBlock> {
     _ => colors.ink2,
   };
 
-  Color _railColor(FwPalette colors, StackState state) => switch (state) {
+  /// The tone the surface is washed with, or null for a state that gets none.
+  ///
+  /// Down is not a fault and does not get a colour — a checkout you are not
+  /// working in *should* have its stack down, and a tinted overview is a tinted
+  /// overview whether or not anything is wrong.
+  Color? _tone(FwPalette colors, StackState state) => switch (state) {
     StackState.up => _core.reading.isPartial ? colors.amber : colors.grn,
     StackState.starting || StackState.stopping => colors.amber,
     StackState.unavailable => colors.red,
-    // Down is not a fault and does not get an edge — a checkout you are not
-    // working in *should* have its stack down.
-    _ => colors.line2,
+    _ => null,
   };
 }
 
 class _StateDot extends StatelessWidget {
-  const _StateDot(this.state, {this.size = 8, this.muted = false});
+  const _StateDot(this.state, {this.muted = false});
 
   final StackState state;
-  final double size;
   final bool muted;
 
   @override
@@ -569,8 +657,8 @@ class _StateDot extends StatelessWidget {
       StackState.unknown => colors.mut3,
     };
     return Container(
-      width: size,
-      height: size,
+      width: 8,
+      height: 8,
       decoration: BoxDecoration(
         color: muted ? colors.mut3 : color,
         shape: BoxShape.circle,
@@ -586,40 +674,34 @@ class _StateDot extends StatelessWidget {
 /// hovering. The rule underneath is the second finding of the study: an
 /// affordance you have to discover is not an affordance.
 class _Link extends StatelessWidget {
-  const _Link(
-    this.label, {
-    this.enabled = true,
-    this.quiet = false,
-    required this.onTap,
-  });
+  const _Link(this.label, {this.enabled = true, required this.onTap});
 
   final String label;
   final bool enabled;
-
-  /// Navigation rather than action — set muted, so it does not compete with the
-  /// control beside it.
-  final bool quiet;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var color = !enabled
-        ? colors.mut3
-        : quiet
-        ? colors.mut
-        : colors.ink2;
     return Tappable(
       onTap: enabled ? onTap : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: FwSpacing.xxs),
         child: Container(
           decoration: BoxDecoration(
+            // [mut3], not a hairline: this link sits on a tinted band as often
+            // as on white, and a line2 underline vanishes into the wash — an
+            // affordance you have to hover for is not one.
             border: Border(
-              bottom: BorderSide(color: enabled ? colors.line2 : colors.line),
+              bottom: BorderSide(color: enabled ? colors.mut3 : colors.line),
             ),
           ),
-          child: Text(label, style: context.type.body.copyWith(color: color)),
+          child: Text(
+            label,
+            style: context.type.caption.copyWith(
+              color: enabled ? colors.ink2 : colors.mut3,
+            ),
+          ),
         ),
       ),
     );

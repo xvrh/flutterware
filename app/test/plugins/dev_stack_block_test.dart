@@ -21,12 +21,12 @@ import 'package:flutterware_app/src/utils/run_dir.dart';
 
 /// The block's layout rules, as behaviour.
 ///
-/// See `docs/superpowers/specs/2026-08-11-dev-stack-ui-study.md`. What is
-/// asserted here is the handful of rules that were *decided* rather than drawn:
-/// which slot a failure lands in, when a control is emphatic, what the compact
-/// form is allowed to drop, and what a cold start says when it has a cache.
-/// Colours and gaps are not asserted — a test that pins those only makes the
-/// next visual change expensive.
+/// See `docs/superpowers/specs/2026-08-11-dev-stack-ui-study.md` and its second
+/// pass, `2026-08-12-dev-stack-ui-study-2.md`. What is asserted here is the
+/// handful of rules that were *decided* rather than drawn: which slot a failure
+/// lands in, when a control is emphatic, what the strip is allowed to carry, and
+/// what a cold start says when it has a cache. Colours and gaps are not asserted
+/// — a test that pins those only makes the next visual change expensive.
 void main() {
   late Directory runDir;
   late Directory project;
@@ -72,7 +72,7 @@ void main() {
   Future<void> pump(
     WidgetTester tester,
     DevStackPlugin plugin, {
-    bool compact = false,
+    DevStackForm form = DevStackForm.band,
     VoidCallback? onOpenPanel,
   }) async {
     await tester.pumpWidget(
@@ -81,11 +81,7 @@ void main() {
         home: Scaffold(
           body: Padding(
             padding: const EdgeInsets.all(24),
-            child: DevStackBlock(
-              plugin,
-              compact: compact,
-              onOpenPanel: onOpenPanel,
-            ),
+            child: DevStackBlock(plugin, form: form, onOpenPanel: onOpenPanel),
           ),
         ),
       ),
@@ -107,7 +103,7 @@ void main() {
     }
   });
 
-  testWidgets('the state is a word, and the address is under it', (
+  testWidgets('the state is a word, and the address is beside it', (
     tester,
   ) async {
     var plugin = pluginWith(
@@ -116,16 +112,17 @@ void main() {
     );
     await pump(tester, plugin);
     expect(find.text('up'), findsOneWidget);
-    expect(find.text('localhost:8080 · pid 493'), findsOneWidget);
-    // Not `up · localhost:8080 · pid 493 · just now` — the age labels the block
-    // from the section line above rather than joining the state in a run-on.
-    expect(find.textContaining('· just now'), findsNothing);
+    expect(
+      find.textContaining('localhost:8080 · pid 493', findRichText: true),
+      findsOneWidget,
+    );
     plugin.core.dispose();
   });
 
   testWidgets('the home screen keeps the services', (tester) async {
     // The compact form used to drop them, which left the one screen you glance
-    // at unable to say *what* was up.
+    // at unable to say *what* was up. They are one muted run on the strip
+    // rather than a row of chips — the per-service breakdown is the panel's.
     var plugin = pluginWith(
       jsonConfig(),
       probeOutput:
@@ -133,9 +130,26 @@ void main() {
           '{"name":"postgres","port":8200,"state":"up"},'
           '{"name":"identity","port":8201,"state":"up"}]}',
     );
-    await pump(tester, plugin, compact: true);
-    expect(find.text('postgres :8200'), findsOneWidget);
-    expect(find.text('identity :8201'), findsOneWidget);
+    await pump(tester, plugin, form: DevStackForm.strip);
+    expect(
+      find.textContaining('postgres :8200', findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('identity :8201', findRichText: true),
+      findsOneWidget,
+    );
+    plugin.core.dispose();
+  });
+
+  testWidgets('the strip carries none of the project commands', (tester) async {
+    // A glance surface may only offer controls whose result is visible on it.
+    // `Logs` used to sit here as the first argument-less command declared;
+    // pressing it printed forty lines into the panel, a screen you were not on.
+    var plugin = pluginWith(jsonConfig(), probeOutput: '{"state":"up"}');
+    await pump(tester, plugin, form: DevStackForm.strip);
+    expect(find.text('Logs'), findsNothing);
+    expect(find.widgetWithText(FwActionButton, 'Tear down'), findsOneWidget);
     plugin.core.dispose();
   });
 
@@ -166,10 +180,22 @@ void main() {
     expect(find.text("can't tell"), findsOneWidget);
     expect(find.text('Cannot connect to the Docker daemon.'), findsOneWidget);
     // Re-reading is the next move when the reading is the broken thing, so the
-    // link becomes Check now even though this stack declares a Logs command.
+    // one link on offer is Check now.
     expect(find.text('Check now'), findsOneWidget);
-    expect(find.text('Logs'), findsNothing);
     plugin.core.dispose();
+
+    // The strip is one line for every state but this one: a reason ellipsised
+    // at a couple of hundred pixels is a reason nobody can act on, so it takes a
+    // second line of its own rather than the run of text beside the word.
+    var glance = pluginWith(
+      jsonConfig(),
+      probeOutput: 'Cannot connect to the Docker daemon.',
+      exitCode: 1,
+    );
+    await pump(tester, glance, form: DevStackForm.strip);
+    expect(find.text('Cannot connect to the Docker daemon.'), findsOneWidget);
+    expect(find.text('Check now'), findsOneWidget);
+    glance.core.dispose();
   });
 
   testWidgets('only a stack known to be down gets an emphatic Bring up', (
@@ -230,7 +256,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('bringing up'), findsOneWidget);
-    expect(find.text('0s elapsed'), findsOneWidget);
+    expect(find.textContaining('0s elapsed'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(
       tester
@@ -284,19 +310,31 @@ void main() {
     second.core.dispose();
   });
 
-  testWidgets('the way into the panel is offered on the home screen only', (
+  testWidgets('the strip is the way into the panel, and says so', (
     tester,
   ) async {
+    // There is no `Open panel →` link any more: a line whose every fact belongs
+    // to one page is that page's link, and the chevron is what admits it.
     var opened = 0;
     var plugin = pluginWith(jsonConfig(), probeOutput: '{"state":"up"}');
-    await pump(tester, plugin, compact: true, onOpenPanel: () => opened++);
-    await tester.tap(find.text('Open panel →'));
+    await pump(
+      tester,
+      plugin,
+      form: DevStackForm.strip,
+      onOpenPanel: () => opened++,
+    );
+    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+    await tester.tap(find.text('up'));
     expect(opened, 1);
     plugin.core.dispose();
 
+    // The band is already on that page, so it neither points at it nor takes a
+    // tap that would go nowhere.
     var inPanel = pluginWith(jsonConfig(), probeOutput: '{"state":"up"}');
     await pump(tester, inPanel, onOpenPanel: () => opened++);
-    expect(find.text('Open panel →'), findsNothing);
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
+    await tester.tap(find.text('up'));
+    expect(opened, 1);
     inPanel.core.dispose();
   });
 }
