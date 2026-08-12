@@ -6,9 +6,12 @@ library;
 
 import 'dart:typed_data';
 
+import 'change_range.dart';
 import 'changes_config_cache.dart';
 import 'patch_index.dart';
 import 'ranking.dart';
+
+export 'change_range.dart';
 
 /// The bounds. Every one is checked **before** the work it bounds, and every
 /// one is visible when it bites: a screen that quietly drops files is worse
@@ -24,6 +27,14 @@ class ChangesLimits {
 
   /// Past this a file is listed and counted but not expandable.
   static const filePatchBytes = 512 * 1024;
+
+  /// How many commits the range picker lists.
+  ///
+  /// A branch with more than this is one nobody is picking a single commit out
+  /// of by eye, and the list is the only thing on this screen whose length is
+  /// unbounded by the *delta* — a rebase of somebody's fork can put thousands
+  /// of commits between a merge base and HEAD.
+  static const commits = 200;
 }
 
 /// Where the base came from. The header shows this, because the one thing
@@ -99,6 +110,8 @@ class ChangeSet {
     Ranking? ranking,
     this.configState = ChangesConfigState.none,
     this.attentionConfigured = false,
+    this.commits = const [],
+    this.range = ChangeRange.everything,
     // ignore: prefer_initializing_formals
   }) : _ranking = ranking;
 
@@ -111,6 +124,22 @@ class ChangeSet {
   /// The commit the delta starts at — `merge-base(base, HEAD)`.
   final String? mergeBase;
   final String? head;
+
+  /// The branch's own commits, newest first — **the whole branch, whatever
+  /// [range] is**, because the picker has to widen what it narrowed.
+  ///
+  /// Capped at [ChangesLimits.commits] + 1, so [commitsTruncated] can tell
+  /// "exactly at the cap" from "there are more" without a second call.
+  final List<CommitEntry> commits;
+
+  bool get commitsTruncated => commits.length > ChangesLimits.commits;
+
+  /// Which part of that history this set is. [ChangeRange.everything] is the
+  /// default and is what everything except the screen's picker asks for.
+  final ChangeRange range;
+
+  /// The commits [range] covers — empty when it is only the working tree.
+  List<CommitEntry> get rangeCommits => commitsIn(range, commits);
 
   /// The patch, indexed. [PatchIndex.empty] when [refusal] is set, or when
   /// there is nothing to compare against.
@@ -215,9 +244,20 @@ class ChangeSet {
         baseSource != other.baseSource ||
         mergeBase != other.mergeBase ||
         head != other.head ||
+        range != other.range ||
         configState != other.configState ||
         refusal?.patchBytes != other.refusal?.patchBytes) {
       return false;
+    }
+    // **A commit is the one thing that moves this list without moving a byte
+    // of the patch.** Committing the whole delta changes nothing about what is
+    // drawn on the left and everything about what the picker has to offer, so
+    // a set that compared only the diff would leave the popover a commit
+    // behind for as long as the screen stayed open. Shas only: nothing else
+    // about a commit can change once it exists.
+    if (commits.length != other.commits.length) return false;
+    for (var i = 0; i < commits.length; i++) {
+      if (commits[i].sha != other.commits[i].sha) return false;
     }
     if (uncommitted.length != other.uncommitted.length ||
         !uncommitted.containsAll(other.uncommitted)) {
@@ -325,6 +365,7 @@ class ChangeSet {
     'baseSource': baseSource.name,
     'mergeBase': ?mergeBase,
     'head': ?head,
+    if (!range.isEverything) 'range': range.toParams(),
     'files': changed.length,
     'added': added,
     'removed': removed,

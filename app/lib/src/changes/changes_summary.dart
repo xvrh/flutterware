@@ -31,6 +31,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import '../worktrees/facts.dart';
 import 'change_set.dart';
@@ -568,9 +569,10 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return InkWell(
+    return Tappable.builder(
       onTap: onOpen,
-      child: Padding(
+      builder: (context, hovered) => Container(
+        color: hovered && onOpen != null ? colors.hoverOverlay : null,
         padding: const EdgeInsets.symmetric(
           horizontal: FwSpacing.lg,
           vertical: FwSpacing.sm,

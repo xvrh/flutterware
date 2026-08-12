@@ -56,6 +56,7 @@ void main() {
     ChangeSet set, {
     Completer<void>? gate,
     bool isOpen = false,
+    bool showTitle = true,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -64,6 +65,7 @@ void main() {
           body: ChangesScreen(
             worktree: worktree,
             isOpen: isOpen,
+            showTitle: showTitle,
             load: (_) async {
               if (gate != null) await gate.future;
               return set;
@@ -110,6 +112,35 @@ void main() {
     gate.complete();
     await tester.pumpAndSettle();
     expect(find.text('Reading…'), findsNothing);
+  });
+
+  testWidgets('under a tab strip it names neither itself nor its base', (
+    tester,
+  ) async {
+    // The strip above says both — `files | previews | scenarios` and
+    // `against <base>` — and this screen saying them again six pixels below is
+    // one delta stated twice, in two vocabularies that can be read as two.
+    await pump(tester, setOf(files: [file('lib/a.dart')]), showTitle: false);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Changes'), findsNothing);
+    expect(find.text(worktree.displayName), findsNothing);
+    expect(find.text('base master (inferred)'), findsNothing);
+    // The counts stay: they are what the strip does not say.
+    expect(find.text('1 files'), findsOneWidget);
+  });
+
+  testWidgets('under a tab strip a missing base is still said', (tester) async {
+    // Not a duplicate of anything — it is the reason the counts beside it are
+    // smaller than they look.
+    await pump(
+      tester,
+      setOf(base: null, source: BaseSource.none),
+      showTitle: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('no base'), findsOneWidget);
   });
 
   testWidgets('lists files with their counts, deletions first', (tester) async {

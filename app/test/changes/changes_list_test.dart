@@ -196,6 +196,129 @@ void main() {
       reason: '4,000 lines exist; only what fits on screen was built',
     );
   });
+  group('syntax colour', () {
+    testWidgets('a Dart line is drawn as spans, not one string', (
+      tester,
+    ) async {
+      await pumpPatch(
+        tester,
+        index(
+          [
+            'diff --git a/lib/a.dart b/lib/a.dart',
+            '--- a/lib/a.dart',
+            '+++ b/lib/a.dart',
+            '@@ -1,2 +1,2 @@',
+            ' void main() {}',
+            "-var a = 'old';",
+            "+var a = 'new';",
+            '',
+          ].join('\n'),
+        ),
+      );
+      await tester.tap(find.text('a.dart'));
+      await tester.pumpAndSettle();
+
+      var row = tester
+          .widgetList<DiffLineView>(find.byType(DiffLineView))
+          .firstWhere((it) => it.line.text == "var a = 'new';");
+      expect(row.tokens, isNotNull);
+      expect([
+        for (var token in row.tokens!) token.className,
+      ], contains('keyword'));
+      // The text still reads as itself — `find.text` sees through the spans,
+      // and so does the semantics tree the drive tools read.
+      expect(find.text("var a = 'new';"), findsOneWidget);
+    });
+
+    testWidgets('a file with no grammar keeps its plain text', (tester) async {
+      await pumpPatch(
+        tester,
+        index(
+          [
+            'diff --git a/notes.md b/notes.md',
+            '--- a/notes.md',
+            '+++ b/notes.md',
+            '@@ -1 +1 @@',
+            '-was prose',
+            '+is prose',
+            '',
+          ].join('\n'),
+        ),
+      );
+      await tester.tap(find.text('notes.md'));
+      await tester.pumpAndSettle();
+
+      var row = tester
+          .widgetList<DiffLineView>(find.byType(DiffLineView))
+          .firstWhere((it) => it.line.text == 'is prose');
+      expect(row.tokens, isNull);
+      expect(find.text('is prose'), findsOneWidget);
+    });
+
+    testWidgets('a wholly added file is coloured, however long it is', (
+      tester,
+    ) async {
+      // There is no size at which this screen stops colouring, so there is
+      // nothing for the header to announce. It briefly had a
+      // `not coloured · 600-line hunk` note beside a 500-line cap; the chunked
+      // tokeniser removed the cap and the note with it.
+      var lines = [
+        'diff --git a/lib/huge.dart b/lib/huge.dart',
+        '--- a/lib/huge.dart',
+        '+++ b/lib/huge.dart',
+        '@@ -0,0 +1,600 @@',
+      ];
+      for (var i = 0; i < 600; i++) {
+        lines.add('+var v$i = $i;');
+      }
+      lines.add('');
+
+      await pumpPatch(tester, index(lines.join('\n')));
+      await tester.tap(find.text('huge.dart'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('not coloured'), findsNothing);
+      var row = tester
+          .widgetList<DiffLineView>(find.byType(DiffLineView))
+          .firstWhere((it) => it.line.text == 'var v0 = 0;');
+      expect([
+        for (var token in row.tokens!) token.className,
+      ], contains('keyword'));
+    });
+
+    testWidgets('only the hunks on screen are tokenised', (tester) async {
+      // The same claim `HunkLineCache` makes, and it has to survive the second
+      // cache sitting beside it: a 4,000-line file must not be parsed to draw
+      // its first screenful.
+      var lines = [
+        'diff --git a/lib/huge.dart b/lib/huge.dart',
+        '--- a/lib/huge.dart',
+        '+++ b/lib/huge.dart',
+      ];
+      for (var hunk = 0; hunk < 40; hunk++) {
+        lines.add('@@ -${hunk * 100 + 1},2 +${hunk * 100 + 1},2 @@');
+        lines
+          ..add('-var was$hunk = 0;')
+          ..add('+var is$hunk = 1;');
+      }
+      lines.add('');
+
+      await pumpPatch(tester, index(lines.join('\n')));
+      await tester.tap(find.text('huge.dart'));
+      await tester.pumpAndSettle();
+
+      var built = tester
+          .widgetList<DiffLineView>(find.byType(DiffLineView))
+          .where((it) => it.tokens != null);
+      expect(built, isNotEmpty);
+      expect(
+        built.length,
+        lessThan(120),
+        reason: '40 hunks exist; only the ones on screen were tokenised',
+      );
+    });
+  });
+
   testWidgets('a header that overstates its hunk says so instead of crashing', (
     tester,
   ) async {

@@ -2,14 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-// ignore: implementation_imports
-import 'package:flutterware/src/third_party/highlight/lib/highlight_core.dart'
-    show Node, highlight;
-// ignore: implementation_imports
-import 'package:flutterware/src/third_party/highlight/lib/languages/dart.dart'
-    as dart_language;
-
 import '../ui/design/design.dart';
+import '../ui/syntax.dart';
 import 'authoring.dart';
 
 /// How to write a scenario, as a page.
@@ -170,7 +164,7 @@ class _CodeBlock extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.all(FwSpacing.lg),
           child: SelectableText.rich(
-            TextSpan(children: dartSpans(context, source)),
+            TextSpan(children: codeSpans(context, source)),
             style: const TextStyle(
               fontFamily: 'monospace',
               fontFamilyFallback: ['Menlo', 'Consolas', 'Courier New'],
@@ -182,51 +176,6 @@ class _CodeBlock extends StatelessWidget {
       ),
     );
   }
-}
-
-var _registered = false;
-
-/// [source] as Dart, coloured from the app's palette.
-///
-/// The vendored `highlight` ships themes, and none of them is this app's: they
-/// are picked for a light or a dark editor and this panel is both. So the
-/// tokeniser is the only part borrowed, and the colours come from [FwPalette]
-/// — the same greens and ambers the JSON view uses for the same kinds of
-/// thing.
-List<InlineSpan> dartSpans(BuildContext context, String source) {
-  if (!_registered) {
-    highlight.registerLanguage('dart', dart_language.dart);
-    _registered = true;
-  }
-  var colors = context.colors;
-  Color? colorFor(String? className) => switch (className) {
-    'comment' || 'quote' => colors.mut2,
-    'string' || 'subst' => colors.grn,
-    'number' => colors.amber,
-    'keyword' || 'literal' || 'built_in' => colors.accent,
-    'type' || 'class' || 'title' || 'meta' => colors.info,
-    _ => null,
-  };
-
-  var spans = <InlineSpan>[];
-  void walk(List<Node> nodes, Color? inherited) {
-    for (var node in nodes) {
-      var color = colorFor(node.className) ?? inherited;
-      if (node.value case var value?) {
-        spans.add(
-          TextSpan(
-            text: value,
-            style: TextStyle(color: color),
-          ),
-        );
-      } else if (node.children case var children?) {
-        walk(children, color);
-      }
-    }
-  }
-
-  walk(highlight.parse(source, language: 'dart').nodes ?? const [], colors.ink);
-  return spans;
 }
 
 /// The command, with a way to take it. The shape `web_build_dialog` uses, for
