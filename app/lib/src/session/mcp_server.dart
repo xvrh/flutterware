@@ -428,8 +428,9 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               'screen rather than a raster of the Flutter layer. Two limits '
               'worth knowing: on Android the tree is the focused window, so '
               'a dialog is fully there but the soft keyboard is not; on '
-              'macOS it sees native chrome only, because a Flutter app '
-              'publishes none of its own widgets to macOS accessibility. '
+              'macOS it is for native chrome, because a Flutter app usually '
+              'publishes none of its own widgets to macOS accessibility — '
+              'some processes do, and then you simply see more. '
               'Use verb: foreground here to bring back a suspended iOS app.',
         ),
         'target': Schema.string(

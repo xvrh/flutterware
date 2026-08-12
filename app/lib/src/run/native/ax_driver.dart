@@ -20,12 +20,30 @@ import 'native_driver.dart';
 /// **Scope differs sharply between the two, and the tool says so.** On the
 /// simulator this reads the app under test: measured, the complete Flutter
 /// screen with labels and frames, no guest and no semantics handshake. On
-/// macOS it reads *native chrome only* — menus, dialogs, other apps — because
-/// Flutter's macOS accessibility bridge stays dormant for anything short of
-/// VoiceOver (measured: the enhanced-interface attributes are refused, and the
-/// guest's own `ensureSemantics` builds the framework tree without waking it).
-/// That costs nothing on a flutterware-launched app, where Flutter content is
-/// the drive layer's business anyway.
+/// macOS the brief is *native chrome* — menus, dialogs, save panels, other
+/// apps — and a Flutter app's own widgets usually do not appear.
+///
+/// **Usually, not never** — the first version of this comment said never, and
+/// it was wrong. The framework says the rule itself when asked for a
+/// semantics tree it has not built: *"the framework only generates semantics
+/// when asked to do so by the platform"*. Flutterware's own
+/// `ensureSemantics()` is framework-side and does **not** ask the platform, so
+/// nothing we do turns publication on — which is why the macOS brief holds in
+/// practice. But the platform can be asked from outside (an assistive client
+/// attaching, VoiceOver, an `AXEnhancedUserInterface` probe), and an app in
+/// that state publishes its whole Flutter tree here: observed on this very
+/// example app, ten labels deep, and on exactly one of two identical Brewline
+/// builds — which is what made it look like a property of the app rather than
+/// of the process.
+///
+/// Not turned into a feature, deliberately: the same app, given the same
+/// treatment, published in one run and refused in the next, so there is no
+/// recipe honest enough to put behind a verb. The risk of leaving it is
+/// one-directional — an agent either sees the chrome it came for, or that
+/// plus Flutter content it can also use.
+///
+/// Found by `app/tool/native_spike/semantics_state.dart`, which reads whether
+/// the *platform* has asked, without changing the answer.
 class AxNativeDriver extends NativeDriver {
   AxNativeDriver({
     required this.platform,
@@ -137,11 +155,14 @@ class AxNativeDriver extends NativeDriver {
       screenshotScale: _scale,
       note: platform == 'macos'
           ? 'On macOS this layer is for native chrome — menus, dialogs, save '
-                'panels, other applications. A Flutter app usually publishes '
-                'none of its own widgets to macOS accessibility (measured: '
-                'not while frontmost, not with semantics armed, not with '
-                'frames forced), so if the tree below is only a window title '
-                'that is why: address the app itself by dropping `layer`.'
+                "panels, other applications. A Flutter app's own widgets "
+                'usually do not appear: the framework builds a semantics tree '
+                'only when the *platform* asks, and nothing flutterware does '
+                'asks it. So a tree that is just a window title is the normal '
+                'case, not a fault — address the app by dropping `layer`. '
+                'Some apps do publish (an assistive client or VoiceOver '
+                'turned it on for that process); if you see Flutter content '
+                'below, it is real and you can use it.'
           : null,
     );
   }
