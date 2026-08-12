@@ -4,91 +4,71 @@ import 'package:flutterware/src/walker.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+// The global `fw` is frozen, so what it does is exactly what these tests
+// pin: find a committed wrapper by its marker and exec it, or fall back to
+// the recorded-SDK redirect untouched.
 void main() {
-  late Directory root;
+  late Directory tmp;
 
-  Directory initialized(String path) {
-    var dir = Directory(p.join(root.path, path))..createSync(recursive: true);
-    var link = Link(p.join(dir.path, sdkLinkPath))
-      ..parent.createSync(recursive: true);
-    // The target need not exist: the walker's question is whether a project
-    // recorded an SDK, and a dangling link is reported separately from an
-    // absent one so the two get different messages.
-    link.createSync('/nonexistent/sdk');
-    return dir;
+  setUp(() => tmp = Directory.systemTemp.createTempSync('fw-walker-test'));
+  tearDown(() => tmp.deleteSync(recursive: true));
+
+  File wrapper(String at, {String marker = '$wrapperMarker v1'}) {
+    var file = File(p.join(tmp.path, at))..createSync(recursive: true);
+    file.writeAsStringSync('#!/bin/sh\n$marker\necho "wrapper ran: $at \$@"\n');
+    Process.runSync('chmod', ['+x', file.path]);
+    return file;
   }
 
-  setUp(() => root = Directory.systemTemp.createTempSync('fw-walker'));
-  tearDown(() => root.deleteSync(recursive: true));
-
-  test('finds the project from a deep subdirectory', () {
-    var project = initialized('repo');
-    var deep = Directory(p.join(project.path, 'app', 'lib', 'src'))
+  test('finds a marked wrapper walking up from a subdirectory', () {
+    var script = wrapper('repo/fw');
+    var inner = Directory(p.join(tmp.path, 'repo', 'app', 'lib'))
       ..createSync(recursive: true);
-
-    expect(findInitializedRoot(deep)?.path, project.path);
+    expect(findWrapper(inner), script.path);
   });
 
-  test('finds it when standing in the root itself', () {
-    var project = initialized('repo');
-    expect(findInitializedRoot(project)?.path, project.path);
+  test('an fw without the marker is someone else, ancestors included', () {
+    wrapper('repo/fw', marker: '# some other tool');
+    var inner = Directory(p.join(tmp.path, 'repo', 'inner'))
+      ..createSync(recursive: true);
+    expect(findWrapper(inner), isNull);
   });
 
-  test('returns null when no parent has been initialized', () {
-    var stray = Directory(p.join(root.path, 'elsewhere'))..createSync();
-    expect(findInitializedRoot(stray), isNull);
+  test('the nearest marked wrapper wins over a farther one', () {
+    wrapper('repo/fw');
+    var nested = wrapper('repo/packages/one/fw');
+    var inner = Directory(p.join(tmp.path, 'repo', 'packages', 'one', 'lib'))
+      ..createSync(recursive: true);
+    expect(findWrapper(inner), nested.path);
   });
 
-  test('stops at the nearest project, not the outermost', () {
-    // A flutterware repo inside another one — the inner project wins, the way
-    // a nested checkout should.
-    initialized('outer');
-    var inner = initialized(p.join('outer', 'vendor', 'inner'));
-    var deep = Directory(p.join(inner.path, 'lib'))..createSync();
-
-    expect(findInitializedRoot(deep)?.path, inner.path);
+  test('a directory named fw is not a wrapper', () {
+    Directory(p.join(tmp.path, 'repo', 'fw')).createSync(recursive: true);
+    expect(findWrapper(Directory(p.join(tmp.path, 'repo'))), isNull);
   });
 
-  test('finds a project whose sdk entry is a directory, not a link', () {
-    // Windows-style: the SDK was copied in rather than symlinked. Still a
-    // recorded SDK; the bin decides from there whether it actually works.
-    var project = Directory(p.join(root.path, 'copied'))..createSync();
-    Directory(p.join(project.path, sdkLinkPath)).createSync(recursive: true);
+  test(
+    'the bin execs the wrapper it finds, forwarding the arguments',
+    () async {
+      wrapper('repo/fw');
+      var inner = Directory(p.join(tmp.path, 'repo', 'sub'))..createSync();
+      var result = await Process.run(Platform.resolvedExecutable, [
+        p.join(Directory.current.path, 'bin', 'walker.dart'),
+        'status',
+        '--json',
+      ], workingDirectory: inner.path);
+      expect(result.exitCode, 0);
+      expect(result.stdout, contains('wrapper ran: repo/fw status --json'));
+    },
+    testOn: '!windows',
+  );
 
-    expect(findInitializedRoot(project)?.path, project.path);
-  });
-
-  test('the message names the rule, not just a command', () {
-    // The after-clone case is every teammate, every time, because the
-    // directory is machine-specific and therefore ignored. What they need to
-    // understand is why `fw` alone cannot work yet.
-    expect(noProjectMessage, contains('dart run flutterware'));
-    expect(noProjectMessage, contains('your own Flutter SDK'));
-  });
-
-  test('the message states the dependency prerequisite', () {
-    // Without it, a user in a project that never added flutterware follows
-    // the advice and hits pub's "Could not find package" with no guidance.
-    expect(noProjectMessage, contains('dart pub add flutterware'));
-  });
-
-  test('the broken-sdk message names the path as a path', () {
-    var message = brokenSdkMessage('/Users/x/myapp');
-    expect(message, contains('/Users/x/myapp/$sdkLinkPath'));
-    // Interpolating the Directory itself once printed "Directory: '/path'".
-    expect(message, isNot(contains("Directory: '")));
-    expect(message, contains('dart run flutterware init'));
-  });
-
-  test('help without a project explains the redirect and the setup', () {
-    expect(noProjectHelp, contains(sdkLinkPath));
-    expect(noProjectHelp, contains('dart run flutterware'));
-    expect(noProjectHelp, contains('dart pub add flutterware'));
-  });
-
-  test('the help spellings match what the CLI accepts', () {
-    // Mirrors FwCli's dispatcher, which the walker cannot import; this pins
-    // the copy so a drift shows up here instead of as a silent exit 64.
-    expect(helpArguments, {'help', '--help', '-h'});
+  test('without a wrapper the old redirect message still answers', () async {
+    var result = await Process.run(Platform.resolvedExecutable, [
+      p.join(Directory.current.path, 'bin', 'walker.dart'),
+      'status',
+    ], workingDirectory: tmp.path);
+    expect(result.exitCode, 64);
+    expect(result.stderr, contains('no project set up'));
   });
 }

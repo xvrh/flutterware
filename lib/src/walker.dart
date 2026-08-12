@@ -2,13 +2,58 @@ import 'dart:io';
 
 /// Where a project records which Flutter SDK it uses, relative to its root.
 ///
-/// **This path is the one permanently frozen thing in the whole design.** The
-/// global `fw` is installed once and never refreshed, so it may be years older
-/// than the project it is pointed at; it is safe to freeze precisely because
-/// this name and `dart run flutterware` are the sum of what it knows. Anything
-/// else — the artifact layout, the freshness check, what the launcher does
-/// after it starts — lives on the far side of that exec and may move freely.
+/// **This path is one of the three permanently frozen facts in the whole
+/// design** — the others being [wrapperMarker] and `dart run flutterware`.
+/// The global `fw` is installed once and never refreshed, so it may be years
+/// older than the project it is pointed at; it is safe to freeze precisely
+/// because those three names are the sum of what it knows. Anything else —
+/// the artifact layout, the freshness check, what the launcher or the wrapper
+/// does after it starts — lives on the far side of an exec and may move
+/// freely.
 const sdkLinkPath = '.flutterware/sdk';
+
+/// The marker line a committed `fw` wrapper script carries — what lets the
+/// walker tell flutterware's wrapper from any other executable that happens
+/// to be named `fw`.
+///
+/// A prefix, not a full line: the wrapper's own line ends in a version
+/// (`# flutterware wrapper v1`), and the version belongs to the script, not
+/// to this contract.
+const wrapperMarker = '# flutterware wrapper';
+
+/// Walks up from [start] for a committed `fw` wrapper script.
+///
+/// Returns its absolute path, or null. Checked before [findInitializedRoot]:
+/// a repo that commits the wrapper has pinned its whole toolchain, and the
+/// wrapper resolves the SDK better than the recorded link does — it can even
+/// install it. A file named `fw` without [wrapperMarker] is someone else's
+/// and is skipped, ancestors included.
+String? findWrapper(Directory start) {
+  var dir = start.absolute;
+  while (true) {
+    var candidate = File('${dir.path}/fw');
+    if (_isWrapper(candidate)) return candidate.path;
+    var parent = dir.parent;
+    if (parent.path == dir.path) return null;
+    dir = parent;
+  }
+}
+
+bool _isWrapper(File file) {
+  if (file.statSync().type != FileSystemEntityType.file) return false;
+  try {
+    var handle = file.openSync();
+    try {
+      // The marker sits on line 2; 256 bytes reaches it in any wrapper
+      // version without reading a whole file that turns out to be a binary.
+      return String.fromCharCodes(handle.readSync(256)).contains(wrapperMarker);
+    } finally {
+      handle.closeSync();
+    }
+  } on FileSystemException {
+    return false;
+  }
+}
 
 /// Walks up from [start] for a project that has been initialized.
 ///
@@ -68,15 +113,17 @@ $_setup''';
 ///
 /// Everything version-sensitive — including the command list — lives on the
 /// far side of the exec, so this can only describe the redirect itself and
-/// the two frozen facts: [sdkLinkPath] and `dart run flutterware`.
+/// the frozen facts: the committed wrapper, [sdkLinkPath], and
+/// `dart run flutterware`.
 const noProjectHelp =
     '''
 fw — runs flutterware commands in the nearest set-up project.
 
-`fw <command>` walks up to the project that recorded a Flutter SDK in
-$sdkLinkPath, then runs `dart run flutterware <command>` with that
-SDK. The commands live in the project's own flutterware version, so
-`fw help` inside a set-up project lists them.
+`fw <command>` runs the project's committed `fw` wrapper when one
+exists; otherwise it walks up to the project that recorded a Flutter
+SDK in $sdkLinkPath, then runs `dart run flutterware <command>` with
+that SDK. The commands live in the project's own flutterware version,
+so `fw help` inside a set-up project lists them.
 
 No project is set up here yet.
 

@@ -27,6 +27,24 @@ import 'package:flutterware/src/walker.dart';
 /// signal at all. `executables:` decides what `dart install` installs;
 /// `dart run <package>` resolves `bin/<package>.dart`. The two never meet.
 Future<void> main(List<String> arguments) async {
+  // A committed wrapper outranks the recorded link: the repo that carries one
+  // has pinned its whole toolchain, and the wrapper can resolve — and even
+  // install — the SDK the link can only point at. The user's cwd is kept: the
+  // wrapper's passthrough commands (`fw flutter test` inside `app/`) are
+  // cwd-sensitive, and its fallthrough moves to the root by itself. Skipped
+  // on Windows, where the wrapper is a shell script this process cannot exec.
+  if (!Platform.isWindows) {
+    var wrapper = findWrapper(Directory.current);
+    if (wrapper != null) {
+      var process = await Process.start(
+        wrapper,
+        arguments,
+        mode: ProcessStartMode.inheritStdio,
+      );
+      exit(await process.exitCode);
+    }
+  }
+
   var root = findInitializedRoot(Directory.current);
   if (root == null) {
     // Help must not be gated on setup — it is how someone finds out what the

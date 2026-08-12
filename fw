@@ -146,6 +146,13 @@ case ${1:-} in
     exec "$sdk/bin/dart" "$@"
     ;;
   *)
+    # From the repo root, not from where the user is standing: `dart run
+    # <package>` from a subdirectory runs the build hooks and then fails to
+    # resolve (the global walker documents the measurement). Nothing is lost
+    # — the session walks up to the repo root anyway. Passthrough above stays
+    # in the user's cwd on purpose: `../fw flutter test` inside app/ must run
+    # app's tests.
+    cd "$root"
     exec "$sdk/bin/dart" run flutterware "$@"
     ;;
 esac
