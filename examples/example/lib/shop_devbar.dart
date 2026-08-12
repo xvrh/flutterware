@@ -25,6 +25,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/devbar.dart';
 
 import 'shop/shop_app.dart';
+import 'src/database/app_database.dart';
 import 'src/devbar/notifications_panel.dart';
 import 'src/notifications/push_banner.dart';
 import 'src/notifications/push_service.dart';
@@ -51,10 +52,28 @@ final _links = [
 
 final _push = PushService(navigatorKey: _navigatorKey, links: _links);
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  var database = await AppDatabase.open();
+  database.persistPushes(_push);
   runApp(
     Devbar(
-      plugins: [NotificationsPlugin.init(service: _push)],
+      plugins: [
+        NotificationsPlugin.init(service: _push),
+        // The recipe from 2026-08-12-sqlite-watch-design.md: the app hands
+        // over query/updates/watch; flutterware imports no sqlite.
+        DatabasePlugin.init(
+          database: DatabaseAdapter(
+            query: (sql, args) => database.db.getAll(sql, args),
+            updates: database.db.updates.map((u) => u.tables),
+            watch: (sql) =>
+                database.db.watch(sql, throttle: Duration(milliseconds: 250)),
+            // The write door, deliberately present here: providing the
+            // function is the whole opt-in, and the cockpit marks it danger.
+            execute: (sql, args) => database.db.execute(sql, args),
+          ),
+        ),
+      ],
       child: ShopApp(
         navigatorKey: _navigatorKey,
         overlay: PushBanner(service: _push),

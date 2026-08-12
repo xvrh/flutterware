@@ -1,0 +1,85 @@
+# Database watch — your app's sqlite, on every surface
+
+Hand the devbar a `DatabaseAdapter` and the running app's database becomes a
+panel: browse the schema, run a query, pin a live query, follow the writes —
+from the cockpit's App tab, from `fw run run`, from an agent over MCP, on any
+device the run cockpit reaches. Nothing here needs a rebuild to inspect, and
+it works on a physical phone, where the database file itself is sealed inside
+the app sandbox (design doc:
+`docs/superpowers/specs/2026-08-12-sqlite-watch-design.md`).
+
+flutterware imports no sqlite. The adapter is four function types and a name;
+you wire it to whatever database library you use and own those five lines.
+
+## The recipe: sqlite_async (and PowerSync)
+
+`PowerSyncDatabase` implements sqlite_async's interface, so the same lines
+cover both. A live version is
+[`examples/example/lib/shop_devbar.dart`](../examples/example/lib/shop_devbar.dart).
+
+```dart
+import 'package:flutterware/devbar.dart';
+
+Devbar(
+  plugins: [
+    DatabasePlugin.init(
+      database: DatabaseAdapter(
+        query: (sql, args) => db.getAll(sql, args),
+        updates: db.updates.map((u) => u.tables),
+        watch: (sql) =>
+            db.watch(sql, throttle: const Duration(milliseconds: 250)),
+      ),
+    ),
+  ],
+  child: ...,
+)
+```
+
+- `query` should be a **read path**. sqlite_async's `getAll` runs on the
+  read pool, which sqlite itself enforces read-only — a write smuggled into
+  a query dies with `attempt to write a readonly database`, measured, not
+  assumed.
+- `updates` powers the `changes` feed: which tables changed, per write
+  transaction, coalesced over 250ms so a sync burst reads as one event
+  rather than two hundred.
+- `watch` is optional. Without it a watched query re-runs on every coalesced
+  tick; with it, sqlite_async re-runs only when the query's own source
+  tables change. Pass a `throttle` around 250ms — the library's 30ms default
+  produces a dozen snapshots during a burst.
+- Two databases are two `DatabasePlugin.init` calls with two
+  `DatabaseAdapter(name: ...)`s: panels `db:main` and `db:cache`.
+
+## Writes are opt-in, by existence
+
+There is no flag. Provide `execute` and an `Execute SQL` action exists,
+marked danger on every surface; leave it out and no surface — agents
+included — can see a write door at all:
+
+```dart
+DatabaseAdapter(
+  query: (sql, args) => db.getAll(sql, args),
+  updates: db.updates.map((u) => u.tables),
+  execute: (sql, args) => db.execute(sql, args),  // the whole opt-in
+)
+```
+
+## What you get on the wire
+
+- **`schema`** (state) — tables, columns, row counts, read live.
+- **`query`** (action) — one statement, rows inline, capped at `limit`
+  (default 100) with a `truncated` flag rather than a silent cut. The cap
+  protects the reply, not the fetch: put a `LIMIT` in the SQL to page a big
+  table.
+- **`changes`** (feed) — coalesced table-level ticks.
+- **`watch` / `unwatch`** (actions) + **`watch`** (feed) — every result
+  snapshot of every watched query, rows riding in the lazily-fetched
+  details; a broken query reports its error on the feed and stops. Each
+  snapshot offers **`explain`** — `EXPLAIN QUERY PLAN` for the query the row
+  belongs to.
+
+From an agent, one call each:
+
+```sh
+fw run run panelInvoke --panel=db:main --action=query \
+  --args='{"sql": "SELECT * FROM orders WHERE status = ?", "args": "[\"open\"]"}'
+```
