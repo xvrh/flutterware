@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/walker.dart' show wrapperMarker;
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:path/path.dart' as p;
 
@@ -117,6 +119,54 @@ void main() {
       environment: {'HOME': p.join(tmp.path, 'home')},
     );
     expect(sdks.first.root, p.canonicalize(fw));
+  });
+
+  /// The link `init` writes, pointed wherever the caller says.
+  void recordSdk(String target) {
+    var link = Link(p.join(tmp.path, 'project', '.flutterware', 'sdk'));
+    link.parent.createSync(recursive: true);
+    link.createSync(target);
+  }
+
+  /// A committed wrapper is a file named `fw` carrying [wrapperMarker]; the
+  /// walker skips one without it, so the marker is the whole test.
+  void commitWrapper() {
+    File(
+      p.join(tmp.path, 'project', 'fw'),
+    ).writeAsStringSync('#!/bin/sh\n$wrapperMarker v1\n');
+  }
+
+  test('a committed wrapper puts its pin above the recorded link', () async {
+    var fw = fakeSdk(
+      p.join(tmp.path, 'home', '.flutterware', 'sdks', '3.99.0'),
+    );
+    // The link still names the SDK of a version manager the repo has left.
+    recordSdk(fakeSdk(p.join(tmp.path, 'home', 'fvm', 'versions', '3.44.0')));
+    var from = fwProject('3.99.0');
+    commitWrapper();
+    var sdks = await FlutterSdkPath.findSdks(
+      from: from,
+      environment: {'HOME': p.join(tmp.path, 'home')},
+    );
+    expect(sdks.first.root, p.canonicalize(fw));
+  });
+
+  test('without a committed wrapper the recorded link still wins', () async {
+    fakeSdk(p.join(tmp.path, 'home', '.flutterware', 'sdks', '3.99.0'));
+    var linked = fakeSdk(p.join(tmp.path, 'home', 'fvm', 'versions', '3.44.0'));
+    recordSdk(linked);
+    var from = fwProject('3.99.0');
+    var sdks = await FlutterSdkPath.findSdks(
+      from: from,
+      environment: {'HOME': p.join(tmp.path, 'home')},
+    );
+    // Reached through the link, so symlink-resolved: on macOS the temp
+    // directory is `/var/...` lexically and `/private/var/...` resolved, and
+    // `p.canonicalize` alone would compare the two.
+    expect(
+      sdks.first.root,
+      p.canonicalize(Directory(linked).resolveSymbolicLinksSync()),
+    );
   });
 
   test('an empty or uncached fw pin answers nothing', () async {

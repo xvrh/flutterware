@@ -16,6 +16,15 @@ jobs:
       # resolves the channel to today.
       - run: ./fw flutter --version
       - run: ./fw flutter pub get
+      # The pin and the published floors are two numbers on purpose, and
+      # nothing used to notice when they drifted into each other. They did:
+      # `flutter: '>=3.47.0-0'` reached a package whose last published floor
+      # was `>=3.21.0`, which no one on stable could have installed. This step
+      # only catches the half that breaks *us* — a floor risen above the pin,
+      # so the repo no longer builds on the SDK it says it develops on. The
+      # other half, a floor lower than what the code needs, is a claim only
+      # running an older SDK could disprove, and nothing here does.
+      - run: ./fw dart tool/bump_flutter.dart --check
       - run: ./fw flutter analyze
       - run: ../fw flutter test
         working-directory: app

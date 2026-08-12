@@ -8,13 +8,16 @@ same code, so an agent can do anything you can do from the window.
 
 ## Quick start
 
+**Use whichever Dart your project already uses.** Flutterware does not install
+an SDK, ask you to switch one, or care how you manage them:
+
 ```shell
-dart pub add flutterware
+dart pub add flutterware          # or: fvm dart pub add flutterware
 ```
 
 ```shell
 # Run this in your Flutter project directory
-dart run flutterware
+dart run flutterware              # or: fvm dart run flutterware, ./fw dart run flutterware…
 ```
 
 That opens the GUI. The first launch is slow — it builds the CLI and the
@@ -23,6 +26,12 @@ desktop app — and it also initializes the project: it writes `.flutterware/`
 `.gitignore`, scaffolds a `tool/flutterware.dart` if you have none, and
 registers `fw mcp` in `.mcp.json` so an agent opening the repo finds the tools
 without being told.
+
+**The SDK you ran it with is the one it records**, and everything afterwards
+re-execs with that — so the choice is made once, by you, with the command you
+already type. Point it at a different SDK by running it with a different
+`dart`. If your project pins with fvm, run it with `fvm dart` and the pin is
+what gets recorded; nothing here competes with your version manager.
 
 Anything after `dart run flutterware` is passed to the CLI instead:
 
@@ -48,6 +57,15 @@ package root and uses whichever `dart` is on your PATH; `fw` walks up to the
 project itself and re-execs with the SDK that project recorded in
 `.flutterware/`, so it is right in a monorepo, right under fvm, and right when
 the `dart` you happen to have is not the one the project resolves against.
+
+`fw` itself is a redirect and nothing else — it holds no logic, so it never
+needs upgrading in step with anything. Whichever SDK installs it, every
+version-sensitive decision happens on the far side of the exec, in the
+project's own resolved sources. One install per machine, then forget it.
+
+> The SDK that runs `dart install` still has to satisfy this package's own
+> `environment:` constraint, so today `fw` cannot be installed from an SDK
+> older than that floor even though the binary itself would run fine on one.
 
 **Agents need it.** An MCP client spawns a command; `fw mcp` is a single entry
 that works for every project on the machine, where `dart run` would need the
@@ -284,9 +302,9 @@ Devbar(
 );
 ```
 
-> The test visualizer's GUI is currently being rewritten and is not in the
-> shell. `package:flutterware/flutter_test.dart` still ships and still records
-> a screenshot per step.
+> `package:flutterware/flutter_test.dart` is a drop-in superset of
+> `package:flutter_test`: everything re-exported 1:1, nothing hidden. An
+> existing test file compiles with only its import changed.
 
 ## Contributing
 
