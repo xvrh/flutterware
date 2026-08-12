@@ -53,6 +53,12 @@ void main() => Flutterware.configure((fw) {
     ),
   );
 
+  // **Which of the three packages is this repository.** `app` — the desktop
+  // GUI — because that is the thing a window of flutterware is showing you.
+  // `.` is the published library and `examples/example` is a fixture; neither
+  // is what you point at to say "that project".
+  fw.identity(const ProjectIdentity(package: app));
+
   fw.use(
     Dependencies(packages: DependenciesPackage.each([root, app, example])),
   );

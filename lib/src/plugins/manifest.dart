@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'address.dart';
 import 'changes_config.dart';
+import 'project_identity.dart';
 import 'package.dart';
 import 'plugin.dart';
 
@@ -43,6 +44,7 @@ class PluginManifest {
     this.plugins, {
     this.version = manifestVersion,
     this.changes,
+    this.identity,
   });
 
   final int version;
@@ -55,6 +57,13 @@ class PluginManifest {
   /// has to be readable for a worktree with no session, which is precisely a
   /// worktree whose plugins have not been resolved.
   final ChangesConfig? changes;
+
+  /// Which package stands for the repository, or null when it says nothing.
+  ///
+  /// **Not a plugin**, for the same reason [changes] is not: it describes the
+  /// project rather than something mounted in it, and the window that needs it
+  /// has to be identifiable before any plugin has resolved.
+  final ProjectIdentity? identity;
 
   /// Every package any plugin names, in declaration order, deduplicated.
   ///
@@ -86,6 +95,7 @@ class PluginManifest {
     'version': version,
     'plugins': [for (var p in plugins) p.toJson()],
     'changes': ?changes?.toJson(),
+    'identity': ?identity?.toJson(),
   };
 
   static PluginManifest fromJson(Map<String, Object?> json) {
@@ -130,6 +140,12 @@ class PluginManifest {
         ),
         _ => null,
       },
+      identity: switch (json['identity']) {
+        Map<Object?, Object?> it => ProjectIdentity.fromJson(
+          it.cast<String, Object?>(),
+        ),
+        _ => null,
+      },
     );
   }
 
@@ -142,6 +158,7 @@ class FlutterwareConfig {
   final _plugins = <Plugin>[];
 
   ChangesConfig? _changes;
+  ProjectIdentity? _identity;
 
   /// Declares how this project's changes should be ranked. See [ChangesConfig].
   ///
@@ -156,6 +173,21 @@ class FlutterwareConfig {
       );
     }
     _changes = config;
+  }
+
+  /// Declares which package stands for this repository. See [ProjectIdentity].
+  ///
+  /// **Refused twice, like [changes] and for the same reason.** A repository
+  /// has one face; two calls are a config with two answers, and either
+  /// resolution drops one of them without a word.
+  void identity(ProjectIdentity config) {
+    if (_identity != null) {
+      throw StateError(
+        'fw.identity was called twice. A repository has one face — declare one '
+        'ProjectIdentity.',
+      );
+    }
+    _identity = config;
   }
 
   /// Registers a plugin. The same class may be used more than once as long as
@@ -179,10 +211,14 @@ class FlutterwareConfig {
     _plugins.add(plugin);
   }
 
-  PluginManifest toManifest() => PluginManifest([
-    for (var p in _plugins)
-      PluginDeclaration(id: p.id, label: p.label, config: p.config),
-  ], changes: _changes);
+  PluginManifest toManifest() => PluginManifest(
+    [
+      for (var p in _plugins)
+        PluginDeclaration(id: p.id, label: p.label, config: p.config),
+    ],
+    changes: _changes,
+    identity: _identity,
+  );
 }
 
 /// Entry point for a project's `tool/flutterware.dart`:
