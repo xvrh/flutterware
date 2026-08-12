@@ -1,6 +1,6 @@
 # Run native fallback — the layer below the widget tree
 
-**Date:** 2026-08-12
+**Date:** 2026-08-12 (macOS scope corrected the same day, after the merge — § The macOS counterexample, explained)
 **Status:** Designed. The three spikes that gate it ran the same day and
 all passed — `2026-08-12-run-native-fallback-spike-findings.md` (S-N1
 Android, S-N2 iOS simulator, S-N3 macOS + TCC). Every mechanism claim in
@@ -51,14 +51,20 @@ The design converges on **two backends, zero new dependencies**:
 | webview | DOM exposed when JS is enabled, tap-through verified | invisible to AX — coordinates + real pixels only |
 | un-suspend | not needed (backgrounded Android drives fine) | `AXPress` Home + `AXPress` the app icon — **`simctl launch` restarts instead** |
 
-macOS is the same helper with a narrower brief: **native chrome only** —
-file dialogs, alerts, menus, other apps. Flutter's macOS AX bridge is
-dormant to everything short of VoiceOver (measured: enhanced-UI attributes
-refused, guest `ensureSemantics` builds the framework tree without waking
-NSAccessibility), and for a flutterware-launched app that costs nothing:
-Flutter content is the drive layer's territory, where it is strictly
-better served. The tool output says this instead of letting an agent hunt
-the AX tree for Flutter texts.
+macOS is the same helper with a narrower brief: **native chrome** — file
+dialogs, alerts, menus, other apps. A Flutter app's own widgets usually do
+not appear, and for a flutterware-launched app that costs nothing: Flutter
+content is the drive layer's territory, where it is strictly better
+served. The tool output says so instead of letting an agent hunt the AX
+tree for Flutter texts.
+
+**Corrected 2026-08-12, after the merge — see § The macOS counterexample,
+explained.** The first version of this section said the bridge is *dormant
+to everything short of VoiceOver*. That is wrong, and the mechanism is
+simpler: Flutter builds a semantics tree only when the **platform** asks,
+and flutterware's `ensureSemantics()` is framework-side and never asks. So
+nothing we do turns publication on — but something else can, and an app in
+that state publishes its whole tree here.
 
 Physical Android rides the adb backend unchanged. Physical iOS stays out
 of scope, as decided at the brainstorm.
@@ -166,10 +172,12 @@ rule.
 
 Nothing to negotiate. Android: the dump arms Flutter semantics itself —
 the merged tree is what asking returns. iOS simulator: the runtime keeps
-the bridge awake for the host. macOS: out of scope by the dormant-bridge
-finding. The guest's `ensureSemantics` handle stays what it always was —
-the *framework* tree for the semantics tab — and this feature neither
-needs it nor touches it.
+the bridge awake for the host. macOS: out of scope, because the guest
+cannot ask on the platform's behalf (§ The macOS counterexample,
+explained). The guest's `ensureSemantics` handle stays what it always
+was — the *framework* tree for the semantics tab — and this feature
+neither needs it nor touches it, which is precisely why it cannot turn
+macOS publication on.
 
 ## Apps launched outside flutterware
 
@@ -250,10 +258,12 @@ the budget absorbs it.
    Verified on the simulator: observe **546ms**, tap 743ms — seven times
    faster than Android — and the suspended-app recovery end to end
    (§ What the build changed).
-3. ~~**macOS chrome scope**.~~ **Done, 2026-08-12**, with the dormant
-   bridge re-confirmed against the running app: frontmost, semantics
-   armed *and* frames forced, a macOS Flutter app still publishes nothing
-   but its window title.
+3. ~~**macOS chrome scope**.~~ **Done, 2026-08-12.** The re-confirmation
+   claimed here — "frontmost, semantics armed *and* frames forced, still
+   nothing but a window title" — was itself confounded: on a hidden
+   window `ensureSemantics()` builds no tree, so those runs never had the
+   semantics they reported having. The scope survives on a better
+   mechanism; see § The macOS counterexample, explained.
 4. ~~**Dogfood as acceptance.**~~ **Done, 2026-08-12**, with the flow
    changed for a reason (§ What the build changed): a system window over
    the app rather than a camera prompt.
@@ -341,3 +351,56 @@ path, and the tool description says so.
 - Whether `foreground` should auto-suggest itself inside the existing
   iOS `DriveTimeout` message immediately (yes in spirit — the exact
   wording lands with the implementation).
+
+## The macOS counterexample, explained (2026-08-12, after the merge)
+
+The PR shipped with a loose thread: one Flutter app on the dev machine
+published its content to macOS accessibility while the example app refused
+to under every condition tried. The scope decision rested on that, so it
+was worth chasing.
+
+**The measurement was confounded, twice.**
+
+*Identity.* Three apps were running, all named `flutterware_example`, built
+from the same package in three worktrees — the two "Brewline" devbar runs
+are the same package with a different entry point. The S-N3 probe matched
+by **name**, so "our app is dormant" and "Brewline publishes" were two
+observations of whichever process `runningApplications` happened to list
+first. (S-N3's own log says `pid 43609` — the *devbar-run-integration*
+app, not the one it claimed to be measuring.) Addressed by bundle path,
+the two Brewline twins turn out to **differ from each other**, which no
+code-level explanation survives.
+
+*Frames.* "Semantics armed" was not armed. `ensureSemantics()` schedules a
+frame with `ensureVisualUpdate()`, and a hidden macOS window produces
+none — so the tree stayed empty (2 chars over the wire) in exactly the
+runs that concluded arming changes nothing.
+
+**The mechanism, in the framework's own words.** Asked for a tree it has
+not built, Flutter answers: *"the framework only generates semantics when
+asked to do so by the platform"*. That is the whole rule. Flutterware's
+`ensureSemantics()` is framework-side — it builds a tree for in-process
+readers (scenarios, inspect, `label` targets) and never tells the embedder
+to publish. The publishing app had **platform** semantics on; its twin did
+not (`ext.flutter.debugDumpSemanticsTreeInTraversalOrder` says which, and
+does not change the answer — `app/tool/native_spike/semantics_state.dart`).
+
+**So the scope holds, for a better reason than the one shipped.** Not
+"Flutter never publishes on macOS", but "nothing flutterware does asks the
+platform for semantics, and only the platform can grant it". The brief
+stays native chrome.
+
+**What is not resolved, and is left alone deliberately.** Publication can
+be provoked from outside — a probe setting `AXEnhancedUserInterface` was
+observed flipping a process from *not generated* to a live semantics tree,
+and our own example app was seen publishing all ten of its labels. But the
+same treatment on a fresh instance of the same app produced platform
+semantics **and no AX content**, through a forced frame and twenty seconds
+of polling. One instance publishes, the next does not. There is no recipe
+honest enough to put behind a verb, so none was added.
+
+The risk of leaving it is one-directional, which is why this is a
+documentation fix rather than a code one: an agent either sees the chrome
+it came for, or that plus Flutter content it can also use. The tool note
+now says *usually*, and says what to do when the tree is only a window
+title.
