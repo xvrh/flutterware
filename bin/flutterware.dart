@@ -275,7 +275,17 @@ bool _willBuildGui(List<String> arguments, {required bool editable}) {
   var argv = arguments
       .where((a) => a != '--json' && a != '--verbose' && a != '-v')
       .toList();
-  var command = argv.isEmpty ? 'app' : argv.first;
+  // Mirrors `FwCli.run`: a leading flag is the `app` command — except the
+  // help flags, which must not spend 38 seconds building a window to print
+  // usage.
+  var first = argv.firstOrNull;
+  var command = first == null
+      ? 'app'
+      : first == '--help' || first == '-h'
+      ? 'help'
+      : first.startsWith('-')
+      ? 'app'
+      : first;
   if (command != 'app') return false;
   return !editable || argv.contains('--release');
 }

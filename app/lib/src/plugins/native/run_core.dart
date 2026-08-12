@@ -2764,7 +2764,8 @@ class RunCore extends PluginCore {
       handle.handlePath ?? handle.vmService ?? handle.entrypoint;
 
   DriveSession _driveSessionFor(RunHandle handle) =>
-      _driveSessions[_driveKey(handle)] ??= DriveSession(handle);
+      (_driveSessions[_driveKey(handle)] ??= DriveSession(handle))
+        ..refresh(handle);
 
   /// Stands in for the guest wire so the act path can be pumped in a test —
   /// the same seam [debugRead] is for inspect.

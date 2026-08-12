@@ -203,6 +203,31 @@ void main() {
     expect(profileMatch.isSelectedType('/1'), null);
   });
 
+  test('MatchedPath.isSelected survives query parameters', () {
+    // The current URL is the side that carries a query, and it used to be
+    // compared with the query included — so `/settings?tab=2` selected
+    // nothing and every nav highlight vanished the moment a screen put state
+    // in its query.
+    var path = PagePath('/settings?tab=2');
+    var matched = path.rootMatch;
+
+    expect(matched.isSelectedType('/settings'), RouteSelectedType.self);
+    expect(matched.isSelectedType('settings'), RouteSelectedType.self);
+    expect(matched.isSelected('/other'), false);
+
+    var deep = PagePath('/home/profile/1?edit=true');
+    var profileMatch = deep.rootMatch.matchesRemaining(
+      PathPattern('home/profile'),
+    )!;
+    expect(profileMatch.isSelectedType('1'), RouteSelectedType.self);
+    expect(deep.rootMatch.isSelectedType('home'), RouteSelectedType.descendant);
+
+    // A query on the asked side is ignored the same way.
+    expect(matched.isSelectedType('/settings?tab=9'), RouteSelectedType.self);
+
+    expect(deep.rootMatch.selectedIndex(['', 'home', 'other']), 1);
+  });
+
   test('MatchedPath.selectedIndex', () {
     var path = PagePath('/users/1');
     var matched = path.rootMatch;

@@ -498,6 +498,15 @@ class _MotionStageState extends State<_MotionStage> {
     setState(() {});
   }
 
+  /// Names the scope this panel is showing in every guest call. The guest
+  /// resolves a missing `scope` only while exactly one is mounted, so without
+  /// this the lanes rendered on a two-scope app while every scrub, play and
+  /// pause came back as a refusal.
+  Map<String, String> get _scopeArgs => switch (_scope?['id']) {
+    String id => {'scope': id},
+    _ => const {},
+  };
+
   /// Follows a playing motion, and asks nothing at all when none is.
   ///
   /// Idle, this costs one boolean read every 40ms. The alternative — ticking
@@ -510,6 +519,7 @@ class _MotionStageState extends State<_MotionStage> {
     try {
       var reply = await _session?.callGuestExtension(
         'ext.flutterware.motion.progress',
+        args: _scopeArgs,
       );
       if (!mounted || reply == null) return;
       // Merged rather than replacing: the lanes stay put while the playhead
@@ -558,7 +568,7 @@ class _MotionStageState extends State<_MotionStage> {
         _wanted = null;
         await _session?.callGuestExtension(
           'ext.flutterware.motion.seek',
-          args: {'t': '$wanted'},
+          args: {..._scopeArgs, 't': '$wanted'},
         );
         if (!mounted) return;
       }
@@ -740,7 +750,7 @@ class _MotionStageState extends State<_MotionStage> {
     if (verb != 'pause') setState(() => _playhead = null);
     await _session?.callGuestExtension(
       'ext.flutterware.motion.transport',
-      args: {'verb': verb},
+      args: {..._scopeArgs, 'verb': verb},
     );
     await _refresh();
   }

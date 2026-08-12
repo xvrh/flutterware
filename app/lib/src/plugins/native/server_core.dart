@@ -94,15 +94,27 @@ class ServerCore extends PluginCore {
     if (tracked.connected || tracked.stopped || tracked.attaching) return;
     tracked.attaching = true;
     unawaited(() async {
-      var client = await attachToServer(tracked.handle);
+      var handleDeleted = false;
+      var client = await attachToServer(
+        tracked.handle,
+        onFailure: (_, {required bool deleted}) => handleDeleted = deleted,
+      );
       tracked.attaching = false;
       if (isDisposed) {
         await client?.close();
         return;
       }
       if (client == null) {
-        // Dead handle — attachToServer deleted it; reflect that.
-        tracked.markStopped();
+        if (handleDeleted) {
+          // Dead handle — attachToServer deleted it; reflect that.
+          tracked.markStopped();
+        } else {
+          // Alive but slow — a busy server that missed the handshake window.
+          // Marking it stopped here would be permanent (`_attach` never
+          // retries a stopped row); leaving it disconnected lets the next
+          // scan try again.
+          _scheduleRescan();
+        }
         notifyChanged();
         return;
       }
@@ -322,8 +334,23 @@ class ServerCore extends PluginCore {
     }
 
     var out = <Map<String, Object?>>[];
+    // A skipped server must say why it is missing from the answer. Without
+    // this, "every attach failed" and "no traffic yet" were the same empty
+    // list — an agent reading it debugged the wrong thing.
+    var failures = <String>[];
     for (var handle in handles) {
-      var client = await attachToServer(handle);
+      var client = await attachToServer(
+        handle,
+        onFailure: (error, {required bool deleted}) {
+          failures.add(
+            deleted
+                ? '"${handle.name}" (pid ${handle.pid}) is gone; its stale '
+                      'handle was removed.'
+                : '"${handle.name}" (pid ${handle.pid}) did not answer the '
+                      'attach in time: $error. It is still listed — retry.',
+          );
+        },
+      );
       if (client == null) continue;
       try {
         await _replayed(client);
@@ -332,7 +359,10 @@ class ServerCore extends PluginCore {
         await client.close();
       }
     }
-    return {'servers': out};
+    return {
+      'servers': out,
+      if (failures.isNotEmpty) 'note': failures.join(' '),
+    };
   }
 
   static int _intArgument(Object? value, int fallback) => switch (value) {

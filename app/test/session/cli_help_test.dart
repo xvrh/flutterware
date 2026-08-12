@@ -94,6 +94,39 @@ void main() {
     expect(err.toString(), contains('dart run flutterware'));
   });
 
+  test(
+    'a leading app flag is the app command, with the flag honored',
+    () async {
+      // `fw --force-compile` — the documented invocation — used to dispatch as
+      // a command named "--force-compile" and exit 64, after the launcher had
+      // already paid the forced rebuild the flag asked for.
+      bool? forced;
+      var cli = FwCli(
+        openSession: _session,
+        out: out,
+        err: err,
+        launchGui: ({required bool forceBuild}) async {
+          forced = forceBuild;
+          return 0;
+        },
+      );
+      expect(await cli.run(['--force-compile']), 0);
+      expect(forced, isTrue);
+    },
+  );
+
+  test("a typo'd leading flag refuses instead of opening a window", () async {
+    var cli = FwCli(
+      openSession: _session,
+      out: out,
+      err: err,
+      launchGui: ({required bool forceBuild}) async =>
+          fail('a window opened for a flag nobody recognizes'),
+    );
+    expect(await cli.run(['--bogus']), FwCli.usageExit);
+    expect(err.toString(), contains('unknown argument "--bogus"'));
+  });
+
   test('the help footer says what -v does, once', () async {
     expect(await cli().run(['help']), 0);
     expect(out.toString(), contains('`-v` on any command'));

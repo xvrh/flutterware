@@ -266,6 +266,40 @@ void main() {
       },
     );
 
+    test('a mute listener keeps its handle — slow is not dead', () async {
+      // Accepts the connection and never answers the hello: what a live
+      // server swamped past the handshake window looks like. Deleting its
+      // handle here is what once made a busy server vanish from every list
+      // until restart.
+      var socketPath = p.join(runDir.path, 'srv-mute.sock');
+      var mute = await ServerSocket.bind(
+        InternetAddress(socketPath, type: InternetAddressType.unix),
+        0,
+      );
+      addTearDown(mute.close);
+      mute.listen((socket) {});
+
+      var busy = ServerHandle(
+        projectRoot: '/repo/app',
+        name: 'mute',
+        socketPath: socketPath,
+        pid: 999999,
+        startedAt: DateTime.now(),
+        handlePath: p.join(runDir.path, 'srv-00000000-mute-999999.json'),
+      );
+      File(busy.handlePath!).writeAsStringSync(jsonEncode(busy.toJson()));
+
+      bool? reportedDeleted;
+      var client = await attachToServer(
+        busy,
+        timeout: const Duration(milliseconds: 300),
+        onFailure: (_, {required bool deleted}) => reportedDeleted = deleted,
+      );
+      expect(client, isNull);
+      expect(reportedDeleted, isFalse);
+      expect(File(busy.handlePath!).existsSync(), isTrue);
+    });
+
     test('activation cleans up a dead predecessor of the same server', () async {
       var stale = ServerHandle(
         projectRoot: '/repo/app',
