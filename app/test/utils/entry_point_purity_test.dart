@@ -22,7 +22,6 @@ const _pureEntryPoints = [
   'bin/fw.dart',
   // The MCP server. Same contract, same reason.
   'bin/mcp.dart',
-  'bin/wrap.dart',
   // Writes docs/capabilities.md. Pure for the same reason `fw` is: it
   // resolves cores, and a core that reached a panel would drag in Flutter.
   'tool/generate_capabilities.dart',
