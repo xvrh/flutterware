@@ -3749,6 +3749,34 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'RunNetworkRequestResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunNetworkRequestResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{'name': 'request', 'type': 'Map<String, Object?>'},
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunNetworkResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunNetworkResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'requests',
+        'type': 'List<Map<String, Object?>>',
+        'doc': 'One row per request, oldest first.',
+      },
+      <String, Object?>{
+        'name': 'cursor',
+        'type': 'int',
+        'doc':
+            'Pass back as `since` to read only what changed after this reply.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
   'RunPanelResult': ResultShape.fromJson(<String, Object?>{
     'type': 'RunPanelResult',
     'fields': <Object?>[

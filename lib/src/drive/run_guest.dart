@@ -8,6 +8,7 @@ import '../inspect/guest_inspect.dart';
 import '../inspect/guest_logs.dart';
 import '../server/vm_transport.dart';
 import 'guest_drive.dart';
+import 'http_capture_stub.dart' if (dart.library.io) 'http_capture_io.dart';
 import 'human_actions.dart';
 
 /// Installs the run guest around a user app's `main` — what the generated
@@ -25,6 +26,10 @@ import 'human_actions.dart';
 /// goes through `TextInput.updateEditingValue` instead.
 FutureOr<void> runGuest(FutureOr<void> Function() appMain) {
   return GuestLogs.instance.install(() {
+    // Before anything that could open a connection: the http profile records
+    // nothing retroactively, and startup requests are the ones a host can
+    // never catch by enabling over the wire.
+    armHttpCapture();
     WidgetsFlutterBinding.ensureInitialized();
     // Framework errors, on stdout *and* kept where they can be asked for —
     // the bundle's `errors` field is the diff of this buffer.

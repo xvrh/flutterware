@@ -167,6 +167,13 @@ void main() => Flutterware.configure((fw) {
                   '`fw` or an agent',
             ),
             Entrypoint(
+              'lib/network_spike.dart',
+              name: 'Network spike',
+              description:
+                  'Self-contained http traffic generator for the '
+                  'ext.dart.io http-profile spike',
+            ),
+            Entrypoint(
               'lib/ui_book.dart',
               name: 'UI book',
               description: 'The component gallery, no backend',

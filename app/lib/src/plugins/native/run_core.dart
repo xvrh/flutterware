@@ -9,7 +9,8 @@ import 'package:flutterware/plugins.dart';
 import 'package:flutterware/src/inspect/node.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
-import 'package:vm_service/vm_service.dart' show RPCError;
+import 'package:vm_service/vm_service.dart'
+    show DartIOExtension, HttpProfileRequest, HttpProfileRequestRef, RPCError;
 
 import '../../run/channel_client.dart';
 import '../../run/connection.dart';
@@ -24,6 +25,7 @@ import '../../run/inventory.dart';
 import '../../run/journal.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
+import '../../run/network_tracker.dart';
 import '../../run/panel_client.dart';
 import '../../shell/worktree_discovery.dart';
 import '../../utils/daemon/device.dart';
@@ -1144,6 +1146,57 @@ class RunCore extends PluginCore {
           ],
         ),
         PluginAction(
+          'network',
+          'Network',
+          returns: RunNetworkResult,
+          description:
+              "The app's HTTP traffic, read from the VM's own http profile — "
+              'the data source behind DevTools, so it needs no devbar and no '
+              'wrapper client. Capture is armed at launch by the run guest; '
+              'an app launched outside flutterware records from this call '
+              'on. A request in flight has no `status` yet and comes back '
+              "again, same id, once it completes — pass the reply's "
+              '`cursor` as `since` to read only what changed.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'since',
+              'Cursor',
+              kind: ActionParameterKind.integer,
+              required: false,
+              description:
+                  'The `cursor` of a previous reply — only requests touched '
+                  'after it come back. A hot restart clears the profile and '
+                  'the cursor with it.',
+            ),
+            const ActionParameter(
+              'limit',
+              'Limit',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '50',
+              description: 'How many requests to bring back, newest kept',
+            ),
+          ],
+        ),
+        PluginAction(
+          'networkRequest',
+          'One request',
+          returns: RunNetworkRequestResult,
+          description:
+              'Headers, bodies and timing events for one request `network` '
+              'listed — held in the app and fetched on demand, which is what '
+              'keeps the list light.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'id',
+              'Request',
+              description: 'The request id from `network`',
+            ),
+          ],
+        ),
+        PluginAction(
           'emulators',
           'Emulators',
           returns: RunEmulatorsResult,
@@ -1471,6 +1524,8 @@ class RunCore extends PluginCore {
       'panelInvoke' => _panelInvokeAction(arguments),
       'panelKnob' => _panelKnobAction(arguments),
       'panelState' => _panelStateAction(arguments),
+      'network' => _networkAction(arguments),
+      'networkRequest' => _networkRequestAction(arguments),
       'emulators' => _emulatorsAction(),
       'bootEmulator' => _bootEmulatorAction(arguments),
       _ => super.invoke(actionId, arguments: arguments),
@@ -2411,6 +2466,136 @@ class RunCore extends PluginCore {
     var value = arguments[id];
     if (value is String && value.isNotEmpty) return value;
     throw ArgumentError('`$id` is required');
+  }
+
+  /// One VM-service call against a running app's main isolate, with http
+  /// capture armed on the way in — the guest-less fallback, and a 3ms no-op
+  /// when the run guest already armed it in `main`.
+  Future<T> _withHttpProfile<T>(
+    RunHandle handle,
+    Future<T> Function(RunConnection connection, String isolateId) body,
+  ) async {
+    var uri = handle.vmService;
+    if (uri == null) {
+      throw StateError(
+        '${handle.entrypointLabel} has no VM service yet — it is still '
+        'building. Watch ${handle.logPath}.',
+      );
+    }
+    var connection = await RunConnection.connect(uri);
+    try {
+      var isolateId = connection.isolateId;
+      if (isolateId == null) {
+        throw StateError('${handle.entrypointLabel} has no isolate yet.');
+      }
+      await connection.service.httpEnableTimelineLogging(isolateId, true);
+      return await body(connection, isolateId);
+    } finally {
+      await connection.close();
+    }
+  }
+
+  Future<RunNetworkResult> _networkAction(
+    Map<String, Object?> arguments,
+  ) async {
+    var handle = await _selectRunningApp(arguments);
+    var since = switch (arguments['since']) {
+      null => null,
+      var value => DateTime.fromMicrosecondsSinceEpoch(_intArgument(value, 0)),
+    };
+    var limit = switch (arguments['limit']) {
+      null => 50,
+      var value => _intArgument(value, 50),
+    };
+    return _withHttpProfile(handle, (connection, isolateId) async {
+      var profile = await connection.service.getHttpProfile(
+        isolateId,
+        updatedSince: since,
+      );
+      var requests = profile.requests
+        ..sort((a, b) => a.startTime.compareTo(b.startTime));
+      var dropped = requests.length > limit ? requests.length - limit : 0;
+      if (dropped > 0) requests = requests.sublist(dropped);
+      return RunNetworkResult(
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        requests: [for (var r in requests) _networkRow(r)],
+        cursor: profile.timestamp.microsecondsSinceEpoch,
+        note: dropped > 0
+            ? '$dropped older requests over the limit — raise `limit` or '
+                  'pass `since` to page forward.'
+            : requests.isEmpty && since == null
+            ? 'Nothing recorded. Capture starts at launch for an app '
+                  'flutterware launched, and from this call on for one it '
+                  'attached to.'
+            : null,
+      );
+    });
+  }
+
+  Future<RunNetworkRequestResult> _networkRequestAction(
+    Map<String, Object?> arguments,
+  ) async {
+    var handle = await _selectRunningApp(arguments);
+    var id = _requiredArgument(arguments, 'id');
+    return _withHttpProfile(handle, (connection, isolateId) async {
+      HttpProfileRequest detail;
+      try {
+        detail = await connection.service.getHttpProfileRequest(isolateId, id);
+      } on RPCError {
+        throw StateError(
+          "No request `$id` in ${handle.entrypointLabel}'s profile. Ids "
+          'come from `network`, and a hot restart clears them.',
+        );
+      }
+      return RunNetworkRequestResult(
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        request: {
+          ..._networkRow(detail),
+          'requestHeaders': ?_headers(
+            detail.request?.hasError ?? true ? null : detail.request?.headers,
+          ),
+          'responseHeaders': ?_headers(detail.response?.headers),
+          'requestBody': ?_bodyText(detail.requestBody),
+          'responseBody': ?_bodyText(detail.responseBody),
+          'events': [
+            for (var event in detail.events)
+              {'at': event.timestamp.toIso8601String(), 'event': event.event},
+          ],
+        },
+      );
+    });
+  }
+
+  static Map<String, Object?> _networkRow(HttpProfileRequestRef request) => {
+    'id': request.id,
+    'method': request.method,
+    'uri': request.uri.toString(),
+    'status': ?networkStatusOf(request),
+    'ms': ?networkDurationOf(request),
+    'size': ?networkSizeOf(request),
+    'start': request.startTime.toIso8601String(),
+    'error': ?networkErrorOf(request),
+  };
+
+  static Map<String, Object?>? _headers(Map<Object?, Object?>? raw) =>
+      raw?.map((key, value) => MapEntry('$key', value));
+
+  /// A body as JSON can carry it: the text when it decodes, a byte count when
+  /// it is binary, capped so one huge download does not swamp a reply.
+  static String? _bodyText(List<int>? body) {
+    if (body == null || body.isEmpty) return null;
+    String text;
+    try {
+      text = utf8.decode(body);
+    } on FormatException {
+      return '<${body.length} bytes of binary data>';
+    }
+    const cap = 65536;
+    if (text.length <= cap) return text;
+    return '${text.substring(0, cap)}… (${text.length - cap} more characters '
+        'truncated)';
   }
 
   /// A knob value the way a caller can actually type one: `true`, `3` and

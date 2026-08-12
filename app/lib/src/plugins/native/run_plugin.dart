@@ -18,6 +18,7 @@ import '../../run/handle.dart';
 import '../../run/inventory.dart';
 import '../../run/flag_memory.dart';
 import '../../run/journal.dart';
+import '../../run/network_tab.dart';
 import '../../run/panels_tab.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
@@ -347,6 +348,12 @@ class _RunViewState extends State<_RunView> {
               },
             ),
             RunViewKind.logs => _LogsTab(core: core, handle: handle),
+            RunViewKind.network => NetworkTab(
+              // Keyed by run, like the App tab: a different run behind the
+              // same tab is a different app to attach to.
+              key: ValueKey(handle.key),
+              handle: handle,
+            ),
             RunViewKind.panels => PanelsTab(
               // Keyed by run: attaching is per app, and a different run behind
               // the same tab is a different app to attach to.
@@ -624,6 +631,7 @@ class _ViewTabs extends StatelessWidget {
         InspectDockTab(id: 'screen', label: 'Screen', body: _unused),
         InspectDockTab(id: 'steps', label: 'Steps', body: _unused),
         InspectDockTab(id: 'logs', label: 'Logs', body: _unused),
+        InspectDockTab(id: 'network', label: 'Network', body: _unused),
         InspectDockTab(id: 'panels', label: 'App', body: _unused),
       ],
       current: view.name,

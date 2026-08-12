@@ -22,8 +22,10 @@
 /// those are deliberately last.
 ///
 /// The tab list is open on purpose. `Screen` and `Logs` arrive with the inspect
-/// slice; `Network` and `Data` are devbar plugins reporting into the cockpit
-/// later.
+/// slice; `Data` is a devbar plugin reporting into the cockpit later. `Network`
+/// was reserved for one too, and became native instead — the VM's http profile
+/// answers with no app cooperation, and that reach beat the plugin route
+/// (`2026-08-12-http-profile-spike-findings.md`).
 ///
 /// **There is no `tree` tab**, and there was one for a day. The design's Screen
 /// tab is a split — the picture on the left, the widget tree filling the rest —
@@ -47,6 +49,10 @@ enum RunViewKind {
   steps,
 
   logs,
+
+  /// The app's HTTP traffic, read from the VM's own http profile — present
+  /// for every debug run, no devbar required.
+  network,
 
   /// What the *app* reports about itself — the devbar plugins that declared a
   /// panel. `Screen` is what flutterware can see of a run; this is what the
