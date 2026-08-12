@@ -951,3 +951,59 @@ class RunPanelResult implements PluginResult {
   @override
   Map<String, Object?> toJson() => _$RunPanelResultToJson(this);
 }
+
+/// `network` — the app's HTTP traffic, read from the VM's http profile.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunNetworkResult implements PluginResult {
+  RunNetworkResult({
+    required this.device,
+    required this.entrypoint,
+    required this.requests,
+    required this.cursor,
+    this.note,
+  });
+
+  final String device;
+  final String entrypoint;
+
+  /// One row per request, oldest first. `status` is absent while a request is
+  /// in flight; the same id comes back updated once it completes.
+  final List<Map<String, Object?>> requests;
+
+  /// Pass back as `since` to read only what changed after this reply.
+  final int cursor;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunNetworkResultToJson(this);
+}
+
+/// `networkRequest` — one request in full: headers, bodies, timing events.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunNetworkRequestResult implements PluginResult {
+  RunNetworkRequestResult({
+    required this.device,
+    required this.entrypoint,
+    required this.request,
+    this.note,
+  });
+
+  final String device;
+  final String entrypoint;
+
+  final Map<String, Object?> request;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunNetworkRequestResultToJson(this);
+}

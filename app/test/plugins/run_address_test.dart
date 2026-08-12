@@ -28,13 +28,18 @@ void main() {
   });
 
   test('a tab this build does not know falls back to the screen', () {
-    // The strip is an extension point: `Network` and `Data` arrive as devbar
-    // plugins later. An address from a newer build should lose the pane, not
-    // the run.
-    var place = runPlace(['app-abc', 'network']);
+    // The strip is an extension point: `Data` arrives as a devbar plugin
+    // later. An address from a newer build should lose the pane, not the run.
+    var place = runPlace(['app-abc', 'data']);
     expect(place.runKey, 'app-abc');
     expect(place.view, RunViewKind.screen);
     expect(place.isNew, isFalse);
+  });
+
+  test('the network tab is a place', () {
+    var place = runPlace(['app-abc', 'network']);
+    expect(place.runKey, 'app-abc');
+    expect(place.view, RunViewKind.network);
   });
 
   test('empty segments are the default place, not an error', () {

@@ -839,6 +839,58 @@ note: String?
 | `panel` | string | yes | — | — |
 | `state` | string | yes | — | The state id `panels` reports |
 
+#### `network` — Network
+
+The app's HTTP traffic, read from the VM's own http profile — the data source behind DevTools, so it needs no devbar and no wrapper client. Capture is armed at launch by the run guest; an app launched outside flutterware records from this call on. A request in flight has no `status` yet and comes back again, same id, once it completes — pass the reply's `cursor` as `since` to read only what changed.
+
+```sh
+fw run run network [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--since=…] [--limit=…]
+```
+
+Returns `RunNetworkResult`:
+
+```
+device: String
+entrypoint: String
+requests: List<Map<String, Object?>>   # One row per request, oldest first.
+cursor: int   # Pass back as `since` to read only what changed after this reply.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
+| `since` | integer | no | — | The `cursor` of a previous reply — only requests touched after it come back. A hot restart clears the profile and the cursor with it. |
+| `limit` | integer | no | 50 | How many requests to bring back, newest kept |
+
+#### `networkRequest` — One request
+
+Headers, bodies and timing events for one request `network` listed — held in the app and fetched on demand, which is what keeps the list light.
+
+```sh
+fw run run networkRequest [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --id=<string>
+```
+
+Returns `RunNetworkRequestResult`:
+
+```
+device: String
+entrypoint: String
+request: Map<String, Object?>
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
+| `id` | string | yes | — | The request id from `network` |
+
 #### `emulators` — Emulators
 
 Every emulator and simulator this machine could boot, and whether each is already up. Different from devices, which only lists the ones that are: an emulator that is not running is not a device. Costs a few seconds — it starts a flutter daemon.

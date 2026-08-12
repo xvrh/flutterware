@@ -236,3 +236,21 @@ Map<String, dynamic> _$RunPanelResultToJson(RunPanelResult instance) =>
       'knobs': ?instance.knobs,
       'note': ?instance.note,
     };
+
+Map<String, dynamic> _$RunNetworkResultToJson(RunNetworkResult instance) =>
+    <String, dynamic>{
+      'device': instance.device,
+      'entrypoint': instance.entrypoint,
+      'requests': instance.requests,
+      'cursor': instance.cursor,
+      'note': ?instance.note,
+    };
+
+Map<String, dynamic> _$RunNetworkRequestResultToJson(
+  RunNetworkRequestResult instance,
+) => <String, dynamic>{
+  'device': instance.device,
+  'entrypoint': instance.entrypoint,
+  'request': instance.request,
+  'note': ?instance.note,
+};

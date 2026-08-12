@@ -41,6 +41,8 @@ dependencies:
   flutter_secure_storage:
   flutterware:
     path: ../..
+  # For lib/network_spike.dart — the http-profile spike's traffic generator.
+  http:
   logging:
   os_detect:
   package_info_plus:
