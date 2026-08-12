@@ -14,17 +14,51 @@ Versions in `pubspec.yaml` (`flutterware`) and `app/pubspec.yaml` (`flutterware_
 
 ## Toolchain: the committed `./fw` wrapper
 
-The SDK is pinned in `flutter_version` and fetched by the committed `./fw` wrapper script (macOS-only for now) — no fvm, no global tool. The `flutter`/`dart` on PATH are typically older than the pin (the workspace requires a recent beta) and **fail the SDK constraint check** — always go through the wrapper: `./fw flutter ...` / `./fw dart ...` (from a subdirectory, `../fw` and so on). The first run downloads the pinned SDK to `~/.flutterware/sdks/<version>/` (checksummed, ~4 min cold); after that the wrapper adds ~0.1s. `FW_FLUTTER_SDK=<path>` bypasses the pin.
+The SDK is pinned in `flutter_version` and fetched by the committed `./fw` wrapper script (macOS-only for now). Every Flutter or Dart command in this repo goes through it: `./fw flutter …` / `./fw dart …`, and `../fw` from a subdirectory. The wrapper downloads the pinned SDK to `~/.flutterware/sdks/<version>/` (checksummed) and then adds ~0.1s per call. `FW_FLUTTER_SDK=<path>` bypasses the pin.
 
-One-time setup in a fresh clone or worktree:
+### Setting yourself up
+
+There is one command, and which case you are in only changes how long it takes.
 
 ```sh
-./fw flutter pub get     # first run also downloads the pinned SDK
+./fw flutter pub get
 ```
 
-`./fw flutter upgrade`/`downgrade`/`channel <x>` are refused: bump the pin by editing `flutter_version`.
+- **Existing machine, fresh worktree** — the pinned SDK is already cached, so this is the whole setup. Measured 2026-08-12: **1.7s**.
+- **New machine** — the same command; the first run also downloads the SDK (~4 min cold, checksummed, moved into place atomically so a killed download leaves nothing broken).
+
+That is all. No global install, no PATH change, no version manager.
+
+**Do not reach for any of these — each one is a way to end up on the wrong SDK:**
+
+- **`fvm`.** It was removed in #102 and is not a source of truth here. A `.fvm/` directory may still sit in an older checkout (it is gitignored, so the removal commit left it on disk); it is a leftover. Ignore it.
+- **The `flutter`/`dart` on PATH.** They are typically older than the pin. Measured 2026-08-12 on this machine: PATH Dart is **3.12.1 stable** against a `^3.13.0-0` floor, so `dart run flutterware` here fails outright with *"Because flutterware requires SDK version ^3.13.0-0, version solving failed"*. That is the good case — it refuses rather than building something subtly different.
+- **A globally installed `fw`.** It can be weeks stale and cannot represent the branch you are working on. Use `./fw` from the checkout.
+
+If the MCP server is what you need up, `tool/mcp_server.sh` performs this same setup itself on first connect — measured **7.8s** on a cold worktree whose SDK was already cached. See the drive section below.
+
+`./fw flutter upgrade`/`downgrade`/`channel <x>` are refused: bump the pin with `tool/bump_flutter.dart` (next section).
 
 Note: `.gitignore` starts with `.*`, so dot-directories like `.claude/` are silently unaddable — `git add` no-ops on them.
+
+### Which Flutter we support: two numbers, not one
+
+`flutter_version` and the `environment:` floors in the pubspecs answer different questions, and keeping them apart is the whole policy.
+
+- **`flutter_version` is the pin** — the SDK development happens on. It tracks whatever beta is worth having; the wrapper installs exactly it and CI runs exactly it.
+- **The `environment:` floors are a promise** — the oldest Flutter the package claims to work on. They move *only* when something below them actually breaks.
+
+Let the floor track the pin and it promises the beta of the week. That is how `flutter: '>=3.47.0-0'` came to sit in a package whose last published floor was `>=3.21.0`: a floor naming an unreleased beta is a package nobody on stable can install. Held apart, stable catches up on its own — the floor stays put, stable rises past it, and the package becomes installable there with nobody republishing.
+
+Only the pubspecs that ship carry the promise: the root package and `app/`, which `.pubignore` keeps in the archive. `examples/example` is excluded and records its own real requirement (dot shorthands, Dart 3.10).
+
+```sh
+./fw dart tool/bump_flutter.dart beta        # or stable, or 3.48.0-0.1.pre — moves the pin
+./fw dart tool/bump_flutter.dart --floor     # promise the pin, after a break below it
+./fw dart tool/bump_flutter.dart --check     # what CI runs; offline
+```
+
+Each command moves one number, never both. `--check` catches only the half that breaks *us* — a floor risen above the pin. A floor that is lower than what the code needs is a claim nothing here disproves, because nothing runs an older SDK.
 
 ## How the CLI/GUI launch flow works
 
@@ -61,6 +95,15 @@ For GUI work, the fastest loop is not restart-and-look — it is *drive*: launch
 - **You are co-driving one app with the human.** Every step lands in the run's journal (`~/.flutterware/run/<key>.journal.jsonl`) and shows in the GUI's Run → Steps tab; the human may have moved the app since your last step, so open with `observe`, never assume the screen is where you left it. What they did is not a guess: the reply's `human` field lists their taps since your last step (`tap "Pay"`), and the same entries precede your step in the journal as `actor: human`.
 - **Phones drive the same way, foregrounded.** An Android emulator and an iOS simulator run the identical loop at desktop speed (measured 2026-08-11 — `docs/superpowers/specs/2026-08-11-run-drive-design.md` § Mobile), so `run/launch` on a device id is all it takes. Two differences to know: **iOS suspends a backgrounded app**, so an act against one comes back as a timeout telling you to bring it forward — a hidden desktop window and a backgrounded Android app both drive fine — and the screenshot is the Flutter layer tree only, so the soft keyboard and platform views are blank bands in it. Physical iOS additionally needs the project's Xcode signing to be set up.
 - **Scenarios vs drive.** Scenarios stay the tool for deterministic, headless flows (milliseconds, FakeAsync). Reach for drive when it must be the real thing: real data, real backend, a real device, or this GUI itself.
+
+## Scenarios: which half is published
+
+The scenario code sits in two places and only one of them is API:
+
+- `lib/src/scenarios/` — runs inside the user's Flutter test process, re-exported through `lib/flutter_test.dart`. **This half is published**: changing it changes what users' existing tests compile against.
+- `app/lib/src/scenarios/` — the GUI and CLI side (panel, flow view, motion player, discovery, artifacts). Free to change.
+
+Design: `docs/superpowers/specs/2026-07-30-scenarios-design.md`.
 
 ## Common commands
 

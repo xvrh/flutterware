@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-// The frozen name of the link `init` writes, taken from the walker rather than
-// spelled a second time here.
+// The frozen name of the link `init` writes and the test for a committed
+// wrapper, taken from the walker rather than spelled a second time here.
 // ignore: implementation_imports
-import 'package:flutterware/src/walker.dart' show sdkLinkPath;
+import 'package:flutterware/src/walker.dart' show findWrapper, sdkLinkPath;
 import 'package:path/path.dart' as p;
 
 import '../constants.dart';
@@ -64,15 +64,20 @@ class FlutterSdkPath {
   /// **Recorded before discovered, and the project before the machine.** A
   /// recorded answer was written by something that was already running under
   /// the right SDK; everything below it is a convention that may not hold.
+  /// Between two recorded answers the committed one wins: `flutter_version` is
+  /// versioned and moves with the repo, where `.flutterware/sdk` is gitignored
+  /// and can go on naming a version manager the repo has left.
   ///
   /// 1. [dartExecutableEnvironmentKey], set by the launcher — the same "record,
   ///    do not discover" rule `.flutterware/sdk` follows, and the only source
   ///    that survives `fw` being an AOT binary.
-  /// 2. `.flutterware/sdk`, what `init` wrote down.
-  /// 3. The version `flutter_version` pins, read from the `fw` wrapper's
+  /// 2. The version `flutter_version` pins, read from the `fw` wrapper's
   ///    cache — the committed pin of a repo whose toolchain is the wrapper,
   ///    resolved exactly the way the wrapper resolves it. Above the fvm
-  ///    sources: a repo carrying both pins is one the wrapper runs.
+  ///    sources: a repo carrying both pins is one the wrapper runs. Above the
+  ///    recorded link too, but only where a committed wrapper is found.
+  /// 3. `.flutterware/sdk`, what `init` wrote down — first when the repo
+  ///    commits no wrapper.
   /// 4. `.fvm/flutter_sdk`, for a project that pins with fvm and has not run
   ///    flutterware yet.
   /// 5. The version `.fvmrc` pins, read from fvm's cache — for a *fresh
@@ -102,8 +107,17 @@ class FlutterSdkPath {
       sdks.add(await tryFind(launcherDart));
     }
 
-    sdks.add(await _findAbove(start, sdkLinkPath));
-    sdks.add(await _findFwPinned(start, env));
+    // A repo that commits the wrapper has pinned its whole toolchain, so its
+    // pin outranks the link `init` recorded — the precedence [findWrapper]
+    // already gives the wrapper one level up. It matters because the link can
+    // name the SDK of a version manager the repo has since left, and `init`
+    // leaves an unchanged link alone: read back as the best answer, it feeds
+    // itself and never disagrees.
+    var recorded = await _findAbove(start, sdkLinkPath);
+    var pinned = await _findFwPinned(start, env);
+    sdks.addAll(
+      findWrapper(start) != null ? [pinned, recorded] : [recorded, pinned],
+    );
     sdks.add(await _findAbove(start, p.join('.fvm', 'flutter_sdk')));
     sdks.add(await _findPinned(start, env));
 
