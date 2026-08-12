@@ -792,6 +792,11 @@ class RunActResult implements PluginResult, ProducesArtifacts {
     this.errors,
     this.journal,
     this.note,
+    this.layer,
+    this.coordinateSpace,
+    this.screenshotScale,
+    this.nativeTree,
+    this.reconciled,
   });
 
   final String device;
@@ -864,6 +869,27 @@ class RunActResult implements PluginResult, ProducesArtifacts {
   final String? journal;
 
   final String? note;
+
+  /// Which tree this step addressed — absent for the drive layer, `native`
+  /// when it went through the platform's own accessibility tree.
+  final String? layer;
+
+  /// Native steps only: the space [nativeTree]'s bounds and `{"at": …}` speak
+  /// — `px` on Android, window points elsewhere.
+  final String? coordinateSpace;
+
+  /// Native steps only: how many screenshot pixels one coordinate unit is.
+  /// Divide a point read off the picture by this before passing it to
+  /// `{"at": …}`.
+  final double? screenshotScale;
+
+  /// Native steps only, and only when asked for: the platform's view tree.
+  final Map<String, Object?>? nativeTree;
+
+  /// Native steps only: human entries dropped as this step's own echo — the
+  /// guest cannot tell an injected tap from a finger, so the agent's own tap
+  /// would otherwise be journaled twice.
+  final int? reconciled;
 
   /// The step's PNG as a job artifact, so a surface that renders images —
   /// MCP first — shows the moment rather than a path. The JSON keeps the

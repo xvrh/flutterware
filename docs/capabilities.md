@@ -90,12 +90,13 @@ Run one plugin action. Argument keys are the parameter ids reported by flutterwa
 
 ### `flutterware_act`
 
-One transaction against the running app — the loop tool for live work: edit code, hot-reload (flutterware_invoke run.reload), then act or observe here. Every reply is one settled moment of the app: screenshot, visible texts, what it printed since the last step, and what the human tapped since the last step (`human`) — nothing to correlate. Targets resolve inside the app at act time, retry through route transitions, and are refused loudly with the screen they were refused on; a silent wrong-target tap cannot happen. `settled: false` means the budget ran out with the app still animating — normal for a spinner, act anyway. Needs an app launched by flutterware (run.launch); every step lands in the run's journal, reviewable in the GUI's Steps tab. On a phone, keep the app in the foreground: iOS suspends a backgrounded app and it answers nothing until somebody brings it back — you get a timeout saying exactly that. A hidden desktop window and a backgrounded Android app both drive fine. For flows expressible headlessly, scenarios are milliseconds and deterministic — reach for this tool when it must be the real thing: real backend, real data, real device, or the flutterware GUI itself.
+One transaction against the running app — the loop tool for live work: edit code, hot-reload (flutterware_invoke run.reload), then act or observe here. Every reply is one settled moment of the app: screenshot, visible texts, what it printed since the last step, and what the human tapped since the last step (`human`) — nothing to correlate. Targets resolve inside the app at act time, retry through route transitions, and are refused loudly with the screen they were refused on; a silent wrong-target tap cannot happen. `settled: false` means the budget ran out with the app still animating — normal for a spinner, act anyway. Needs an app launched by flutterware (run.launch); every step lands in the run's journal, reviewable in the GUI's Steps tab. On a phone, keep the app in the foreground: iOS suspends a backgrounded app and it answers nothing until somebody brings it back — you get a timeout saying exactly that, and `{"verb": "foreground", "layer": "native"}` is how you fix it yourself. A hidden desktop window and a backgrounded Android app both drive fine. When a target is refused for something you can see in the screenshot but not in the texts — a permission dialog, a webview's contents — retry it with layer: native. For flows expressible headlessly, scenarios are milliseconds and deterministic — reach for this tool when it must be the real thing: real backend, real data, real device, or the flutterware GUI itself.
 
 | argument | required | |
 |---|---|---|
-| `verb` | yes | tap \| longPress \| drag \| scrollTo \| enterText \| back \| wait \| observe \| navigate. observe is the act-less transaction — the opening move, and the call after a reload. |
-| `target` | no | Bare text matches a visible string. JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. A reply text ending in … was truncated — target it with {"containing": <prefix>}, not the truncated string. |
+| `verb` | yes | tap \| longPress \| drag \| scrollTo \| enterText \| back \| wait \| observe \| navigate. observe is the act-less transaction — the opening move, and the call after a reload. On layer: native: observe \| tap \| enterText \| foreground. |
+| `layer` | no | Which tree to address. Omit for the app's own widget tree — fast, exact, and where everything Flutter draws lives. "native" addresses the platform's accessibility tree instead: slower (Android ~4s a step, iOS simulator ~0.6s) but it sees what Flutter cannot — permission dialogs and other native popups, the contents of a webview or map, another app the flow jumped to — and its screenshot is the real device screen rather than a raster of the Flutter layer. Two limits worth knowing: on Android the tree is the focused window, so a dialog is fully there but the soft keyboard is not; on macOS it sees native chrome only, because a Flutter app publishes none of its own widgets to macOS accessibility. Use verb: foreground here to bring back a suspended iOS app. |
+| `target` | no | Bare text matches a visible string. JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. A reply text ending in … was truncated — target it with {"containing": <prefix>}, not the truncated string. On layer: native the same grammar minus key/tooltip/within, plus {"role": …} and {"at": {"x": …, "y": …}} for a point no element covers — divide a point read off the screenshot by the reply's screenshotScale first. |
 | `text` | no | What enterText types, as one editing value. |
 | `route` | no | For navigate — needs the app to have registered a navigation handler. |
 | `dx` | no | Drag distance, logical px. |
@@ -557,7 +558,7 @@ note: String?
 One drive transaction against a running app: resolve the target, check the pointer can reach it (retrying through route transitions until a deadline), perform the verb, settle, and observe — texts, a screenshot, what was printed — all in one reply describing one moment. Needs the app to have been launched by flutterware (the launch wraps it in the drive guest); anything else is inspect-only. A refusal still observes: the error comes back with the screen it happened on. Every step is appended to the run's journal. On a phone the app has to be in the foreground: iOS suspends a backgrounded app, which answers nothing until somebody brings it back — that comes back as a timeout saying so, never a hang. A hidden desktop window is fine, and so is a backgrounded Android app.
 
 ```sh
-fw run run act [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --verb=<choice> [--target=…] [--text=…] [--dx=…] [--dy=…] [--within=…] [--route=…] [--waitMs=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
+fw run run act [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --verb=<choice> [--layer=…] [--target=…] [--text=…] [--dx=…] [--dy=…] [--within=…] [--route=…] [--waitMs=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
 ```
 
 Returns `RunActResult`:
@@ -593,6 +594,11 @@ errors: List<RunLogEntry>?   # Framework errors this step produced or repeated.
   error: bool   # The launcher marked it as an error.
 journal: String?   # The run's journal file this step was appended to.
 note: String?
+layer: String?   # Which tree this step addressed — absent for the drive layer, `native` when it went through the platform's own accessibility tree.
+coordinateSpace: String?   # Native steps only: the space [nativeTree]'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.
+screenshotScale: double?   # Native steps only: how many screenshot pixels one coordinate unit is.
+nativeTree: Map<String, Object?>?   # Native steps only, and only when asked for: the platform's view tree.
+reconciled: int?   # Native steps only: human entries dropped as this step's own echo — the guest cannot tell an injected tap from a finger, so the agent's own tap would otherwise be journaled twice.
 ```
 
 | parameter | kind | required | default | |
@@ -602,7 +608,8 @@ note: String?
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 | `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `verb` | choice | yes | — | What to do |
-| `target` | string | no | — | What to act on. Bare text matches a visible string; JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. Resolved inside the app at act time, and refused loudly on zero or several matches — never a silent wrong-target tap. A reply text ending in … was truncated: target it with {"containing": <prefix>}. |
+| `layer` | choice | no | flutter | Which tree to address. `flutter` (default) is the app's own widget tree — fast, exact, and where everything Flutter draws lives. `native` is the platform's accessibility tree, reached through adb or the OS: slower (seconds, not milliseconds) and blunter, but it sees what Flutter cannot — permission dialogs and other native popups, the contents of a webview or map, another app the flow jumped to — and its screenshot is the real device screen rather than a raster of the Flutter layer. Reach for it when a drive target is refused for something you can see in the picture but not in the texts, or to bring a suspended iOS app back with verb: foreground. It does observe, tap, enterText (Android) and foreground; drag, scrollTo, back and navigate stay on the drive layer. |
+| `target` | string | no | — | What to act on. Bare text matches a visible string; JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. Resolved inside the app at act time, and refused loudly on zero or several matches — never a silent wrong-target tap. A reply text ending in … was truncated: target it with {"containing": <prefix>}. On layer: native the grammar is the same minus key/tooltip/within, plus {"role": …} and {"at": {"x": …, "y": …}} for a point no element covers. |
 | `text` | string | no | — | What enterText types, as one editing value |
 | `dx` | string | no | — | Horizontal drag distance, logical pixels |
 | `dy` | string | no | — | Vertical drag distance. Negative moves the finger up the screen, the touch convention. |
@@ -617,10 +624,10 @@ note: String?
 
 #### `observe` — Observe
 
-The act-less transaction: settle the running app and look — texts, a screenshot, what it printed since the last step. The opening move of a drive loop, and the call to make after a hot reload. Same reply shape and same journal as act.
+The act-less transaction: settle the running app and look — texts, a screenshot, what it printed since the last step. The opening move of a drive loop, and the call to make after a hot reload. Same reply shape and same journal as act. With layer: native it reads the platform's own tree instead and photographs the real device screen — keyboard, dialogs and platform views included.
 
 ```sh
-fw run run observe [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
+fw run run observe [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--layer=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
 ```
 
 Returns `RunActResult`:
@@ -656,6 +663,11 @@ errors: List<RunLogEntry>?   # Framework errors this step produced or repeated.
   error: bool   # The launcher marked it as an error.
 journal: String?   # The run's journal file this step was appended to.
 note: String?
+layer: String?   # Which tree this step addressed — absent for the drive layer, `native` when it went through the platform's own accessibility tree.
+coordinateSpace: String?   # Native steps only: the space [nativeTree]'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.
+screenshotScale: double?   # Native steps only: how many screenshot pixels one coordinate unit is.
+nativeTree: Map<String, Object?>?   # Native steps only, and only when asked for: the platform's view tree.
+reconciled: int?   # Native steps only: human entries dropped as this step's own echo — the guest cannot tell an injected tap from a finger, so the agent's own tap would otherwise be journaled twice.
 ```
 
 | parameter | kind | required | default | |
@@ -664,6 +676,7 @@ note: String?
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 | `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
+| `layer` | choice | no | flutter | Which tree to address. `flutter` (default) is the app's own widget tree — fast, exact, and where everything Flutter draws lives. `native` is the platform's accessibility tree, reached through adb or the OS: slower (seconds, not milliseconds) and blunter, but it sees what Flutter cannot — permission dialogs and other native popups, the contents of a webview or map, another app the flow jumped to — and its screenshot is the real device screen rather than a raster of the Flutter layer. Reach for it when a drive target is refused for something you can see in the picture but not in the texts, or to bring a suspended iOS app back with verb: foreground. It does observe, tap, enterText (Android) and foreground; drag, scrollTo, back and navigate stay on the drive layer. |
 | `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
 | `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |
 | `tree` | boolean | no | false | Include the widget tree in the reply. Off by default because a real app is thousands of tokens of tree; the texts ride along either way. |
@@ -711,6 +724,11 @@ errors: List<RunLogEntry>?   # Framework errors this step produced or repeated.
   error: bool   # The launcher marked it as an error.
 journal: String?   # The run's journal file this step was appended to.
 note: String?
+layer: String?   # Which tree this step addressed — absent for the drive layer, `native` when it went through the platform's own accessibility tree.
+coordinateSpace: String?   # Native steps only: the space [nativeTree]'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.
+screenshotScale: double?   # Native steps only: how many screenshot pixels one coordinate unit is.
+nativeTree: Map<String, Object?>?   # Native steps only, and only when asked for: the platform's view tree.
+reconciled: int?   # Native steps only: human entries dropped as this step's own echo — the guest cannot tell an injected tap from a finger, so the agent's own tap would otherwise be journaled twice.
 ```
 
 | parameter | kind | required | default | |

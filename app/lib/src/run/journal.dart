@@ -34,6 +34,8 @@ class JournalEntry {
     this.texts,
     this.logLines,
     this.errorCount,
+    this.layer,
+    this.reconciled,
     this.rotated = false,
   });
 
@@ -54,6 +56,8 @@ class JournalEntry {
     texts: json['texts'] as String?,
     logLines: json['logLines'] as int?,
     errorCount: json['errorCount'] as int?,
+    layer: json['layer'] as String?,
+    reconciled: json['reconciled'] as int?,
     rotated: json['rotated'] as bool? ?? false,
   );
 
@@ -96,6 +100,22 @@ class JournalEntry {
 
   final int? errorCount;
 
+  /// Which tree the step addressed: absent or `flutter` for the drive layer,
+  /// `native` for a step taken through the platform's own accessibility tree.
+  /// A reviewer reading the strip should be able to see that the agent went
+  /// below the widget tree — that is usually the interesting part of the
+  /// story, not a footnote.
+  final String? layer;
+
+  /// How many human entries this step absorbed as its own echo.
+  ///
+  /// A native tap arrives at the guest as ordinary platform input, so the
+  /// app's human-action recorder reports the agent's own tap back as a
+  /// human's. The host drops those (see `RunCore`), and states the count
+  /// rather than hiding the correction — the stated-caps rule, applied to a
+  /// subtraction.
+  final int? reconciled;
+
   /// A marker entry: the file was rotated here (see [appendJournal]).
   final bool rotated;
 
@@ -116,6 +136,8 @@ class JournalEntry {
     if (texts != null) 'texts': texts,
     if (logLines != null) 'logLines': logLines,
     if (errorCount != null) 'errorCount': errorCount,
+    if (layer != null) 'layer': layer,
+    if (reconciled != null) 'reconciled': reconciled,
     if (rotated) 'rotated': true,
   };
 }

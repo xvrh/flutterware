@@ -2582,6 +2582,41 @@ final resultShapes = <String, ResultShape>{
         'doc': 'The run\'s journal file this step was appended to.',
       },
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'layer',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Which tree this step addressed — absent for the drive layer, `native` when it went through the platform\'s own accessibility tree.',
+      },
+      <String, Object?>{
+        'name': 'coordinateSpace',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Native steps only: the space [nativeTree]\'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.',
+      },
+      <String, Object?>{
+        'name': 'screenshotScale',
+        'type': 'double',
+        'optional': true,
+        'doc':
+            'Native steps only: how many screenshot pixels one coordinate unit is.',
+      },
+      <String, Object?>{
+        'name': 'nativeTree',
+        'type': 'Map<String, Object?>',
+        'optional': true,
+        'doc':
+            'Native steps only, and only when asked for: the platform\'s view tree.',
+      },
+      <String, Object?>{
+        'name': 'reconciled',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'Native steps only: human entries dropped as this step\'s own echo — the guest cannot tell an injected tap from a finger, so the agent\'s own tap would otherwise be journaled twice.',
+      },
     ],
   }),
   'RunAppEntry': ResultShape.fromJson(<String, Object?>{

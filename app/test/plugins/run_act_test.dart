@@ -46,6 +46,10 @@ void main() {
         ),
       ),
     );
+    // No device on the other end of these tests, so the native layer is not
+    // one of the answers — said here rather than discovered by `adb` and
+    // `xcrun` being run for every refusal.
+    core.debugNativeAvailable = false;
     handle = RunHandle(
       worktree: worktree.path,
       worktreeName: '~',
@@ -147,6 +151,62 @@ void main() {
     expect(result.failure, 'notFound');
     expect(result.texts, ['Pay'], reason: 'a refusal still shows the screen');
     expect(readJournal(handle).single.failure, 'notFound');
+  });
+
+  test(
+    'a refusal teaches the native layer, but only where there is one',
+    () async {
+      core.debugAct = (handle, args) async => {
+        'error': 'nothing matches "Allow"',
+        'failure': 'notFound',
+        'texts': <String>['Pay'],
+      };
+
+      // How an agent finds this layer at all: not from documentation it read
+      // once, but at the moment it is looking for something the widget tree does
+      // not have.
+      core.debugNativeAvailable = true;
+      var taught =
+          (await core.invoke(
+                'act',
+                arguments: {'verb': 'tap', 'target': 'Allow'},
+              ))!
+              as RunActResult;
+      expect(taught.error, contains('layer: native'));
+
+      // And silence where the advice would fail: a device with no native driver
+      // must not be told to try one.
+      core.debugNativeAvailable = false;
+      var quiet =
+          (await core.invoke(
+                'act',
+                arguments: {'verb': 'tap', 'target': 'Allow'},
+              ))!
+              as RunActResult;
+      expect(quiet.error, isNot(contains('layer: native')));
+    },
+  );
+
+  test('a native step journals as its own layer', () async {
+    // The native path refuses without a device, which is the point: the
+    // refusal is still a step, and the story records which tree it addressed.
+    var result =
+        (await core.invoke(
+              'act',
+              arguments: {
+                'verb': 'observe',
+                'layer': 'native',
+                'device': 'macos',
+              },
+            ))!
+            as RunActResult;
+
+    expect(result.ok, isFalse);
+    expect(result.layer, 'native');
+    expect(result.error, contains('no driver'));
+    var entry = readJournal(handle).single;
+    expect(entry.layer, 'native');
+    expect(entry.verb, 'observe');
   });
 
   test('observe and navigate funnel into act with the verb fixed', () async {

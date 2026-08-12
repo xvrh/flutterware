@@ -1,0 +1,273 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
+import '../handle.dart';
+import 'adb_driver.dart';
+import 'ax_driver.dart';
+import 'native_driver.dart';
+
+/// One native transaction, and the driver it runs on.
+///
+/// The shape is the drive layer's, deliberately: resolve against a *fresh*
+/// tree, act, look again, answer with one bundle describing one moment. An
+/// agent that has been tapping widgets all session should find nothing new
+/// here except which tree it is addressing.
+///
+/// Held per run like [DriveSession], for the same reason and one more: the
+/// driver learns things (Android's package, the simulator's window) that a
+/// per-call driver would keep rediscovering.
+class NativeSession {
+  NativeSession(this.handle);
+
+  final RunHandle handle;
+
+  NativeDriver? _driver;
+  Future<NativeDriver?>? _resolving;
+
+  /// The driver for this run's device, or null when this machine has none.
+  ///
+  /// Cached including the null: asking `adb devices` on every act to be told
+  /// again that a macOS run is not an Android device is a round trip that can
+  /// only have one answer.
+  Future<NativeDriver?> driver() {
+    if (_resolving case var held?) return held;
+    return _resolving = _resolve();
+  }
+
+  /// Whether this device *could* be driven natively, without building
+  /// anything to find out.
+  ///
+  /// Split from [driver] because of where it is asked: a drive-layer refusal
+  /// mentions the native layer only if there is one, and that question must
+  /// not cost the caller a Swift compile. Identity is cheap to establish;
+  /// the helper is built when somebody actually asks for the layer.
+  /// Set by tests, so the drive path can be exercised without a device.
+  bool? debugAvailable;
+
+  Future<bool> get isAvailable async {
+    if (debugAvailable case var forced?) return forced;
+    if (_available case var known?) return known;
+    var adb = AdbNativeDriver.findAdb();
+    if (adb != null && await AdbNativeDriver.owns(handle.device, adb)) {
+      return _available = true;
+    }
+    if (!Platform.isMacOS) return _available = false;
+    if (handle.device == 'macos') return _available = _macosBundle() != null;
+    return _available = await _bootedSimulator(handle.device) != null;
+  }
+
+  bool? _available;
+
+  Future<NativeDriver?> _resolve() async {
+    var adb = AdbNativeDriver.findAdb();
+    if (adb != null && await AdbNativeDriver.owns(handle.device, adb)) {
+      return _driver = AdbNativeDriver(serial: handle.device, adb: adb);
+    }
+    if (!Platform.isMacOS) return null;
+
+    // The two Apple targets are one mechanism pointed at two processes: the
+    // simulator is a Mac app whose accessibility tree contains the whole
+    // simulated device, and a macOS run is that same API on the app's own pid.
+    var simulator = await _bootedSimulator(handle.device);
+    var helper = await AxNativeDriver.ensureHelper();
+    if (helper == null) return null;
+    if (simulator != null) {
+      return _driver = AxNativeDriver(
+        platform: 'ios-simulator',
+        helper: helper,
+        app: 'com.apple.iphonesimulator',
+        // Scoped to this device's window: a Mac can run several simulators,
+        // and an unscoped walk would also drag in the host's menu bar.
+        window: simulator,
+      )..simulatorUdid = handle.device;
+    }
+    if (handle.device == 'macos') {
+      var bundle = _macosBundle();
+      if (bundle == null) return null;
+      return _driver = AxNativeDriver(
+        platform: 'macos',
+        helper: helper,
+        app: bundle,
+      );
+    }
+    return null;
+  }
+
+  /// The window title of [device] if it is a booted simulator, else null.
+  ///
+  /// `simctl list` rather than the shape of the id: a UDID is only a UUID, and
+  /// guessing from its shape would mistake any other UUID-shaped device id for
+  /// a simulator.
+  Future<String?> _bootedSimulator(String device) async {
+    try {
+      var result = await Process.run('xcrun', [
+        'simctl',
+        'list',
+        'devices',
+        'booted',
+        '-j',
+      ]);
+      if (result.exitCode != 0) return null;
+      if (jsonDecode('${result.stdout}') case {'devices': Map runtimes}) {
+        for (var runtime in runtimes.values) {
+          for (var entry in (runtime as List).cast<Map<String, Object?>>()) {
+            if (entry['udid'] == device) return entry['name'] as String?;
+          }
+        }
+      }
+    } on Object {
+      // No Xcode, or a `simctl` that answered something else. Either way this
+      // machine has no simulator to drive.
+    }
+    return null;
+  }
+
+  /// The bundle this run launched, as a path.
+  ///
+  /// A **path**, not a product name, and the difference is a bug this found
+  /// the moment it ran: two worktrees building the same package produce two
+  /// running apps with the same name, and picking by name attached the driver
+  /// to somebody else's window. It is the machine-global selection hole the
+  /// drive layer already closed with `ownHandles`, met again one layer down —
+  /// and the same answer applies, that only this checkout's run is a drivable
+  /// subject. The build directory under this worktree is what makes it this
+  /// checkout's.
+  String? _macosBundle() {
+    var package = handle.package;
+    if (package == null) return null;
+    var build = Directory(
+      p.join(handle.worktree, package, 'build', 'macos', 'Build', 'Products'),
+    );
+    if (!build.existsSync()) return null;
+    for (var configuration in build.listSync()) {
+      if (configuration is! Directory) continue;
+      for (var entity in configuration.listSync()) {
+        if (entity.path.endsWith('.app')) return entity.path;
+      }
+    }
+    return null;
+  }
+
+  /// Why this device has no native layer, written for the agent that just
+  /// asked for one.
+  ///
+  /// Says which platforms *do* have one, because the useful next thought is
+  /// usually "then run it somewhere that does" — and says the drive layer is
+  /// still there, because on a desktop run it answers almost everything the
+  /// native layer would have.
+  String get unavailable =>
+      'The native layer has no driver for ${handle.deviceLabel}. It drives '
+      'Android devices and emulators through adb; the iOS simulator and macOS '
+      'arrive with the accessibility helper. Everything Flutter draws is '
+      'addressable without it — drop `layer` to use the widget tree.';
+
+  /// Resolve → act → observe, as one reply.
+  ///
+  /// [verb] is the native vocabulary, deliberately smaller than the drive
+  /// layer's: what a platform tree cannot do — walk a lazy list to something
+  /// not yet built — is refused rather than approximated.
+  Future<NativeStep> act({
+    required String verb,
+    String? target,
+    String? text,
+    bool screenshot = true,
+  }) async {
+    var driver = await this.driver();
+    if (driver == null) {
+      throw NativeRefusal(unavailable, failure: 'unavailable');
+    }
+    var started = DateTime.now();
+
+    String? described;
+    if (verb != 'observe' && verb != 'foreground') {
+      var spec = target;
+      if (spec == null) {
+        throw NativeRefusal(
+          '`$verb` needs a target. On the native layer that is bare visible '
+          'text, {"containing": …}, {"role": …}, or {"at": {"x": …, "y": …}} '
+          'for a point the platform publishes no element for.',
+          failure: 'notFound',
+        );
+      }
+      // Resolved against a tree read *now*: the screen may have moved since
+      // whatever the agent read, and a stale match is exactly the wrong-target
+      // tap this layer refuses to make.
+      var before = await driver.observe(screenshot: false);
+      var parsed = NativeTarget.parse(spec);
+      described = parsed.description;
+      switch (verb) {
+        case 'tap':
+          if (parsed.point case (var x, var y)) {
+            await driver.tapAt(x, y);
+          } else {
+            await driver.tapNode(parsed.resolve(before));
+          }
+        case 'enterText':
+          if (text == null) {
+            throw NativeRefusal(
+              '`enterText` needs `text` to type.',
+              failure: 'notFound',
+            );
+          }
+          // Focus first, the way a person would: native text entry types into
+          // whatever holds focus, and nothing else on this layer knows what
+          // that is.
+          if (parsed.point case (var x, var y)) {
+            await driver.tapAt(x, y);
+          } else {
+            await driver.tapNode(parsed.resolve(before));
+          }
+          await driver.enterText(text);
+        default:
+          throw NativeRefusal(
+            '`$verb` is not a native verb. The native layer does `observe`, '
+            '`tap`, `enterText` and `foreground`; everything else — drag, '
+            'scrollTo, back, navigate — is the drive layer, which addresses '
+            "Flutter's own tree. Drop `layer` for those.",
+            failure: 'unsupported',
+          );
+      }
+    } else if (verb == 'foreground') {
+      await driver.foreground();
+      // The OS needs a moment to actually swap the app in; without it the
+      // observation photographs the screen we came from.
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+    }
+
+    var observation = await driver.observe(screenshot: screenshot);
+    return NativeStep(
+      verb: verb,
+      target: described,
+      observation: observation,
+      elapsedMs: DateTime.now().difference(started).inMilliseconds,
+    );
+  }
+
+  Future<void> close() async {
+    await _driver?.close();
+    _driver = null;
+    _resolving = null;
+  }
+}
+
+/// What one native transaction produced.
+class NativeStep {
+  NativeStep({
+    required this.verb,
+    required this.observation,
+    required this.elapsedMs,
+    this.target,
+  });
+
+  final String verb;
+
+  /// The target as the resolver described it — the drive layer's spelling, so
+  /// the journal reads the same whichever layer wrote the line.
+  final String? target;
+
+  final NativeObservation observation;
+  final int elapsedMs;
+}

@@ -25,6 +25,8 @@ import '../../run/inventory.dart';
 import '../../run/journal.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
+import '../../run/native/native_driver.dart';
+import '../../run/native/native_session.dart';
 import '../../run/network_tracker.dart';
 import '../../run/panel_client.dart';
 import '../../shell/worktree_discovery.dart';
@@ -911,8 +913,10 @@ class RunCore extends PluginCore {
                 ActionOption('wait'),
                 ActionOption('observe'),
                 ActionOption('navigate'),
+                ActionOption('foreground'),
               ],
             ),
+            _layerParameter,
             const ActionParameter(
               'target',
               'Target',
@@ -925,7 +929,9 @@ class RunCore extends PluginCore {
                   'app at act time, and refused loudly on zero or several '
                   'matches — never a silent wrong-target tap. A reply text '
                   'ending in … was truncated: target it with '
-                  '{"containing": <prefix>}.',
+                  '{"containing": <prefix>}. On layer: native the grammar is '
+                  'the same minus key/tooltip/within, plus {"role": …} and '
+                  '{"at": {"x": …, "y": …}} for a point no element covers.',
             ),
             const ActionParameter(
               'text',
@@ -988,9 +994,13 @@ class RunCore extends PluginCore {
               'The act-less transaction: settle the running app and look — '
               'texts, a screenshot, what it printed since the last step. The '
               'opening move of a drive loop, and the call to make after a '
-              'hot reload. Same reply shape and same journal as act.',
+              'hot reload. Same reply shape and same journal as act. With '
+              "layer: native it reads the platform's own tree instead and "
+              'photographs the real device screen — keyboard, dialogs and '
+              'platform views included.',
           parameters: [
             ..._appSelector,
+            _layerParameter,
             ..._observationParameters,
             const ActionParameter(
               'actor',
@@ -1455,6 +1465,34 @@ class RunCore extends PluginCore {
           'this repository.',
     ),
   ];
+
+  /// Which tree a transaction addresses.
+  ///
+  /// One parameter rather than a second set of verbs, because everything an
+  /// agent already knows should keep working: same targets, same reply, same
+  /// journal, same refusal voice — one extra word when the widget tree is not
+  /// where the thing lives.
+  static const _layerParameter = ActionParameter(
+    'layer',
+    'Layer',
+    kind: ActionParameterKind.choice,
+    required: false,
+    defaultValue: 'flutter',
+    description:
+        "Which tree to address. `flutter` (default) is the app's own widget "
+        'tree — fast, exact, and where everything Flutter draws lives. '
+        "`native` is the platform's accessibility tree, reached through adb "
+        'or the OS: slower (seconds, not milliseconds) and blunter, but it '
+        'sees what Flutter cannot — permission dialogs and other native '
+        'popups, the contents of a webview or map, another app the flow '
+        'jumped to — and its screenshot is the real device screen rather than '
+        'a raster of the Flutter layer. Reach for it when a drive target is '
+        'refused for something you can see in the picture but not in the '
+        'texts, or to bring a suspended iOS app back with verb: foreground. '
+        'It does observe, tap, enterText (Android) and foreground; drag, '
+        'scrollTo, back and navigate stay on the drive layer.',
+    options: [ActionOption('flutter'), ActionOption('native')],
+  );
 
   /// What every drive transaction lets you tune about its observation.
   static const _observationParameters = [
@@ -2083,6 +2121,8 @@ class RunCore extends PluginCore {
           // orphaned app running on the phone with nothing able to reload it,
           // which is the worst of both.
           unawaited(_driveSessions.remove(_driveKey(handle))?.close());
+          unawaited(_nativeSessions.remove(_driveKey(handle))?.close());
+          _nativeEchoes.remove(_driveKey(handle));
           await connection?.exitApp();
           // Current, not merely alive: this pid came out of a file that can
           // be a day old, and SIGTERM to a recycled number is SIGTERM to
@@ -2773,12 +2813,31 @@ class RunCore extends PluginCore {
   Future<Map<String, dynamic>> Function(RunHandle, Map<String, String>)?
   debugAct;
 
+  /// Held native drivers, one per run — same lifecycle as [_driveSessions],
+  /// and the same reason: a driver learns its device and should not have to
+  /// relearn it every call.
+  final _nativeSessions = <String, NativeSession>{};
+
+  NativeSession _nativeSessionFor(RunHandle handle) {
+    var session = _nativeSessions[_driveKey(handle)] ??= NativeSession(handle);
+    return session..debugAvailable = debugNativeAvailable;
+  }
+
+  /// Stands in for "does this machine have a native layer for that device",
+  /// so a test of the drive path does not shell out to `adb` and `xcrun` to
+  /// be told what it already knows. The same seam [debugAct] is.
+  @visibleForTesting
+  bool? debugNativeAvailable;
+
   /// `act`, `observe` and `navigate` — one funnel, because the last two are
   /// the first with the verb fixed.
   Future<RunActResult> _actAction(Map<String, Object?> arguments) async {
     var handle = await _selectRunningApp(arguments);
     var verb = arguments['verb'] as String? ?? 'observe';
     var actor = arguments['actor'] as String? ?? 'agent';
+    if (arguments['layer'] == 'native') {
+      return _nativeAct(handle, arguments, verb: verb, actor: actor);
+    }
     var wantsTree = _boolArgument(arguments['tree']);
     var wantsShot = arguments['screenshot'] == null
         ? true
@@ -2821,6 +2880,15 @@ class RunCore extends PluginCore {
                 'inspected but not driven. Launch it through flutterware '
                 '(the GUI, `fw run launch`, or MCP) to get a driveable run.'
           : '$e';
+      // The timeout says "bring the app to the front" — which used to be a
+      // request only a human could carry out. On a device with a native
+      // driver the agent can do it itself, so the sentence that reports the
+      // dead end also says the way out of it.
+      if (e is DriveTimeout && await _nativeSessionFor(handle).isAvailable) {
+        error =
+            '$error\nYou can do that from here: '
+            '`act {verb: foreground, layer: native}`.';
+      }
       appendJournal(
         handle,
         JournalEntry(
@@ -2850,7 +2918,10 @@ class RunCore extends PluginCore {
     var logs = (reply['logs'] as List?)?.cast<Map>();
     var guestErrors = (reply['errors'] as List?)?.cast<Map>();
     var framesEnabled = settle?['framesEnabled'] as bool?;
-    var human = (reply['human'] as List?)?.cast<Map>();
+    var (human, reconciled) = _reconcileHuman(
+      handle,
+      (reply['human'] as List?)?.cast<Map>() ?? const [],
+    );
 
     String? shotPath;
     String? treePath;
@@ -2884,7 +2955,7 @@ class RunCore extends PluginCore {
     // What the human did on the way here, ahead of the step that saw it —
     // the guest buffers between transactions, so these precede this step in
     // wall time and must precede it in the story too.
-    for (var action in human ?? const <Map>[]) {
+    for (var action in human) {
       appendJournal(
         handle,
         JournalEntry(
@@ -2918,6 +2989,7 @@ class RunCore extends PluginCore {
         texts: textsPath,
         logLines: logs?.length,
         errorCount: guestErrors?.length,
+        reconciled: reconciled == 0 ? null : reconciled,
       ),
     );
 
@@ -2944,8 +3016,11 @@ class RunCore extends PluginCore {
               },
             ),
       ok: error == null,
-      error: error,
+      error: error == null
+          ? null
+          : '$error${await _nativeHint(handle, reply['failure'] as String?)}',
       failure: reply['failure'] as String?,
+      reconciled: reconciled == 0 ? null : reconciled,
       attempts: step?['attempts'] as int?,
       elapsedMs: step?['elapsedMs'] as int?,
       settled: settle?['settled'] as bool?,
@@ -2953,7 +3028,7 @@ class RunCore extends PluginCore {
       frames: settle?['frames'] as int?,
       framesEnabled: framesEnabled,
       lifecycle: reply['lifecycle'] as String?,
-      human: human == null
+      human: human.isEmpty
           ? null
           : [for (var action in human) '${action['verb']} ${action['target']}'],
       texts: texts,
@@ -2986,6 +3061,217 @@ class RunCore extends PluginCore {
           ? 'The window is hidden or occluded; every frame this step saw was '
                 'forced. What a human sees on screen may lag this reply.'
           : null,
+    );
+  }
+
+  /// The sentence that teaches the other layer, appended to a drive refusal.
+  ///
+  /// This is how the native layer is discovered at all: not from documentation
+  /// an agent read once, but at the moment it is looking for something the
+  /// widget tree does not have — a permission dialog, a button inside a
+  /// webview, the keyboard. The refusal is where the next move belongs, which
+  /// is the same rule the rest of this surface already follows.
+  ///
+  /// Only for `notFound`, and only when this device actually has a driver: an
+  /// ambiguous target or a covered widget is a drive-layer problem, and
+  /// pointing at a layer that does not exist here would be advice that fails.
+  Future<String> _nativeHint(RunHandle handle, String? failure) async {
+    if (failure != 'notFound') return '';
+    if (!await _nativeSessionFor(handle).isAvailable) return '';
+    return '\nIf this is not a Flutter widget — a permission dialog, a '
+        'webview, the keyboard, anything the platform draws — the native '
+        'layer may see it: retry with layer: native.';
+  }
+
+  /// When this run's native layer injected input, so the guest's report of it
+  /// can be recognised as an echo rather than journaled as a human.
+  ///
+  /// The guest cannot tell an injected tap from a finger: an `adb shell input
+  /// tap` and an `AXPress` both arrive as ordinary platform input, on the same
+  /// global pointer route the human-action recorder watches. Without this,
+  /// every native tap the agent makes appears twice in the story — once as its
+  /// own step, once as a phantom human's — and the Steps strip a human reviews
+  /// tells them somebody else was clicking.
+  ///
+  /// Windows rather than target sentences, because the two sides genuinely
+  /// name things differently: the native layer resolved `"Increment"` while
+  /// the guest's ancestor walk called the same tap `tooltip 'Increment'`
+  /// (measured). Time is the signal both agree on.
+  final _nativeEchoes = <String, List<_NativeEcho>>{};
+
+  void _recordNativeEcho(RunHandle handle, DateTime from, DateTime to) {
+    var echoes = _nativeEchoes[_driveKey(handle)] ??= [];
+    echoes.add(_NativeEcho(from, to.add(const Duration(milliseconds: 750))));
+    // A native step whose echo never arrives — the app was not driveable, or
+    // the human tapped nothing — must not sit here forever poisoning a later
+    // reconciliation.
+    echoes.removeWhere(
+      (echo) => DateTime.now().difference(echo.to) > const Duration(minutes: 2),
+    );
+  }
+
+  /// Drops the human entries that are this process's own native taps coming
+  /// back, and says how many. Returns what a real human did.
+  (List<Map>, int) _reconcileHuman(RunHandle handle, List<Map> human) {
+    var echoes = _nativeEchoes[_driveKey(handle)];
+    if (echoes == null || echoes.isEmpty) return (human, 0);
+    var kept = <Map>[];
+    var dropped = 0;
+    for (var action in human) {
+      var at = DateTime.tryParse(action['at'] as String? ?? '')?.toUtc();
+      var echo = at == null
+          ? null
+          : echoes.where((candidate) => candidate.contains(at)).firstOrNull;
+      if (echo == null) {
+        kept.add(action);
+        continue;
+      }
+      // One echo answers for one entry: a native tap produces one recorded
+      // action, and a human who really did tap inside the same window should
+      // keep their line.
+      echoes.remove(echo);
+      dropped++;
+    }
+    return (kept, dropped);
+  }
+
+  /// What every native observation says about itself.
+  ///
+  /// The scale sentence is not decoration: the picture is retina and the
+  /// coordinates are not, so an agent reading a point off the screenshot and
+  /// passing it straight to `{"at": …}` would tap at half the intended place.
+  /// Stating the factor is cheaper than a class of silent misses.
+  static String _nativeNote(NativeObservation observation) {
+    var picture =
+        'This screenshot is the real device screen, not a raster of the '
+        'Flutter layer. Coordinates are ${observation.coordinateSpace} and '
+        'the picture is ${observation.screenshotScale ?? 1}× that, so divide '
+        'before passing a point you read off it to {"at": …}.';
+    return [
+      picture,
+      ?observation.note,
+      'Flutter widgets are addressed better without `layer`.',
+    ].join(' ');
+  }
+
+  /// The native half of the act funnel: the same transaction, against the
+  /// platform's own tree instead of Flutter's.
+  Future<RunActResult> _nativeAct(
+    RunHandle handle,
+    Map<String, Object?> arguments, {
+    required String verb,
+    required String actor,
+  }) async {
+    var session = _nativeSessionFor(handle);
+    var wantsTree = _boolArgument(arguments['tree']);
+    var wantsShot = arguments['screenshot'] == null
+        ? true
+        : _boolArgument(arguments['screenshot']);
+    var started = DateTime.now();
+    var injects = verb == 'tap' || verb == 'enterText';
+
+    NativeStep? step;
+    String? error;
+    String? failure;
+    try {
+      step = await session.act(
+        verb: verb,
+        target: arguments['target'] as String?,
+        text: arguments['text'] as String?,
+        screenshot: wantsShot,
+      );
+    } on NativeRefusal catch (refusal) {
+      error = refusal.message;
+      failure = refusal.failure;
+    } on Object catch (e) {
+      error = '$e';
+    }
+
+    if (injects) {
+      _recordNativeEcho(handle, started, DateTime.now());
+    }
+
+    // A refusal still observes, exactly as on the drive layer: the error comes
+    // back with the screen it happened on, so an agent never has to spend a
+    // second call finding out what it was looking at.
+    if (step == null && error != null) {
+      try {
+        if (await session.driver() case var driver?) {
+          step = NativeStep(
+            verb: verb,
+            observation: await driver.observe(screenshot: wantsShot),
+            elapsedMs: DateTime.now().difference(started).inMilliseconds,
+          );
+        }
+      } on Object {
+        // The refusal is the answer; failing to photograph it changes nothing
+        // about what to tell the caller.
+      }
+    }
+
+    var observation = step?.observation;
+    String? shotPath;
+    if (journalArtifactsDirFor(handle) case var dir?) {
+      if (observation?.screenshot case var png?) {
+        var file = File(
+          p.join(dir, '${started.millisecondsSinceEpoch}-$pid.native.png'),
+        );
+        file.parent.createSync(recursive: true);
+        file.writeAsBytesSync(png);
+        shotPath = file.absolute.path;
+      }
+    }
+
+    appendJournal(
+      handle,
+      JournalEntry(
+        at: started.toUtc().toIso8601String(),
+        verb: verb,
+        actor: actor,
+        layer: 'native',
+        target: step?.target ?? arguments['target'] as String?,
+        error: error,
+        failure: failure,
+        elapsedMs: step?.elapsedMs,
+        screenshot: shotPath,
+      ),
+    );
+
+    return RunActResult(
+      device: handle.device,
+      entrypoint: handle.entrypoint,
+      worktree: handle.worktreeName,
+      verb: verb,
+      layer: 'native',
+      target: step?.target ?? arguments['target'] as String?,
+      ok: error == null,
+      error: error,
+      failure: failure,
+      elapsedMs: step?.elapsedMs,
+      coordinateSpace: observation?.coordinateSpace,
+      screenshotScale: observation?.screenshotScale,
+      texts: observation?.texts,
+      nativeTree: wantsTree ? observation?.root.toJson() : null,
+      nodes: observation?.nodes.length,
+      screenshot: shotPath,
+      screenshotArtifact: shotPath == null
+          ? null
+          : Artifact(
+              kind: Artifact.png,
+              address: Address(
+                worktree: host.worktree.name,
+                plugin: runPluginId,
+                segments: [handle.key, 'steps'],
+              ),
+              path: shotPath,
+              meta: {
+                'verb': verb,
+                'layer': 'native',
+                if (step?.target case String target) 'target': target,
+              },
+            ),
+      journal: journalPathFor(handle),
+      note: observation == null ? null : _nativeNote(observation),
     );
   }
 
@@ -3240,6 +3526,10 @@ class RunCore extends PluginCore {
       unawaited(session.close());
     }
     _driveSessions.clear();
+    for (var session in _nativeSessions.values) {
+      unawaited(session.close());
+    }
+    _nativeSessions.clear();
     _probeTimer?.cancel();
     unawaited(_daemonChanges?.cancel());
     // Give the lease back rather than stopping the daemon: another open
@@ -3255,3 +3545,14 @@ class RunCore extends PluginCore {
 }
 
 PluginCore runCoreFactory(PluginHost host) => RunCore(host);
+
+/// The window a native step's own input arrives in, as the guest reports it.
+class _NativeEcho {
+  _NativeEcho(this.from, this.to);
+
+  final DateTime from;
+  final DateTime to;
+
+  bool contains(DateTime at) =>
+      !at.isBefore(from.toUtc()) && !at.isAfter(to.toUtc());
+}
