@@ -20,6 +20,18 @@ void main() {
     return file;
   }
 
+  /// A real `dart`, wherever this suite runs: under `dart test` it is the
+  /// executable itself, under `flutter test` the executable is
+  /// `flutter_tester` — which, spawned with a script, hangs to the timeout —
+  /// and the SDK it belongs to is in `FLUTTER_ROOT`.
+  String dartExecutable() {
+    var exe = Platform.resolvedExecutable;
+    if (p.basenameWithoutExtension(exe) == 'dart') return exe;
+    var root = Platform.environment['FLUTTER_ROOT'];
+    if (root == null) fail('neither dart nor FLUTTER_ROOT to find one with');
+    return p.join(root, 'bin', 'cache', 'dart-sdk', 'bin', 'dart');
+  }
+
   test('finds a marked wrapper walking up from a subdirectory', () {
     var script = wrapper('repo/fw');
     var inner = Directory(p.join(tmp.path, 'repo', 'app', 'lib'))
@@ -52,7 +64,7 @@ void main() {
     () async {
       wrapper('repo/fw');
       var inner = Directory(p.join(tmp.path, 'repo', 'sub'))..createSync();
-      var result = await Process.run(Platform.resolvedExecutable, [
+      var result = await Process.run(dartExecutable(), [
         p.join(Directory.current.path, 'bin', 'walker.dart'),
         'status',
         '--json',
@@ -64,7 +76,7 @@ void main() {
   );
 
   test('without a wrapper the old redirect message still answers', () async {
-    var result = await Process.run(Platform.resolvedExecutable, [
+    var result = await Process.run(dartExecutable(), [
       p.join(Directory.current.path, 'bin', 'walker.dart'),
       'status',
     ], workingDirectory: tmp.path);
