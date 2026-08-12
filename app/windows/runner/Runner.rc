@@ -93,8 +93,8 @@ BEGIN
             VALUE "FileDescription", "Flutterware" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "Flutterware" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2022 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "app.exe" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Flutterware. All rights reserved." "\0"
+            VALUE "OriginalFilename", "Flutterware.exe" "\0"
             VALUE "ProductName", "Flutterware" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END

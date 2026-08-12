@@ -21,7 +21,35 @@ class MainFlutterWindow: NSWindow {
       with: flutterViewController.registrar(forPlugin: "EmbedderTexturePlugin"))
     ClipboardImagePlugin.register(
       with: flutterViewController.registrar(forPlugin: "ClipboardImagePlugin"))
+    registerWindowChannel(
+      flutterViewController.registrar(forPlugin: "WindowChannel"))
 
     super.awakeFromNib()
+  }
+
+  /// Lets Dart name this window after the project it was opened on.
+  ///
+  /// Small enough to live here rather than in its own plugin file, which would
+  /// mean editing the Xcode project. Note [titleVisibility] is `.hidden` above,
+  /// so the title never appears in the window itself — it reaches the user
+  /// through Mission Control, the Window menu, and the Dock icon's menu.
+  private func registerWindowChannel(_ registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: "flutterware/window",
+      binaryMessenger: registrar.messenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "setTitle":
+        guard let title = call.arguments as? String else {
+          result(FlutterError(code: "bad_args",
+                              message: "title string required", details: nil))
+          return
+        }
+        self?.title = title
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 }
