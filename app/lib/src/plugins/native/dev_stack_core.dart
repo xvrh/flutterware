@@ -112,6 +112,14 @@ class DevStackCore extends PluginCore {
   String _lastOutput = '';
   String? _lastCommand;
 
+  /// How the last command ended, and how long it took.
+  ///
+  /// Both were already on [DevStackRunResult] and reached the CLI and an agent;
+  /// the panel showed the output and nothing about it, so a command that
+  /// printed a warning and exited 1 looked exactly like one that worked.
+  int? _lastExitCode;
+  Duration? _lastRunFor;
+
   /// The last reading, cache or probe.
   StackReading get reading => _reading;
 
@@ -155,6 +163,8 @@ class DevStackCore extends PluginCore {
   };
   String get lastOutput => _lastOutput;
   String? get lastCommand => _lastCommand;
+  int? get lastExitCode => _lastExitCode;
+  Duration? get lastRunFor => _lastRunFor;
   Duration get pollInterval => _poll;
 
   /// The probe as declared, joined — what the panel names when it explains
@@ -371,11 +381,14 @@ class DevStackCore extends PluginCore {
     _busySince = DateTime.now();
     _lastCommand = command.join(' ');
     _lastOutput = '';
+    _lastExitCode = null;
+    _lastRunFor = null;
     notifyChanged();
     ProcessResult result;
     try {
       result = await runProcess(command, workingDirectory: workingDirectory);
     } on Object catch (e) {
+      _lastRunFor = busyFor;
       _busy = null;
       _busySince = null;
       _lastOutput = '$e';
@@ -383,6 +396,8 @@ class DevStackCore extends PluginCore {
       rethrow;
     }
     _lastOutput = _tail(_combined(result));
+    _lastExitCode = result.exitCode;
+    _lastRunFor = busyFor;
     _busy = null;
     _busySince = null;
     notifyChanged();

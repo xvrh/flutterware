@@ -80,7 +80,7 @@ class WorktreeHome extends StatelessWidget {
           const Gap(FwSpacing.xxxl),
           DevStackBlock(
             stack,
-            compact: true,
+            form: DevStackForm.strip,
             onOpenPanel: onOpenPlugin == null
                 ? null
                 : () => onOpenPlugin!(devStackPluginId),

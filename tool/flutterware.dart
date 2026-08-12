@@ -97,7 +97,14 @@ void main() => Flutterware.configure((fw) {
       stop: [dart, 'tool/stack.dart', 'down'],
       poll: const Duration(seconds: 15),
       commands: [
-        StackCommand('logs', 'Logs', [dart, 'tool/stack.dart', 'logs']),
+        StackCommand(
+          'logs',
+          'Logs',
+          [dart, 'tool/stack.dart', 'logs'],
+          description:
+              'The last 40 lines the server logged. A background process has '
+              'no terminal, so it appends to a file instead.',
+        ),
         StackCommand(
           'hit',
           'Send a request',

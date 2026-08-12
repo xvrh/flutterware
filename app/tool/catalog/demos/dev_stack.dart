@@ -64,7 +64,8 @@ Widget devStackPartial() => _Panel(_plugin(state: _Scripted.partial));
 Widget devStackObserveOnly() =>
     _Panel(_plugin(state: _Scripted.up, controls: false));
 
-/// The compact form the worktree home draws — the answer, without the file.
+/// The strip the worktree home draws — one line, tinted, and the line is the
+/// way into the panel.
 @Preview(
   name: 'Dev stack · on the home screen',
   group: 'Dev stack',
@@ -88,7 +89,7 @@ Widget devStackCompact() => Builder(
           const Gap(FwSpacing.xxxl),
           DevStackBlock(
             _plugin(state: _Scripted.up),
-            compact: true,
+            form: DevStackForm.strip,
             onOpenPanel: () {},
           ),
         ],
