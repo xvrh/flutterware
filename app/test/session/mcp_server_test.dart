@@ -91,6 +91,19 @@ void main() {
     ]);
   });
 
+  test('every argument flutterware_act advertises is forwarded', () async {
+    // The schema and the forwarding list are maintained by hand in the same
+    // file, and only one of them is visible to a client. When they diverge the
+    // dropped argument fails in the worst way: the ambiguity refusal tells the
+    // agent to pass `run`, the agent passes it, and the identical refusal
+    // comes back forever. (`run` was exactly that hole.)
+    var act = (await connection.listTools()).tools.singleWhere(
+      (t) => t.name == 'flutterware_act',
+    );
+    var advertised = (act.inputSchema.properties ?? {}).keys;
+    expect(advertised, unorderedEquals(FlutterwareMcpServer.actArguments));
+  });
+
   test('flutterware_act funnels into the run plugin and reports its refusal '
       'as a readable error', () async {
     // An empty run dir of its own, not the machine's: with a real app

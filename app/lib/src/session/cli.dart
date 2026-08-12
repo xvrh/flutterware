@@ -367,9 +367,19 @@ class FwCli {
 
     // No arguments opens the GUI, because that is what `dart run flutterware`
     // has always done and the point of this CLI is that it is the same
-    // program, not a different one with different habits.
-    var command = argv.isEmpty ? 'app' : argv.first;
-    var rest = argv.skip(1).toList();
+    // program, not a different one with different habits. A leading flag is
+    // the same command: `fw --force-compile` is `fw app --force-compile`, not
+    // a command named "--force-compile" — which is what it dispatched as
+    // until this test existed, after the launcher had already paid the forced
+    // rebuild the flag asked for. Help flags stay commands.
+    var first = argv.firstOrNull;
+    var leadingFlag =
+        first != null &&
+        first.startsWith('-') &&
+        first != '--help' &&
+        first != '-h';
+    var command = argv.isEmpty || leadingFlag ? 'app' : argv.first;
+    var rest = leadingFlag ? argv : argv.skip(1).toList();
 
     try {
       // Initializing is not a step someone should have to be told about: this
@@ -393,6 +403,7 @@ class FwCli {
           release: rest.remove('--release'),
           json: json,
           verbose: verbose,
+          extra: rest,
         ),
         'mcp' => await _mcp(),
         'capture' => await _capture(rest, json: json, verbose: verbose),
@@ -649,7 +660,14 @@ class FwCli {
     required bool release,
     required bool json,
     required bool verbose,
+    List<String> extra = const [],
   }) async {
+    // Anything left after the known flags is a typo, and a typo'd flag that
+    // silently opened a window would be worse than the unknown-command error
+    // it used to be.
+    if (extra.isNotEmpty) {
+      return fail('unknown argument "${extra.first}" for app. Try `fw help`.');
+    }
     if (launchGui case var launch?) return launch(forceBuild: forceBuild);
 
     var appToolPath = Platform.environment[appPathEnvironmentKey];

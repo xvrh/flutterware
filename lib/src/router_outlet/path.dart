@@ -54,10 +54,6 @@ class PagePath {
     );
   }
 
-  MatchedPath? matches(PathPattern pattern) {
-    throw core.UnimplementedError();
-  }
-
   MatchedPath? _rootMatch;
   MatchedPath get rootMatch {
     assert(isAbsolute);
@@ -198,8 +194,13 @@ class MatchedPath {
       toMatch = matched.subPath(PagePath(url));
     }
 
-    var toMatchUrl = toMatch.toString();
-    var fullUrl = full.toString();
+    // Paths, not full URLs: `toString()` carries the query, and the current
+    // URL is the one that has it — so `/settings?tab=2` stopped selecting
+    // `/settings` and every nav highlight vanished the moment a screen put
+    // state in its query. Where the user is does not change with the query,
+    // so selection ignores it on both sides.
+    var toMatchUrl = toMatch.toPath();
+    var fullUrl = full.toPath();
     if (toMatchUrl == fullUrl) {
       return RouteSelectedType.self;
     } else if (p.isWithin(toMatchUrl, fullUrl)) {

@@ -43,11 +43,6 @@ class Resolved<T extends Object> {
 
   bool get isPresent => value != null;
 
-  Map<String, Object?> toJson() => {
-    if (value != null) 'value': '$value',
-    if (key != null) 'from': key,
-  };
-
   @override
   String toString() => value == null ? 'absent' : '$value (from $key)';
 }
@@ -336,26 +331,6 @@ class SplashResolution {
     fullscreen: fullscreen,
     fallsBackToLight: true,
   );
-
-  Map<String, Object?> toJson() => {
-    'surface': surface.name,
-    'theme': theme.name,
-    if (!enabled) 'enabled': false,
-    if (color.isPresent) 'color': color.toJson(),
-    if (backgroundImage.isPresent) 'backgroundImage': backgroundImage.toJson(),
-    if (image.isPresent) 'image': image.toJson(),
-    if (branding.isPresent) 'branding': branding.toJson(),
-    if (iconBackgroundColor.isPresent)
-      'iconBackgroundColor': iconBackgroundColor.toJson(),
-    'fit': fit.name,
-    'alignment': alignment.label,
-    if (branding.isPresent) ...{
-      'brandingAlignment': brandingAlignment.label,
-      'brandingBottomPadding': brandingBottomPadding,
-    },
-    if (fullscreen) 'fullscreen': true,
-    if (fallsBackToLight) 'fallsBackToLight': true,
-  };
 
   /// The placement in words — what `fw describe` prints, and the reason the
   /// CLI never needs to render anything to answer "where does my logo go?".

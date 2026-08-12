@@ -269,7 +269,6 @@ They are independent of the tools above.
 | `router_outlet.dart` | Nested, URL-driven routing |
 | `flutter_test.dart` | A strict superset of `package:flutter_test`, plus the scenario API — see [doc/scenarios.md](doc/scenarios.md) |
 | `server.dart` | Live inspection for Dart servers — the primitives behind the server tool above, and the protocol its attachers use |
-| `drawing.dart` | Path building and drawing helpers |
 | `plugins.dart` | The plugin contract `tool/flutterware.dart` is written against |
 
 The devbar composes from small plugins:

@@ -1,13 +1,9 @@
 /// One splash, reduced to the layers that draw it — **as data**.
 ///
-/// This is the seam that lets the same picture reach the panel and `fw`. It is
-/// pure Dart and round-trips through JSON, so:
-///
-/// - the panel builds widgets from it, drawing live as the config changes;
-/// - the headless guest is handed the identical JSON and mounts the identical
-///   widget, so an exported PNG cannot drift from what the panel shows;
-/// - `fw describe` reads [summary] and answers "where does my logo go?" without
-///   rendering anything at all.
+/// This is the seam that lets the same picture reach the panel and `fw`: the
+/// panel builds widgets from it, drawing live as the config changes, and
+/// `fw describe` reads [summary] and answers "where does my logo go?" without
+/// rendering anything at all.
 ///
 /// Every rule about *where things go* has already been applied by the time one
 /// of these exists. A renderer that reasons about `android_gravity` is a
@@ -50,31 +46,6 @@ class SplashLayer {
   /// preview can draw the hole where it should have been instead of quietly
   /// looking fine.
   final bool missing;
-
-  Map<String, Object?> toJson() => {
-    'path': path,
-    if (absolutePath != null) 'absolutePath': absolutePath,
-    'fit': fit.name,
-    'alignment': alignment.toJson(),
-    if (naturalWidth != null) 'naturalWidth': naturalWidth,
-    if (naturalHeight != null) 'naturalHeight': naturalHeight,
-    if (missing) 'missing': true,
-  };
-
-  static SplashLayer fromJson(Map<String, Object?> json) => SplashLayer(
-    path: json['path']! as String,
-    absolutePath: json['absolutePath'] as String?,
-    fit: SplashFit.values.firstWhere(
-      (f) => f.name == json['fit'],
-      orElse: () => SplashFit.none,
-    ),
-    alignment: SplashAlignment.fromJson(
-      (json['alignment']! as Map).cast<String, Object?>(),
-    ),
-    naturalWidth: (json['naturalWidth'] as num?)?.toDouble(),
-    naturalHeight: (json['naturalHeight'] as num?)?.toDouble(),
-    missing: json['missing'] == true,
-  );
 }
 
 /// Everything needed to draw one cell of the matrix.
@@ -146,95 +117,6 @@ class SplashComposition {
 
   bool get isEmpty =>
       backgroundColor == null && backgroundImage == null && image == null;
-
-  /// The same composition with one layer replaced.
-  ///
-  /// Exists for the studio, whose live tile is this cell with the image it is
-  /// about to write standing in for the one on disk. Restricted to the layers,
-  /// because everything else here was decided by the cascade and swapping it
-  /// would be drawing a splash the config does not describe.
-  SplashComposition withLayers({
-    SplashLayer? image,
-    SplashLayer? backgroundImage,
-    SplashLayer? branding,
-    bool usesLauncherIcon = false,
-  }) => SplashComposition(
-    surface: surface,
-    theme: theme,
-    enabled: enabled,
-    backgroundColor: backgroundColor,
-    backgroundImage: backgroundImage ?? this.backgroundImage,
-    image: image ?? this.image,
-    iconBackgroundColor: iconBackgroundColor,
-    iconCanvas: iconCanvas,
-    iconMaskFraction: iconMaskFraction,
-    branding: branding ?? this.branding,
-    brandingAlignment: brandingAlignment,
-    brandingBottomPadding: brandingBottomPadding,
-    fullscreen: fullscreen,
-    fallsBackToLight: fallsBackToLight,
-    // The stand-in is the author's image by definition, so the "this is your
-    // launcher icon" caption must not survive it.
-    usesLauncherIcon: usesLauncherIcon,
-  );
-
-  Map<String, Object?> toJson() => {
-    'surface': surface.name,
-    'theme': theme.name,
-    'enabled': enabled,
-    if (backgroundColor != null)
-      'backgroundColor': formatSplashColor(backgroundColor!),
-    if (backgroundImage != null) 'backgroundImage': backgroundImage!.toJson(),
-    if (image != null) 'image': image!.toJson(),
-    if (iconBackgroundColor != null)
-      'iconBackgroundColor': formatSplashColor(iconBackgroundColor!),
-    if (iconCanvas != null) 'iconCanvas': iconCanvas,
-    if (iconMaskFraction != null) 'iconMaskFraction': iconMaskFraction,
-    if (branding != null) ...{
-      'branding': branding!.toJson(),
-      'brandingAlignment': brandingAlignment.toJson(),
-      'brandingBottomPadding': brandingBottomPadding,
-    },
-    if (fullscreen) 'fullscreen': true,
-    if (fallsBackToLight) 'fallsBackToLight': true,
-    if (usesLauncherIcon) 'usesLauncherIcon': true,
-  };
-
-  static SplashComposition fromJson(Map<String, Object?> json) {
-    SplashLayer? layer(String key) {
-      var value = json[key];
-      return value is Map
-          ? SplashLayer.fromJson(value.cast<String, Object?>())
-          : null;
-    }
-
-    return SplashComposition(
-      surface:
-          SplashSurface.byName(json['surface']! as String) ??
-          SplashSurface.android,
-      theme: SplashTheme.byName(json['theme']! as String) ?? SplashTheme.light,
-      enabled: json['enabled'] != false,
-      backgroundColor: parseSplashColor(json['backgroundColor'] as String?),
-      backgroundImage: layer('backgroundImage'),
-      image: layer('image'),
-      iconBackgroundColor: parseSplashColor(
-        json['iconBackgroundColor'] as String?,
-      ),
-      iconCanvas: (json['iconCanvas'] as num?)?.toDouble(),
-      iconMaskFraction: (json['iconMaskFraction'] as num?)?.toDouble(),
-      branding: layer('branding'),
-      brandingAlignment: json['brandingAlignment'] is Map
-          ? SplashAlignment.fromJson(
-              (json['brandingAlignment']! as Map).cast<String, Object?>(),
-            )
-          : SplashAlignment.bottomCenter,
-      brandingBottomPadding:
-          (json['brandingBottomPadding'] as num?)?.toInt() ?? 0,
-      fullscreen: json['fullscreen'] == true,
-      fallsBackToLight: json['fallsBackToLight'] == true,
-      usesLauncherIcon: json['usesLauncherIcon'] == true,
-    );
-  }
 
   /// The composition in words — what `fw describe` prints.
   String get summary {

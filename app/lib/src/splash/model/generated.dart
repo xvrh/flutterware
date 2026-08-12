@@ -90,17 +90,6 @@ class SplashArtifact {
     }
     return pixelWidth! / scale;
   }
-
-  Map<String, Object?> toJson() => {
-    'path': path,
-    'surface': surface.name,
-    'theme': theme.name,
-    'role': role.name,
-    if (density != null) 'density': density,
-    if (pixelWidth != null) 'width': pixelWidth,
-    if (pixelHeight != null) 'height': pixelHeight,
-    'modified': modified.toIso8601String(),
-  };
 }
 
 /// What one Android density bucket multiplies a dp by.

@@ -90,10 +90,9 @@ class ScenariosCore extends PluginCore {
   final _results = <String, ScenarioScanResult>{};
   final _errors = <String, Object>{};
 
-  /// The live listing per package — in flight, landed, and failed.
+  /// The live listing per package — in flight and landed.
   final _listings = <String, Future<void>>{};
   final _listed = <String, List<ScenarioListing>>{};
-  final _listingErrors = <String, Object>{};
 
   /// One warm runner per package, created by the first `run` and kept — a
   /// second run reuses the compiled harness and the live tester.
@@ -215,7 +214,9 @@ class ScenariosCore extends PluginCore {
     _listings[path] = _runnerFor(path)
         .list()
         .then<void>((listed) => _listed[path] = listed)
-        .catchError((Object error) => _listingErrors[path] = error)
+        // Swallowed by design: a failed listing reads as null, and the run
+        // that follows reports the same failure with the room to explain it.
+        .catchError((Object _) {})
         .whenComplete(notifyChanged);
   }
 
@@ -445,7 +446,9 @@ class ScenariosCore extends PluginCore {
     _listings[path] = _runnerFor(path)
         .list()
         .then<void>((listed) => _listed[path] = listed)
-        .catchError((Object error) => _listingErrors[path] = error)
+        // Swallowed by design: a failed listing reads as null, and the run
+        // that follows reports the same failure with the room to explain it.
+        .catchError((Object _) {})
         .whenComplete(notifyChanged);
   }
 

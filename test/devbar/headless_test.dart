@@ -133,6 +133,29 @@ void main() {
     expect(seen, isTrue, reason: 'a flag works with nobody watching the panel');
   });
 
+  /// The first frame is deferred while plugins load, so a throwing factory
+  /// used to leave it deferred forever: a blank window, the error buried in a
+  /// future nobody awaits. The contract now is that the error is *reported*
+  /// and the app still comes up.
+  testWidgets('a throwing plugin factory is reported, not a blank app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      Devbar(
+        plugins: [
+          (devbar) => throw StateError('broken factory'),
+          (devbar) => _CountingPlugin(),
+        ],
+        headless: true,
+        child: _app(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isA<StateError>());
+    expect(find.text('hello'), findsOneWidget);
+  });
+
   testWidgets('the overlay is absent from the tree, not merely invisible', (
     tester,
   ) async {

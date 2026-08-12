@@ -103,13 +103,6 @@ class SplashAlignment {
   final double x;
   final double y;
 
-  Map<String, Object?> toJson() => {'x': x, 'y': y};
-
-  static SplashAlignment fromJson(Map<String, Object?> json) => SplashAlignment(
-    (json['x']! as num).toDouble(),
-    (json['y']! as num).toDouble(),
-  );
-
   /// How a human reads it back — what `fw describe` prints.
   String get label => switch ((x, y)) {
     (0.0, 0.0) => 'center',

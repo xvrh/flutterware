@@ -471,25 +471,31 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
     ),
   );
 
+  /// Every property `_actTool` advertises, and nothing else. The schema and
+  /// this list drift independently — an argument declared but not forwarded
+  /// is silently dropped, and the refusal that told the agent to pass it
+  /// becomes a dead end — so a test asserts they stay equal.
+  static const actArguments = [
+    'verb',
+    'target',
+    'text',
+    'route',
+    'dx',
+    'dy',
+    'waitMs',
+    'settleMs',
+    'tree',
+    'maxSide',
+    'device',
+    'entrypoint',
+    'worktree',
+    'run',
+  ];
+
   Future<CallToolResult> _act(CallToolRequest request) =>
       _withSession((session) async {
         var arguments = <String, Object?>{
-          for (var key in const [
-            'verb',
-            'target',
-            'text',
-            'route',
-            'dx',
-            'dy',
-            'waitMs',
-            'settleMs',
-            'tree',
-            'maxSide',
-            'device',
-            'entrypoint',
-            'worktree',
-          ])
-            key: ?request.arguments?[key],
+          for (var key in actArguments) key: ?request.arguments?[key],
         };
         arguments.putIfAbsent('maxSide', () => 1200);
 

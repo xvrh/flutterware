@@ -1121,9 +1121,15 @@ class _GuestSession {
       await _renderScratchFrame();
       _motionReady = true;
     }
+    // List first, and seek the scope the duration is read from: the guest
+    // resolves a nameless seek only while exactly one scope is mounted, so a
+    // demo with two would refuse — and the refusal surfaced here as the
+    // misleading "no mounted MotionScope".
+    var listed = await _vmService.callExtension('ext.flutterware.motion.list');
+    var scope = ((listed?['scopes'] as List?) ?? const []).firstOrNull as Map?;
     var reply = await _vmService.callExtension(
       'ext.flutterware.motion.seek',
-      args: {'t': '$t'},
+      args: {if (scope?['id'] case String id) 'scope': id, 't': '$t'},
     );
     if (reply == null) {
       throw ArgumentError.value(
@@ -1132,11 +1138,9 @@ class _GuestSession {
         'this entry has no mounted MotionScope to seek',
       );
     }
-    var listed = await _vmService.callExtension('ext.flutterware.motion.list');
-    var scope = ((listed?['scopes'] as List?) ?? const []).firstOrNull;
     return (
       (reply['ms'] as num?)?.toInt() ?? 0,
-      ((scope as Map?)?['durationMs'] as num?)?.toInt() ?? 0,
+      (scope?['durationMs'] as num?)?.toInt() ?? 0,
     );
   }
 

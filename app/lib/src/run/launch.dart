@@ -14,6 +14,10 @@ import 'handle.dart';
 
 final _logger = Logger('run_launch');
 
+/// Disambiguates two launches from one process in the log file name; see the
+/// naming comment in [launchApp].
+var _launchSequence = 0;
+
 /// Enough for an Xcode signing failure with its four remediation steps, which
 /// is the longest real one measured. Past that it is a build log, not a reason.
 const _maxFailureLines = 40;
@@ -65,25 +69,29 @@ Future<RunHandle> launchApp({
     );
   }
 
+  // **One log per launch, not per key.** The handle file is pid-suffixed so
+  // two launchers racing produce two files and one visible conflict; a log
+  // named by the key alone did not get that lesson, and two live runs of the
+  // same key shared one file — the second launch truncated the first's story,
+  // and [refreshFromLog] then read the second's `app.debugPort` into the
+  // *first's* handle, pointing both at one VM. The suffix cannot be the
+  // child's pid (the path travels into `Process.start` below, before there is
+  // a child), so it is this process's pid plus a counter — unique across
+  // racing launchers and within one. The stale-URI relaunch hazard this used
+  // to truncate against is gone with the sharing: a fresh name has no
+  // previous run's `app.debugPort` in it. Created eagerly so a poller that
+  // arrives before the shell's redirect sees an empty log, not a missing one.
   var logPath = p.join(
     runDir,
-    '${runHandleKey(worktree, device, entrypoint, flavor)}.log',
+    '${runHandleKey(worktree, device, entrypoint, flavor)}'
+    '-$pid-${_launchSequence++}.log',
   );
-  // **Emptied here, not by the shell's `>` below.** The key is stable across
-  // relaunch by design, so a second run of the same entry point on the same
-  // device writes to the same file — and the redirect only truncates it once
-  // the child is actually running. Between `Process.start` returning and that
-  // moment, the *previous* run's log is still on disk, complete with its
-  // `app.debugPort` and `app.started`. [awaitLaunch] starts polling
-  // immediately, reads them, and reports the new app as up at the old app's VM
-  // service address, which is dead. Measured: a relaunch inherited a URI from a
-  // run two hours older.
   try {
     File(logPath).writeAsStringSync('');
   } on FileSystemException catch (e) {
     // Not fatal on its own — the shell redirect will still create it — so this
-    // must not stop a launch. It only means the window above is open again.
-    _logger.warning('Could not clear $logPath before launching: $e');
+    // must not stop a launch.
+    _logger.warning('Could not create $logPath before launching: $e');
   }
   // The guest wrapper is what makes the app driveable; without it the run is
   // inspect-only over the bare VM service. The handle keeps the *user's*

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a pub workspace (`workspace:` in root `pubspec.yaml`) with two member packages:
 
-- `/` — the published `flutterware` package. Contains the runtime libraries that Flutter apps depend on (`lib/devbar.dart`, `lib/flutter_test.dart`, `lib/feature_flag.dart`, `lib/previews.dart`, `lib/ui_catalog.dart`, `lib/router_outlet.dart`, `lib/drawing.dart`) plus the user-facing CLI entry point `bin/flutterware.dart`.
+- `/` — the published `flutterware` package. Contains the runtime libraries that Flutter apps depend on (`lib/devbar.dart`, `lib/flutter_test.dart`, `lib/feature_flag.dart`, `lib/previews.dart`, `lib/ui_catalog.dart`, `lib/router_outlet.dart`) plus the user-facing CLI entry point `bin/flutterware.dart`.
 - `app/` — `flutterware_app`, the Flutter desktop GUI (`publish_to: none`). Implements the actual tools the user sees: test runner, dependency manager, launcher icon editor, etc.
 - `examples/example` — workspace member used as a sample project.
 
@@ -59,13 +59,6 @@ For GUI work, the fastest loop is not restart-and-look — it is *drive*: launch
 - **You are co-driving one app with the human.** Every step lands in the run's journal (`~/.flutterware/run/<key>.journal.jsonl`) and shows in the GUI's Run → Steps tab; the human may have moved the app since your last step, so open with `observe`, never assume the screen is where you left it. What they did is not a guess: the reply's `human` field lists their taps since your last step (`tap "Pay"`), and the same entries precede your step in the journal as `actor: human`.
 - **Phones drive the same way, foregrounded.** An Android emulator and an iOS simulator run the identical loop at desktop speed (measured 2026-08-11 — `docs/superpowers/specs/2026-08-11-run-drive-design.md` § Mobile), so `run/launch` on a device id is all it takes. Two differences to know: **iOS suspends a backgrounded app**, so an act against one comes back as a timeout telling you to bring it forward — a hidden desktop window and a backgrounded Android app both drive fine — and the screenshot is the Flutter layer tree only, so the soft keyboard and platform views are blank bands in it. Physical iOS additionally needs the project's Xcode signing to be set up.
 - **Scenarios vs drive.** Scenarios stay the tool for deterministic, headless flows (milliseconds, FakeAsync). Reach for drive when it must be the real thing: real data, real backend, a real device, or this GUI itself.
-
-## Test runner architecture (legacy)
-
-The pre-overhaul "test visualizer" still exists in-tree but is unreachable from the shell (`main.dart`); it is slated for a rewrite (master-plan M4, `docs/superpowers/specs/2026-07-30-scenarios-design.md`). Until then:
-
-- `lib/src/test_runner/runtime/` — code that runs inside the user's Flutter test process, exported to consumers via `lib/flutter_test.dart`. This half is published API.
-- `lib/src/test_runner/protocol/` and `app/lib/src/test_runner/` — the old wire format and GUI side, reachable only from dev entry points.
 
 ## Common commands
 

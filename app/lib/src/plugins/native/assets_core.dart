@@ -82,10 +82,6 @@ class AssetsCore extends PluginCore {
   /// Scans [path], unless it already has been. Idempotent.
   void track(String path) => unawaited(_load(path));
 
-  /// Releases [path]. The scan stays — demand says what work is justified, not
-  /// what must be discarded.
-  void untrack(String path) {}
-
   /// Scans every declared package and waits — what `fw` and MCP do for the
   /// duration of one request, where there is no panel to subscribe on their
   /// behalf.

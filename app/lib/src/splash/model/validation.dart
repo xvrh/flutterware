@@ -158,16 +158,6 @@ class SplashProblem {
   /// `dart run flutter_native_splash:create` will `exit(1)` on this.
   final bool blocksGeneration;
 
-  Map<String, Object?> toJson() => {
-    'tone': tone.name,
-    'message': message,
-    if (key != null) 'key': key,
-    if (surface != null) 'surface': surface!.name,
-    if (theme != null) 'theme': theme!.name,
-    if (device != null) 'device': device,
-    if (blocksGeneration) 'blocksGeneration': true,
-  };
-
   @override
   String toString() => message;
 }

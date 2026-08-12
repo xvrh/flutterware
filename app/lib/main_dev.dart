@@ -7,7 +7,6 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 
 import 'src/context.dart';
-import 'src/app/project_view.dart' show enableDrawingPath;
 import 'src/devbar.dart';
 import 'src/plugins/manifest_loader.dart';
 import 'src/plugins/native/registry.dart';
@@ -51,12 +50,7 @@ void main() async {
       flutterRoot: flutterSdk.root,
     ),
   );
-  runApp(
-    AppDevbar(
-      flags: [enableDrawingPath.withDefaultValue],
-      child: ShellApp(shell),
-    ),
-  );
+  runApp(AppDevbar(flags: const [], child: ShellApp(shell)));
 
   // Discovery runs a subprocess; the shell renders its empty state until it
   // resolves rather than blocking the first frame. The path is walked up to the

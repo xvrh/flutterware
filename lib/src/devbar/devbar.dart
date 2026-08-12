@@ -89,13 +89,31 @@ class DevbarState extends State<Devbar> {
   }
 
   Future<void> _loadPlugins() async {
-    for (var plugin in widget.plugins) {
-      _plugins.add(await plugin(this));
+    try {
+      for (var plugin in widget.plugins) {
+        _plugins.add(await plugin(this));
+      }
+    } on Object catch (e, stack) {
+      // A throwing factory must not take the app with it. Without this catch
+      // the first frame stays deferred forever — a blank window with the
+      // error buried in a future nobody awaits. Report it where every other
+      // build-time error goes and run with the plugins that did load.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: e,
+          stack: stack,
+          library: 'flutterware devbar',
+          context: ErrorDescription('while loading devbar plugins'),
+        ),
+      );
+    } finally {
+      // Unconditionally, and before the bridge: nothing that can throw may
+      // stand between a deferred first frame and this call.
+      WidgetsBinding.instance.allowFirstFrame();
+      // After construction, never in `initState`: a plugin still being built
+      // has nothing to describe, and the bridge reads each one's declaration.
+      DevbarBridge.mount(this, _plugins);
     }
-    // After construction, never in `initState`: a plugin still being built has
-    // nothing to describe, and the bridge reads each one's declaration.
-    DevbarBridge.mount(this, _plugins);
-    WidgetsBinding.instance.allowFirstFrame();
   }
 
   T plugin<T extends DevbarPlugin>() {
@@ -112,7 +130,7 @@ class DevbarState extends State<Devbar> {
       future: _loadPluginsFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          // Should never appears since we are deferring the first frame
+          // Never painted: the first frame stays deferred until loading ends.
           return Container(color: Colors.red);
         }
 

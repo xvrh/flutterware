@@ -32,7 +32,26 @@ class DriveTimeout implements Exception {
 class DriveSession {
   DriveSession(this.handle);
 
-  final RunHandle handle;
+  RunHandle handle;
+
+  /// Re-points the session at the run's current handle.
+  ///
+  /// The session outlives the snapshot it was created from, and the snapshot
+  /// is what goes stale: a run observed mid-build has no VM uri yet, and a
+  /// session frozen on that read would refuse "still building" forever after
+  /// the app came up. Called on every act, so the dial uses whatever the last
+  /// probe read. A connection held against a different uri is dropped, not
+  /// reused.
+  void refresh(RunHandle next) {
+    if (_connection != null && next.vmService != _connectedUri) {
+      unawaited(_drop());
+    }
+    handle = next;
+  }
+
+  /// What [_connection] was opened against, so [refresh] can tell a changed
+  /// uri from a re-read of the same one.
+  String? _connectedUri;
 
   /// The connect in flight or done — memoized as a future, so two overlapping
   /// acts on a fresh session share one websocket instead of the second
@@ -149,6 +168,7 @@ class DriveSession {
     }
     var connecting = RunConnection.connect(uri);
     _connection = connecting;
+    _connectedUri = uri;
     // A failed connect must not stay memoized: the next act should try again,
     // not rethrow a stale failure forever. The caller still sees the error —
     // this side-chain only clears the cache.

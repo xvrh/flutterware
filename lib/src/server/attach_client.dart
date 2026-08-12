@@ -150,17 +150,32 @@ class ServerAttachClient {
 typedef ServerRequestException = InspectorRequestException;
 
 /// [ServerAttachClient.connect] with `attachToLiveSession`'s cleanup rule: a
-/// handle that will not connect is deleted on the way past, and null comes
-/// back instead of an error. This is what keeps the published list truthful —
-/// dead servers disappear the first time anything tries to reach them.
+/// handle whose socket nobody is listening on is deleted on the way past, and
+/// null comes back instead of an error. This is what keeps the published list
+/// truthful — dead servers disappear the first time anything tries to reach
+/// them.
+///
+/// Only that, though. The rule used to be "any failure deletes", and the 2s
+/// timeout is a failure — so a server that was merely too busy to finish the
+/// handshake had its handle destroyed and vanished from every list until it
+/// was restarted. A refused connect is evidence of death; a slow answer is
+/// evidence of life. [onFailure] tells the caller which happened, since a
+/// bare null cannot.
 Future<ServerAttachClient?> attachToServer(
   ServerHandle handle, {
   Duration timeout = const Duration(seconds: 2),
+  void Function(Object error, {required bool deleted})? onFailure,
 }) async {
   try {
     return await ServerAttachClient.connect(handle, timeout: timeout);
-  } on Object {
+  } on SocketException catch (e) {
+    // Refused, or the socket file is gone: nothing is listening, the server
+    // is dead, the handle is litter.
     deleteServerHandle(handle);
+    onFailure?.call(e, deleted: true);
+    return null;
+  } on Object catch (e) {
+    onFailure?.call(e, deleted: false);
     return null;
   }
 }
