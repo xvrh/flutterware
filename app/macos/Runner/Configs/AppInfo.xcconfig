@@ -1,14 +1,18 @@
 // Application-level settings for the Runner target.
 //
-// This may be replaced with something auto-generated from metadata (e.g., pubspec.yaml) in the
-// future. If not, the values below would default to using the project name when this becomes a
-// 'flutter create' template.
+// PRODUCT_NAME names the built bundle, its executable, and CFBundleName — which
+// is what the Dock tooltip, the ⌘-Tab switcher and the menu bar all show. It was
+// `app` (the `flutter create` default), so every project's instance identified
+// itself as "app". `lib/src/desktop_gui.dart` is the one place that spells the
+// resulting path out; change this and change that.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = app
+PRODUCT_NAME = Flutterware
 
-// The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.app
+// The application's bundle identifier. Matches CompanyName in the Windows
+// runner's Runner.rc. macOS keys per-app state — permissions, saved window
+// positions, preferences — on this, so changing it later starts an app fresh.
+PRODUCT_BUNDLE_IDENTIFIER = dev.flutterware.studio
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2023 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 Flutterware. All rights reserved.

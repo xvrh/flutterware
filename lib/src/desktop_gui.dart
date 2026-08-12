@@ -58,16 +58,17 @@ class DesktopGui {
         'app',
       );
     }
+    // Both spellings are PRODUCT_NAME, set in macos/Runner/Configs/AppInfo.xcconfig.
     return p.join(
       'build',
       'macos',
       'Build',
       'Products',
       'Release',
-      'app.app',
+      'Flutterware.app',
       'Contents',
       'MacOS',
-      'app',
+      'Flutterware',
     );
   }
 
