@@ -185,14 +185,22 @@ void main() {
       expect(content, isNot(contains("r'8186'")));
     });
 
-    test('a value that does not fit its kind is not written', () {
-      // The action refuses these first; this is the second line, so a bad value
-      // can never reach the compiler as generated source.
-      var content = wrapperFor('void main({int port = 1}) {}', {
-        'port': 'eight',
-      });
-
-      expect(content, isNot(contains('port:')));
+    test('a value that does not fit its kind throws rather than vanishing', () {
+      // Both launch paths and setKnobs refuse these first; this is the second
+      // line. It used to drop the argument, and dropping was the quiet version
+      // of the same mistake: with nothing left to write the wrapper came out in
+      // its no-knobs shape, so the app ran on `1` while the run's handle
+      // reported `eight` — the cockpit showing a value the app was not using.
+      expect(
+        () => wrapperFor('void main({int port = 1}) {}', {'port': 'eight'}),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            allOf(contains('port'), contains('integer'), contains('eight')),
+          ),
+        ),
+      );
     });
 
     test('a string needing escapes stops being raw', () {

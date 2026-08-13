@@ -440,19 +440,6 @@ enum RunPlatform {
   };
 }
 
-/// A `--dart-define` this entry point wants, offered as a control rather than
-/// as something to remember.
-///
-/// **Named for what it is, because that is what says what it costs.** This was
-/// `LaunchKnob`, which put it in the same word as a preview's knobs — and those
-/// are the opposite kind of thing: a knob is read while a widget builds and
-/// changing one costs a frame, while a define is compiled in and changing one
-/// costs a full rebuild and reinstall. Nothing in the old name said so, and
-/// both were `--knobs=` on the same CLI.
-///
-/// Prefer a runtime control where one will do — a devbar variable, pushed into
-/// a running app for nothing — and reach for this only when the value has to be
-/// baked in.
 /// One knob an entry point's `main` takes, annotated.
 ///
 /// **The signature is the declaration; this only annotates it.** `main`'s
@@ -484,6 +471,14 @@ enum RunPlatform {
 /// Changing a knob's value rewrites the generated wrapper and hot restarts —
 /// 262ms on desktop, 3s on an Android emulator, against a rebuild. See
 /// `docs/superpowers/specs/2026-08-12-run-knobs-design.md`.
+///
+/// **The word is back because the cost is.** This was `LaunchKnob`, renamed to
+/// `DartDefine` on the grounds that a preview's knob costs a frame while a
+/// define costs a rebuild, so one word for both would hide the difference. The
+/// mechanism underneath has changed: a restart is not a frame, but it is the
+/// same order of thing, and a value read off a parameter list is what
+/// `KnobDescriptor` already models for previews and devbar variables. One
+/// vocabulary, one wire shape.
 class Knob {
   const Knob(
     this.name, {

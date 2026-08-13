@@ -29,6 +29,7 @@ class KnobsTab extends StatefulWidget {
     required this.knobs,
     this.unknown,
     required this.onApply,
+    this.interfaceOf,
   });
 
   final RunHandle handle;
@@ -45,6 +46,9 @@ class KnobsTab extends StatefulWidget {
   /// Rewrites the wrapper and restarts. Errors surface here rather than as a
   /// snackbar somewhere else.
   final Future<void> Function(Map<String, String> values) onApply;
+
+  /// Passed to [KnobField] — which interface an offered address belongs to.
+  final String? Function(String)? interfaceOf;
 
   @override
   State<KnobsTab> createState() => _KnobsTabState();
@@ -125,6 +129,7 @@ class _KnobsTabState extends State<KnobsTab> {
           KnobField(
             knob: knob,
             value: _edited[knob.name],
+            interfaceOf: widget.interfaceOf,
             onChanged: (value) => setState(() {
               if (value == null) {
                 _edited.remove(knob.name);

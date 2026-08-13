@@ -34,6 +34,7 @@ void main() {
     RunHandle? handle,
     List<RunKnobEntry>? offered,
     String? unknown,
+    String? Function(String)? interfaceOf,
   }) async {
     var applied = <Map<String, String>>[];
     await tester.pumpWidget(
@@ -43,6 +44,7 @@ void main() {
             handle: handle ?? handleWith(const {}),
             knobs: offered ?? knobs,
             unknown: unknown,
+            interfaceOf: interfaceOf,
             onApply: (values) async => applied.add(values),
           ),
         ),
@@ -111,6 +113,77 @@ void main() {
     expect(find.textContaining('takes no knobs'), findsOneWidget);
     // And teaches the one thing that would make it non-empty.
     expect(find.textContaining('optional named parameters'), findsOneWidget);
+  });
+
+  testWidgets('a text knob offers its options, and a tap fills the field', (
+    tester,
+  ) async {
+    // `Knob('apiHost', from: ValueSource.hostAddresses)` is a String parameter,
+    // so a text field — and the whole reason it exists is the list underneath.
+    // Rendering options only for pickers made this feature invisible to a
+    // human while `entrypoints` still reported it to an agent.
+    var applied = await pump(
+      tester,
+      offered: [
+        RunKnobEntry(
+          name: 'apiHost',
+          kind: 'string',
+          defaultValue: 'localhost',
+          options: const ['192.168.1.24', '10.0.0.3'],
+        ),
+      ],
+      interfaceOf: (address) => address.startsWith('192.') ? 'en0' : null,
+    );
+
+    expect(find.widgetWithText(ActionChip, '192.168.1.24'), findsOneWidget);
+    // Five bare IPv4s say nothing about which one the phone can reach.
+    expect(find.text('en0'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ActionChip, '192.168.1.24'));
+    await tester.pump();
+
+    // The field shows it, not just the form state behind it: `initialValue` is
+    // read once, so a chip tap used to change the value and leave the box.
+    expect(
+      tester.widget<TextFormField>(find.byType(TextFormField)).controller?.text,
+      '192.168.1.24',
+    );
+
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump();
+    expect(applied.single, {'apiHost': '192.168.1.24'});
+  });
+
+  testWidgets('a picker does not repeat its own constants as chips', (
+    tester,
+  ) async {
+    await pump(tester);
+
+    // The dropdown already is the list; a second copy below it would be the
+    // same facts twice.
+    expect(find.byType(ActionChip), findsNothing);
+  });
+
+  testWidgets('a picker whose value is not among its options still draws', (
+    tester,
+  ) async {
+    // A script source can compute a value for an enum knob that is not one of
+    // its constants. A dropdown asked to show a value it has no item for
+    // asserts rather than degrading, which would take the whole tab down.
+    await pump(
+      tester,
+      offered: [
+        RunKnobEntry(
+          name: 'backend',
+          kind: 'picker',
+          defaultValue: 'whatever-the-script-said',
+          options: const ['dev', 'prod'],
+        ),
+      ],
+    );
+
+    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a run it cannot read says why, not "takes no knobs"', (

@@ -132,14 +132,29 @@ $arguments      ));'''}
 ///
 /// A picker's value is a bare constant name, so it is written back through the
 /// type the entry point wrote — `staging` becomes `m.Backend.staging`.
+///
+/// A value for a knob the signature *does* declare, which cannot be written as
+/// its type, throws. Dropping it was the quiet version of the same mistake: the
+/// wrapper came out with no arguments at all, so the app ran on its defaults
+/// while the run's handle showed the value that was asked for. Callers check
+/// first — this is the line that makes a gap in that checking loud.
 String _arguments(Map<String, Object?> values, List<ParameterKnob> declared) {
   var byName = {for (var knob in declared) knob.name: knob};
   var lines = <String>[];
   for (var MapEntry(key: name, value: value) in values.entries) {
     var knob = byName[name];
+    // Not an error: a config can name a parameter that has since moved, and a
+    // stale wish should be a knob that does nothing rather than a launch that
+    // cannot start.
     if (knob == null || value == null) continue;
     var literal = _literalFor(knob, value);
-    if (literal == null) continue;
+    if (literal == null) {
+      throw ArgumentError.value(
+        value,
+        name,
+        'is not a ${knob.knob.kind.name} ${knob.enumType ?? ''}'.trimRight(),
+      );
+    }
     lines.add('        $name: $literal,\n');
   }
   return lines.join();
@@ -153,9 +168,10 @@ String _arguments(Map<String, Object?> values, List<ParameterKnob> declared) {
 /// on *String can't be assigned to int*. The parameter list is the only thing
 /// that knows what a value is meant to be.
 ///
-/// Null for a value that does not fit its kind. The action refuses those before
-/// anything is built; this is the second line, so a bad value can never reach
-/// the compiler as generated source.
+/// Null for a value that does not fit its kind. Both launch paths and
+/// `setKnobs` refuse those before anything is written; [_arguments] turns what
+/// is left into a throw, so a bad value can never reach the compiler as
+/// generated source *nor* be silently left out of it.
 String? _literalFor(ParameterKnob knob, Object? value) {
   var text = '$value';
   return switch (knob.knob.kind) {

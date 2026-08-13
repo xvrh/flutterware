@@ -445,6 +445,42 @@ for an app plainly running with values. Sixteen fields is too many to copy by
 hand more than once, so there is now a single `_copy` and the three are one line
 each.
 
+### The second dogfood, after the review — 2026-08-13
+
+Three review findings were fixed and then checked in the running cockpit rather
+than only in tests. Driving it found a fourth that the tests could not see.
+
+**The host-address chips had stopped being drawn.** `KnobField` rendered
+`options` only for `picker`, and `Knob('apiHost', from:
+ValueSource.hostAddresses)` is a `String` parameter — kind `string`, so a text
+field. The list underneath it, which is the entire reason that source exists,
+was reachable through `entrypoints` and invisible in the GUI; `hostInterfaceOf`
+had zero callers. Chips are back, under every kind except `picker` and
+`boolean`, and `KnobField` now holds a controller because `initialValue` is read
+once and a chip changes the value from outside the field.
+
+**A bad value was swallowed on the panel path.** `_checkKnobNames` also
+validates values, and it sat in the action — on the reasoning that the panel
+builds its fields from the same list and cannot invent a *name*. True of names,
+false of values: a text field for an `int` takes `eight` from a desktop
+keyboard. `_literalFor` then declined to write a literal it could not form, the
+argument vanished, the wrapper came out in its **no-knobs shape**, the app ran
+on the parameter's default, and the handle recorded `eight`. The check moved
+into `launch()` where both surfaces meet, and `_arguments` now throws instead of
+dropping a declared knob.
+
+**`applyKnobs` recorded the handle after the restart, and lost it.** Found only
+by driving: the wrapper on disk carried `apiHost: r'10.0.0.49'`, the app came up
+on it, the app logged `apiHost knob: 10.0.0.49` — and the Knobs tab showed an
+empty field. A hot restart tears down the root isolate, so nothing queued after
+`await control('restart', …)` ever ran. Recording afterwards had looked like the
+careful order: say it is running only once it is. Both writes now happen before
+the restart and roll back together on failure.
+
+That last one only bites when the app being restarted is flutterware itself —
+which is our own inner loop, and is exactly the case a unit test with a fake VM
+service cannot reach.
+
 ## Order
 
 1. ~~**K1 + K2 + K3 + K4, and the `RunCore` wiring**~~ — built 2026-08-13, and

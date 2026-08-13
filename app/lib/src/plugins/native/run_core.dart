@@ -1807,7 +1807,6 @@ class RunCore extends PluginCore {
     _checkDevice(device, entry);
     var defines = PreviewsCore.parsePairs(arguments['dartDefines']);
     var knobs = PreviewsCore.parsePairs(arguments['knobs']);
-    _checkKnobNames(package, entry, knobs);
 
     var handle = await launch(
       device: device,
@@ -1882,6 +1881,16 @@ class RunCore extends PluginCore {
   ///
   /// [defines] is what the caller *chose*; the defaults and anything a script
   /// source computes are filled in here, so both surfaces bake in the same set.
+  ///
+  /// **[knobs] are checked here, not in the action.** They used to be, on the
+  /// grounds that the panel builds its fields from the same list and so cannot
+  /// invent a name — true of names, false of *values*. A text field for an `int`
+  /// parameter accepts `eight` on a desktop keyboard, and the generator then
+  /// declined to write a literal it could not form: the argument vanished, the
+  /// wrapper fell back to its no-knobs shape, the app ran on the parameter's own
+  /// default, and the handle recorded `eight` — a cockpit showing a value the
+  /// app was not using. A knob that quietly does nothing is the exact failure
+  /// this design deleted `--dart-define` to escape.
   Future<RunHandle> launch({
     required String device,
     required String package,
@@ -1890,6 +1899,7 @@ class RunCore extends PluginCore {
     Map<String, String> defines = const {},
     Map<String, String> knobs = const {},
   }) async {
+    _checkKnobNames(package, entry, knobs);
     var resolvedKnobs = await _resolveKnobs(package, entry, knobs);
     var deviceName = devices
         .where((candidate) => candidate.id == device)
@@ -2214,21 +2224,6 @@ class RunCore extends PluginCore {
     }
   }
 
-  /// Does one thing to one running app. The panel's entry point as well.
-  /// Rewrites [handle]'s wrapper with [values] and hot restarts it.
-  ///
-  /// **The whole point of the design, and the only place a human feels it.**
-  /// Changing a knob is a rewrite of one generated file plus a restart —
-  /// measured at 262ms on desktop, 263ms on the iOS simulator and 3.07s on an
-  /// Android emulator, against 29.6s and 38.6s to rebuild. Without this the only
-  /// route back to the launch form is Stop, which is the rebuild.
-  ///
-  /// **Restart, never reload.** A value passed to `main` moves only when `main`
-  /// runs again, and reload does not re-run it — so a reload here would report
-  /// success and change nothing.
-  ///
-  /// The handle is rewritten too: the cockpit shows a run's current knobs, and
-  /// one it had forgotten would be a field you can only overwrite blind.
   /// The knobs [handle]'s entry point takes, or why they cannot be known.
   ///
   /// **Empty and unknowable are different answers**, and the tab says so —
@@ -2281,6 +2276,22 @@ class RunCore extends PluginCore {
     );
   }
 
+  /// Rewrites [handle]'s wrapper with [values] and hot restarts it.
+  ///
+  /// **The whole point of the design, and the only place a human feels it.**
+  /// Changing a knob is a rewrite of one generated file plus a restart —
+  /// measured at 262ms on desktop, 263ms on the iOS simulator and 3.07s on an
+  /// Android emulator, against 29.6s and 38.6s to rebuild. Without this the only
+  /// route back to the launch form is Stop, which is the rebuild.
+  ///
+  /// **Restart, never reload.** A value passed to `main` moves only when `main`
+  /// runs again, and reload does not re-run it — so a reload here would report
+  /// success and change nothing.
+  ///
+  /// The handle is rewritten too: the cockpit shows a run's current knobs, and
+  /// one it had forgotten would be a field you can only overwrite blind. It
+  /// moves with the wrapper — see the comment on the write below for why that
+  /// has to happen before the restart rather than after it.
   Future<void> applyKnobs(RunHandle handle, Map<String, String> values) async {
     // Refused before anything is written. `absolutePathOf` resolves in *this*
     // worktree, so applying to another checkout's run would rewrite this
@@ -2316,35 +2327,49 @@ class RunCore extends PluginCore {
     _checkKnobNames(package, entry, values);
 
     var packageRoot = host.workspace.absolutePathOf(package);
-    writeGuestEntrypoint(
-      packageRoot: packageRoot,
-      entrypoint: handle.entrypoint,
-      knobs: values,
-    );
-    try {
-      await control('restart', handle);
-    } on Object {
-      // Put the file back. A failed restart leaves the app on its old code and
-      // the wrapper on the new, so every later reload would fail too — on a
-      // change nobody asked for any more.
+
+    // **Both writes happen before the restart, and roll back together.**
+    // Recording afterwards looked safer — say it is running only once it is —
+    // and it lost the values outright the first time the app being restarted
+    // was *this* one. A hot restart tears down the root isolate, so nothing
+    // queued after `await control(…)` ever ran: the wrapper on disk carried
+    // `apiHost: r'10.0.0.49'`, the app came up on it, and the handle recorded
+    // nothing at all, so the Knobs tab showed an empty field for a value the
+    // app was plainly holding. Self-hosting is our own inner loop, and only
+    // driving the real cockpit found it.
+    var previous = handle.knobs;
+    void write(Map<String, String> knobs) {
       writeGuestEntrypoint(
         packageRoot: packageRoot,
         entrypoint: handle.entrypoint,
-        knobs: handle.knobs,
+        knobs: knobs,
       );
+      handle.withKnobs(knobs).publish(runDirProvider());
+      _handles = [
+        for (var other in _handles)
+          if (other.handlePath == handle.handlePath)
+            other.withKnobs(knobs)
+          else
+            other,
+      ];
+    }
+
+    write(values);
+    notifyChanged();
+    try {
+      await control('restart', handle);
+    } on Object {
+      // Put both back. A failed restart leaves the app on its old code, so a
+      // wrapper on the new one would fail every later reload as well — on a
+      // change nobody asked for any more — and a handle on the new one would
+      // report values the app never took.
+      write(previous);
+      notifyChanged();
       rethrow;
     }
-    handle.withKnobs(values).publish(runDirProvider());
-    _handles = [
-      for (var other in _handles)
-        if (other.handlePath == handle.handlePath)
-          other.withKnobs(values)
-        else
-          other,
-    ];
-    notifyChanged();
   }
 
+  /// Does one thing to one running app. The panel's entry point as well.
   Future<void> control(String action, RunHandle handle) async {
     var uri = handle.vmService;
     if (uri == null && action != 'stop') {

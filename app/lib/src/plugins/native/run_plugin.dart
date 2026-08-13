@@ -588,6 +588,22 @@ class _CapabilityPill extends StatelessWidget {
   }
 }
 
+/// The Knobs tab: what this run's `main` was called with, editable.
+///
+/// One lookup rather than one per field — [RunCore.knobEntriesFor] parses the
+/// entry point's signature once and answers with the knobs *or* the reason it
+/// cannot know them, which are different things and drawn differently.
+Widget _knobsTab(RunCore core, RunHandle handle) {
+  var offered = core.knobEntriesFor(handle);
+  return KnobsTab(
+    handle: handle,
+    knobs: offered.knobs,
+    unknown: offered.unknown,
+    onApply: (values) => core.applyKnobs(handle, values),
+    interfaceOf: core.hostInterfaceOf,
+  );
+}
+
 /// Screen | Logs, written into the address.
 ///
 /// **The strip is the extension point.** `Network` and `Data` are devbar
@@ -598,17 +614,6 @@ class _CapabilityPill extends StatelessWidget {
 /// [InspectTabStrip] rather than a row of buttons: it is what ui_catalog and
 /// scenarios already draw above a widget tree, and three surfaces showing the
 /// same thing should not be two designs.
-/// One lookup, not one per field: it parses the entry point's signature.
-Widget _knobsTab(RunCore core, RunHandle handle) {
-  var offered = core.knobEntriesFor(handle);
-  return KnobsTab(
-    handle: handle,
-    knobs: offered.knobs,
-    unknown: offered.unknown,
-    onApply: (values) => core.applyKnobs(handle, values),
-  );
-}
-
 class _ViewTabs extends StatelessWidget {
   const _ViewTabs({
     required this.runKey,
@@ -1734,6 +1739,7 @@ class _NewRunPageState extends State<_NewRunPage> {
                       KnobField(
                         knob: knob,
                         value: _knobs[knob.name],
+                        interfaceOf: _core.hostInterfaceOf,
                         onChanged: (value) => setState(() {
                           if (value == null) {
                             _knobs.remove(knob.name);
@@ -2359,13 +2365,6 @@ class _Action extends StatelessWidget {
   }
 }
 
-/// What to bake in before building.
-///
-/// Every define is a text field, because a `--dart-define` is a string; the
-/// difference the tool makes is the list under it. `from:
-/// DefineSource.hostAddresses` fills that list with this machine's LAN
-/// addresses — so "point the app at my dev machine" is a click rather than a
-/// trip to `ifconfig`.
 class _Tag extends StatelessWidget {
   const _Tag(this.label);
 

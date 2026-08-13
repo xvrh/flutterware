@@ -1099,6 +1099,33 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
         allOf(contains('dev, prod'), contains('nope')),
       ),
     );
+
+    test('and the panel is refused too, not only the action', () async {
+      // The check used to sit in the action, on the grounds that the panel
+      // builds its fields from the same list and so cannot invent a name —
+      // true of names, false of values. A text field for an `int` takes
+      // `eight` from a desktop keyboard, and what followed was the failure
+      // this design deleted `--dart-define` to escape: the generator declined
+      // to write a literal it could not form, the argument vanished, the
+      // wrapper came out in its no-knobs shape, the app ran on 1, and the
+      // handle recorded `eight` for the cockpit to display.
+      await core.computeAll();
+      await expectLater(
+        core.launch(
+          device: 'phone',
+          package: 'app',
+          entry: core.entrypointsFor('app').single,
+          knobs: {'serverPort': 'eight'},
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            contains('takes a whole number'),
+          ),
+        ),
+      );
+    });
   });
 
   group('setKnobs', () {
@@ -1196,6 +1223,46 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
         expect(result.error, contains('belongs to feature-x'));
       },
     );
+
+    test('a failed restart puts the wrapper and the handle both back', () async {
+      // The two move together or the cockpit lies. Recording the handle *after*
+      // the restart looked safer — say it is running only once it is — and it
+      // lost the values outright when the app being restarted was flutterware
+      // itself: a hot restart tears down the root isolate, so nothing queued
+      // after `await control(…)` ran at all. The wrapper on disk carried the
+      // value, the app came up on it, and the Knobs tab showed an empty field
+      // for a value the app was plainly holding. Found by driving the real
+      // cockpit; no unit test was looking in that direction.
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        package: 'app',
+        launcherPid: pid,
+        knobs: {'serverPort': '7'},
+      );
+      await core.computeAll();
+
+      // No VM service, so the restart cannot land.
+      await expectLater(
+        core.applyKnobs(handle, {'serverPort': '9'}),
+        throwsA(anything),
+      );
+
+      var wrapper = File(
+        p.join(
+          worktree.path,
+          'app',
+          '.dart_tool/flutterware/run/main_guest.dart',
+        ),
+      ).readAsStringSync();
+      expect(wrapper, contains('serverPort: 7,'));
+      expect(wrapper, isNot(contains('serverPort: 9')));
+      expect(RunHandle.tryRead(File(handle.handlePath!))!.knobs, {
+        'serverPort': '7',
+      });
+    });
 
     test('refuses an entry point this worktree does not declare', () async {
       // Without it there is nothing to validate against, and an unvalidated
@@ -1990,6 +2057,7 @@ RunHandle _writeHandle(
   String? package,
   int launcherPid = 1,
   DateTime? startedAt,
+  Map<String, String> knobs = const {},
 }) {
   return RunHandle(
     worktree: worktree.path,
@@ -2004,6 +2072,7 @@ RunHandle _writeHandle(
     vmService: vmService,
     appId: appId,
     logPath: logPath,
+    knobs: knobs,
     startedAt: startedAt ?? DateTime.now(),
   ).publish(runDir.path);
 }
