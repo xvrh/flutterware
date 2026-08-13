@@ -11,7 +11,7 @@ import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
 import '../support/declared_dependencies.dart';
 
-/// The live end-to-end check: really shells out to `dart pub deps --json`
+/// The live end-to-end check: really shells out to `flutter pub deps --json`
 /// against this repo, which is a three-member pub workspace.
 ///
 /// `resolution_test.dart` covers the same ground against a captured fixture and
@@ -36,6 +36,56 @@ void main() {
   DependenciesService serviceAt(String path) => DependenciesService(
     PackageRef(AppContext(logger: LogClient.print()), path, sdk),
   );
+
+  test(
+    'the resolution is read through `flutter pub`, never `dart pub`',
+    () async {
+      String? executable;
+      var service = DependenciesService(
+        PackageRef(AppContext(logger: LogClient.print()), '..', sdk),
+        runProcess: (e, arguments, {workingDirectory}) async {
+          executable = e;
+          return ProcessResult(0, 1, '', 'not run');
+        },
+      );
+      addTearDown(service.dispose);
+      await expectLater(
+        service.dependencies.refreshOrThrow(),
+        throwsA(anything),
+      );
+
+      // `dart pub` refuses outright the moment pub has to re-resolve anything
+      // that depends on the Flutter SDK — which every member of this workspace
+      // does, directly or through a sibling. It only ever appeared to work
+      // because the SDK's own `dart` lets pub infer FLUTTER_ROOT from where the
+      // executable sits; a stale FLUTTER_ROOT in the environment defeats that
+      // and the panel fails to load against this very repo.
+      expect(executable, sdk.flutter);
+      expect(executable, isNot(sdk.dart));
+    },
+  );
+
+  // The other two members. `examples/example` is opened live by the test below
+  // and in more detail; the root package and `app` were opened by nothing, and
+  // the root package is the one that was reported broken.
+  for (var member in const ['..', '.']) {
+    test(
+      'the resolution loads for $member',
+      () async {
+        var service = serviceAt(member);
+        addTearDown(service.dispose);
+        var dependencies = await service.dependencies.refreshOrThrow();
+
+        var declared = DeclaredDependencies.of('$member/pubspec.yaml');
+        expect(
+          dependencies.directs.map((d) => d.name).toSet(),
+          declared.dependencies,
+        );
+        expect(dependencies.devs.map((d) => d.name).toSet(), declared.devs);
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+  }
 
   test(
     'a workspace member classifies against its own resolution',

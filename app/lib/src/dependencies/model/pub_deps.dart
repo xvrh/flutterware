@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-/// The resolution pub actually performed, read from `dart pub deps --json`.
+/// The resolution pub actually performed, read from `flutter pub deps --json`.
 ///
 /// Replaces reconstructing the graph from the pubspecs of whatever happened to
 /// be in `package_config.json`, which was wrong twice over: it re-derived edges
@@ -51,19 +51,33 @@ class PubDeps {
     );
   }
 
-  /// Runs `dart pub deps --json` in [directory].
+  /// Runs `pub deps --json` in [directory], **through the Flutter SDK's
+  /// `flutter`** rather than its `dart`.
   ///
-  /// Fast — 0.45s on this workspace — because it reads the lockfile and the
-  /// package config rather than resolving anything. It does *not* reach the
-  /// network, and it does not run `pub get`: an unresolved project is an error
-  /// here, and says so.
+  /// Not a preference. Whenever pub has to re-resolve — a touched pubspec, a
+  /// moved SDK, a fresh checkout — `dart pub` refuses a package that depends on
+  /// the Flutter SDK and says so itself: *"Flutter users should use `flutter
+  /// pub` instead of `dart pub`"*. It appeared to work only because the `dart`
+  /// being run sits inside a Flutter SDK, which lets pub infer `FLUTTER_ROOT`
+  /// from its own location; an inherited-but-wrong `FLUTTER_ROOT` breaks that
+  /// inference and the Dependencies panel fails to load against this very repo.
+  ///
+  /// Asking whether *this* package depends on Flutter would not be enough: pub
+  /// resolves the whole workspace, so a pure-Dart member fails on a *sibling's*
+  /// Flutter dependency. `flutter pub` is right for every package and costs
+  /// ~0.13s more (measured 2026-08-13: 0.37s against 0.50s on this workspace).
+  ///
+  /// Fast either way, because it reads the lockfile and the package config
+  /// rather than resolving anything. It does *not* reach the network, and it
+  /// does not run `pub get`: an unresolved project is an error here, and says
+  /// so.
   static Future<PubDeps> load({
-    required String dartExecutable,
+    required String flutterExecutable,
     required String directory,
     RunProcess? runProcess,
   }) async {
     var run = runProcess ?? Process.run;
-    var result = await run(dartExecutable, const [
+    var result = await run(flutterExecutable, const [
       'pub',
       'deps',
       '--json',
@@ -102,7 +116,7 @@ class PubDepsFailure implements Exception {
 
   @override
   String toString() =>
-      'dart pub deps failed in $directory (exit $exitCode). '
+      'flutter pub deps failed in $directory (exit $exitCode). '
       'Run `flutter pub get` there first.'
       '${stderr.isEmpty ? '' : '\n$stderr'}';
 }
