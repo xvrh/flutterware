@@ -276,3 +276,86 @@ Map<String, dynamic> _$RunLensResultToJson(RunLensResult instance) =>
       'was': ?instance.was,
       'lenses': instance.lenses,
     };
+
+Map<String, dynamic> _$RunPermissionsResultToJson(
+  RunPermissionsResult instance,
+) => <String, dynamic>{
+  'packages': instance.packages.map((e) => e.toJson()).toList(),
+  'note': ?instance.note,
+};
+
+Map<String, dynamic> _$RunPermissionPackageToJson(
+  RunPermissionPackage instance,
+) => <String, dynamic>{
+  'path': instance.path,
+  'platforms': instance.platforms,
+  'rows': instance.rows.map((e) => e.toJson()).toList(),
+  'findings': instance.findings.map((e) => e.toJson()).toList(),
+  'sources': instance.sources,
+  'merged': instance.merged,
+  'device': ?instance.device,
+  'appId': ?instance.appId,
+  'appIdSource': ?instance.appIdSource,
+  'heldUnavailable': ?instance.heldUnavailable,
+  'heldNotes': instance.heldNotes,
+  'note': ?instance.note,
+};
+
+Map<String, dynamic> _$RunPermissionRowToJson(RunPermissionRow instance) =>
+    <String, dynamic>{
+      'capability': instance.capability,
+      'label': instance.label,
+      'platforms': instance.platforms,
+      'declarations': instance.declarations.map((e) => e.toJson()).toList(),
+      'known': instance.known,
+      'held': ?instance.held,
+      'observed': ?instance.observed,
+    };
+
+Map<String, dynamic> _$RunPermissionDeclarationToJson(
+  RunPermissionDeclaration instance,
+) => <String, dynamic>{
+  'identifier': instance.identifier,
+  'platform': instance.platform,
+  'source': instance.source,
+  'usage': ?instance.usage,
+  'maxSdkVersion': ?instance.maxSdkVersion,
+  'fromDependency': instance.fromDependency,
+};
+
+Map<String, dynamic> _$RunPermissionFindingToJson(
+  RunPermissionFinding instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'severity': instance.severity,
+  'message': instance.message,
+  'capability': ?instance.capability,
+  'platform': ?instance.platform,
+};
+
+Map<String, dynamic> _$RunPermissionMatrixResultToJson(
+  RunPermissionMatrixResult instance,
+) => <String, dynamic>{
+  'device': instance.device,
+  'package': instance.package,
+  'entrypoint': instance.entrypoint,
+  'route': ?instance.route,
+  'cells': instance.cells.map((e) => e.toJson()).toList(),
+  'note': ?instance.note,
+};
+
+Map<String, dynamic> _$RunPermissionMatrixCellToJson(
+  RunPermissionMatrixCell instance,
+) => <String, dynamic>{
+  'profile': instance.profile,
+  'label': instance.label,
+  'ok': instance.ok,
+  'held': instance.held,
+  'observed': instance.observed,
+  'screenshot': ?instance.screenshot,
+  'texts': ?instance.texts,
+  'added': instance.added,
+  'error': ?instance.error,
+  'note': ?instance.note,
+  'ms': ?instance.ms,
+};
