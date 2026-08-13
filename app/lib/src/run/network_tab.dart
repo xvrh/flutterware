@@ -12,6 +12,7 @@ import 'connection.dart';
 import 'handle.dart';
 import 'network_tracker.dart';
 import '../ui/design/design.dart';
+import '../ui/loading_state.dart';
 
 final _logger = Logger('run_network');
 
@@ -97,7 +98,7 @@ class _NetworkTabState extends State<NetworkTab> {
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
     var tracker = _tracker;
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const LoadingState(title: 'Reading the network log…');
     if (_error != null || tracker == null) {
       return Center(
         child: Text(
@@ -420,7 +421,7 @@ class _RequestDetailState extends State<_RequestDetail> {
             future: _detail,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
+                return const LoadingState(title: 'Reading the request…');
               }
               var detail = snapshot.data;
               if (detail == null) {

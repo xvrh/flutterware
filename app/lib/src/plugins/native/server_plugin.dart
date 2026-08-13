@@ -12,6 +12,7 @@ import '../native_plugin.dart';
 import 'server_address.dart';
 import 'server_core.dart';
 import '../../ui/design/design.dart';
+import '../../ui/loading_state.dart';
 
 export 'server_core.dart' show ServerCore, serverPluginId;
 
@@ -1196,7 +1197,7 @@ class _HttpMessageTab extends StatelessWidget {
       future: server.detailsFor(request),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
+          return const LoadingState(title: 'Reading the request…');
         }
         var details = snapshot.data;
         var headers = details?[response ? 'responseHeaders' : 'requestHeaders'];

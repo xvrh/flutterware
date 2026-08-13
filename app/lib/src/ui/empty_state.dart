@@ -4,7 +4,7 @@ import 'design/design.dart';
 /// The centred placeholder a list, table, or panel shows when it has nothing to
 /// display: a muted icon, a [title], an optional [message] and an optional
 /// [action]. The empty arm of the load → empty/error triad alongside
-/// `LoadingPanel` / `ErrorPanel`.
+/// [LoadingState] and `ErrorPanel`.
 ///
 /// Ported from `cms/packages/admin_ui/lib/src/common/ui/empty_state.dart`.
 class EmptyState extends StatelessWidget {

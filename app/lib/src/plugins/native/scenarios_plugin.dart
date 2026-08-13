@@ -29,6 +29,7 @@ import '../native_plugin.dart';
 import 'scenarios_address.dart';
 import 'scenarios_core.dart';
 import 'scenarios_results.dart';
+import '../../ui/loading_state.dart';
 
 export 'scenarios_core.dart' show ScenariosCore, scenariosPluginId;
 
@@ -413,7 +414,7 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
           ),
         );
       }
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingState(title: 'Scanning for scenarios…');
     }
     if (result.scenarios.isEmpty) {
       // Two doors and a sentence, because this column is 240px wide. What used

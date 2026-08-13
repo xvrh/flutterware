@@ -18,6 +18,7 @@ import '../native_plugin.dart';
 import 'previews_address.dart';
 import 'previews_core.dart';
 import '../../ui/design/design.dart';
+import '../../ui/loading_state.dart';
 
 export 'previews_core.dart' show PreviewsCore, uiCatalogPluginId;
 
@@ -407,7 +408,7 @@ class _CatalogPanelState extends State<_CatalogPanel> {
         // same claim as "there are none".
         var setup = widget.plugin.core.setupFor(path);
         if (setup == CatalogSetup.unknown) {
-          return const Center(child: CircularProgressIndicator());
+          return const LoadingState(title: 'Looking for demos…');
         }
         if (setup != CatalogSetup.ready) {
           return _NoPreviews(

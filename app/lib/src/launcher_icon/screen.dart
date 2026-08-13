@@ -14,6 +14,7 @@ import 'model/scan.dart';
 import 'model/wiring.dart';
 import 'ui/detail.dart';
 import 'ui/plate.dart';
+import '../ui/loading_state.dart';
 
 /// Every launcher icon a package has: a plate per role on the left, and the
 /// selected one shown where it actually lives on the right.
@@ -102,7 +103,7 @@ class _LauncherIconScreenState extends State<LauncherIconScreen> {
 
     var scan = core.scanFor(widget.package, flavor: widget.flavor);
     if (scan == null) {
-      return const Center(child: CircularProgressIndicator.adaptive());
+      return const LoadingState(title: 'Reading the icons…');
     }
 
     if (scan.isEmpty) {

@@ -12,6 +12,7 @@ import 'ui/cell_inspector.dart';
 import 'ui/panel_header.dart';
 import 'ui/problem_list.dart';
 import 'ui/variant_tile.dart';
+import '../ui/loading_state.dart';
 
 /// The whole matrix at once: four surfaces, two themes, side by side — and,
 /// when one is selected, an inspector beside them rather than instead of them.
@@ -79,7 +80,7 @@ class SplashScreen extends StatelessWidget {
 
     var scan = core.scanFor(package);
     if (scan == null) {
-      return const Center(child: CircularProgressIndicator.adaptive());
+      return const LoadingState(title: 'Reading the splash screens…');
     }
 
     if (scan.configErrors.isNotEmpty) {

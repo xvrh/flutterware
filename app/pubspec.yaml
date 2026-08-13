@@ -81,7 +81,6 @@ dependencies:
       ref: master
   pub_semver:
   pubspec_parse:
-  rxdart:
   shelf:
   shelf_router:
   shelf_web_socket:

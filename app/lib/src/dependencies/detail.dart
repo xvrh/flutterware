@@ -12,13 +12,13 @@ import '../ui/theme.dart';
 import '../utils/async_value.dart';
 import '../utils/cloc/cloc.dart';
 import '../utils/utils.dart';
-import '../utils/ui/loading.dart';
 import '../utils/value_stream_builder.dart';
 import 'model/package_imports.dart';
 import 'model/package_origin.dart';
 import 'model/pub_dev_api.dart';
 import 'model/service.dart';
 import 'utils.dart';
+import '../ui/loading_state.dart';
 
 class DependencyDetailScreen extends StatelessWidget {
   final DependenciesService dependencies;
@@ -41,7 +41,9 @@ class DependencyDetailScreen extends StatelessWidget {
             message: '${snapshot.error}',
           );
         }
-        if (snapshot.isLoading) return LoadingPanel();
+        if (snapshot.isLoading) {
+          return const LoadingState(title: 'Reading the dependency…');
+        }
 
         var dependency = snapshot.requireData[packageName];
         if (dependency == null) {

@@ -13,6 +13,7 @@ import 'database_panel_view.dart';
 import 'flag_memory.dart';
 import 'handle.dart';
 import 'panel_client.dart';
+import '../ui/loading_state.dart';
 
 final _logger = Logger('run_panels');
 
@@ -205,7 +206,7 @@ class _PanelsTabState extends State<PanelsTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const LoadingState(title: 'Reading the panels…');
     if (_error != null) {
       return Center(
         child: Padding(

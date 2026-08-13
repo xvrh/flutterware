@@ -6,6 +6,7 @@ import 'package:flutterware/channels.dart';
 
 import 'panel_client.dart';
 import '../ui/design/design.dart';
+import '../ui/loading_state.dart';
 
 /// The cockpit's bespoke renderer for `db:*` panels — a database browser, not
 /// a descriptor dump.
@@ -473,7 +474,7 @@ class _TableView extends StatelessWidget {
           child: error != null
               ? _ErrorPane(error!)
               : reply == null
-              ? const Center(child: CircularProgressIndicator())
+              ? const LoadingState(title: 'Running the query…')
               : _ResultGrid(reply: reply!),
         ),
         if (reply != null) _footer(context),
