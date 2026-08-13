@@ -11,7 +11,6 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'src/devbar/info_panel.dart';
-import 'src/devbar/permission_adapter.dart';
 import 'src/devbar/storage_panel.dart';
 
 final _logger = Logger('devbar_example');
@@ -63,7 +62,6 @@ class MyDevBar extends StatelessWidget {
         ),
         InfoPlugin.new,
         StoragePlugin.new,
-        PermissionsPlugin.init(permissions: buildPermissionAdapter()),
         DeviceFramePlugin.init(),
       ],
       flags: [

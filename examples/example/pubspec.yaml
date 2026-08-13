@@ -48,13 +48,6 @@ dependencies:
   package_info_plus:
   path:
   path_provider:
-  # For lib/src/devbar/permission_adapter.dart — the permissions-panel
-  # dogfood. flutterware itself never depends on this; the adapter exists so
-  # the app can bring whichever package it already uses.
-  # Pinned below 13: permission_handler_android 14 requires Android SDK 37,
-  # which this machine's SDK does not have. Nothing in the adapter depends on
-  # the version — it maps six PermissionStatus values, and those are stable.
-  permission_handler: ^12.0.0
   shared_preferences:
   # For bin/example_server.dart — the server-inspection example.
   shelf:

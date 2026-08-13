@@ -66,10 +66,6 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>A fixture for flutterware's permissions work — the example never opens the camera.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>A fixture for flutterware's permissions work — the example never reads your location.</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 	<key>UIStatusBarHidden</key>
