@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,34 @@ void main() {
       packageUriRoot: Uri.directory(p.join(root.path, packageRoot, 'lib', '')),
     ),
   ]);
+
+  /// The `.dart_tool/package_config.json` a `pub get` leaves.
+  ///
+  /// At the workspace root and nowhere else, which is the shape that matters
+  /// here: a member package has no copy of its own, so anything reading one has
+  /// to walk up for it. `rootUri` is relative to the file's own directory —
+  /// `../app`, not `app` — and pub writes it relative for exactly the packages
+  /// whose source is in the checkout.
+  void writeConfig(
+    List<({String name, String root})> packages, {
+    String? pubCache,
+  }) => write(
+    '.dart_tool/package_config.json',
+    jsonEncode({
+      'configVersion': 2,
+      if (pubCache != null)
+        'pubCache': Uri.directory(p.join(root.path, pubCache)).toString(),
+      'packages': [
+        for (var package in packages)
+          {
+            'name': package.name,
+            'rootUri': package.root,
+            'packageUri': 'lib/',
+            'languageVersion': '3.9',
+          },
+      ],
+    }),
+  );
 
   test('finds an enum declared in the file itself', () {
     write('main.dart', '''
@@ -197,6 +226,54 @@ enum Backend { local }
       EnumLookup().lookup(file: at('main.dart'), name: 'Backend').problem,
       contains('no enum Backend'),
     );
+  });
+
+  test('crosses into another package of the same checkout', () {
+    // The ordinary monorepo shape, and the one this used to refuse: the enum
+    // lives in a shared package precisely so two apps cannot disagree about
+    // what `staging` means. Reported by a consumer whose every enum knob came
+    // back as a parameter `main` does not take.
+    write('shared/lib/config.dart', 'enum Backend { dev, staging, prod }');
+    write('mobile/lib/main.dart', "import 'package:shared/config.dart';");
+    writeConfig([
+      (name: 'mobile', root: '../mobile'),
+      (name: 'shared', root: '../shared'),
+    ]);
+
+    var found = EnumLookup(
+      selfPackage: 'mobile',
+      selfPackageRoot: at('mobile'),
+    ).lookup(file: at('mobile/lib/main.dart'), name: 'Backend');
+
+    expect(found.values, ['dev', 'staging', 'prod']);
+    expect(found.declaredIn, at('shared/lib/config.dart'));
+  });
+
+  test('a package it did not write is left where it is', () {
+    // The bound that keeps this cheap. Following `package:flutter/material.dart`
+    // means parsing its whole export closure to answer one name, on a form that
+    // has to open now — and an enum somebody cannot edit is not the one they
+    // are looking for. Both spellings of "fetched" are refused: a root inside
+    // the cache the config names, and the absolute root pub writes for one.
+    write('.cache/hosted/near-1.0.0/lib/near.dart', 'enum Backend { dev }');
+    write('far/lib/far.dart', 'enum Other { dev }');
+    write('mobile/lib/main.dart', '''
+import 'package:near/near.dart';
+import 'package:far/far.dart';
+''');
+    writeConfig(pubCache: '.cache', [
+      (name: 'mobile', root: '../mobile'),
+      (name: 'near', root: '../.cache/hosted/near-1.0.0'),
+      (name: 'far', root: Uri.directory(p.join(root.path, 'far')).toString()),
+    ]);
+
+    var lookup = EnumLookup(
+      selfPackage: 'mobile',
+      selfPackageRoot: at('mobile'),
+    );
+    var file = at('mobile/lib/main.dart');
+    expect(lookup.lookup(file: file, name: 'Backend').problem, isNotNull);
+    expect(lookup.lookup(file: file, name: 'Other').problem, isNotNull);
   });
 
   test('import chains are the bound, and the refusal says what to do', () {

@@ -3025,30 +3025,56 @@ class RunCore extends PluginCore {
     return null;
   }
 
-  /// Every line to show for [entry] — its knobs, plus one per `required`
-  /// parameter saying why it cannot be launched.
+  /// Every line to show for [entry] — its knobs, plus one per parameter that
+  /// cannot be one, saying why.
   ///
   /// **One list, three surfaces.** The `entrypoints` action, the running app's
   /// Knobs tab and the New run form each built this loop themselves, so a line
-  /// added to one appeared on one. A required parameter is exactly such a line:
-  /// it is not a knob, it is the reason there will be no launch, and all three
-  /// have to say so.
-  List<RunKnobEntry> knobEntriesOf(String package, EntrypointRef entry) => [
-    for (var (:read, :declared) in knobsFor(package, entry))
-      knobEntry(read, declared),
-    for (var name in knobsReadBy(package, entry.path).required)
-      RunKnobEntry(
-        name: name,
-        problem:
-            'main requires this, so nothing can launch it. A knob has to be '
-            "optional — give it a default (String $name = 'x') and it becomes "
-            'one.',
-      ),
-  ];
+  /// added to one appeared on one. A `required` parameter is exactly such a
+  /// line: it is not a knob, it is the reason there will be no launch, and all
+  /// three have to say so. A parameter no control can be drawn for is the same
+  /// kind of line — the scan has always known why, and nothing said it.
+  List<RunKnobEntry> knobEntriesOf(String package, EntrypointRef entry) {
+    var scan = knobsReadBy(package, entry.path);
+    var undrawable = {
+      for (var (:name, :reason) in scan.undrawable) name: reason,
+    };
+    return [
+      for (var (:read, :declared) in knobsFor(package, entry))
+        knobEntry(read, declared, undrawable: undrawable),
+      // Only the ones no declaration already speaks for: a knob naming one is
+      // its line, and two lines for one parameter is the list contradicting
+      // itself.
+      for (var (:name, :reason) in scan.undrawable)
+        if (!entry.knobs.any((knob) => knob.name == name))
+          RunKnobEntry(name: name, problem: _undrawable(name, reason)),
+      for (var name in scan.required)
+        RunKnobEntry(
+          name: name,
+          problem:
+              'main requires this, so nothing can launch it. A knob has to be '
+              "optional — give it a default (String $name = 'x') and it "
+              'becomes one.',
+        ),
+    ];
+  }
+
+  /// Why a parameter `main` does take still cannot be a knob.
+  ///
+  /// Composed in one place because two surfaces say it — the launch form and
+  /// the refusal a `launch` with that knob throws — and the whole point of the
+  /// sentence is that it names the type instead of sending somebody to the
+  /// signature.
+  String _undrawable(String name, String reason) =>
+      'main takes `$name`, but it $reason';
 
   /// One knob as the wire reports it — the signature's facts, the config's
   /// annotations, and a value worked out just now when a source could.
-  RunKnobEntry knobEntry(ParameterKnob? read, Knob? declared) {
+  RunKnobEntry knobEntry(
+    ParameterKnob? read,
+    Knob? declared, {
+    Map<String, String> undrawable = const {},
+  }) {
     var descriptor = read?.knob;
     var computed = switch (declared?.from) {
       ScriptSource source => outcomeOf(source)?.value,
@@ -3065,7 +3091,7 @@ class RunCore extends PluginCore {
       // places to be wrong this design removes.
       defaultValue: computed ?? descriptor?.defaultValue?.toString(),
       options: _knobOptions(descriptor, declared),
-      problem: _knobProblem(read, declared),
+      problem: _knobProblem(read, declared, undrawable),
     );
   }
 
@@ -3101,7 +3127,11 @@ class RunCore extends PluginCore {
   }
 
   /// What is wrong with this knob, worst first.
-  String? _knobProblem(ParameterKnob? read, Knob? declared) {
+  String? _knobProblem(
+    ParameterKnob? read,
+    Knob? declared,
+    Map<String, String> undrawable,
+  ) {
     if (declared?.from case ScriptSource source) {
       if (outcomeOf(source)?.problem case var problem?) {
         return '$problem. Until it answers, ${declared!.name} has no computed '
@@ -3109,7 +3139,13 @@ class RunCore extends PluginCore {
       }
     }
     if (read == null) {
-      return 'main takes no `${declared!.name}` parameter. The control would '
+      // A parameter that is there and cannot be drawn is not a parameter that
+      // is missing, and the two send somebody to different files. The scan
+      // already worked out which this is; before, both came back as the typo.
+      if (undrawable[declared!.name] case var reason?) {
+        return _undrawable(declared.name, reason);
+      }
+      return 'main takes no `${declared.name}` parameter. The control would '
           'appear and do nothing — check the spelling against the signature.';
     }
     // A value offered for an enum that the enum does not declare. Worth saying
@@ -3410,7 +3446,8 @@ class RunCore extends PluginCore {
     // its no-knobs branch casts `main` to `FutureOr<void> Function()`, which a
     // function with a required parameter cannot satisfy, so the app died at
     // startup on a cast error that named nothing.
-    var required = knobsReadBy(package, entry.path).required;
+    var scan = knobsReadBy(package, entry.path);
+    var required = scan.required;
     if (required.isNotEmpty) {
       throw StateError(
         "${entry.name}'s main requires ${required.join(', ')}, so it cannot "
@@ -3425,14 +3462,21 @@ class RunCore extends PluginCore {
     for (var MapEntry(key: name, value: value) in given.entries) {
       var knob = known[name];
       if (knob == null) {
-        throw ArgumentError.value(
-          name,
-          'knobs',
-          known.isEmpty
-              ? "${entry.name}'s main takes no knobs"
-              : '${entry.name} has no such knob; it takes '
-                    '${known.keys.join(', ')}',
-        );
+        // The same distinction the launch form draws, for the same reason: a
+        // parameter with no control is not a parameter that is not there, and
+        // reciting the ones that are would send somebody looking for a typo.
+        var reason = scan.undrawable
+            .where((parameter) => parameter.name == name)
+            .firstOrNull
+            ?.reason;
+        var message = switch ((reason, known.isEmpty)) {
+          (var reason?, _) => '${entry.name}: ${_undrawable(name, reason)}',
+          (_, true) => "${entry.name}'s main takes no knobs",
+          _ =>
+            '${entry.name} has no such knob; it takes '
+                '${known.keys.join(', ')}',
+        };
+        throw ArgumentError.value(name, 'knobs', message);
       }
       // Checked here rather than left to the compiler. The value becomes a
       // literal in generated source, so a bad one is a build failure pointing

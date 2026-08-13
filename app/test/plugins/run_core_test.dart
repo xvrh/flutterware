@@ -1019,6 +1019,111 @@ void main({
       expect(knobs.last.kind, isNull);
     });
 
+    test(
+      'a parameter that cannot be drawn says so instead of vanishing',
+      () async {
+        // The reason was computed at the skip site and thrown away, so a control
+        // simply went missing with nothing to explain it — which looks like a
+        // broken tool rather than a type nothing can draw.
+        _writePackage(worktree, 'app', {
+          'pubspec.yaml': 'name: app\n',
+          'lib/main.dart': 'void main({int port = 1, Uri? base}) {}',
+        });
+        core = _coreFor(
+          worktree,
+          config: {
+            'packages': [
+              {
+                'path': 'app',
+                'entrypoints': [
+                  {'path': 'lib/main.dart', 'name': 'App'},
+                ],
+              },
+            ],
+          },
+        );
+
+        var result =
+            (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+        var knobs = result.packages.single.entrypoints.single.knobs;
+
+        expect(knobs.map((k) => k.name), ['port', 'base']);
+        expect(knobs.last.kind, isNull);
+        expect(knobs.last.problem, contains('main takes `base`'));
+        expect(knobs.last.problem, contains('`Uri?`'));
+      },
+    );
+
+    test('a knob on such a parameter names the type, not a typo', () async {
+      // The constraint: "main takes no `x` parameter" is right for a misspelled
+      // name and wrong here, and the difference is the whole point — one sends
+      // somebody to the signature, the other to the type.
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({Uri? base}) {}',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main.dart',
+                  'name': 'App',
+                  'knobs': [
+                    {'knob': 'base'},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var knobs = result.packages.single.entrypoints.single.knobs;
+
+      expect(knobs.single.name, 'base');
+      expect(knobs.single.problem, contains('main takes `base`'));
+      expect(knobs.single.problem, isNot(contains('takes no')));
+    });
+
+    test('launching such a knob is refused for the real reason', () async {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({Uri? base}) {}',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+
+      await expectLater(
+        core.invoke(
+          'launch',
+          arguments: {'device': 'phone', 'knobs': 'base=x'},
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            allOf(contains('main takes `base`'), contains('`Uri?`')),
+          ),
+        ),
+      );
+    });
+
     test('launching refuses a knob the signature does not have', () async {
       _writePackage(worktree, 'app', {
         'pubspec.yaml': 'name: app\n',
