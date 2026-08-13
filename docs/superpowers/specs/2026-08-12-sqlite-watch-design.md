@@ -230,7 +230,7 @@ question demotes the uploads feed to polling or kills it.
 ## Open, deliberately
 
 - **Which real powersync app runs S-DB2.** Without one, Decision 4 stays
-  paper. Candidate: rimbaud.
+  paper. There is a candidate consumer with a live powersync stack.
 - **The watch fallback throttle** when the adapter has `updates` but no
   `watch` — 250ms to match the coalescing window, until measured.
 - **Watch snapshot coalescing.** S-DB1 measured the mismatch: sqlite_async's
