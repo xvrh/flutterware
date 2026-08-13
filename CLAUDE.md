@@ -85,7 +85,13 @@ When changing CLI behavior, remember a *hosted* install is cached under `~/.flut
 
 ## Developing the GUI without the CLI bootstrap
 
-Use `app/lib/main_dev.dart` as the entry point in your IDE. It bypasses the env-var wiring and runs the worktree shell against flutterware's own workspace, with a default Flutter SDK discovered via `FlutterSdkPath.findSdks()`. The catalog panel needs the app root passed in (`flutter run -t lib/main_dev.dart -d macos --dart-define=FLUTTERWARE_APP_ROOT="$(pwd)"` from `app/`). This is the normal inner-loop entry for GUI work.
+Use `app/lib/main_dev.dart` as the entry point in your IDE. It bypasses the env-var wiring and runs the worktree shell against flutterware's own workspace, with a default Flutter SDK discovered via `FlutterSdkPath.findSdks()`. This is the normal inner-loop entry for GUI work.
+
+The catalog panel needs the app root passed in. It is a **knob** — an optional named parameter of `main` — so launched through flutterware (*Studio (dev)*) you set it on the run's Knobs tab and a change costs a hot restart rather than a rebuild. Launched by hand it falls back to the define, so an old run configuration still works:
+
+```sh
+cd app && ../fw flutter run -t lib/main_dev.dart -d macos --dart-define=FLUTTERWARE_APP_ROOT="$(pwd)"
+```
 
 `app/lib/main.dart` is the production entry point and **requires** the env vars above; it is not runnable standalone.
 

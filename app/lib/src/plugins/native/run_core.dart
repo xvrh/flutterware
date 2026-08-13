@@ -15,7 +15,8 @@ import 'package:vm_service/vm_service.dart'
 import '../../run/channel_client.dart';
 import '../../run/connection.dart';
 import '../../run/define_scripts.dart';
-import '../../run/defines.dart';
+import '../../run/entrypoint_knobs.dart';
+import '../../run/guest_entrypoint.dart';
 import '../../run/drive_session.dart';
 import '../../run/entrypoints.dart';
 import '../../run/flavors.dart';
@@ -30,6 +31,7 @@ import '../../run/native/native_session.dart';
 import '../../run/network_tracker.dart';
 import '../../run/panel_client.dart';
 import '../../shell/worktree_discovery.dart';
+import '../../utils/parameter_knobs.dart';
 import '../../utils/daemon/device.dart';
 import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
@@ -197,58 +199,45 @@ class RunCore extends PluginCore {
 
   final _defaultFlavors = <String, String?>{};
 
-  /// Every `--dart-define` [path]'s own `lib/` reads, by define name.
+  /// What [entry]'s `main` declares it takes, and the imports a wrapper needs.
   ///
-  /// Package-level rather than per entry point, because that is as far as an
-  /// unresolved parse can honestly go — see [scanDefines].
-  ///
-  /// **Scanned on first ask, not in [computeAll].** Measured warm, the scan
-  /// costs ~0.2ms per file in `lib/` — 2ms for `examples/example`'s 11 files,
-  /// but 100ms for a 500-file package, because every file is read before the
-  /// substring prefilter can rule it out. `computeAll` is ~430ms across this
-  /// repo and *every* `fw` invocation pays it, so putting a real app's 100ms
-  /// there would tax `fw status` for something only the `entrypoints` action
-  /// and the New run page ever read.
-  ///
-  /// The cache is dropped by [computeAll] rather than kept forever: a reload
-  /// means the sources may have moved, and a define list that outlived the code
-  /// it was read from is the one wrong answer worth paying to avoid.
-  Map<String, DefineRef> definesReadBy(String path) => _defines.putIfAbsent(
-    path,
-    () => scanDefines(host.workspace.absolutePathOf(path)),
-  );
+  /// Cached on first ask and dropped by [computeAll], for the reason
+  /// [definesReadBy] gives: a knob list that outlived the signature it was read
+  /// from is the one wrong answer worth paying to avoid.
+  EntrypointKnobs knobsReadBy(String package, String entrypoint) =>
+      _entrypointKnobs.putIfAbsent(
+        '$package|$entrypoint',
+        () => scanEntrypointKnobs(
+          packageRoot: host.workspace.absolutePathOf(package),
+          entrypoint: entrypoint,
+        ),
+      );
 
-  final _defines = <String, Map<String, DefineRef>>{};
+  final _entrypointKnobs = <String, EntrypointKnobs>{};
 
-  /// The defines to offer for [entry], and what the scan says about each.
+  /// The knobs to offer for [entry] — the signature's, annotated by the
+  /// config's.
   ///
-  /// The config is authority when it declared any — the rule entry points
-  /// already follow, and for the same reason: declaring two defines meant those
-  /// two. What the scan adds there is the **default the code actually uses**
-  /// when the config named none, and the fact that a declared define is read
-  /// nowhere at all.
+  /// **No authority rule, because the two halves answer different questions.**
+  /// A signature cannot be wrong about what its own `main` accepts, so it is
+  /// the list; the config only says what a signature cannot — a computed value,
+  /// a human label, options for a type that cannot enumerate itself. This is
+  /// why the authority rule the deleted define scan needed does not arise.
   ///
-  /// When the config declared none, the scan *is* the list. That is the zero
-  /// config case, and it is worth having: the define's name and its real
-  /// default are already written in the app, and repeating them in
-  /// `tool/flutterware.dart` only creates two places to be wrong.
-  List<({DartDefine define, DefineRef? read})> definesFor(
+  /// A declaration naming a parameter that is not there comes last, with
+  /// `read: null`, so it can be reported: the control would appear and do
+  /// nothing, which is indistinguishable from a broken feature.
+  List<({ParameterKnob? read, Knob? declared})> knobsFor(
     String package,
     EntrypointRef entry,
   ) {
-    var read = definesReadBy(package);
-    if (entry.defines.isNotEmpty) {
-      return [
-        for (var define in entry.defines)
-          (define: define, read: read[define.name]),
-      ];
-    }
+    var read = knobsReadBy(package, entry.path).knobs;
+    var declared = {for (var knob in entry.knobs) knob.name: knob};
     return [
-      for (var define in read.values)
-        (
-          define: DartDefine(define.name, defaultValue: define.defaultValue),
-          read: define,
-        ),
+      for (var knob in read) (read: knob, declared: declared[knob.name]),
+      for (var knob in entry.knobs)
+        if (!read.any((parameter) => parameter.name == knob.name))
+          (read: null, declared: knob),
     ];
   }
 
@@ -333,9 +322,8 @@ class RunCore extends PluginCore {
           : scanEntrypoints(root);
       _defaultFlavors[path] = defaultFlavorOf(root);
     }
-    // Not rescanned here — see [definesFor]. Dropped so the next ask re-reads
-    // sources that may have moved since.
-    _defines.clear();
+    // Dropped so the next ask re-reads sources that may have moved since.
+    _entrypointKnobs.clear();
     _hostAddresses = await _readHostAddresses();
     _scanned = true;
   }
@@ -715,16 +703,34 @@ class RunCore extends PluginCore {
                   'build failure rather than a default value.',
             ),
             const ActionParameter(
-              'defines',
-              'Defines',
+              'dartDefines',
+              'Dart defines',
               required: false,
               description:
-                  '`--dart-define`s to bake in: `NAME=value,NAME=value`, or a '
-                  'JSON object. Compiled in rather than read at run time, so '
-                  'changing one costs a full rebuild — which is why the entry '
-                  'point declares which ones it wants and what values are '
-                  'worth using. Not to be confused with a preview knob, which '
-                  'is read while a widget builds and costs a frame.',
+                  '`--dart-define`s to pass through verbatim: '
+                  '`NAME=value,NAME=value`, or a JSON object. An escape hatch, '
+                  'not the way to configure a launch — nothing offers them, '
+                  'checks them or remembers them, and changing one costs a '
+                  'full rebuild. Use `knobs` for anything you switch while '
+                  'working. This is for the three a knob cannot reach: a '
+                  'define read by a package you do not own, one the native '
+                  'build consumes, and anything needed before the Dart entry '
+                  'point runs.',
+            ),
+            const ActionParameter(
+              'knobs',
+              'Knobs',
+              required: false,
+              description:
+                  'Values to pass the entry point, `name=value,name=value` or '
+                  'a JSON object. These are the optional named parameters of '
+                  "its `main`, so `entrypoints` lists them with each one's "
+                  'type, default and options. Passed as arguments in the '
+                  'generated wrapper rather than compiled in, so changing one '
+                  'costs a hot restart instead of a rebuild — which is what '
+                  'makes a knob the right home for a value you switch while '
+                  'working, and a define the right home for one that differs '
+                  'per shipped artifact.',
             ),
             const ActionParameter(
               'wait',
@@ -769,6 +775,35 @@ class RunCore extends PluginCore {
               'without rebuilding or reinstalling. Same requirement as reload: '
               'the launcher has to be alive.',
           parameters: _appSelector,
+        ),
+        PluginAction(
+          'setKnobs',
+          'Set knobs',
+          returns: RunControlResult,
+          description:
+              "Changes what a running app's main() was called with, and hot "
+              'restarts it — a rewrite of one generated file rather than a '
+              'build, so it costs a restart (about a second) instead of a '
+              'relaunch (half a minute). The app starts again from its first '
+              'screen, because a value reaches it only through main(). What '
+              'each entry point takes, with its type and options, is '
+              '`entrypoints`.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'knobs',
+              'Knobs',
+              required: true,
+              description:
+                  'The values to run with, `name=value,name=value` or a JSON '
+                  'object. This replaces the set rather than merging into it: '
+                  'a name left out stops being overridden, which is the only '
+                  'way to say so. It then falls back to whatever the project '
+                  'works out for it — a `from:` script is re-asked, exactly as '
+                  'at launch — and to the parameter default only when nothing '
+                  'else answers.',
+            ),
+          ],
         ),
         PluginAction(
           'stop',
@@ -1562,6 +1597,7 @@ class RunCore extends PluginCore {
       'reload' => _controlAction('reload', arguments),
       'restart' => _controlAction('restart', arguments),
       'stop' => _controlAction('stop', arguments),
+      'setKnobs' => _setKnobsAction(arguments),
       'inspect' => _inspectAction(arguments),
       'screenshot' => _screenshotAction(arguments),
       'act' => _actAction(arguments),
@@ -1622,10 +1658,7 @@ class RunCore extends PluginCore {
                   devices: entry.platforms.isEmpty
                       ? const []
                       : [for (var device in devicesFor(entry)) device.id],
-                  defines: [
-                    for (var (:define, :read) in definesFor(path, entry))
-                      _defineEntry(define, read),
-                  ],
+                  knobs: knobEntriesOf(path, entry),
                 ),
             ],
           ),
@@ -1635,38 +1668,6 @@ class RunCore extends PluginCore {
                 'or discovered as a top-level main() in lib/*.dart.'
           : null,
     );
-  }
-
-  /// Everything worth offering for [define] — the config's own list plus
-  /// whatever its `from:` points at right now.
-  ///
-  /// This is what makes "point the app at this machine" a choice rather than
-  /// something to go and look up. Public because the panel's dialog and the
-  /// `entrypoints` action must offer the same values — a list only one surface
-  /// had would be a capability the others could not see.
-  ///
-  /// Bare values, with no decoration: this is what gets baked into the build,
-  /// and an agent reading `entrypoints` wants the value. Which interface an
-  /// address belongs to is [hostInterfaceOf], asked for separately by the one
-  /// surface that can render it.
-  List<String> optionsFor(DartDefine define) {
-    var options = [...define.options];
-    switch (define.from) {
-      case HostAddressesSource():
-        for (var host in hostAddresses) {
-          if (!options.contains(host.address)) options.add(host.address);
-        }
-      case ScriptSource source:
-        // Only the list form. A script that computed a single value did not
-        // offer a choice, and putting it here as well would show it twice —
-        // once pre-filled in the field and once as a chip that changes nothing.
-        for (var value in outcomeOf(source)?.options ?? const <String>[]) {
-          if (!options.contains(value)) options.add(value);
-        }
-      case null:
-        break;
-    }
-    return options;
   }
 
   /// Asks every [ScriptSource] any declared define points at, concurrently.
@@ -1681,7 +1682,8 @@ class RunCore extends PluginCore {
   /// identical thing are one process.
   Future<void> resolveScriptSources() => _resolveScripts([
     for (var path in packages)
-      for (var entry in entrypointsFor(path)) ...entry.defines,
+      for (var entry in entrypointsFor(path))
+        for (var knob in entry.knobs) knob.from,
   ]);
 
   /// Asks the script sources among [defines], concurrently, and records what
@@ -1693,12 +1695,10 @@ class RunCore extends PluginCore {
   /// that relied on it would find no source to ask, then refuse itself for a
   /// value that was never looked up. Resolving exactly the defines the caller
   /// is about to use cannot disagree with the caller.
-  Future<void> _resolveScripts(Iterable<DartDefine> defines) async {
+  Future<void> _resolveScripts(Iterable<ValueSource?> from) async {
     var sources = <String, ScriptSource>{};
-    for (var define in defines) {
-      if (define.from case ScriptSource source) {
-        sources[_scriptKey(source)] = source;
-      }
+    for (var source in from) {
+      if (source is ScriptSource) sources[_scriptKey(source)] = source;
     }
     if (sources.isEmpty) return;
     var dart = p.join(host.workspace.flutterSdk.root, 'bin', 'dart');
@@ -1716,23 +1716,6 @@ class RunCore extends PluginCore {
     }
   }
 
-  /// The value a script source computed for [define], when one did.
-  ///
-  /// Beats what the config wrote and what the code falls back to, because it is
-  /// the only one of the three that was worked out just now. A config's
-  /// `defaultValue` is a guess made when the file was written; a scanned one is
-  /// what the app does when nobody says anything.
-  String? scriptValueFor(DartDefine define) => switch (define.from) {
-    ScriptSource source => outcomeOf(source)?.value,
-    _ => null,
-  };
-
-  /// Why [define] cannot be resolved, when its script source could not answer.
-  String? scriptProblemFor(DartDefine define) => switch (define.from) {
-    ScriptSource source => outcomeOf(source)?.problem,
-    _ => null,
-  };
-
   /// The interface an offered address was found on — `en0` — or null when it
   /// is not one of ours.
   ///
@@ -1748,37 +1731,139 @@ class RunCore extends PluginCore {
     return null;
   }
 
-  DartDefineEntry _defineEntry(
-    DartDefine define,
-    DefineRef? read,
-  ) => DartDefineEntry(
-    name: define.name,
-    label: define.label,
-    description: define.description,
-    // A script's answer first, because it is the only one worked out just now;
-    // then the config's word; then the code's real fallback.
-    defaultValue:
-        scriptValueFor(define) ?? define.defaultValue ?? read?.defaultValue,
-    options: optionsFor(define),
-    kind: read?.kind,
-    readAt: read?.file,
-    problem: _defineProblem(define, read),
-  );
-
-  /// What is wrong with [define], worst first.
+  /// The declaration [handle] was launched from, or null if this worktree has
+  /// none matching.
   ///
-  /// A script that could not answer outranks a define nothing reads, because it
-  /// is the one that will otherwise be discovered by an app talking to the
-  /// wrong backend.
-  String? _defineProblem(DartDefine define, DefineRef? read) {
-    if (scriptProblemFor(define) case var problem?) {
-      return '$problem. Until it answers, ${define.name} has no computed '
-          'value and a launch that does not set it will be refused.';
+  /// **By name first, then path.** #119 made "declare one file several times
+  /// under different names" the documented way to run one app against several
+  /// configurations, so a path matches several entry points and only the name
+  /// separates them. Their *signatures* are identical — it is the same file —
+  /// but their config annotations are not, so taking the first match would read
+  /// another declaration's `label`, `options` and `from:` script, and
+  /// [applyKnobs] would resolve a port from the wrong one.
+  EntrypointRef? entrypointOf(RunHandle handle) {
+    var package = handle.package;
+    if (package == null) return null;
+    var candidates = entrypointsFor(package);
+    if (handle.entrypointName case var name?) {
+      for (var candidate in candidates) {
+        if (candidate.name == name) return candidate;
+      }
+    }
+    // A scanned entry point carries no name, and one declared since the launch
+    // may have been renamed. The path is the weaker answer and still the right
+    // fallback: at worst it is the same file under a sibling declaration.
+    for (var candidate in candidates) {
+      if (candidate.path == handle.entrypoint) return candidate;
+    }
+    return null;
+  }
+
+  /// Every line to show for [entry] — its knobs, plus one per `required`
+  /// parameter saying why it cannot be launched.
+  ///
+  /// **One list, three surfaces.** The `entrypoints` action, the running app's
+  /// Knobs tab and the New run form each built this loop themselves, so a line
+  /// added to one appeared on one. A required parameter is exactly such a line:
+  /// it is not a knob, it is the reason there will be no launch, and all three
+  /// have to say so.
+  List<RunKnobEntry> knobEntriesOf(String package, EntrypointRef entry) => [
+    for (var (:read, :declared) in knobsFor(package, entry))
+      knobEntry(read, declared),
+    for (var name in knobsReadBy(package, entry.path).required)
+      RunKnobEntry(
+        name: name,
+        problem:
+            'main requires this, so nothing can launch it. A knob has to be '
+            "optional — give it a default (String $name = 'x') and it becomes "
+            'one.',
+      ),
+  ];
+
+  /// One knob as the wire reports it — the signature's facts, the config's
+  /// annotations, and a value worked out just now when a source could.
+  RunKnobEntry knobEntry(ParameterKnob? read, Knob? declared) {
+    var descriptor = read?.knob;
+    var computed = switch (declared?.from) {
+      ScriptSource source => outcomeOf(source)?.value,
+      _ => null,
+    };
+    return RunKnobEntry(
+      name: read?.name ?? declared!.name,
+      label: declared?.label,
+      description: declared?.description,
+      kind: descriptor?.kind.name,
+      // A script's answer first, because it is the only one worked out just
+      // now; then what the signature falls back to. There is deliberately no
+      // config default — the parameter has one, and repeating it is the two
+      // places to be wrong this design removes.
+      defaultValue: computed ?? descriptor?.defaultValue?.toString(),
+      options: _knobOptions(descriptor, declared),
+      problem: _knobProblem(read, declared),
+    );
+  }
+
+  /// Everything worth offering: an enum's own constants, this machine's
+  /// addresses, a script's list, or whatever the config wrote.
+  List<String> _knobOptions(KnobDescriptor? descriptor, Knob? declared) {
+    var options = [...?descriptor?.options];
+    // **An enum's constants are the whole list.** The wrapper writes
+    // `Backend.<value>`, so anything else cannot compile — offering it would
+    // put a chip on screen that fails the launch it starts, and the value check
+    // would refuse the very value the panel had just suggested. What the config
+    // added is said out loud by [_knobProblem] instead of quietly dropped.
+    if (descriptor?.kind == KnobKind.picker) return options;
+    for (var option in declared?.options ?? const <String>[]) {
+      if (!options.contains(option)) options.add(option);
+    }
+    switch (declared?.from) {
+      case HostAddressesSource():
+        for (var host in hostAddresses) {
+          if (!options.contains(host.address)) options.add(host.address);
+        }
+      case ScriptSource source:
+        // Only the list form. A script that computed a single value did not
+        // offer a choice, and showing it twice — pre-filled and as a chip —
+        // would suggest it did.
+        for (var value in outcomeOf(source)?.options ?? const <String>[]) {
+          if (!options.contains(value)) options.add(value);
+        }
+      case null:
+        break;
+    }
+    return options;
+  }
+
+  /// What is wrong with this knob, worst first.
+  String? _knobProblem(ParameterKnob? read, Knob? declared) {
+    if (declared?.from case ScriptSource source) {
+      if (outcomeOf(source)?.problem case var problem?) {
+        return '$problem. Until it answers, ${declared!.name} has no computed '
+            'value and a launch that does not set it will be refused.';
+      }
     }
     if (read == null) {
-      return 'nothing in this package reads ${define.name}. Setting it '
-          'compiles and changes nothing — check the spelling against the '
-          'fromEnvironment call.';
+      return 'main takes no `${declared!.name}` parameter. The control would '
+          'appear and do nothing — check the spelling against the signature.';
+    }
+    // A value offered for an enum that the enum does not declare. Worth saying
+    // rather than dropping: it is a line in `tool/flutterware.dart` that reads
+    // as working, and the only symptom would be a choice missing from a
+    // dropdown that nothing explains.
+    if (read.knob.kind == KnobKind.picker) {
+      var constants = read.knob.options;
+      var stray = {
+        ...?declared?.options,
+        ...switch (declared?.from) {
+          ScriptSource source => outcomeOf(source)?.options ?? const <String>[],
+          _ => const <String>[],
+        },
+      }..removeWhere(constants.contains);
+      if (stray.isNotEmpty) {
+        return '${stray.join(', ')} — offered for ${read.name}, which is an '
+            'enum taking ${constants.join(', ')}. Only its own constants '
+            'compile, so the rest are not offered.';
+      }
     }
     return null;
   }
@@ -1794,8 +1879,8 @@ class RunCore extends PluginCore {
       arguments['entrypoint'] as String?,
     );
     _checkDevice(device, entry);
-    var defines = PreviewsCore.parsePairs(arguments['defines']);
-    _checkDefineNames(package, entry, defines);
+    var defines = PreviewsCore.parsePairs(arguments['dartDefines']);
+    var knobs = PreviewsCore.parsePairs(arguments['knobs']);
 
     var handle = await launch(
       device: device,
@@ -1808,6 +1893,7 @@ class RunCore extends PluginCore {
         _ => flavorFor(package, entry).flavor,
       },
       defines: defines,
+      knobs: knobs,
     );
 
     var wait = _boolArgument(arguments['wait'] ?? true);
@@ -1869,14 +1955,26 @@ class RunCore extends PluginCore {
   ///
   /// [defines] is what the caller *chose*; the defaults and anything a script
   /// source computes are filled in here, so both surfaces bake in the same set.
+  ///
+  /// **[knobs] are checked here, not in the action.** They used to be, on the
+  /// grounds that the panel builds its fields from the same list and so cannot
+  /// invent a name — true of names, false of *values*. A text field for an `int`
+  /// parameter accepts `eight` on a desktop keyboard, and the generator then
+  /// declined to write a literal it could not form: the argument vanished, the
+  /// wrapper fell back to its no-knobs shape, the app ran on the parameter's own
+  /// default, and the handle recorded `eight` — a cockpit showing a value the
+  /// app was not using. A knob that quietly does nothing is the exact failure
+  /// this design deleted `--dart-define` to escape.
   Future<RunHandle> launch({
     required String device,
     required String package,
     required EntrypointRef entry,
     String? flavor,
     Map<String, String> defines = const {},
+    Map<String, String> knobs = const {},
   }) async {
-    var resolved = await _resolveDefines(entry, defines);
+    _checkKnobNames(package, entry, knobs);
+    var resolvedKnobs = await _resolveKnobs(package, entry, knobs);
     var deviceName = devices
         .where((candidate) => candidate.id == device)
         .map((candidate) => candidate.displayName)
@@ -1893,7 +1991,8 @@ class RunCore extends PluginCore {
       entrypoint: entry.path,
       entrypointName: entry.declared ? entry.name : null,
       flavor: flavor,
-      defines: resolved,
+      defines: defines,
+      knobs: resolvedKnobs,
     );
     _handles = [handle, ..._handles];
     notifyChanged();
@@ -2013,92 +2112,164 @@ class RunCore extends PluginCore {
     }
   }
 
-  /// Refuses a define name neither declared nor read anywhere in the package.
+  /// Refuses a knob name `main` does not take.
   ///
-  /// Refused rather than passed through, because a misspelled define compiles
-  /// perfectly and does nothing — the app reads the fallback and behaves as if
-  /// nobody set anything, which is a very long way from a legible failure.
-  ///
-  /// The scan is what makes the refusal safe to extend. Before it, the only
-  /// defines known were the declared ones, so a package that declared none had to
-  /// accept anything; now `APII` is refused against the defines the code
-  /// genuinely reads, and the error can name them.
-  ///
-  /// Only the action path needs this — the panel builds its fields from the same
-  /// list, so it cannot produce a name that is not on it. Filling in defaults is
-  /// [_resolveDefines], which both paths share.
-  void _checkDefineNames(
+  /// The signature is the list, so this can be exact in a way the define check
+  /// never could: a misspelled name is not a value that quietly does nothing,
+  /// it is a parameter that is not there, and the error can recite the ones
+  /// that are.
+  void _checkKnobNames(
     String package,
     EntrypointRef entry,
     Map<String, String> given,
   ) {
-    var known = {
-      for (var (:define, read: _) in definesFor(package, entry))
-        define.name: define,
-    };
-    if (known.isEmpty) return;
-    for (var name in given.keys) {
-      if (!known.containsKey(name)) {
+    // Before the names, because it is not about them: a `required` named
+    // parameter has no default to fall back to, so there is no launch to check
+    // the knobs *of*. Refused here, by name, rather than left to the wrapper —
+    // its no-knobs branch casts `main` to `FutureOr<void> Function()`, which a
+    // function with a required parameter cannot satisfy, so the app died at
+    // startup on a cast error that named nothing.
+    var required = knobsReadBy(package, entry.path).required;
+    if (required.isNotEmpty) {
+      throw StateError(
+        "${entry.name}'s main requires ${required.join(', ')}, so it cannot "
+        'start without one. A knob has to be optional — give the parameter a '
+        "default (String apiHost = 'localhost') and it becomes one.",
+      );
+    }
+    var known = <String, ParameterKnob>{};
+    for (var (:read, declared: _) in knobsFor(package, entry)) {
+      if (read != null) known[read.name] = read;
+    }
+    for (var MapEntry(key: name, value: value) in given.entries) {
+      var knob = known[name];
+      if (knob == null) {
         throw ArgumentError.value(
           name,
-          'defines',
-          '${entry.name} has no such define; it takes '
-              '${known.keys.join(', ')}',
+          'knobs',
+          known.isEmpty
+              ? "${entry.name}'s main takes no knobs"
+              : '${entry.name} has no such knob; it takes '
+                    '${known.keys.join(', ')}',
         );
+      }
+      // Checked here rather than left to the compiler. The value becomes a
+      // literal in generated source, so a bad one is a build failure pointing
+      // at a file the user did not write — where this can say which knob, what
+      // it takes, and what was passed.
+      if (_knobValueProblem(knob, value) case var problem?) {
+        throw ArgumentError.value(value, 'knobs', '$name $problem');
       }
     }
   }
 
-  /// The defines a launch will bake in: what the caller gave, over what a script
-  /// source computed, over what the config declared.
+  /// Why [value] is not one [knob] can take, or null when it is.
+  String? _knobValueProblem(ParameterKnob knob, String value) =>
+      switch (knob.knob.kind) {
+        KnobKind.integer when int.tryParse(value) == null =>
+          'takes a whole number, not "$value"',
+        KnobKind.number when double.tryParse(value) == null =>
+          'takes a number, not "$value"',
+        KnobKind.boolean when value != 'true' && value != 'false' =>
+          'takes true or false, not "$value"',
+        KnobKind.picker when !knob.knob.options.contains(value) =>
+          'takes ${knob.knob.options.join(', ')} — not "$value"',
+        _ => null,
+      };
+
+  /// The values a launch will pass `main`: what the caller gave, over what a
+  /// source computed just now.
   ///
-  /// **Both launch paths go through this**, which is the point of it being here
-  /// rather than in the action. They used to disagree: the action omitted a
-  /// scanned default while the panel seeded its text field with one and then
-  /// sent it, so the same launch through two surfaces produced two different
-  /// build commands.
+  /// **A parameter's own default is deliberately not passed.** Writing it into
+  /// the wrapper would say "somebody chose this" about a value nobody touched,
+  /// and the parameter already falls back to it — the same reasoning
+  /// a define's scanned default was left alone for.
   ///
-  /// **A script source that could not answer refuses the launch.** Everything
-  /// else in this file degrades — an unreadable handle is a handle that does not
-  /// exist, an OS that will not list interfaces means a shorter list. This one
-  /// may not, because the define it failed to compute is compiled in, and an app
-  /// built against the wrong port behaves exactly like an app built against the
-  /// right one until it is talking to another worktree's database.
-  Future<Map<String, String>> _resolveDefines(
+  /// **A source that could not answer refuses the launch**, as it does for a
+  /// define and for the same reason: the value is compiled in, and an app built
+  /// against the wrong port is indistinguishable from a correct one until it is
+  /// talking to another worktree's database.
+  Future<Map<String, Object?>> _resolveKnobs(
+    String package,
     EntrypointRef entry,
     Map<String, String> given,
   ) async {
-    await _resolveScripts(entry.defines);
-    var resolved = <String, String>{};
+    await _resolveScripts([for (var knob in entry.knobs) knob.from]);
+    var resolved = <String, Object?>{...given};
     var unresolved = <String>[];
-    // Only what the *config* declared. A scanned define's default is the value
-    // the code already falls back to, so passing it back as a `--dart-define`
-    // sets nothing, lengthens the build command and fills the run's handle with
-    // values nobody picked — and only a config can declare a `from:` at all.
-    for (var define in entry.defines) {
-      if (given.containsKey(define.name)) continue;
-      if (define.from case ScriptSource source) {
+    for (var (:read, :declared) in knobsFor(package, entry)) {
+      if (read == null || declared == null) continue;
+      if (resolved.containsKey(declared.name)) continue;
+      if (declared.from case ScriptSource source) {
         var outcome = outcomeOf(source);
         if (outcome == null || outcome.failed) {
           unresolved.add(
-            '${define.name} (${outcome?.problem ?? 'not resolved'})',
+            '${declared.name} (${outcome?.problem ?? 'not resolved'})',
           );
           continue;
         }
-        if (outcome.value case var value?) {
-          resolved[define.name] = value;
-          continue;
-        }
+        if (outcome.value case var value?) resolved[declared.name] = value;
       }
-      if (define.defaultValue case var value?) resolved[define.name] = value;
     }
     if (unresolved.isNotEmpty) {
       throw StateError(
         'cannot work out ${unresolved.join(', ')}. Fix the script, or pass the '
-        'define explicitly to launch without it.',
+        'knob explicitly to launch without it.',
       );
     }
-    return {...resolved, ...given};
+    return resolved;
+  }
+
+  /// `setKnobs` — rewrite the wrapper with new values and hot restart.
+  ///
+  /// The agent's half of § K5: without it an agent can launch with knobs and
+  /// then has to relaunch to change one, which is the rebuild this design
+  /// exists to remove.
+  Future<RunControlResult> _setKnobsAction(
+    Map<String, Object?> arguments,
+  ) async {
+    // Before anything else: the entry points are what the values are checked
+    // against, and without them the check silently passed — the restart then
+    // failed on a wrapper that would not compile, reported as
+    // `s1.hotRestart: (-32603)`, which says nothing to anybody.
+    await computeAll();
+    _handles = _scanHandles();
+    await _probeAll();
+    var handle = _selectApp(arguments, await _repoWorktrees);
+    var values = PreviewsCore.parsePairs(arguments['knobs']);
+    var started = DateTime.now();
+    try {
+      var running = await applyKnobs(handle, values);
+      appendJournal(
+        handle,
+        JournalEntry(
+          at: started.toUtc().toIso8601String(),
+          verb: 'setKnobs',
+          elapsedMs: DateTime.now().difference(started).inMilliseconds,
+        ),
+      );
+      return RunControlResult(
+        action: 'setKnobs',
+        run: handle.runId,
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        ok: true,
+        ms: DateTime.now().difference(started).inMilliseconds,
+        // What it is running with, not what was asked for — the two differ
+        // whenever a source filled in a knob this call left out.
+        knobs: running,
+      );
+    } on Object catch (e) {
+      return RunControlResult(
+        action: 'setKnobs',
+        run: handle.runId,
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        ok: false,
+        ms: DateTime.now().difference(started).inMilliseconds,
+        error: '$e',
+      );
+    }
   }
 
   Future<RunControlResult> _controlAction(
@@ -2143,8 +2314,185 @@ class RunCore extends PluginCore {
     }
   }
 
+  /// The knobs [handle]'s entry point takes, or why they cannot be known.
+  ///
+  /// **Empty and unknowable are different answers**, and the tab says so —
+  /// `unknown` is the sentence to show instead of the fields. Reporting an
+  /// empty list for a run this core cannot read would claim the app takes no
+  /// knobs, which is a statement about somebody else's source.
+  ///
+  /// The worktree check is the one that matters and is easy to miss: another
+  /// checkout of the same repo has the same package paths and the same entry
+  /// point names, so every lookup here *succeeds* — against source that may be
+  /// on a different branch. The knobs shown would be plausible and wrong.
+  ({List<RunKnobEntry> knobs, String? unknown}) knobEntriesFor(
+    RunHandle handle,
+  ) {
+    if (!isMine(handle)) {
+      return (
+        knobs: const [],
+        unknown:
+            'This run belongs to ${handle.worktreeName}. Its knobs are '
+            "declared in that checkout's source, which can be on another "
+            'branch — so this one cannot say what it takes.',
+      );
+    }
+    var package = handle.package;
+    if (package == null || !packages.contains(package)) {
+      return (
+        knobs: const [],
+        unknown:
+            'This run was launched from a package this worktree does not '
+            'declare, so there is no signature to read.',
+      );
+    }
+    var entry = entrypointOf(handle);
+    if (entry == null) {
+      return (
+        knobs: const [],
+        unknown:
+            '${handle.entrypoint} is no longer an entry point of $package — '
+            'renamed or removed since this run started.',
+      );
+    }
+    return (knobs: knobEntriesOf(package, entry), unknown: null);
+  }
+
+  /// Rewrites [handle]'s wrapper with [values] and hot restarts it.
+  ///
+  /// **The whole point of the design, and the only place a human feels it.**
+  /// Changing a knob is a rewrite of one generated file plus a restart —
+  /// measured at 262ms on desktop, 263ms on the iOS simulator and 3.07s on an
+  /// Android emulator, against 29.6s and 38.6s to rebuild. Without this the only
+  /// route back to the launch form is Stop, which is the rebuild.
+  ///
+  /// **Restart, never reload.** A value passed to `main` moves only when `main`
+  /// runs again, and reload does not re-run it — so a reload here would report
+  /// success and change nothing.
+  ///
+  /// The handle is rewritten too: the cockpit shows a run's current knobs, and
+  /// one it had forgotten would be a field you can only overwrite blind. It
+  /// moves with the wrapper — see the comment on the write below for why that
+  /// has to happen before the restart rather than after it.
+  /// Returns what the app is now running with, which is not always what was
+  /// asked for: a knob left out of [values] is re-asked of its source.
+  Future<Map<String, String>> applyKnobs(
+    RunHandle handle,
+    Map<String, String> values,
+  ) async {
+    // Refused before anything is written. `absolutePathOf` resolves in *this*
+    // worktree, so applying to another checkout's run would rewrite this
+    // worktree's wrapper and restart that app onto this worktree's code — a
+    // wrong file and a wrong app, with nothing on screen to say so.
+    if (!isMine(handle)) {
+      throw StateError(
+        '${handle.entrypointLabel} belongs to ${handle.worktreeName}. Change '
+        'its knobs from that checkout: this one would rewrite its own copy of '
+        'the wrapper.',
+      );
+    }
+    var package = handle.package;
+    if (package == null) {
+      throw StateError(
+        '${handle.entrypointLabel} was launched without a package, so there is '
+        'no wrapper to rewrite.',
+      );
+    }
+    var entry = entrypointOf(handle);
+    if (entry == null) {
+      // Refused rather than written unchecked. Without the entry point there is
+      // nothing to validate against, and an unvalidated value becomes a literal
+      // in generated source — a build failure in a file nobody wrote.
+      throw StateError(
+        '${handle.entrypoint} is not an entry point this worktree knows, so '
+        'its knobs cannot be checked. Run it from the worktree that declares '
+        'it.',
+      );
+    }
+    _checkKnobNames(package, entry, values);
+    // The same fill-in a launch does, for the same reason. "Replaces the set"
+    // is about what the *caller* chose, not about forgetting what the project
+    // can work out: leaving `serverPort` out of a call that sets `backend`
+    // would otherwise drop a script-computed port back to the parameter's
+    // default — an app talking to another worktree's database, which is the one
+    // failure `_resolveKnobs` refuses a launch over. A source that cannot
+    // answer refuses this the same way.
+    var resolved = {
+      for (var MapEntry(:key, :value) in (await _resolveKnobs(
+        package,
+        entry,
+        values,
+      )).entries)
+        key: '$value',
+    };
+
+    var packageRoot = host.workspace.absolutePathOf(package);
+
+    // **Both writes happen before the restart, and roll back together.**
+    // Recording afterwards looked safer — say it is running only once it is —
+    // and it lost the values outright the first time the app being restarted
+    // was *this* one. A hot restart tears down the root isolate, so nothing
+    // queued after `await control(…)` ever ran: the wrapper on disk carried
+    // `apiHost: r'10.0.0.49'`, the app came up on it, and the handle recorded
+    // nothing at all, so the Knobs tab showed an empty field for a value the
+    // app was plainly holding. Self-hosting is our own inner loop, and only
+    // driving the real cockpit found it.
+    var previous = handle.knobs;
+    void write(Map<String, String> knobs) {
+      writeGuestEntrypoint(
+        packageRoot: packageRoot,
+        entrypoint: handle.entrypoint,
+        knobs: knobs,
+      );
+      handle.withKnobs(knobs).publish(runDirProvider());
+      _handles = [
+        for (var other in _handles)
+          if (other.handlePath == handle.handlePath)
+            other.withKnobs(knobs)
+          else
+            other,
+      ];
+    }
+
+    write(resolved);
+    notifyChanged();
+    try {
+      await control('restart', handle);
+    } on Object {
+      // Put both back. A failed restart leaves the app on its old code, so a
+      // wrapper on the new one would fail every later reload as well — on a
+      // change nobody asked for any more — and a handle on the new one would
+      // report values the app never took.
+      try {
+        write(previous);
+      } on Object {
+        // **The rollback may not throw.** `previous` was valid when it was set,
+        // and the signature can have moved since — this is the edit-reload loop
+        // the whole feature exists for. An unwritable literal would then escape
+        // from inside this catch, so the `rethrow` never ran: the caller was
+        // told the value was malformed instead of why the restart failed, and
+        // because the generator throws before it writes, the wrapper was left
+        // on the *new* values — the exact state being rolled back from.
+        //
+        // No knobs is the fallback because it always writes and always
+        // compiles. The app keeps running whatever it already had; the next
+        // reload puts it on the signature's defaults, which is the honest
+        // answer once the old values no longer fit the signature.
+        write(const {});
+      }
+      notifyChanged();
+      rethrow;
+    }
+    return resolved;
+  }
+
+  /// Stands in for the VM service round trip, so a test can reach what happens
+  /// *after* a restart lands. The same seam [debugRead] and [debugAct] are.
+  Future<void> Function(String action, RunHandle handle)? debugControl;
+
   /// Does one thing to one running app. The panel's entry point as well.
   Future<void> control(String action, RunHandle handle) async {
+    if (debugControl case var stub?) return stub(action, handle);
     var uri = handle.vmService;
     if (uri == null && action != 'stop') {
       throw StateError(
@@ -2293,12 +2641,15 @@ class RunCore extends PluginCore {
   /// persisted to disk — "what I ran a minute ago" is a fact about this
   /// session, and restoring it from last week would be a worse guess than the
   /// first device in the list.
+  /// Knobs rather than defines: the form has no define fields any more, so
+  /// recording them was recording a map that is always empty, and the values
+  /// somebody actually chose were the ones being dropped.
   ({
     String device,
     String package,
     String entrypoint,
     String? flavor,
-    Map<String, String> defines,
+    Map<String, String> knobs,
   })?
   lastLaunch;
 

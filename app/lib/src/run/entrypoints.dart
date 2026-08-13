@@ -16,7 +16,7 @@ class EntrypointRef {
     this.description,
     this.flavor,
     this.platforms = const [],
-    this.defines = const [],
+    this.knobs = const [],
   });
 
   /// Package-relative, `/`-separated — `lib/main_staging.dart`.
@@ -33,7 +33,7 @@ class EntrypointRef {
 
   /// True when `tool/flutterware.dart` named it. A discovered entry point is
   /// still launchable; the difference is that nobody vouched for it, and it
-  /// carries no defines.
+  /// carries no knobs.
   final bool declared;
 
   /// The `--flavor` this entry point is built with, when the project has them.
@@ -44,7 +44,9 @@ class EntrypointRef {
   /// unexpanded. Empty means anything.
   final List<RunPlatform> platforms;
 
-  final List<DartDefine> defines;
+  /// What the config says about `main`'s parameters — a computed value, a
+  /// label. Never what they are: the signature is the list.
+  final List<Knob> knobs;
 
   /// Every concrete platform this allows. Empty means no restriction.
   Set<RunPlatform> get allowedPlatforms => RunPlatform.expandAll(platforms);
@@ -109,7 +111,7 @@ List<EntrypointRef> declaredEntrypoints(Map<String, Object?> config) => [
           flavor: entry['flavor'] as String?,
           platforms: _platformsOf(entry['platforms']),
           declared: true,
-          defines: _definesOf(entry['defines']),
+          knobs: _knobsOf(entry['knobs']),
         ),
 ];
 
@@ -126,20 +128,24 @@ List<RunPlatform> _platformsOf(Object? raw) => [
     if (name is String) ?RunPlatform.byName(name),
 ];
 
-List<DartDefine> _definesOf(Object? raw) => [
+/// The annotations the config attached to `main`'s parameters, by name.
+///
+/// Same forgiving posture as [_platformsOf]: an entry this build cannot read is
+/// dropped rather than refused, because the config imports the `flutterware`
+/// version the *project* pins, which can run ahead of the GUI reading it.
+List<Knob> _knobsOf(Object? raw) => [
   for (var entry in (raw as List? ?? const []))
     if (entry is Map)
-      if (entry['define'] case String name)
-        DartDefine(
+      if (entry['knob'] case String name)
+        Knob(
           name,
           label: entry['label'] as String?,
           description: entry['description'] as String?,
-          defaultValue: entry['default'] as String?,
           options: [
             for (var option in (entry['options'] as List? ?? const []))
               if (option is String) option,
           ],
-          from: DefineSource.fromJson(entry['from']),
+          from: ValueSource.fromJson(entry['from']),
         ),
 ];
 

@@ -127,9 +127,9 @@ void main() => Flutterware.configure((fw) {
   // a phone. `app` is this GUI and `root` is a library.
   //
   // Named rather than left to the scan, which would find four `main()`s under
-  // `lib/` and offer them by file name. `FW_MARKER` is a real define — see
-  // `examples/example/lib/main.dart` — and is here because a launch define the
-  // app does not read is a control that does nothing.
+  // `lib/` and offer them by file name. `fwMarker` is a real parameter of that
+  // app's `main` — see `examples/example/lib/main.dart`; the entry below only
+  // labels it, because the signature already says everything else.
   fw.use(
     Run(
       packages: [
@@ -157,12 +157,13 @@ void main() => Flutterware.configure((fw) {
               'lib/main.dart',
               name: 'App',
               description: 'The example app, with the devbar mounted',
-              defines: [
-                DartDefine(
-                  'FW_MARKER',
+              knobs: [
+                Knob(
+                  'fwMarker',
+                  label: 'Marker',
                   description:
-                      'Shown on the home page, to prove which build '
-                      'is on the device',
+                      'Shown on the home page, to prove which launch is on '
+                      'the device',
                 ),
               ],
             ),

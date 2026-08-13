@@ -1,8 +1,14 @@
 # Knobs: the runtime API we have, and the static one worth exploring
 
-**Status.** The runtime path is built and in use. The static path is an idea
-with prior art, not a plan. This note exists so the decision is made
-deliberately rather than by whoever touches parameters next.
+**Status.** The runtime path is built and in use. **The static path's discovery
+half is built as of 2026-08-13** — `CatalogScanner` now reads a demo's parameter
+list into `CatalogEntry.knobs`, enums included, via
+`app/lib/src/utils/parameter_knobs.dart` and `enum_lookup.dart`, shared with run
+entry points (`2026-08-12-run-knobs-design.md` § K7, which decided the enum
+question this note left open). **What is still undecided is § Should they
+coexist? in the panel** — see the note at the end of that section. This note
+still exists so that decision is made deliberately rather than by whoever
+touches parameters next.
 
 ## What exists
 
@@ -118,6 +124,14 @@ write a hundred of these.
 ## Should they coexist?
 
 Yes, and not as a migration.
+
+**Open, and now load-bearing (2026-08-13).** Discovery produces static knobs, so
+`describe` *could* answer `--knobs` from them without the compile and the frame
+its own doc comment charges for. It deliberately does not yet: an entry may
+declare parameters *and* read `context.uiCatalog.parameters`, and short-circuiting
+would silently under-report the second. The choice — substitute, merge, or report
+them as two lists — is the coexistence question below, and it is exactly what
+this note asks not be settled in passing.
 
 They answer different questions. The static path says *what an entry varies
 over* — legible without running, addressable from a CLI, enumerable by an

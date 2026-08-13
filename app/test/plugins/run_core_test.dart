@@ -10,7 +10,6 @@ import 'package:flutterware_app/src/plugins/native/run_address.dart';
 import 'package:flutterware_app/src/plugins/native/run_plugin.dart';
 import 'package:flutterware_app/src/plugins/native/run_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
-import 'package:flutterware_app/src/run/defines.dart';
 import 'package:flutterware_app/src/run/entrypoints.dart';
 import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/inventory.dart';
@@ -534,48 +533,13 @@ void main() {
       expect(found.every((e) => !e.declared), isTrue);
     });
 
-    test('a declaration wins over the scan, and carries the defines', () async {
-      _writePackage(worktree, 'app', {
-        'lib/main.dart': 'void main() {}',
-        'lib/other.dart': 'void main() {}',
-      });
-      core = _coreFor(
-        worktree,
-        config: {
-          'packages': [
-            {
-              'path': 'app',
-              'entrypoints': [
-                {
-                  'path': 'lib/main.dart',
-                  'name': 'Staging',
-                  'defines': [
-                    {
-                      'define': 'API_BASE_URL',
-                      'from': {'source': 'hostAddresses'},
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      );
-
-      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
-
-      var package = result.packages.single;
-      expect(package.declared, isTrue);
-      // `lib/other.dart` has a main() and is not offered: naming two entry
-      // points meant those two.
-      expect(package.entrypoints.single.name, 'Staging');
-      expect(package.entrypoints.single.defines.single.name, 'API_BASE_URL');
-    });
-
     test(
-      'a source this build has no member for leaves the define usable',
+      'a source this build has no member for leaves the knob usable',
       () async {
-        _writePackage(worktree, 'app', {'lib/main.dart': 'void main() {}'});
+        _writePackage(worktree, 'app', {
+          'pubspec.yaml': 'name: app\n',
+          'lib/main.dart': "void main({String api = 'x'}) {}",
+        });
         core = _coreFor(
           worktree,
           config: {
@@ -585,15 +549,14 @@ void main() {
                 'entrypoints': [
                   {
                     'path': 'lib/main.dart',
-                    'defines': [
+                    'knobs': [
                       // The config imports the flutterware the *project* pins,
                       // which can run ahead of the GUI reading its manifest. A
-                      // source we cannot resolve has to mean a define with
-                      // fewer suggestions, never a define that disappears.
+                      // source we cannot resolve has to mean a knob with fewer
+                      // suggestions, never a knob that disappears.
                       {
-                        'define': 'API',
+                        'knob': 'api',
                         'from': {'source': 'somethingLater'},
-                        'default': 'x',
                       },
                     ],
                   },
@@ -606,19 +569,18 @@ void main() {
         var result =
             (await core.invoke('entrypoints'))! as RunEntrypointsResult;
 
-        var define = result.packages.single.entrypoints.single.defines.single;
-        expect(define.name, 'API');
-        expect(define.defaultValue, 'x');
+        var knob = result.packages.single.entrypoints.single.knobs.single;
+        expect(knob.name, 'api');
+        // Still the signature's own default: the source added nothing, and
+        // took nothing away.
+        expect(knob.defaultValue, 'x');
       },
     );
 
     test('a script source computes the value the launch will use', () async {
       _writePackage(worktree, 'app', {
-        'lib/main.dart': '''
-void main() {
-  const port = int.fromEnvironment('PORT', defaultValue: 8086);
-}
-''',
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({int serverPort = 8086}) {}',
       });
       _writeScript(worktree, 'void main() { print(8186); }');
       core = _coreFor(
@@ -629,65 +591,28 @@ void main() {
 
       var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
 
-      var define = result.packages.single.entrypoints.single.defines.single;
-      // Not 8086. The scanned fallback is what the app does when nobody says
-      // anything, and the whole point of the script is that somebody does —
-      // this worktree's stack came up on a port only the project can work out.
-      expect(define.defaultValue, '8186');
-      expect(define.problem, isNull);
-    });
-
-    test('a launch resolves its own defines, not the core’s scan', () async {
-      _writePackage(worktree, 'app', {
-        'lib/main.dart': '''
-void main() {
-  const port = int.fromEnvironment('PORT', defaultValue: 8086);
-}
-''',
-      });
-      _writeScript(worktree, 'void main() { print(8186); }');
-      core = _coreFor(
-        worktree,
-        sdk: _sdkWithRealDart(worktree),
-        config: _configWithScript(),
-      );
-
-      // No computeAll. A sweep that gathered its sources from the core's
-      // entry-point scan would find none here, ask nothing, and then refuse the
-      // launch for a value it never looked up — so `launch` resolves exactly
-      // the defines it was handed.
-      var handle = await core.launch(
-        device: 'phone',
-        package: 'app',
-        entry: EntrypointRef(
-          path: 'lib/main.dart',
-          name: 'main',
-          declared: true,
-          defines: [
-            DartDefine('PORT', from: DefineSource.script('tool/env.dart')),
-          ],
-        ),
-      );
-
-      expect(handle.defines, {'PORT': '8186'});
+      var knob = result.packages.single.entrypoints.single.knobs.single;
+      // Not 8086. The signature's default is what the app does when nobody
+      // says anything, and the whole point of the script is that somebody
+      // does — this worktree's stack came up on a port only the project can
+      // work out.
+      expect(knob.defaultValue, '8186');
+      expect(knob.problem, isNull);
     });
 
     test('a script that cannot answer refuses the launch', () async {
       _writePackage(worktree, 'app', {
-        'lib/main.dart': '''
-void main() {
-  const port = int.fromEnvironment('PORT', defaultValue: 8086);
-}
-''',
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({int serverPort = 8086}) {}',
       });
-      _writeScript(worktree, '''
+      _writeScript(worktree, """
 import 'dart:io';
 
 void main() {
   stderr.writeln('no .env — run local_env up first');
   exit(1);
 }
-''');
+""");
       core = _coreFor(
         worktree,
         sdk: _sdkWithRealDart(worktree),
@@ -704,7 +629,7 @@ void main() {
           isA<StateError>().having(
             (e) => e.message,
             'message',
-            allOf(contains('PORT'), contains('run local_env up first')),
+            allOf(contains('serverPort'), contains('run local_env up first')),
           ),
         ),
       );
@@ -712,13 +637,10 @@ void main() {
 
     test('a value the caller gave launches past a script that failed', () async {
       _writePackage(worktree, 'app', {
-        'lib/main.dart': '''
-void main() {
-  const port = int.fromEnvironment('PORT', defaultValue: 8086);
-}
-''',
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({int serverPort = 8086}) {}',
       });
-      _writeScript(worktree, 'void main() { exit(1); }');
+      _writeScript(worktree, "import 'dart:io';\nvoid main() { exit(1); }");
       core = _coreFor(
         worktree,
         sdk: _sdkWithRealDart(worktree),
@@ -729,58 +651,17 @@ void main() {
       // typed one has chosen, and a broken dev stack should not stop them.
       //
       // Through `launch` rather than the action, because that is the method the
-      // panel's Start button calls: the defaults are filled in there precisely
-      // so both surfaces bake in the same set, and a test that only went
-      // through `invoke` would not say so.
+      // panel's Start button calls: both surfaces have to bake in the same set,
+      // and a test that only went through `invoke` would not say so.
       await core.computeAll();
       var handle = await core.launch(
         device: 'phone',
         package: 'app',
         entry: core.entrypointsFor('app').single,
-        defines: {'PORT': '9000'},
+        knobs: {'serverPort': '9000'},
       );
 
-      expect(handle.defines, {'PORT': '9000'});
-    });
-
-    test('launching refuses a define the entry point does not declare', () async {
-      _writePackage(worktree, 'app', {'lib/main.dart': 'void main() {}'});
-      core = _coreFor(
-        worktree,
-        config: {
-          'packages': [
-            {
-              'path': 'app',
-              'entrypoints': [
-                {
-                  'path': 'lib/main.dart',
-                  'defines': [
-                    {'define': 'API'},
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      );
-
-      // A misspelled define compiles perfectly and does nothing — the app
-      // reads its fallback and behaves as though nobody set anything.
-      await expectLater(
-        core.invoke(
-          'launch',
-          arguments: {'device': 'phone', 'defines': 'APII=x'},
-        ),
-        throwsA(
-          isA<ArgumentError>().having(
-            (e) => '$e',
-            'message',
-            // "has", not "declares": since the scan, a define can come from the
-            // source as well as from the config, and the refusal covers both.
-            contains('has no such define'),
-          ),
-        ),
-      );
+      expect(handle.knobs, {'serverPort': '9000'});
     });
 
     /// One file declared several times under different names is the documented
@@ -845,7 +726,6 @@ void main() {
       });
     });
   });
-
   group('the platforms an entry point declares', () {
     test('a shorthand expands, and a bare platform does not', () {
       expect(RunPlatform.expandAll([RunPlatform.desktop]), {
@@ -966,113 +846,80 @@ void main() {
     });
   });
 
-  group('the defines a package reads', () {
-    test('finds every spelling, with its type and its real default', () {
+  group('the dart-define passthrough', () {
+    setUp(() {
       _writePackage(worktree, 'app', {
-        // The ordinary shape: `const x = …`, where the const is implicit and
-        // the parser sees a method invocation rather than a construction.
-        'lib/src/config.dart': '''
-const apiBase = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'http://localhost:8080',
-);
-const retries = int.fromEnvironment('RETRIES', defaultValue: 3);
-const verbose = bool.fromEnvironment('VERBOSE');
-''',
-        // The other spelling. An explicit `const` parses as an instance
-        // creation whose type is the prefixed name `String.fromEnvironment` —
-        // handling only this one finds the rarer of the two.
-        'lib/main.dart': '''
-void main() {
-  print(const String.fromEnvironment('MARKER', defaultValue: 'none'));
-  print(bool.hasEnvironment('NOT_A_DEFINE'));
-  print(const bool.fromEnvironment('dart.vm.product'));
-}
-''',
-        // Nowhere near the top level, which is why this scan recurses where
-        // the entry point scan deliberately does not.
-        'lib/src/deep/more.dart':
-            "const ratio = double.fromEnvironment('RATIO', defaultValue: 1.5);",
-      });
-
-      var found = scanDefines(p.join(worktree.path, 'app'));
-
-      expect(found.keys.toSet(), {
-        'API_BASE_URL',
-        'RETRIES',
-        'VERBOSE',
-        'MARKER',
-        'RATIO',
-      });
-      // `hasEnvironment` asks whether a define was passed; it is not one.
-      expect(found, isNot(contains('NOT_A_DEFINE')));
-      // Nor is a reserved VM define, which the compiler answers rather than the
-      // command line — offering one would be offering a control that cannot be
-      // set. This repo reads `dart.vm.product` in two of its own packages.
-      expect(found, isNot(contains('dart.vm.product')));
-
-      var api = found['API_BASE_URL']!;
-      expect(api.kind, 'String');
-      expect(api.file, 'lib/src/config.dart');
-      // Unquoted: the value, not the literal. A `--dart-define` carrying the
-      // quotes would set something the app never meant.
-      expect(api.defaultValue, 'http://localhost:8080');
-
-      expect(found['RETRIES']!.kind, 'int');
-      expect(found['RETRIES']!.defaultValue, '3');
-      // No `defaultValue:` at all is different from one that is empty.
-      expect(found['VERBOSE']!.defaultValue, isNull);
-      expect(found['MARKER']!.defaultValue, 'none');
-      expect(found['RATIO']!.kind, 'double');
-    });
-
-    test('a file that will not parse costs the others nothing', () {
-      _writePackage(worktree, 'app', {
-        'lib/broken.dart': "const x = String.fromEnvironment('A',,,",
-        'lib/fine.dart': "const y = String.fromEnvironment('B');",
-      });
-
-      expect(scanDefines(p.join(worktree.path, 'app')), contains('B'));
-    });
-
-    test(
-      'a package that declares no defines offers the ones it reads',
-      () async {
-        _writePackage(worktree, 'app', {
-          'lib/main.dart': 'void main() {}',
-          'lib/src/config.dart':
-              "const api = String.fromEnvironment('API', defaultValue: 'x');",
-        });
-        core = _coreFor(
-          worktree,
-          config: {
-            'packages': [
-              {
-                'path': 'app',
-                'entrypoints': [
-                  {'path': 'lib/main.dart', 'name': 'App'},
-                ],
-              },
-            ],
-          },
-        );
-
-        var result =
-            (await core.invoke('entrypoints'))! as RunEntrypointsResult;
-        var define = result.packages.single.entrypoints.single.defines.single;
-        expect(define.name, 'API');
-        expect(define.kind, 'String');
-        expect(define.readAt, 'lib/src/config.dart');
-        expect(define.defaultValue, 'x');
-        expect(define.problem, isNull);
-      },
-    );
-
-    test('a declared define nothing reads is reported as such', () async {
-      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
         'lib/main.dart': 'void main() {}',
-        'lib/src/config.dart':
-            "const api = String.fromEnvironment('API_BASE_URL');",
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+    });
+
+    test('forwards whatever it is given, unexamined', () async {
+      // Deliberately unchecked. It exists for the three cases a knob cannot
+      // reach — a define read by a package you do not own, one the native
+      // build consumes, and anything needed before the Dart entry point runs —
+      // and in none of them is there a signature to check against. Modelling a
+      // standard Flutter flag was the mistake; refusing to forward it would be
+      // a different one.
+      await core.computeAll();
+      var handle = await core.launch(
+        device: 'phone',
+        package: 'app',
+        entry: core.entrypointsFor('app').single,
+        defines: {'SOME_SDK_KEY': 'abc', 'NOTHING_READS_THIS': 'x'},
+      );
+
+      expect(handle.defines, {
+        'SOME_SDK_KEY': 'abc',
+        'NOTHING_READS_THIS': 'x',
+      });
+    });
+
+    test('is not confused with knobs', () async {
+      // Same launch, two mechanisms, two costs: a define is baked into the
+      // build, a knob is an argument the wrapper writes.
+      await expectLater(
+        core.invoke(
+          'launch',
+          arguments: {'device': 'phone', 'knobs': 'anything=1'},
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            contains('takes no knobs'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('the knobs an entry point takes', () {
+    test('come off the signature, annotated by the config', () async {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/src/backend.dart': 'enum Backend { dev, staging, prod }',
+        'lib/main.dart': '''
+import 'src/backend.dart';
+void main({
+  String apiHost = 'localhost',
+  int serverPort = 8086,
+  Backend backend = Backend.dev,
+}) {}
+''',
       });
       core = _coreFor(
         worktree,
@@ -1084,8 +931,8 @@ void main() {
                 {
                   'path': 'lib/main.dart',
                   'name': 'App',
-                  'defines': [
-                    {'define': 'API_BASE_URI'},
+                  'knobs': [
+                    {'knob': 'apiHost', 'label': 'Host'},
                   ],
                 },
               ],
@@ -1095,18 +942,29 @@ void main() {
       );
 
       var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
-      var define = result.packages.single.entrypoints.single.defines.single;
-      // One letter out. It compiles, it launches, the control appears, and
-      // turning it does nothing — which looks exactly like a broken feature.
-      expect(define.name, 'API_BASE_URI');
-      expect(define.problem, contains('nothing in this package reads'));
-      expect(define.readAt, isNull);
+      var knobs = result.packages.single.entrypoints.single.knobs;
+
+      // Signature order, and every parameter is offered whether or not the
+      // config mentioned it.
+      expect(knobs.map((k) => k.name), ['apiHost', 'serverPort', 'backend']);
+      expect(knobs.map((k) => k.kind), ['string', 'integer', 'picker']);
+      expect(knobs.first.label, 'Host');
+      expect(knobs.first.defaultValue, 'localhost');
+      expect(knobs[1].defaultValue, '8086');
+      expect(knobs.last.options, ['dev', 'staging', 'prod']);
+      expect(knobs.every((k) => k.problem == null), isTrue);
     });
 
-    test('launching refuses a define no config and no source knows', () async {
+    test('an entry point taking none offers none', () async {
+      // The `Studio (dev)` embarrassment, gone by construction: a package-level
+      // scan offered four constants belonging to another entry point, and a
+      // signature cannot.
       _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
         'lib/main.dart': 'void main() {}',
-        'lib/src/config.dart': "const api = String.fromEnvironment('API');",
+        'lib/main_other.dart':
+            "const x = String.fromEnvironment('SOMEBODY_ELSES');\n"
+            'void main({int port = 1}) {}',
       });
       core = _coreFor(
         worktree,
@@ -1122,21 +980,572 @@ void main() {
         },
       );
 
-      // Before the scan there were no defines to check against, so a package
-      // that declared none had to accept anything.
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      expect(result.packages.single.entrypoints.single.knobs, isEmpty);
+    });
+
+    test('a declaration naming no parameter is reported', () async {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({int serverPort = 1}) {}',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main.dart',
+                  'name': 'App',
+                  'knobs': [
+                    {'knob': 'serverPrt'},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var knobs = result.packages.single.entrypoints.single.knobs;
+
+      // The real one first, the typo last with its reason — which is what makes
+      // the typo findable.
+      expect(knobs.map((k) => k.name), ['serverPort', 'serverPrt']);
+      expect(knobs.last.problem, contains('main takes no `serverPrt`'));
+      expect(knobs.last.kind, isNull);
+    });
+
+    test('launching refuses a knob the signature does not have', () async {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({int serverPort = 1}) {}',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+
       await expectLater(
         core.invoke(
           'launch',
-          arguments: {'device': 'phone', 'defines': 'APII=x'},
+          arguments: {'device': 'phone', 'knobs': 'serverPrt=2'},
         ),
         throwsA(
           isA<ArgumentError>().having(
             (e) => '$e',
             'message',
-            allOf(contains('no such define'), contains('API')),
+            allOf(contains('no such knob'), contains('serverPort')),
           ),
         ),
       );
+    });
+  });
+
+  test('an enum offers its own constants and says what it will not', () async {
+    // The config used to be merged into a picker's list, so a value that could
+    // never compile was offered as a chip and then refused by the very same
+    // core the moment somebody picked it. The enum is the list; what the config
+    // added is worth a sentence, because it is a line in `flutterware.dart`
+    // that reads as working.
+    _writePackage(worktree, 'app', {
+      'pubspec.yaml': 'name: app\n',
+      'lib/src/backend.dart': 'enum Backend { dev, prod }',
+      'lib/main.dart':
+          "import 'src/backend.dart';\n"
+          'void main({Backend backend = Backend.dev}) {}',
+    });
+    core = _coreFor(
+      worktree,
+      config: {
+        'packages': [
+          {
+            'path': 'app',
+            'entrypoints': [
+              {
+                'path': 'lib/main.dart',
+                'knobs': [
+                  {
+                    'knob': 'backend',
+                    'options': ['prod', 'canary'],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+
+    var knob = result.packages.single.entrypoints.single.knobs.single;
+    expect(knob.options, ['dev', 'prod'], reason: 'not canary');
+    expect(knob.problem, allOf(contains('canary'), contains('dev, prod')));
+    // `prod` is a constant, so it is not a complaint — it is merely the same
+    // fact written twice.
+    expect(knob.problem, isNot(contains('prod, canary')));
+  });
+
+  group('a main that requires a parameter', () {
+    // Not a knob and not skippable: there is no default to leave it at, so
+    // nothing can launch it. It used to be dropped silently, which made the
+    // entry point look knob-less — `--knobs=apiHost=x` came back "takes no
+    // knobs", and launching without it produced a wrapper whose
+    // `entry.main as FutureOr<void> Function()` cast cannot hold a function
+    // with a required parameter, so the app died at startup naming nothing.
+    setUp(() {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({required String apiHost}) {}',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+    });
+
+    test('is refused by name rather than crashing on the cast', () async {
+      await expectLater(
+        core.invoke('launch', arguments: {'device': 'phone'}),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('apiHost'), contains('has to be optional')),
+          ),
+        ),
+      );
+    });
+
+    test('and passing it does not talk the launch round', () async {
+      // The old message was actively wrong here: "takes no knobs" about a main
+      // that visibly takes one.
+      await expectLater(
+        core.invoke(
+          'launch',
+          arguments: {'device': 'phone', 'knobs': 'apiHost=x'},
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            isNot(contains('takes no knobs')),
+          ),
+        ),
+      );
+    });
+
+    test('and the cockpit shows the reason instead of nothing', () async {
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+
+      var knob = result.packages.single.entrypoints.single.knobs.single;
+      expect(knob.name, 'apiHost');
+      expect(knob.problem, contains('main requires this'));
+      // No kind: there is no control, and drawing one would suggest there is
+      // something to set.
+      expect(knob.kind, isNull);
+    });
+  });
+
+  group('a knob value the signature cannot take', () {
+    // Refused here rather than left to the compiler: the value becomes a
+    // literal in generated source, so a bad one is a build failure pointing at
+    // a file the user did not write.
+    setUp(() {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/src/backend.dart': 'enum Backend { dev, prod }',
+        'lib/main.dart': """
+import 'src/backend.dart';
+void main({int serverPort = 1, Backend backend = Backend.dev}) {}
+""",
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+    });
+
+    Future<void> refuses(String knobs, Matcher message) => expectLater(
+      core.invoke('launch', arguments: {'device': 'phone', 'knobs': knobs}),
+      throwsA(isA<ArgumentError>().having((e) => '$e', 'message', message)),
+    );
+
+    test(
+      'a word where a number goes',
+      () => refuses('serverPort=eight', contains('takes a whole number')),
+    );
+
+    test(
+      'a constant the enum does not have',
+      () => refuses(
+        'backend=nope',
+        allOf(contains('dev, prod'), contains('nope')),
+      ),
+    );
+
+    test('and the panel is refused too, not only the action', () async {
+      // The check used to sit in the action, on the grounds that the panel
+      // builds its fields from the same list and so cannot invent a name —
+      // true of names, false of values. A text field for an `int` takes
+      // `eight` from a desktop keyboard, and what followed was the failure
+      // this design deleted `--dart-define` to escape: the generator declined
+      // to write a literal it could not form, the argument vanished, the
+      // wrapper came out in its no-knobs shape, the app ran on 1, and the
+      // handle recorded `eight` for the cockpit to display.
+      await core.computeAll();
+      await expectLater(
+        core.launch(
+          device: 'phone',
+          package: 'app',
+          entry: core.entrypointsFor('app').single,
+          knobs: {'serverPort': 'eight'},
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            contains('takes a whole number'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('setKnobs', () {
+    setUp(() {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/src/backend.dart': 'enum Backend { dev, prod }',
+        'lib/main.dart':
+            "import 'src/backend.dart';\n"
+            'void main({int serverPort = 1, Backend backend = Backend.dev}) {}',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+    });
+
+    test('checks the value before it touches anything', () async {
+      // The bug this pins: the action did not run `computeAll`, so there were
+      // no entry points to check against, the check silently passed, and the
+      // restart failed on a wrapper that would not compile — surfacing as
+      // `s1.hotRestart: (-32603)`, which says nothing to anybody.
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        package: 'app',
+        launcherPid: pid,
+      );
+
+      var result =
+          (await core.invoke(
+                'setKnobs',
+                arguments: {'device': 'phone', 'knobs': 'backend=nope'},
+              ))!
+              as RunControlResult;
+
+      expect(result.ok, isFalse);
+      expect(result.error, contains('dev, prod'));
+      // Refused before the wrapper was written, so nothing on disk moved.
+      expect(
+        File(
+          p.join(
+            worktree.path,
+            'app',
+            '.dart_tool/flutterware/run/main_guest.dart',
+          ),
+        ).existsSync(),
+        isFalse,
+      );
+    });
+
+    test(
+      "refuses another checkout's run rather than rewriting our own",
+      () async {
+        // `absolutePathOf` resolves in *this* worktree, so applying to another
+        // checkout's run would rewrite this worktree's wrapper and restart that
+        // app onto this worktree's code — a wrong file and a wrong app.
+        core.debugRepoWorktrees = Future.value({
+          p.canonicalize(worktree.path),
+          p.canonicalize(otherWorktree.path),
+        });
+        _writeHandle(
+          runDir,
+          otherWorktree,
+          device: 'phone',
+          entrypoint: 'lib/main.dart',
+          package: 'app',
+          worktreeName: 'feature-x',
+          launcherPid: pid,
+        );
+
+        var result =
+            (await core.invoke(
+                  'setKnobs',
+                  arguments: {
+                    'device': 'phone',
+                    'worktree': 'feature-x',
+                    'knobs': 'serverPort=2',
+                  },
+                ))!
+                as RunControlResult;
+
+        expect(result.ok, isFalse);
+        expect(result.error, contains('belongs to feature-x'));
+      },
+    );
+
+    test('a failed restart puts the wrapper and the handle both back', () async {
+      // The two move together or the cockpit lies. Recording the handle *after*
+      // the restart looked safer — say it is running only once it is — and it
+      // lost the values outright when the app being restarted was flutterware
+      // itself: a hot restart tears down the root isolate, so nothing queued
+      // after `await control(…)` ran at all. The wrapper on disk carried the
+      // value, the app came up on it, and the Knobs tab showed an empty field
+      // for a value the app was plainly holding. Found by driving the real
+      // cockpit; no unit test was looking in that direction.
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        package: 'app',
+        launcherPid: pid,
+        knobs: {'serverPort': '7'},
+      );
+      await core.computeAll();
+
+      // No VM service, so the restart cannot land.
+      await expectLater(
+        core.applyKnobs(handle, {'serverPort': '9'}),
+        throwsA(anything),
+      );
+
+      var wrapper = File(
+        p.join(
+          worktree.path,
+          'app',
+          '.dart_tool/flutterware/run/main_guest.dart',
+        ),
+      ).readAsStringSync();
+      expect(wrapper, contains('serverPort: 7,'));
+      expect(wrapper, isNot(contains('serverPort: 9')));
+      expect(RunHandle.tryRead(File(handle.handlePath!))!.knobs, {
+        'serverPort': '7',
+      });
+    });
+
+    test('a knob left out is re-asked of its source, not dropped', () async {
+      // "Replaces the set" is about what the *caller* chose. Saying nothing
+      // about `serverPort` used to put it back to the signature's default — an
+      // app quietly talking to another worktree's database, which is the one
+      // failure a launch is refused over. Whatever the project can work out, it
+      // works out again.
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({int serverPort = 8086}) {}',
+      });
+      _writeScript(worktree, 'void main() { print(8186); }');
+      core = _coreFor(
+        worktree,
+        sdk: _sdkWithRealDart(worktree),
+        config: _configWithScript(),
+      );
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        package: 'app',
+        launcherPid: pid,
+        knobs: {'serverPort': '9999'},
+      );
+      await core.computeAll();
+      core.debugControl = (action, handle) async {};
+
+      var running = await core.applyKnobs(handle, const {});
+
+      // Neither 8086 (the signature's default) nor 9999 (the value that was
+      // being overridden). The script still knows the port this worktree got.
+      expect(running, {'serverPort': '8186'});
+      expect(_wrapperFor(worktree), contains('serverPort: 8186,'));
+      expect(
+        RunHandle.tryRead(File(handle.handlePath!))!.knobs,
+        {'serverPort': '8186'},
+        reason: 'and the cockpit is told what it is actually running',
+      );
+    });
+
+    test('finds the declaration by name when a file has several', () async {
+      // #119 made "declare one file several times under different names" the
+      // documented way to run one app against several configurations. Their
+      // signatures are identical — it is the same file — but their config
+      // annotations are not, so matching on the path took the first
+      // declaration and would have resolved the wrong `from:` script.
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': "void main({String apiHost = 'localhost'}) {}",
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main.dart',
+                  'name': 'Dev',
+                  'knobs': [
+                    {
+                      'knob': 'apiHost',
+                      'label': 'Dev host',
+                      'options': ['dev.example.com'],
+                    },
+                  ],
+                },
+                {
+                  'path': 'lib/main.dart',
+                  'name': 'Staging',
+                  'knobs': [
+                    {
+                      'knob': 'apiHost',
+                      'label': 'Staging host',
+                      'options': ['staging.example.com'],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      );
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        entrypointName: 'Staging',
+        package: 'app',
+        launcherPid: pid,
+      );
+      await core.computeAll();
+
+      var knob = core.knobEntriesFor(handle).knobs.single;
+
+      expect(knob.label, 'Staging host');
+      expect(knob.options, ['staging.example.com']);
+    });
+
+    test('a rollback that cannot write still reports the restart', () async {
+      // `previous` was valid when it was set; the signature can have moved
+      // since, which is the loop this feature exists for. The rollback then
+      // threw from inside the catch, so the `rethrow` never ran: the caller was
+      // told the value was malformed instead of why the restart failed, and
+      // because the generator throws before it writes, the wrapper was left on
+      // the values being rolled back *from*.
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({int serverPort = 1}) {}',
+      });
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        package: 'app',
+        launcherPid: pid,
+        // What the run was launched with, back when the parameter was a String.
+        knobs: {'serverPort': 'localhost'},
+      );
+      await core.computeAll();
+      core.debugControl = (action, handle) async =>
+          throw StateError('the app went away mid-restart');
+
+      await expectLater(
+        core.applyKnobs(handle, {'serverPort': '9'}),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('went away mid-restart'),
+          ),
+        ),
+      );
+
+      // Not left on 9, which is the state the rollback exists to undo. `9` is
+      // unwritable as the old `localhost`, so the fallback is no knobs at all —
+      // a wrapper that compiles, on the signature's own default.
+      var wrapper = _wrapperFor(worktree);
+      expect(wrapper, isNot(contains('serverPort: 9')));
+      expect(wrapper, isNot(contains('entry.main(')));
+    });
+
+    test('refuses an entry point this worktree does not declare', () async {
+      // Without it there is nothing to validate against, and an unvalidated
+      // value becomes a literal in generated source.
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/somebody_elses.dart',
+        package: 'app',
+        launcherPid: pid,
+      );
+
+      var result =
+          (await core.invoke(
+                'setKnobs',
+                arguments: {'device': 'phone', 'knobs': 'serverPort=2'},
+              ))!
+              as RunControlResult;
+
+      expect(result.ok, isFalse);
+      expect(result.error, contains('not an entry point this worktree knows'));
     });
   });
 
@@ -1869,9 +2278,9 @@ Map<String, Object?> _configWithScript() => {
       'entrypoints': [
         {
           'path': 'lib/main.dart',
-          'defines': [
+          'knobs': [
             {
-              'define': 'PORT',
+              'knob': 'serverPort',
               'from': {'script': 'tool/env.dart'},
             },
           ],
@@ -1895,6 +2304,11 @@ String _event(String name, Map<String, Object?> params) => jsonEncode([
   {'event': name, 'params': params},
 ]);
 
+/// The generated guest wrapper for `app`'s `lib/main.dart`.
+String _wrapperFor(Directory worktree) => File(
+  p.join(worktree.path, 'app', '.dart_tool/flutterware/run/main_guest.dart'),
+).readAsStringSync();
+
 RunHandle _writeHandle(
   Directory runDir,
   Directory worktree, {
@@ -1906,8 +2320,10 @@ RunHandle _writeHandle(
   String? vmService,
   String? appId,
   String? flavor,
+  String? package,
   int launcherPid = 1,
   DateTime? startedAt,
+  Map<String, String> knobs = const {},
 }) {
   return RunHandle(
     worktree: worktree.path,
@@ -1916,11 +2332,13 @@ RunHandle _writeHandle(
     deviceName: device,
     entrypoint: entrypoint,
     entrypointName: entrypointName,
+    package: package,
     flavor: flavor,
     launcherPid: launcherPid,
     vmService: vmService,
     appId: appId,
     logPath: logPath,
+    knobs: knobs,
     startedAt: startedAt ?? DateTime.now(),
   ).publish(runDir.path);
 }

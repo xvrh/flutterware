@@ -251,19 +251,25 @@ class ServerInspection extends Plugin {
 /// fw.use(Run(packages: [
 ///   RunPackage(app, entrypoints: [
 ///     Entrypoint('lib/main.dart', name: 'App'),
-///     Entrypoint('lib/main_staging.dart', name: 'Staging', defines: [
-///       DartDefine('API_HOST', from: DefineSource.hostAddresses),
-///       DartDefine('API_PORT',
-///           from: DefineSource.script('tool/local_env.dart',
+///     Entrypoint('lib/main_staging.dart', name: 'Staging', knobs: [
+///       Knob('apiHost', from: ValueSource.hostAddresses),
+///       Knob('serverPort',
+///           from: ValueSource.script('tool/local_env.dart',
 ///               args: ['port', 'server'])),
 ///     ]),
 ///   ]),
 /// ]));
 /// ```
 ///
-/// See `docs/superpowers/specs/2026-07-31-app-launcher-cockpit-brainstorm.md`,
-/// and `2026-08-11-computed-define-sources.md` for what a define's `from:` can
-/// work out for itself.
+/// The knobs are the entry point's own `main({String apiHost = 'localhost',
+/// int serverPort = 8086})` — the config only annotates them. Changing one
+/// costs a hot restart rather than a rebuild, which is the whole difference
+/// from the `--dart-define`s this replaced.
+///
+/// See `docs/superpowers/specs/2026-08-12-run-knobs-design.md`,
+/// `2026-07-31-app-launcher-cockpit-brainstorm.md`, and
+/// `2026-08-11-computed-define-sources.md` for what a `from:` can work out for
+/// itself.
 ///
 /// Offers no `each`, like [LauncherIcon] and for the same reason: only a
 /// package that is an app can be run onto a phone.
@@ -309,7 +315,7 @@ class Entrypoint {
     this.description,
     this.flavor,
     this.platforms = const [],
-    this.defines = const [],
+    this.knobs = const [],
   });
 
   /// Package-relative, `/`-separated — `lib/main_staging.dart`.
@@ -317,6 +323,14 @@ class Entrypoint {
 
   /// What a human and an agent call it. The file's name when null.
   final String? name;
+
+  /// The knobs this entry point's `main` takes, annotated — see [Knob].
+  ///
+  /// Declaring none is the ordinary case: the signature is the list, and a
+  /// parameter nobody annotated still gets a control with its own name, type
+  /// and default. This is for the two things a signature cannot say — a
+  /// computed value, and a human label.
+  final List<Knob> knobs;
 
   /// What this entry point *is*, in a line.
   ///
@@ -367,9 +381,6 @@ class Entrypoint {
   /// should have to write down twice.
   final List<RunPlatform> platforms;
 
-  /// What has to be decided before this can be built.
-  final List<DartDefine> defines;
-
   Map<String, Object?> toJson() => {
     'path': path,
     'name': ?name,
@@ -379,7 +390,7 @@ class Entrypoint {
     // devices; the manifest keeps the author's word so a picker can say
     // `desktop` rather than reciting three platforms back at them.
     if (platforms.isNotEmpty) 'platforms': [for (var p in platforms) p.name],
-    if (defines.isNotEmpty) 'defines': [for (var d in defines) d.toJson()],
+    if (knobs.isNotEmpty) 'knobs': [for (var k in knobs) k.toJson()],
   };
 }
 
@@ -429,30 +440,57 @@ enum RunPlatform {
   };
 }
 
-/// A `--dart-define` this entry point wants, offered as a control rather than
-/// as something to remember.
+/// One knob an entry point's `main` takes, annotated.
 ///
-/// **Named for what it is, because that is what says what it costs.** This was
-/// `LaunchKnob`, which put it in the same word as a preview's knobs — and those
-/// are the opposite kind of thing: a knob is read while a widget builds and
-/// changing one costs a frame, while a define is compiled in and changing one
-/// costs a full rebuild and reinstall. Nothing in the old name said so, and
-/// both were `--knobs=` on the same CLI.
+/// **The signature is the declaration; this only annotates it.** `main`'s
+/// parameter list already says what exists, with what type and what default,
+/// and it cannot be wrong about its own function — so nothing here repeats any
+/// of that. Only [name] appears twice, and it is the join key.
 ///
-/// Prefer a runtime control where one will do — a devbar variable, pushed into
-/// a running app for nothing — and reach for this only when the value has to be
-/// baked in.
-class DartDefine {
-  const DartDefine(
+/// ```dart
+/// // tool/flutterware.dart — declared once, shared by being a variable
+/// final devKnobs = [
+///   Knob('serverPort',
+///       from: ValueSource.script('tool/local_env.dart', args: ['port'])),
+///   Knob('apiHost', from: ValueSource.hostAddresses),
+/// ];
+///
+/// Entrypoint('lib/main.dart', name: 'App', knobs: devKnobs),
+/// Entrypoint('lib/main_staging.dart', name: 'Staging', knobs: devKnobs),
+/// ```
+///
+/// ```dart
+/// // lib/main.dart — just the socket
+/// void main({int serverPort = 8086, String apiHost = 'localhost'}) => …
+/// ```
+///
+/// Sharing across entry points needs no API: `tool/flutterware.dart` is Dart,
+/// so a variable does it. A per-package list was proposed and rejected for
+/// exactly that reason.
+///
+/// Changing a knob's value rewrites the generated wrapper and hot restarts —
+/// 262ms on desktop, 3s on an Android emulator, against a rebuild. See
+/// `docs/superpowers/specs/2026-08-12-run-knobs-design.md`.
+///
+/// **The word is back because the cost is.** This was `LaunchKnob`, renamed to
+/// `DartDefine` on the grounds that a preview's knob costs a frame while a
+/// define costs a rebuild, so one word for both would hide the difference. The
+/// mechanism underneath has changed: a restart is not a frame, but it is the
+/// same order of thing, and a value read off a parameter list is what
+/// `KnobDescriptor` already models for previews and devbar variables. One
+/// vocabulary, one wire shape.
+class Knob {
+  const Knob(
     this.name, {
     this.label,
     this.description,
-    this.defaultValue,
     this.options = const [],
     this.from,
   });
 
-  /// The name `String.fromEnvironment` reads — `API_BASE_URL`.
+  /// The parameter's name, exactly — `serverPort`. A knob naming a parameter
+  /// `main` does not take is reported rather than silently ignored: the control
+  /// would appear and do nothing, which looks like a broken feature.
   final String name;
 
   /// What a human sees; [name] when absent.
@@ -460,30 +498,36 @@ class DartDefine {
 
   final String? description;
 
-  /// Used when nobody says otherwise.
-  final String? defaultValue;
-
-  /// Values worth offering, when they are known in advance and few.
+  /// Values worth offering for a knob whose type cannot enumerate itself.
+  ///
+  /// An `enum` parameter needs none — its constants are read off the
+  /// declaration, so a list here would be the same facts twice and free to
+  /// drift.
   final List<String> options;
 
-  /// Values the tool can work out for itself, added to [options].
+  /// A value the tool works out for itself, rather than one to type.
   ///
-  /// This is what turns "point the app at this machine" from typing into
-  /// picking: the tool already knows what this machine is reachable at, so the
-  /// value should not have to be looked up by hand.
-  final DefineSource? from;
+  /// The only thing in this class a signature could not have said: a default is
+  /// a constant, and "whichever port this worktree was allocated" is not.
+  final ValueSource? from;
 
   Map<String, Object?> toJson() => {
-    'define': name,
+    'knob': name,
     if (label != null) 'label': label,
     if (description != null) 'description': description,
-    if (defaultValue != null) 'default': defaultValue,
     if (options.isNotEmpty) 'options': options,
     if (from != null) 'from': from!.toJson(),
   };
 }
 
-/// Where a [DartDefine]'s offered values are found.
+/// The new name for [DefineSource], which no longer only feeds defines.
+///
+/// An alias rather than a rename: `DefineSource` is published, and
+/// `2026-08-11-computed-define-sources.md` describes the same mechanism under
+/// the old noun. Both spell the same class until defines go.
+typedef ValueSource = DefineSource;
+
+/// Where a [Knob]'s value or offered values are found.
 ///
 /// Two of them, and they are not the same kind of thing: [hostAddresses] is
 /// something the tool knows, while [DefineSource.script] is something the
@@ -507,8 +551,8 @@ sealed class DefineSource {
   /// values to choose from.
   ///
   /// ```dart
-  /// DartDefine('LOCALDEV_SERVER_PORT',
-  ///     from: DefineSource.script('tool/local_env.dart',
+  /// Knob('serverPort',
+  ///     from: ValueSource.script('tool/local_env.dart',
   ///         args: ['port', 'server'])),
   /// ```
   ///
@@ -539,7 +583,7 @@ sealed class DefineSource {
   /// Null rather than a throw, for the reason `_platformsOf` gives on the app
   /// side: the config imports the `flutterware` version the *project* pins,
   /// which can run ahead of the GUI reading its manifest. A source we cannot
-  /// resolve has to mean a define with fewer suggestions, never a define that
+  /// resolve has to mean a knob with fewer suggestions, never a knob that
   /// disappears.
   static DefineSource? fromJson(Object? raw) {
     if (raw is! Map) return null;

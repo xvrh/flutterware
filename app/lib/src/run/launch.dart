@@ -57,6 +57,7 @@ Future<RunHandle> launchApp({
   String? deviceName,
   String? flavor,
   Map<String, String> defines = const {},
+  Map<String, Object?> knobs = const {},
 }) async {
   if (Platform.isWindows) {
     // `ProcessStartMode.detached` gives no stdio to redirect, and the POSIX
@@ -99,6 +100,7 @@ Future<RunHandle> launchApp({
   var guestTarget = writeGuestEntrypoint(
     packageRoot: packageRoot,
     entrypoint: entrypoint,
+    knobs: knobs,
   );
   if (!guestTarget.guest) {
     _logger.info('Launching without the run guest: ${guestTarget.reason}');
@@ -144,6 +146,7 @@ Future<RunHandle> launchApp({
     flavor: flavor,
     launcherPid: process.pid,
     defines: defines,
+    knobs: {for (var e in knobs.entries) e.key: '${e.value}'},
     logPath: logPath,
     startedAt: DateTime.now(),
   );

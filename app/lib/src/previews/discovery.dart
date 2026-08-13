@@ -3,8 +3,11 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:path/path.dart' as p;
+import 'package:pubspec_parse/pubspec_parse.dart';
 
+import '../utils/enum_lookup.dart';
 import '../utils/list_files.dart';
+import '../utils/parameter_knobs.dart';
 import 'authoring.dart';
 import 'catalog_entry.dart';
 
@@ -112,8 +115,29 @@ class CatalogScanner {
   /// previews as this package's.
   final _nested = <String, bool>{};
 
+  /// Rebuilt per scan for the same reason [_nested] is: it caches parses, and a
+  /// file that changed between scans must not answer from the old one.
+  EnumLookup _lookup = EnumLookup();
+
+  /// This package's name, so a demo importing its own `package:` URI resolves
+  /// without a `PackageConfig` — which cannot be loaded here anyway, because
+  /// [scan] is synchronous and loading one is not.
+  late final String? _packageName = () {
+    try {
+      return Pubspec.parse(
+        File(p.join(projectRoot, 'pubspec.yaml')).readAsStringSync(),
+      ).name;
+    } on Object {
+      return null;
+    }
+  }();
+
   ScanResult scan() {
     _nested.clear();
+    _lookup = EnumLookup(
+      selfPackage: _packageName,
+      selfPackageRoot: projectRoot,
+    );
     var changed = false;
     var live = <String>{};
     for (var file in _dartFiles()) {
@@ -373,10 +397,28 @@ class CatalogScanner {
       return;
     }
 
+    // The signature *is* the declaration — `2026-07-27-knobs-static-and-runtime.md`
+    // § The static idea, decided in `2026-08-12-run-knobs-design.md` § K7 and
+    // implemented once for demos and entry points alike. Costs a parse of this
+    // file's direct imports, and only for a parameter whose type is not a
+    // built-in one.
+    var declared = knobsFromParameters(
+      parameters,
+      file: p.join(projectRoot, path),
+      lookup: _lookup,
+      onSkipped: (parameter, reason) => diagnostics.add(
+        ScanDiagnostic.warning(
+          '$symbol offers no control for `$parameter`: $reason',
+          location: path,
+        ),
+      ),
+    );
+
     entries.add(
       CatalogEntry(
         path: path,
         symbol: symbol,
+        knobs: [for (var knob in declared) knob.knob],
         // Verbatim, `@` stripped. Never interpreted here.
         annotation: annotation.toSource().substring(1),
         name: _literalString(annotation, 'name') ?? symbol,

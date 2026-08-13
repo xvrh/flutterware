@@ -206,7 +206,7 @@ class RunEntrypointEntry {
     this.flavorSource,
     this.platforms = const [],
     this.devices = const [],
-    this.defines = const [],
+    this.knobs = const [],
   });
 
   /// Package-relative — what `launch` takes as its `entrypoint`.
@@ -245,71 +245,62 @@ class RunEntrypointEntry {
   /// that `desktop` means three platforms, nor which of them is plugged in.
   final List<String> devices;
 
-  final List<DartDefineEntry> defines;
+  /// The knobs this entry point's `main` takes — the optional named parameters
+  /// of its signature, with what the config annotated them with.
+  final List<RunKnobEntry> knobs;
 
   Map<String, Object?> toJson() => _$RunEntrypointEntryToJson(this);
 }
 
-/// One `--dart-define` an entry point declares, with whatever values the tool
-/// can offer for it.
+/// One knob an entry point's `main` takes.
+///
+/// **Read off the signature, not from a config and not by running anything.**
+/// The name, the kind and the default are the parameter's own; a config can
+/// only add what a signature cannot say — a label, options for a type that
+/// cannot enumerate itself, or a value a project script works out.
 @JsonSerializable(
   explicitToJson: true,
   includeIfNull: false,
   createFactory: false,
 )
-class DartDefineEntry {
-  DartDefineEntry({
+class RunKnobEntry {
+  RunKnobEntry({
     required this.name,
     this.label,
     this.description,
+    this.kind,
     this.defaultValue,
     this.options = const [],
-    this.kind,
-    this.readAt,
     this.problem,
   });
 
-  /// The name `String.fromEnvironment` reads.
-  @JsonKey(name: 'define')
+  /// The parameter's name — what `launch` takes as a key.
+  @JsonKey(name: 'knob')
   final String name;
 
   final String? label;
   final String? description;
 
+  /// `string`, `boolean`, `integer`, `number` or `picker` — how it draws.
+  ///
+  /// Absent when the config names a knob `main` does not take, which is the one
+  /// case where there is no parameter to read a kind from.
+  final String? kind;
+
+  /// What the launch uses when nobody says otherwise: a script's answer when
+  /// one was computed, else the parameter's own default.
   @JsonKey(name: 'default')
   final String? defaultValue;
 
-  /// Everything worth offering — what the config listed, plus whatever its
-  /// `from:` resolved to right now, such as this machine's addresses on the
-  /// local network or a list a script in the project printed.
+  /// Everything worth offering — an enum's constants, this machine's
+  /// addresses, a list a project script printed, or what the config wrote.
   final List<String> options;
 
-  /// `String`, `int`, `bool` or `double` — how the app's own source reads this
-  /// define. Absent when nothing reads it.
-  ///
-  /// Found by parsing, not by building. It is the difference between a text
-  /// field and a checkbox, and it catches a config offering two string options
-  /// for a `bool.fromEnvironment`, where both of them mean false.
-  final String? kind;
-
-  /// The package-relative file the read is in. Absent when nothing reads it.
-  final String? readAt;
-
-  /// What is wrong with this define, when something is.
-  ///
-  /// Two things are worth saying, and they are both the expensive kind — the
-  /// kind that compiles, launches, and looks exactly like working:
-  ///
-  /// - **A script source that could not answer.** The value it was supposed to
-  ///   compute is baked into the build, so falling back would produce an app
-  ///   that is wrong in a way nothing on screen shows. A launch that does not
-  ///   set the define explicitly is refused while this says something.
-  /// - **A declared define the app never reads.** The control appears in the
-  ///   cockpit and turning it does nothing at all, which is indistinguishable
-  ///   from a feature that does not work.
+  /// What is wrong with this knob, when something is: a source that could not
+  /// answer, or a declaration naming a parameter that is not there.
   final String? problem;
 
-  Map<String, Object?> toJson() => _$DartDefineEntryToJson(this);
+  Map<String, Object?> toJson() => _$RunKnobEntryToJson(this);
 }
 
 /// `launch` — one run started, and how far it got.
@@ -385,9 +376,10 @@ class RunControlResult implements PluginResult {
     this.ms = 0,
     this.error,
     this.note,
+    this.knobs,
   });
 
-  /// `reload`, `restart` or `stop`.
+  /// `reload`, `restart`, `stop` or `setKnobs`.
   final String action;
 
   /// Which run it was done to — the id `apps` reports and a selector takes.
@@ -410,6 +402,11 @@ class RunControlResult implements PluginResult {
   final String? error;
 
   final String? note;
+
+  /// For `setKnobs`: everything the app is now running with, not only what this
+  /// call changed. A caller that set one knob and got one knob back would have
+  /// to remember the rest to know what it is looking at.
+  final Map<String, String>? knobs;
 
   @override
   Map<String, Object?> toJson() => _$RunControlResultToJson(this);

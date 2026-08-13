@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutterware/channels.dart';
 import 'package:flutterware_app/src/previews/discovery.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -17,6 +18,92 @@ void main() {
   }
 
   ScanResult scan() => CatalogScanner(projectRoot: root.path).scan();
+
+  group('the knobs a signature declares', () {
+    // The static half of `2026-07-27-knobs-static-and-runtime.md`: read off the
+    // parameter list, so answering "what can I vary here" costs a parse rather
+    // than a compile and a frame.
+    test('reads them off the parameter list, enums included', () {
+      write('src/backend.dart', 'enum Backend { dev, staging, prod }');
+      write('team/tile.dart', """
+import 'package:flutter/widgets.dart';
+import '../src/backend.dart';
+
+@Preview(name: 'Tile')
+Widget tile({
+  String label = 'Hello',
+  int count = 2,
+  bool dense = false,
+  Backend backend = Backend.staging,
+}) => const Placeholder();
+""");
+
+      var knobs = scan().entries.single.knobs;
+
+      expect(knobs.map((k) => k.name), ['label', 'count', 'dense', 'backend']);
+      expect(knobs.map((k) => k.kind), [
+        KnobKind.string,
+        KnobKind.integer,
+        KnobKind.boolean,
+        KnobKind.picker,
+      ]);
+      expect(knobs.last.options, ['dev', 'staging', 'prod']);
+      expect(knobs.last.defaultValue, 'staging');
+      expect(knobs.first.defaultValue, 'Hello');
+    });
+
+    test("resolves an enum through this package's own package: URI", () {
+      // A demo importing its own package by URI is ordinary, and there is no
+      // PackageConfig to be had inside a synchronous scan — the package name
+      // off the pubspec is what makes it resolve.
+      File(p.join(root.path, 'pubspec.yaml')).writeAsStringSync('name: myapp');
+      File(p.join(root.path, 'lib', 'models.dart'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('enum Backend { dev, prod }');
+      write('team/tile.dart', """
+import 'package:flutter/widgets.dart';
+import 'package:myapp/models.dart';
+
+@Preview(name: 'Tile')
+Widget tile({Backend backend = Backend.prod}) => const Placeholder();
+""");
+
+      var knobs = scan().entries.single.knobs;
+
+      expect(knobs.single.kind, KnobKind.picker);
+      expect(knobs.single.options, ['dev', 'prod']);
+    });
+
+    test('a parameter it cannot draw is a warning, not a silent gap', () {
+      write('team/tile.dart', """
+import 'package:flutter/widgets.dart';
+
+@Preview(name: 'Tile')
+Widget tile({String label = 'Hi', Color tint = Colors.red}) =>
+    const Placeholder();
+""");
+
+      var result = scan();
+
+      expect(result.entries.single.knobs.map((k) => k.name), ['label']);
+      var warning = result.diagnostics.singleWhere((d) => !d.isError);
+      expect(warning.message, contains('no control for `tint`'));
+      expect(warning.message, contains('no enum Color'));
+      // A warning, so the entry itself still stands.
+      expect(result.ok, isTrue);
+    });
+
+    test('a demo with no parameters declares no knobs', () {
+      write('team/tile.dart', """
+import 'package:flutter/widgets.dart';
+
+@Preview(name: 'Tile')
+Widget tile() => const Placeholder();
+""");
+
+      expect(scan().entries.single.knobs, isEmpty);
+    });
+  });
 
   test('finds annotated top-level functions', () {
     write('team/avatar_tile.dart', '''

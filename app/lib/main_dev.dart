@@ -19,25 +19,30 @@ import 'src/utils/window_title.dart';
 
 final _logger = Logger('main_dev');
 
-/// The `flutterware_app` package root, which owns `native/`, `tool/catalog/`
-/// and the build directory the catalog compiles into.
-///
-/// Passed in rather than derived: a macOS app launched by `flutter run` has a
-/// working directory of `/`, so the default of `Directory.current` finds
-/// nothing. Only the catalog needs it, and only when its panel is opened.
-const _appRootDefine = String.fromEnvironment('FLUTTERWARE_APP_ROOT');
-
 /// In-IDE entry point: runs the shell against flutterware's own workspace.
+///
+/// Launched through flutterware it is *Studio (dev)*, and [appRoot] is a knob —
+/// editable on the run's Knobs tab, applied by a hot restart rather than a
+/// rebuild. Launched by hand it takes the define, so an IDE run configuration
+/// that predates this still works:
 ///
 /// ```sh
 /// cd app && flutter run -t lib/main_dev.dart -d macos \
 ///   --dart-define=FLUTTERWARE_APP_ROOT="$(pwd)"
 /// ```
-void main() async {
+///
+/// [appRoot] is the `flutterware_app` package root, which owns `native/`,
+/// `tool/catalog/` and the build directory the catalog compiles into. Passed in
+/// rather than derived: a macOS app launched by `flutter run` has a working
+/// directory of `/`, so `Directory.current` finds nothing. Only the catalog
+/// needs it, and only when its panel is opened.
+void main({
+  String appRoot = const String.fromEnvironment('FLUTTERWARE_APP_ROOT'),
+}) async {
   setupDebugLogger();
   var appContext = AppContext(
     logger: LogClient.print(),
-    appToolDirectory: _appRootDefine.isEmpty ? null : Directory(_appRootDefine),
+    appToolDirectory: appRoot.isEmpty ? null : Directory(appRoot),
   );
   var flutterSdks = await FlutterSdkPath.findSdks();
   var flutterSdk = flutterSdks.first;

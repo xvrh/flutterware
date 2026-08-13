@@ -357,15 +357,14 @@ packages: List<RunEntrypointPackage>
     flavorSource: String?   # `entrypoint` or `pubspec` — which of the two put [flavor] there.
     platforms: List<String>   # What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.
     devices: List<String>   # The ids of the devices currently connected that [platforms] allows.
-    defines: List<DartDefineEntry>
-      define: String   # The name `String.fromEnvironment` reads.
+    knobs: List<RunKnobEntry>   # The knobs this entry point's `main` takes — the optional named parameters of its signature, with what the config annotated them with.
+      knob: String   # The parameter's name — what `launch` takes as a key.
       label: String?
       description: String?
-      default: String?
-      options: List<String>   # Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now, such as this machine's addresses on the local network or a list a script in the project printed.
-      kind: String?   # `String`, `int`, `bool` or `double` — how the app's own source reads this define.
-      readAt: String?   # The package-relative file the read is in.
-      problem: String?   # What is wrong with this define, when something is.
+      kind: String?   # `string`, `boolean`, `integer`, `number` or `picker` — how it draws.
+      default: String?   # What the launch uses when nobody says otherwise: a script's answer when one was computed, else the parameter's own default.
+      options: List<String>   # Everything worth offering — an enum's constants, this machine's addresses, a list a project script printed, or what the config wrote.
+      problem: String?   # What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.
 note: String?
 ```
 
@@ -378,7 +377,7 @@ note: String?
 Builds an entry point and runs it on a device. The launcher is detached and its output goes to a log file, so this can return while the app keeps running. A cold build is slow — about ten seconds warm on Android and a minute and a half cold — and on a wireless device it can stall on an OS permission dialog that nobody is looking at.
 
 ```sh
-fw run run launch --device=<choice> [--package=…] [--entrypoint=…] [--flavor=…] [--defines=…] [--wait=…] [--timeout=…]
+fw run run launch --device=<choice> [--package=…] [--entrypoint=…] [--flavor=…] [--dartDefines=…] [--knobs=…] [--wait=…] [--timeout=…]
 ```
 
 Returns `RunLaunchResult`:
@@ -415,7 +414,8 @@ note: String?
 | `package` | choice | no | — | Which declared package; the only one when there is one |
 | `entrypoint` | choice | no | — | The name or the package-relative path, as `entrypoints` reports them. Two entry points may share a path — declaring one file several times is how one app is run against several configurations — so the name is the selector that always separates them. The package's only entry point when omitted. |
 | `flavor` | string | no | — | The `--flavor` to build. Defaults to what the entry point declares. A project with product flavors cannot be built without one at all — unlike a define, leaving it out is a build failure rather than a default value. |
-| `defines` | string | no | — | `--dart-define`s to bake in: `NAME=value,NAME=value`, or a JSON object. Compiled in rather than read at run time, so changing one costs a full rebuild — which is why the entry point declares which ones it wants and what values are worth using. Not to be confused with a preview knob, which is read while a widget builds and costs a frame. |
+| `dartDefines` | string | no | — | `--dart-define`s to pass through verbatim: `NAME=value,NAME=value`, or a JSON object. An escape hatch, not the way to configure a launch — nothing offers them, checks them or remembers them, and changing one costs a full rebuild. Use `knobs` for anything you switch while working. This is for the three a knob cannot reach: a define read by a package you do not own, one the native build consumes, and anything needed before the Dart entry point runs. |
+| `knobs` | string | no | — | Values to pass the entry point, `name=value,name=value` or a JSON object. These are the optional named parameters of its `main`, so `entrypoints` lists them with each one's type, default and options. Passed as arguments in the generated wrapper rather than compiled in, so changing one costs a hot restart instead of a rebuild — which is what makes a knob the right home for a value you switch while working, and a define the right home for one that differs per shipped artifact. |
 | `wait` | boolean | no | true | Wait for the app to come up before answering. Off returns as soon as the launcher is spawned, and `apps` is how you find out how it went. |
 | `timeout` | integer | no | 300 | Seconds to wait. A timeout is not a failure — the build carries on and the answer says how far it got. |
 
@@ -430,7 +430,7 @@ fw run run reload [--device=…] [--entrypoint=…] [--worktree=…] [--run=…]
 Returns `RunControlResult`:
 
 ```
-action: String   # `reload`, `restart` or `stop`.
+action: String   # `reload`, `restart`, `stop` or `setKnobs`.
 run: String   # Which run it was done to — the id `apps` reports and a selector takes.
 device: String
 entrypoint: String
@@ -438,6 +438,7 @@ ok: bool
 ms: int   # Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.
 error: String?
 note: String?
+knobs: Map<String, String>?   # For `setKnobs`: everything the app is now running with, not only what this call changed.
 ```
 
 | parameter | kind | required | default | |
@@ -458,7 +459,7 @@ fw run run restart [--device=…] [--entrypoint=…] [--worktree=…] [--run=…
 Returns `RunControlResult`:
 
 ```
-action: String   # `reload`, `restart` or `stop`.
+action: String   # `reload`, `restart`, `stop` or `setKnobs`.
 run: String   # Which run it was done to — the id `apps` reports and a selector takes.
 device: String
 entrypoint: String
@@ -466,6 +467,7 @@ ok: bool
 ms: int   # Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.
 error: String?
 note: String?
+knobs: Map<String, String>?   # For `setKnobs`: everything the app is now running with, not only what this call changed.
 ```
 
 | parameter | kind | required | default | |
@@ -474,6 +476,36 @@ note: String?
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 | `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
+
+#### `setKnobs` — Set knobs
+
+Changes what a running app's main() was called with, and hot restarts it — a rewrite of one generated file rather than a build, so it costs a restart (about a second) instead of a relaunch (half a minute). The app starts again from its first screen, because a value reaches it only through main(). What each entry point takes, with its type and options, is `entrypoints`.
+
+```sh
+fw run run setKnobs [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --knobs=<string>
+```
+
+Returns `RunControlResult`:
+
+```
+action: String   # `reload`, `restart`, `stop` or `setKnobs`.
+run: String   # Which run it was done to — the id `apps` reports and a selector takes.
+device: String
+entrypoint: String
+ok: bool
+ms: int   # Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.
+error: String?
+note: String?
+knobs: Map<String, String>?   # For `setKnobs`: everything the app is now running with, not only what this call changed.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
+| `knobs` | string | yes | — | The values to run with, `name=value,name=value` or a JSON object. This replaces the set rather than merging into it: a name left out stops being overridden, which is the only way to say so. It then falls back to whatever the project works out for it — a `from:` script is re-asked, exactly as at launch — and to the parameter default only when nothing else answers. |
 
 #### `stop` — Stop
 
@@ -486,7 +518,7 @@ fw run run stop [--device=…] [--entrypoint=…] [--worktree=…] [--run=…]
 Returns `RunControlResult`:
 
 ```
-action: String   # `reload`, `restart` or `stop`.
+action: String   # `reload`, `restart`, `stop` or `setKnobs`.
 run: String   # Which run it was done to — the id `apps` reports and a selector takes.
 device: String
 entrypoint: String
@@ -494,6 +526,7 @@ ok: bool
 ms: int   # Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.
 error: String?
 note: String?
+knobs: Map<String, String>?   # For `setKnobs`: everything the app is now running with, not only what this call changed.
 ```
 
 | parameter | kind | required | default | |
