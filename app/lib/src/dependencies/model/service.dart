@@ -65,7 +65,7 @@ class DependenciesService {
     // resolution and the declared constraints, the lockfile for where each
     // package came from, the package config for where each one is on disk.
     var pubDeps = await PubDeps.load(
-      dartExecutable: package.flutterSdkPath.dart,
+      flutterExecutable: package.flutterSdkPath.flutter,
       directory: path,
       runProcess: runProcess,
     );
