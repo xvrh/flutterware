@@ -31,6 +31,7 @@ import 'scenarios_core.dart';
 import 'scenarios_results.dart';
 import '../../ui/loading_state.dart';
 import '../../ui/error_state.dart';
+import 'no_packages.dart';
 
 export 'scenarios_core.dart' show ScenariosCore, scenariosPluginId;
 
@@ -213,14 +214,7 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
   Widget build(BuildContext context) {
     var place = _resolve();
     if (place == null) {
-      return Center(
-        child: Text(
-          'No packages configured for this plugin.\n'
-          'Add them in tool/flutterware.dart.',
-          textAlign: TextAlign.center,
-          style: context.type.bodyMuted,
-        ),
-      );
+      return const NoPackagesConfigured(icon: Icons.route_outlined);
     }
 
     // The axes ride the address as plain parameters, above the segments —

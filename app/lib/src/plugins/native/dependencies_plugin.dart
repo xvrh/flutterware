@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 
 import '../../address/address_scope.dart';
 import '../../dependencies/list.dart';
-import '../../ui/theme.dart';
 import '../native_plugin.dart';
 import 'dependencies_core.dart';
+import 'no_packages.dart';
 
 export 'dependencies_core.dart' show DependenciesCore, dependenciesPluginId;
 
@@ -91,14 +91,7 @@ class _DependenciesPanelState extends State<_DependenciesPanel> {
   Widget build(BuildContext context) {
     var path = _path ?? _resolve();
     if (path == null) {
-      return Center(
-        child: Text(
-          'No packages configured for this plugin.\n'
-          'Add them in tool/flutterware.dart.',
-          textAlign: TextAlign.center,
-          style: context.type.bodyMuted,
-        ),
-      );
+      return const NoPackagesConfigured(icon: Icons.inventory_2_outlined);
     }
 
     // The package goes down with the service because everything below writes

@@ -158,7 +158,7 @@ void main() {
     var shots = await pair(tester, base: false, head: false);
     await pumpStage(tester, shots);
 
-    expect(find.text('Neither side rendered.'), findsOneWidget);
+    expect(find.text('Neither side rendered'), findsOneWidget);
   });
 
   // The mode an agent reads: where to look, in numbers.

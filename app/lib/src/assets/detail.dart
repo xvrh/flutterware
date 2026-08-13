@@ -9,6 +9,7 @@ import '../ui/theme.dart';
 import 'model/asset_catalog.dart';
 import 'model/asset_scan.dart';
 import 'preview.dart';
+import '../ui/error_state.dart';
 
 /// The right half: one asset, drawn, and then said in words.
 ///
@@ -76,16 +77,7 @@ class AssetDetailView extends StatelessWidget {
 
   Widget _preview(BuildContext context) {
     if (error case var failure?) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(FwSpacing.xl),
-          child: Text(
-            'Could not read this file.\n$failure',
-            textAlign: TextAlign.center,
-            style: context.type.caption.copyWith(color: context.colors.red),
-          ),
-        ),
-      );
+      return ErrorState(title: 'Could not read this file', message: '$failure');
     }
     var data = bytes;
     if (data == null) {

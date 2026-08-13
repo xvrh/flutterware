@@ -7,6 +7,7 @@ import '../../splash/screen.dart';
 import '../native_plugin.dart';
 import 'splash_address.dart';
 import 'splash_core.dart';
+import 'no_packages.dart';
 
 export 'splash_core.dart' show SplashCore, splashPluginId;
 
@@ -102,14 +103,7 @@ class _SplashPanelState extends State<_SplashPanel> {
   Widget build(BuildContext context) {
     var place = _place ?? _resolve();
     if (place == null) {
-      return Center(
-        child: Text(
-          'No packages configured for this plugin.\n'
-          'Add them in tool/flutterware.dart.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-      );
+      return const NoPackagesConfigured(icon: Icons.smartphone_outlined);
     }
 
     // Rebuilds when a scan lands: the core notifies, the plugin forwards.

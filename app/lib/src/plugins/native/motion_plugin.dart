@@ -22,6 +22,7 @@ import 'motion_highlight.dart';
 import 'motion_sequencer.dart';
 import '../../ui/design/design.dart';
 import '../../ui/error_state.dart';
+import 'no_packages.dart';
 
 export 'motion_core.dart' show MotionCore, motionPluginId;
 
@@ -81,11 +82,7 @@ class _MotionPanelState extends State<_MotionPanel> {
   Widget build(BuildContext context) {
     var place = _resolve();
     if (place == null) {
-      return const EmptyState(
-        icon: Icons.movie_outlined,
-        title: 'No packages configured',
-        message: 'Add them in tool/flutterware.dart.',
-      );
+      return const NoPackagesConfigured(icon: Icons.movie_outlined);
     }
 
     var result = _core.resultFor(place.package);

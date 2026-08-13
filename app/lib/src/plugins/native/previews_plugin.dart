@@ -19,6 +19,7 @@ import 'previews_address.dart';
 import 'previews_core.dart';
 import '../../ui/design/design.dart';
 import '../../ui/loading_state.dart';
+import 'no_packages.dart';
 
 export 'previews_core.dart' show PreviewsCore, uiCatalogPluginId;
 
@@ -384,7 +385,7 @@ class _CatalogPanelState extends State<_CatalogPanel> {
   Widget build(BuildContext context) {
     var path = _package;
     if (path == null) {
-      return const Center(child: Text('No package declared for this plugin.'));
+      return const NoPackagesConfigured(icon: Icons.widgets_outlined);
     }
     return AnimatedBuilder(
       animation: widget.plugin,

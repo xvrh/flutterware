@@ -14,6 +14,7 @@ import 'network_tracker.dart';
 import '../ui/design/design.dart';
 import '../ui/loading_state.dart';
 import '../ui/error_state.dart';
+import '../ui/empty_state.dart';
 
 final _logger = Logger('run_network');
 
@@ -115,11 +116,10 @@ class _NetworkTabState extends State<NetworkTab> {
       children: [
         Expanded(
           child: requests.isEmpty
-              ? Center(
-                  child: Text(
-                    'No requests yet.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
+              ? const EmptyState(
+                  icon: Icons.swap_vert,
+                  title: 'No requests yet',
+                  message: 'Anything the app fetches lands here.',
                 )
               : selected == null
               ? _RequestList(
@@ -416,11 +416,10 @@ class _RequestDetailState extends State<_RequestDetail> {
               }
               var detail = snapshot.data;
               if (detail == null) {
-                return Center(
-                  child: Text(
-                    'No longer available — the app restarted.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
+                return const EmptyState(
+                  icon: Icons.history_toggle_off,
+                  title: 'No longer available',
+                  message: 'The app restarted, and this request went with it.',
                 );
               }
               return switch (_tab) {
@@ -525,9 +524,7 @@ class _TimingTab extends StatelessWidget {
     var theme = Theme.of(context);
     var events = detail.events;
     if (events.isEmpty) {
-      return Center(
-        child: Text('No timing events.', style: theme.textTheme.bodyMedium),
-      );
+      return const EmptyState(icon: Icons.timeline, title: 'No timing events');
     }
     var previous = detail.startTime;
     var rows = <(String, Duration)>[];

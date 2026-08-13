@@ -7,6 +7,7 @@ import 'package:flutterware/channels.dart';
 import 'panel_client.dart';
 import '../ui/design/design.dart';
 import '../ui/loading_state.dart';
+import '../ui/empty_state.dart';
 
 /// The cockpit's bespoke renderer for `db:*` panels — a database browser, not
 /// a descriptor dump.
@@ -674,11 +675,10 @@ class _SqlViewState extends State<_SqlView> {
           child: _error != null
               ? _ErrorPane(_error!)
               : _reply == null
-              ? Center(
-                  child: Text(
-                    'Results appear here.',
-                    style: context.type.bodyMuted,
-                  ),
+              ? const EmptyState(
+                  icon: Icons.table_rows_outlined,
+                  title: 'Results appear here',
+                  message: 'Run a query above.',
                 )
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -733,22 +733,17 @@ class _ActivityView extends StatelessWidget {
     var merged = [...changes, ...snapshots]
       ..sort((a, b) => b.id.compareTo(a.id));
     if (merged.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.bolt, size: FwIconSize.xl, color: context.colors.mut3),
-            const Gap(FwSpacing.md),
-            Text('Nothing yet.', style: context.type.bodyMuted),
-            const Gap(FwSpacing.xs),
-            Text(
-              'Writes tick here as the app makes them; a watched query '
-              'reports every result change.',
-              style: context.type.caption.copyWith(color: context.colors.mut2),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+      // This was EmptyState retyped: same xl icon in mut3, same md gap, same
+      // two lines. It differed only in the details nobody chose on purpose —
+      // an xs gap where the component uses xxs, and a caption where it uses
+      // bodyMuted — which is exactly the drift a shared component exists to
+      // stop.
+      return const EmptyState(
+        icon: Icons.bolt,
+        title: 'Nothing yet',
+        message:
+            'Writes tick here as the app makes them; a watched query '
+            'reports every result change.',
       );
     }
     return ListView.separated(

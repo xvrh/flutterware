@@ -13,6 +13,7 @@ import 'server_address.dart';
 import 'server_core.dart';
 import '../../ui/design/design.dart';
 import '../../ui/loading_state.dart';
+import '../../ui/empty_state.dart';
 
 export 'server_core.dart' show ServerCore, serverPluginId;
 
@@ -364,8 +365,9 @@ class _SqlView extends StatelessWidget {
     var theme = Theme.of(context);
     var stats = sqlStats(server.events);
     if (stats.isEmpty) {
-      return Center(
-        child: Text('No queries recorded.', style: theme.textTheme.bodyMedium),
+      return const EmptyState(
+        icon: Icons.storage_outlined,
+        title: 'No queries recorded',
       );
     }
     var header = theme.textTheme.bodySmall!.copyWith(color: theme.hintColor);
@@ -500,11 +502,10 @@ class _QueryDetailState extends State<_QueryDetail> {
       widget.server.events,
     ).where((s) => s.key == widget.queryKey).firstOrNull;
     if (stats == null) {
-      return Center(
-        child: Text(
-          'This query shape is no longer in the recorded window.',
-          style: theme.textTheme.bodyMedium,
-        ),
+      return const EmptyState(
+        icon: Icons.history_toggle_off,
+        title: 'Outside the recorded window',
+        message: 'This query shape is no longer being kept.',
       );
     }
     var latestQuery = stats.latest.payload['query']! as String;
@@ -656,11 +657,8 @@ class _RequestList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     if (requests.isEmpty) {
-      return Center(
-        child: Text('No requests yet.', style: theme.textTheme.bodyMedium),
-      );
+      return const EmptyState(icon: Icons.swap_vert, title: 'No requests yet');
     }
     return ListView.builder(
       itemCount: requests.length,
@@ -1028,11 +1026,9 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
     var theme = Theme.of(context);
     var mono = _mono(context);
     if (widget.queries.isEmpty) {
-      return Center(
-        child: Text(
-          'No queries in this request.',
-          style: theme.textTheme.bodyMedium,
-        ),
+      return const EmptyState(
+        icon: Icons.storage_outlined,
+        title: 'No queries in this request',
       );
     }
     return ListView(
@@ -1203,14 +1199,12 @@ class _HttpMessageTab extends StatelessWidget {
         var headers = details?[response ? 'responseHeaders' : 'requestHeaders'];
         var body = details?[response ? 'responseBody' : 'requestBody'];
         if (details == null || headers is! Map) {
-          return Center(
-            child: Text(
-              'Not captured.\n'
-              'The middleware decides what to record — see the capturing '
-              'version in doc/server_inspection.md.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
-            ),
+          return const EmptyState(
+            icon: Icons.visibility_off_outlined,
+            title: 'Not captured',
+            message:
+                'The middleware decides what to record — see the capturing '
+                'version in doc/server_inspection.md.',
           );
         }
         return ListView(
@@ -1264,14 +1258,11 @@ class _RequestLogsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     var mono = _mono(context);
     if (logs.isEmpty) {
-      return Center(
-        child: Text(
-          'No logs in this request.',
-          style: theme.textTheme.bodyMedium,
-        ),
+      return const EmptyState(
+        icon: Icons.article_outlined,
+        title: 'No logs in this request',
       );
     }
     return ListView(
@@ -1728,13 +1719,10 @@ class _EventTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     if (events.isEmpty) {
-      return Center(
-        child: Text(
-          'Attached — waiting for events.',
-          style: theme.textTheme.bodyMedium,
-        ),
+      return const LoadingState(
+        title: 'Attached — waiting for events',
+        message: 'Anything this server reports will land here.',
       );
     }
     var reversed = events.reversed.toList();
@@ -1815,24 +1803,12 @@ class _EmptyHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'No servers are announcing themselves under this worktree.',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Report from one with package:flutterware/server.dart — an event,\n'
-            'a span or a handler is enough; it publishes on first use.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall,
-          ),
-        ],
-      ),
+    return const EmptyState(
+      icon: Icons.dns_outlined,
+      title: 'No servers are announcing themselves',
+      message:
+          'Report from one with package:flutterware/server.dart — an event, '
+          'a span or a handler is enough; it publishes on first use.',
     );
   }
 }
