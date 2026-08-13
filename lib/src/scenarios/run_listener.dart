@@ -3,6 +3,56 @@ import 'dart:typed_data';
 import 'events.dart';
 import 'motion.dart';
 
+/// Something the flow produced that is not a widget — a PDF, a payload, an
+/// email body — carried on the step the way the screenshot is.
+///
+/// A screenshot answers "what did this look like"; some flows exist to
+/// produce a *document*, and rendering the button that generates one and then
+/// having nothing to show is a scenario that stops one step short of its own
+/// point.
+///
+/// One shape rather than one per format: what the panel can render it decides
+/// from [mimeType], and everything else is a file you can open.
+class ScenarioAttachment {
+  ScenarioAttachment({
+    required this.name,
+    required this.bytes,
+    this.fileName,
+    this.mimeType,
+  });
+
+  /// What it is called on the step — `'report'`, `'welcome email'`.
+  final String name;
+
+  final Uint8List bytes;
+
+  /// What to call the file on disk, extension included. Defaults to [name]
+  /// made file-safe, which leaves a viewer nothing to go on — so a project
+  /// that knows the extension should say it.
+  final String? fileName;
+
+  /// `application/pdf`, `application/json`, `text/html`. What a viewer
+  /// switches on; a missing one means "offer it as a download".
+  final String? mimeType;
+}
+
+/// What to call attachment [index] of [all] on disk.
+///
+/// The declared file name where there is one — an extension is what tells a
+/// viewer whether it can show the thing — and the ordinal in front only when
+/// a step carries more than one, so the common case reads as `report.pdf`
+/// rather than `1-report.pdf`. Derived rather than checked against the
+/// filesystem, so two runs of the same scenario name their files identically
+/// and a comparison can line them up.
+String scenarioAttachmentFileName(List<ScenarioAttachment> all, int index) {
+  var attachment = all[index];
+  var name = (attachment.fileName ?? attachment.name).replaceAll(
+    RegExp(r'[^A-Za-z0-9._-]+'),
+    '_',
+  );
+  return all.length > 1 ? '${index + 1}-$name' : name;
+}
+
 /// One captured step, handed from [ScenarioTester]'s capture to whoever is
 /// listening — the harness, when a scenario runs under the flutterware
 /// runner.
@@ -30,6 +80,7 @@ class ScenarioStepCapture {
     this.settled = true,
     this.strayFrames = 0,
     this.failure,
+    this.attachments = const [],
   });
 
   /// 1-based position in the scenario's capture sequence.
@@ -124,6 +175,13 @@ class ScenarioStepCapture {
   /// Set on the one step a scenario captures when it breaks: the error, with
   /// its split branch. The frame is the state at the failure.
   final String? failure;
+
+  /// What `s.attach` handed over since the previous capture.
+  ///
+  /// The same lifetime as [events] and [motion], and for the same reason: an
+  /// attachment describes the edge into this step — the document the flow
+  /// produced on the way here — rather than the frame itself.
+  final List<ScenarioAttachment> attachments;
 }
 
 /// Set by the flutterware harness for the duration of one scenario run; null

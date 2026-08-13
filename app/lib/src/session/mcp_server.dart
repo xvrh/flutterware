@@ -10,6 +10,7 @@ import 'package:flutterware/plugins.dart';
 import 'package:flutterware/src/log_client.dart';
 import 'package:path/path.dart' as p;
 
+import '../constants.dart';
 import '../plugins/plugin_core.dart';
 import 'action_shapes.generated.dart';
 import 'job.dart';
@@ -37,7 +38,13 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
     this.openSession,
   }) : workingDirectory = workingDirectory ?? Directory.current,
        super.fromStreamChannel(
-         implementation: Implementation(name: 'flutterware', version: '0.5.2'),
+         // The same constant `fw --version` prints. It was a literal here, and
+         // this handshake was the only place a consumer could read the
+         // version at all — which is the report that gave the CLI the command.
+         implementation: Implementation(
+           name: 'flutterware',
+           version: flutterwareVersion,
+         ),
          instructions:
              'Inspect and drive a Flutter project through its flutterware '
              'plugins. Start with flutterware_status; it loads and reports what '

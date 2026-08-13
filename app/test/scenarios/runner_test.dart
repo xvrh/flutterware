@@ -87,6 +87,41 @@ void main() {
       // A run that did not ask records nothing — the CLI lane, and what keeps
       // it costing what it always cost.
       expect(steps.every((s) => s['frames'] == null), isTrue);
+      // And nothing attached anything, so nothing says it did.
+      expect(steps.every((s) => s['attachments'] == null), isTrue);
+
+      // What `s.attach` produced: a file beside the pixels, on the step that
+      // captured *after* the attach — an attachment describes the edge into a
+      // step, like the events do.
+      var attached = await runner.run(
+        outDir: outDir,
+        file: 'test/scenarios/attachment_test.dart',
+      );
+      var attachedSteps =
+          ((attached['scenarios']! as List).single
+                  as Map<String, dynamic>)['steps']!
+              as List;
+      var carrying = [
+        for (var step in attachedSteps.cast<Map<String, dynamic>>())
+          if (step['attachments'] != null) step,
+      ];
+      expect(carrying, hasLength(1), reason: 'only the step after the attach');
+      expect(carrying.single['name'], 'Exported');
+      var attachment =
+          (carrying.single['attachments']! as List).single
+              as Map<String, dynamic>;
+      expect(attachment['name'], 'receipt');
+      expect(attachment['mimeType'], 'application/json');
+      var file = File(attachment['file']! as String);
+      expect(file.existsSync(), isTrue);
+      // The declared file name, beside the step's own stem — so a directory
+      // reads as "the frame, and what the flow produced to reach it".
+      expect(p.basename(file.path), endsWith('.receipt.json'));
+      expect(attachment['bytes'], file.lengthSync());
+      expect(
+        jsonDecode(file.readAsStringSync()),
+        containsPair('currency', 'EUR'),
+      );
 
       // Recording on: the sixth leg, a directory of numbered frames beside
       // the pixels. The panel's settings, so this is the real cost too.

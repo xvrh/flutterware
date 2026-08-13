@@ -493,6 +493,31 @@ Widget added() => const Placeholder();
     expect(described.toJson().containsKey('knobs'), isFalse);
   });
 
+  test('`knobs` and `axes` mean a selection on every action', () async {
+    var subject = catalog()..track('.');
+    await scanned(subject);
+
+    // The four actions are listed side by side in `fw run previews --help`,
+    // so a name that means "include this in the answer" on one and "set this
+    // on the render" on the others is knowledge nothing teaches. `describe`
+    // asks with `with-`; the bare names are a selection wherever they appear.
+    for (var action in subject.report.actions) {
+      for (var parameter in action.parameters) {
+        if (parameter.id != 'knobs' && parameter.id != 'axes') continue;
+        expect(
+          parameter.kind,
+          isNot(ActionParameterKind.boolean),
+          reason: '${action.id} --${parameter.id} is a boolean',
+        );
+      }
+    }
+
+    var describe = subject.report.actions.firstWhere((a) => a.id == 'describe');
+    expect([
+      for (var parameter in describe.parameters) parameter.id,
+    ], containsAll(['with-knobs', 'with-axes']));
+  });
+
   test('describe refuses an entry that is not there', () async {
     expect(
       catalog().invoke('describe', arguments: {'entry': 'nope#nope'}),

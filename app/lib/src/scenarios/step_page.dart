@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/previews_guest.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../address/address_scope.dart';
 import '../previews/devices.dart';
@@ -473,6 +474,17 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
                 label: 'Texts',
                 body: (context) => _TextsTab(step: widget.step),
               ),
+              // Only where there is one. Almost no step attaches anything, and
+              // a permanently empty tab is a tab a reader learns to skip —
+              // which is the wrong lesson for the one step that has the
+              // document the flow existed to produce.
+              if (widget.step.attachments.isNotEmpty)
+                InspectDockTab(
+                  id: 'attachments',
+                  label: 'Files',
+                  badge: widget.step.attachments.length,
+                  body: (context) => _AttachmentsTab(step: widget.step),
+                ),
             ],
           ),
         ],
@@ -772,6 +784,75 @@ class _TextsTab extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What the flow produced on the way to this step, and a way to open it.
+///
+/// Deliberately a list and not a viewer: a PDF, a JSON payload and an email
+/// body want three different renderers, and handing the file to whatever the
+/// machine already opens it with beats a bad one of each. A viewer earns its
+/// place later, per type; the file being reachable at all is the feature.
+class _AttachmentsTab extends StatelessWidget {
+  const _AttachmentsTab({required this.step});
+
+  final ScenarioRunStep step;
+
+  @override
+  Widget build(BuildContext context) {
+    var artifacts = ScenarioArtifactsScope.of(context);
+    return Container(
+      color: context.colors.panel,
+      width: double.infinity,
+      child: ListView(
+        primary: false,
+        padding: const EdgeInsets.all(FwSpacing.lg),
+        children: [
+          Text('PRODUCED ON THE WAY HERE', style: context.type.sectionLabel),
+          const Gap(FwSpacing.md),
+          for (var attachment in step.attachments)
+            Padding(
+              padding: const EdgeInsets.only(bottom: FwSpacing.sm),
+              child: Tappable(
+                onTap: () =>
+                    unawaited(launchUrl(artifacts.uriOf(attachment.file))),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(attachment.name, style: context.type.bodySmall),
+                          Text(
+                            [
+                              p.basename(attachment.file),
+                              ?attachment.mimeType,
+                              _size(attachment.bytes),
+                            ].join(' · '),
+                            style: context.type.bodyMuted,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.open_in_new,
+                      size: 14,
+                      color: context.colors.textGrey,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _size(int bytes) => bytes < 1024
+      ? '$bytes B'
+      : bytes < 1024 * 1024
+      ? '${(bytes / 1024).toStringAsFixed(1)} kB'
+      : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
 
 class _StepLink extends StatelessWidget {

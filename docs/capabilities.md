@@ -30,6 +30,7 @@ cd app && dart run bin/fw.dart <command>
 | `mcp` | serve this project to an agent, over stdio |
 | `compare [--base=<ref>] [--package=<path>] [--entry=<id>] [--export[=<dir>]] [--report=<dir>] [--json]` | what this worktree did to the pictures, against its base |
 | `capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI window itself, at an address |
+| `version [--json]` | which flutterware this is, and where it came from |
 | `help [<command>]` | this, or one command in detail |
 
 `-v` on any command shows the output of whatever it has to build, instead of
@@ -1303,6 +1304,11 @@ packages: List<ScenarioRunPackage>
       settled: bool   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
       strayFrames: int   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
       failure: String?   # The error, when this is the step a scenario broke on.
+      attachments: List<ScenarioRunAttachment>   # What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.
+        name: String   # What the scenario called it — `'report'`.
+        file: String   # The file, **relative to the worktree root**, like the step's own image.
+        mimeType: String?   # What it is, when the scenario said — `application/pdf`.
+        bytes: int   # How big it is, so a reader knows before opening it.
     stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
     errors: List<ScenarioRunError>   # The failure, when [ok] is false.
       error: String
@@ -1761,7 +1767,7 @@ packages: List<CatalogPackageCheck>
 One entry: what it is, where it is, and the knobs it declares
 
 ```sh
-fw run previews describe --entry=<choice> [--knobs=…] [--axes=…]
+fw run previews describe --entry=<choice> [--with-knobs=…] [--with-axes=…]
 ```
 
 Returns `CatalogEntryDescription`:
@@ -1797,8 +1803,8 @@ shell: String?   # Which shell declared [axes].
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `entry` | choice (from `entries`) | yes | — | The id of the entry to describe |
-| `knobs` | boolean | no | false | Compile the entry and run it to read the knobs it declares — the names and kinds every other action takes as `--knobs`. Off by default because it costs a build; without it the answer is what the scan knows. |
-| `axes` | boolean | no | false | Run it and read what the shell around it offers — the names and kinds every other action takes as `--axes`, plus which shell declared them. Costs a build for the same reason knobs do: an axis is declared by a shell asking for it while it builds. |
+| `with-knobs` | boolean | no | false | Compile the entry and run it to read the knobs it declares — the names and kinds every other action takes as `--knobs`. Off by default because it costs a build; without it the answer is what the scan knows. |
+| `with-axes` | boolean | no | false | Run it and read what the shell around it offers — the names and kinds every other action takes as `--axes`, plus which shell declared them. Costs a build for the same reason knobs do: an axis is declared by a shell asking for it while it builds. |
 
 #### `screenshot` — Screenshot
 
@@ -1822,11 +1828,11 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 |---|---|---|---|---|
 | `entry` | choice (from `entries`) | yes | — | The id of the entry to render |
 | `output` | string | no | — | Where to write the PNG; a build path when omitted |
-| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the preview asked for while it built — a preview calling `context.knobs.string("label", "Hello")` declares one named `label` — so the names come from the preview itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the preview declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. Recorded on the address, so two settings are two artifacts rather than one file written twice. |
+| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the preview asked for while it built — a preview calling `context.knobs.string("label", "Hello")` declares one named `label` — so the names come from the preview itself and differ per entry. Read them with `describe --entry=<id> --with-knobs=true`. Each value is coerced to the kind the preview declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. Recorded on the address, so two settings are two artifacts rather than one file written twice. |
 | `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the preview reads the phone from `MediaQuery` rather than a rectangle. Omitted means the panel. The same value the GUI writes as `?device=`, so an address captured here reopens framed the way it was shot. |
 | `width` | integer | no | 900 | — |
 | `height` | integer | no | 700 | — |
-| `axes` | string | no | — | Values for the shell *around* the preview — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the preview and travels with the entry, an axis is declared by the `PreviewShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+| `axes` | string | no | — | Values for the shell *around* the preview — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the preview and travels with the entry, an axis is declared by the `PreviewShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --with-axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
 | `debug` | string | no | — | The debug switches the framework itself registers, as `name=value,name=value`. These belong to neither the preview nor its shell but to the guest process, and the framework registers them whether anything asks or not — so unlike knobs and axes the set is fixed and listed in `--help`. `paint=true` draws the layout guides, `brightness=dark` moves `MediaQuery.platformBrightness` (dark mode without a shell axis for it), `banner=false` drops the DEBUG ribbon, `platform=iOS` changes what `defaultTargetPlatform` reports, `timeDilation=5` slows animations enough to photograph. Only what you name is set; the rest are left as they are. |
 | `node` | string | no | — | Cut the picture down to one node, by the id `tree` gave. Cut out of the real frame rather than re-rendered alone, so the widget is still in its surroundings. |
 | `annotate` | boolean | no | false | Draw a box and its node id over every widget, so a tree read and a picture of it can be laid side by side |
@@ -1922,8 +1928,8 @@ next: String?   # One line naming what else can be asked of this frame.
 | `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the preview reads the phone from `MediaQuery` rather than a rectangle. Omitted means the panel. **This is what makes "why does it look wrong on a phone" one render**: the tree, the constraints and the picture all describe the same framed build. Forces a render, like any other change to what is drawn. |
 | `width` | integer | no | — | Override the viewport width — how to ask for a size no device has, and on a device it stretches the screen rather than dropping its ratio and its notch |
 | `height` | integer | no | — | See width |
-| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the preview asked for while it built — a preview calling `context.knobs.string("label", "Hello")` declares one named `label` — so the names come from the preview itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the preview declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. A tree is of one build, and a knob can change which widgets there are. |
-| `axes` | string | no | — | Values for the shell *around* the preview — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the preview and travels with the entry, an axis is declared by the `PreviewShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the preview asked for while it built — a preview calling `context.knobs.string("label", "Hello")` declares one named `label` — so the names come from the preview itself and differ per entry. Read them with `describe --entry=<id> --with-knobs=true`. Each value is coerced to the kind the preview declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. A tree is of one build, and a knob can change which widgets there are. |
+| `axes` | string | no | — | Values for the shell *around* the preview — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the preview and travels with the entry, an axis is declared by the `PreviewShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --with-axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
 | `debug` | string | no | — | The debug switches the framework itself registers, as `name=value,name=value`. These belong to neither the preview nor its shell but to the guest process, and the framework registers them whether anything asks or not — so unlike knobs and axes the set is fixed and listed in `--help`. `paint=true` draws the layout guides, `brightness=dark` moves `MediaQuery.platformBrightness` (dark mode without a shell axis for it), `banner=false` drops the DEBUG ribbon, `platform=iOS` changes what `defaultTargetPlatform` reports, `timeDilation=5` slows animations enough to photograph. Only what you name is set; the rest are left as they are. |
 | `live` | boolean | no | false | Read the entry from a GUI session that is already showing it, instead of building a fresh guest. **Off unless you ask.** What it buys is real: attached, the answer describes the preview *as the person left it* — the dropdown they opened, the tab they switched to, the row they scrolled to, and anything their clicking made it print or throw. No fresh render can reach that, because no fresh render performs the clicks. What it costs is determinism: the same command answers differently depending on whether a window happens to be open, which is a poor default for CI and for an agent that did not know to look. So it is opt-in, and `readFrom` says which one you got either way. Even switched on it declines unless a session is open on this exact entry and nothing here would change what is drawn, and it never switches what that window is showing. |
 

@@ -614,6 +614,47 @@ class ScenarioTester {
     Settle? settle,
   }) => _step(Shot(name, tags: tags), settle, () async {}, verb: 'screen');
 
+  /// Hands the run something the flow produced that is not a widget — the PDF
+  /// it just generated, the email body it queued, the payload it posted.
+  ///
+  /// It rides the **next** capture, exactly as recorded events do: an
+  /// attachment describes what happened on the way to a step, and a document
+  /// generally exists before the screen that announces it.
+  ///
+  /// ```dart
+  /// var bytes = await tester.runAsync(() => report.generatePdf());
+  /// s.attach('report', bytes!, fileName: 'report.pdf');
+  /// await s.screen('PDF report');
+  /// ```
+  ///
+  /// A flow whose whole point is the document it produces was otherwise a
+  /// scenario that stopped one step short: you could screenshot the button
+  /// and prove nothing about what it made. Deliberately one verb rather than
+  /// one per format — the format is [mimeType]'s job.
+  ///
+  /// Attached after the last capture of a scenario, it goes nowhere, which is
+  /// the same bargain [events] strike and for the same reason: there is no
+  /// step for it to belong to.
+  void attach(
+    String name,
+    List<int> bytes, {
+    String? fileName,
+    String? mimeType,
+  }) {
+    if (!_capturing) return;
+    _pendingAttachments.add(
+      ScenarioAttachment(
+        name: name,
+        bytes: bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+        fileName: fileName,
+        mimeType: mimeType,
+      ),
+    );
+  }
+
+  /// What [attach] has collected since the last capture drained it.
+  final _pendingAttachments = <ScenarioAttachment>[];
+
   /// One verb: act, wait per the policy, capture. The settle result rides the
   /// step, so a screen that never stopped animating says so instead of
   /// throwing.
@@ -822,6 +863,11 @@ class ScenarioTester {
       // appending these would multiply a shared prefix once per branch.
       scenarioEventBuffer?.discard();
       _recorder?.discard();
+      // Same reasoning for the attachments this replay collected on the way:
+      // the step they belong to was emitted on the first pass, with that
+      // pass's artifacts, and appending these would multiply a shared prefix
+      // once per branch.
+      _pendingAttachments.clear();
       _lastPosition = position;
       _pendingBranch = null;
       return;
@@ -902,6 +948,8 @@ class ScenarioTester {
     // *next* transition, not to the one being closed.
     var (events, dropped) =
         scenarioEventBuffer?.drain() ?? (const <ScenarioEvent>[], 0);
+    var attachments = List.of(_pendingAttachments);
+    _pendingAttachments.clear();
     await tester.runAsync(() async {
       var view = tester.binding.renderViews.single;
       var layer = view.debugLayer! as OffsetLayer;
@@ -968,6 +1016,7 @@ class ScenarioTester {
             settled: settled,
             strayFrames: stray,
             failure: failure,
+            attachments: attachments,
           ),
         );
         return;
@@ -982,9 +1031,15 @@ class ScenarioTester {
         '${slug.isEmpty ? '' : '${_fileSafe(slug)}/'}'
         '${_fileSafe(_description)}',
       )..createSync(recursive: true);
-      File(
-        '${directory.path}/$index-${_fileSafe(label)}.png',
-      ).writeAsBytesSync(bytes);
+      var base = '${directory.path}/$index-${_fileSafe(label)}';
+      File('$base.png').writeAsBytesSync(bytes);
+      // Beside the picture, under the same stem, so a destination directory
+      // stays readable as "one step, its frame and whatever it produced".
+      for (var (i, attachment) in attachments.indexed) {
+        File(
+          '$base.${scenarioAttachmentFileName(attachments, i)}',
+        ).writeAsBytesSync(attachment.bytes);
+      }
     });
   }
 

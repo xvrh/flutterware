@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutterware/src/constants.dart';
 import 'package:flutterware/src/walker.dart';
 
 /// `fw` — installed globally by `dart install flutterware`, and nothing but a
@@ -20,6 +21,12 @@ import 'package:flutterware/src/walker.dart';
 /// resolved sources moments earlier. Logic added here is logic that ages
 /// independently of every project it is pointed at.
 ///
+/// `--version` is the one thing it answers about itself, and it is the drift
+/// above that makes the question worth asking: this binary and the package it
+/// runs are two versions, and only this process knows the first one. It carries
+/// its own number across the exec so the far side can print both, and answers
+/// alone when there is no project to forward to.
+///
 /// Deliberately separate from `bin/flutterware.dart`, which is the launcher and
 /// is only ever reached through `dart run`. An earlier draft made one file
 /// serve both roles and told them apart by whether `Isolate.resolvePackageUri`
@@ -27,6 +34,14 @@ import 'package:flutterware/src/walker.dart';
 /// signal at all. `executables:` decides what `dart install` installs;
 /// `dart run <package>` resolves `bin/<package>.dart`. The two never meet.
 Future<void> main(List<String> arguments) async {
+  // Carried across the exec so the far side can print both numbers. Only when
+  // the line asks: nothing else has a use for it, and an environment variable
+  // every child of every `fw` inherits is a wider contract than one question
+  // needs.
+  var environment = arguments.any(versionArguments.contains)
+      ? {walkerVersionEnvironmentKey: flutterwareVersion}
+      : const <String, String>{};
+
   // A committed wrapper outranks the recorded link: the repo that carries one
   // has pinned its whole toolchain, and the wrapper can resolve — and even
   // install — the SDK the link can only point at. The user's cwd is kept: the
@@ -39,6 +54,7 @@ Future<void> main(List<String> arguments) async {
       var process = await Process.start(
         wrapper,
         arguments,
+        environment: environment,
         mode: ProcessStartMode.inheritStdio,
       );
       exit(await process.exitCode);
@@ -52,6 +68,14 @@ Future<void> main(List<String> arguments) async {
     // inside a project, so outside one the setup steps are the honest answer.
     if (arguments.any(helpArguments.contains)) {
       stdout.writeln(noProjectHelp);
+      exit(0);
+    }
+    // Neither is `--version`, and for a sharper reason: it is what somebody
+    // types to find out whether `fw` is installed at all. Refusing it because
+    // no project is set up withholds the diagnostic exactly where it is being
+    // asked for.
+    if (arguments.any(versionArguments.contains)) {
+      stdout.writeln(noProjectVersion);
       exit(0);
     }
     stderr.writeln(noProjectMessage);
@@ -82,6 +106,7 @@ Future<void> main(List<String> arguments) async {
     dart,
     ['run', 'flutterware', ...arguments],
     workingDirectory: root.path,
+    environment: environment,
     mode: ProcessStartMode.inheritStdio,
   );
   exit(await process.exitCode);

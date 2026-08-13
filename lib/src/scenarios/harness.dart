@@ -795,6 +795,24 @@ Future<Map<String, Object?>> _runOne(
       }
       framesDir = directory.path;
     }
+    // And the seventh: whatever the flow *produced* on the way here that is
+    // not a widget. Files like the trees, and for a stronger version of the
+    // same reason — a PDF has no business inside a JSON report, and what a
+    // reader wants is to open it.
+    var attachments = [
+      for (var (index, attachment) in capture.attachments.indexed)
+        () {
+          var path =
+              '$base.${scenarioAttachmentFileName(capture.attachments, index)}';
+          File(path).writeAsBytesSync(attachment.bytes);
+          return {
+            'name': attachment.name,
+            'file': path,
+            'mimeType': ?attachment.mimeType,
+            'bytes': attachment.bytes.length,
+          };
+        }(),
+    ];
     var counts = <String, int>{};
     for (var event in capture.events) {
       counts[event.channel] = (counts[event.channel] ?? 0) + 1;
@@ -837,6 +855,7 @@ Future<Map<String, Object?>> _runOne(
         ].take(_maxInlineTitles).toList(),
       },
       if (capture.eventsDropped > 0) 'eventsDropped': capture.eventsDropped,
+      if (attachments.isNotEmpty) 'attachments': attachments,
       if (framesDir != null) ...{
         'frames': framesDir,
         'frameCount': capture.motion.bytes.length,

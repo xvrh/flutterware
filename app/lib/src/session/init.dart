@@ -399,8 +399,8 @@ void main() => Flutterware.configure((fw) {
 ${_identityLine(root)}
   fw.use(Dependencies(packages: [.new(app)]));
 
-  // Renders the widgets you have annotated with `@Preview`, from `demo/` — add
-  // `directory: 'examples'` to point it elsewhere.
+  // Renders the widgets you have annotated with `@Preview`, found anywhere in
+  // the package — add `directory: 'demo'` to bound the scan.
   // `fw run previews new --name="Buttons"` writes your first one.
   fw.use(Previews(packages: [.new(app)]));
 

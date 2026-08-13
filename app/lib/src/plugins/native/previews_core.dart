@@ -86,8 +86,9 @@ const _knobsDoc =
     'preview calling `context.knobs.string("label", "Hello")` '
     'declares one named `label` — so the names come from the preview itself '
     'and differ per '
-    'entry. Read them with `describe --entry=<id> --knobs=true`. Each value is '
-    'coerced to the kind the preview declared, and a picker takes one of its '
+    'entry. Read them with `describe --entry=<id> --with-knobs=true`. Each '
+    'value is coerced to the kind the preview declared, and a picker takes one '
+    'of its '
     'option labels; a name the entry does not declare is an error listing the '
     'ones it does.';
 
@@ -111,8 +112,8 @@ const _axesDoc =
     'is who declares it and how long it lasts: a knob is asked for by the preview '
     'and travels with the entry, an axis is declared by the `PreviewShell` '
     'wrapping it and stays put as you move between entries. Read them with '
-    '`describe --entry=<id> --axes=true`, which also names the shell; an entry '
-    'whose wrapper is not a shell offers none.';
+    '`describe --entry=<id> --with-axes=true`, which also names the shell; an '
+    'entry whose wrapper is not a shell offers none.';
 
 /// What `--live` is, on every read that can be answered by a window somebody
 /// already has open.
@@ -502,8 +503,17 @@ class PreviewsCore extends PluginCore {
             description: 'The id of the entry to describe',
             optionsFrom: 'entries',
           ),
+          // `with-` rather than the bare name, and that prefix is the whole
+          // point of it. These four actions are listed side by side in
+          // `fw run previews --help` and in the action index, so `--knobs`
+          // meaning "include them in the answer" here and "set them on the
+          // render" three lines down is a name that has to be learned
+          // positionally — reported by a consumer who typed
+          // `inspect --axes=true` by analogy and got a refusal. `--knobs=` and
+          // `--axes=` now mean a selection everywhere, which is what they
+          // already mean on an address (`axis.Language=nl`).
           ActionParameter(
-            'knobs',
+            'with-knobs',
             'Read the knobs',
             kind: ActionParameterKind.boolean,
             required: false,
@@ -515,7 +525,7 @@ class PreviewsCore extends PluginCore {
                 'answer is what the scan knows.',
           ),
           ActionParameter(
-            'axes',
+            'with-axes',
             'Read the axes',
             kind: ActionParameterKind.boolean,
             required: false,
@@ -1564,8 +1574,8 @@ class PreviewsCore extends PluginCore {
       shell: shell,
     );
 
-    var wantsKnobs = arguments['knobs'] == true;
-    var wantsAxes = arguments['axes'] == true;
+    var wantsKnobs = arguments['with-knobs'] == true;
+    var wantsAxes = arguments['with-axes'] == true;
     if (!wantsKnobs && !wantsAxes) return describe();
 
     // One guest for both when both are asked for: each costs a compile and a

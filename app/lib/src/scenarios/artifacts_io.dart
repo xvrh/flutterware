@@ -46,6 +46,9 @@ class FileScenarioArtifacts extends ScenarioArtifacts {
   ImageProvider encodedImage(String path) => FileImage(_file(path));
 
   @override
+  Uri uriOf(String path) => Uri.file(_file(path).absolute.path);
+
+  @override
   bool operator ==(Object other) =>
       other is FileScenarioArtifacts && other.root == root;
 

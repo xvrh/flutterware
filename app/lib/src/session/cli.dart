@@ -292,6 +292,21 @@ const fwCommands = [
         'architecture.',
   ),
   FwCommand(
+    'version',
+    usage: 'version [--json]',
+    summary: 'which flutterware this is, and where it came from',
+    details:
+        'Also `fw --version`. Answered before the project is opened, so it\n'
+        'works in a directory flutterware has never been set up in — which is\n'
+        'where the question is usually asked.\n'
+        '\n'
+        'It reports **two** numbers when there are two. The global `fw` is\n'
+        'installed once by `dart install flutterware` and nothing refreshes\n'
+        'it, while the package it runs is the one your project resolved, so\n'
+        'the two drift apart by design. Only the line naming the package\n'
+        'describes the code that actually answers your commands.',
+  ),
+  FwCommand(
     'help',
     usage: 'help [<command>]',
     summary: 'this, or one command in detail',
@@ -312,6 +327,75 @@ const fwExitCodes = {
   1: 'the action failed, or what it ran did not pass',
   64: 'a usage error: unknown plugin, bad argument, malformed command line',
 };
+
+/// Which flutterware is answering, and where its code is.
+///
+/// **Two numbers, because there are two.** `fw` on the PATH is installed once
+/// by `dart install flutterware` and nothing refreshes it; the package it runs
+/// is whatever the project resolved. Reporting one of them answers the question
+/// with the wrong half as often as the right one, and a version that might be
+/// either is worse than none — which is how a consumer came to read the version
+/// out of an MCP handshake to find out what they were talking to.
+///
+/// Where the package is, spelled as the launcher decided it: a path dependency
+/// runs in the checkout, a hosted one from a copy under `~/.flutterware`. That
+/// is the distinction that explains why an edit did or did not take effect, so
+/// it is on the line rather than left to be inferred from the path.
+///
+/// Built from an environment map rather than reading [Platform] itself, because
+/// the interesting case — the two versions disagreeing — is one only the
+/// environment can produce.
+class FwVersion {
+  const FwVersion({
+    required this.version,
+    this.source,
+    this.packageRoot,
+    this.walker,
+  });
+
+  factory FwVersion.of(Map<String, String> environment) {
+    var appToolPath = environment[appPathEnvironmentKey];
+    return FwVersion(
+      version: flutterwareVersion,
+      // Both absent together: they are the launcher's word for where it put
+      // this install, and nothing else knows.
+      source: appToolPath == null
+          ? null
+          : environment[editableSourcesEnvironmentKey] == 'true'
+          ? 'path dependency'
+          : 'unpacked from the pub cache',
+      packageRoot: appToolPath == null ? null : p.dirname(appToolPath),
+      // Absent when this was not started by the global `fw` — `dart run
+      // flutterware`, or the built CLI run directly. One number is the honest
+      // answer then, rather than a guess at the other.
+      walker: environment[walkerVersionEnvironmentKey],
+    );
+  }
+
+  /// The flutterware package that is answering — the one that matters.
+  final String version;
+
+  /// How that package got here: `path dependency`, or `unpacked from the pub
+  /// cache`.
+  final String? source;
+
+  final String? packageRoot;
+
+  /// The global `fw` that ran this, when one did.
+  final String? walker;
+
+  Map<String, Object?> toJson() => {
+    'version': version,
+    'source': ?source,
+    'packageRoot': ?packageRoot,
+    'walker': ?walker,
+  };
+
+  List<String> get lines => [
+    ['flutterware $version', ?source, ?packageRoot].join(' · '),
+    if (walker case var walker?) 'fw $walker · the global walker, which ran it',
+  ];
+}
 
 /// The CLI renderer of the plugin contract — `fw`, minus the process.
 ///
@@ -377,7 +461,12 @@ class FwCli {
         first != null &&
         first.startsWith('-') &&
         first != '--help' &&
-        first != '-h';
+        first != '-h' &&
+        // `fw --version` used to dispatch as `app --version` and be refused
+        // with `unknown argument "--version" for app` — the flag every CLI
+        // answers, reported as a mistake, by the one command that opens a
+        // window. Not `-v`: that is `--verbose`, taken above.
+        first != '--version';
     var command = argv.isEmpty || leadingFlag ? 'app' : argv.first;
     var rest = leadingFlag ? argv : argv.skip(1).toList();
 
@@ -385,11 +474,18 @@ class FwCli {
       // Initializing is not a step someone should have to be told about: this
       // process already knows everything `init` records. `help` is excluded so
       // that reading the help for a project you have not adopted yet does not
-      // write to it.
-      if (command != 'help' && command != 'init') await _autoInit();
+      // write to it, and `version` for the stronger reason that it has to
+      // answer in a directory that is not a project at all.
+      if (command != 'help' &&
+          command != 'init' &&
+          command != 'version' &&
+          command != '--version') {
+        await _autoInit();
+      }
 
       return switch (command) {
         'init' => await _init(),
+        'version' || '--version' => _version(json: json),
         'status' => await _status(json: json),
         'worktrees' => await _worktrees(
           json: json,
@@ -1262,6 +1358,16 @@ class FwCli {
   /// Rendered from [fwCommands] rather than typed out, because the capability
   /// document renders the same list — and two copies of a command summary is
   /// how a document ends up describing a flag that no longer exists.
+  int _version({required bool json}) {
+    var report = FwVersion.of(Platform.environment);
+    if (json) {
+      out.writeln(const JsonEncoder.withIndent('  ').convert(report.toJson()));
+    } else {
+      report.lines.forEach(out.writeln);
+    }
+    return 0;
+  }
+
   int _help([String? command]) {
     if (command != null) {
       var found = fwCommands.where((c) => c.name == command).firstOrNull;

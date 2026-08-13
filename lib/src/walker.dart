@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'constants.dart';
+
 /// Where a project records which Flutter SDK it uses, relative to its root.
 ///
 /// **This path is one of the three permanently frozen facts in the whole
@@ -85,6 +87,31 @@ Directory? findInitializedRoot(Directory start) {
 /// and the walker cannot strip flags it does not know without acquiring
 /// logic that ages.
 const helpArguments = {'help', '--help', '-h'};
+
+/// The spellings that ask which flutterware this is.
+///
+/// No `-v`: that is `--verbose`, which every command already takes.
+const versionArguments = {'version', '--version'};
+
+/// What the global `fw` says about itself when there is no project to forward
+/// to.
+///
+/// The one version-sensitive thing the walker is allowed to carry, and it does
+/// not violate the rule the library doc states: [flutterwareVersion] compiled
+/// in here describes *this binary*, which cannot go stale the way a copy of
+/// somebody else's behaviour would. It is also the reason the question is worth
+/// asking — this binary is installed once and never refreshed, while the code
+/// it runs comes from the project, so the two drift apart by design and
+/// "which flutterware am I talking to" has two answers.
+const noProjectVersion =
+    '''
+fw $flutterwareVersion — the global walker.
+
+Commands run the flutterware the *project* resolved, which is a different
+version from this one as often as not. No project is set up here, so there is
+nothing to report but this binary.
+
+$_setup''';
 
 /// The setup steps, shared by every message that has to teach them.
 const _setup = '''
