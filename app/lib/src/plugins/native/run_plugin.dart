@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 // ignore: implementation_imports
@@ -771,6 +772,11 @@ class _ScreenTab extends StatefulWidget {
 
 class _ScreenTabState extends State<_ScreenTab> {
   Uint8List? _image;
+
+  /// The same picture, decoded — see [_Picture] for why the pane is handed a
+  /// frame rather than the bytes it came in.
+  ui.Image? _picture;
+  var _undecodable = false;
   InspectTree? _tree;
   String? _error;
   var _loading = false;
@@ -808,6 +814,9 @@ class _ScreenTabState extends State<_ScreenTab> {
     // picture of this one.
     if (old.handle.key != widget.handle.key) {
       _image = null;
+      _picture?.dispose();
+      _picture = null;
+      _undecodable = false;
       _tree = null;
       _error = null;
       _read();
@@ -816,6 +825,7 @@ class _ScreenTabState extends State<_ScreenTab> {
 
   @override
   void dispose() {
+    _picture?.dispose();
     _highlight.dispose();
     super.dispose();
   }
@@ -831,9 +841,20 @@ class _ScreenTabState extends State<_ScreenTab> {
     _tellThePage();
     try {
       var read = await widget.core.inspectRead(widget.handle);
-      if (!mounted) return;
+      // Decoded here rather than in the pane, so that the frame and the caption
+      // describing it land in the same build. The picture already on screen is
+      // held until this one is ready — a re-read should not blank the pane it
+      // is refreshing.
+      var picture = await _decodePicture(read.image);
+      if (!mounted) {
+        picture?.dispose();
+        return;
+      }
       setState(() {
+        _picture?.dispose();
         _image = read.image;
+        _picture = picture;
+        _undecodable = read.image != null && picture == null;
         _tree = read.tree;
         _error = null;
       });
@@ -877,7 +898,11 @@ class _ScreenTabState extends State<_ScreenTab> {
           children: [
             SizedBox(
               width: width,
-              child: _Picture(image: _image, loading: _loading),
+              child: _Picture(
+                picture: _picture,
+                undecodable: _undecodable,
+                loading: _loading,
+              ),
             ),
             InspectSplitGrip(
               axis: Axis.vertical,
@@ -912,10 +937,52 @@ class _ScreenTabState extends State<_ScreenTab> {
   }
 }
 
-class _Picture extends StatelessWidget {
-  const _Picture({required this.image, required this.loading});
+/// Bytes to a frame, or null.
+///
+/// Absence is a null and never an exception, which is the contract the
+/// comparison side's shot decoding already settled on: a picture that will not
+/// decode is a thing the pane has to *say*, and a throw here would report it as
+/// a failed read instead.
+Future<ui.Image?> _decodePicture(Uint8List? bytes) async {
+  if (bytes == null || bytes.isEmpty) return null;
+  try {
+    var codec = await ui.instantiateImageCodec(bytes);
+    var frame = await codec.getNextFrame();
+    codec.dispose();
+    return frame.image;
+  } on Object {
+    return null;
+  }
+}
 
-  final Uint8List? image;
+/// The picture, and the caption that only a picture earns.
+///
+/// **The caption is tied to the decoded frame, not to the bytes.** It used to
+/// be tied to `image != null`, and that told the reader a lie for as long as
+/// the decode took: `Image.memory` resolves *asynchronously*, and a
+/// `RenderImage` with nothing to draw yet takes `constraints.smallest` — zero,
+/// under the loose constraints this column hands it. So the caption drew,
+/// slid up to where the picture should have been, and described a picture that
+/// was not on screen. Measured on macOS: 103ms against a painting app, and
+/// unbounded against one that is not painting — a hidden or occluded window
+/// schedules no frame, so the decoded picture had nothing to arrive on. That is
+/// the state a Studio is in for the whole of an agent's drive session.
+///
+/// Handing it an already-decoded [ui.Image] removes the window rather than
+/// narrowing it: there is no moment where this widget has bytes and no picture.
+class _Picture extends StatelessWidget {
+  const _Picture({
+    required this.picture,
+    required this.undecodable,
+    required this.loading,
+  });
+
+  final ui.Image? picture;
+
+  /// The app answered with bytes that are not an image. Worth its own word:
+  /// silence here reads as "no picture yet", which is the one thing it is not.
+  final bool undecodable;
+
   final bool loading;
 
   @override
@@ -931,18 +998,12 @@ class _Picture extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (image == null)
-            Text(
-              loading ? '' : 'No picture yet',
-              style: context.type.caption.copyWith(color: context.colors.mut2),
-            )
-          else ...[
+          if (picture case var picture?) ...[
             Flexible(
-              child: Image.memory(
-                image!,
+              child: RawImage(
+                image: picture,
                 fit: BoxFit.contain,
                 filterQuality: FilterQuality.medium,
-                gaplessPlayback: true,
               ),
             ),
             const Gap(FwSpacing.sm),
@@ -951,7 +1012,17 @@ class _Picture extends StatelessWidget {
               textAlign: TextAlign.center,
               style: context.type.micro.copyWith(color: context.colors.mut3),
             ),
-          ],
+          ] else
+            Text(
+              switch ((loading, undecodable)) {
+                (true, _) => '',
+                (_, true) =>
+                  'The app answered with a picture that decodes to nothing.',
+                _ => 'No picture yet',
+              },
+              textAlign: TextAlign.center,
+              style: context.type.caption.copyWith(color: context.colors.mut2),
+            ),
         ],
       ),
     );

@@ -52,9 +52,8 @@ void main() {
     }
   });
 
-  testWidgets('the screen pane finishes its read and draws both halves', (
-    tester,
-  ) async {
+  /// Mounts the panel on the Screen tab against one fake reading.
+  Future<void> pumpScreenTab(WidgetTester tester, Uint8List? image) async {
     var core = RunCore(
       PluginHost(
         id: runPluginId,
@@ -90,7 +89,6 @@ void main() {
     // async zone — the future would simply never complete.
     await tester.runAsync(core.computeAll);
     core.debugSetProbe(handle, const RunProbe(app: true, launcher: true));
-    var screenshot = Uint8List.fromList(_onePixelPng);
     core.debugRead = (_) async => InspectRead(
       tree: InspectTree(
         entryId: null,
@@ -100,7 +98,7 @@ void main() {
           createdByLocalProject: true,
         ),
       ),
-      image: screenshot,
+      image: image,
     );
 
     var address = ValueNotifier(
@@ -123,18 +121,20 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Decode the screenshot here rather than leaving a codec in flight. The
-    // pumps above run in fake async, so `Image.memory` only schedules its
-    // decode; the real work would then land in whichever test runs next, which
-    // reports it as an image-resource exception that test never caused. Same
-    // bytes instance, so this is the provider the widget is already waiting on.
+    // The decode is real engine work and the pumps above run in fake async, so
+    // it needs a real moment to land. The pane holds the reading open until it
+    // does — which is the point: the picture and the caption describing it
+    // arrive in one build, never the caption first.
     await tester.runAsync(
-      () => precacheImage(
-        MemoryImage(screenshot),
-        tester.element(find.byType(Image)),
-      ),
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await tester.pump();
+  }
+
+  testWidgets('the screen pane finishes its read and draws both halves', (
+    tester,
+  ) async {
+    await pumpScreenTab(tester, Uint8List.fromList(_onePixelPng));
 
     // The read completed. Before the fix this threw inside `initState`, the
     // read never ran, and the pane said `Reading the app…` for ever.
@@ -143,7 +143,21 @@ void main() {
 
     // Both halves of the Screen tab, from the one reading.
     expect(find.text('MyApp'), findsOneWidget);
-    expect(find.byType(Image), findsOneWidget);
+    expect(find.byType(RawImage), findsOneWidget);
+
+    // **The caption is only ever drawn over a picture that is there.** It used
+    // to be drawn on `image != null`, which is true a decode before there is
+    // anything to see: `Image.memory` resolves asynchronously and a
+    // `RenderImage` with nothing yet takes zero height, so the caption slid up
+    // and described a blank pane. Measured at 103ms against a painting app and
+    // unbounded against one that is not — an occluded window schedules no
+    // frame for the decode to arrive on.
+    var picture = tester.widget<RawImage>(find.byType(RawImage));
+    expect(picture.image, isNotNull);
+    expect(
+      find.text('rendered by the app — platform views will not appear'),
+      findsOneWidget,
+    );
 
     // **The detail pane must not read this reader's blindness as the widget's
     // shape.** A VM-service tree carries no layout for any node, and the pane
@@ -180,6 +194,32 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Hot restart'), findsOneWidget);
+  });
+
+  testWidgets('a picture that will not decode is said, not captioned', (
+    tester,
+  ) async {
+    // Bytes the app called a screenshot and no decoder will take. The read
+    // succeeded, so this is not the failure banner's case — the pane has an
+    // answer, and the answer is that there is no picture in it.
+    await pumpScreenTab(tester, Uint8List.fromList([1, 2, 3, 4]));
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.text('The app answered with a picture that decodes to nothing.'),
+      findsOneWidget,
+    );
+
+    // Neither of the two things it is not: a caption over an empty box, nor
+    // the "no picture yet" that means the reading has not happened.
+    expect(
+      find.text('rendered by the app — platform views will not appear'),
+      findsNothing,
+    );
+    expect(find.text('No picture yet'), findsNothing);
+
+    // The other half of the reading still arrived.
+    expect(find.text('MyApp'), findsOneWidget);
   });
 
   testWidgets('the New run page offers only the devices the entry point '
