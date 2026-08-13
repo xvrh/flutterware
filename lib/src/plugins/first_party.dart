@@ -533,7 +533,11 @@ class Knob {
   ///
   /// An `enum` parameter needs none — its constants are read off the
   /// declaration, so a list here would be the same facts twice and free to
-  /// drift.
+  /// drift. That reading is bounded, and the bound is worth knowing: the entry
+  /// point's own file, the files it imports directly, and the packages of the
+  /// same checkout — a shared config package included. An enum outside all
+  /// three is reported by name rather than drawn, and a list here does not
+  /// rescue it: the values would be offered for a control that is not there.
   final List<String> options;
 
   /// A value the tool works out for itself, rather than one to type.

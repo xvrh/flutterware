@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
@@ -49,6 +50,14 @@ class EnumValues {
 /// reported as not found rather than hunted for, so the cost of a lookup is
 /// bounded by the file's own import list.
 ///
+/// An import is followed when it names a file this checkout holds: a relative
+/// path, or a `package:` URI belonging to a package of the same workspace —
+/// see [firstPartyPackages]. A dependency it fetched is not, which is a bound
+/// and not an oversight: parsing the export closure of
+/// `package:flutter/material.dart` to answer one name would cost a form that
+/// has to open now, and an enum nobody in the checkout can edit is not the one
+/// somebody is trying to put a knob on.
+///
 /// Shared deliberately: entry-point knobs and catalog demos ask the identical
 /// question of the identical AST, and
 /// `docs/superpowers/specs/2026-07-27-knobs-static-and-runtime.md` left it open
@@ -57,8 +66,10 @@ class EnumValues {
 class EnumLookup {
   EnumLookup({this.packageConfig, this.selfPackage, this.selfPackageRoot});
 
-  /// Resolves `package:` URIs. Without one, only relative imports and
-  /// [selfPackage] are followed, and everything else reports honestly.
+  /// Resolves `package:` URIs. Read from [selfPackageRoot]'s checkout when not
+  /// given, and null only when there is nothing to read it from — then relative
+  /// imports and [selfPackage] are all that is followed, and everything else
+  /// reports honestly.
   final PackageConfig? packageConfig;
 
   /// The name of the package being scanned, so `package:myapp/src/models.dart`
@@ -71,6 +82,14 @@ class EnumLookup {
 
   /// [selfPackage]'s directory — the one holding its `lib/`.
   final String? selfPackageRoot;
+
+  /// [packageConfig], or the checkout's own packages, worked out on first need.
+  ///
+  /// Lazy because it is a file read that most lookups never want: a type
+  /// declared in the file or beside it is answered before any `package:` URI
+  /// has to mean anything.
+  late final PackageConfig? _packages =
+      packageConfig ?? firstPartyPackages(selfPackageRoot);
 
   final _libraries = <String, _Library>{};
 
@@ -153,8 +172,8 @@ class EnumLookup {
   }
 
   /// A directive's URI as an absolute file path, or null for anything this
-  /// cannot follow — `dart:` libraries, and `package:` URIs with no config to
-  /// resolve them.
+  /// cannot follow — `dart:` libraries, and the packages this checkout fetched
+  /// rather than holds.
   String? _resolve(String uri, {required String from}) {
     if (uri.startsWith('dart:')) return null;
     if (uri.startsWith('package:')) {
@@ -165,7 +184,7 @@ class EnumLookup {
           p.joinAll([selfPackageRoot!, 'lib', ...parsed.pathSegments.skip(1)]),
         );
       }
-      var resolved = packageConfig?.resolve(parsed);
+      var resolved = _packages?.resolve(parsed);
       return resolved == null ? null : p.normalize(resolved.toFilePath());
     }
     return p.normalize(p.join(p.dirname(from), uri));
@@ -264,6 +283,114 @@ class EnumLookup {
     }
   }
 }
+
+/// The packages whose source is in [packageRoot]'s checkout, as a resolver for
+/// `package:` URIs — and nothing that was fetched.
+///
+/// **Why not simply the whole config.** A shared package is where a first-party
+/// enum hides — one `Backend` in one place, so two apps cannot disagree about
+/// what `staging` means — and following `path:` dependencies to reach it is a
+/// handful of small packages. Following everything else is not: an entry point
+/// imports `package:flutter/material.dart`, whose export closure is hundreds of
+/// files to parse before a missing name can be called missing, on the path that
+/// draws a launch form. So the resolver carries the checkout and stops there.
+///
+/// The two lines are drawn where the config itself draws them: pub names the
+/// cache it fetched into and the SDK it resolved against, and writes a relative
+/// `rootUri` for exactly the packages that live beside the file — a workspace
+/// member, a `path:` dependency. Both are required, so the odd layout (a cache
+/// inside the project, a dependency on another drive) is refused rather than
+/// guessed at, which is the behaviour there was before any of this.
+///
+/// Read here rather than through `loadPackageConfig`, which is async while both
+/// scanners that need this are not. The walk up is what a workspace requires:
+/// `pub get` writes one `.dart_tool/package_config.json` at the root and none
+/// in the members.
+PackageConfig? firstPartyPackages(String? packageRoot) {
+  if (packageRoot == null) return null;
+  var file = _packageConfigAbove(p.normalize(p.absolute(packageRoot)));
+  if (file == null) return null;
+  Map<String, Object?> json;
+  Uri base;
+  try {
+    json = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+    // `rootUri` is relative to the directory holding the file, not to the file.
+    base = Uri.directory(file.parent.path);
+  } on Object {
+    return null;
+  }
+  var fetched = [
+    for (var key in const ['pubCache', 'flutterRoot'])
+      if (json[key] case String uri) ?_pathOf(base.resolve(uri)),
+  ];
+  var packages = [
+    for (var entry in json['packages'] as List? ?? const [])
+      if (entry is Map) ?_packageOf(entry, base: base, fetched: fetched),
+  ];
+  if (packages.isEmpty) return null;
+  try {
+    return PackageConfig(packages);
+  } on Object {
+    return null;
+  }
+}
+
+/// One `packages` entry, or null when the checkout does not hold it.
+Package? _packageOf(
+  Map<Object?, Object?> entry, {
+  required Uri base,
+  required List<String> fetched,
+}) {
+  if (entry['name'] is! String) return null;
+  if (entry['rootUri'] is! String) return null;
+  var rootUri = entry['rootUri']! as String;
+  // Absolute is how pub spells "I fetched this", so it is refused before the
+  // directories are compared — and a package on another drive, which has no
+  // relative spelling, is left alone rather than followed.
+  if (Uri.parse(rootUri).hasScheme) return null;
+  var root = base.resolve(_directory(rootUri));
+  var path = _pathOf(root);
+  if (path == null) return null;
+  if (fetched.any((from) => p.isWithin(from, path))) return null;
+  var lib = entry['packageUri'];
+  try {
+    return Package(
+      entry['name']! as String,
+      root,
+      packageUriRoot: root.resolve(_directory(lib is String ? lib : 'lib/')),
+    );
+  } on Object {
+    // One entry this cannot make sense of costs that entry, never the rest of
+    // the checkout.
+    return null;
+  }
+}
+
+/// The nearest `.dart_tool/package_config.json` at [from] or above it.
+File? _packageConfigAbove(String from) {
+  for (var directory = from; ; directory = p.dirname(directory)) {
+    var file = File(p.join(directory, '.dart_tool', 'package_config.json'));
+    if (file.existsSync()) return file;
+    if (p.dirname(directory) == directory) return null;
+  }
+}
+
+/// [uri] as a local path, or null when it does not name one.
+String? _pathOf(Uri uri) {
+  if (!uri.isScheme('file')) return null;
+  try {
+    return p.normalize(uri.toFilePath());
+  } on Object {
+    return null;
+  }
+}
+
+/// [uri] with the trailing slash a directory needs.
+///
+/// Pub writes `../shared`, and both `Uri.resolve` and [Package] read a URI
+/// without one as a file — so the last segment would be dropped and the package
+/// would resolve one directory too high.
+String _directory(String uri) => uri.endsWith('/') ? uri : '$uri/';
 
 class _Library {
   _Library(this.path);

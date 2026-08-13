@@ -120,8 +120,10 @@ class CatalogScanner {
   EnumLookup _lookup = EnumLookup();
 
   /// This package's name, so a demo importing its own `package:` URI resolves
-  /// without a `PackageConfig` — which cannot be loaded here anyway, because
-  /// [scan] is synchronous and loading one is not.
+  /// without reading anything. The rest of the checkout resolves too, off the
+  /// `package_config.json` [EnumLookup] finds from this root — a demo whose
+  /// enum lives in a shared package is the same shape as an entry point whose
+  /// knob does.
   late final String? _packageName = () {
     try {
       return Pubspec.parse(

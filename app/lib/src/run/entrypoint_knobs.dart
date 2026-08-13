@@ -13,7 +13,7 @@ class EntrypointKnobs {
   const EntrypointKnobs({
     this.knobs = const [],
     this.imports = const [],
-    this.problems = const [],
+    this.undrawable = const [],
     this.required = const [],
   });
 
@@ -29,9 +29,17 @@ class EntrypointKnobs {
   /// — `2026-08-12-run-knobs-design.md` § K4.
   final List<String> imports;
 
-  /// Parameters that could not be drawn, said out loud. A knob missing with no
-  /// explanation looks like a broken tool.
-  final List<String> problems;
+  /// Parameters `main` takes that no control can be drawn for, each with the
+  /// sentence saying why — a verb phrase whose subject is the parameter, so a
+  /// surface can put it after the name it is already showing.
+  ///
+  /// **Keyed by name, because the name is what a surface has.** This was a list
+  /// of prose that nothing read, so the accurate reason was computed and thrown
+  /// away twice over: a control went missing with nothing to explain it, and a
+  /// knob declared for one of these was reported as a parameter `main` does not
+  /// take — which sent people to the signature to hunt for a typo that was not
+  /// there. Both are [RunKnobEntry] lines now, joined on [ParameterKnob.name].
+  final List<({String name, String reason})> undrawable;
 
   /// Named parameters `main` declares `required`, which make it unlaunchable.
   ///
@@ -84,7 +92,7 @@ EntrypointKnobs scanEntrypointKnobs({
   }
   if (main == null) return const EntrypointKnobs();
 
-  var problems = <String>[];
+  var undrawable = <({String name, String reason})>[];
   var knobs = knobsFromParameters(
     main.functionExpression.parameters,
     file: file,
@@ -93,13 +101,13 @@ EntrypointKnobs scanEntrypointKnobs({
       selfPackageRoot: packageRoot,
     ),
     onSkipped: (parameter, reason) =>
-        problems.add('`$parameter` has no control: $reason'),
+        undrawable.add((name: parameter, reason: reason)),
   );
 
   return EntrypointKnobs(
     knobs: knobs,
     imports: _importsOf(unit, packageRoot: packageRoot, entrypoint: entrypoint),
-    problems: problems,
+    undrawable: undrawable,
     required: [
       for (var parameter
           in main.functionExpression.parameters?.parameters ??

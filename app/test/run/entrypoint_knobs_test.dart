@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -48,7 +49,7 @@ void main({
     expect(found.knobs.last.knob.options, ['dev', 'staging', 'prod']);
     expect(found.knobs.last.knob.defaultValue, 'staging');
     expect(found.knobs.last.enumType, 'Backend');
-    expect(found.problems, isEmpty);
+    expect(found.undrawable, isEmpty);
   });
 
   test('an entry point taking nothing offers nothing', () {
@@ -69,14 +70,62 @@ void main({
     write('lib/main.dart', 'const x = 1;');
 
     expect(scan().knobs, isEmpty);
-    expect(scan().problems, isEmpty);
+    expect(scan().undrawable, isEmpty);
   });
 
-  test('a parameter with no drawable type is reported', () {
+  test('a parameter with no drawable type is reported, by name', () {
     write('lib/main.dart', 'void main({Uri base = someUri}) {}');
 
     expect(scan().knobs, isEmpty);
-    expect(scan().problems.single, contains('`base` has no control'));
+    // Keyed rather than prose, because the surfaces have to join it back to the
+    // parameter: a knob declared for one of these was reported as a parameter
+    // `main` does not take.
+    expect(scan().undrawable.single.name, 'base');
+    expect(scan().undrawable.single.reason, contains('is `Uri`'));
+  });
+
+  test('an enum from another package of the workspace is a picker', () {
+    // A shared package is the ordinary monorepo shape — the enum lives in one
+    // place precisely so two apps cannot disagree about what `staging` means —
+    // and every such knob came back as a parameter `main` does not take. The
+    // resolution lives in one `.dart_tool/package_config.json` at the workspace
+    // root; a member has no copy of its own.
+    write(
+      'pubspec.yaml',
+      'name: monorepo\nworkspace:\n  - mobile\n  - shared\n',
+    );
+    write('shared/pubspec.yaml', 'name: shared\n');
+    write('shared/lib/config.dart', 'enum Backend { dev, staging, prod }');
+    write('mobile/pubspec.yaml', 'name: mobile\n');
+    write('mobile/lib/main.dart', '''
+import 'package:shared/config.dart';
+void main({Backend backend = Backend.staging}) {}
+''');
+    write(
+      '.dart_tool/package_config.json',
+      jsonEncode({
+        'configVersion': 2,
+        'packages': [
+          for (var name in const ['mobile', 'shared'])
+            {'name': name, 'rootUri': '../$name', 'packageUri': 'lib/'},
+        ],
+      }),
+    );
+
+    var found = scanEntrypointKnobs(
+      packageRoot: p.join(package.path, 'mobile'),
+      entrypoint: 'lib/main.dart',
+    );
+
+    expect(found.undrawable, isEmpty);
+    expect(found.knobs.single.knob.kind, KnobKind.picker);
+    expect(found.knobs.single.knob.options, ['dev', 'staging', 'prod']);
+    expect(found.knobs.single.knob.defaultValue, 'staging');
+    expect(found.knobs.single.enumType, 'Backend');
+    // The wrapper writes `Backend.staging`, so it has to import what declares
+    // it — already a `package:` URI, which means the same thing from the
+    // `.dart_tool/flutterware/run/` the wrapper is written into.
+    expect(found.imports, ["import 'package:shared/config.dart';"]);
   });
 
   group('the imports a wrapper will need', () {
