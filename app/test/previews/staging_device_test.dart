@@ -27,11 +27,12 @@ void main() {
   });
 
   group('the list is the only source', () {
-    test('a phone or tablet gets a silhouette built from its own numbers', () {
-      // Not borrowed from a named `device_frame` device, so there is no second
-      // set of measurements to drift from — which is why nothing here checks
-      // one list against another any more.
-      var device = deviceById('iphone-13')!;
+    test('a phone or tablet with no artwork is drawn from its own numbers', () {
+      // The generic half. `iphone-16` is deliberate: it is a device the table
+      // added after `device_frame` stopped shipping bodies, and it renders
+      // without anybody drawing one. `frames_test.dart` covers the other half.
+      var device = deviceById('iphone-16')!;
+      expect(namedFrameFor(device.id), isNull, reason: 'no body to borrow');
       var chrome = deviceFrameFor(device)!;
 
       expect(chrome.screenSize.width, device.width);

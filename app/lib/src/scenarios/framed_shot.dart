@@ -1,11 +1,12 @@
 import 'dart:ui' as ui;
 
-import 'package:device_frame/device_frame.dart';
+// Theirs hidden, as everywhere but the one file that borrows their bodies:
+// `Devices` here is our offered table, which is what a shot is filed under.
+import 'package:device_frame/device_frame.dart' hide Devices;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 
-// Ours hidden here, not theirs: this file names `device_frame`'s bodies.
-import '../previews/catalog_devices.dart' hide Devices;
+import '../previews/catalog_devices.dart';
 import '../plugins/native/scenarios_results.dart';
 import '../ui/theme.dart';
 import 'artifacts.dart';
@@ -13,14 +14,12 @@ import 'artifacts.dart';
 /// A captured step, in the silhouette of the device it ran as, wearing the
 /// status chrome a real screenshot would have.
 ///
-/// iOS devices get `device_frame`'s **hand-drawn bodies** — an SE with its
-/// home button, a 13 with its notch — because the flow is a wall of phones
-/// and generic lozenges all read alike. That mapping is the second list the
-/// catalog's [deviceFrameFor] doc warns about, made safe the way it says:
-/// `frames_test.dart` holds the two sets of measurements together, and any
-/// device without a named body falls back to the same generic silhouette the
-/// catalog draws. Desktop sizes and the bare test surface get a plain
-/// border: a monitor body around a rectangle explains nothing.
+/// The silhouette is [deviceFrameFor]'s, the same one the preview canvas
+/// draws — hand-drawn where a body exists, generic where none does. It used to
+/// keep its own named-body mapping here, which is how the same iPhone came to
+/// wear a notch in the flow and a lozenge in previews. Desktop sizes and the
+/// bare test surface get a plain border: a monitor body around a rectangle
+/// explains nothing.
 ///
 /// Over the screen, the **fake status bar** (time, network, battery) and the
 /// home indicator, tinted by the `SystemUiOverlayStyle` the app declared at
@@ -82,18 +81,6 @@ class FramedShot extends StatelessWidget {
   /// defaults to light icons.
   final Brightness fallbackBrightness;
 
-  /// The hand-drawn body for [id], or null for the generic fallback. Only
-  /// devices whose named frame matches our table's screen exactly — the test
-  /// pins that.
-  static DeviceInfo? namedFrameFor(String id) => switch (id) {
-    'iphone-se' => Devices.ios.iPhoneSE,
-    'iphone-13-mini' => Devices.ios.iPhone13Mini,
-    'iphone-13' => Devices.ios.iPhone13,
-    'iphone-12-pro-max' => Devices.ios.iPhone12ProMax,
-    'ipad' => Devices.ios.iPad,
-    _ => null,
-  };
-
   Brightness _brightness(String? declared) => switch (declared) {
     'light' => Brightness.light,
     'dark' => Brightness.dark,
@@ -150,7 +137,7 @@ class FramedShot extends StatelessWidget {
       ),
     );
     // Upright: the body is artwork, and `DeviceFrame` turns it.
-    var chrome = namedFrameFor(resolved.id) ?? deviceFrameFor(resolved);
+    var chrome = deviceFrameFor(resolved);
     if (chrome == null) {
       // A desktop size: a hairline, not a monitor body. Nothing to rotate —
       // `canRotate` already told [effective] as much.

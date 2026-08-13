@@ -1,18 +1,16 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/previews/catalog_devices.dart';
-import 'package:flutterware_app/src/scenarios/framed_shot.dart';
 
 /// The test that makes the named-frame mapping safe: `device_frame`'s
 /// hand-drawn bodies carry their own measurements, and a mismatch with our
 /// device table would stretch every screenshot inside its frame. This is the
-/// "test to hold the two together" the catalog's `deviceFrameFor` doc names
-/// as the price of a second list.
+/// "price" the catalog's `deviceFrameFor` doc names for borrowing them.
 void main() {
   test('every named frame matches our table exactly', () {
     var mapped = 0;
     for (var device in Devices.all) {
-      var named = FramedShot.namedFrameFor(device.id);
+      var named = namedFrameFor(device.id);
       if (named == null) continue;
       mapped++;
       expect(
@@ -21,6 +19,19 @@ void main() {
         reason: device.id,
       );
       expect(named.pixelRatio, device.pixelRatio, reason: device.id);
+      // Portrait too, which only matters because the guest is laid out against
+      // *our* insets while the body draws its own notch: a disagreement puts
+      // the AppBar somewhere the artwork says there is no glass.
+      expect(
+        named.safeAreas,
+        EdgeInsets.fromLTRB(
+          device.insetLeft,
+          device.insetTop,
+          device.insetRight,
+          device.insetBottom,
+        ),
+        reason: device.id,
+      );
     }
     // The whole iOS shortlist has a real body.
     expect(mapped, 5);
@@ -28,7 +39,7 @@ void main() {
 
   test('every named frame agrees about landscape too', () {
     for (var device in Devices.all) {
-      var named = FramedShot.namedFrameFor(device.id);
+      var named = namedFrameFor(device.id);
       if (named == null) continue;
       // The body draws its own rotated safe areas while our chrome places
       // itself from the table's. Two sets of numbers for one picture is the
@@ -45,6 +56,17 @@ void main() {
         ),
         reason: device.id,
       );
+    }
+  });
+
+  test('a device with a body gets it, wherever the frame is drawn', () {
+    // One function, so the flow and the preview canvas cannot disagree about
+    // what an iPhone looks like — which they did, when the mapping lived in
+    // `FramedShot` and only scenario shots consulted it.
+    for (var device in Devices.all) {
+      var named = namedFrameFor(device.id);
+      if (named == null) continue;
+      expect(deviceFrameFor(device), same(named), reason: device.id);
     }
   });
 
@@ -66,8 +88,8 @@ void main() {
   });
 
   test('no named frame for an id outside the table', () {
-    expect(FramedShot.namedFrameFor('android-medium'), isNull);
-    expect(FramedShot.namedFrameFor('macbook-pro'), isNull);
-    expect(FramedShot.namedFrameFor('nonsense'), isNull);
+    expect(namedFrameFor('android-medium'), isNull);
+    expect(namedFrameFor('macbook-pro'), isNull);
+    expect(namedFrameFor('nonsense'), isNull);
   });
 }
