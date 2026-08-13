@@ -34,6 +34,7 @@ import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../../ui/split_button.dart';
 import '../../ui/empty_state.dart';
+import '../../ui/loading_state.dart';
 import '../../ui/popover.dart';
 import '../../ui/popover_menu.dart';
 import '../../ui/tappable.dart';
@@ -888,6 +889,18 @@ class _ScreenTabState extends State<_ScreenTab> {
   @override
   Widget build(BuildContext context) {
     if (_error case var error?) return _Failed(error);
+    // A grip divides two things. Until the first read lands there is only one
+    // — the picture pane draws nothing at all while loading, so what the page
+    // showed was a blank half, a hairline down the middle, and the tab's only
+    // words centred in the *other* half. That reads as a divider waiting for a
+    // panel, not as a pane that is busy. One state for one thing, and the
+    // split appears with the content it splits.
+    if (_loading && _image == null && _tree == null) {
+      return const LoadingState(
+        title: 'Reading the app…',
+        message: 'Its widget tree, and a picture of what it is showing.',
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         var width = (constraints.maxWidth * _split)
@@ -1015,7 +1028,10 @@ class _Picture extends StatelessWidget {
           ] else
             Text(
               switch ((loading, undecodable)) {
-                (true, _) => '',
+                // Never the empty string: a pane that draws nothing is
+                // indistinguishable from a pane that is not there, and beside
+                // the grip it reads as an unexplained rule down the page.
+                (true, _) => 'Taking a picture…',
                 (_, true) =>
                   'The app answered with a picture that decodes to nothing.',
                 _ => 'No picture yet',
