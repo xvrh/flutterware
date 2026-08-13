@@ -1,5 +1,17 @@
 # Permissions in the Run cockpit — three facts, one profile, a matrix
 
+> **REMOVED 2026-08-13, one day after it was built.** Everything below
+> describes a feature that no longer exists in this repository: all five
+> phases, the devbar adapter and its five exported types, the four run actions,
+> and `launch --permissions`. It never shipped — the removal landed before
+> 0.5.2, so no public API was ever committed. **Read the section
+> [Why it was removed](#why-it-was-removed) at the end before rebuilding any of
+> it**; three of the failures there are properties of the platform rather than
+> of the code, and they will be waiting for the next attempt.
+>
+> The runtime panel — the part people actually asked for — now lives in
+> consumer projects. Recipe: `docs/permissions-panel.md`.
+
 **Date:** 2026-08-12
 **Status:** Brainstorm, third pass. **Every spike this design named is done
 except S-P6** — S-P1 through S-P5, 2026-08-12/13, findings in
@@ -878,3 +890,113 @@ before it is called done.
   is — is right there and works; the question is whether a permission asked
   through three layers of a package is findable that way, or whether the lint
   should only fire on high confidence.
+
+## Why it was removed
+
+Written 2026-08-13, the day after the build, with the feature deleted in the
+same commit. Everything above stays as written — the measurements are the
+expensive part and they remain true. What follows is why they were not enough.
+
+### The declared third cannot answer its own question on Android
+
+This is the finding that decided it, and it applies to the phase the design
+called "close to risk-free".
+
+`AndroidManifest.xml` is not the list. Dependencies contribute permissions
+through manifest merging, and the merged manifest exists only after a build.
+The design knew this and called it "the list grows once". It is worse than
+that in two directions:
+
+- **Before a build, the list omits precisely the permissions the feature was
+  most valuable for.** This document says it itself about the dependency-
+  contributed ones: *"These are the ones people meet for the first time at
+  store review."* Those are exactly the entries missing from a pre-build list.
+- **After a build, the list is complete only until the next manifest edit.**
+  `_isStale` correctly rejected a merged manifest older than the source — a
+  stale merge misattributes permissions to dependencies. But editing
+  `AndroidManifest.xml` is what you do when you act on this panel's advice, so
+  **the feature invalidated its own completeness the moment anyone used it.**
+
+`merged: false` was therefore the normal state, not the pre-build one.
+Demonstrated on this repo's own dogfood example, which had a build on disk:
+the reader reported Camera, Location and Notifications, said `merged: false`,
+and omitted `android.permission.INTERNET` — which the engine contributes to
+every Flutter app ever built.
+
+Apple has no equivalent problem: nothing merges into `Info.plist`, so the
+Apple half of the list is complete without a build.
+
+### Which lints survive that, and which do not
+
+| finding | sound without a current merge? |
+|---|---|
+| `emptyUsageDescription` | yes — Apple-only |
+| `locationAlwaysWithoutWhenInUse` | yes — Apple-only |
+| `unreadable` | yes |
+| `backgroundLocationWithoutForeground` | **no** — a dependency contributing `ACCESS_FINE_LOCATION` makes it fire wrongly |
+| `platformMismatch`, Android→iOS | **no** — silently misses dependency-contributed permissions |
+| `fromDependency` | **no** — definitionally needs the merge |
+
+Three of six. And the three that survive are Apple usage-description checks:
+roughly 150 lines of lint, not a cockpit feature.
+
+### `platformMismatch` was wrong in a way worth recording
+
+Shipped, it fired on a consumer app that had been in production for months,
+twice: camera and photo library declared on iOS, absent on Android, reported as
+*"the other platform will refuse it at runtime"*. Android refuses nothing
+there. The lint assumed a capability's declaration requirement is symmetric
+across platforms. It is not — Apple wants a usage description for *any* access,
+however mediated, while Android wants a permission only for *direct* access,
+and the delegated routes (`ACTION_IMAGE_CAPTURE`, the system photo picker,
+`ACTION_PICK` on contacts) ask for nothing at all.
+
+**Following that advice would have broken the app**: once
+`android.permission.CAMERA` is in the manifest, Android enforces the runtime
+grant on `ACTION_IMAGE_CAPTURE` too. A fix landed (directional lint, plus a
+per-capability "Android delegates this" fact) and is preserved here rather than
+in code. Any future attempt needs both halves of that rule.
+
+### The adapter seam belonged in the consumer's project
+
+`PermissionAdapter` existed so flutterware would not depend on
+`permission_handler` — the `DatabaseAdapter` precedent, correctly applied. But
+the consumer already depends on a permissions package, so the seam only
+translated their vocabulary into ours, and the translation was lossy in the one
+place it mattered:
+
+- `permission_handler` has no *undetermined* — never-asked and user-denied both
+  arrive as `denied` — so the adapter mapped it to `unknown`.
+- Android's `permanentlyDenied` is derived from
+  `shouldShowRequestPermissionRationale`, which is false **both** before the
+  first ask and after "don't ask again", so a fresh install reported every
+  permission permanently denied — also mapped to `unknown`.
+
+Two of six states survived the trip. The shared vocabulary existed so
+`observed` could sit beside `held` and `declared` without translating; with
+those two columns gone, it was translating into a language nothing speaks.
+
+Written directly against the app's own package, in the app's own project, there
+is no mapping and nothing is lost — and `DevbarPanelSource` was already public,
+so it needed no new API. That is `docs/permissions-panel.md`, and it is the
+better test of the extension point: a real app builds a real panel on it
+without flutterware shipping the panel.
+
+### What a future attempt should know
+
+- **The runtime panel is the part with demand**, and it does not need any of
+  this. It needs no manifest parsing, no `dumpsys`, no host side at all.
+- **`first-run` is the verb worth having** — every permission back to
+  undetermined, so the app prompts as it does for a new user. It is the one
+  thing the deleted host-side code did that nothing else can, and it is
+  impossible from inside the app on either platform.
+- **A declared list is only worth showing if it is complete.** That means
+  either running Gradle's `processDebugMainManifest` on demand, or unioning the
+  app manifest with every plugin's manifest via `.flutter-plugins-dependencies`
+  — the latter is cheap and build-free but still misses transitive AAR
+  permissions (Firebase, play-services), which is the same disease in a smaller
+  dose. Showing the app's own manifest and captioning it as partial is what was
+  tried, and it reads as complete however it is captioned.
+- **`dumpsys`, `simctl privacy` and `plutil` are not contracts.** The
+  empty-parse-is-an-error rule and the read-back-after-every-write rule were
+  both right and should be carried forward verbatim by anyone rebuilding this.

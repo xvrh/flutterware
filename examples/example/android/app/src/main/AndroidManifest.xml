@@ -1,13 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Nothing in the example uses these. They are here as a fixture for the
-         permissions work — a runtime permission has to be *declared* before
-         `pm grant` will do anything, and an app that declares none cannot
-         exercise the grant/revoke/reset path at all. See
-         docs/superpowers/specs/2026-08-12-run-permissions-spike-findings.md -->
-    <uses-permission android:name="android.permission.CAMERA"/>
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="flutterware_example"
         android:name="${applicationName}"
