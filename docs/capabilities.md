@@ -413,7 +413,7 @@ note: String?
 |---|---|---|---|---|
 | `device` | choice | yes | — | Which device to run on |
 | `package` | choice | no | — | Which declared package; the only one when there is one |
-| `entrypoint` | choice | no | — | Package-relative path, as `entrypoints` reports it. The package's only entry point when omitted. |
+| `entrypoint` | choice | no | — | The name or the package-relative path, as `entrypoints` reports them. Two entry points may share a path — declaring one file several times is how one app is run against several configurations — so the name is the selector that always separates them. The package's only entry point when omitted. |
 | `flavor` | string | no | — | The `--flavor` to build. Defaults to what the entry point declares. A project with product flavors cannot be built without one at all — unlike a define, leaving it out is a build failure rather than a default value. |
 | `defines` | string | no | — | `--dart-define`s to bake in: `NAME=value,NAME=value`, or a JSON object. Compiled in rather than read at run time, so changing one costs a full rebuild — which is why the entry point declares which ones it wants and what values are worth using. Not to be confused with a preview knob, which is read while a widget builds and costs a frame. |
 | `wait` | boolean | no | true | Wait for the app to come up before answering. Off returns as soon as the launcher is spawned, and `apps` is how you find out how it went. |

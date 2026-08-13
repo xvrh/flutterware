@@ -766,6 +766,55 @@ void main() {
     timeout: const Timeout(Duration(minutes: 4)),
   );
 
+  test(
+    'a scenario that never returns is reported, and does not take the run',
+    () async {
+      var flutterRoot = Platform.environment['FLUTTER_ROOT']!;
+      // Written into the workspace root and deleted after, like the
+      // no-main test below: a scenario that never returns must not be left
+      // lying inside a package whose `test/` a real run scans.
+      var repoRoot = Directory.current.parent.path;
+      var outDir = Directory.systemTemp.createTempSync('scenario_hang').path;
+      var dir = Directory(p.join(repoRoot, 'test', 'scenarios_hang'))
+        ..createSync(recursive: true);
+      File(
+        p.join(dir.path, 'hanging_test.dart'),
+      ).writeAsStringSync(_hangingSource);
+
+      var runner = ScenarioRunner(
+        packageRoot: repoRoot,
+        directory: 'test/scenarios_hang',
+        flutterSdkRoot: flutterRoot,
+      );
+      try {
+        var report = await runner.run(outDir: outDir);
+        var scenarios = (report['scenarios']! as List)
+            .cast<Map<String, dynamic>>();
+
+        // The whole point: an answer came back at all.
+        expect(report['abandoned'], isTrue);
+        expect(scenarios, hasLength(1));
+        var hung = scenarios.single;
+        expect(hung['name'], 'Never returns');
+        expect(hung['ok'], isFalse);
+        expect(
+          '${(hung['errors']! as List).first}',
+          contains('did not finish within 2s'),
+        );
+        // Declared after it, and deliberately never reached.
+        expect(
+          scenarios.map((s) => s['name']),
+          isNot(contains('After the hang')),
+        );
+      } finally {
+        await runner.dispose();
+        dir.deleteSync(recursive: true);
+        Directory(outDir).deleteSync(recursive: true);
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 4)),
+  );
+
   test('the entrypoint file is left alone when its content is right', () {
     var root = Directory.systemTemp.createTempSync('scenario_entrypoint');
     try {
@@ -1153,6 +1202,32 @@ void main() {
         await s.tap('Pay now');
       },
     });
+  });
+}
+''';
+
+/// A scenario that never returns, and one declared after it that must not run.
+const _hangingSource = r'''
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario(
+    'Never returns',
+    // Two seconds rather than the 30-second default: the test asserts that
+    // the deadline fires, not how patient it is.
+    timeout: const Timeout(Duration(seconds: 2)),
+    (s) async {
+      await s.pumpWidget(const SizedBox.shrink());
+      // Real async that no pump — and no clock — will ever complete.
+      await s.tester.runAsync(() => Completer<void>().future);
+    },
+  );
+
+  scenario('After the hang', (s) async {
+    await s.pumpWidget(const SizedBox.shrink());
   });
 }
 ''';

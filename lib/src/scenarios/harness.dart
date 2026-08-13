@@ -524,6 +524,10 @@ Future<Map<String, Object?>> _run(
         );
       });
 
+  /// Set when a scenario blew its deadline: the walk unwinds, and the report
+  /// says the run stopped rather than that the rest passed.
+  var abandoned = false;
+
   /// Mirrors `test_core`'s engine (`runner/engine.dart`, `_runGroup`): the
   /// group's `setUpAll` before its entries, its entries only if that passed,
   /// and its `tearDownAll` afterwards **whatever happened** — cleanup a
@@ -550,6 +554,7 @@ Future<Map<String, Object?>> _run(
         : await _runHook(group.setUpAll!, suite, scope);
 
     for (var entry in group.entries) {
+      if (abandoned) return;
       switch (entry) {
         case Test():
           // The name the listing shows, matched against the name the caller
@@ -581,16 +586,23 @@ Future<Map<String, Object?>> _run(
           // zone of the design. Set per scenario rather than per request,
           // because the framing is per folder.
           scenarioRunArgs = framedArgs;
-          outcomes.add(
-            await _runOne(
-              entry.load(suite, groups: scope),
-              file: groupFile ?? '',
-              name: name,
-              device: framedDevice,
-              inspector: inspector,
-              outDir: outDir,
-            ),
+          var outcome = await _runOne(
+            entry.load(suite, groups: scope),
+            file: groupFile ?? '',
+            name: name,
+            device: framedDevice,
+            inspector: inspector,
+            outDir: outDir,
           );
+          outcomes.add(outcome);
+          // A scenario that timed out is still running in there, holding the
+          // binding — the next one would fail on its leftovers and blame
+          // itself. So the walk stops and the run answers with what it has,
+          // which is the point of having a deadline at all.
+          if (outcome['timedOut'] == true) {
+            abandoned = true;
+            return;
+          }
         case Group():
           if (setUpAllError == null) {
             await walk(entry, suite, scope, groupFile ?? entry.name);
@@ -600,7 +612,11 @@ Future<Map<String, Object?>> _run(
       }
     }
 
-    if (group.tearDownAll case var hook?) {
+    // Cleanup is skipped only here, and for the one reason that outranks it:
+    // a `tearDownAll` runs on the binding the abandoned scenario is still
+    // holding, so it is as likely to hang as to clean up — and the guest is
+    // being thrown away regardless.
+    if (group.tearDownAll case var hook? when !abandoned) {
       if (await _runHook(hook, suite, scope) case var error?) {
         // Its own outcome: a cleanup failure belongs to nobody's scenario, and
         // marking a scenario that passed as failed would be a lie.
@@ -623,7 +639,13 @@ Future<Map<String, Object?>> _run(
     scenarioRunArgs = null;
   }
 
-  return {'ms': watch.elapsedMilliseconds, 'scenarios': outcomes};
+  return {
+    'ms': watch.elapsedMilliseconds,
+    'scenarios': outcomes,
+    // Says the list is short because the run stopped, not because that was
+    // everything — and tells the host its guest is spent.
+    if (abandoned) 'abandoned': true,
+  };
 }
 
 /// Whether anything under [group] survives the scenario filter — the question
@@ -891,9 +913,16 @@ Future<Map<String, Object?>> _runOne(
     );
   });
 
+  // What the scenario declared, over `flutter test`'s own default —
+  // `scenario(timeout: Timeout(…))`, and `Timeout.none` to opt out entirely.
+  var deadline = live.test.metadata.timeout.apply(_defaultScenarioTimeout);
   var watch = Stopwatch()..start();
+  var timedOut = false;
   try {
-    await live.run();
+    var running = live.run();
+    await (deadline == null ? running : running.timeout(deadline));
+  } on TimeoutException {
+    timedOut = true;
   } finally {
     await records.cancel();
     await messages.cancel();
@@ -906,11 +935,12 @@ Future<Map<String, Object?>> _runOne(
   }
 
   var errors = [
+    if (timedOut) {'error': _timedOutMessage(deadline!)},
     ...failures,
     for (var error in live.errors)
       {'error': '${error.error}', 'stack': '${error.stackTrace}'},
   ];
-  var passed = live.state.result.isPassing && errors.isEmpty;
+  var passed = !timedOut && live.state.result.isPassing && errors.isEmpty;
   return {
     'file': file,
     'name': name,
@@ -921,8 +951,27 @@ Future<Map<String, Object?>> _runOne(
     'ms': watch.elapsedMilliseconds,
     'steps': steps,
     if (!passed) 'errors': errors,
+    // Read by the host, not by a reader: the body is still running in there,
+    // so this harness is spent and the next run needs a fresh one.
+    if (timedOut) 'timedOut': true,
   };
 }
+
+/// How long one scenario may take before the run gives up on it.
+///
+/// `flutter test`'s own default. It exists because a scenario that never
+/// returns used to take the **whole run** with it: every scenario before it
+/// had written its artifacts and none of them were ever reported, which is a
+/// worse answer than a red scenario by a wide margin.
+const _defaultScenarioTimeout = Duration(seconds: 30);
+
+String _timedOutMessage(Duration deadline) =>
+    'the scenario did not finish within ${deadline.inSeconds}s. A scenario '
+    'runs under fake time, so this is not slowness — something is waiting on '
+    'a real future no pump can complete: an `s.tester.runAsync` that never '
+    'returns, or a platform channel with nobody on the other end. The steps '
+    'it captured before it stopped are on disk. Give it longer, or opt out, '
+    'with `scenario(timeout: …)`.';
 
 String _fileSafe(String name) =>
     name.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');

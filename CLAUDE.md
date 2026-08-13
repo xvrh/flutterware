@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Never name another project
+
+**Nothing written here may name a client, their repository, their people or their product.** Not code, comments, doc comments, docs, tests, fixtures, test data, commit messages, branch names, PR titles and bodies, changelog entries, or issue text. This repository is public; they are not.
+
+Work with a real consumer is where most of the good findings come from, and those findings are still worth writing down — write them without the identity. *"A consumer migrating from v1"*, *"measured on a real 46-scenario suite"*, *"an app that loads its translations at boot"* carry the whole of the evidence. The name carries none of it.
+
+This applies to everything that leaves the machine, including a PR opened on your behalf — check before pushing, not after.
+
 ## Repository layout
 
 This is a pub workspace (`workspace:` in root `pubspec.yaml`) with two member packages:

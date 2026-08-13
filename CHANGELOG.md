@@ -41,6 +41,17 @@ Flutter's own annotation. Breaking, with no deprecation path.
   for opposite costs: a preview knob is read while a widget builds and changing
   one costs a frame, while these are compiled in and changing one costs a full
   rebuild and reinstall. The manifest key and the `launch` result field follow.
+- **`launch` selects an entry point by name as well as by path.** Declaring one
+  file several times under different names is how one app is run against
+  several configurations, so a path is not a unique handle — and the two places
+  that assumed it was behaved badly: the `entrypoint` choice offered two options
+  carrying the *same value*, and the ambiguity refusal answered
+  `name one of: lib/main.dart, lib/main.dart`, a choice between identical
+  strings that no caller could act on. The options are now the names, and the
+  refusal asks for whichever of the name or the `package` actually separates the
+  matches — or, when nothing the caller passes could, says to give two
+  same-named declarations distinct names. Resolution already accepted a name, so
+  a call that passes a path is unaffected.
 
 ### Motion — new
 

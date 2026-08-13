@@ -92,6 +92,14 @@ class Drive {
 
   late final TargetResolver _resolver = TargetResolver(
     controller,
+    messages: const TargetMessages(
+      blankScreenHint:
+          'Nothing has rendered in the widget tree — there is no text on '
+          'screen at all, so this is not something `scrollTo` can reach. '
+          'Either the app has not drawn yet, or what you are looking at is '
+          'not Flutter: a permission dialog, a webview or a map is invisible '
+          'here and addressable with `layer: native`.',
+    ),
     describeScreen: _describeScreen,
     ensureSemantics: () async {
       _semantics ??= controller.binding.ensureSemantics();

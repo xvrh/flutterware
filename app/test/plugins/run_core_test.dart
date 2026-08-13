@@ -782,6 +782,68 @@ void main() {
         ),
       );
     });
+
+    /// One file declared several times under different names is the documented
+    /// way to run one app against several configurations — so a path is not a
+    /// unique handle on an entry point, and everything that selects one has to
+    /// cope with that.
+    group('when two entry points share a path', () {
+      RunCore coreWithTwoNames() {
+        _writePackage(worktree, 'app', {'lib/main.dart': 'void main() {}'});
+        return _coreFor(
+          worktree,
+          config: {
+            'packages': [
+              {
+                'path': 'app',
+                'entrypoints': [
+                  {'path': 'lib/main.dart', 'name': 'Stage'},
+                  {'path': 'lib/main.dart', 'name': 'Local stack'},
+                ],
+              },
+            ],
+          },
+        );
+      }
+
+      test('the refusal offers the names, not the identical paths', () async {
+        core = coreWithTwoNames();
+
+        // The bug this replaced answered `name one of: lib/main.dart,
+        // lib/main.dart` — a choice between two identical strings, which no
+        // caller can act on.
+        await expectLater(
+          core.invoke(
+            'launch',
+            arguments: {'device': 'phone', 'entrypoint': 'lib/main.dart'},
+          ),
+          throwsA(
+            isA<ArgumentError>().having(
+              (e) => '$e',
+              'message',
+              allOf(contains('"Stage"'), contains('"Local stack"')),
+            ),
+          ),
+        );
+      });
+
+      test('the offered values are unique', () async {
+        core = coreWithTwoNames();
+        await core.invoke('entrypoints');
+
+        var launch = core.report.actions.firstWhere((a) => a.id == 'launch');
+        var options = launch.parameters
+            .firstWhere((p) => p.id == 'entrypoint')
+            .options;
+
+        // Two options carrying one value is a picker whose rows do the same
+        // thing — and an enum an MCP client cannot represent.
+        expect(
+          [for (var option in options) option.value],
+          ['Stage', 'Local stack'],
+        );
+      });
+    });
   });
 
   group('the platforms an entry point declares', () {

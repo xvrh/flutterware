@@ -32,7 +32,11 @@ class TargetError implements Exception {
 /// deliberately identical, so a failure reads the same to a scenario author
 /// and to an agent driving a live app.
 class TargetMessages {
-  const TargetMessages({this.prefix = '', this.coveredEscapeHatch = ''});
+  const TargetMessages({
+    this.prefix = '',
+    this.coveredEscapeHatch = '',
+    this.blankScreenHint = '',
+  });
 
   /// Goes in front of verb names in messages — `'s.'` for scenarios, where
   /// the reader will retype the verb on a receiver called `s`.
@@ -41,10 +45,28 @@ class TargetMessages {
   /// Appended to the covered refusal — scenarios offer `s.tester` here.
   final String coveredEscapeHatch;
 
-  String notFound(String verb, String described, String? screen) =>
-      'nothing matches $described, which `$prefix$verb` needs. A widget '
-      'further down a lazy list is not built yet — `${prefix}scrollTo` walks '
-      'to it.${screen == null ? '' : '\nVisible text: $screen'}';
+  /// Replaces the lazy-list guess when the screen carries no text at all.
+  ///
+  /// The lazy-list sentence is the right guess for a mature suite and the
+  /// wrong one for a first run, where nothing has rendered and no amount of
+  /// scrolling will help. Flavored per host because the cause is: a scenario
+  /// under fake time is usually waiting on something FakeAsync will not
+  /// complete, while a live app is usually just still drawing.
+  final String blankScreenHint;
+
+  String notFound(
+    String verb,
+    String described,
+    String? screen, {
+    bool blank = false,
+  }) {
+    var hint = blank && blankScreenHint.isNotEmpty
+        ? blankScreenHint
+        : 'A widget further down a lazy list is not built yet — '
+              '`${prefix}scrollTo` walks to it.';
+    return 'nothing matches $described, which `$prefix$verb` needs. $hint'
+        '${screen == null ? '' : '\nVisible text: $screen'}';
+  }
 
   String multiple(int count, String verb, String described) =>
       '$count widgets match $described, and `$prefix$verb` needs one. '
@@ -117,7 +139,12 @@ class TargetResolver {
     if (count == 0) {
       throw TargetError(
         TargetFailure.notFound,
-        messages.notFound(verb, described, describeScreen?.call()),
+        messages.notFound(
+          verb,
+          described,
+          describeScreen?.call(),
+          blank: _screenIsBlank,
+        ),
       );
     }
     if (count > 1) {
@@ -129,6 +156,14 @@ class TargetResolver {
     await _ensureReachable(finder, described, verb);
     return finder;
   }
+
+  /// Whether the screen the target was refused on carries any text.
+  ///
+  /// Read off the tree rather than off [describeScreen]'s sentence: the
+  /// wording is a host's business, and a message that changes meaning would
+  /// silently change which hint a reader gets.
+  bool get _screenIsBlank =>
+      !visibleTextsOf(controller).any((text) => text.isNotEmpty);
 
   Future<void> _ensureReachable(
     Finder finder,
@@ -147,7 +182,12 @@ class TargetResolver {
     if (finder.evaluate().length != 1) {
       throw TargetError(
         TargetFailure.notFound,
-        messages.notFound(verb, described, describeScreen?.call()),
+        messages.notFound(
+          verb,
+          described,
+          describeScreen?.call(),
+          blank: _screenIsBlank,
+        ),
       );
     }
     if (_reaches(finder)) return;
