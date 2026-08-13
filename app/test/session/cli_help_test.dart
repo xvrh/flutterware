@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
+import 'package:flutterware_app/src/constants.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/session/capabilities.dart';
@@ -160,6 +161,59 @@ void main() {
   test('--help on an action that is not there suggests the list', () async {
     expect(await cli().run(['run', 'fake', 'nope', '--help']), FwCli.usageExit);
     expect(err.toString(), contains('fw run fake'));
+  });
+
+  test('--version answers without opening a window or a session', () async {
+    // It used to reach `app` — `fw: unknown argument "--version" for app` —
+    // so the flag every CLI answers was reported as a mistake by the one
+    // command that spends 38 seconds building a GUI.
+    var cli = FwCli(
+      openSession: () => fail('a session was opened to print a version'),
+      out: out,
+      err: err,
+      launchGui: ({required bool forceBuild}) async =>
+          fail('a window opened to print a version'),
+    );
+    expect(await cli.run(['--version']), 0);
+    expect(out.toString(), contains('flutterware $flutterwareVersion'));
+    expect(err.toString(), isEmpty);
+  });
+
+  test('version and --version are the same command', () async {
+    expect(await cli().run(['version']), 0);
+    var spelled = out.toString();
+    out.clear();
+    expect(await cli().run(['--version']), 0);
+    expect(out.toString(), spelled);
+  });
+
+  test('it names both versions when they can differ', () {
+    // The question the command exists for: the global `fw` is installed once
+    // and the package comes from the project, so one number cannot answer it.
+    var report = FwVersion.of(const {
+      appPathEnvironmentKey: '/checkout/app',
+      editableSourcesEnvironmentKey: 'true',
+      walkerVersionEnvironmentKey: '0.4.9',
+    });
+    expect(report.lines, [
+      'flutterware $flutterwareVersion · path dependency · /checkout',
+      'fw 0.4.9 · the global walker, which ran it',
+    ]);
+    expect(report.toJson()['walker'], '0.4.9');
+  });
+
+  test('a hosted install says so, and one line is enough alone', () {
+    var report = FwVersion.of(const {
+      appPathEnvironmentKey: '/home/.flutterware/abc123/app',
+    });
+    expect(
+      report.lines.single,
+      'flutterware $flutterwareVersion · unpacked from the pub cache · '
+      '/home/.flutterware/abc123',
+    );
+    // Nothing ran this through the global `fw`, so there is no second number
+    // to invent.
+    expect(report.toJson(), isNot(contains('walker')));
   });
 
   test('the document and the CLI render the same commands', () async {

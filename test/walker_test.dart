@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutterware/src/constants.dart';
 import 'package:flutterware/src/walker.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -83,4 +84,49 @@ void main() {
     expect(result.exitCode, 64);
     expect(result.stderr, contains('no project set up'));
   });
+
+  test('--version answers where a command would be refused', () async {
+    // The diagnostic somebody reaches for to find out whether `fw` works at
+    // all. Gating it on project setup withholds it exactly where it is asked.
+    var result = await Process.run(dartExecutable(), [
+      p.join(Directory.current.path, 'bin', 'walker.dart'),
+      '--version',
+    ], workingDirectory: tmp.path);
+    expect(result.exitCode, 0);
+    expect(result.stdout, contains('fw $flutterwareVersion'));
+    // And still teaches the setup, because that is the next thing wanted.
+    expect(result.stdout, contains('dart run flutterware'));
+  });
+
+  test('the walker carries its own version across the exec', () async {
+    // The far side prints two numbers, and this is the only process that
+    // knows the first one.
+    var file = File(p.join(tmp.path, 'repo', 'fw'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        '#!/bin/sh\n$wrapperMarker v1\necho "walker=\$FW_WALKER_VERSION"\n',
+      );
+    Process.runSync('chmod', ['+x', file.path]);
+
+    var result = await Process.run(dartExecutable(), [
+      p.join(Directory.current.path, 'bin', 'walker.dart'),
+      '--version',
+    ], workingDirectory: p.join(tmp.path, 'repo'));
+    expect(result.stdout, contains('walker=$flutterwareVersion'));
+  }, testOn: '!windows');
+
+  test('an ordinary command does not carry it', () async {
+    var file = File(p.join(tmp.path, 'repo', 'fw'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        '#!/bin/sh\n$wrapperMarker v1\necho "walker=[\$FW_WALKER_VERSION]"\n',
+      );
+    Process.runSync('chmod', ['+x', file.path]);
+
+    var result = await Process.run(dartExecutable(), [
+      p.join(Directory.current.path, 'bin', 'walker.dart'),
+      'status',
+    ], workingDirectory: p.join(tmp.path, 'repo'));
+    expect(result.stdout, contains('walker=[]'));
+  }, testOn: '!windows');
 }

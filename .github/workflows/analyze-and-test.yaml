@@ -51,7 +51,8 @@ jobs:
         # `tool/catalog/compiler_daemon.dart` inside the user's project; and once
         # that was fixed, `dart run app/bin/fw.dart` still had no
         # `APP_TOOL_PATH`, because only the launcher sets it. Every headless
-        # previews action — screenshot, inspect, describe --knobs, check, audit —
+        # previews action — screenshot, inspect, describe --with-knobs, check,
+        # audit —
         # was broken from `fw` in an ordinary project, in both cases.
         #
         # `headless_check` could not catch it: it builds its own `DaemonConfig`,

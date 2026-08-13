@@ -198,7 +198,7 @@ class ScenarioWebExporter {
             'frameIntervalMs',
             'framesDropped',
           ]) {
-            (step as Map).remove(key);
+            step.remove(key);
           }
         }
       }

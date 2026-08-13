@@ -276,13 +276,17 @@ bool _willBuildGui(List<String> arguments, {required bool editable}) {
       .where((a) => a != '--json' && a != '--verbose' && a != '-v')
       .toList();
   // Mirrors `FwCli.run`: a leading flag is the `app` command — except the
-  // help flags, which must not spend 38 seconds building a window to print
-  // usage.
+  // help and version flags, which must not spend 38 seconds building a window
+  // to print one line. `--version` especially: it is what somebody types to
+  // find out whether `fw` works at all, so it has to be the cheap answer and
+  // not the most expensive one in the program.
   var first = argv.firstOrNull;
   var command = first == null
       ? 'app'
       : first == '--help' || first == '-h'
       ? 'help'
+      : first == '--version'
+      ? 'version'
       : first.startsWith('-')
       ? 'app'
       : first;
