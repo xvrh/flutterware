@@ -294,7 +294,7 @@ class _DevStackBlockState extends State<DevStackBlock> {
         ..._controls(context, state),
         if (widget.onOpenPanel != null) ...[
           const Gap(FwSpacing.sm),
-          Icon(Icons.chevron_right, size: 16, color: colors.mut2),
+          Icon(Icons.chevron_right, size: FwIconSize.md, color: colors.mut2),
         ],
       ],
     );
@@ -482,7 +482,7 @@ class _DevStackBlockState extends State<DevStackBlock> {
   Widget _progress(BuildContext context) {
     var colors = context.colors;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(2),
+      borderRadius: BorderRadius.circular(context.radii.micro),
       child: LinearProgressIndicator(
         minHeight: 3,
         backgroundColor: colors.statusBorder(colors.amber),

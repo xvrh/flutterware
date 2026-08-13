@@ -6,6 +6,7 @@ import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../pixel_diff.dart';
 import 'shot_image.dart';
+import '../../ui/empty_state.dart';
 
 /// The five ways of looking at two frames.
 ///
@@ -433,11 +434,9 @@ class _OneSided extends StatelessWidget {
   Widget build(BuildContext context) {
     var only = head ?? base;
     if (only == null) {
-      return Center(
-        child: Text(
-          'Neither side rendered.',
-          style: context.type.body.copyWith(color: context.colors.mut),
-        ),
+      return const EmptyState(
+        icon: Icons.compare_outlined,
+        title: 'Neither side rendered',
       );
     }
     return _Framed(

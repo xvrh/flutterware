@@ -7,9 +7,9 @@ import 'package:pub_scores/pub_scores.dart';
 import '../ui/action_button.dart';
 import '../ui/column_layout.dart';
 import '../ui/empty_state.dart';
+import '../ui/panel_header.dart';
 import '../ui/table.dart';
 import '../ui/theme.dart';
-import '../utils.dart';
 import '../utils/async_value.dart';
 import '../utils/value_stream_builder.dart';
 import 'detail.dart';
@@ -17,6 +17,7 @@ import 'model/package_origin.dart';
 import 'model/service.dart';
 import 'upgrades.dart';
 import 'utils.dart';
+import '../ui/error_state.dart';
 
 class DependenciesScreen extends StatefulWidget {
   final DependenciesService dependencies;
@@ -166,33 +167,34 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     Snapshot<Dependencies> snapshot,
     PubScores? scores,
   ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: FwSpacing.xxl,
-        vertical: FwSpacing.lg,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _title(),
-          const Gap(FwSpacing.lg),
-          Expanded(child: _card(snapshot, scores)),
-        ],
-      ),
-    );
-  }
-
-  Widget _title() {
-    return Row(
+    var package = widget.parent.widget.package;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(child: Text('Dependencies', style: context.type.pageTitle)),
-        // `refreshOrThrow`, not `refresh`: the button reports what it is handed,
-        // and `refresh` resolves to a Snapshot carrying its own error rather
-        // than throwing — which would show a tick for a resolve that failed.
-        FwActionButton(
-          label: 'Reload',
-          tooltip: 'Resolve the package graph again',
-          onPressed: dependencies.dependencies.refreshOrThrow,
+        // The package, not "Dependencies" — the rail says that already, and
+        // this panel exists once per package.
+        FwPanelHeader(
+          package == '.' ? 'root' : package,
+          // `refreshOrThrow`, not `refresh`: the button reports what it is
+          // handed, and `refresh` resolves to a Snapshot carrying its own error
+          // rather than throwing — which would show a tick for a resolve that
+          // failed.
+          trailing: FwActionButton(
+            label: 'Reload',
+            tooltip: 'Resolve the package graph again',
+            onPressed: dependencies.dependencies.refreshOrThrow,
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              panelGutter,
+              0,
+              panelGutter,
+              FwSpacing.lg,
+            ),
+            child: _card(snapshot, scores),
+          ),
         ),
       ],
     );
@@ -246,8 +248,9 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
       },
       error: snapshot.error == null
           ? null
-          : ErrorPanel(
-              message: 'Failed to load dependencies',
+          : ErrorState(
+              title: 'Could not load dependencies',
+              message: '${snapshot.error}',
               onRetry: dependencies.dependencies.refresh,
             ),
       empty: EmptyState(
@@ -451,7 +454,7 @@ class _KindFilter extends StatelessWidget {
           children: [
             Icon(
               selected ? Icons.check_box : Icons.check_box_outline_blank,
-              size: 14,
+              size: FwIconSize.sm,
               color: selected ? tone : colors.mut2,
             ),
             const Gap(FwSpacing.xs),
@@ -624,7 +627,11 @@ class _GithubCell extends StatelessWidget {
           children: [
             Text('$starCount', style: context.type.bodyMuted),
             const Gap(FwSpacing.xxs),
-            Icon(Icons.star_outline, size: 15, color: context.colors.mut),
+            Icon(
+              Icons.star_outline,
+              size: FwIconSize.md,
+              color: context.colors.mut,
+            ),
           ],
         ),
       ),

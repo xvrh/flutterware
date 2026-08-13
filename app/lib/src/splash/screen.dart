@@ -12,6 +12,8 @@ import 'ui/cell_inspector.dart';
 import 'ui/panel_header.dart';
 import 'ui/problem_list.dart';
 import 'ui/variant_tile.dart';
+import '../ui/loading_state.dart';
+import '../ui/error_state.dart';
 
 /// The whole matrix at once: four surfaces, two themes, side by side — and,
 /// when one is selected, an inspector beside them rather than instead of them.
@@ -70,8 +72,7 @@ class SplashScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     var failure = core.failureFor(package);
     if (failure != null) {
-      return EmptyState(
-        icon: Icons.error_outline,
+      return ErrorState(
         title: 'This package could not be read',
         message: failure,
       );
@@ -79,12 +80,11 @@ class SplashScreen extends StatelessWidget {
 
     var scan = core.scanFor(package);
     if (scan == null) {
-      return const Center(child: CircularProgressIndicator.adaptive());
+      return const LoadingState(title: 'Reading the splash screens…');
     }
 
     if (scan.configErrors.isNotEmpty) {
-      return EmptyState(
-        icon: Icons.error_outline,
+      return ErrorState(
         title: 'The config file is not one the generator would read',
         message: scan.configErrors.join('\n\n'),
       );

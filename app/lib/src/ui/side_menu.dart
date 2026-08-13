@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'design/design.dart';
 import '../utils.dart';
 import '../utils/expansion_tile.dart';
 
@@ -29,7 +30,7 @@ class SideMenu extends StatelessWidget {
                   children: [
                     for (var child in children) ...[
                       child,
-                      Container(height: 1, color: AppColors.primaryBorder),
+                      Container(height: 1, color: context.colors.line),
                     ],
                   ],
                 ),
@@ -125,13 +126,13 @@ class MenuLine extends StatelessWidget {
     return DefaultTextStyle.merge(
       style: isSelected
           ? TextStyle(
-              color: AppColors.navigationForegroundActive,
+              color: context.colors.accentDark,
               fontWeight: FontWeight.w500,
             )
           : null,
       child: IconTheme.merge(
         data: IconThemeData(
-          color: isSelected ? AppColors.navigationForegroundActive : null,
+          color: isSelected ? context.colors.accentDark : null,
           size: 18,
         ),
         child: Padding(
@@ -140,7 +141,7 @@ class MenuLine extends StatelessWidget {
             decoration: isSelected
                 ? BoxDecoration(
                     borderRadius: borderRadius,
-                    color: AppColors.navigationBackgroundActive,
+                    color: context.colors.accentSoft,
                   )
                 : null,
             child: InkWell(
@@ -211,9 +212,9 @@ class _CollapsibleMenuState extends State<CollapsibleMenu> {
           key: _expansionTileKey,
           initiallyExpanded: widget.initiallyExpanded,
           maintainState: widget.maintainState,
-          textColor: AppColors.textSecondary,
-          collapsedTextColor: AppColors.textSecondary,
-          collapsedIconColor: AppColors.textSecondary,
+          textColor: context.colors.mut,
+          collapsedTextColor: context.colors.mut,
+          collapsedIconColor: context.colors.mut,
           title: widget.title,
           children: [...widget.children, const SizedBox(height: 5)],
         ),

@@ -450,7 +450,11 @@ class _StepPage extends StatelessWidget {
               Tappable(
                 key: stepBackKey,
                 onTap: onBack,
-                child: Icon(Icons.arrow_back, size: 18, color: colors.mut),
+                child: Icon(
+                  Icons.arrow_back,
+                  size: FwIconSize.lg,
+                  color: colors.mut,
+                ),
               ),
               const Gap(FwSpacing.lg),
               Expanded(child: Text(item.id, style: context.type.heading)),

@@ -270,7 +270,7 @@ class _Toggle extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             color: on ? colors.accentSoft : colors.panel2,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(context.radii.pill),
             border: Border.all(color: on ? colors.accent : colors.line),
           ),
           child: Text(label, style: context.type.caption),

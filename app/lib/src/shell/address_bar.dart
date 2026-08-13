@@ -548,7 +548,7 @@ class _WorktreeSwitcherState extends State<_WorktreeSwitcher> {
           MenuItemButton(
             leadingIcon: Icon(
               worktree.name == widget.current ? Icons.check : null,
-              size: 14,
+              size: FwIconSize.sm,
               color: colors.accent,
             ),
             onPressed: () => widget.onPick(worktree),
@@ -616,7 +616,7 @@ class _WorktreeSwitcherState extends State<_WorktreeSwitcher> {
               const Gap(2),
               Icon(
                 Icons.expand_more,
-                size: 11,
+                size: FwIconSize.xs,
                 color: lit ? colors.ink2 : colors.mut3,
               ),
             ],
@@ -651,7 +651,7 @@ class _AxisChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
         decoration: BoxDecoration(
           color: colors.panel2,
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(context.radii.micro),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -722,7 +722,11 @@ class _Editor extends StatelessWidget {
                 const Gap(FwSpacing.sm),
                 IconButton(
                   tooltip: 'Copy',
-                  icon: Icon(Icons.copy_rounded, size: 14, color: colors.mut),
+                  icon: Icon(
+                    Icons.copy_rounded,
+                    size: FwIconSize.sm,
+                    color: colors.mut,
+                  ),
                   constraints: const BoxConstraints.tightFor(
                     width: 28,
                     height: 28,

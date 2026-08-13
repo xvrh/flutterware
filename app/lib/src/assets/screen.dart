@@ -8,12 +8,12 @@ import 'package:flutter/material.dart';
 import '../address/address_scope.dart';
 import '../plugins/native/assets_address.dart';
 import '../plugins/native/assets_core.dart';
-import '../ui/theme.dart';
 import 'detail.dart';
 import 'list.dart';
 import 'model/asset_catalog.dart';
 import 'model/asset_scan.dart';
 import 'preview.dart';
+import '../ui/error_state.dart';
 
 /// The asset inspector, wired up.
 ///
@@ -149,7 +149,7 @@ class _AssetsScreenState extends State<AssetsScreen> {
   @override
   Widget build(BuildContext context) {
     if (widget.core.failureFor(widget.package) case var failure?) {
-      return _Message(text: failure, tone: context.colors.red);
+      return ErrorState(title: 'Could not read the assets', message: failure);
     }
     var scan = _scan;
     if (scan == null) {
@@ -213,26 +213,5 @@ class _AssetsScreenState extends State<AssetsScreen> {
       if (option.name == name) return option;
     }
     return PreviewBackground.checker;
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message({required this.text, this.tone});
-
-  final String text;
-  final Color? tone;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(FwSpacing.xxl),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: context.type.bodyMuted.copyWith(color: tone),
-        ),
-      ),
-    );
   }
 }

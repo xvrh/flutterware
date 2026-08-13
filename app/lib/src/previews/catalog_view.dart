@@ -13,6 +13,8 @@ import '../embedder/input_region.dart';
 import '../inspect/node_highlight.dart';
 import '../inspect/pick_region.dart';
 import '../inspect/semantics_node.dart';
+import '../ui/empty_state.dart';
+import '../ui/loading_state.dart';
 import '../ui/capture_button.dart';
 import '../ui/design/design.dart';
 import 'app_chords.dart';
@@ -382,27 +384,21 @@ class _CatalogViewState extends State<CatalogView> {
   ) {
     switch (_session.phase) {
       case CatalogSessionPhase.starting:
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            spacing: 16,
-            children: [
-              const CircularProgressIndicator(),
-              Text(
-                'Building the guest and compiling the first entry… '
-                '${_session.busyFor.inSeconds}s',
-              ),
-            ],
-          ),
+        // The seconds are the message rather than the title: a cold start is
+        // ~11s here, and a count that is climbing is the only thing on screen
+        // that distinguishes "slow" from "hung".
+        return LoadingState(
+          title: 'Building the guest…',
+          message: 'Compiling the first entry — ${_session.busyFor.inSeconds}s',
         );
       case CatalogSessionPhase.error:
         return Center(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(FwSpacing.xxl),
             child: SingleChildScrollView(
               child: SelectableText(
                 _session.errorMessage ?? 'unknown error',
-                style: const TextStyle(color: Colors.red, fontSize: 12),
+                style: context.type.caption.copyWith(color: context.colors.red),
               ),
             ),
           ),
@@ -901,7 +897,9 @@ class _Toggle extends StatelessWidget {
                   border: Border.all(
                     color: value ? colors.accent : colors.line,
                   ),
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(
+                    context.radii.radiusSmall,
+                  ),
                 ),
                 child: AnimatedAlign(
                   duration: const Duration(milliseconds: 120),
@@ -1193,7 +1191,7 @@ class _TopBar extends StatelessWidget {
             IconButton(
               icon: Icon(
                 staging.frameVisible ? Icons.phone_iphone : Icons.crop_din,
-                size: 16,
+                size: FwIconSize.md,
               ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 24, height: 24),
@@ -1443,7 +1441,7 @@ class _RotateToggle extends StatelessWidget {
             landscape
                 ? Icons.stay_current_landscape
                 : Icons.stay_current_portrait,
-            size: 14,
+            size: FwIconSize.sm,
             color: ink,
           ),
         ),
@@ -1507,7 +1505,7 @@ class _DevicePicker extends StatelessWidget {
               device?.label ?? 'Fit',
               style: context.type.caption.copyWith(color: colors.ink),
             ),
-            Icon(Icons.expand_more, size: 14, color: colors.mut),
+            Icon(Icons.expand_more, size: FwIconSize.sm, color: colors.mut),
           ],
         ),
       ),
@@ -1705,11 +1703,14 @@ class _EntryList extends StatelessWidget {
         const Divider(height: 1),
         Expanded(
           child: rows.isEmpty
-              ? Center(
-                  child: Text(
-                    filtering ? 'Nothing matches' : 'No entries',
-                    style: context.type.caption,
-                  ),
+              ? EmptyState(
+                  icon: filtering
+                      ? Icons.search_off_outlined
+                      : Icons.widgets_outlined,
+                  title: filtering ? 'Nothing matches' : 'No entries',
+                  message: filtering
+                      ? 'No demo in this package has a name like that.'
+                      : 'A demo is a top-level function marked @Preview.',
                 )
               : ListView(
                   padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
@@ -1756,7 +1757,7 @@ class _BranchRow extends StatelessWidget {
             children: [
               Icon(
                 open ? Icons.expand_more : Icons.chevron_right,
-                size: 14,
+                size: FwIconSize.sm,
                 color: colors.mut,
               ),
               const Gap(FwSpacing.xs),
@@ -1833,7 +1834,11 @@ class _LeafRow extends StatelessWidget {
                 ),
                 if (broken != null) ...[
                   const Gap(FwSpacing.xs),
-                  Icon(Icons.error_outline, size: 14, color: colors.red),
+                  Icon(
+                    Icons.error_outline,
+                    size: FwIconSize.sm,
+                    color: colors.red,
+                  ),
                 ],
               ],
             ),
@@ -2005,7 +2010,11 @@ class _FilterFieldState extends State<_FilterField> {
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: FwSpacing.md,
                   ),
-                  prefixIcon: Icon(Icons.search, size: 14, color: colors.mut2),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    size: FwIconSize.sm,
+                    color: colors.mut2,
+                  ),
                   // Both slots are the same size whether or not they hold
                   // anything. An `InputDecorator` sizes itself around its
                   // icons, so a clear button that comes and goes with the text
@@ -2015,7 +2024,11 @@ class _FilterFieldState extends State<_FilterField> {
                   suffixIcon: _controller.text.isEmpty
                       ? const SizedBox.shrink()
                       : IconButton(
-                          icon: Icon(Icons.close, size: 14, color: colors.mut2),
+                          icon: Icon(
+                            Icons.close,
+                            size: FwIconSize.sm,
+                            color: colors.mut2,
+                          ),
                           padding: EdgeInsets.zero,
                           constraints: _iconSlot,
                           onPressed: () {
@@ -2033,7 +2046,7 @@ class _FilterFieldState extends State<_FilterField> {
           IconButton(
             icon: Icon(
               widget.browsing.anyClosed ? Icons.unfold_more : Icons.unfold_less,
-              size: 16,
+              size: FwIconSize.md,
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 24, height: 24),
@@ -2043,7 +2056,7 @@ class _FilterFieldState extends State<_FilterField> {
                 : widget.browsing.closeAll(allBranches(widget.tree)),
           ),
           IconButton(
-            icon: const Icon(Icons.chevron_left, size: 16),
+            icon: const Icon(Icons.chevron_left, size: FwIconSize.md),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 24, height: 24),
             tooltip: 'Hide the list',
@@ -2070,7 +2083,7 @@ class _ShowListStrip extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.only(top: FwSpacing.md),
           child: IconButton(
-            icon: const Icon(Icons.chevron_right, size: 16),
+            icon: const Icon(Icons.chevron_right, size: FwIconSize.md),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 24, height: 24),
             tooltip: 'Show the list',
@@ -2113,7 +2126,11 @@ class _CompileError extends StatelessWidget {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Icon(Icons.error_outline, size: 18, color: colors.red),
+                  child: Icon(
+                    Icons.error_outline,
+                    size: FwIconSize.lg,
+                    color: colors.red,
+                  ),
                 ),
                 const Gap(FwSpacing.md),
                 Expanded(
@@ -2138,7 +2155,7 @@ class _CompileError extends StatelessWidget {
                 const Gap(FwSpacing.lg),
                 ElevatedButton.icon(
                   onPressed: onRetry,
-                  icon: const Icon(Icons.refresh, size: 16),
+                  icon: const Icon(Icons.refresh, size: FwIconSize.md),
                   label: const Text('Retry'),
                 ),
               ],
@@ -2249,7 +2266,7 @@ class _StatusBar extends StatelessWidget {
           BusyDot(busy: busy),
           IconButton(
             onPressed: ready && busy == null ? onReload : null,
-            icon: const Icon(Icons.refresh, size: 16),
+            icon: const Icon(Icons.refresh, size: FwIconSize.md),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 24, height: 24),
             tooltip: 'Reload (${Platform.isMacOS ? '⌘R' : 'Ctrl+R'})',

@@ -543,7 +543,7 @@ class _Pill extends StatelessWidget {
         border: Border.all(
           color: tone == null ? colors.line : colors.statusBorder(tone!),
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(context.radii.pill),
       ),
       child: Text(
         label,

@@ -34,6 +34,7 @@ import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../../ui/split_button.dart';
 import '../../ui/empty_state.dart';
+import '../../ui/loading_state.dart';
 import '../../ui/popover.dart';
 import '../../ui/popover_menu.dart';
 import '../../ui/tappable.dart';
@@ -242,7 +243,7 @@ class _Pill extends StatelessWidget {
               : hovered
               ? colors.hoverOverlay
               : null,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(context.radii.pill),
           border: Border.all(
             color: selected ? colors.accentSoft2 : colors.line,
           ),
@@ -580,7 +581,7 @@ class _CapabilityPill extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.13),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(context.radii.pill),
       ),
       child: Text(
         state.label,
@@ -888,6 +889,18 @@ class _ScreenTabState extends State<_ScreenTab> {
   @override
   Widget build(BuildContext context) {
     if (_error case var error?) return _Failed(error);
+    // A grip divides two things. Until the first read lands there is only one
+    // — the picture pane draws nothing at all while loading, so what the page
+    // showed was a blank half, a hairline down the middle, and the tab's only
+    // words centred in the *other* half. That reads as a divider waiting for a
+    // panel, not as a pane that is busy. One state for one thing, and the
+    // split appears with the content it splits.
+    if (_loading && _image == null && _tree == null) {
+      return const LoadingState(
+        title: 'Reading the app…',
+        message: 'Its widget tree, and a picture of what it is showing.',
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         var width = (constraints.maxWidth * _split)
@@ -1015,7 +1028,10 @@ class _Picture extends StatelessWidget {
           ] else
             Text(
               switch ((loading, undecodable)) {
-                (true, _) => '',
+                // Never the empty string: a pane that draws nothing is
+                // indistinguishable from a pane that is not there, and beside
+                // the grip it reads as an unexplained rule down the page.
+                (true, _) => 'Taking a picture…',
                 (_, true) =>
                   'The app answered with a picture that decodes to nothing.',
                 _ => 'No picture yet',
@@ -1390,7 +1406,7 @@ class _StepRow extends StatelessWidget {
     var path = entry.screenshot;
     if (path != null && File(path).existsSync()) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: BorderRadius.circular(context.radii.micro),
         child: Image.file(
           File(path),
           width: 44,
@@ -1404,7 +1420,11 @@ class _StepRow extends StatelessWidget {
     return SizedBox(
       width: 44,
       height: 32,
-      child: Icon(_verbIcon(entry.verb), size: 18, color: context.colors.mut2),
+      child: Icon(
+        _verbIcon(entry.verb),
+        size: FwIconSize.lg,
+        color: context.colors.mut2,
+      ),
     );
   }
 }
@@ -1928,150 +1948,161 @@ class _NewRunPageState extends State<_NewRunPage> {
     // A column, not the window. Fields stretched across a desktop panel put
     // the label and the caret a hand's width apart, and the form is a short
     // sequence of decisions rather than a table.
-    return Align(
-      alignment: Alignment.topLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: ListView(
-          padding: const EdgeInsets.all(FwSpacing.xl),
-          children: [
-            Text('New run', style: context.type.heading),
-            const Gap(FwSpacing.lg),
-            _Field(
-              label: 'Entry point',
-              child: _EntrypointPicker(
-                entries: entries,
-                selected: _entry,
-                onChanged: (choice) => setState(() {
-                  _entry = choice;
-                  _forgetDeclarations();
-                  _rebuildKnobs(const {});
-                  _resetFlavor();
-                  // Everything below is downstream, and the device most
-                  // visibly so: switching to a mobile-only entry point while
-                  // this Mac is selected has to move off it, not leave a
-                  // selection the Start button would refuse.
-                  _device = _pickDevice(preferred: _device);
-                }),
-              ),
-            ),
-            const Gap(FwSpacing.lg),
-            _Field(
-              label: 'Device',
-              hint: _restriction,
-              child: _DevicePicker(
-                devices: allowed,
-                selected: _device,
-                restricted: _entry?.entry.platforms.isNotEmpty ?? false,
-                onChanged: (id) => setState(() => _device = id),
-              ),
-            ),
-            // Always present, not only when something declared one: whether
-            // this project has flavors is not something the cockpit knows, and
-            // a flavoured project cannot be launched at all without the right
-            // word here.
-            const Gap(FwSpacing.lg),
-            _Field(
-              label: 'Flavor',
-              hint: _overridingFlavor
-                  ? 'just this run; empty passes no --flavor at all'
-                  : null,
-              child: _FlavorField(
-                declared: _declaredFlavor,
-                controller: _flavor,
-                overriding: _overridingFlavor,
-                onOverride: () => setState(() => _overridingFlavor = true),
-                onRevert: () => setState(_resetFlavor),
-              ),
-            ),
-            if (_offeredKnobs.isNotEmpty) ...[
-              const Gap(FwSpacing.lg),
-              _Field(
-                label: 'Knobs',
-                hint: 'passed to main — changing one is a hot restart',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var knob in _offeredKnobs) ...[
-                      KnobField(
-                        knob: knob,
-                        value: _knobs[knob.name],
-                        interfaceOf: _core.hostInterfaceOf,
-                        onChanged: (value) => setState(() {
-                          if (value == null) {
-                            _knobs.remove(knob.name);
-                          } else {
-                            _knobs[knob.name] = value;
-                          }
-                        }),
-                      ),
-                      const Gap(FwSpacing.md),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-            if (_permissions case var declared? when !declared.isEmpty) ...[
-              const Gap(FwSpacing.lg),
-              _Field(
-                label: 'Permissions',
-                hint: declared.merged
-                    ? 'what this app asks for, including its dependencies'
-                    : "the app's own list — a build adds its dependencies'",
-                child: _PermissionsField(
-                  declarations: declared,
-                  heldKey: _heldKey,
-                  held: _heldPermissions,
-                  observed: _observedPermissions,
-                  platform: _selectedPlatform,
-                  busy: _applyingProfile,
-                  onApply: _device == null ? null : _applyProfile,
-                  onCompare: _device == null ? null : _compare,
-                ),
-              ),
-            ],
-            const Gap(FwSpacing.lg),
-            Row(
+    // The scroller is the whole pane; the cap sits inside it. The other way
+    // round — a ListView *inside* the 560 cap — parks the scroll gutter 560px
+    // from the left, which on a wide window reads as a divider down the middle
+    // of the page rather than as the edge of a list.
+    return ListView(
+      padding: const EdgeInsets.all(FwSpacing.xl),
+      children: [
+        Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                FilledButton(
-                  onPressed: _launching || device == null ? null : _start,
-                  child: Text(_launching ? 'Starting…' : 'Start'),
+                Text('New run', style: context.type.heading),
+                const Gap(FwSpacing.lg),
+                _Field(
+                  label: 'Entry point',
+                  child: _EntrypointPicker(
+                    entries: entries,
+                    selected: _entry,
+                    onChanged: (choice) => setState(() {
+                      _entry = choice;
+                      _forgetDeclarations();
+                      _rebuildKnobs(const {});
+                      _resetFlavor();
+                      // Everything below is downstream, and the device most
+                      // visibly so: switching to a mobile-only entry point while
+                      // this Mac is selected has to move off it, not leave a
+                      // selection the Start button would refuse.
+                      _device = _pickDevice(preferred: _device);
+                    }),
+                  ),
                 ),
-                const Gap(FwSpacing.md),
-                // Said before the click, not explained after it: every wireless
-                // launch in the spike stalled on an OS dialog while the tool
-                // reported only `Installing and launching…`.
-                if (device != null && device.isWireless)
-                  Flexible(
-                    child: Text(
-                      'wireless — expect a slow install, and a permission prompt '
-                      'on this Mac',
-                      style: context.type.caption.copyWith(
-                        color: context.colors.amber,
-                      ),
+                const Gap(FwSpacing.lg),
+                _Field(
+                  label: 'Device',
+                  hint: _restriction,
+                  child: _DevicePicker(
+                    devices: allowed,
+                    selected: _device,
+                    restricted: _entry?.entry.platforms.isNotEmpty ?? false,
+                    onChanged: (id) => setState(() => _device = id),
+                  ),
+                ),
+                // Always present, not only when something declared one: whether
+                // this project has flavors is not something the cockpit knows, and
+                // a flavoured project cannot be launched at all without the right
+                // word here.
+                const Gap(FwSpacing.lg),
+                _Field(
+                  label: 'Flavor',
+                  hint: _overridingFlavor
+                      ? 'just this run; empty passes no --flavor at all'
+                      : null,
+                  child: _FlavorField(
+                    declared: _declaredFlavor,
+                    controller: _flavor,
+                    overriding: _overridingFlavor,
+                    onOverride: () => setState(() => _overridingFlavor = true),
+                    onRevert: () => setState(_resetFlavor),
+                  ),
+                ),
+                if (_offeredKnobs.isNotEmpty) ...[
+                  const Gap(FwSpacing.lg),
+                  _Field(
+                    label: 'Knobs',
+                    hint: 'passed to main — changing one is a hot restart',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var knob in _offeredKnobs) ...[
+                          KnobField(
+                            knob: knob,
+                            value: _knobs[knob.name],
+                            interfaceOf: _core.hostInterfaceOf,
+                            onChanged: (value) => setState(() {
+                              if (value == null) {
+                                _knobs.remove(knob.name);
+                              } else {
+                                _knobs[knob.name] = value;
+                              }
+                            }),
+                          ),
+                          const Gap(FwSpacing.md),
+                        ],
+                      ],
                     ),
                   ),
+                ],
+                if (_permissions case var declared? when !declared.isEmpty) ...[
+                  const Gap(FwSpacing.lg),
+                  _Field(
+                    label: 'Permissions',
+                    hint: declared.merged
+                        ? 'what this app asks for, including its dependencies'
+                        : "the app's own list — a build adds its dependencies'",
+                    child: _PermissionsField(
+                      declarations: declared,
+                      heldKey: _heldKey,
+                      held: _heldPermissions,
+                      observed: _observedPermissions,
+                      platform: _selectedPlatform,
+                      busy: _applyingProfile,
+                      onApply: _device == null ? null : _applyProfile,
+                      onCompare: _device == null ? null : _compare,
+                    ),
+                  ),
+                ],
+                const Gap(FwSpacing.lg),
+                Row(
+                  children: [
+                    FilledButton(
+                      onPressed: _launching || device == null ? null : _start,
+                      child: Text(_launching ? 'Starting…' : 'Start'),
+                    ),
+                    const Gap(FwSpacing.md),
+                    // Said before the click, not explained after it: every wireless
+                    // launch in the spike stalled on an OS dialog while the tool
+                    // reported only `Installing and launching…`.
+                    if (device != null && device.isWireless)
+                      Flexible(
+                        child: Text(
+                          'wireless — expect a slow install, and a permission prompt '
+                          'on this Mac',
+                          style: context.type.caption.copyWith(
+                            color: context.colors.amber,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                if (_error case var error?) ...[
+                  const Gap(FwSpacing.md),
+                  Text(
+                    error,
+                    style: context.type.caption.copyWith(
+                      color: context.colors.red,
+                    ),
+                  ),
+                ],
+                // The desk also lives in the shell's chrome, where it can jump you
+                // to the worktree holding a busy device — but nobody who never
+                // looks up there should lose the list. Gated on *this worktree's*
+                // runs: another checkout holding the phone is exactly when the
+                // desk has something to say here.
+                if (_core.ownHandles.isEmpty) ...[
+                  const Gap(FwSpacing.xl),
+                  _Desk(core: _core),
+                ],
               ],
             ),
-            if (_error case var error?) ...[
-              const Gap(FwSpacing.md),
-              Text(
-                error,
-                style: context.type.caption.copyWith(color: context.colors.red),
-              ),
-            ],
-            // The desk also lives in the shell's chrome, where it can jump you
-            // to the worktree holding a busy device — but nobody who never
-            // looks up there should lose the list. Gated on *this worktree's*
-            // runs: another checkout holding the phone is exactly when the
-            // desk has something to say here.
-            if (_core.ownHandles.isEmpty) ...[
-              const Gap(FwSpacing.xl),
-              _Desk(core: _core),
-            ],
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -2290,7 +2321,7 @@ class _DeskState extends State<_Desk> {
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
               children: [
-                Icon(_iconFor(device), size: 14, color: colors.mut2),
+                Icon(_iconFor(device), size: FwIconSize.sm, color: colors.mut2),
                 const Gap(FwSpacing.sm),
                 Flexible(
                   flex: 0,
@@ -2313,7 +2344,11 @@ class _DeskState extends State<_Desk> {
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
               children: [
-                Icon(Icons.phone_iphone_outlined, size: 14, color: colors.mut3),
+                Icon(
+                  Icons.phone_iphone_outlined,
+                  size: FwIconSize.sm,
+                  color: colors.mut3,
+                ),
                 const Gap(FwSpacing.sm),
                 Flexible(
                   flex: 0,
@@ -2535,7 +2570,7 @@ class _PermissionsField extends StatelessWidget {
         DecoratedBox(
           decoration: BoxDecoration(
             border: Border.all(color: context.colors.line),
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(context.radii.micro),
           ),
           child: Column(
             children: [
@@ -2707,11 +2742,11 @@ class _ProfileChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(3),
+      borderRadius: BorderRadius.circular(context.radii.micro),
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border.all(color: context.colors.line),
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(context.radii.micro),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -2732,7 +2767,7 @@ class _ProfileChip extends StatelessWidget {
                 ),
                 const Gap(FwSpacing.xs),
               ] else if (icon case var glyph?) ...[
-                Icon(glyph, size: 11, color: context.colors.mut2),
+                Icon(glyph, size: FwIconSize.xs, color: context.colors.mut2),
                 const Gap(FwSpacing.xs),
               ],
               Text(
@@ -2809,7 +2844,7 @@ class _PermissionFinding extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 14, color: color),
+        Icon(icon, size: FwIconSize.sm, color: color),
         const Gap(FwSpacing.xs),
         Expanded(
           child: Text(
@@ -2842,13 +2877,21 @@ class _FlavorField extends StatelessWidget {
     if (overriding) {
       return Row(
         children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              style: context.type.bodySmall,
-              decoration: const InputDecoration(
-                isDense: true,
-                hintText: 'dev, staging…',
+          // Capped and unstyled, so this is the same control as a knob's: no
+          // `style:` override (which made it 27 tall beside a 32 field on the
+          // same form) and the same width as a knob value, since a flavor is
+          // one word and 500px of box for `dev` reads as a mistake.
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: KnobField.controlWidth,
+              ),
+              child: TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  hintText: 'dev, staging…',
+                ),
               ),
             ),
           ),
@@ -2949,7 +2992,7 @@ class _FailedRunPage extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.error_outline, size: 16, color: colors.red),
+              Icon(Icons.error_outline, size: FwIconSize.md, color: colors.red),
               const Gap(FwSpacing.sm),
               Expanded(
                 child: Column(
@@ -3077,7 +3120,7 @@ class _Action extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 14, color: fg),
+              Icon(icon, size: FwIconSize.sm, color: fg),
               const Gap(FwSpacing.xs),
               Text(label, style: context.type.bodySmall.copyWith(color: fg)),
             ],
@@ -3224,7 +3267,7 @@ class _Picker<T> extends StatelessWidget {
               ],
               const Spacer(),
               const Gap(FwSpacing.sm),
-              Icon(Icons.expand_more, size: 16, color: colors.mut2),
+              Icon(Icons.expand_more, size: FwIconSize.md, color: colors.mut2),
             ],
           ),
         ),

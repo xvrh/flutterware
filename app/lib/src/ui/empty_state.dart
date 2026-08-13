@@ -4,7 +4,7 @@ import 'design/design.dart';
 /// The centred placeholder a list, table, or panel shows when it has nothing to
 /// display: a muted icon, a [title], an optional [message] and an optional
 /// [action]. The empty arm of the load → empty/error triad alongside
-/// `LoadingPanel` / `ErrorPanel`.
+/// [LoadingState] and `ErrorPanel`.
 ///
 /// Ported from `cms/packages/admin_ui/lib/src/common/ui/empty_state.dart`.
 class EmptyState extends StatelessWidget {
@@ -14,6 +14,17 @@ class EmptyState extends StatelessWidget {
   final Widget? action;
   final double minHeight;
 
+  /// Overrides the muted icon. The one caller that needs it is [ErrorState],
+  /// which paints the icon red — the single mark that separates "nothing here"
+  /// from "this did not work" at a glance.
+  final Color? iconColor;
+
+  /// Makes [message] selectable. Off by default, because an empty state's
+  /// message is a sentence somebody wrote and nobody needs to copy. [ErrorState]
+  /// turns it on: an error message is a path, a command or a stack, and the
+  /// first thing anyone does with one is paste it somewhere.
+  final bool selectableMessage;
+
   const EmptyState({
     super.key,
     this.icon = Icons.inbox_outlined,
@@ -21,6 +32,8 @@ class EmptyState extends StatelessWidget {
     this.message,
     this.action,
     this.minHeight = 160,
+    this.iconColor,
+    this.selectableMessage = false,
   });
 
   @override
@@ -33,7 +46,11 @@ class EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 32, color: context.colors.mut3),
+              Icon(
+                icon,
+                size: FwIconSize.xl,
+                color: iconColor ?? context.colors.mut3,
+              ),
               const Gap(FwSpacing.md),
               Text(
                 title,
@@ -42,11 +59,18 @@ class EmptyState extends StatelessWidget {
               ),
               if (message != null) ...[
                 const Gap(FwSpacing.xxs),
-                Text(
-                  message!,
-                  style: context.type.bodyMuted,
-                  textAlign: TextAlign.center,
-                ),
+                if (selectableMessage)
+                  SelectableText(
+                    message!,
+                    style: context.type.bodyMuted,
+                    textAlign: TextAlign.center,
+                  )
+                else
+                  Text(
+                    message!,
+                    style: context.type.bodyMuted,
+                    textAlign: TextAlign.center,
+                  ),
               ],
               if (action != null) ...[const Gap(FwSpacing.lg), action!],
             ],

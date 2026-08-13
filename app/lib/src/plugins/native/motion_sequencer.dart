@@ -20,9 +20,9 @@ import 'package:flutterware/motion.dart' show curveByName, motionCurveNames;
 import '../../motion/lane_model.dart';
 import '../../motion/property_editor.dart';
 import '../../motion/values_file.dart';
-import '../../ui/design/spacing.dart';
-import '../../ui/design/tokens.dart';
+import '../../ui/empty_state.dart';
 import '../../ui/tappable.dart';
+import '../../ui/design/design.dart';
 
 /// Rewrites one segment in place. Every edit the panel makes — retime, trim,
 /// re-value, re-curve — is this one call with a different closure.
@@ -76,11 +76,10 @@ class _MotionSequencerState extends State<MotionSequencer> {
   Widget build(BuildContext context) {
     var scope = widget.scope;
     if (scope == null) {
-      return Center(
-        child: Text(
-          'No motion mounted in the guest yet.',
-          style: context.type.bodyMuted,
-        ),
+      return const EmptyState(
+        icon: Icons.timeline,
+        title: 'Nothing mounted yet',
+        message: 'The guest has not put a motion on the stage.',
       );
     }
 
@@ -353,7 +352,7 @@ class _GroupRow extends StatelessWidget {
                   children: [
                     Icon(
                       collapsed ? Icons.arrow_right : Icons.arrow_drop_down,
-                      size: 14,
+                      size: FwIconSize.sm,
                       color: context.colors.mut2,
                     ),
                     _Badge(target.state),
@@ -369,7 +368,7 @@ class _GroupRow extends StatelessWidget {
                         message: 'Tuned, but no build asked for it — prunable.',
                         child: Icon(
                           Icons.link_off,
-                          size: 12,
+                          size: FwIconSize.xs,
                           color: context.colors.amber,
                         ),
                       ),
@@ -570,7 +569,11 @@ class _LaneRow extends StatelessWidget {
               onTap: onCreate,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
-                child: Icon(Icons.add, size: 14, color: context.colors.accent),
+                child: Icon(
+                  Icons.add,
+                  size: FwIconSize.sm,
+                  color: context.colors.accent,
+                ),
               ),
             ),
           ),
@@ -592,7 +595,9 @@ class _LaneRow extends StatelessWidget {
                       height: 11,
                       decoration: BoxDecoration(
                         color: color,
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: BorderRadius.circular(
+                          context.radii.micro,
+                        ),
                         border: Border.all(color: context.colors.line),
                       ),
                     ),
@@ -962,15 +967,10 @@ class MotionInspector extends StatelessWidget {
     return ColoredBox(
       color: context.colors.panel2,
       child: segment == null || selection == null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(FwSpacing.lg),
-                child: Text(
-                  'Select a span to see its values.',
-                  textAlign: TextAlign.center,
-                  style: context.type.bodyMuted,
-                ),
-              ),
+          ? const EmptyState(
+              icon: Icons.straighten,
+              title: 'Pick a span',
+              message: 'Opening one shows the values it drives.',
             )
           : ListView(
               padding: const EdgeInsets.all(FwSpacing.lg),
@@ -1122,7 +1122,7 @@ class MotionInspector extends StatelessWidget {
                       children: [
                         Icon(
                           Icons.delete_outline,
-                          size: 14,
+                          size: FwIconSize.sm,
                           color: context.colors.red,
                         ),
                         Text(
@@ -1379,7 +1379,7 @@ class _ScrubNumberState extends State<_ScrubNumber> {
         border: Border.all(
           color: widget.held ? context.colors.accent : context.colors.line,
         ),
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
       ),
       child: _typing
           ? Row(
@@ -1641,7 +1641,7 @@ class _Note extends StatelessWidget {
         right: BorderSide(color: context.colors.line),
         bottom: BorderSide(color: context.colors.line),
       ),
-      borderRadius: BorderRadius.circular(7),
+      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
     ),
     child: Text(
       text,
@@ -1730,7 +1730,7 @@ class _FieldState extends State<_Field> {
           decoration: BoxDecoration(
             color: context.colors.bg,
             border: Border.all(color: context.colors.line),
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
           ),
           child: Row(
             spacing: FwSpacing.sm,
@@ -1741,7 +1741,7 @@ class _FieldState extends State<_Field> {
                   height: 13,
                   decoration: BoxDecoration(
                     color: colour,
-                    borderRadius: BorderRadius.circular(3),
+                    borderRadius: BorderRadius.circular(context.radii.micro),
                     border: Border.all(color: context.colors.line),
                   ),
                 ),
@@ -1791,7 +1791,7 @@ class _CurvePicker extends StatelessWidget {
             onPressed: () => onPick(candidate),
             leadingIcon: Icon(
               candidate == name ? Icons.check : null,
-              size: 14,
+              size: FwIconSize.sm,
               color: context.colors.accent,
             ),
             child: Text(candidate, style: context.type.caption),
@@ -1825,7 +1825,7 @@ class _CurveBox extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.colors.bg,
         border: Border.all(color: context.colors.line),
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(context.radii.radius),
       ),
       child: Row(
         spacing: FwSpacing.lg,
@@ -1835,7 +1835,7 @@ class _CurveBox extends StatelessWidget {
             height: 52,
             decoration: BoxDecoration(
               color: context.colors.panel2,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(context.radii.micro),
             ),
             child: curve == null
                 ? null

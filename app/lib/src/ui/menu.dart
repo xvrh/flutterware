@@ -166,7 +166,7 @@ class _MenuItemRow extends StatelessWidget {
         child: Row(
           children: [
             if (item.icon != null) ...[
-              Icon(item.icon, size: 16, color: fg),
+              Icon(item.icon, size: FwIconSize.md, color: fg),
               const Gap(FwSpacing.md),
             ],
             Expanded(

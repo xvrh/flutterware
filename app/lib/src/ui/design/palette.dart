@@ -16,11 +16,41 @@ class FwPalette {
   final Color panel;
   final Color panel2;
 
-  // ink / text scale
+  // ── ink / text scale ──
+  //
+  // Five steps, ranked rather than named for a job, which is the one thing
+  // worth knowing about them: a call site picks by feel unless it is told what
+  // each step is *for*. So it is told, below, from what the app actually does
+  // with them rather than from a taxonomy invented afterwards.
+  //
+  // Deliberately not re-exposed under role names like `textSecondary`. The
+  // palette already tried that during the `AppColors` migration and the
+  // evidence is in: `mutedText`, `hairline` and `controlBackground` were added
+  // as friendlier aliases and reached **zero** call sites between them. A
+  // second vocabulary for the same five colours makes the "are these the same
+  // grey?" question harder, not easier.
+
+  /// Primary text, and anything that must be read first.
   final Color ink;
+
+  /// Secondary emphasis that is still ink rather than grey — an active tab's
+  /// label, a table header that is the current sort.
   final Color ink2;
+
+  /// **The workhorse muted.** Captions, field labels, the words of an inactive
+  /// control, a running state. If a thing is muted and you have no reason to
+  /// pick another step, it is this one — 207 of the 487 muted uses are.
   final Color mut;
+
+  /// One step back from [mut]: provenance and asides. A panel header's
+  /// subtitle, a code comment, a keyboard shortcut beside a menu row — present,
+  /// and explicitly not competing with the line above it.
   final Color mut2;
+
+  /// The faintest step, for things that must be *visible but never read first*:
+  /// an empty state's icon, a spinner, a disabled chevron, a hint under a
+  /// field. Text at this weight is decoration; do not put a sentence in it that
+  /// the reader needs.
   final Color mut3;
 
   // lines
@@ -70,14 +100,15 @@ class FwPalette {
     required this.info,
   });
 
-  // derived names — so call sites read close to the old AppColors
+  // Derived names that carry their own meaning — a status word rather than a
+  // second spelling of a colour.
+  //
+  // The compatibility aliases from the `AppColors` migration are gone:
+  // `mutedText`, `hairline` and `controlBackground` had no call sites at all,
+  // and `textGrey`/`textSteal` had four between them, all now reading `mut` and
+  // `ink` directly. They were a bridge, and the far side has been reached.
   Color get primary => accent;
   Color get scaffoldBackground => panel;
-  Color get textSteal => ink;
-  Color get textGrey => mut;
-  Color get mutedText => mut;
-  Color get hairline => line;
-  Color get controlBackground => panel;
   Color get danger => red;
   Color get warning => amber;
   Color get success => grn;
@@ -142,7 +173,7 @@ class FwPalette {
       error: danger,
       onPrimary: onPrimary,
       onSecondary: onPrimary,
-      onSurface: textGrey,
+      onSurface: mut,
       onError: const Color(0xFFFFFFFF),
     );
   }

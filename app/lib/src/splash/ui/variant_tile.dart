@@ -169,7 +169,7 @@ class _Note extends StatelessWidget {
         vertical: 1,
       ),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(context.radii.pill),
         border: Border.all(color: warn ? colors.amber : colors.line),
       ),
       child: Text(

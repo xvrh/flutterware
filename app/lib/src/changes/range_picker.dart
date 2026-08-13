@@ -284,7 +284,7 @@ class _Trigger extends StatelessWidget {
           children: [
             Text(label, style: context.type.bodySmall.copyWith(color: tone)),
             const Gap(FwSpacing.xs),
-            Icon(Icons.expand_more, size: 13, color: tone),
+            Icon(Icons.expand_more, size: FwIconSize.sm, color: tone),
           ],
         ),
       ),

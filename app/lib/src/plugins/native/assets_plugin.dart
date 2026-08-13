@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 
 import '../../address/address_scope.dart';
 import '../../assets/screen.dart';
-import '../../ui/theme.dart';
 import '../native_plugin.dart';
 import 'assets_core.dart';
+import 'no_packages.dart';
 
 export 'assets_core.dart' show AssetsCore, assetsPluginId;
 
@@ -69,14 +69,7 @@ class _AssetsPanelState extends State<_AssetsPanel> {
   Widget build(BuildContext context) {
     var path = _path ?? _resolve();
     if (path == null) {
-      return Center(
-        child: Text(
-          'No packages configured for this plugin.\n'
-          'Add them in tool/flutterware.dart.',
-          textAlign: TextAlign.center,
-          style: context.type.bodyMuted,
-        ),
-      );
+      return const NoPackagesConfigured(icon: Icons.image_outlined);
     }
 
     // Rebuilds when a scan lands: the core notifies, the plugin forwards.

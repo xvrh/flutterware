@@ -118,7 +118,11 @@ class _DeskButtonState extends State<DeskButton> {
         message: 'Devices — what is on this machine, and who has it',
         child: IconButton(
           onPressed: () => controller.isOpen ? controller.close() : _open(),
-          icon: Icon(Icons.devices_outlined, size: 16, color: colors.mut),
+          icon: Icon(
+            Icons.devices_outlined,
+            size: FwIconSize.md,
+            color: colors.mut,
+          ),
           constraints: const BoxConstraints.tightFor(width: 28, height: 28),
           padding: EdgeInsets.zero,
         ),
@@ -259,7 +263,7 @@ class _DeskRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: colors.mut2),
+          Icon(icon, size: FwIconSize.sm, color: colors.mut2),
           const Gap(FwSpacing.sm),
           Flexible(
             flex: 0,
@@ -281,7 +285,11 @@ class _DeskRow extends StatelessWidget {
           ),
           if (jumpable) ...[
             const Gap(FwSpacing.sm),
-            Icon(Icons.arrow_forward, size: 12, color: colors.accent),
+            Icon(
+              Icons.arrow_forward,
+              size: FwIconSize.xs,
+              color: colors.accent,
+            ),
           ],
         ],
       ),

@@ -12,13 +12,13 @@ import '../ui/theme.dart';
 import '../utils/async_value.dart';
 import '../utils/cloc/cloc.dart';
 import '../utils/utils.dart';
-import '../utils/ui/loading.dart';
 import '../utils/value_stream_builder.dart';
 import 'model/package_imports.dart';
 import 'model/package_origin.dart';
 import 'model/pub_dev_api.dart';
 import 'model/service.dart';
 import 'utils.dart';
+import '../ui/loading_state.dart';
 
 class DependencyDetailScreen extends StatelessWidget {
   final DependenciesService dependencies;
@@ -41,7 +41,9 @@ class DependencyDetailScreen extends StatelessWidget {
             message: '${snapshot.error}',
           );
         }
-        if (snapshot.isLoading) return LoadingPanel();
+        if (snapshot.isLoading) {
+          return const LoadingState(title: 'Reading the dependency…');
+        }
 
         var dependency = snapshot.requireData[packageName];
         if (dependency == null) {
@@ -193,7 +195,7 @@ class _BackBar extends StatelessWidget {
             var handle = AddressScope.write(context);
             handle.setSegments([?handle.segment(0)]);
           },
-          icon: const Icon(Icons.arrow_back, size: 16),
+          icon: const Icon(Icons.arrow_back, size: FwIconSize.md),
           label: const Text('All dependencies'),
         ),
       ),
@@ -527,7 +529,7 @@ class _Chain extends StatelessWidget {
                 if (index > 0)
                   Icon(
                     Icons.subdirectory_arrow_right,
-                    size: 14,
+                    size: FwIconSize.sm,
                     color: context.colors.mut3,
                   ),
                 const Gap(FwSpacing.xxs),
@@ -640,7 +642,7 @@ class _UsageSectionState extends State<_UsageSection> {
                       children: [
                         Icon(
                           asset.isFont ? Icons.text_fields : Icons.image,
-                          size: 13,
+                          size: FwIconSize.sm,
                           color: context.colors.mut3,
                         ),
                         const Gap(FwSpacing.xs),
@@ -670,7 +672,7 @@ class _UsageSectionState extends State<_UsageSection> {
                     children: [
                       Icon(
                         reference.isExport ? Icons.output : Icons.arrow_forward,
-                        size: 13,
+                        size: FwIconSize.sm,
                         color: context.colors.mut3,
                       ),
                       const Gap(FwSpacing.xs),
@@ -960,7 +962,7 @@ class _Chip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 12, color: accent ?? colors.mut),
+            Icon(icon, size: FwIconSize.xs, color: accent ?? colors.mut),
             const Gap(FwSpacing.xxs),
           ],
           Text(
@@ -1081,7 +1083,7 @@ class _StatTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 14, color: colors.mut),
+              Icon(icon, size: FwIconSize.sm, color: colors.mut),
               const Gap(FwSpacing.xs),
               Expanded(
                 child: Text(
@@ -1124,7 +1126,7 @@ class _LinkButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextButton.icon(
       onPressed: onTap,
-      icon: Icon(icon, size: 15),
+      icon: Icon(icon, size: FwIconSize.md),
       label: Text(label),
     );
   }

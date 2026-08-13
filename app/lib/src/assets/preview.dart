@@ -485,7 +485,7 @@ class _LottiePreviewState extends State<LottiePreview>
         children: [
           IconButton(
             onPressed: _toggle,
-            iconSize: 18,
+            iconSize: FwIconSize.lg,
             icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
           ),
           Expanded(
@@ -529,7 +529,11 @@ class _NoPreview extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: FwSpacing.md,
       children: [
-        Icon(Icons.description_outlined, size: 32, color: context.colors.mut2),
+        Icon(
+          Icons.description_outlined,
+          size: FwIconSize.xl,
+          color: context.colors.mut2,
+        ),
         Text(
           // The extension, because that is what the reader is holding. "No
           // preview for data" names our own taxonomy back at them.
@@ -558,7 +562,7 @@ class _Unreadable extends StatelessWidget {
         children: [
           Icon(
             Icons.broken_image_outlined,
-            size: 32,
+            size: FwIconSize.xl,
             color: context.colors.red,
           ),
           Text(

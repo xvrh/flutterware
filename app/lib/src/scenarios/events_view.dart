@@ -5,6 +5,7 @@ import '../ui/count_badge.dart';
 import '../ui/json_view.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
+import '../ui/empty_state.dart';
 
 /// The Events tab: what the app did on the way *into* this step.
 ///
@@ -129,11 +130,10 @@ class _ScenarioEventsViewState extends State<ScenarioEventsView> {
           const Divider(height: 1),
           Expanded(
             child: rows.isEmpty
-                ? Center(
-                    child: Text(
-                      'Every channel is filtered out.',
-                      style: context.type.caption.copyWith(color: colors.mut),
-                    ),
+                ? const EmptyState(
+                    icon: Icons.filter_alt_off_outlined,
+                    title: 'Every channel is filtered out',
+                    message: 'Turn one back on above.',
                   )
                 : ListView.builder(
                     primary: false,
@@ -212,7 +212,7 @@ class _EventRow extends StatelessWidget {
                           expanded
                               ? Icons.keyboard_arrow_down
                               : Icons.keyboard_arrow_right,
-                          size: 14,
+                          size: FwIconSize.sm,
                           color: colors.mut,
                         )
                       : null,

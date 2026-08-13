@@ -481,7 +481,7 @@ class _HeaderCellState extends State<_HeaderCell> {
             active
                 ? (widget.ascending ? Icons.arrow_upward : Icons.arrow_downward)
                 : Icons.unfold_more,
-            size: 13,
+            size: FwIconSize.sm,
             color: active ? context.colors.accent : context.colors.mut3,
           ),
         ],
@@ -553,7 +553,7 @@ class _HeaderCellState extends State<_HeaderCell> {
                 onTap: controller.toggle,
                 child: Icon(
                   Icons.more_vert,
-                  size: 15,
+                  size: FwIconSize.md,
                   color: context.colors.mut,
                 ),
               ),

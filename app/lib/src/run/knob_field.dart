@@ -307,7 +307,9 @@ class _Toggle extends StatelessWidget {
                   border: Border.all(
                     color: value ? colors.accent : colors.line,
                   ),
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(
+                    context.radii.radiusSmall,
+                  ),
                 ),
                 child: AnimatedAlign(
                   duration: const Duration(milliseconds: 120),
@@ -366,7 +368,7 @@ class _OptionChip extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: selected ? colors.accentSoft : colors.panel2,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(context.radii.pill),
           border: Border.all(color: selected ? colors.accent : colors.line),
         ),
         child: Row(

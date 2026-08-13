@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
 import '../plugins/manifest_loader.dart';
+import '../ui/panel_header.dart';
 import '../ui/theme.dart';
 import 'shell_controller.dart';
 import 'worktree.dart';
@@ -37,50 +38,43 @@ class ConfigScreen extends StatelessWidget {
 
     return ListView(
       key: configScreenKey,
-      padding: const EdgeInsets.all(FwSpacing.xxxl),
+      padding: const EdgeInsets.only(bottom: FwSpacing.xxxl),
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Config', style: context.type.pageTitle),
-                  const Gap(FwSpacing.sm),
-                  SelectableText(
-                    '${worktree.path}/$configFilePath',
-                    style: context.type.caption,
-                  ),
-                ],
-              ),
-            ),
-            _ReloadAction(shell, worktree),
-          ],
+        FwPanelHeader(
+          'Config',
+          subtitle: ['${worktree.path}/$configFilePath'],
+          selectableSubtitle: true,
+          trailing: _ReloadAction(shell, worktree),
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: panelGutter),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Watch(shell, worktree),
 
-        const Gap(FwSpacing.lg),
-        _Watch(shell, worktree),
+              if (error != null) ...[
+                const Gap(FwSpacing.xxl),
+                _Failure(error.message),
+              ],
 
-        if (error != null) ...[
-          const Gap(FwSpacing.xxl),
-          _Failure(error.message),
-        ],
+              if (manifest != null) ...[
+                const Gap(FwSpacing.xxl),
+                Text('Resolved', style: context.type.sectionLabel),
+                const Gap(FwSpacing.sm),
+                _Resolved(shell, worktree, manifest),
+              ],
 
-        if (manifest != null) ...[
-          const Gap(FwSpacing.xxl),
-          Text('Resolved', style: context.type.sectionLabel),
-          const Gap(FwSpacing.sm),
-          _Resolved(shell, worktree, manifest),
-        ],
-
-        if (manifest == null && error == null) ...[
-          const Gap(FwSpacing.xxl),
-          Text(
-            'This worktree declares no $configFilePath.',
-            style: context.type.bodyMuted.copyWith(color: colors.mut),
+              if (manifest == null && error == null) ...[
+                const Gap(FwSpacing.xxl),
+                Text(
+                  'This worktree declares no $configFilePath.',
+                  style: context.type.bodyMuted.copyWith(color: colors.mut),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
       ],
     );
   }
@@ -102,7 +96,7 @@ class _ReloadAction extends StatelessWidget {
       // plugin hard-blocked teardown, which made the button that fixes a broken
       // config refusable by the plugins the broken config left running.
       onPressed: shell.isLoading(worktree) ? null : () => shell.reloadConfig(),
-      icon: const Icon(Icons.refresh, size: 14),
+      icon: const Icon(Icons.refresh, size: FwIconSize.sm),
       label: const Text('Reload'),
     ),
   );
@@ -221,7 +215,7 @@ class _Resolved extends StatelessWidget {
                   missing.contains(pkg.path)
                       ? Icons.error_outline
                       : Icons.folder_outlined,
-                  size: 12,
+                  size: FwIconSize.xs,
                   color: missing.contains(pkg.path) ? colors.red : colors.mut2,
                 ),
                 const Gap(FwSpacing.sm),

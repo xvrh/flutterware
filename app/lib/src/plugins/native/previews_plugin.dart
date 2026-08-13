@@ -17,6 +17,9 @@ import '../../previews/web_server.dart';
 import '../native_plugin.dart';
 import 'previews_address.dart';
 import 'previews_core.dart';
+import '../../ui/design/design.dart';
+import '../../ui/loading_state.dart';
+import 'no_packages.dart';
 
 export 'previews_core.dart' show PreviewsCore, uiCatalogPluginId;
 
@@ -382,7 +385,7 @@ class _CatalogPanelState extends State<_CatalogPanel> {
   Widget build(BuildContext context) {
     var path = _package;
     if (path == null) {
-      return const Center(child: Text('No package declared for this plugin.'));
+      return const NoPackagesConfigured(icon: Icons.widgets_outlined);
     }
     return AnimatedBuilder(
       animation: widget.plugin,
@@ -406,7 +409,7 @@ class _CatalogPanelState extends State<_CatalogPanel> {
         // same claim as "there are none".
         var setup = widget.plugin.core.setupFor(path);
         if (setup == CatalogSetup.unknown) {
-          return const Center(child: CircularProgressIndicator());
+          return const LoadingState(title: 'Looking for demos…');
         }
         if (setup != CatalogSetup.ready) {
           return _NoPreviews(
@@ -513,7 +516,7 @@ class _NoPreviews extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: FilledButton.icon(
               onPressed: onNew,
-              icon: const Icon(Icons.add, size: 16),
+              icon: const Icon(Icons.add, size: FwIconSize.md),
               label: const Text('New preview'),
             ),
           ),

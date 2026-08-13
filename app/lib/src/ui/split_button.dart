@@ -128,7 +128,7 @@ class FwSplitButton extends StatelessWidget {
                     if (icon != null) ...[
                       Icon(
                         icon,
-                        size: 14,
+                        size: FwIconSize.sm,
                         color: enabled ? colors.accent : colors.mut3,
                       ),
                       const Gap(FwSpacing.xs),
@@ -150,7 +150,7 @@ class FwSplitButton extends StatelessWidget {
                 onTap: controller.toggle,
                 child: Icon(
                   Icons.expand_more,
-                  size: 14,
+                  size: FwIconSize.sm,
                   color: _menuEnabled ? colors.accent : colors.mut3,
                 ),
               ),

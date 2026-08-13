@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../shell/worktree.dart';
 import '../ui/syntax.dart';
 import '../ui/tappable.dart';
+import '../ui/panel_header.dart';
 import '../ui/theme.dart';
 import 'change_rows.dart';
 import 'change_set.dart';
@@ -493,10 +494,14 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     return Padding(
+      // The same gutter and top inset [FwPanelHeader] uses. Not the header
+      // itself: this one has a second mode where the summary *replaces* the
+      // title, and the component would restructure that for no visual change.
+      // Reading the constant is what keeps it from drifting anyway.
       padding: EdgeInsets.fromLTRB(
-        FwSpacing.xxl,
+        panelGutter,
         showTitle ? FwSpacing.xl : FwSpacing.lg,
-        FwSpacing.xxl,
+        panelGutter,
         FwSpacing.lg,
       ),
       child: Column(
@@ -550,7 +555,7 @@ class _Header extends StatelessWidget {
                 tooltip: 'Read this checkout again',
                 icon: Icon(
                   Icons.refresh,
-                  size: 18,
+                  size: FwIconSize.lg,
                   color: isLoading ? colors.mut3 : colors.mut,
                 ),
               ),
@@ -652,7 +657,11 @@ class _Watching extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (pinned)
-            Icon(Icons.push_pin_outlined, size: 11, color: colors.mut3)
+            Icon(
+              Icons.push_pin_outlined,
+              size: FwIconSize.xs,
+              color: colors.mut3,
+            )
           else
             Container(
               width: 6,
@@ -796,7 +805,11 @@ class _IndexPane extends StatelessWidget {
               isDense: true,
               hintText: 'Filter paths',
               hintStyle: context.type.bodySmall.copyWith(color: colors.mut3),
-              prefixIcon: Icon(Icons.search, size: 16, color: colors.mut3),
+              prefixIcon: Icon(
+                Icons.search,
+                size: FwIconSize.md,
+                color: colors.mut3,
+              ),
               prefixIconConstraints: const BoxConstraints(minWidth: 26),
               border: const OutlineInputBorder(),
               contentPadding: const EdgeInsets.symmetric(
@@ -1208,7 +1221,7 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
                 children: [
                   Icon(
                     _open ? Icons.expand_more : Icons.chevron_right,
-                    size: 14,
+                    size: FwIconSize.sm,
                     color: colors.mut3,
                   ),
                   Expanded(

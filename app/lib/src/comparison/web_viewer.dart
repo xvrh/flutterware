@@ -13,6 +13,7 @@ import 'shot_store_http.dart';
 import 'ui/previews_tab.dart';
 import 'ui/scenarios_tab.dart';
 import 'ui/state_chip.dart';
+import '../ui/loading_state.dart';
 
 /// The exported comparison page.
 ///
@@ -139,7 +140,9 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
     }
     var index = _index;
     if (index == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: LoadingState(title: 'Loading the comparison…'),
+      );
     }
 
     var tabs = [

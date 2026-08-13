@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'design/palette.dart';
-import 'design/tokens.dart';
+import '../utils/string/plural.dart';
 import 'tappable.dart';
+import 'design/design.dart';
 
 // Ported 2026-07-31 from the cms project's admin_ui
 // (packages/admin_ui/lib/src/common/ui/json_view.dart), onto this app's own
@@ -502,7 +502,11 @@ class _JsonViewState extends State<JsonView> {
           fillColor: colors.panel,
           hintText: 'Search',
           hintStyle: context.type.bodySmall.copyWith(color: colors.mut2),
-          prefixIcon: Icon(Icons.search_rounded, size: 15, color: colors.mut2),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            size: FwIconSize.md,
+            color: colors.mut2,
+          ),
           prefixIconConstraints: const BoxConstraints(
             minWidth: 28,
             minHeight: 28,
@@ -537,7 +541,7 @@ class _JsonViewState extends State<JsonView> {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 17, color: colors.mut),
+          child: Icon(icon, size: FwIconSize.lg, color: colors.mut),
         ),
       ),
     );
@@ -550,7 +554,11 @@ class _JsonViewState extends State<JsonView> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline_rounded, size: 16, color: colors.red),
+          Icon(
+            Icons.error_outline_rounded,
+            size: FwIconSize.md,
+            color: colors.red,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -576,14 +584,12 @@ class _JsonViewState extends State<JsonView> {
 
   String _rootSummary(JsonNode root) => switch (root.kind) {
     JsonNodeKind.object =>
-      '{ } ${root.childCount} ${_plural(root.childCount, 'key')}',
+      '{ } ${root.childCount} ${plural(root.childCount, 'key')}',
     JsonNodeKind.array =>
-      '[ ] ${root.childCount} ${_plural(root.childCount, 'item')}',
+      '[ ] ${root.childCount} ${plural(root.childCount, 'item')}',
     _ => root.kind.name,
   };
 }
-
-String _plural(int n, String word) => n == 1 ? word : '${word}s';
 
 /// Copies the pretty-printed document, with a moment of confirmation.
 class _CopyButton extends StatefulWidget {
@@ -615,7 +621,7 @@ class _CopyButtonState extends State<_CopyButton> {
           padding: const EdgeInsets.all(6),
           child: Icon(
             _copied ? Icons.check_rounded : Icons.copy_rounded,
-            size: 15,
+            size: FwIconSize.md,
             color: _copied ? colors.grn : colors.mut,
           ),
         ),
@@ -684,7 +690,7 @@ class _JsonRowView extends StatelessWidget {
       width: _indent,
       child: Icon(
         row.collapsed ? Icons.chevron_right_rounded : Icons.expand_more_rounded,
-        size: 16,
+        size: FwIconSize.md,
         color: context.colors.mut2,
       ),
     );
@@ -719,7 +725,7 @@ class _JsonRowView extends StatelessWidget {
         final unit = node.kind == JsonNodeKind.array ? 'item' : 'key';
         spans
           ..add(_span('$open ', colors.mut))
-          ..add(_span('$n ${_plural(n, unit)}', colors.mut3))
+          ..add(_span('$n ${plural(n, unit)}', colors.mut3))
           ..add(_span(' $close', colors.mut));
         if (!row.last) spans.add(_span(',', colors.mut));
       } else {

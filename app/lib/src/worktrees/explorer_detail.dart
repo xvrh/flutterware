@@ -208,7 +208,7 @@ class _MiniBar extends StatelessWidget {
           width: math.max(2, constraints.maxWidth * fraction.clamp(0, 1)),
           decoration: BoxDecoration(
             color: colors.mut2,
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(context.radii.micro),
           ),
         ),
       ),

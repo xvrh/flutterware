@@ -6,12 +6,14 @@ import 'package:flutterware/server.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../address/address_scope.dart';
-import '../../ui/design/tokens.dart';
 import '../../ui/json_view.dart';
 import '../../ui/tappable.dart';
 import '../native_plugin.dart';
 import 'server_address.dart';
 import 'server_core.dart';
+import '../../ui/design/design.dart';
+import '../../ui/loading_state.dart';
+import '../../ui/empty_state.dart';
 
 export 'server_core.dart' show ServerCore, serverPluginId;
 
@@ -199,7 +201,7 @@ class _ServerBar extends StatelessWidget {
                         : hovered
                         ? colors.hoverOverlay
                         : null,
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.circular(context.radii.pill),
                     border: Border.all(
                       color: selected ? colors.accentSoft2 : colors.line,
                     ),
@@ -315,7 +317,7 @@ class _EnvironmentChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(context.radii.micro),
       ),
       child: Text(
         environment,
@@ -363,8 +365,9 @@ class _SqlView extends StatelessWidget {
     var theme = Theme.of(context);
     var stats = sqlStats(server.events);
     if (stats.isEmpty) {
-      return Center(
-        child: Text('No queries recorded.', style: theme.textTheme.bodyMedium),
+      return const EmptyState(
+        icon: Icons.storage_outlined,
+        title: 'No queries recorded',
       );
     }
     var header = theme.textTheme.bodySmall!.copyWith(color: theme.hintColor);
@@ -499,11 +502,10 @@ class _QueryDetailState extends State<_QueryDetail> {
       widget.server.events,
     ).where((s) => s.key == widget.queryKey).firstOrNull;
     if (stats == null) {
-      return Center(
-        child: Text(
-          'This query shape is no longer in the recorded window.',
-          style: theme.textTheme.bodyMedium,
-        ),
+      return const EmptyState(
+        icon: Icons.history_toggle_off,
+        title: 'Outside the recorded window',
+        message: 'This query shape is no longer being kept.',
       );
     }
     var latestQuery = stats.latest.payload['query']! as String;
@@ -520,7 +522,7 @@ class _QueryDetailState extends State<_QueryDetail> {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.close, size: 18),
+              icon: const Icon(Icons.close, size: FwIconSize.lg),
               tooltip: 'Back to all queries',
               onPressed: () => AddressScope.write(
                 context,
@@ -621,7 +623,7 @@ class _OccurrenceRow extends StatelessWidget {
           ),
           if (request != null)
             IconButton(
-              icon: const Icon(Icons.north_east, size: 14),
+              icon: const Icon(Icons.north_east, size: FwIconSize.sm),
               tooltip:
                   '${request.payload['method']} ${request.payload['path']}',
               onPressed: () => AddressScope.write(context).setSegments(
@@ -655,11 +657,8 @@ class _RequestList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     if (requests.isEmpty) {
-      return Center(
-        child: Text('No requests yet.', style: theme.textTheme.bodyMedium),
-      );
+      return const EmptyState(icon: Icons.swap_vert, title: 'No requests yet');
     }
     return ListView.builder(
       itemCount: requests.length,
@@ -748,7 +747,7 @@ class _RequestRow extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: Colors.amber.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(context.radii.micro),
                   ),
                   child: Text(
                     'N+1',
@@ -822,7 +821,7 @@ class _RequestDetail extends StatelessWidget {
               const SizedBox(width: 8),
               _CopyAsCurlButton(server: server, request: request),
               IconButton(
-                icon: const Icon(Icons.close, size: 18),
+                icon: const Icon(Icons.close, size: FwIconSize.lg),
                 tooltip: 'Back to the request list',
                 onPressed: () => AddressScope.write(
                   context,
@@ -921,7 +920,7 @@ class _CopyAsCurlButton extends StatelessWidget {
           : 'Copy as curl — needs a published baseUrl '
                 '(FlutterwareServer.info)',
       child: IconButton(
-        icon: const Icon(Icons.terminal, size: 18),
+        icon: const Icon(Icons.terminal, size: FwIconSize.lg),
         onPressed: !enabled
             ? null
             : () async {
@@ -967,7 +966,7 @@ class _WaterfallTab extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.amber.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1027,11 +1026,9 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
     var theme = Theme.of(context);
     var mono = _mono(context);
     if (widget.queries.isEmpty) {
-      return Center(
-        child: Text(
-          'No queries in this request.',
-          style: theme.textTheme.bodyMedium,
-        ),
+      return const EmptyState(
+        icon: Icons.storage_outlined,
+        title: 'No queries in this request',
       );
     }
     return ListView(
@@ -1053,7 +1050,7 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
                     _expanded.contains(event.id)
                         ? Icons.expand_more
                         : Icons.chevron_right,
-                    size: 16,
+                    size: FwIconSize.md,
                     color: theme.hintColor,
                   ),
                   const SizedBox(width: 4),
@@ -1166,7 +1163,7 @@ class _CommandResult extends StatelessWidget {
         color: Theme.of(
           context,
         ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
       ),
       child: SelectableText('$result', style: _mono(context)),
     );
@@ -1196,20 +1193,18 @@ class _HttpMessageTab extends StatelessWidget {
       future: server.detailsFor(request),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
+          return const LoadingState(title: 'Reading the request…');
         }
         var details = snapshot.data;
         var headers = details?[response ? 'responseHeaders' : 'requestHeaders'];
         var body = details?[response ? 'responseBody' : 'requestBody'];
         if (details == null || headers is! Map) {
-          return Center(
-            child: Text(
-              'Not captured.\n'
-              'The middleware decides what to record — see the capturing '
-              'version in doc/server_inspection.md.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
-            ),
+          return const EmptyState(
+            icon: Icons.visibility_off_outlined,
+            title: 'Not captured',
+            message:
+                'The middleware decides what to record — see the capturing '
+                'version in doc/server_inspection.md.',
           );
         }
         return ListView(
@@ -1243,7 +1238,9 @@ class _HttpMessageTab extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surfaceContainerHighest
                           .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(
+                        context.radii.radiusSmall,
+                      ),
                     ),
                     child: SelectableText(body, style: mono),
                   ),
@@ -1261,14 +1258,11 @@ class _RequestLogsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     var mono = _mono(context);
     if (logs.isEmpty) {
-      return Center(
-        child: Text(
-          'No logs in this request.',
-          style: theme.textTheme.bodyMedium,
-        ),
+      return const EmptyState(
+        icon: Icons.article_outlined,
+        title: 'No logs in this request',
       );
     }
     return ListView(
@@ -1341,7 +1335,9 @@ class _Waterfall extends StatelessWidget {
                           height: 14,
                           decoration: BoxDecoration(
                             color: color,
-                            borderRadius: BorderRadius.circular(3),
+                            borderRadius: BorderRadius.circular(
+                              context.radii.micro,
+                            ),
                           ),
                         ),
                       ),
@@ -1629,7 +1625,7 @@ class _KindChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: Colors.teal.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(context.radii.micro),
       ),
       child: Text(
         kind,
@@ -1662,7 +1658,7 @@ class _SmallIconButton extends StatelessWidget {
           onTap: onTap,
           builder: (context, hovered) => Icon(
             icon,
-            size: 14,
+            size: FwIconSize.sm,
             color: hovered
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).hintColor,
@@ -1699,7 +1695,7 @@ class _NoInfoHint extends StatelessWidget {
               color: theme.colorScheme.surfaceContainerHighest.withValues(
                 alpha: 0.5,
               ),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
             ),
             child: SelectableText(
               'FlutterwareServer.info(ServerInfo(\n'
@@ -1723,13 +1719,10 @@ class _EventTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     if (events.isEmpty) {
-      return Center(
-        child: Text(
-          'Attached — waiting for events.',
-          style: theme.textTheme.bodyMedium,
-        ),
+      return const LoadingState(
+        title: 'Attached — waiting for events',
+        message: 'Anything this server reports will land here.',
       );
     }
     var reversed = events.reversed.toList();
@@ -1793,7 +1786,7 @@ class _ChannelChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(context.radii.micro),
       ),
       child: Text(
         event.channel,
@@ -1810,24 +1803,12 @@ class _EmptyHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'No servers are announcing themselves under this worktree.',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Report from one with package:flutterware/server.dart — an event,\n'
-            'a span or a handler is enough; it publishes on first use.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall,
-          ),
-        ],
-      ),
+    return const EmptyState(
+      icon: Icons.dns_outlined,
+      title: 'No servers are announcing themselves',
+      message:
+          'Report from one with package:flutterware/server.dart — an event, '
+          'a span or a handler is enough; it publishes on first use.',
     );
   }
 }

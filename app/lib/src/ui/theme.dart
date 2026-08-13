@@ -4,9 +4,6 @@ import 'package:flutterware/plugins.dart';
 
 import 'design/design.dart';
 
-// Re-exported so screens not yet migrated to tokens keep compiling. New code
-// should read `context.colors` / `context.type` instead of `AppColors`.
-export 'colors.dart';
 export 'design/design.dart';
 
 ThemeData? __theme;
@@ -44,7 +41,7 @@ ThemeData buildAppTheme(FwTokens tokens) {
 
   var textTheme = type.spec
       .applyFontTheme(base.textTheme)
-      .apply(displayColor: palette.textSteal, bodyColor: palette.textGrey);
+      .apply(displayColor: palette.ink, bodyColor: palette.mut);
 
   var inputBorder = OutlineInputBorder(
     borderRadius: BorderRadius.circular(radii.radius),
@@ -80,7 +77,7 @@ ThemeData buildAppTheme(FwTokens tokens) {
     scaffoldBackgroundColor: palette.scaffoldBackground,
     appBarTheme: base.appBarTheme.copyWith(
       backgroundColor: palette.scaffoldBackground,
-      foregroundColor: palette.textGrey,
+      foregroundColor: palette.mut,
       elevation: 0,
     ),
     tabBarTheme: base.tabBarTheme.copyWith(
@@ -113,7 +110,15 @@ ThemeData buildAppTheme(FwTokens tokens) {
       fillColor: palette.bg,
       hoverColor: palette.bg,
       hintStyle: TextStyle(color: palette.mut2),
-      contentPadding: const EdgeInsets.symmetric(vertical: 13, horizontal: 10),
+      // Sized to the app's own controls, not to Material's default. At the
+      // old `vertical: 13` a text field stood 42 tall next to a 33 picker and
+      // a 32 button — on the New run page the three sit in one column, and
+      // the field read as a different, heavier kind of control. The picker's
+      // own padding is the reference, so a field and a picker are one family.
+      contentPadding: const EdgeInsets.symmetric(
+        vertical: FwSpacing.md,
+        horizontal: FwSpacing.md,
+      ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(

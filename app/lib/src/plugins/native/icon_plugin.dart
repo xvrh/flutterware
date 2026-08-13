@@ -7,6 +7,7 @@ import '../../launcher_icon/screen.dart';
 import '../native_plugin.dart';
 import 'icon_address.dart';
 import 'icon_core.dart';
+import 'no_packages.dart';
 
 export 'icon_core.dart' show LauncherIconCore, launcherIconPluginId;
 
@@ -89,14 +90,7 @@ class _LauncherIconPanelState extends State<_LauncherIconPanel> {
   Widget build(BuildContext context) {
     var place = _place ?? _resolve();
     if (place == null) {
-      return Center(
-        child: Text(
-          'No packages configured for this plugin.\n'
-          'Add them in tool/flutterware.dart.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-      );
+      return const NoPackagesConfigured(icon: Icons.apps_outlined);
     }
 
     // Rebuilds when a scan lands: the core notifies, the plugin forwards.

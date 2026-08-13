@@ -236,7 +236,11 @@ class _Header extends StatelessWidget {
                 borderRadius: BorderRadius.circular(context.radii.radius),
                 child: Padding(
                   padding: const EdgeInsets.all(FwSpacing.xs),
-                  child: Icon(Icons.close, size: 16, color: colors.mut2),
+                  child: Icon(
+                    Icons.close,
+                    size: FwIconSize.md,
+                    color: colors.mut2,
+                  ),
                 ),
               ),
             ),
@@ -267,7 +271,7 @@ class _Origin extends StatelessWidget {
           children: [
             Icon(
               generated ? Icons.check_circle_outline : Icons.article_outlined,
-              size: 14,
+              size: FwIconSize.sm,
               color: generated ? colors.accent : colors.mut2,
             ),
             const Gap(FwSpacing.xs),
@@ -349,7 +353,7 @@ class _Swatch extends StatelessWidget {
     margin: const EdgeInsets.only(top: 2),
     decoration: BoxDecoration(
       color: Color(parseSplashColor(value) ?? 0xFF000000),
-      borderRadius: BorderRadius.circular(3),
+      borderRadius: BorderRadius.circular(context.radii.micro),
       border: Border.all(color: context.colors.line),
     ),
   );

@@ -6,12 +6,15 @@ import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import 'package:vm_service/vm_service.dart';
 
-import '../ui/design/tokens.dart';
 import '../ui/json_view.dart';
 import '../ui/tappable.dart';
 import 'connection.dart';
 import 'handle.dart';
 import 'network_tracker.dart';
+import '../ui/design/design.dart';
+import '../ui/loading_state.dart';
+import '../ui/error_state.dart';
+import '../ui/empty_state.dart';
 
 final _logger = Logger('run_network');
 
@@ -97,22 +100,12 @@ class _NetworkTabState extends State<NetworkTab> {
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
     var tracker = _tracker;
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const LoadingState(title: 'Reading the network log…');
     if (_error != null || tracker == null) {
-      return Center(
-        child: Text(
-          _error ?? 'Could not reach this app.',
-          style: theme.textTheme.bodyMedium,
-        ),
-      );
+      return ErrorState(title: 'Could not reach this app', message: _error);
     }
     if (tracker.broken) {
-      return Center(
-        child: Text(
-          'This app stopped answering.',
-          style: theme.textTheme.bodyMedium,
-        ),
-      );
+      return const ErrorState(title: 'This app stopped answering');
     }
     var requests = tracker.requests
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
@@ -123,11 +116,10 @@ class _NetworkTabState extends State<NetworkTab> {
       children: [
         Expanded(
           child: requests.isEmpty
-              ? Center(
-                  child: Text(
-                    'No requests yet.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
+              ? const EmptyState(
+                  icon: Icons.swap_vert,
+                  title: 'No requests yet',
+                  message: 'Anything the app fetches lands here.',
                 )
               : selected == null
               ? _RequestList(
@@ -377,7 +369,7 @@ class _RequestDetailState extends State<_RequestDetail> {
               const SizedBox(width: 8),
               _CopyAsCurlButton(detail: _detail),
               IconButton(
-                icon: const Icon(Icons.close, size: 18),
+                icon: const Icon(Icons.close, size: FwIconSize.lg),
                 tooltip: 'Back to the request list',
                 onPressed: widget.onClose,
               ),
@@ -420,15 +412,14 @@ class _RequestDetailState extends State<_RequestDetail> {
             future: _detail,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
+                return const LoadingState(title: 'Reading the request…');
               }
               var detail = snapshot.data;
               if (detail == null) {
-                return Center(
-                  child: Text(
-                    'No longer available — the app restarted.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
+                return const EmptyState(
+                  icon: Icons.history_toggle_off,
+                  title: 'No longer available',
+                  message: 'The app restarted, and this request went with it.',
                 );
               }
               return switch (_tab) {
@@ -511,7 +502,7 @@ class _HttpMessageTab extends StatelessWidget {
               color: theme.colorScheme.surfaceContainerHighest.withValues(
                 alpha: 0.5,
               ),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
             ),
             child: SelectableText(bodyText, style: mono),
           ),
@@ -533,9 +524,7 @@ class _TimingTab extends StatelessWidget {
     var theme = Theme.of(context);
     var events = detail.events;
     if (events.isEmpty) {
-      return Center(
-        child: Text('No timing events.', style: theme.textTheme.bodyMedium),
-      );
+      return const EmptyState(icon: Icons.timeline, title: 'No timing events');
     }
     var previous = detail.startTime;
     var rows = <(String, Duration)>[];
@@ -575,7 +564,7 @@ class _CopyAsCurlButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: const Icon(Icons.terminal, size: 18),
+      icon: const Icon(Icons.terminal, size: FwIconSize.lg),
       tooltip: 'Copy as curl',
       onPressed: () async {
         var resolved = await detail;

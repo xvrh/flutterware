@@ -155,7 +155,11 @@ class _SearchTriggerState extends State<SearchTrigger> {
           ),
           child: Row(
             children: [
-              Icon(Icons.search_rounded, size: 14, color: colors.mut2),
+              Icon(
+                Icons.search_rounded,
+                size: FwIconSize.sm,
+                color: colors.mut2,
+              ),
               const Gap(FwSpacing.sm),
               Expanded(
                 child: Text(

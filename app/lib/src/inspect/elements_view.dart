@@ -374,7 +374,7 @@ class _TreeRow extends StatelessWidget {
                         onTap: onToggle,
                         child: Icon(
                           open ? Icons.arrow_drop_down : Icons.arrow_right,
-                          size: 14,
+                          size: FwIconSize.sm,
                           color: colors.mut,
                         ),
                       ),

@@ -15,6 +15,7 @@ import 'artifacts_http.dart';
 import 'flow_view.dart';
 import 'step_page.dart';
 import 'web_report.dart';
+import '../ui/loading_state.dart';
 
 /// The exported scenario page.
 ///
@@ -134,7 +135,7 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
     }
     var report = _report;
     if (report == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: LoadingState(title: 'Loading the report…'));
     }
 
     var outcomes = report.outcomes.toList();
@@ -337,7 +338,7 @@ class _ScenarioList extends StatelessWidget {
               children: [
                 Icon(
                   outcome.ok ? Icons.check_circle_outline : Icons.error_outline,
-                  size: 14,
+                  size: FwIconSize.sm,
                   color: outcome.ok ? colors.grn : colors.red,
                 ),
                 const Gap(FwSpacing.sm),

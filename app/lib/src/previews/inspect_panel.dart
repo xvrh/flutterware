@@ -7,6 +7,7 @@ import '../inspect/semantics_node.dart';
 import '../inspect/semantics_view.dart';
 import '../ui/design/design.dart';
 import 'catalog_session.dart';
+import '../ui/empty_state.dart';
 
 /// The inspection panel: Chrome's shape, docked under the preview.
 ///
@@ -306,7 +307,11 @@ class _Problem extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.only(top: 2, right: FwSpacing.sm),
-                child: Icon(Icons.error_outline, size: 14, color: colors.red),
+                child: Icon(
+                  Icons.error_outline,
+                  size: FwIconSize.sm,
+                  color: colors.red,
+                ),
               ),
               Expanded(
                 child: SelectableText(
@@ -414,16 +419,10 @@ class _ConsoleState extends State<_Console> {
               valueListenable: widget.session.guestLogs,
               builder: (context, lines, _) {
                 if (lines.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(FwSpacing.lg),
-                      child: Text(
-                        'Nothing printed yet. '
-                        'Anything this demo prints shows up here.',
-                        textAlign: TextAlign.center,
-                        style: context.type.caption.copyWith(color: colors.mut),
-                      ),
-                    ),
+                  return const EmptyState(
+                    icon: Icons.terminal,
+                    title: 'Nothing printed yet',
+                    message: 'Anything this demo prints shows up here.',
                   );
                 }
                 var dropped = widget.session.logsDropped;

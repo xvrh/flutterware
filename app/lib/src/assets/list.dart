@@ -130,7 +130,7 @@ class _AssetListViewState extends State<AssetListView> {
           detail: formatBytes(owner.bytes),
           leading: Icon(
             open ? Icons.expand_more : Icons.chevron_right,
-            size: 14,
+            size: FwIconSize.sm,
             color: context.colors.mut,
           ),
         ),
@@ -162,13 +162,13 @@ class _AssetListViewState extends State<AssetListView> {
             decoration: InputDecoration(
               isDense: true,
               hintText: 'Filter by key',
-              prefixIcon: const Icon(Icons.search, size: 16),
+              prefixIcon: const Icon(Icons.search, size: FwIconSize.md),
               prefixIconConstraints: const BoxConstraints(minWidth: 32),
               suffixIcon: _search.text.isEmpty
                   ? null
                   : IconButton(
                       padding: EdgeInsets.zero,
-                      iconSize: 14,
+                      iconSize: FwIconSize.sm,
                       onPressed: () => setState(_search.clear),
                       icon: const Icon(Icons.clear),
                     ),
@@ -336,7 +336,11 @@ class _ProblemRow extends StatelessWidget {
       child: Row(
         spacing: FwSpacing.md,
         children: [
-          Icon(Icons.warning_amber_rounded, size: 15, color: colors.amber),
+          Icon(
+            Icons.warning_amber_rounded,
+            size: FwIconSize.md,
+            color: colors.amber,
+          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
