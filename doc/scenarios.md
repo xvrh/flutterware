@@ -256,4 +256,7 @@ flutter test --dart-define=screenshots-destination=build/shots
 ```
 
 (`SCREENSHOTS_DESTINATION` works too.) Files land under
-`<destination>/<assignment>/<scenario>/<index>-<name>.png`.
+`<destination>/<assignment>/<file>/<scenario>/<index>-<name>.png` — the file
+the scenario was declared in, flattened (`test_scenarios_shop_test.dart`), as
+the runner spells it. A scenario name is unique per file, not per suite, so
+without it two files naming the same screen write over each other.

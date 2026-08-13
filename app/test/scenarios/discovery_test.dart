@@ -68,7 +68,7 @@ void main() {
     expect(result.diagnostics.single, contains('not a string literal'));
   });
 
-  test('reports duplicate names across files', () {
+  test('a name repeated across files is not a duplicate', () {
     write(
       'test/scenarios/a_test.dart',
       "void main() => scenario('Same', (s) async {});",
@@ -79,7 +79,29 @@ void main() {
     );
     var result = ScenarioScanner(packageRoot: root.path).scan();
     expect(result.scenarios, hasLength(2));
-    expect(result.diagnostics.single, contains('declared 2 times'));
+    // The file is in the address, in `run --scenario=`'s required company and
+    // in the artifact path — nothing here has to choose between them.
+    expect(result.diagnostics, isEmpty);
+  });
+
+  test('reports duplicate names within one file', () {
+    write('test/scenarios/a_test.dart', '''
+void main() {
+  scenario('Same', (s) async {});
+  scenario('Other', (s) async {});
+  scenario('Same', (s) async {});
+}
+''');
+    var result = ScenarioScanner(packageRoot: root.path).scan();
+    expect(result.scenarios, hasLength(3));
+    expect(
+      result.diagnostics.single,
+      allOf(
+        contains('test/scenarios/a_test.dart'),
+        contains('"Same" is declared 2 times'),
+        contains('lines 2, 4'),
+      ),
+    );
   });
 
   test('honours a configured directory', () {
