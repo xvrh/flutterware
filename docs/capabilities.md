@@ -383,12 +383,218 @@ note: String?
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; the only one when there is one |
 
+#### `permissions` — Permissions
+
+What each package **declares** — the permissions in its AndroidManifest, the usage descriptions in its Info.plist, a Mac app's entitlements — grouped so one capability is one row across platforms, with what disagrees called out: background location with no foreground location, an always-on location key with no when-in-use key, a usage description left blank, a capability declared on one platform and not the other. Needs no device, no run and no build, because these are checked-in files. After a build it also reads the merged manifest, which is the only place a dependency's permissions appear — so the list grows once, and says which one it is showing.
+
+Pass `device` to add what the **OS currently holds** for the app on it — granted, denied, denied-forever or undetermined — read from `dumpsys package` on Android and from the simulator's own TCC database on iOS. Read-only. A device that cannot answer says why rather than reporting an empty list: macOS has no readable store, and iOS location lives outside the one this reads.
+
+```sh
+fw run run permissions [--package=…] [--device=…]
+```
+
+Returns `RunPermissionsResult`:
+
+```
+packages: List<RunPermissionPackage>
+  path: String
+  platforms: List<String>   # Which platform directories this package actually has — `android`, `ios`, `macos`.
+  rows: List<RunPermissionRow>
+    capability: String   # `camera` — or the raw identifier, when nothing in the catalogue claims it.
+    label: String
+    platforms: List<String>   # Which platforms declare this capability.
+    declarations: List<RunPermissionDeclaration>
+      identifier: String   # `android.permission.CAMERA`, `NSCameraUsageDescription`, or an entitlement key — what you would actually type to act on this.
+      platform: String
+      source: String   # Package-relative path of the file it was read from.
+      usage: String?   # The Apple usage description verbatim; absent on Android.
+      maxSdkVersion: String?
+      fromDependency: bool   # True when only the merged manifest has it — a dependency asked for this.
+    known: bool   # False when this is reported under its raw identifier because nothing named it — `INTERNET` and Flutter's own generated receiver permission are the standing examples.
+    held: String?   # What the OS holds: `granted`, `denied`, `deniedForever`, `undetermined` or `unknown`.
+    observed: String?   # What the **app itself** believes, when it wired a `PermissionAdapter`.
+  findings: List<RunPermissionFinding>   # What disagrees.
+    id: String
+    severity: String   # `problem`, `warning` or `note`.
+    message: String   # Written to be read alone, because it travels to `fw` and MCP where there is no row beside it.
+    capability: String?
+    platform: String?
+  sources: List<String>   # The files actually read, package-relative.
+  merged: bool   # True when an Android merged manifest was read, so dependencies' permissions are included.
+  device: String?   # The device the `held` column was read from, when one was asked for.
+  appId: String?   # The application id the host-side read used — **not** the Dart package name.
+  appIdSource: String?   # Where [appId] came from: the merged manifest, a Gradle guess, the Xcode project.
+  heldUnavailable: String?   # Why there is no held state, when a device was asked and could not answer.
+  heldNotes: List<String>   # Why particular rows read `unknown` on this device — iOS location and notifications live outside the store this reads.
+  note: String?
+note: String?   # Said out loud when there is nothing to report, rather than left for the caller to infer from an empty array.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the only one when there is one |
+| `device` | string | no | — | A device id from `devices` — an Android serial, or a booted simulator's UDID. Omit for the declared list alone, which needs no device at all. |
+
+#### `permissionSet` — Set a permission
+
+Puts one capability into a state on a device: `granted`, `denied`, `deniedForever` or `undetermined`. **Answers with the state after the write, read back from the device** — never the request echoed, because `pm grant` of a permission the app never declared exits 0, prints nothing and grants nothing. A write that did not land says so.
+
+Android composes this from `pm grant`/`revoke` plus the permission flags, since revoke alone cannot express the difference between denied and never-asked. **A revoke kills the app and ends any `flutter run` attached to it** — measured. iOS has no separate denied-forever and says so rather than silently downgrading.
+
+```sh
+fw run run permissionSet [--package=…] --device=<string> --permission=<string> --value=<choice>
+```
+
+Returns `RunPermissionsResult`:
+
+```
+packages: List<RunPermissionPackage>
+  path: String
+  platforms: List<String>   # Which platform directories this package actually has — `android`, `ios`, `macos`.
+  rows: List<RunPermissionRow>
+    capability: String   # `camera` — or the raw identifier, when nothing in the catalogue claims it.
+    label: String
+    platforms: List<String>   # Which platforms declare this capability.
+    declarations: List<RunPermissionDeclaration>
+      identifier: String   # `android.permission.CAMERA`, `NSCameraUsageDescription`, or an entitlement key — what you would actually type to act on this.
+      platform: String
+      source: String   # Package-relative path of the file it was read from.
+      usage: String?   # The Apple usage description verbatim; absent on Android.
+      maxSdkVersion: String?
+      fromDependency: bool   # True when only the merged manifest has it — a dependency asked for this.
+    known: bool   # False when this is reported under its raw identifier because nothing named it — `INTERNET` and Flutter's own generated receiver permission are the standing examples.
+    held: String?   # What the OS holds: `granted`, `denied`, `deniedForever`, `undetermined` or `unknown`.
+    observed: String?   # What the **app itself** believes, when it wired a `PermissionAdapter`.
+  findings: List<RunPermissionFinding>   # What disagrees.
+    id: String
+    severity: String   # `problem`, `warning` or `note`.
+    message: String   # Written to be read alone, because it travels to `fw` and MCP where there is no row beside it.
+    capability: String?
+    platform: String?
+  sources: List<String>   # The files actually read, package-relative.
+  merged: bool   # True when an Android merged manifest was read, so dependencies' permissions are included.
+  device: String?   # The device the `held` column was read from, when one was asked for.
+  appId: String?   # The application id the host-side read used — **not** the Dart package name.
+  appIdSource: String?   # Where [appId] came from: the merged manifest, a Gradle guess, the Xcode project.
+  heldUnavailable: String?   # Why there is no held state, when a device was asked and could not answer.
+  heldNotes: List<String>   # Why particular rows read `unknown` on this device — iOS location and notifications live outside the store this reads.
+  note: String?
+note: String?   # Said out loud when there is nothing to report, rather than left for the caller to infer from an empty array.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the only one when there is one |
+| `device` | string | yes | — | The device to write to |
+| `permission` | string | yes | — | A capability id as `permissions` reports it — `camera`, `location`, `notifications` |
+| `value` | choice | yes | — | The state to put it in |
+
+#### `permissionProfile` — Apply a permission profile
+
+Puts **every permission the app declares** into one state, and answers with the read-back. `first-run` is the one worth having: everything undetermined, so the app prompts as it does for a new user — the state that otherwise means uninstalling or tapping through Settings.
+
+Composed per permission rather than delegated to `pm reset-permissions`, which takes no package argument and would reset every app on the device.
+
+```sh
+fw run run permissionProfile [--package=…] --device=<string> --profile=<choice>
+```
+
+Returns `RunPermissionsResult`:
+
+```
+packages: List<RunPermissionPackage>
+  path: String
+  platforms: List<String>   # Which platform directories this package actually has — `android`, `ios`, `macos`.
+  rows: List<RunPermissionRow>
+    capability: String   # `camera` — or the raw identifier, when nothing in the catalogue claims it.
+    label: String
+    platforms: List<String>   # Which platforms declare this capability.
+    declarations: List<RunPermissionDeclaration>
+      identifier: String   # `android.permission.CAMERA`, `NSCameraUsageDescription`, or an entitlement key — what you would actually type to act on this.
+      platform: String
+      source: String   # Package-relative path of the file it was read from.
+      usage: String?   # The Apple usage description verbatim; absent on Android.
+      maxSdkVersion: String?
+      fromDependency: bool   # True when only the merged manifest has it — a dependency asked for this.
+    known: bool   # False when this is reported under its raw identifier because nothing named it — `INTERNET` and Flutter's own generated receiver permission are the standing examples.
+    held: String?   # What the OS holds: `granted`, `denied`, `deniedForever`, `undetermined` or `unknown`.
+    observed: String?   # What the **app itself** believes, when it wired a `PermissionAdapter`.
+  findings: List<RunPermissionFinding>   # What disagrees.
+    id: String
+    severity: String   # `problem`, `warning` or `note`.
+    message: String   # Written to be read alone, because it travels to `fw` and MCP where there is no row beside it.
+    capability: String?
+    platform: String?
+  sources: List<String>   # The files actually read, package-relative.
+  merged: bool   # True when an Android merged manifest was read, so dependencies' permissions are included.
+  device: String?   # The device the `held` column was read from, when one was asked for.
+  appId: String?   # The application id the host-side read used — **not** the Dart package name.
+  appIdSource: String?   # Where [appId] came from: the merged manifest, a Gradle guess, the Xcode project.
+  heldUnavailable: String?   # Why there is no held state, when a device was asked and could not answer.
+  heldNotes: List<String>   # Why particular rows read `unknown` on this device — iOS location and notifications live outside the store this reads.
+  note: String?
+note: String?   # Said out loud when there is nothing to report, rather than left for the caller to infer from an empty array.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the only one when there is one |
+| `device` | string | yes | — | The device to write to |
+| `profile` | choice | yes | — | Which set of states to apply |
+
+#### `permissionMatrix` — Compare permission profiles
+
+Runs the app once per permission profile and photographs the same screen from each — the answer to "what does this look like to a user who said no". Every cell carries what the OS held after the profile was applied, what the app itself reported, the screenshot, and the texts that appeared in it and not in the first cell.
+
+**Each cell is a relaunch, and this is minutes rather than seconds.** Permission state is read at process start and a revoke kills the app anyway, so there is no cheaper way to see it. The first failed launch stops the run: a build that cannot compile will not compile three more times.
+
+Pass `route` to drive each launch somewhere before the picture is taken — the first screen of an app is usually not where a permission is read, and a matrix of four identical screenshots says so rather than pretending.
+
+```sh
+fw run run permissionMatrix [--package=…] --device=<choice> [--entrypoint=…] [--profiles=…] [--route=…] [--flavor=…] [--knobs=…] [--dartDefines=…] [--timeout=…]
+```
+
+Returns `RunPermissionMatrixResult`:
+
+```
+device: String
+package: String
+entrypoint: String
+route: String?   # The route each cell was driven to before it was photographed, when one was asked for.
+cells: List<RunPermissionMatrixCell>   # In the order they were run — which is the caller's order, not the enum's.
+  profile: String   # The profile id — `first-run`, `granted`.
+  label: String
+  ok: bool   # The launch came up and the screen was observed.
+  held: Map<String, String>   # What the OS held after the profile was applied, capability → state.
+  observed: Map<String, String>   # What the app itself reported, for an app with a `PermissionAdapter` wired.
+  screenshot: String?   # Where this cell's PNG was written — the run's journal directory, so the cell is also a step somebody can scrub back to.
+  texts: List<String>?   # Every text on screen after the settle.
+  added: List<String>   # Texts this cell had and the **first** cell did not.
+  error: String?
+  note: String?   # Anything the platform could not do for this cell — a state iOS does not have, a capability with nothing behind it.
+  ms: int?   # Apply, launch, drive and observe, together.
+note: String?   # What the grid cannot show: a run cut short, a wish that will undo the last cell, every screen having come out identical.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the only one when there is one |
+| `device` | choice | yes | — | Which device to run the whole matrix on |
+| `entrypoint` | choice | no | — | Package-relative path, as `entrypoints` reports it. The package's only entry point when omitted. |
+| `profiles` | string | no | — | Which profiles to run, comma-separated — `first-run,granted`. All of them when omitted, in the order given when not: the first one is what the others are compared against. An unknown name is refused rather than skipped.
+Declared: first-run, granted, denied, denied-forever. |
+| `route` | string | no | — | A route to drive each launch to before it is photographed, as the app's navigation handler understands it. Without one every cell shows the first screen. |
+| `flavor` | string | no | — | The `--flavor` to build every cell with. Defaults to what the entry point declares. |
+| `knobs` | string | no | — | The values every cell passes its entry point, `name=value,name=value` or a JSON object. The same for all of them — this varies permissions, nothing else. |
+| `dartDefines` | string | no | — | The `--dart-define`s every cell is built with, same escape hatch and same caveats as on `launch`. |
+| `timeout` | integer | no | 300 | Seconds to wait for each launch |
+
 #### `launch` — Launch
 
 Builds an entry point and runs it on a device. The launcher is detached and its output goes to a log file, so this can return while the app keeps running. A cold build is slow — about ten seconds warm on Android and a minute and a half cold — and on a wireless device it can stall on an OS permission dialog that nobody is looking at.
 
 ```sh
-fw run run launch --device=<choice> [--package=…] [--entrypoint=…] [--flavor=…] [--dartDefines=…] [--knobs=…] [--wait=…] [--timeout=…]
+fw run run launch --device=<choice> [--package=…] [--entrypoint=…] [--flavor=…] [--dartDefines=…] [--knobs=…] [--wait=…] [--timeout=…] [--permissions=…]
 ```
 
 Returns `RunLaunchResult`:
@@ -429,6 +635,7 @@ note: String?
 | `knobs` | string | no | — | Values to pass the entry point, `name=value,name=value` or a JSON object. These are the optional named parameters of its `main`, so `entrypoints` lists them with each one's type, default and options. Passed as arguments in the generated wrapper rather than compiled in, so changing one costs a hot restart instead of a rebuild — which is what makes a knob the right home for a value you switch while working, and a define the right home for one that differs per shipped artifact. |
 | `wait` | boolean | no | true | Wait for the app to come up before answering. Off returns as soon as the launcher is spawned, and `apps` is how you find out how it went. |
 | `timeout` | integer | no | 300 | Seconds to wait. A timeout is not a failure — the build carries on and the answer says how far it got. |
+| `permissions` | choice | no | — | A permission profile to put the app in **before it starts** — the robust point, since nothing is running yet and an app that asks on its first frame gets what you asked for. Sticky: it applies to every later launch until you clear it with an empty value, and each launch says so. Needs the app installed once first on Android; on the iOS simulator it works even before the first install. |
 
 #### `reload` — Hot reload
 

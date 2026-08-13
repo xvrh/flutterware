@@ -3985,6 +3985,652 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),
+  'RunPermissionDeclaration': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunPermissionDeclaration',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'identifier',
+        'type': 'String',
+        'doc':
+            '`android.permission.CAMERA`, `NSCameraUsageDescription`, or an entitlement key — what you would actually type to act on this.',
+      },
+      <String, Object?>{'name': 'platform', 'type': 'String'},
+      <String, Object?>{
+        'name': 'source',
+        'type': 'String',
+        'doc': 'Package-relative path of the file it was read from.',
+      },
+      <String, Object?>{
+        'name': 'usage',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The Apple usage description verbatim; absent on Android.',
+      },
+      <String, Object?>{
+        'name': 'maxSdkVersion',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'fromDependency',
+        'type': 'bool',
+        'doc':
+            'True when only the merged manifest has it — a dependency asked for this.',
+      },
+    ],
+  }),
+  'RunPermissionFinding': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunPermissionFinding',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'id', 'type': 'String'},
+      <String, Object?>{
+        'name': 'severity',
+        'type': 'String',
+        'doc': '`problem`, `warning` or `note`.',
+      },
+      <String, Object?>{
+        'name': 'message',
+        'type': 'String',
+        'doc':
+            'Written to be read alone, because it travels to `fw` and MCP where there is no row beside it.',
+      },
+      <String, Object?>{
+        'name': 'capability',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{'name': 'platform', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunPermissionMatrixCell': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunPermissionMatrixCell',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'profile',
+        'type': 'String',
+        'doc': 'The profile id — `first-run`, `granted`.',
+      },
+      <String, Object?>{'name': 'label', 'type': 'String'},
+      <String, Object?>{
+        'name': 'ok',
+        'type': 'bool',
+        'doc': 'The launch came up and the screen was observed.',
+      },
+      <String, Object?>{
+        'name': 'held',
+        'type': 'Map<String, String>',
+        'doc':
+            'What the OS held after the profile was applied, capability → state.',
+      },
+      <String, Object?>{
+        'name': 'observed',
+        'type': 'Map<String, String>',
+        'doc':
+            'What the app itself reported, for an app with a `PermissionAdapter` wired.',
+      },
+      <String, Object?>{
+        'name': 'screenshot',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Where this cell\'s PNG was written — the run\'s journal directory, so the cell is also a step somebody can scrub back to.',
+      },
+      <String, Object?>{
+        'name': 'texts',
+        'type': 'List<String>',
+        'optional': true,
+        'doc': 'Every text on screen after the settle.',
+      },
+      <String, Object?>{
+        'name': 'added',
+        'type': 'List<String>',
+        'doc': 'Texts this cell had and the **first** cell did not.',
+      },
+      <String, Object?>{'name': 'error', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'note',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Anything the platform could not do for this cell — a state iOS does not have, a capability with nothing behind it.',
+      },
+      <String, Object?>{
+        'name': 'ms',
+        'type': 'int',
+        'optional': true,
+        'doc': 'Apply, launch, drive and observe, together.',
+      },
+    ],
+  }),
+  'RunPermissionMatrixResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunPermissionMatrixResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'route',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The route each cell was driven to before it was photographed, when one was asked for.',
+      },
+      <String, Object?>{
+        'name': 'cells',
+        'type': 'List<RunPermissionMatrixCell>',
+        'doc':
+            'In the order they were run — which is the caller\'s order, not the enum\'s.',
+        'shape': <String, Object?>{
+          'type': 'RunPermissionMatrixCell',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'profile',
+              'type': 'String',
+              'doc': 'The profile id — `first-run`, `granted`.',
+            },
+            <String, Object?>{'name': 'label', 'type': 'String'},
+            <String, Object?>{
+              'name': 'ok',
+              'type': 'bool',
+              'doc': 'The launch came up and the screen was observed.',
+            },
+            <String, Object?>{
+              'name': 'held',
+              'type': 'Map<String, String>',
+              'doc':
+                  'What the OS held after the profile was applied, capability → state.',
+            },
+            <String, Object?>{
+              'name': 'observed',
+              'type': 'Map<String, String>',
+              'doc':
+                  'What the app itself reported, for an app with a `PermissionAdapter` wired.',
+            },
+            <String, Object?>{
+              'name': 'screenshot',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Where this cell\'s PNG was written — the run\'s journal directory, so the cell is also a step somebody can scrub back to.',
+            },
+            <String, Object?>{
+              'name': 'texts',
+              'type': 'List<String>',
+              'optional': true,
+              'doc': 'Every text on screen after the settle.',
+            },
+            <String, Object?>{
+              'name': 'added',
+              'type': 'List<String>',
+              'doc': 'Texts this cell had and the **first** cell did not.',
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'note',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Anything the platform could not do for this cell — a state iOS does not have, a capability with nothing behind it.',
+            },
+            <String, Object?>{
+              'name': 'ms',
+              'type': 'int',
+              'optional': true,
+              'doc': 'Apply, launch, drive and observe, together.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'note',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What the grid cannot show: a run cut short, a wish that will undo the last cell, every screen having come out identical.',
+      },
+    ],
+  }),
+  'RunPermissionPackage': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunPermissionPackage',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'path', 'type': 'String'},
+      <String, Object?>{
+        'name': 'platforms',
+        'type': 'List<String>',
+        'doc':
+            'Which platform directories this package actually has — `android`, `ios`, `macos`.',
+      },
+      <String, Object?>{
+        'name': 'rows',
+        'type': 'List<RunPermissionRow>',
+        'shape': <String, Object?>{
+          'type': 'RunPermissionRow',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'capability',
+              'type': 'String',
+              'doc':
+                  '`camera` — or the raw identifier, when nothing in the catalogue claims it.',
+            },
+            <String, Object?>{'name': 'label', 'type': 'String'},
+            <String, Object?>{
+              'name': 'platforms',
+              'type': 'List<String>',
+              'doc': 'Which platforms declare this capability.',
+            },
+            <String, Object?>{
+              'name': 'declarations',
+              'type': 'List<RunPermissionDeclaration>',
+              'shape': <String, Object?>{
+                'type': 'RunPermissionDeclaration',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'identifier',
+                    'type': 'String',
+                    'doc':
+                        '`android.permission.CAMERA`, `NSCameraUsageDescription`, or an entitlement key — what you would actually type to act on this.',
+                  },
+                  <String, Object?>{'name': 'platform', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'source',
+                    'type': 'String',
+                    'doc':
+                        'Package-relative path of the file it was read from.',
+                  },
+                  <String, Object?>{
+                    'name': 'usage',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The Apple usage description verbatim; absent on Android.',
+                  },
+                  <String, Object?>{
+                    'name': 'maxSdkVersion',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'fromDependency',
+                    'type': 'bool',
+                    'doc':
+                        'True when only the merged manifest has it — a dependency asked for this.',
+                  },
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'known',
+              'type': 'bool',
+              'doc':
+                  'False when this is reported under its raw identifier because nothing named it — `INTERNET` and Flutter\'s own generated receiver permission are the standing examples.',
+            },
+            <String, Object?>{
+              'name': 'held',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'What the OS holds: `granted`, `denied`, `deniedForever`, `undetermined` or `unknown`.',
+            },
+            <String, Object?>{
+              'name': 'observed',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'What the **app itself** believes, when it wired a `PermissionAdapter`.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'findings',
+        'type': 'List<RunPermissionFinding>',
+        'doc': 'What disagrees.',
+        'shape': <String, Object?>{
+          'type': 'RunPermissionFinding',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'id', 'type': 'String'},
+            <String, Object?>{
+              'name': 'severity',
+              'type': 'String',
+              'doc': '`problem`, `warning` or `note`.',
+            },
+            <String, Object?>{
+              'name': 'message',
+              'type': 'String',
+              'doc':
+                  'Written to be read alone, because it travels to `fw` and MCP where there is no row beside it.',
+            },
+            <String, Object?>{
+              'name': 'capability',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'platform',
+              'type': 'String',
+              'optional': true,
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'sources',
+        'type': 'List<String>',
+        'doc': 'The files actually read, package-relative.',
+      },
+      <String, Object?>{
+        'name': 'merged',
+        'type': 'bool',
+        'doc':
+            'True when an Android merged manifest was read, so dependencies\' permissions are included.',
+      },
+      <String, Object?>{
+        'name': 'device',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The device the `held` column was read from, when one was asked for.',
+      },
+      <String, Object?>{
+        'name': 'appId',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The application id the host-side read used — **not** the Dart package name.',
+      },
+      <String, Object?>{
+        'name': 'appIdSource',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Where [appId] came from: the merged manifest, a Gradle guess, the Xcode project.',
+      },
+      <String, Object?>{
+        'name': 'heldUnavailable',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Why there is no held state, when a device was asked and could not answer.',
+      },
+      <String, Object?>{
+        'name': 'heldNotes',
+        'type': 'List<String>',
+        'doc':
+            'Why particular rows read `unknown` on this device — iOS location and notifications live outside the store this reads.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunPermissionRow': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunPermissionRow',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'capability',
+        'type': 'String',
+        'doc':
+            '`camera` — or the raw identifier, when nothing in the catalogue claims it.',
+      },
+      <String, Object?>{'name': 'label', 'type': 'String'},
+      <String, Object?>{
+        'name': 'platforms',
+        'type': 'List<String>',
+        'doc': 'Which platforms declare this capability.',
+      },
+      <String, Object?>{
+        'name': 'declarations',
+        'type': 'List<RunPermissionDeclaration>',
+        'shape': <String, Object?>{
+          'type': 'RunPermissionDeclaration',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'identifier',
+              'type': 'String',
+              'doc':
+                  '`android.permission.CAMERA`, `NSCameraUsageDescription`, or an entitlement key — what you would actually type to act on this.',
+            },
+            <String, Object?>{'name': 'platform', 'type': 'String'},
+            <String, Object?>{
+              'name': 'source',
+              'type': 'String',
+              'doc': 'Package-relative path of the file it was read from.',
+            },
+            <String, Object?>{
+              'name': 'usage',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The Apple usage description verbatim; absent on Android.',
+            },
+            <String, Object?>{
+              'name': 'maxSdkVersion',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'fromDependency',
+              'type': 'bool',
+              'doc':
+                  'True when only the merged manifest has it — a dependency asked for this.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'known',
+        'type': 'bool',
+        'doc':
+            'False when this is reported under its raw identifier because nothing named it — `INTERNET` and Flutter\'s own generated receiver permission are the standing examples.',
+      },
+      <String, Object?>{
+        'name': 'held',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What the OS holds: `granted`, `denied`, `deniedForever`, `undetermined` or `unknown`.',
+      },
+      <String, Object?>{
+        'name': 'observed',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What the **app itself** believes, when it wired a `PermissionAdapter`.',
+      },
+    ],
+  }),
+  'RunPermissionsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunPermissionsResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'packages',
+        'type': 'List<RunPermissionPackage>',
+        'shape': <String, Object?>{
+          'type': 'RunPermissionPackage',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'path', 'type': 'String'},
+            <String, Object?>{
+              'name': 'platforms',
+              'type': 'List<String>',
+              'doc':
+                  'Which platform directories this package actually has — `android`, `ios`, `macos`.',
+            },
+            <String, Object?>{
+              'name': 'rows',
+              'type': 'List<RunPermissionRow>',
+              'shape': <String, Object?>{
+                'type': 'RunPermissionRow',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'capability',
+                    'type': 'String',
+                    'doc':
+                        '`camera` — or the raw identifier, when nothing in the catalogue claims it.',
+                  },
+                  <String, Object?>{'name': 'label', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'platforms',
+                    'type': 'List<String>',
+                    'doc': 'Which platforms declare this capability.',
+                  },
+                  <String, Object?>{
+                    'name': 'declarations',
+                    'type': 'List<RunPermissionDeclaration>',
+                    'shape': <String, Object?>{
+                      'type': 'RunPermissionDeclaration',
+                      'fields': <Object?>[
+                        <String, Object?>{
+                          'name': 'identifier',
+                          'type': 'String',
+                          'doc':
+                              '`android.permission.CAMERA`, `NSCameraUsageDescription`, or an entitlement key — what you would actually type to act on this.',
+                        },
+                        <String, Object?>{'name': 'platform', 'type': 'String'},
+                        <String, Object?>{
+                          'name': 'source',
+                          'type': 'String',
+                          'doc':
+                              'Package-relative path of the file it was read from.',
+                        },
+                        <String, Object?>{
+                          'name': 'usage',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The Apple usage description verbatim; absent on Android.',
+                        },
+                        <String, Object?>{
+                          'name': 'maxSdkVersion',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'fromDependency',
+                          'type': 'bool',
+                          'doc':
+                              'True when only the merged manifest has it — a dependency asked for this.',
+                        },
+                      ],
+                    },
+                  },
+                  <String, Object?>{
+                    'name': 'known',
+                    'type': 'bool',
+                    'doc':
+                        'False when this is reported under its raw identifier because nothing named it — `INTERNET` and Flutter\'s own generated receiver permission are the standing examples.',
+                  },
+                  <String, Object?>{
+                    'name': 'held',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'What the OS holds: `granted`, `denied`, `deniedForever`, `undetermined` or `unknown`.',
+                  },
+                  <String, Object?>{
+                    'name': 'observed',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'What the **app itself** believes, when it wired a `PermissionAdapter`.',
+                  },
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'findings',
+              'type': 'List<RunPermissionFinding>',
+              'doc': 'What disagrees.',
+              'shape': <String, Object?>{
+                'type': 'RunPermissionFinding',
+                'fields': <Object?>[
+                  <String, Object?>{'name': 'id', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'severity',
+                    'type': 'String',
+                    'doc': '`problem`, `warning` or `note`.',
+                  },
+                  <String, Object?>{
+                    'name': 'message',
+                    'type': 'String',
+                    'doc':
+                        'Written to be read alone, because it travels to `fw` and MCP where there is no row beside it.',
+                  },
+                  <String, Object?>{
+                    'name': 'capability',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'platform',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'sources',
+              'type': 'List<String>',
+              'doc': 'The files actually read, package-relative.',
+            },
+            <String, Object?>{
+              'name': 'merged',
+              'type': 'bool',
+              'doc':
+                  'True when an Android merged manifest was read, so dependencies\' permissions are included.',
+            },
+            <String, Object?>{
+              'name': 'device',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The device the `held` column was read from, when one was asked for.',
+            },
+            <String, Object?>{
+              'name': 'appId',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The application id the host-side read used — **not** the Dart package name.',
+            },
+            <String, Object?>{
+              'name': 'appIdSource',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Where [appId] came from: the merged manifest, a Gradle guess, the Xcode project.',
+            },
+            <String, Object?>{
+              'name': 'heldUnavailable',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Why there is no held state, when a device was asked and could not answer.',
+            },
+            <String, Object?>{
+              'name': 'heldNotes',
+              'type': 'List<String>',
+              'doc':
+                  'Why particular rows read `unknown` on this device — iOS location and notifications live outside the store this reads.',
+            },
+            <String, Object?>{
+              'name': 'note',
+              'type': 'String',
+              'optional': true,
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'note',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Said out loud when there is nothing to report, rather than left for the caller to infer from an empty array.',
+      },
+    ],
+  }),
   'ScenarioListEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioListEntry',
     'fields': <Object?>[
