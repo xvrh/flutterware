@@ -130,9 +130,9 @@ List<RunPlatform> _platformsOf(Object? raw) => [
 
 /// The annotations the config attached to `main`'s parameters, by name.
 ///
-/// Same forgiving posture as [_definesOf] and `_platformsOf`: an entry this
-/// build cannot read is dropped rather than refused, because the config imports
-/// the `flutterware` version the *project* pins.
+/// Same forgiving posture as [_platformsOf]: an entry this build cannot read is
+/// dropped rather than refused, because the config imports the `flutterware`
+/// version the *project* pins, which can run ahead of the GUI reading it.
 List<Knob> _knobsOf(Object? raw) => [
   for (var entry in (raw as List? ?? const []))
     if (entry is Map)

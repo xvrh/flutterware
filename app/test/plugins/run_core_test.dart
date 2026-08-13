@@ -1054,6 +1054,51 @@ void main({
     });
   });
 
+  test('an enum offers its own constants and says what it will not', () async {
+    // The config used to be merged into a picker's list, so a value that could
+    // never compile was offered as a chip and then refused by the very same
+    // core the moment somebody picked it. The enum is the list; what the config
+    // added is worth a sentence, because it is a line in `flutterware.dart`
+    // that reads as working.
+    _writePackage(worktree, 'app', {
+      'pubspec.yaml': 'name: app\n',
+      'lib/src/backend.dart': 'enum Backend { dev, prod }',
+      'lib/main.dart':
+          "import 'src/backend.dart';\n"
+          'void main({Backend backend = Backend.dev}) {}',
+    });
+    core = _coreFor(
+      worktree,
+      config: {
+        'packages': [
+          {
+            'path': 'app',
+            'entrypoints': [
+              {
+                'path': 'lib/main.dart',
+                'knobs': [
+                  {
+                    'knob': 'backend',
+                    'options': ['prod', 'canary'],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+
+    var knob = result.packages.single.entrypoints.single.knobs.single;
+    expect(knob.options, ['dev', 'prod'], reason: 'not canary');
+    expect(knob.problem, allOf(contains('canary'), contains('dev, prod')));
+    // `prod` is a constant, so it is not a complaint — it is merely the same
+    // fact written twice.
+    expect(knob.problem, isNot(contains('prod, canary')));
+  });
+
   group('a knob value the signature cannot take', () {
     // Refused here rather than left to the compiler: the value becomes a
     // literal in generated source, so a bad one is a build failure pointing at

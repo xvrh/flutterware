@@ -481,6 +481,37 @@ That last one only bites when the app being restarted is flutterware itself —
 which is our own inner loop, and is exactly the case a unit test with a fake VM
 service cannot reach.
 
+### The tail of the review — 2026-08-13
+
+Five smaller findings, closed in two passes.
+
+**The form forgot last time's knobs.** `lastLaunch` carried a `defines` map the
+panel stopped filling in when defines were deleted, so "run the same thing
+again" came back empty. It carries knobs now, and no defines: the form has no
+define fields, so recording them was recording a map that is always empty.
+
+**`setKnobs` reverted a computed value.** Setting one knob and saying nothing
+about another dropped a script-computed port to the signature's default.
+"Replaces the set" is about what the *caller* chose, not about forgetting what
+the project can work out, so the launch path's fill-in runs here too and the
+result reports what is running rather than what was asked.
+
+**A picker offered values it would then refuse.** `_knobOptions` merged the
+config's `options:` into an enum's constants while the value check compared
+against the constants alone — so a config-declared extra appeared as a chip and
+was rejected the moment somebody picked it. The enum is the whole list; what the
+config added is now reported instead of silently dropped. The same hole existed
+one layer down: `_literalFor` would happily write `Backend.whatever`, a
+perfectly formable literal that does not compile, so it checks the constants
+too.
+
+**A line break closed the generated string.** A single-quoted literal cannot
+span lines raw or not. `define_scripts` refuses multi-line output, so no source
+can produce one — but a JSON `"\n"` over MCP is one character, and it left the
+wrapper unparseable.
+
+**A doc reference to `_definesOf`**, deleted in K6.
+
 ## Order
 
 1. ~~**K1 + K2 + K3 + K4, and the `RunCore` wiring**~~ — built 2026-08-13, and

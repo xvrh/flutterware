@@ -1761,6 +1761,12 @@ class RunCore extends PluginCore {
   /// addresses, a script's list, or whatever the config wrote.
   List<String> _knobOptions(KnobDescriptor? descriptor, Knob? declared) {
     var options = [...?descriptor?.options];
+    // **An enum's constants are the whole list.** The wrapper writes
+    // `Backend.<value>`, so anything else cannot compile — offering it would
+    // put a chip on screen that fails the launch it starts, and the value check
+    // would refuse the very value the panel had just suggested. What the config
+    // added is said out loud by [_knobProblem] instead of quietly dropped.
+    if (descriptor?.kind == KnobKind.picker) return options;
     for (var option in declared?.options ?? const <String>[]) {
       if (!options.contains(option)) options.add(option);
     }
@@ -1793,6 +1799,25 @@ class RunCore extends PluginCore {
     if (read == null) {
       return 'main takes no `${declared!.name}` parameter. The control would '
           'appear and do nothing — check the spelling against the signature.';
+    }
+    // A value offered for an enum that the enum does not declare. Worth saying
+    // rather than dropping: it is a line in `tool/flutterware.dart` that reads
+    // as working, and the only symptom would be a choice missing from a
+    // dropdown that nothing explains.
+    if (read.knob.kind == KnobKind.picker) {
+      var constants = read.knob.options;
+      var stray = {
+        ...?declared?.options,
+        ...switch (declared?.from) {
+          ScriptSource source => outcomeOf(source)?.options ?? const <String>[],
+          _ => const <String>[],
+        },
+      }..removeWhere(constants.contains);
+      if (stray.isNotEmpty) {
+        return '${stray.join(', ')} — offered for ${read.name}, which is an '
+            'enum taking ${constants.join(', ')}. Only its own constants '
+            'compile, so the rest are not offered.';
+      }
     }
     return null;
   }

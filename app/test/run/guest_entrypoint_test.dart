@@ -211,5 +211,44 @@ void main() {
       expect(content, isNot(contains("r'it's")));
       expect(content, contains(r"label: 'it\'s',"));
     });
+
+    test('a line break is escaped rather than closing the literal', () {
+      // A single-quoted literal cannot span lines whether it is raw or not, so
+      // this used to end the string mid-value and leave the wrapper
+      // unparseable — a syntax error in generated source, about a value typed
+      // somewhere else entirely. A JSON "\n" over MCP is one character.
+      var content = wrapperFor("void main({String banner = 'x'}) {}", {
+        'banner': 'first\nsecond',
+      });
+
+      expect(content, contains(r"banner: 'first\nsecond',"));
+      // Every line of the wrapper is still a line of the wrapper.
+      expect(
+        content.split('\n').where((l) => l.contains('banner:')),
+        hasLength(1),
+      );
+    });
+
+    test('a picker value the enum does not declare throws', () {
+      // `Backend.whatever` is a perfectly writable literal that does not
+      // compile. A script source can compute one, so the type alone is not
+      // enough — the constants are the check.
+      writeLib('src/backend.dart', 'enum Backend { dev, prod }');
+
+      expect(
+        () => wrapperFor(
+          "import 'src/backend.dart';\n"
+          'void main({Backend backend = Backend.dev}) {}',
+          {'backend': 'whatever'},
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            allOf(contains('backend'), contains('whatever')),
+          ),
+        ),
+      );
+    });
   });
 }

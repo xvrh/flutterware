@@ -175,7 +175,14 @@ String _arguments(Map<String, Object?> values, List<ParameterKnob> declared) {
 String? _literalFor(ParameterKnob knob, Object? value) {
   var text = '$value';
   return switch (knob.knob.kind) {
-    KnobKind.picker => knob.enumType == null ? null : '${knob.enumType}.$text',
+    // Checked against the constants, not merely spelled through the type. A
+    // script source can compute a value for an enum knob that the enum does not
+    // declare, and `Backend.whatever` is a perfectly writable literal that does
+    // not compile — a build failure in a file nobody wrote.
+    KnobKind.picker =>
+      knob.enumType == null || !knob.knob.options.contains(text)
+          ? null
+          : '${knob.enumType}.$text',
     KnobKind.integer => int.tryParse(text)?.toString(),
     KnobKind.number => double.tryParse(text)?.toString(),
     KnobKind.boolean => switch (text) {
@@ -190,7 +197,27 @@ String? _literalFor(ParameterKnob knob, Object? value) {
 /// Strings are quoted `r'...'` unless they carry something a raw string cannot
 /// — a URL or a Windows path then arrives with no escaping to get wrong, which
 /// is the shape a knob's value tends to have.
-String _stringLiteral(String value) =>
-    !value.contains("'") && !value.contains(r'$')
-    ? "r'$value'"
-    : "'${value.replaceAll(r'\', r'\\').replaceAll("'", r"\'").replaceAll(r'$', r'\$')}'";
+///
+/// **A line break disqualifies both forms until it is escaped.** A single-quoted
+/// literal cannot span lines whether it is raw or not, so a value carrying one
+/// closed the string mid-way and left the wrapper unparseable — reported as a
+/// syntax error in generated source, about a value the user typed somewhere
+/// else. A script source cannot produce one (`define_scripts` refuses
+/// multi-line output outright), but a caller can: a JSON `"\n"` over MCP is one
+/// character, and so is a paste into the field.
+String _stringLiteral(String value) {
+  var plain =
+      !value.contains("'") &&
+      !value.contains(r'$') &&
+      !value.contains('\n') &&
+      !value.contains('\r');
+  if (plain) return "r'$value'";
+  // Backslash first, or every escape written after it is escaped again.
+  var escaped = value
+      .replaceAll(r'\', r'\\')
+      .replaceAll("'", r"\'")
+      .replaceAll(r'$', r'\$')
+      .replaceAll('\n', r'\n')
+      .replaceAll('\r', r'\r');
+  return "'$escaped'";
+}
