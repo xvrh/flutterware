@@ -30,6 +30,34 @@ String describeDevice(Device device) =>
 Device? resolveDevice(String? param) =>
     param == null ? null : deviceById(param);
 
+/// What `orientation` means, for every action that offers it.
+///
+/// One string because two plugins declare the parameter and a reader meeting it
+/// in `previews screenshot` and again in `scenarios run` should not have to
+/// work out whether the two differ.
+const orientationParameterDoc =
+    'Which way up the device is — `portrait` (the default) or `landscape`. '
+    'An axis on top of `device` rather than a device of its own, so `ipad` '
+    'plus `landscape` is the same iPad on its side: the screen trades width '
+    'for height and the safe areas become the ones that device declares for '
+    'landscape, which is not a permutation of the portrait four — a phone '
+    'loses its status bar rather than moving it. Ignored by anything that '
+    'cannot turn, which is every desktop size and `fit`.';
+
+/// The orientation an address names, or null when it names none — which means
+/// portrait.
+///
+/// Derived from the address like [resolveDevice], and applied by handing the
+/// pair to `Device.oriented`: nothing downstream of that sees an orientation,
+/// only a device whose numbers already agree with it.
+ScreenOrientation? resolveOrientation(String? param) =>
+    param == null ? null : orientationById(param);
+
+/// An `?orientation=` this build has never heard of, or null. Shown for the
+/// same reason [unknownDeviceIn] is.
+String? unknownOrientationIn(String? param) =>
+    param != null && !isOrientationId(param) ? param : null;
+
 /// A `?device=` this build has never heard of, or null.
 ///
 /// Derived rather than remembered, like everything else here. Meant to be shown

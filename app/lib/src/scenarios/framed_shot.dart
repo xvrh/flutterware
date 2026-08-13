@@ -38,6 +38,7 @@ class FramedShot extends StatelessWidget {
     super.key,
     required this.step,
     required this.device,
+    this.orientation,
     this.fallbackBrightness = Brightness.dark,
     this.screenOverlay,
     this.image,
@@ -55,8 +56,18 @@ class FramedShot extends StatelessWidget {
   /// box — the frame is the motion, the shot is the evidence.
   final ImageProvider? image;
 
-  /// The device the run was framed as, or null for the bare surface.
+  /// The device the run was framed as, **upright**, or null for the bare
+  /// surface. [orientation] turns it.
   final Device? device;
+
+  /// Which way up the run was, or null for portrait.
+  ///
+  /// Kept apart from [device] all the way down here because the two halves of
+  /// the picture want different answers: the *body* is drawn from the upright
+  /// device and rotated by `DeviceFrame` — which is what makes a hand-drawn
+  /// iPhone work, its artwork being portrait — while the *screen* is sized and
+  /// its chrome placed from the rotated one.
+  final ScreenOrientation? orientation;
 
   /// Drawn over the screen, inside the frame — **in the screen's own logical
   /// coordinates**, which are exactly the guest coordinates a capture and its
@@ -113,15 +124,24 @@ class FramedShot extends StatelessWidget {
         ),
       );
     }
+    // The screen is the *rotated* device: `DeviceFrame` hands its child a box
+    // that has already traded width for height, so a portrait-shaped one would
+    // be stretched to fill it — a landscape shot squashed back into a portrait
+    // aspect, distorted without erroring.
+    var effective = resolved.oriented(orientation);
     var screen = SizedBox(
-      width: resolved.width,
-      height: resolved.height,
+      width: effective.width,
+      height: effective.height,
       child: Stack(
         fit: StackFit.expand,
         children: [
           image,
           _StatusChrome(
-            device: resolved,
+            // Rotated too, which is the whole of what landscape chrome needs:
+            // an iPhone's landscape `insetTop` is 0, so the guard below draws
+            // no status bar — exactly what the real thing does — while the
+            // home indicator keeps its 21 at the interface bottom.
+            device: effective,
             statusBrightness: _brightness(step.statusBrightness),
             navBrightness: _brightness(step.navBrightness),
           ),
@@ -129,9 +149,11 @@ class FramedShot extends StatelessWidget {
         ],
       ),
     );
+    // Upright: the body is artwork, and `DeviceFrame` turns it.
     var chrome = namedFrameFor(resolved.id) ?? deviceFrameFor(resolved);
     if (chrome == null) {
-      // A desktop size: a hairline, not a monitor body.
+      // A desktop size: a hairline, not a monitor body. Nothing to rotate —
+      // `canRotate` already told [effective] as much.
       return Container(
         decoration: BoxDecoration(
           border: Border.all(color: context.colors.line),
@@ -139,7 +161,13 @@ class FramedShot extends StatelessWidget {
         child: screen,
       );
     }
-    return DeviceFrame(device: chrome, screen: screen);
+    return DeviceFrame(
+      device: chrome,
+      screen: screen,
+      orientation: orientation == ScreenOrientation.landscape
+          ? Orientation.landscape
+          : Orientation.portrait,
+    );
   }
 }
 

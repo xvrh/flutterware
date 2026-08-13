@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 
 import '../../inspect/lens.dart';
 import '../../inspect/screen_read.dart';
+import '../../previews/devices.dart' show orientationParameterDoc;
 import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
@@ -582,6 +583,17 @@ class ScenariosCore extends PluginCore {
                 ActionOption(fitDeviceId, label: 'Bare test surface'),
               ],
             ),
+            ActionParameter(
+              'orientation',
+              'Orientation',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  '$orientationParameterDoc Applies to whatever device the run '
+                  "ends up as, including one a folder's profile chose rather "
+                  'than this call.',
+              options: [for (var id in orientationIds) ActionOption(id)],
+            ),
             const ActionParameter(
               'language',
               'Language',
@@ -612,6 +624,18 @@ class ScenariosCore extends PluginCore {
               description:
                   'The other half of the matrix — `en,fr,de`. Crossed with '
                   '`devices`, and overrides `language`.',
+            ),
+            const ActionParameter(
+              'orientations',
+              'Orientations',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'The third axis — `portrait,landscape`. Crossed with the '
+                  'other two, and overrides `orientation`. A device that '
+                  'cannot turn contributes one point rather than two '
+                  'identical ones, so mixing a desktop into the devices does '
+                  'not double the run.',
             ),
             const ActionParameter(
               'tag',
@@ -996,6 +1020,14 @@ class ScenariosCore extends PluginCore {
               description: 'Run as a device before capturing the page',
               options: [for (var id in deviceIds) ActionOption(id)],
             ),
+            ActionParameter(
+              'orientation',
+              'Orientation',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'Which way up that device is, before capturing',
+              options: [for (var id in orientationIds) ActionOption(id)],
+            ),
             const ActionParameter(
               'language',
               'Language',
@@ -1205,6 +1237,15 @@ class ScenariosCore extends PluginCore {
         'no such device. Accepted: ${deviceIds.join(', ')}',
       );
     }
+    var orientation = arguments['orientation'];
+    if (orientation != null &&
+        (orientation is! String || !isOrientationId(orientation))) {
+      throw ArgumentError.value(
+        orientation,
+        'orientation',
+        'no such orientation. Accepted: ${orientationIds.join(', ')}',
+      );
+    }
     var language = arguments['language'];
     if (language != null &&
         (language is! String ||
@@ -1245,6 +1286,7 @@ class ScenariosCore extends PluginCore {
 
     return ScenarioAxes(
       device: device as String?,
+      orientation: orientation as String?,
       language: language as String?,
       textScale: textScale,
       brightness: brightness as String?,
@@ -1723,10 +1765,16 @@ class ScenariosCore extends PluginCore {
         );
       }
     }
+    var orientations = _orientationList(arguments['orientations']);
     var assignments = <ScenarioAxes>[
       for (var device in devices.isEmpty ? [null] : devices)
-        for (var language in languages.isEmpty ? [null] : languages)
-          ScenarioAxes(device: device, language: language),
+        for (var orientation in _orientationsFor(device, orientations, null))
+          for (var language in languages.isEmpty ? [null] : languages)
+            ScenarioAxes(
+              device: device,
+              orientation: orientation,
+              language: language,
+            ),
     ];
 
     var results = <ScenarioShotsPackage>[];
@@ -1769,8 +1817,21 @@ class ScenariosCore extends PluginCore {
           for (var outcome in described.scenarios) {
             var language = assignment.language ?? 'default';
             var device = outcome.device ?? fitDeviceId;
-            var key = p.join(language, device);
-            axesOf[key] = {'language': ?assignment.language, 'device': device};
+            // The orientation joins the device in the directory name, not
+            // beside it: without it the two ways up of one device share a key
+            // and the second run overwrites the first. Portrait adds nothing,
+            // so a store tree that never asked for landscape is the tree it
+            // was before.
+            var key = p.join(
+              language,
+              assignment.isLandscape ? '$device-landscape' : device,
+            );
+            axesOf[key] = {
+              'language': ?assignment.language,
+              'device': device,
+              if (assignment.isLandscape)
+                'orientation': ScreenOrientation.landscape.name,
+            };
             var into = Directory(p.join(output, key))
               ..createSync(recursive: true);
             var kept = images.putIfAbsent(key, () => []);
@@ -2029,18 +2090,25 @@ class ScenariosCore extends PluginCore {
     }
     // One point when nothing fanned out, which is every panel run and every
     // `fw run scenarios run` that names at most one of each.
+    var orientations = _orientationList(arguments['orientations']);
     var assignments = <ScenarioAxes>[
       for (var device in devices.isEmpty ? [axes.device] : devices)
-        for (var language in languages.isEmpty ? [axes.language] : languages)
-          ScenarioAxes(
-            device: device,
-            language: language,
-            textScale: axes.textScale,
-            brightness: axes.brightness,
-            boldText: axes.boldText,
-            highContrast: axes.highContrast,
-            invertColors: axes.invertColors,
-          ),
+        for (var orientation in _orientationsFor(
+          device,
+          orientations,
+          axes.orientation,
+        ))
+          for (var language in languages.isEmpty ? [axes.language] : languages)
+            ScenarioAxes(
+              device: device,
+              orientation: orientation,
+              language: language,
+              textScale: axes.textScale,
+              brightness: axes.brightness,
+              boldText: axes.boldText,
+              highContrast: axes.highContrast,
+              invertColors: axes.invertColors,
+            ),
     ];
     var fannedOut = assignments.length > 1;
     double? captureScale;
@@ -2394,6 +2462,45 @@ class ScenariosCore extends PluginCore {
       for (var part in raw.split(','))
         if (part.trim().isNotEmpty) part.trim(),
     ];
+  }
+
+  /// The orientation list a matrix asked for, checked. Empty stays empty — the
+  /// caller decides what "nothing fanned out" falls back to.
+  static List<String> _orientationList(Object? raw) {
+    var list = _axisList(raw, 'orientations');
+    for (var id in list) {
+      if (!isOrientationId(id)) {
+        throw ArgumentError.value(
+          id,
+          'orientations',
+          'no such orientation. Accepted: ${orientationIds.join(', ')}',
+        );
+      }
+    }
+    return list;
+  }
+
+  /// Which orientations [device] actually contributes to the matrix.
+  ///
+  /// **One point, not two, for anything that cannot turn.** Crossing a desktop
+  /// or the bare surface with both orientations would run it twice for
+  /// byte-identical pixels — a doubled CI bill for a picture nobody asked for
+  /// twice. The same rule the bare `flutter test` lane applies in
+  /// `scenarioAssignments`, because the two lanes have to agree on how many
+  /// points a matrix has.
+  ///
+  /// An *unnamed* device keeps whatever was asked: the folder profile that
+  /// resolves it only speaks inside the harness, so there is nothing to ask
+  /// here, and `Device.oriented` collapses it there instead.
+  static List<String?> _orientationsFor(
+    String? device,
+    List<String> requested,
+    String? fallback,
+  ) {
+    if (device != null && !(deviceById(device)?.canRotate ?? false)) {
+      return const [null];
+    }
+    return requested.isEmpty ? [fallback] : requested;
   }
 
   static final _localePattern = RegExp(

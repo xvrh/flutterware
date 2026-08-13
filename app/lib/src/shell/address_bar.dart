@@ -292,7 +292,8 @@ class AddressReadout extends StatelessWidget {
         );
     }
 
-    // Everything but the last segment gives way; the last never does.
+    // The middle gives way first; the last gives way only once there is
+    // nothing left to take from it.
     var segments = address.segments;
     var last = segments.lastOrNull;
 
@@ -305,30 +306,65 @@ class AddressReadout extends StatelessWidget {
           child: Row(
             children: [
               ...head,
-              for (var i = 0; i < segments.length - 1; i++) ...[
-                separator(),
+              // **The middle path is one flexible block, not one per segment.**
+              // A `Row` hands every flex child `freeSpace / totalFlex` and never
+              // gives the unused part back, so a leaf competing with each
+              // segment individually would be clamped to a sixth of the bar on a
+              // deep path and ellipsized with room to spare. Grouped, it
+              // competes with a single sibling — and this block is the one that
+              // yields, because the path between the worktree and the leaf is
+              // usually the same one it was a minute ago.
+              if (segments.length > 1)
                 Flexible(
-                  child: _Part(
-                    onTap: () => onGo(
-                      address.copyWith(
-                        segments: segments.sublist(0, i + 1),
-                        // The axes applied to the leaf do not describe its
-                        // parents.
-                        axes: const {},
-                      ),
-                    ),
-                    child: (lit) => Text(
-                      segments[i],
-                      style: mono.copyWith(
-                        color: lit ? colors.ink2 : colors.mut3,
-                      ),
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  child: Row(
+                    // Shrink-wrapped, or the block would swallow its whole
+                    // allotment and hand the leaf the leftovers of a half it
+                    // never needed.
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < segments.length - 1; i++) ...[
+                        separator(),
+                        Flexible(
+                          child: _Part(
+                            onTap: () => onGo(
+                              address.copyWith(
+                                segments: segments.sublist(0, i + 1),
+                                // The axes applied to the leaf do not describe
+                                // its parents.
+                                axes: const {},
+                              ),
+                            ),
+                            child: (lit) => Text(
+                              segments[i],
+                              style: mono.copyWith(
+                                color: lit ? colors.ink2 : colors.mut3,
+                              ),
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              if (last != null) ...[
+                separator(),
+                // **Ellipsized rather than overflowing.** It used to be laid out
+                // at its natural width whatever the bar could afford, which is
+                // fine until the bar is full: a long leaf and two axis chips
+                // painted 55 pixels of debug stripes across the strip. It is
+                // still the last part to give way — it just gives way now
+                // instead of running off the end.
+                Flexible(
+                  child: Text(
+                    last,
+                    style: mono.copyWith(color: colors.ink2),
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
-              if (last != null) ...[separator(), part(last, colors.ink2)],
               for (var axis in address.axes.entries) ...[
                 const Gap(FwSpacing.sm),
                 _AxisChip(

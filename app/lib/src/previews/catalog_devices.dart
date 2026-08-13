@@ -24,6 +24,10 @@ export 'devices.dart';
 /// Null for [DeviceKind.desktop], which gets no silhouette: the panel is
 /// already a desktop-shaped canvas, and a monitor body scaled down to fit
 /// inside it costs more room than it explains. A desktop entry is a *size*.
+/// Takes the device **as it stands upright**. `DeviceFrame` rotates a body it
+/// is given an orientation for, so the landscape numbers belong in
+/// [DeviceInfo.rotatedSafeAreas] here rather than in a second, sideways
+/// `DeviceInfo`.
 DeviceInfo? deviceFrameFor(Device device) {
   var screen = Size(device.width, device.height);
   var safeAreas = EdgeInsets.fromLTRB(
@@ -31,6 +35,18 @@ DeviceInfo? deviceFrameFor(Device device) {
     device.insetTop,
     device.insetRight,
     device.insetBottom,
+  );
+  // **Passed explicitly, because the default is a trap.** `rotatedSafeAreas`
+  // defaults to `EdgeInsets.zero` rather than to null, and `canRotate` is
+  // `rotatedSafeAreas != null` — so a generic body left to the default claims
+  // it rotates and then renders landscape with no notch and no home indicator
+  // at all. Wrong without looking wrong, and only in the rotated case.
+  var rotated = device.rotated();
+  var rotatedSafeAreas = EdgeInsets.fromLTRB(
+    rotated.insetLeft,
+    rotated.insetTop,
+    rotated.insetRight,
+    rotated.insetBottom,
   );
 
   return switch (device.kind) {
@@ -40,6 +56,7 @@ DeviceInfo? deviceFrameFor(Device device) {
       name: device.label,
       screenSize: screen,
       safeAreas: safeAreas,
+      rotatedSafeAreas: rotatedSafeAreas,
       pixelRatio: device.pixelRatio,
     ),
     DeviceKind.tablet => DeviceInfo.genericTablet(
@@ -48,6 +65,7 @@ DeviceInfo? deviceFrameFor(Device device) {
       name: device.label,
       screenSize: screen,
       safeAreas: safeAreas,
+      rotatedSafeAreas: rotatedSafeAreas,
       pixelRatio: device.pixelRatio,
     ),
     DeviceKind.desktop => null,

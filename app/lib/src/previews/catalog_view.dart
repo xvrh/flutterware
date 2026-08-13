@@ -319,7 +319,15 @@ class _CatalogViewState extends State<CatalogView> {
                       // was set.
                       child: Builder(
                         builder: (context) {
-                          var device = _deviceOf(context, _session);
+                          // Turned here, once, and everything below meets a
+                          // device whose numbers already agree with it: the
+                          // screen it is sized to, the safe areas the guest is
+                          // told about, and the silhouette drawn around it are
+                          // all read off this one value.
+                          var device = _deviceOf(
+                            context,
+                            _session,
+                          )?.oriented(_orientationOf(context));
                           return AddressScope(
                             namespace: _inspectNamespace,
                             child: LayoutBuilder(
@@ -1091,7 +1099,10 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var staging = session.staging;
+    // Upright: the picker finds its selection by identity in its own list, and
+    // a turned device is a different object that matches nothing there.
     var device = _deviceOf(context, session);
+    var orientation = _orientationOf(context);
     return Container(
       color: context.colors.panel,
       padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
@@ -1100,9 +1111,12 @@ class _TopBar extends StatelessWidget {
         spacing: FwSpacing.md,
         children: [
           _DevicePicker(device: device),
+          _RotateToggle(device: device, orientation: orientation),
           if (device != null)
             Text(
-              describeDevice(device),
+              // The *turned* size: the one number on the bar that says whether
+              // the axis took, and the cheapest possible proof of it.
+              describeDevice(device.oriented(orientation)),
               style: context.type.caption.copyWith(fontFamily: 'monospace'),
             ),
           // The shell's own switches, after what the guest is *staged* as. A
@@ -1347,6 +1361,69 @@ class _Axis extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Turns the picked device on its side.
+///
+/// **Beside the picker, not inside it.** Orientation is a state of the device
+/// you already chose, so "iPad" and "iPad (landscape)" as two rows would make
+/// the list say they are different devices — which is the modelling this
+/// deliberately does not use, and the list would grow by one row per rotatable
+/// entry to say it.
+///
+/// **Disabled rather than hidden** when there is nothing to turn: a control
+/// that vanished would reflow the bar every time you moved between a phone and
+/// a monitor, and "this one does not rotate" is worth saying. The size beside
+/// it is the confirmation the axis landed — `810×1080` becomes `1080×810`.
+class _RotateToggle extends StatelessWidget {
+  const _RotateToggle({required this.device, required this.orientation});
+
+  /// The upright device, or null for the panel — which has no other way up.
+  final Device? device;
+
+  final ScreenOrientation? orientation;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var enabled = device?.canRotate ?? false;
+    var landscape = enabled && orientation == ScreenOrientation.landscape;
+    var ink = enabled ? (landscape ? colors.bg : colors.ink) : colors.mut;
+    return Tooltip(
+      message: !enabled
+          ? '${device?.label ?? 'The panel'} does not rotate'
+          : landscape
+          ? 'Back to portrait'
+          : 'Rotate to landscape',
+      child: GestureDetector(
+        onTap: enabled
+            // Portrait clears the parameter rather than writing itself: the
+            // default belongs in nobody's address, and a link that says
+            // nothing about orientation has to keep meaning what it meant.
+            ? () => AddressScope.write(context).setParam(
+                'orientation',
+                landscape ? null : ScreenOrientation.landscape.name,
+              )
+            : null,
+        child: Container(
+          height: 24,
+          width: 26,
+          decoration: BoxDecoration(
+            color: landscape ? colors.ink : colors.bg,
+            border: Border.all(color: colors.line),
+            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          ),
+          child: Icon(
+            landscape
+                ? Icons.stay_current_landscape
+                : Icons.stay_current_portrait,
+            size: 14,
+            color: ink,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2183,3 +2260,12 @@ Device? _deviceOf(BuildContext context, CatalogSession session) {
   );
   return resolveDevice(AddressScope.param(context, 'device'));
 }
+
+/// Which way up the picked device is, read from the same un-namespaced level as
+/// [_deviceOf] and for the same reason.
+///
+/// Kept out of [_deviceOf] because the two consumers want opposite things: the
+/// canvas wants the device already turned, and the picker wants the upright one
+/// it can find in its own list.
+ScreenOrientation? _orientationOf(BuildContext context) =>
+    resolveOrientation(AddressScope.param(context, 'orientation'));

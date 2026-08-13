@@ -15,6 +15,52 @@ enum DeviceKind { phone, tablet, desktop }
 /// one place a frame is drawn.
 enum DevicePlatform { ios, android, macos, windows, linux }
 
+/// Which way up a device is — an axis applied on top of a [Device], not a
+/// device of its own.
+///
+/// A rotated iPad is the same iPad: same id, same ratio, same artwork. A second
+/// entry for it would double the table per rotatable device and turn a
+/// 4-device × 2-orientation matrix into eight ids instead of two crossed lists.
+///
+/// **One landscape, not two.** Real hardware has a left and a right, and they
+/// differ only in which side the cutout lands on — so a second value would
+/// double every matrix to buy a mirrored inset. This one is defined by a fixed
+/// physical side: **the cutout on the left**. Deliberately not "the leading
+/// side", which flips under an RTL locale: orientation must not change meaning
+/// because the language axis moved.
+///
+/// The enum is open on purpose. A second value can arrive without changing the
+/// grammar, and it would be the mirror of this one rather than a new
+/// declaration.
+///
+/// **Not `DeviceOrientation`**, which Flutter already defines in `services.dart`
+/// and therefore has in scope in every file that imports `material.dart`. A
+/// consumer declaring a profile would have had to hide one of the two to name
+/// the other, in the API whose whole job is to be nameable from a
+/// `flutter_test_config.dart`. `Orientation` is taken as well, by
+/// `widgets.dart`.
+enum ScreenOrientation { portrait, landscape }
+
+/// A device's safe areas, as one value.
+///
+/// Ours rather than `EdgeInsets` because this file is pure Dart by design: a
+/// project's `tool/flutterware.dart` and a scenario folder's
+/// `flutter_test_config.dart` both import it, and neither should have to pull
+/// in Flutter to name a device.
+class DeviceInsets {
+  const DeviceInsets({
+    this.top = 0,
+    this.right = 0,
+    this.bottom = 0,
+    this.left = 0,
+  });
+
+  final double top;
+  final double right;
+  final double bottom;
+  final double left;
+}
+
 /// One device an address may name.
 class Device {
   const Device(
@@ -30,6 +76,7 @@ class Device {
     this.insetRight = 0,
     this.insetBottom = 0,
     this.insetLeft = 0,
+    this.landscape,
   });
 
   /// What goes in an address — `?device=iphone-16`.
@@ -64,6 +111,61 @@ class Device {
   final double insetRight;
   final double insetBottom;
   final double insetLeft;
+
+  /// The safe areas when this device is on its side, or null for the swap-only
+  /// case: width and height trade places and the insets stay where they are.
+  ///
+  /// **Declared, not computed.** Permuting the four insets geometrically is
+  /// wrong on exactly the devices it matters on. An iPhone in landscape *loses*
+  /// its status bar rather than moving it — the top inset goes to 0, not to a
+  /// side — the cutout inset lands on both sides, and the home indicator stays
+  /// at the interface bottom and shrinks. A tablet, meanwhile, really is just
+  /// swap-width-and-height, which is why null is the default: only the notched
+  /// phones say anything here.
+  ///
+  /// `device_frame` storing a separately measured `rotatedSafeAreas` beside its
+  /// `safeAreas` is the same conclusion reached from the hardware.
+  final DeviceInsets? landscape;
+
+  /// Whether orientation is a question this device answers. Desktops are
+  /// windows: there is no other way up.
+  ///
+  /// Mirrors `device_frame`'s `canRotate`, and it is what stops a matrix from
+  /// running a desktop twice to produce the same pixels.
+  bool get canRotate => kind != DeviceKind.desktop;
+
+  /// This device as [orientation] shows it — itself for portrait, for null, and
+  /// for anything that cannot rotate.
+  ///
+  /// **The one place the orientation axis becomes geometry.** Everything
+  /// downstream takes a [Device] and reads `width`, `height` and the insets —
+  /// the capture viewport, the harness args, the silhouette, the splash sweep —
+  /// so resolving the axis into a device here leaves all of them untouched.
+  Device oriented(ScreenOrientation? orientation) =>
+      orientation == ScreenOrientation.landscape && canRotate
+      ? rotated()
+      : this;
+
+  /// This device on its side, whatever it thinks of the idea — [oriented] is
+  /// the one that asks [canRotate] first.
+  ///
+  /// Keeps [id] and [label]: a rotated iPad is still `ipad`, which is what lets
+  /// the frame lookup and every saved address go on working.
+  Device rotated() => Device(
+    id,
+    label,
+    kind: kind,
+    platform: platform,
+    group: group,
+    width: height,
+    height: width,
+    pixelRatio: pixelRatio,
+    insetTop: landscape?.top ?? insetTop,
+    insetRight: landscape?.right ?? insetRight,
+    insetBottom: landscape?.bottom ?? insetBottom,
+    insetLeft: landscape?.left ?? insetLeft,
+    landscape: landscape,
+  );
 
   @override
   String toString() => 'Device($id)';
@@ -121,6 +223,10 @@ abstract final class Devices {
     pixelRatio: 2,
     insetTop: 47,
     insetBottom: 34,
+    // Asymmetric because the hardware is: the notch side measures 47 and the
+    // far side only its rounded corner. `device_frame`'s own body for this
+    // model, which is where these four numbers come from.
+    landscape: DeviceInsets(left: 47, right: 44, bottom: 21),
   );
 
   static const iphone13 = Device(
@@ -134,6 +240,7 @@ abstract final class Devices {
     pixelRatio: 3,
     insetTop: 47,
     insetBottom: 34,
+    landscape: DeviceInsets(left: 47, right: 47, bottom: 21),
   );
 
   static const iphone12ProMax = Device(
@@ -147,6 +254,7 @@ abstract final class Devices {
     pixelRatio: 3,
     insetTop: 44,
     insetBottom: 34,
+    landscape: DeviceInsets(left: 44, right: 44, bottom: 21),
   );
 
   /// The Dynamic Island generation — the same screen as an iPhone 15, and the
@@ -162,6 +270,12 @@ abstract final class Devices {
     pixelRatio: 3,
     insetTop: 59,
     insetBottom: 34,
+    // No `device_frame` body for this generation, so these follow the rule the
+    // three measured ones agree on rather than a measurement of their own: the
+    // status bar goes, the cutout inset lands on both sides at whatever the
+    // portrait top was, and the home indicator settles at 21. Said out loud
+    // because the rest of this table only claims numbers somebody measured.
+    landscape: DeviceInsets(left: 59, right: 59, bottom: 21),
   );
 
   /// The largest iPhone screen there is — what a layout overflows on last and
@@ -177,6 +291,8 @@ abstract final class Devices {
     pixelRatio: 3,
     insetTop: 59,
     insetBottom: 34,
+    // Derived the same way as [iphone16], and carrying the same caveat.
+    landscape: DeviceInsets(left: 59, right: 59, bottom: 21),
   );
 
   static const iPad = Device(
@@ -368,3 +484,18 @@ Device? deviceById(String id) =>
 
 /// Whether [id] is a value this build accepts at all.
 bool isDeviceId(String id) => id == fitDeviceId || deviceById(id) != null;
+
+/// Every value `?orientation=` accepts, portrait first.
+///
+/// One list, for the same reason [deviceIds] is one: the picker, the address,
+/// `fw`'s usage line and MCP's schema all read it.
+List<String> get orientationIds => [
+  for (var orientation in ScreenOrientation.values) orientation.name,
+];
+
+/// The orientation [id] names, or null for anything unknown.
+ScreenOrientation? orientationById(String id) =>
+    ScreenOrientation.values.where((o) => o.name == id).firstOrNull;
+
+/// Whether [id] is an orientation this build accepts.
+bool isOrientationId(String id) => orientationById(id) != null;

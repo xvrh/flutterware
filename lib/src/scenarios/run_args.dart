@@ -33,7 +33,9 @@ class ScenarioRunArgs {
   /// vocabulary in, numbers out — done here for the lane that has no host:
   /// a bare `flutter test`, where the profile is all there is.
   factory ScenarioRunArgs.forAssignment(ScenarioAssignment assignment) {
-    var device = assignment.device;
+    // Already turned the right way up: the assignment resolves its own
+    // rotation, so the numbers below are the ones the layout will meet.
+    var device = assignment.orientedDevice;
     return ScenarioRunArgs(
       size: device == null ? null : Size(device.width, device.height),
       pixelRatio: device?.pixelRatio,
@@ -51,27 +53,35 @@ class ScenarioRunArgs {
     );
   }
 
-  /// These args, re-framed as [device] — everything else kept.
+  /// These args, re-framed as [device] turned to [orientation] — everything
+  /// else kept.
   ///
   /// What the harness applies when a run named no device and the scenario's
   /// folder profile has one: the request still carries the language, the text
   /// scale and the accessibility switches the caller asked for, and only the
   /// screen comes from the folder.
-  ScenarioRunArgs withDevice(Device device) => ScenarioRunArgs(
-    size: Size(device.width, device.height),
-    pixelRatio: device.pixelRatio,
-    padding: _paddingOf(device),
-    platform: _platformOf(device),
-    locale: locale,
-    textScale: textScale,
-    brightness: brightness,
-    accessibility: accessibility,
-    captureScale: captureScale,
-    captureRaw: captureRaw,
-    captureNative: captureNative,
-    record: record,
-    clockOrigin: clockOrigin,
-  );
+  ///
+  /// [orientation] comes from the request even though the device does not,
+  /// which is the whole reason it travels the wire as an axis rather than as
+  /// pre-rotated numbers: the host cannot rotate a device it never chose.
+  ScenarioRunArgs withDevice(Device device, {ScreenOrientation? orientation}) {
+    var oriented = device.oriented(orientation);
+    return ScenarioRunArgs(
+      size: Size(oriented.width, oriented.height),
+      pixelRatio: oriented.pixelRatio,
+      padding: _paddingOf(oriented),
+      platform: _platformOf(oriented),
+      locale: locale,
+      textScale: textScale,
+      brightness: brightness,
+      accessibility: accessibility,
+      captureScale: captureScale,
+      captureRaw: captureRaw,
+      captureNative: captureNative,
+      record: record,
+      clockOrigin: clockOrigin,
+    );
+  }
 
   static EdgeInsets _paddingOf(Device device) => EdgeInsets.fromLTRB(
     device.insetLeft,
