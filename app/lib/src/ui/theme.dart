@@ -4,9 +4,6 @@ import 'package:flutterware/plugins.dart';
 
 import 'design/design.dart';
 
-// Re-exported so screens not yet migrated to tokens keep compiling. New code
-// should read `context.colors` / `context.type` instead of `AppColors`.
-export 'colors.dart';
 export 'design/design.dart';
 
 ThemeData? __theme;
@@ -44,7 +41,7 @@ ThemeData buildAppTheme(FwTokens tokens) {
 
   var textTheme = type.spec
       .applyFontTheme(base.textTheme)
-      .apply(displayColor: palette.textSteal, bodyColor: palette.textGrey);
+      .apply(displayColor: palette.ink, bodyColor: palette.mut);
 
   var inputBorder = OutlineInputBorder(
     borderRadius: BorderRadius.circular(radii.radius),
@@ -80,7 +77,7 @@ ThemeData buildAppTheme(FwTokens tokens) {
     scaffoldBackgroundColor: palette.scaffoldBackground,
     appBarTheme: base.appBarTheme.copyWith(
       backgroundColor: palette.scaffoldBackground,
-      foregroundColor: palette.textGrey,
+      foregroundColor: palette.mut,
       elevation: 0,
     ),
     tabBarTheme: base.tabBarTheme.copyWith(

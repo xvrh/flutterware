@@ -383,7 +383,7 @@ class _ZoomButtons extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.all(FwSpacing.sm),
-        child: Icon(icon, size: 18, color: context.colors.mut),
+        child: Icon(icon, size: FwIconSize.lg, color: context.colors.mut),
       ),
     );
   }

@@ -560,12 +560,22 @@ bool? _selectedOf(RenderObject? render) {
 /// is whatever was there last time.
 InspectLayout? _layoutOf(RenderObject? render) {
   if (render is! RenderBox || !render.hasSize) return null;
-  var origin = render.localToGlobal(Offset.zero);
+  // The whole rect through the transform, not an origin from `localToGlobal`
+  // beside a raw `render.size`. Those two are in different spaces the moment
+  // any ancestor scales — a preview stage fitting a device to its pane, the
+  // shell scaling itself below its minimum window size — and mixing them
+  // reports a box whose position is on screen and whose size is not. Every
+  // number a reader compares (a centre against `at "x,y"`, a width against the
+  // screenshot) then quietly disagrees with the picture.
+  var bounds = MatrixUtils.transformRect(
+    render.getTransformTo(null),
+    Offset.zero & render.size,
+  );
   return InspectLayout(
-    x: origin.dx,
-    y: origin.dy,
-    width: render.size.width,
-    height: render.size.height,
+    x: bounds.left,
+    y: bounds.top,
+    width: bounds.width,
+    height: bounds.height,
     constraints: InspectConstraints(
       minWidth: render.constraints.minWidth,
       maxWidth: render.constraints.maxWidth,

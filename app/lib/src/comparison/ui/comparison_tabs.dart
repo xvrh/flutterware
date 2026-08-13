@@ -424,7 +424,7 @@ class _TabButton extends StatelessWidget {
             ),
             if (half?.stage == HalfStage.refused) ...[
               const Gap(FwSpacing.sm),
-              Icon(Icons.error_outline, size: 12, color: colors.red),
+              Icon(Icons.error_outline, size: FwIconSize.xs, color: colors.red),
             ],
             if (note != null) ...[
               const Gap(FwSpacing.sm),

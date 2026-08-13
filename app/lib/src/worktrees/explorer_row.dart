@@ -544,7 +544,7 @@ class _Broken extends StatelessWidget {
     return Tooltip(
       message: failure ?? 'This probe failed.',
       child: _Lines(
-        top: Icon(Icons.error_outline, size: 13, color: colors.mut2),
+        top: Icon(Icons.error_outline, size: FwIconSize.sm, color: colors.mut2),
         bottom: Text(
           "couldn't read",
           style: context.type.micro.copyWith(color: colors.mut3),
@@ -1051,7 +1051,7 @@ class _PrCell extends StatelessWidget {
           ),
           const Gap(FwSpacing.sm),
           if (checksIcon != null)
-            Icon(checksIcon, size: 12, color: checksColor),
+            Icon(checksIcon, size: FwIconSize.xs, color: checksColor),
           const Gap(FwSpacing.xs),
           Flexible(
             child: Text(
@@ -1228,7 +1228,7 @@ class _Actions extends StatelessWidget {
                         onTap: controller.toggle,
                         child: Icon(
                           Icons.more_horiz,
-                          size: 16,
+                          size: FwIconSize.md,
                           color: colors.mut2,
                         ),
                       ),
@@ -1244,7 +1244,7 @@ class _Actions extends StatelessWidget {
               message: expanded ? 'Hide the detail' : 'Show the detail',
               child: Icon(
                 expanded ? Icons.expand_less : Icons.expand_more,
-                size: 16,
+                size: FwIconSize.md,
                 color: colors.mut2,
               ),
             ),

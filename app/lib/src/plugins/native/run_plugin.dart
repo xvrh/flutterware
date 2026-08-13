@@ -242,7 +242,7 @@ class _Pill extends StatelessWidget {
               : hovered
               ? colors.hoverOverlay
               : null,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(context.radii.pill),
           border: Border.all(
             color: selected ? colors.accentSoft2 : colors.line,
           ),
@@ -580,7 +580,7 @@ class _CapabilityPill extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.13),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(context.radii.pill),
       ),
       child: Text(
         state.label,
@@ -1390,7 +1390,7 @@ class _StepRow extends StatelessWidget {
     var path = entry.screenshot;
     if (path != null && File(path).existsSync()) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: BorderRadius.circular(context.radii.micro),
         child: Image.file(
           File(path),
           width: 44,
@@ -1404,7 +1404,11 @@ class _StepRow extends StatelessWidget {
     return SizedBox(
       width: 44,
       height: 32,
-      child: Icon(_verbIcon(entry.verb), size: 18, color: context.colors.mut2),
+      child: Icon(
+        _verbIcon(entry.verb),
+        size: FwIconSize.lg,
+        color: context.colors.mut2,
+      ),
     );
   }
 }
@@ -2290,7 +2294,7 @@ class _DeskState extends State<_Desk> {
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
               children: [
-                Icon(_iconFor(device), size: 14, color: colors.mut2),
+                Icon(_iconFor(device), size: FwIconSize.sm, color: colors.mut2),
                 const Gap(FwSpacing.sm),
                 Flexible(
                   flex: 0,
@@ -2313,7 +2317,11 @@ class _DeskState extends State<_Desk> {
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
               children: [
-                Icon(Icons.phone_iphone_outlined, size: 14, color: colors.mut3),
+                Icon(
+                  Icons.phone_iphone_outlined,
+                  size: FwIconSize.sm,
+                  color: colors.mut3,
+                ),
                 const Gap(FwSpacing.sm),
                 Flexible(
                   flex: 0,
@@ -2535,7 +2543,7 @@ class _PermissionsField extends StatelessWidget {
         DecoratedBox(
           decoration: BoxDecoration(
             border: Border.all(color: context.colors.line),
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(context.radii.micro),
           ),
           child: Column(
             children: [
@@ -2707,11 +2715,11 @@ class _ProfileChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(3),
+      borderRadius: BorderRadius.circular(context.radii.micro),
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border.all(color: context.colors.line),
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(context.radii.micro),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -2732,7 +2740,7 @@ class _ProfileChip extends StatelessWidget {
                 ),
                 const Gap(FwSpacing.xs),
               ] else if (icon case var glyph?) ...[
-                Icon(glyph, size: 11, color: context.colors.mut2),
+                Icon(glyph, size: FwIconSize.xs, color: context.colors.mut2),
                 const Gap(FwSpacing.xs),
               ],
               Text(
@@ -2809,7 +2817,7 @@ class _PermissionFinding extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 14, color: color),
+        Icon(icon, size: FwIconSize.sm, color: color),
         const Gap(FwSpacing.xs),
         Expanded(
           child: Text(
@@ -2949,7 +2957,7 @@ class _FailedRunPage extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.error_outline, size: 16, color: colors.red),
+              Icon(Icons.error_outline, size: FwIconSize.md, color: colors.red),
               const Gap(FwSpacing.sm),
               Expanded(
                 child: Column(
@@ -3077,7 +3085,7 @@ class _Action extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 14, color: fg),
+              Icon(icon, size: FwIconSize.sm, color: fg),
               const Gap(FwSpacing.xs),
               Text(label, style: context.type.bodySmall.copyWith(color: fg)),
             ],
@@ -3224,7 +3232,7 @@ class _Picker<T> extends StatelessWidget {
               ],
               const Spacer(),
               const Gap(FwSpacing.sm),
-              Icon(Icons.expand_more, size: 16, color: colors.mut2),
+              Icon(Icons.expand_more, size: FwIconSize.md, color: colors.mut2),
             ],
           ),
         ),

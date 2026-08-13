@@ -293,12 +293,12 @@ void main() {
     writePng('android/app/src/main/res/mipmap-hdpi/ic_launcher.png', 72);
 
     var c = await mount(tester);
-    expect(find.text('1 files'), findsOneWidget);
+    expect(find.text('1 file'), findsOneWidget);
 
     // What running a generator in another terminal looks like from in here.
     writePng('web/icons/Icon-192.png', 192);
     await tester.pumpAndSettle();
-    expect(find.text('1 files'), findsOneWidget, reason: 'still cached');
+    expect(find.text('1 file'), findsOneWidget, reason: 'still cached');
 
     await tester.tap(find.byTooltip('Read the icons again'));
     // Bounded pumps rather than pumpAndSettle: the reload spinner is an

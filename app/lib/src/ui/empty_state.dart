@@ -33,7 +33,7 @@ class EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 32, color: context.colors.mut3),
+              Icon(icon, size: FwIconSize.xl, color: context.colors.mut3),
               const Gap(FwSpacing.md),
               Text(
                 title,

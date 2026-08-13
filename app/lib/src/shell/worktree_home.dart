@@ -4,6 +4,7 @@ import '../dev_stack/stack_block.dart';
 import '../plugins/native/dev_stack_core.dart';
 import '../plugins/native/dev_stack_plugin.dart';
 import '../plugins/worktree_session.dart';
+import '../ui/panel_header.dart';
 import '../ui/theme.dart';
 import 'worktree.dart';
 
@@ -57,35 +58,43 @@ class WorktreeHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(FwSpacing.xxxl),
+      padding: const EdgeInsets.only(bottom: FwSpacing.xxxl),
       children: [
-        Text(worktree.displayName, style: context.type.pageTitle),
-        const Gap(FwSpacing.sm),
-        SelectableText(worktree.path, style: context.type.caption),
-        const Gap(FwSpacing.xl),
-
-        Wrap(
-          spacing: FwSpacing.md,
-          runSpacing: FwSpacing.md,
-          children: [
-            _Chip(worktree.isMain ? 'main checkout' : 'linked worktree'),
-            if (worktree.branch case var branch?)
-              _Chip(branch, icon: Icons.call_split)
-            else if (worktree.head case var head?)
-              _Chip('detached at ${_short(head)}'),
-          ],
+        FwPanelHeader(
+          worktree.displayName,
+          subtitle: [worktree.path],
+          // A path is the thing most likely to be wanted in a terminal a moment
+          // later.
+          selectableSubtitle: true,
+          below: Wrap(
+            spacing: FwSpacing.md,
+            runSpacing: FwSpacing.md,
+            children: [
+              _Chip(worktree.isMain ? 'main checkout' : 'linked worktree'),
+              if (worktree.branch case var branch?)
+                _Chip(branch, icon: Icons.call_split)
+              else if (worktree.head case var head?)
+                _Chip('detached at ${_short(head)}'),
+            ],
+          ),
         ),
 
-        if (_stack case var stack?) ...[
-          const Gap(FwSpacing.xxxl),
-          DevStackBlock(
-            stack,
-            form: DevStackForm.strip,
-            onOpenPanel: onOpenPlugin == null
-                ? null
-                : () => onOpenPlugin!(devStackPluginId),
+        if (_stack case var stack?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              panelGutter,
+              FwSpacing.lg,
+              panelGutter,
+              0,
+            ),
+            child: DevStackBlock(
+              stack,
+              form: DevStackForm.strip,
+              onOpenPanel: onOpenPlugin == null
+                  ? null
+                  : () => onOpenPlugin!(devStackPluginId),
+            ),
           ),
-        ],
       ],
     );
   }
@@ -121,7 +130,7 @@ class _Chip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 12, color: colors.mut),
+              Icon(icon, size: FwIconSize.xs, color: colors.mut),
               const Gap(FwSpacing.xs),
             ],
             Flexible(

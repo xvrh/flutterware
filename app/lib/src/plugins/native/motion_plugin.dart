@@ -12,14 +12,14 @@ import '../../motion/discovery.dart';
 import '../../motion/lane_model.dart';
 import '../../motion/new_span.dart';
 import '../../motion/values_file.dart';
-import '../../ui/design/spacing.dart';
-import '../../ui/design/tokens.dart';
+import '../../ui/loading_state.dart';
 import '../../ui/tappable.dart';
 import '../native_plugin.dart';
 import 'motion_address.dart';
 import 'motion_core.dart';
 import 'motion_highlight.dart';
 import 'motion_sequencer.dart';
+import '../../ui/design/design.dart';
 
 export 'motion_core.dart' show MotionCore, motionPluginId;
 
@@ -125,7 +125,7 @@ class _MotionPanelState extends State<_MotionPanel> {
       );
     }
     if (result == null) {
-      return Center(child: Text('Scanning…', style: context.type.bodyMuted));
+      return const LoadingState(title: 'Scanning for motions…');
     }
     if (result.motions.isEmpty) {
       return Center(
@@ -255,7 +255,7 @@ class _MotionPicker extends StatelessWidget {
             ),
             leadingIcon: Icon(
               identical(motion, selected) ? Icons.check : null,
-              size: 14,
+              size: FwIconSize.sm,
               color: context.colors.accent,
             ),
             child: Row(
@@ -285,7 +285,7 @@ class _MotionPicker extends StatelessWidget {
             ),
             Icon(
               Icons.keyboard_arrow_down,
-              size: 16,
+              size: FwIconSize.md,
               color: context.colors.mut2,
             ),
           ],
@@ -335,7 +335,7 @@ class _ScanGaps extends StatelessWidget {
               border: Border.all(
                 color: context.colors.amber.withValues(alpha: 0.5),
               ),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
             ),
             child: Text(
               '${diagnostics.length} not scanned',
@@ -366,7 +366,7 @@ class _ValuesFileBadge extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.colors.accentSoft,
           border: Border.all(color: context.colors.accent),
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
         ),
         child: Text(
           name,

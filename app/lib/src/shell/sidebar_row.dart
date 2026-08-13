@@ -178,7 +178,11 @@ class _ChildCommandsButton extends StatelessWidget {
       builder: (context, controller) => Tappable(
         onTap: controller.toggle,
         child: Center(
-          child: Icon(Icons.more_vert, size: 14, color: context.colors.mut),
+          child: Icon(
+            Icons.more_vert,
+            size: FwIconSize.sm,
+            color: context.colors.mut,
+          ),
         ),
       ),
     );

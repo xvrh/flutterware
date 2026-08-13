@@ -6,12 +6,12 @@ import 'package:flutterware/server.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../address/address_scope.dart';
-import '../../ui/design/tokens.dart';
 import '../../ui/json_view.dart';
 import '../../ui/tappable.dart';
 import '../native_plugin.dart';
 import 'server_address.dart';
 import 'server_core.dart';
+import '../../ui/design/design.dart';
 
 export 'server_core.dart' show ServerCore, serverPluginId;
 
@@ -199,7 +199,7 @@ class _ServerBar extends StatelessWidget {
                         : hovered
                         ? colors.hoverOverlay
                         : null,
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.circular(context.radii.pill),
                     border: Border.all(
                       color: selected ? colors.accentSoft2 : colors.line,
                     ),
@@ -315,7 +315,7 @@ class _EnvironmentChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(context.radii.micro),
       ),
       child: Text(
         environment,
@@ -520,7 +520,7 @@ class _QueryDetailState extends State<_QueryDetail> {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.close, size: 18),
+              icon: const Icon(Icons.close, size: FwIconSize.lg),
               tooltip: 'Back to all queries',
               onPressed: () => AddressScope.write(
                 context,
@@ -621,7 +621,7 @@ class _OccurrenceRow extends StatelessWidget {
           ),
           if (request != null)
             IconButton(
-              icon: const Icon(Icons.north_east, size: 14),
+              icon: const Icon(Icons.north_east, size: FwIconSize.sm),
               tooltip:
                   '${request.payload['method']} ${request.payload['path']}',
               onPressed: () => AddressScope.write(context).setSegments(
@@ -748,7 +748,7 @@ class _RequestRow extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: Colors.amber.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(context.radii.micro),
                   ),
                   child: Text(
                     'N+1',
@@ -822,7 +822,7 @@ class _RequestDetail extends StatelessWidget {
               const SizedBox(width: 8),
               _CopyAsCurlButton(server: server, request: request),
               IconButton(
-                icon: const Icon(Icons.close, size: 18),
+                icon: const Icon(Icons.close, size: FwIconSize.lg),
                 tooltip: 'Back to the request list',
                 onPressed: () => AddressScope.write(
                   context,
@@ -921,7 +921,7 @@ class _CopyAsCurlButton extends StatelessWidget {
           : 'Copy as curl — needs a published baseUrl '
                 '(FlutterwareServer.info)',
       child: IconButton(
-        icon: const Icon(Icons.terminal, size: 18),
+        icon: const Icon(Icons.terminal, size: FwIconSize.lg),
         onPressed: !enabled
             ? null
             : () async {
@@ -967,7 +967,7 @@ class _WaterfallTab extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.amber.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1053,7 +1053,7 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
                     _expanded.contains(event.id)
                         ? Icons.expand_more
                         : Icons.chevron_right,
-                    size: 16,
+                    size: FwIconSize.md,
                     color: theme.hintColor,
                   ),
                   const SizedBox(width: 4),
@@ -1166,7 +1166,7 @@ class _CommandResult extends StatelessWidget {
         color: Theme.of(
           context,
         ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
       ),
       child: SelectableText('$result', style: _mono(context)),
     );
@@ -1243,7 +1243,9 @@ class _HttpMessageTab extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surfaceContainerHighest
                           .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(
+                        context.radii.radiusSmall,
+                      ),
                     ),
                     child: SelectableText(body, style: mono),
                   ),
@@ -1341,7 +1343,9 @@ class _Waterfall extends StatelessWidget {
                           height: 14,
                           decoration: BoxDecoration(
                             color: color,
-                            borderRadius: BorderRadius.circular(3),
+                            borderRadius: BorderRadius.circular(
+                              context.radii.micro,
+                            ),
                           ),
                         ),
                       ),
@@ -1629,7 +1633,7 @@ class _KindChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: Colors.teal.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(context.radii.micro),
       ),
       child: Text(
         kind,
@@ -1662,7 +1666,7 @@ class _SmallIconButton extends StatelessWidget {
           onTap: onTap,
           builder: (context, hovered) => Icon(
             icon,
-            size: 14,
+            size: FwIconSize.sm,
             color: hovered
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).hintColor,
@@ -1699,7 +1703,7 @@ class _NoInfoHint extends StatelessWidget {
               color: theme.colorScheme.surfaceContainerHighest.withValues(
                 alpha: 0.5,
               ),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
             ),
             child: SelectableText(
               'FlutterwareServer.info(ServerInfo(\n'
@@ -1793,7 +1797,7 @@ class _ChannelChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(context.radii.micro),
       ),
       child: Text(
         event.channel,

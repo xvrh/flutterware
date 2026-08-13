@@ -69,7 +69,7 @@ class ScenarioHelpPage extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: FilledButton.icon(
                   onPressed: onNew,
-                  icon: const Icon(Icons.add, size: 16),
+                  icon: const Icon(Icons.add, size: FwIconSize.md),
                   label: const Text('New scenario'),
                 ),
               ),
@@ -236,7 +236,10 @@ class _CommandLineState extends State<_CommandLine> {
           ),
           const Gap(FwSpacing.sm),
           IconButton(
-            icon: Icon(justCopied ? Icons.check : Icons.content_copy, size: 14),
+            icon: Icon(
+              justCopied ? Icons.check : Icons.content_copy,
+              size: FwIconSize.sm,
+            ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 22, height: 22),
             tooltip: 'Copy the command',

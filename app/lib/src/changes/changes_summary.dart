@@ -579,7 +579,11 @@ class _Footer extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.difference_outlined, size: 13, color: colors.accent),
+            Icon(
+              Icons.difference_outlined,
+              size: FwIconSize.sm,
+              color: colors.accent,
+            ),
             const Gap(FwSpacing.sm),
             Expanded(
               child: Text(

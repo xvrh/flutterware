@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../ui/design/design.dart';
 
 class ErrorPanel extends StatelessWidget {
   final String message;
@@ -15,7 +16,7 @@ class ErrorPanel extends StatelessWidget {
         children: <Widget>[
           Padding(
             padding: const EdgeInsets.all(10.0),
-            child: Icon(Icons.error, size: 40),
+            child: Icon(Icons.error, size: FwIconSize.xl),
           ),
           Padding(
             padding: const EdgeInsets.all(8.0),

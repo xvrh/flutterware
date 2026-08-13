@@ -502,7 +502,7 @@ class _GuardBanner extends StatelessWidget {
         children: [
           Icon(
             blocking ? Icons.block : Icons.warning_amber_rounded,
-            size: 15,
+            size: FwIconSize.md,
             color: tint,
           ),
           const Gap(FwSpacing.md),

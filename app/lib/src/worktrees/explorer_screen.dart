@@ -562,7 +562,7 @@ class _Header extends StatelessWidget {
           const Gap(FwSpacing.sm),
           IconButton(
             onPressed: onRefresh,
-            icon: Icon(Icons.refresh, size: 15, color: colors.mut),
+            icon: Icon(Icons.refresh, size: FwIconSize.md, color: colors.mut),
             tooltip: 'Refresh every worktree',
             constraints: const BoxConstraints.tightFor(width: 26, height: 26),
             padding: EdgeInsets.zero,
@@ -655,7 +655,7 @@ class _FilterState extends State<_Filter> {
         isDense: true,
         filled: true,
         fillColor: colors.panel,
-        prefixIcon: Icon(Icons.search, size: 14, color: colors.mut3),
+        prefixIcon: Icon(Icons.search, size: FwIconSize.sm, color: colors.mut3),
         prefixIconConstraints: const BoxConstraints.tightFor(
           width: 28,
           height: 20,
@@ -706,7 +706,7 @@ class _SortMenu extends StatelessWidget {
               sort.label,
               style: context.type.bodySmall.copyWith(color: colors.ink),
             ),
-            Icon(Icons.expand_more, size: 14, color: colors.mut2),
+            Icon(Icons.expand_more, size: FwIconSize.sm, color: colors.mut2),
           ],
         ),
       ),

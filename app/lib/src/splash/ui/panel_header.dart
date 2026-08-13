@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../capture/capture_mode.dart';
 import '../../ui/action_button.dart';
 import '../../ui/menu.dart';
+import '../../ui/panel_header.dart';
+import '../../utils/string/plural.dart';
 import '../../ui/theme.dart';
 import '../model/surface.dart';
 
@@ -22,7 +24,7 @@ enum SplashGeneratedState {
 
   String label(int files) => switch (this) {
     never => 'Never generated',
-    current => '$files ${files == 1 ? 'file' : 'files'} generated',
+    current => '${counted(files, 'file')} generated',
     stale => 'Generated, then edited',
   };
 }
@@ -81,59 +83,23 @@ class SplashPanelHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var type = context.type;
-    var colors = context.colors;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            FwSpacing.xxl,
-            FwSpacing.xl,
-            FwSpacing.xxl,
-            FwSpacing.lg,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      package,
-                      style: type.pageTitle,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const Gap(FwSpacing.lg),
-                  _StatusPill(state: state, files: fileCount),
-                ],
-              ),
-              const Gap(FwSpacing.xs),
-              Text(
-                [
-                  configPath,
-                  if (fromPubspec) 'from the pubspec section',
-                  if (scannedAt != null && !CaptureMode.isCapturing(context))
-                    'read at ${_clock(scannedAt!)}',
-                ].join('  ·  '),
-                style: type.caption.copyWith(color: colors.mut2),
-              ),
-              if (flavors.isNotEmpty) ...[
-                const Gap(FwSpacing.lg),
-                _Flavors(
-                  flavors: flavors,
-                  selected: selectedFlavor,
-                  onSelect: onFlavor,
-                ),
-              ],
-            ],
-          ),
-        ),
-        _Toolbar(size: size, onSize: onSize, onReload: onReload),
+    return FwPanelHeader(
+      package,
+      badge: _StatusPill(state: state, files: fileCount),
+      subtitle: [
+        configPath,
+        if (fromPubspec) 'from the pubspec section',
+        if (scannedAt != null && !CaptureMode.isCapturing(context))
+          'read at ${_clock(scannedAt!)}',
       ],
+      below: flavors.isEmpty
+          ? null
+          : _Flavors(
+              flavors: flavors,
+              selected: selectedFlavor,
+              onSelect: onFlavor,
+            ),
+      toolbar: _Toolbar(size: size, onSize: onSize, onReload: onReload),
     );
   }
 }
@@ -170,7 +136,7 @@ class _StatusPill extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(context.radii.pill),
       ),
       child: Text(
         state.label(files),
@@ -295,7 +261,11 @@ class _SizePicker extends StatelessWidget {
                     style: context.type.caption.copyWith(color: colors.ink),
                   ),
                   const Gap(FwSpacing.xs),
-                  Icon(Icons.keyboard_arrow_down, size: 14, color: colors.mut2),
+                  Icon(
+                    Icons.keyboard_arrow_down,
+                    size: FwIconSize.sm,
+                    color: colors.mut2,
+                  ),
                 ],
               ),
             ),
@@ -331,7 +301,7 @@ class _Flavors extends StatelessWidget {
         ])
           InkWell(
             onTap: onSelect == null ? null : () => onSelect!(value),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(context.radii.pill),
             child: Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: FwSpacing.lg,
@@ -339,7 +309,7 @@ class _Flavors extends StatelessWidget {
               ),
               decoration: BoxDecoration(
                 color: value == selected ? colors.accentSoft : null,
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(context.radii.pill),
                 border: Border.all(
                   color: value == selected ? colors.accent : colors.line,
                 ),

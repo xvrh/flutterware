@@ -306,7 +306,11 @@ class _Problem extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.only(top: 2, right: FwSpacing.sm),
-                child: Icon(Icons.error_outline, size: 14, color: colors.red),
+                child: Icon(
+                  Icons.error_outline,
+                  size: FwIconSize.sm,
+                  color: colors.red,
+                ),
               ),
               Expanded(
                 child: SelectableText(

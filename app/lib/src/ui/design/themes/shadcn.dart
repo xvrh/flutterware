@@ -68,7 +68,13 @@ final shadcnTheme = FwTheme.from(
   name: 'shadcn',
   palette: shadcnPalette,
   dark: shadcnDarkPalette,
-  radii: const FwRadii(radiusSmall: 6, radius: 8, radiusLarge: 12),
+  radii: const FwRadii(
+    micro: 4,
+    radiusSmall: 6,
+    radius: 8,
+    radiusLarge: 12,
+    pill: 999,
+  ),
   type: const FwTypeSpec(
     heading: FontWeight.w600,
     strong: FontWeight.w500,

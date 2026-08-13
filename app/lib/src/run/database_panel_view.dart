@@ -4,9 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutterware/channels.dart';
 
-import '../ui/design/spacing.dart';
-import '../ui/design/tokens.dart';
 import 'panel_client.dart';
+import '../ui/design/design.dart';
 
 /// The cockpit's bespoke renderer for `db:*` panels — a database browser, not
 /// a descriptor dump.
@@ -291,7 +290,7 @@ class _DatabasePanelViewState extends State<DatabasePanelView> {
               children: [
                 Icon(
                   Icons.terminal,
-                  size: 16,
+                  size: FwIconSize.md,
                   color: pane is _SqlPane
                       ? context.colors.accent
                       : context.colors.mut,
@@ -308,7 +307,7 @@ class _DatabasePanelViewState extends State<DatabasePanelView> {
               children: [
                 Icon(
                   Icons.bolt,
-                  size: 16,
+                  size: FwIconSize.md,
                   color: pane is _ActivityPane
                       ? context.colors.accent
                       : context.colors.mut,
@@ -405,11 +404,11 @@ class _IconAction extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: InkWell(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(context.radii.micro),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(FwSpacing.xs),
-          child: Icon(icon, size: 15, color: context.colors.mut),
+          child: Icon(icon, size: FwIconSize.md, color: context.colors.mut),
         ),
       ),
     );
@@ -618,7 +617,7 @@ class _SqlViewState extends State<_SqlView> {
                 children: [
                   FilledButton.icon(
                     onPressed: _running ? null : () => unawaited(_run('query')),
-                    icon: const Icon(Icons.play_arrow, size: 16),
+                    icon: const Icon(Icons.play_arrow, size: FwIconSize.md),
                     label: const Text('Run'),
                   ),
                   const Gap(FwSpacing.md),
@@ -634,7 +633,10 @@ class _SqlViewState extends State<_SqlView> {
                       onPressed: _running
                           ? null
                           : () => unawaited(_run('watch')),
-                      icon: const Icon(Icons.visibility_outlined, size: 16),
+                      icon: const Icon(
+                        Icons.visibility_outlined,
+                        size: FwIconSize.md,
+                      ),
                       label: const Text('Watch'),
                     ),
                   const Spacer(),
@@ -646,7 +648,10 @@ class _SqlViewState extends State<_SqlView> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: context.colors.red,
                       ),
-                      icon: const Icon(Icons.warning_amber, size: 16),
+                      icon: const Icon(
+                        Icons.warning_amber,
+                        size: FwIconSize.md,
+                      ),
                       label: const Text('Execute write'),
                     ),
                 ],
@@ -731,7 +736,7 @@ class _ActivityView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.bolt, size: 32, color: context.colors.mut3),
+            Icon(Icons.bolt, size: FwIconSize.xl, color: context.colors.mut3),
             const Gap(FwSpacing.md),
             Text('Nothing yet.', style: context.type.bodyMuted),
             const Gap(FwSpacing.xs),
@@ -775,7 +780,11 @@ class _ChangeRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.edit_outlined, size: 15, color: context.colors.mut2),
+          Icon(
+            Icons.edit_outlined,
+            size: FwIconSize.md,
+            color: context.colors.mut2,
+          ),
           const Gap(FwSpacing.md),
           Expanded(
             child: Text.rich(
@@ -861,7 +870,7 @@ class _SnapshotRowState extends State<_SnapshotRow> {
               children: [
                 Icon(
                   error == null ? Icons.visibility_outlined : Icons.error,
-                  size: 15,
+                  size: FwIconSize.md,
                   color: error == null
                       ? context.colors.accent
                       : context.colors.red,
@@ -925,7 +934,7 @@ class _SnapshotRowState extends State<_SnapshotRow> {
             ),
             decoration: BoxDecoration(
               border: Border.all(color: context.colors.line),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(context.radii.micro),
             ),
             child: _evicted
                 ? Padding(
@@ -1082,7 +1091,7 @@ class _ErrorPane extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.colors.red.withValues(alpha: 0.06),
           border: Border.all(color: context.colors.red.withValues(alpha: 0.4)),
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
         ),
         child: Text(
           message,

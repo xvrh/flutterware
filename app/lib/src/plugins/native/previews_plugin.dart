@@ -17,6 +17,7 @@ import '../../previews/web_server.dart';
 import '../native_plugin.dart';
 import 'previews_address.dart';
 import 'previews_core.dart';
+import '../../ui/design/design.dart';
 
 export 'previews_core.dart' show PreviewsCore, uiCatalogPluginId;
 
@@ -513,7 +514,7 @@ class _NoPreviews extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: FilledButton.icon(
               onPressed: onNew,
-              icon: const Icon(Icons.add, size: 16),
+              icon: const Icon(Icons.add, size: FwIconSize.md),
               label: const Text('New preview'),
             ),
           ),

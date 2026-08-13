@@ -21,6 +21,7 @@ import 'address_bar.dart';
 import 'config_load.dart';
 import 'config_screen.dart';
 import 'device_desk.dart';
+import '../utils/fitted_app.dart';
 import '../utils/hot_reload.dart';
 import '../utils/value_stream_builder.dart';
 import 'drive_navigator.dart';
@@ -79,24 +80,31 @@ class ShellApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutterware',
-      theme: appTheme,
-      // Follows the OS. The shell reads every colour through `context.colors`,
-      // so both builds come from the same widgets — but a plugin panel that
-      // still hardcodes its own will stay light, and look it.
-      darkTheme: appDarkTheme,
-      themeMode: framing.themeMode ?? ThemeMode.system,
-      debugShowCheckedModeBanner: false,
-      builder: captureKey == null
-          ? null
-          : (context, child) => framing.frame(
-              context,
-              CaptureMode(
-                child: RepaintBoundary(key: captureKey, child: child),
+    // Above the `MaterialApp`, so the whole window scales together and the
+    // corrected MediaQuery is the one `WidgetsApp` inherits — it never
+    // introduces its own. A capture sets its size *below* this, inside
+    // `builder`, which is what we want: a screenshot asked for exact pixels
+    // should get them rather than the window's scale factor.
+    return FittedApp(
+      child: MaterialApp(
+        title: 'Flutterware',
+        theme: appTheme,
+        // Follows the OS. The shell reads every colour through `context.colors`,
+        // so both builds come from the same widgets — but a plugin panel that
+        // still hardcodes its own will stay light, and look it.
+        darkTheme: appDarkTheme,
+        themeMode: framing.themeMode ?? ThemeMode.system,
+        debugShowCheckedModeBanner: false,
+        builder: captureKey == null
+            ? null
+            : (context, child) => framing.frame(
+                context,
+                CaptureMode(
+                  child: RepaintBoundary(key: captureKey, child: child),
+                ),
               ),
-            ),
-      home: DriveNavigatorScope(shell: shell, child: ShellView(shell)),
+        home: DriveNavigatorScope(shell: shell, child: ShellView(shell)),
+      ),
     );
   }
 }
@@ -310,7 +318,7 @@ class _SidebarButton extends StatelessWidget {
     return IconButton(
       icon: Icon(
         shell.sidebarVisible ? Icons.chevron_left : Icons.chevron_right,
-        size: 16,
+        size: FwIconSize.md,
         color: context.colors.mut,
       ),
       padding: EdgeInsets.zero,
@@ -366,7 +374,11 @@ class _LaunchFallbackBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.warning_amber_outlined, size: 14, color: colors.amber),
+          Icon(
+            Icons.warning_amber_outlined,
+            size: FwIconSize.sm,
+            color: colors.amber,
+          ),
           const Gap(FwSpacing.sm),
           Expanded(
             child: Text(
@@ -412,7 +424,7 @@ class _ConfigErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline, size: 14, color: colors.red),
+          Icon(Icons.error_outline, size: FwIconSize.sm, color: colors.red),
           const Gap(FwSpacing.sm),
           Expanded(
             child: Text(
@@ -559,7 +571,7 @@ class _ConfigButton extends StatelessWidget {
           children: [
             Icon(
               Icons.tune,
-              size: 16,
+              size: FwIconSize.md,
               color: shell.isConfigScreen ? colors.accent : colors.mut,
             ),
             if (failing)
@@ -669,7 +681,7 @@ class _HotReloadButtonsState extends State<_HotReloadButtons> {
     message: tooltip,
     child: IconButton(
       onPressed: () => unawaited(onPressed()),
-      icon: Icon(icon, size: 16, color: colors.mut),
+      icon: Icon(icon, size: FwIconSize.md, color: colors.mut),
       constraints: const BoxConstraints.tightFor(width: 28, height: 28),
       padding: EdgeInsets.zero,
     ),
@@ -739,7 +751,7 @@ class _ExplorerTab extends StatelessWidget {
               children: [
                 Icon(
                   Icons.account_tree_outlined,
-                  size: 15,
+                  size: FwIconSize.md,
                   color: selected ? colors.accent : colors.mut,
                 ),
                 if (needsYou > 0)
@@ -751,7 +763,9 @@ class _ExplorerTab extends StatelessWidget {
                       constraints: const BoxConstraints(minWidth: 11),
                       decoration: BoxDecoration(
                         color: colors.accent,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(
+                          context.radii.radiusSmall,
+                        ),
                       ),
                       child: Text(
                         '$needsYou',
@@ -952,7 +966,7 @@ class _CloseButton extends StatelessWidget {
         },
         builder: (context, hovered) => Icon(
           blockers.isEmpty ? Icons.close : Icons.lock_outline,
-          size: 13,
+          size: FwIconSize.sm,
           color: blockers.isNotEmpty
               ? colors.amber
               : hovered
@@ -1100,7 +1114,11 @@ class _SwitcherButtonState extends State<_SwitcherButton> {
             message: 'Switch worktree',
             child: IconButton(
               onPressed: () => controller.isOpen ? controller.close() : _open(),
-              icon: Icon(Icons.expand_more, size: 18, color: colors.mut),
+              icon: Icon(
+                Icons.expand_more,
+                size: FwIconSize.lg,
+                color: colors.mut,
+              ),
               constraints: const BoxConstraints.tightFor(width: 28, height: 28),
               padding: EdgeInsets.zero,
             ),
@@ -1413,7 +1431,7 @@ class _Row extends StatelessWidget {
             if (icon != null) ...[
               Icon(
                 icon,
-                size: 14,
+                size: FwIconSize.sm,
                 color: selected ? colors.accent : colors.mut,
               ),
               const Gap(FwSpacing.md),
@@ -1441,7 +1459,7 @@ class _Row extends StatelessWidget {
                       padding: const EdgeInsets.only(left: FwSpacing.xs),
                       child: Icon(
                         action.icon,
-                        size: 15,
+                        size: FwIconSize.md,
                         color: over ? colors.accent : colors.mut,
                       ),
                     ),

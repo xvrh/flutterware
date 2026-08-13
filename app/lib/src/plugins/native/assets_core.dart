@@ -10,6 +10,7 @@ import '../../assets/model/asset_facts.dart';
 import '../../assets/model/asset_scan.dart';
 import '../../previews/package_config_locator.dart';
 import '../../utils/list_files.dart';
+import '../../utils/string/plural.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 import 'assets_address.dart';
@@ -291,7 +292,8 @@ class AssetsCore extends PluginCore {
     // Deliberately short. This shares a sidebar row with the package's name,
     // and the count of problems is already on the plugin's own row above —
     // saying it again here costs the name the space it needs.
-    var summary = '${scan.totalCount} assets · ${formatBytes(scan.totalBytes)}';
+    var summary =
+        '${counted(scan.totalCount, 'asset')} · ${formatBytes(scan.totalBytes)}';
     return scan.problems.isEmpty ? Status.info(summary) : Status.warn(summary);
   }
 
@@ -377,7 +379,7 @@ class AssetsCore extends PluginCore {
             ViewItem(
               owner.package,
               detail:
-                  '${owner.assets.length} assets · ${formatBytes(owner.bytes)}',
+                  '${counted(owner.assets.length, 'asset')} · ${formatBytes(owner.bytes)}',
             ),
         ], truncated: scan.fromPackages.length - shown.length),
       ]),

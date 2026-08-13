@@ -24,7 +24,10 @@ class AppThemeDemo extends StatelessWidget {
                     bottom: 0,
                     right: 0,
                     left: 0,
-                    child: Container(color: AppColors.tabDivider, height: 1),
+                    child: Container(
+                      color: context.colors.tabDivider,
+                      height: 1,
+                    ),
                   ),
                   const TabBar(
                     tabs: [
@@ -115,7 +118,7 @@ class _Tab1State extends State<_Tab1> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.stateError,
+                backgroundColor: context.colors.red,
               ),
               onPressed: () {},
               child: Text('Danger button'),

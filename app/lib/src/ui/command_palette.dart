@@ -208,7 +208,11 @@ class _CommandPaletteState extends State<CommandPalette> {
       ),
       child: Row(
         children: [
-          Icon(Icons.search_rounded, size: 20, color: context.colors.mut),
+          Icon(
+            Icons.search_rounded,
+            size: FwIconSize.lg,
+            color: context.colors.mut,
+          ),
           const Gap(FwSpacing.md),
           Expanded(
             child: TextField(
@@ -307,7 +311,7 @@ class _CommandPaletteState extends State<CommandPalette> {
               children: [
                 Icon(
                   _iconFor(hit.reason),
-                  size: 18,
+                  size: FwIconSize.lg,
                   color: selected ? context.colors.accent : context.colors.mut,
                 ),
                 const Gap(FwSpacing.lg),

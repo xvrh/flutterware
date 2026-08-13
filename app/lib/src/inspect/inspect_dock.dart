@@ -391,7 +391,7 @@ class InspectStripButton extends StatelessWidget {
               : null,
           child: Icon(
             icon,
-            size: 16,
+            size: FwIconSize.md,
             color: active ? context.colors.accent : context.colors.mut,
           ),
         ),

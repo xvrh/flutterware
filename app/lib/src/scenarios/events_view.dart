@@ -212,7 +212,7 @@ class _EventRow extends StatelessWidget {
                           expanded
                               ? Icons.keyboard_arrow_down
                               : Icons.keyboard_arrow_right,
-                          size: 14,
+                          size: FwIconSize.sm,
                           color: colors.mut,
                         )
                       : null,

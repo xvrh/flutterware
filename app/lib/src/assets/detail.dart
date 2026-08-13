@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../ui/field_row.dart';
+import '../ui/empty_state.dart';
 import '../ui/theme.dart';
 import 'model/asset_catalog.dart';
 import 'model/asset_scan.dart';
@@ -273,8 +274,12 @@ class AssetDetailEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Text('Select an asset.', style: context.type.bodyMuted),
+    return const EmptyState(
+      icon: Icons.image_outlined,
+      title: 'Pick an asset',
+      message:
+          'Opening one shows where it came from, what densities it has, '
+          'and the Dart that loads it.',
     );
   }
 }

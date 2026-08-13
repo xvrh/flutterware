@@ -426,7 +426,7 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
           children: [
             FilledButton.icon(
               onPressed: () => unawaited(_newScenario(context, core, package)),
-              icon: const Icon(Icons.add, size: 16),
+              icon: const Icon(Icons.add, size: FwIconSize.md),
               label: const Text('New scenario'),
             ),
             const Gap(FwSpacing.lg),
@@ -502,7 +502,7 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
               children: [
                 Icon(
                   Icons.warning_amber_outlined,
-                  size: 14,
+                  size: FwIconSize.sm,
                   color: context.colors.amber,
                 ),
                 const Gap(FwSpacing.sm),
@@ -628,7 +628,7 @@ class _HeaderButton extends StatelessWidget {
           ),
           child: Icon(
             icon,
-            size: 16,
+            size: FwIconSize.md,
             color: selected || hovered ? colors.ink : colors.mut,
           ),
         ),
@@ -675,13 +675,21 @@ class _FilterField extends StatelessWidget {
             contentPadding: const EdgeInsets.symmetric(
               horizontal: FwSpacing.md,
             ),
-            prefixIcon: Icon(Icons.search, size: 14, color: colors.mut2),
+            prefixIcon: Icon(
+              Icons.search,
+              size: FwIconSize.sm,
+              color: colors.mut2,
+            ),
             prefixIconConstraints: _iconSlot,
             suffixIconConstraints: _iconSlot,
             suffixIcon: controller.text.isEmpty
                 ? const SizedBox.shrink()
                 : IconButton(
-                    icon: Icon(Icons.close, size: 14, color: colors.mut2),
+                    icon: Icon(
+                      Icons.close,
+                      size: FwIconSize.sm,
+                      color: colors.mut2,
+                    ),
                     padding: EdgeInsets.zero,
                     constraints: _iconSlot,
                     onPressed: () {
@@ -732,7 +740,7 @@ class _ScenarioRow extends StatelessWidget {
           children: [
             Icon(
               Icons.route_outlined,
-              size: 14,
+              size: FwIconSize.sm,
               color: selected ? colors.accent : colors.mut2,
             ),
             const Gap(FwSpacing.md),
@@ -953,7 +961,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
           else if (outcome != null) ...[
             Icon(
               outcome.ok ? Icons.check_circle_outline : Icons.error_outline,
-              size: 16,
+              size: FwIconSize.md,
               color: outcome.ok ? colors.grn : colors.red,
             ),
             const Gap(FwSpacing.xs),
@@ -1087,7 +1095,7 @@ class _RunSplitButton extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.play_arrow, size: 16, color: fg),
+                  Icon(Icons.play_arrow, size: FwIconSize.md, color: fg),
                   const Gap(FwSpacing.xs),
                   Text('Run', style: context.type.button.copyWith(color: fg)),
                 ],
@@ -1120,7 +1128,11 @@ class _RunSplitButton extends StatelessWidget {
                 onTap: enabled ? controller.toggle : null,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xs),
-                  child: Icon(Icons.arrow_drop_down, size: 18, color: fg),
+                  child: Icon(
+                    Icons.arrow_drop_down,
+                    size: FwIconSize.lg,
+                    color: fg,
+                  ),
                 ),
               ),
             ),
@@ -1423,7 +1435,11 @@ class _AccessibilityPanel extends StatelessWidget {
               Expanded(child: Text('Text scale', style: context.type.body)),
               Tappable(
                 onTap: () => setScale((scale - 0.1).clamp(0.5, 3.0)),
-                child: Icon(Icons.remove, size: 16, color: colors.mut),
+                child: Icon(
+                  Icons.remove,
+                  size: FwIconSize.md,
+                  color: colors.mut,
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
@@ -1434,7 +1450,7 @@ class _AccessibilityPanel extends StatelessWidget {
               ),
               Tappable(
                 onTap: () => setScale((scale + 0.1).clamp(0.5, 3.0)),
-                child: Icon(Icons.add, size: 16, color: colors.mut),
+                child: Icon(Icons.add, size: FwIconSize.md, color: colors.mut),
               ),
             ],
           ),
@@ -1487,7 +1503,11 @@ class _AxisChip extends StatelessWidget {
               value,
               style: context.type.caption.copyWith(color: colors.ink),
             ),
-            Icon(Icons.arrow_drop_down, size: 16, color: colors.mut2),
+            Icon(
+              Icons.arrow_drop_down,
+              size: FwIconSize.md,
+              color: colors.mut2,
+            ),
           ],
         ),
       ),

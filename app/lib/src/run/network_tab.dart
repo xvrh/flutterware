@@ -6,12 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import 'package:vm_service/vm_service.dart';
 
-import '../ui/design/tokens.dart';
 import '../ui/json_view.dart';
 import '../ui/tappable.dart';
 import 'connection.dart';
 import 'handle.dart';
 import 'network_tracker.dart';
+import '../ui/design/design.dart';
 
 final _logger = Logger('run_network');
 
@@ -377,7 +377,7 @@ class _RequestDetailState extends State<_RequestDetail> {
               const SizedBox(width: 8),
               _CopyAsCurlButton(detail: _detail),
               IconButton(
-                icon: const Icon(Icons.close, size: 18),
+                icon: const Icon(Icons.close, size: FwIconSize.lg),
                 tooltip: 'Back to the request list',
                 onPressed: widget.onClose,
               ),
@@ -511,7 +511,7 @@ class _HttpMessageTab extends StatelessWidget {
               color: theme.colorScheme.surfaceContainerHighest.withValues(
                 alpha: 0.5,
               ),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
             ),
             child: SelectableText(bodyText, style: mono),
           ),
@@ -575,7 +575,7 @@ class _CopyAsCurlButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: const Icon(Icons.terminal, size: 18),
+      icon: const Icon(Icons.terminal, size: FwIconSize.lg),
       tooltip: 'Copy as curl',
       onPressed: () async {
         var resolved = await detail;

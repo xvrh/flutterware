@@ -8,6 +8,7 @@ import '../plugins/native/icon_core.dart';
 import '../ui/design/design.dart';
 import '../ui/empty_state.dart';
 import '../ui/theme.dart';
+import '../utils/string/plural.dart';
 import 'model/role.dart';
 import 'model/scan.dart';
 import 'model/wiring.dart';
@@ -340,13 +341,19 @@ class _Header extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
-              scan.packagePath == '.' ? 'root' : scan.packagePath,
-              style: type.heading,
+            // The package path is the one thing here that has no bound — a
+            // nested example package is as long as its directories. It yields
+            // first, so the count and the minSdk beside it stay whole.
+            Flexible(
+              child: Text(
+                scan.packagePath == '.' ? 'root' : scan.packagePath,
+                style: type.heading,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             const Gap(FwSpacing.md),
             Text(
-              '${scan.fileCount} files',
+              '${scan.fileCount} ${plural(scan.fileCount, 'file')}',
               style: type.caption.copyWith(color: colors.mut),
             ),
             const Spacer(),
@@ -365,7 +372,7 @@ class _Header extends StatelessWidget {
             // there has to be a way to look again without reopening the panel.
             IconButton(
               onPressed: scanning ? null : onReload,
-              iconSize: 16,
+              iconSize: FwIconSize.md,
               visualDensity: VisualDensity.compact,
               tooltip: 'Read the icons again',
               icon: scanning
@@ -424,7 +431,7 @@ class _Chip extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: selected ? colors.accentSoft : colors.panel2,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(context.radii.pill),
         border: Border.all(color: selected ? colors.accent : colors.line),
       ),
       child: Text(label, style: context.type.caption),

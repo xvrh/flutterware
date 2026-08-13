@@ -9,6 +9,7 @@ library;
 export 'elevation.dart';
 export 'palette.dart';
 export 'radii.dart';
+export 'sizing.dart';
 export 'spacing.dart';
 export 'themes/fw_theme.dart';
 export 'themes/flutter_blue.dart';

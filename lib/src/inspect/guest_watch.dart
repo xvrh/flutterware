@@ -311,8 +311,12 @@ class GuestWatch {
     if (render is! RenderBox || !render.attached || !render.hasSize) {
       return null;
     }
-    var origin = render.localToGlobal(Offset.zero);
-    return origin & render.size;
+    // Through the transform as one rect — see `_layoutOf` in guest_inspect.dart
+    // for why an origin plus a raw size is two different spaces.
+    return MatrixUtils.transformRect(
+      render.getTransformTo(null),
+      Offset.zero & render.size,
+    );
   }
 
   /// A hash of the element tree's shape, and how many elements it has.

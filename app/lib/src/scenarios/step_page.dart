@@ -316,7 +316,11 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
               children: [
                 Tappable(
                   onTap: widget.onBack,
-                  child: Icon(Icons.arrow_back, size: 18, color: colors.mut),
+                  child: Icon(
+                    Icons.arrow_back,
+                    size: FwIconSize.lg,
+                    color: colors.mut,
+                  ),
                 ),
                 const Gap(FwSpacing.lg),
                 Expanded(
@@ -553,7 +557,7 @@ class _MotionTransport extends StatelessWidget {
               padding: const EdgeInsets.all(FwSpacing.xs),
               child: Icon(
                 motion.playing ? Icons.pause : Icons.play_arrow,
-                size: 18,
+                size: FwIconSize.lg,
                 color: colors.accent,
               ),
             ),
@@ -619,7 +623,11 @@ class _MotionTransport extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.content_cut, size: 12, color: colors.mut),
+                  Icon(
+                    Icons.content_cut,
+                    size: FwIconSize.xs,
+                    color: colors.mut,
+                  ),
                   const Gap(FwSpacing.xs),
                   Text(
                     'cut off',
@@ -657,7 +665,7 @@ class _StepFrameButton extends StatelessWidget {
           padding: const EdgeInsets.all(FwSpacing.xs),
           child: Icon(
             icon,
-            size: 18,
+            size: FwIconSize.lg,
             color: onTap == null ? colors.mut3 : colors.mut,
           ),
         ),
@@ -836,8 +844,8 @@ class _AttachmentsTab extends StatelessWidget {
                     ),
                     Icon(
                       Icons.open_in_new,
-                      size: 14,
-                      color: context.colors.textGrey,
+                      size: FwIconSize.sm,
+                      color: context.colors.mut,
                     ),
                   ],
                 ),
@@ -877,7 +885,11 @@ class _StepLink extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (!isNext)
-              Icon(Icons.arrow_back_ios, size: 12, color: colors.mut),
+              Icon(
+                Icons.arrow_back_ios,
+                size: FwIconSize.xs,
+                color: colors.mut,
+              ),
             Text(
               '${step.index} · ${scenarioStepLabel(step)}',
               style: context.type.caption.copyWith(
@@ -885,7 +897,11 @@ class _StepLink extends StatelessWidget {
               ),
             ),
             if (isNext)
-              Icon(Icons.arrow_forward_ios, size: 12, color: colors.mut),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: FwIconSize.xs,
+                color: colors.mut,
+              ),
           ],
         ),
       ),

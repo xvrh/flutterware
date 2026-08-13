@@ -105,10 +105,19 @@ class IconPlate extends StatelessWidget {
                       ],
                     ),
                   ),
+                  // The API-level badge is provenance, not the subject. Left
+                  // unconstrained it took its full intrinsic width out of a
+                  // narrow card and left the [Expanded] label beside it a few
+                  // pixels to wrap "Adaptive foreground" into — one character
+                  // per line. It yields before the label does.
                   if (role.since != null)
-                    Text(
-                      role.since!,
-                      style: type.micro.copyWith(color: colors.mut3),
+                    Flexible(
+                      child: Text(
+                        role.since!,
+                        style: type.micro.copyWith(color: colors.mut3),
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
                     ),
                 ],
               ),
@@ -118,36 +127,56 @@ class IconPlate extends StatelessWidget {
               else
                 // As authored, then every shape the platform might apply — in a
                 // row, because the comparison is the content.
-                Row(
-                  children: [
-                    _Cell(
-                      label: 'as authored',
-                      child: IconRender(
-                        image: image!,
-                        role: role,
-                        size: _size,
-                        mask: IconMask.none,
-                        backgroundImage: backgroundImage,
-                        backgroundColor: backgroundColor,
-                      ),
-                    ),
-                    for (var (label, mask) in _shapes)
-                      Padding(
-                        padding: const EdgeInsets.only(left: FwSpacing.lg),
-                        child: _Cell(
-                          label: label,
+                //
+                // The cells shrink together rather than the row overflowing.
+                // Five icons at [_size] do not fit the plate at the narrowest
+                // window we lay out for, and the two usual escapes both destroy
+                // the comparison: wrapping puts the shapes on different lines,
+                // scrolling puts some of them off the edge. Same size as each
+                // other is the only property that matters here, not any
+                // particular size.
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    var count = 1 + _shapes.length;
+                    var gaps = FwSpacing.lg * (count - 1);
+                    var cell = ((constraints.maxWidth - gaps) / count).clamp(
+                      0.0,
+                      _size,
+                    );
+                    return Row(
+                      children: [
+                        _Cell(
+                          label: 'as authored',
+                          size: cell,
                           child: IconRender(
                             image: image!,
                             role: role,
-                            size: _size,
-                            adaptiveMask: mask ?? adaptiveMask,
-                            showSafeZone: true,
+                            size: cell,
+                            mask: IconMask.none,
                             backgroundImage: backgroundImage,
                             backgroundColor: backgroundColor,
                           ),
                         ),
-                      ),
-                  ],
+                        for (var (label, mask) in _shapes)
+                          Padding(
+                            padding: const EdgeInsets.only(left: FwSpacing.lg),
+                            child: _Cell(
+                              label: label,
+                              size: cell,
+                              child: IconRender(
+                                image: image!,
+                                role: role,
+                                size: cell,
+                                adaptiveMask: mask ?? adaptiveMask,
+                                showSafeZone: true,
+                                backgroundImage: backgroundImage,
+                                backgroundColor: backgroundColor,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               if (_note != null) ...[
                 const Gap(FwSpacing.lg),
@@ -187,10 +216,18 @@ class IconPlate extends StatelessWidget {
 }
 
 class _Cell extends StatelessWidget {
-  const _Cell({required this.label, required this.child});
+  const _Cell({
+    required this.label,
+    required this.child,
+    this.size = IconPlate._size,
+  });
 
   final String label;
   final Widget child;
+
+  /// Width of the caption under [child] — the rendered icon's size, so the two
+  /// stay the same width as the row shrinks.
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +237,7 @@ class _Cell extends StatelessWidget {
         child,
         const Gap(FwSpacing.sm),
         SizedBox(
-          width: IconPlate._size,
+          width: size,
           child: Text(
             label,
             textAlign: TextAlign.center,
