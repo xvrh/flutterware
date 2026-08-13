@@ -301,4 +301,148 @@ void main() {
       );
     });
   });
+
+  group('a range', () {
+    /// The whole branch, one commit and no working-tree noise, so a test can
+    /// say which of them it asked for.
+    ({ChangesProbe probe, List<String> asked}) probeOf() {
+      var asked = <String>[];
+      return (
+        asked: asked,
+        probe: ChangesProbe(
+          runGit: (directory, arguments) async {
+            var line = arguments.join(' ');
+            asked.add(line);
+            String? answer;
+            if (line.contains('rev-parse --verify HEAD')) {
+              answer = 'headsha\n';
+            } else if (line.contains('symbolic-ref')) {
+              answer = 'origin/main\n';
+            } else if (line.contains('merge-base')) {
+              answer = 'basesha\n';
+            } else if (line.contains('log')) {
+              answer =
+                  'c2sha\u001fc2\u001fAda\u001f2026-08-12T09:00:00Z\u001f'
+                  'the second\u0000\n'
+                  'c1sha\u001fc1\u001fAda\u001f2026-08-11T09:00:00Z\u001f'
+                  'the first\u0000';
+            } else if (line.contains('status')) {
+              answer = '? scratch.dart\u0000';
+            } else if (line.contains('diff --name-only')) {
+              answer = 'lib/a.dart\u0000';
+            } else if (line.contains('diff --no-ext-diff')) {
+              answer =
+                  'diff --git a/lib/a.dart b/lib/a.dart\n'
+                  '--- a/lib/a.dart\n'
+                  '+++ b/lib/a.dart\n'
+                  '@@ -1 +1 @@\n'
+                  '-x\n'
+                  '+y\n';
+            }
+            return answer == null
+                ? GitOutput(exitCode: 1, stdout: Uint8List(0))
+                : GitOutput(
+                    exitCode: 0,
+                    stdout: Uint8List.fromList(utf8.encode(answer)),
+                  );
+          },
+        ),
+      );
+    }
+
+    test('the branch is listed whatever the range is', () async {
+      // The picker has to widen what it narrowed, so the list is always
+      // merge-base…HEAD — and it is read `--first-parent`, which is what makes
+      // "the row below this one" a well-defined left edge.
+      var it = probeOf();
+      var set = await it.probe.probe(
+        '/w',
+        range: const ChangeRange(from: 'c1sha', to: 'c2sha'),
+      );
+
+      expect([for (var c in set.commits) c.shortSha], ['c2', 'c1']);
+      expect(set.commits.first.subject, 'the second');
+      expect(
+        it.asked.firstWhere((a) => a.contains('log')),
+        allOf(contains('--first-parent'), contains('basesha..HEAD')),
+      );
+    });
+
+    test('diffs the two trees it names', () async {
+      var it = probeOf();
+      await it.probe.probe(
+        '/w',
+        range: const ChangeRange(from: 'c1sha', to: 'c2sha'),
+      );
+
+      expect(
+        it.asked.firstWhere((a) => a.contains('diff --no-ext-diff')),
+        contains('c1sha c2sha'),
+      );
+    });
+
+    test('ending at a commit reads neither untracked nor uncommitted', () async {
+      // Not filtered away afterwards — never asked for. An untracked file is in
+      // no commit, and `uncommitted` is a comparison against HEAD, which is a
+      // question about something the reader is not looking at.
+      var it = probeOf();
+      var set = await it.probe.probe(
+        '/w',
+        range: const ChangeRange(to: 'c2sha'),
+      );
+
+      expect(set.untracked, isEmpty);
+      expect(set.uncommitted, isEmpty);
+      expect(it.asked.any((a) => a.contains('status')), isFalse);
+      expect(it.asked.any((a) => a.contains('diff --name-only')), isFalse);
+    });
+
+    test('ending at the working tree still reads both', () async {
+      var it = probeOf();
+      var set = await it.probe.probe(
+        '/w',
+        range: const ChangeRange(from: 'c1sha'),
+      );
+
+      expect(set.untracked.single.path, 'scratch.dart');
+      expect(set.uncommitted, {'lib/a.dart'});
+    });
+
+    test('everything is what it always was', () async {
+      var it = probeOf();
+      var set = await it.probe.probe('/w');
+
+      expect(set.range, ChangeRange.everything);
+      expect(
+        it.asked.firstWhere((a) => a.contains('diff --no-ext-diff')),
+        contains('basesha'),
+      );
+      expect(set.untracked, hasLength(1));
+    });
+  });
+
+  group('the commit log', () {
+    test('reads the fields, and the subject is whatever is left', () {
+      // `%s` is last precisely so a subject holding the separator cannot shift
+      // anything — a commit message is user input.
+      var commits = parseCommitLog([
+        'sha1\u001fs1\u001fAda\u001f2026-08-12T09:00:00Z\u001fa: b\u001fc',
+        '\nsha2\u001fs2\u001fGrace\u001fnot a date\u001fplain',
+      ]);
+
+      expect(commits, hasLength(2));
+      expect(commits[0].sha, 'sha1');
+      expect(commits[0].author, 'Ada');
+      expect(commits[0].at, DateTime.utc(2026, 8, 12, 9));
+      expect(commits[0].subject, 'a: b\u001fc');
+      // The leading newline git writes after each record does not become part
+      // of the next one's sha.
+      expect(commits[1].sha, 'sha2');
+      expect(commits[1].at, isNull, reason: 'unparseable, not thrown');
+    });
+
+    test('a record it does not understand is dropped, not half-read', () {
+      expect(parseCommitLog(['sha-only', '']), isEmpty);
+    });
+  });
 }

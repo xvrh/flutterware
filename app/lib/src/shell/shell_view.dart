@@ -1530,13 +1530,17 @@ class _Panel extends StatelessWidget {
         key: ValueKey('changes::${changesFor.path}'),
         shell: shell,
         worktree: changesFor,
-        files: (context) => ChangesScreen(
+        files: (context, withinTabs) => ChangesScreen(
           key: ValueKey(changesFor.path),
           worktree: changesFor,
+          showTitle: !withinTabs,
           isOpen: shell.isOpen(changesFor),
           repoRoot: shell.repoRoot,
           initialPath: _changesFilePath(shell),
           onPathChanged: (path) => shell.selectChangesFile(changesFor, path),
+          initialRange: shell.changesRange,
+          onRangeChanged: (range) =>
+              shell.selectChangesRange(changesFor, range),
           gitMoved: shell.gitMoved,
         ),
       );

@@ -7,9 +7,12 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../ui/syntax.dart';
+import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import 'change_set.dart';
 import 'diff_lines.dart';
+import 'hunk_syntax.dart';
 import 'patch_index.dart';
 
 /// A file's row **in the index**: what happened to it, and how much.
@@ -65,11 +68,15 @@ class IndexFileRow extends StatelessWidget {
     var name = slash < 0 ? file.path : file.path.substring(slash + 1);
     var directory = slash < 0 ? '' : file.path.substring(0, slash);
 
-    return InkWell(
+    return Tappable.builder(
       onTap: onTap,
-      child: Container(
+      builder: (context, hovered) => Container(
         decoration: BoxDecoration(
-          color: selected ? colors.accentSoft : Colors.transparent,
+          color: selected
+              ? colors.accentSoft
+              : hovered
+              ? colors.hoverOverlay
+              : Colors.transparent,
           // A 2 px edge rather than a badge: it is scannable down a column of
           // forty rows and costs the text no width at all.
           border: pinned
@@ -93,11 +100,17 @@ class IndexFileRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            SizedBox(
-              width: 12,
-              child: Text(
-                _letter(file.status),
-                style: context.type.bodySmall.copyWith(color: _tone(colors)),
+            // **The letter says it, the tooltip spells it.** One character in a
+            // colour is a legend a reader has to have been taught; `A` and `R`
+            // are the two nobody guesses.
+            Tooltip(
+              message: _word(file.status),
+              child: SizedBox(
+                width: 12,
+                child: Text(
+                  _letter(file.status),
+                  style: context.type.bodySmall.copyWith(color: _tone(colors)),
+                ),
               ),
             ),
             const Gap(FwSpacing.sm),
@@ -182,7 +195,19 @@ class IndexFileRow extends StatelessWidget {
     ChangeStatus.deleted => 'D',
     ChangeStatus.renamed => 'R',
   };
+
+  static String _word(ChangeStatus status) => statusWord(status);
 }
+
+/// How a status reads in words — the index's tooltip and the body's header say
+/// the same one, because two spellings of four states is four chances to
+/// disagree.
+String statusWord(ChangeStatus status) => switch (status) {
+  ChangeStatus.added => 'added',
+  ChangeStatus.deleted => 'deleted',
+  ChangeStatus.renamed => 'renamed',
+  ChangeStatus.modified => 'modified',
+};
 
 /// A lens over the index: one toggle, one count.
 ///
@@ -210,16 +235,19 @@ class IndexLens extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return InkWell(
+    return Tappable.builder(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-      child: Container(
+      builder: (context, hovered) => Container(
         padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.sm,
-          vertical: FwSpacing.xxs,
+          horizontal: FwSpacing.md,
+          vertical: FwSpacing.xs,
         ),
         decoration: BoxDecoration(
-          color: on ? colors.accentSoft : Colors.transparent,
+          color: on
+              ? colors.accentSoft
+              : hovered
+              ? colors.hoverOverlay
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(context.radii.radiusSmall),
           border: Border.all(color: on ? Colors.transparent : colors.line),
         ),
@@ -301,12 +329,18 @@ class HunkLineView extends StatelessWidget {
     required this.lines,
     required this.hunk,
     required this.index,
+    this.tokens,
     super.key,
   });
 
   final HunkLineCache lines;
   final HunkSpan hunk;
   final int index;
+
+  /// Where this line's colours come from, or null for a file nothing here
+  /// reads. **Asked for per row, computed per hunk** — the first row of a hunk
+  /// to be built pays for the whole hunk and every row after it is a lookup.
+  final HunkTokenCache? tokens;
 
   @override
   Widget build(BuildContext context) {
@@ -321,7 +355,10 @@ class HunkLineView extends StatelessWidget {
         ),
       );
     }
-    return DiffLineView(line: decoded[index]);
+    return DiffLineView(
+      line: decoded[index],
+      tokens: tokens?.forHunk(hunk).at(index),
+    );
   }
 }
 
@@ -331,10 +368,20 @@ class HunkLineView extends StatelessWidget {
 /// ~8% of men with red-green colour blindness, and the glyph alone would make a
 /// block of additions hard to see at a glance; together neither is load-bearing
 /// on its own.
+///
+/// **Syntax colour is a third channel and does not compete with those two.**
+/// What says *added* is the row's wash and the `+`; what the tokens say is
+/// which word is a keyword. So the row keeps its tint, and a token the
+/// highlighter had no opinion about keeps the row's own ink rather than being
+/// forced to a neutral.
 class DiffLineView extends StatelessWidget {
-  const DiffLineView({required this.line, super.key});
+  const DiffLineView({required this.line, this.tokens, super.key});
 
   final DiffLine line;
+
+  /// This line's coloured runs, or null for a file nothing here reads — in
+  /// which case the text is drawn exactly as it was before any of this existed.
+  final List<Token>? tokens;
 
   @override
   Widget build(BuildContext context) {
@@ -369,21 +416,34 @@ class DiffLineView extends StatelessWidget {
             child: Text(marker, style: style.copyWith(color: tone)),
           ),
           Expanded(
-            child: Text(
-              line.text,
-              style: line.kind == DiffLineKind.meta
-                  ? style.copyWith(
-                      color: colors.mut3,
-                      fontStyle: FontStyle.italic,
-                    )
-                  : style,
-              // **Never wrapped.** A wrapped line changes a row's height, and a
-              // virtualised list whose rows change height as they are built is
-              // one whose scrollbar jumps under your hand. Long lines clip; the
-              // list scrolls horizontally as a whole.
-              softWrap: false,
-              overflow: TextOverflow.clip,
-            ),
+            child: switch (tokens) {
+              // **The same `Text`, given spans instead of a string.** Not a
+              // different widget for the coloured case: the row's height, its
+              // clipping and its never-wrapping are the properties that keep a
+              // virtualised list smooth, and two widgets is two places to lose
+              // one of them.
+              var it? when line.kind != DiffLineKind.meta => Text.rich(
+                TextSpan(children: spansFor(context, it, style: style)),
+                style: style,
+                softWrap: false,
+                overflow: TextOverflow.clip,
+              ),
+              _ => Text(
+                line.text,
+                style: line.kind == DiffLineKind.meta
+                    ? style.copyWith(
+                        color: colors.mut3,
+                        fontStyle: FontStyle.italic,
+                      )
+                    : style,
+                // **Never wrapped.** A wrapped line changes a row's height, and
+                // a virtualised list whose rows change height as they are built
+                // is one whose scrollbar jumps under your hand. Long lines
+                // clip; the list scrolls horizontally as a whole.
+                softWrap: false,
+                overflow: TextOverflow.clip,
+              ),
+            },
           ),
         ],
       ),
@@ -443,11 +503,15 @@ class IndexUntrackedRow extends StatelessWidget {
       if (slash > 0 && !entry.isDirectory) entry.path.substring(0, slash),
     ];
 
-    return InkWell(
+    return Tappable.builder(
       onTap: onTap,
-      child: Container(
+      builder: (context, hovered) => Container(
         decoration: BoxDecoration(
-          color: selected ? colors.accentSoft : Colors.transparent,
+          color: selected
+              ? colors.accentSoft
+              : hovered && onTap != null
+              ? colors.hoverOverlay
+              : Colors.transparent,
         ),
         padding: const EdgeInsets.symmetric(
           horizontal: FwSpacing.md,
@@ -457,11 +521,21 @@ class IndexUntrackedRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            SizedBox(
-              width: 12,
-              child: Text(
-                '?',
-                style: context.type.bodySmall.copyWith(color: colors.mut3),
+            // **git's own letter, and it is the one nobody reads.** `A`/`M`/`D`
+            // are guessable from the word they start; `?` stands for a question
+            // git is asking rather than an answer, so it says so on hover.
+            Tooltip(
+              message: entry.isDirectory
+                  ? 'Untracked — git is not tracking anything in this '
+                        'directory yet'
+                  : 'Untracked — git is not tracking this file yet, so there '
+                        'is no other side to diff it against',
+              child: SizedBox(
+                width: 12,
+                child: Text(
+                  '?',
+                  style: context.type.bodySmall.copyWith(color: colors.mut3),
+                ),
               ),
             ),
             const Gap(FwSpacing.sm),

@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import '../../capture/settle.dart';
+import '../../ui/empty_state.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../channels.dart';
@@ -186,12 +187,22 @@ class _ScenariosTabState extends State<ScenariosTab> {
               children: [
                 _Header(scenario),
                 Expanded(
-                  child: MergedTree(
-                    scenario: scenario,
-                    store: widget.store,
-                    selected: null,
-                    onSelect: (id) => _select(step: id),
-                  ),
+                  // **A scenario with no steps is not an empty tree.** Three
+                  // of the eight verdicts are reached without replaying
+                  // anything, so `items` is empty by design — and the merged
+                  // tree, given nothing to draw, drew nothing. Picking a
+                  // `skipped` row from the index therefore selected it, filled
+                  // the header, and left the rest of the pane blank, which
+                  // reads as a row you cannot open rather than as one there is
+                  // nothing behind.
+                  child: scenario.items.isEmpty && scenario.branches.isEmpty
+                      ? _NotReplayed(scenario.state)
+                      : MergedTree(
+                          scenario: scenario,
+                          store: widget.store,
+                          selected: null,
+                          onSelect: (id) => _select(step: id),
+                        ),
                 ),
               ],
             ),
@@ -359,6 +370,43 @@ class _Header extends StatelessWidget {
         StateChip(scenario.state),
       ],
     ),
+  );
+}
+
+/// Why a scenario has no tree: it was never replayed, and the reason differs.
+///
+/// **The word in the chip, expanded.** `skipped` beside an empty pane is a
+/// verdict a reader has to already know how to trust — the thing worth saying
+/// is *what was compared to reach it*, which is the closure hash, and that it
+/// answers "no reason to run", not "could not run".
+class _NotReplayed extends StatelessWidget {
+  const _NotReplayed(this.state);
+
+  final ComparedState state;
+
+  @override
+  Widget build(BuildContext context) => EmptyState(
+    icon: switch (state) {
+      ComparedState.added || ComparedState.removed => Icons.call_split,
+      _ => Icons.done_all,
+    },
+    title: switch (state) {
+      ComparedState.added => 'Only on this branch',
+      ComparedState.removed => 'Only on the base',
+      _ => 'Not replayed',
+    },
+    message: switch (state) {
+      ComparedState.added =>
+        'The base has no scenario by this name, so there is no run to compare '
+            'this one against.',
+      ComparedState.removed =>
+        'This branch no longer declares it. The base still does, which is the '
+            'whole finding.',
+      _ =>
+        'Nothing that decides its pixels changed between the two sides — not '
+            'a file in its import closure, not an asset, not a lockfile — so '
+            'both runs would have drawn the same frames and neither was run.',
+    },
   );
 }
 

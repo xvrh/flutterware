@@ -64,7 +64,11 @@ class ComparisonTabs extends StatefulWidget {
   final Worktree worktree;
 
   /// The file diff, built only when its tab is showing.
-  final WidgetBuilder files;
+  ///
+  /// Told whether a strip was drawn above it, because that decides whether it
+  /// has to name itself: with a strip it is a tab among three and writes no
+  /// title, and without one it is the whole screen.
+  final Widget Function(BuildContext context, bool withinTabs) files;
 
   @override
   State<ComparisonTabs> createState() => _ComparisonTabsState();
@@ -98,7 +102,18 @@ class _ComparisonTabsState extends State<ComparisonTabs>
   }
 
   void _onShell() {
-    if (!mounted || _controller != null) return;
+    if (!mounted) return;
+    if (_controller != null) {
+      // **The address moves the tab too, and only a tap used to run it.**
+      // `_select` is the click path; a pasted link, the back button and a
+      // drive `navigate` all change the address without going through it, so
+      // arriving at `changes/scenarios` from another tab lit the tab, drew its
+      // half — and left it on `Nothing to compare yet.` for ever, because
+      // nothing had asked the half to run. Idempotent: `open` joins a run in
+      // flight and returns at once for one that has finished.
+      _openSelectedTab();
+      return;
+    }
     if (widget.shell.sessionFor(widget.worktree) != null) {
       unawaited(_open());
     } else if (!widget.shell.isOpen(widget.worktree) && _unavailable == null) {
@@ -237,7 +252,7 @@ class _ComparisonTabsState extends State<ComparisonTabs>
     // No comparison to be had — the files tab still is one, and it is the one
     // that needs nothing from us.
     if (_loading || _unavailable != null || _controller == null) {
-      return Builder(builder: widget.files);
+      return Builder(builder: (context) => widget.files(context, false));
     }
 
     var controller = _controller!;
@@ -257,7 +272,7 @@ class _ComparisonTabsState extends State<ComparisonTabs>
         ),
         Expanded(
           child: selected.half == null
-              ? Builder(builder: widget.files)
+              ? Builder(builder: (context) => widget.files(context, true))
               : _HalfView(
                   controller: controller,
                   half: selected.half!,

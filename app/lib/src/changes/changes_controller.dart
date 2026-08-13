@@ -32,8 +32,11 @@ class ChangesController extends ChangeNotifier {
     required this.worktreePath,
     this.repoRoot,
     Future<ChangeSet> Function(String path)? load,
+    ChangeRange range = ChangeRange.everything,
     // ignore: prefer_initializing_formals
-  }) : _load = load;
+  }) : _load = load,
+       // ignore: prefer_initializing_formals
+       _range = range;
 
   final String worktreePath;
 
@@ -55,6 +58,10 @@ class ChangesController extends ChangeNotifier {
 
   Future<ChangeSet> _withConfig(String path) {
     var root = repoRoot;
+    // Captured by value before the isolate is spawned — a `ChangeRange` is two
+    // strings, and reading `_range` from inside the closure would capture
+    // `this`, which does not cross.
+    var range = _range;
     return Isolate.run(() {
       var resolved = root == null
           ? ResolvedChangesConfig.defaults
@@ -63,8 +70,34 @@ class ChangesController extends ChangeNotifier {
         path,
         config: resolved.config,
         configState: resolved.state,
+        range: range,
       );
     });
+  }
+
+  /// Which part of the branch's history is being shown.
+  ///
+  /// **The controller's, not the set's**, because the set is the *answer* and
+  /// this is the question: it has to survive a load that has not landed yet, a
+  /// load that failed, and the first frame — all three of which have no
+  /// `ChangeSet` to read it off.
+  ChangeRange get range => _range;
+  ChangeRange _range;
+
+  /// Re-reads the checkout for [range]. A no-op when it is already showing.
+  ///
+  /// The previous answer is **dropped**, unlike a refresh: stale-then-fresh is
+  /// right for the same range read twice and wrong here, where the old counts
+  /// under a new range's label would be a screen actively lying for the ~100 ms
+  /// the probe takes.
+  Future<void> setRange(ChangeRange range) {
+    if (range == _range) return Future.value();
+    _range = range;
+    _value = null;
+    // What moved *since the screen opened* is a claim about one range. Kept
+    // across a range change, it would mark files that never moved at all.
+    _moved.clear();
+    return refresh();
   }
 
   ChangeSet? get value => _value;

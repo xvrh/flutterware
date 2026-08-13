@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 
+import '../changes/change_range.dart';
 import '../changes/changes_config_cache.dart';
 import '../context.dart';
 import '../plugins/manifest_loader.dart';
@@ -422,13 +423,43 @@ class ShellController extends ChangeNotifier {
   /// A null [path] is the screen with nothing expanded. The segments are the
   /// panel's own, as they are for every plugin — the shell splits and joins
   /// them and reads nothing into them.
+  ///
+  /// **The range rides along.** It is a parameter rather than a segment, and a
+  /// parameter's whole lifetime is that it survives moves within the screen —
+  /// picking a file must not silently widen a delta the reader has narrowed.
   void selectChangesFile(Worktree worktree, String? path) => go(
     Address(
       worktree: worktree.name,
       plugin: Address.shellChanges,
       segments: path == null || path.isEmpty ? const [] : path.split('/'),
+      axes: _changesRangeAxes(worktree.name),
     ),
   );
+
+  /// Narrows the changes screen to [range], keeping whatever it is showing.
+  ///
+  /// Writes `?from=` and `?to=` — [ChangeRange.everything] writes neither,
+  /// which is what keeps the default address the one it has always been rather
+  /// than one carrying two empty parameters.
+  void selectChangesRange(Worktree worktree, ChangeRange range) => go(
+    Address(
+      worktree: worktree.name,
+      plugin: Address.shellChanges,
+      segments: address.worktree == worktree.name ? address.segments : const [],
+      axes: range.toParams(),
+    ),
+  );
+
+  /// The range the address is carrying for [worktree], or nothing when it is
+  /// addressing a different one — a range is about a branch's history, and
+  /// another checkout's shas name nothing in it.
+  Map<String, String> _changesRangeAxes(String worktree) =>
+      address.worktree == worktree && address.plugin == Address.shellChanges
+      ? changesRange.toParams()
+      : const {};
+
+  /// What the changes screen opens on, out of the address.
+  ChangeRange get changesRange => ChangeRange.fromParams(address.axes);
 
   /// Moves to `fw:///worktrees/<worktree>/changes`.
   ///
@@ -461,6 +492,10 @@ class ShellController extends ChangeNotifier {
           worktree: name,
           plugin: Address.shellChanges,
           segments: [tab, ...segments],
+          // Carried across tabs even though only the files tab reads it: a
+          // narrowed range that vanished on a trip to the previews tab and back
+          // would be a control that quietly undoes itself.
+          axes: _changesRangeAxes(name),
         ),
       );
     }

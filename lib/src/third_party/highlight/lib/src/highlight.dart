@@ -85,7 +85,7 @@ class Highlight {
           try {
             compiledKeywords[pair[0]] = [
               className,
-              pair.length > 1 ? int.parse(pair[1]) : 1
+              pair.length > 1 ? int.parse(pair[1]) : 1,
             ];
           } catch (err) {
             print(err);
@@ -115,7 +115,8 @@ class Highlight {
       if (mode.end != null) mode.endRe = _langRe(mode.end!);
       mode.terminator_end = mode.end ?? '';
       if (mode.endsWithParent == true && parent.terminator_end != null) {
-        mode.terminator_end = mode.terminator_end! +
+        mode.terminator_end =
+            mode.terminator_end! +
             (mode.end != null ? '|' : '') +
             parent.terminator_end!;
       }
@@ -155,28 +156,31 @@ class Highlight {
       _compileMode(mode.starts!, parent);
     }
 
-    var terminators = (mode.contains!.map((c) {
-      return c!.beginKeywords != null
-          ? '\\.?(?:' + c.begin! + ')\\.?'
-          : c.begin;
-    }).toList()
-          ..addAll([mode.terminator_end, mode.illegal]))
-        .where((x) => x != null && x.isNotEmpty)
-        .toList();
+    var terminators =
+        (mode.contains!.map((c) {
+              return c!.beginKeywords != null
+                  ? '\\.?(?:' + c.begin! + ')\\.?'
+                  : c.begin;
+            }).toList()..addAll([mode.terminator_end, mode.illegal]))
+            .where((x) => x != null && x.isNotEmpty)
+            .toList();
 
     mode.terminators = terminators.isNotEmpty
         ? _langRe(_joinRe(terminators, '|'), true)
         : null;
   }
 
-  List<Node>? _buildSpan(String? className, List<Node>? insideSpan,
-      {bool noPrefix = false}) {
+  List<Node>? _buildSpan(
+    String? className,
+    List<Node>? insideSpan, {
+    bool noPrefix = false,
+  }) {
     if (!_classNameExists(className)) {
       return insideSpan;
     }
 
     return [
-      Node(noPrefix: noPrefix, className: className, children: insideSpan)
+      Node(noPrefix: noPrefix, className: className, children: insideSpan),
     ];
   }
 
@@ -190,16 +194,19 @@ class Highlight {
   }
 
   RegExp _escapeRe(String value) {
-    return RegExp(value.replaceAll(RegExp(r'[-\/\\^$*+?.()|[\]{}]'), r'\$&'),
-        multiLine: true);
+    return RegExp(
+      value.replaceAll(RegExp(r'[-\/\\^$*+?.()|[\]{}]'), r'\$&'),
+      multiLine: true,
+    );
   }
 
   Mode? _subMode(String lexeme, Mode mode) {
     for (var i = 0; i < mode.contains!.length; i++) {
       if (_testRe(mode.contains![i]!.beginRe, lexeme)) {
         if (mode.contains![i]!.endSameAsBegin == true) {
-          mode.contains![i]!.endRe =
-              _escapeRe(mode.contains![i]!.beginRe!.firstMatch(lexeme)![0]!);
+          mode.contains![i]!.endRe = _escapeRe(
+            mode.contains![i]!.beginRe!.firstMatch(lexeme)![0]!,
+          );
         }
 
         return mode.contains![i];
@@ -251,7 +258,20 @@ class Highlight {
   /// [autoDetect]: The default value is `false`. Pass `true` to enable language auto detection.
   /// Notice that **this may cause performance issue** because it will try to parse source with
   /// all registered languages and use the most relevant one.
-  Result parse(String source, {String? language, bool autoDetection = false}) {
+  ///
+  /// [continuation]: **A local change to the vendored source.** `_parse` has
+  /// always taken one and `Result.top` has always returned one; only the public
+  /// entry point hid them. Threading `top` from one call into the next parses a
+  /// long text in pieces and gets the *same* answer as parsing it whole, which
+  /// is what lets the changes screen colour a thousand-line hunk a couple of
+  /// hundred lines at a time without a construct that straddles a boundary
+  /// coming out wrong. Re-vendoring will drop this; keep it.
+  Result parse(
+    String source, {
+    String? language,
+    bool autoDetection = false,
+    Mode? continuation,
+  }) {
     if (language == null) {
       if (autoDetection) {
         return _parseAuto(source);
@@ -259,7 +279,7 @@ class Highlight {
         throw ArgumentError.notNull('language');
       }
     }
-    return _parse(source, language: language);
+    return _parse(source, language: language, continuation: continuation);
   }
 
   Result _parse(
@@ -334,7 +354,9 @@ class Highlight {
         if (keyword_match != null) {
           relevance += keyword_match[1] as int;
           _addNodes(
-              _buildSpan(keyword_match[0], [Node(value: match[0])])!, result);
+            _buildSpan(keyword_match[0], [Node(value: match[0])])!,
+            result,
+          );
         } else {
           _addText(match[0], result);
         }
@@ -355,13 +377,18 @@ class Highlight {
       }
 
       var result = explicit
-          ? _parse(mode_buffer,
+          ? _parse(
+              mode_buffer,
               language: top!.subLanguage!.first,
               ignoreIllegals: true,
-              continuation: continuations[top!.subLanguage!.first])
-          : _parseAuto(mode_buffer,
-              languageSubset:
-                  top!.subLanguage!.isNotEmpty ? top!.subLanguage : null);
+              continuation: continuations[top!.subLanguage!.first],
+            )
+          : _parseAuto(
+              mode_buffer,
+              languageSubset: top!.subLanguage!.isNotEmpty
+                  ? top!.subLanguage
+                  : null,
+            );
 
       if (top!.relevance! > 0) {
         relevance += result.relevance!;
@@ -374,10 +401,9 @@ class Highlight {
 
     void _processBuffer() {
       _addNodes(
-          top!.subLanguage != null
-              ? _processSubLanguage()!
-              : _processKeywords(),
-          currentChildren);
+        top!.subLanguage != null ? _processSubLanguage()! : _processKeywords(),
+        currentChildren,
+      );
       mode_buffer = '';
     }
 
@@ -516,10 +542,7 @@ class Highlight {
   Result _parseAuto(String source, {List<String>? languageSubset}) {
     languageSubset =
         languageSubset ?? _languages.keys.toList(); // TODO: options
-    var result = Result(
-      relevance: 0,
-      nodes: [Node(value: source)],
-    );
+    var result = Result(relevance: 0, nodes: [Node(value: source)]);
     var secondBest = result;
     // languageSubset = ['json'];
     languageSubset.forEach((language) {
