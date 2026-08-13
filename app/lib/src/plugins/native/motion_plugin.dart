@@ -12,6 +12,7 @@ import '../../motion/discovery.dart';
 import '../../motion/lane_model.dart';
 import '../../motion/new_span.dart';
 import '../../motion/values_file.dart';
+import '../../ui/empty_state.dart';
 import '../../ui/loading_state.dart';
 import '../../ui/tappable.dart';
 import '../native_plugin.dart';
@@ -79,13 +80,10 @@ class _MotionPanelState extends State<_MotionPanel> {
   Widget build(BuildContext context) {
     var place = _resolve();
     if (place == null) {
-      return Center(
-        child: Text(
-          'No packages configured for this plugin.\n'
-          'Add them in tool/flutterware.dart.',
-          textAlign: TextAlign.center,
-          style: context.type.bodyMuted,
-        ),
+      return const EmptyState(
+        icon: Icons.movie_outlined,
+        title: 'No packages configured',
+        message: 'Add them in tool/flutterware.dart.',
       );
     }
 
@@ -128,23 +126,19 @@ class _MotionPanelState extends State<_MotionPanel> {
       return const LoadingState(title: 'Scanning for motions…');
     }
     if (result.motions.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(FwSpacing.lg),
-          child: Text(
-            'No MotionScope found in ${_core.directoryFor(place.package)}.',
-            textAlign: TextAlign.center,
-            style: context.type.bodyMuted,
-          ),
-        ),
+      return EmptyState(
+        icon: Icons.movie_outlined,
+        title: 'No motions here',
+        message:
+            'Nothing declares a MotionScope in '
+            '${_core.directoryFor(place.package)}.',
       );
     }
     if (selected == null) {
-      return Center(
-        child: Text(
-          'Select a motion to scrub it.',
-          style: context.type.bodyMuted,
-        ),
+      return const EmptyState(
+        icon: Icons.timeline,
+        title: 'Pick a motion',
+        message: 'Opening one scrubs it.',
       );
     }
     return _MotionStage(
@@ -359,18 +353,26 @@ class _ValuesFileBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Quiet, because it is a label and not a control. Painted in the accent —
+    // soft fill, accent border, accent text — it was the most clickable-looking
+    // thing on the panel and the only one with nothing behind it. That pairing
+    // means *selected* everywhere else it is used, and a chip that is
+    // permanently selected is just a chip that lies.
     return Tooltip(
       message: 'The only file this editor writes.',
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.sm,
+          vertical: FwSpacing.xxs,
+        ),
         decoration: BoxDecoration(
-          color: context.colors.accentSoft,
-          border: Border.all(color: context.colors.accent),
+          color: context.colors.panel2,
+          border: Border.all(color: context.colors.line),
           borderRadius: BorderRadius.circular(context.radii.radiusSmall),
         ),
         child: Text(
           name,
-          style: context.type.caption.copyWith(color: context.colors.accent),
+          style: context.type.caption.copyWith(color: context.colors.mut),
         ),
       ),
     );
@@ -874,11 +876,13 @@ class _MotionStageState extends State<_MotionStage> {
       );
     }
     if (engine == null || engine.phase != EmbeddedEnginePhase.running) {
-      return Center(
-        child: Text(
-          session?.busyWith ?? 'Starting the guest…',
-          style: context.type.bodyMuted,
-        ),
+      return LoadingState(
+        title: 'Starting the guest…',
+        // `busyWith` is a fragment by design — the rail renders it as
+        // "Motion · building" — so it belongs on the second line. On its own
+        // it put the single lowercase word `building` in the middle of the
+        // stage, with no spinner and no sentence around it.
+        message: session?.busyWith,
       );
     }
     var dpr = MediaQuery.of(context).devicePixelRatio;

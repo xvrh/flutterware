@@ -20,6 +20,7 @@ import 'package:flutterware/motion.dart' show curveByName, motionCurveNames;
 import '../../motion/lane_model.dart';
 import '../../motion/property_editor.dart';
 import '../../motion/values_file.dart';
+import '../../ui/empty_state.dart';
 import '../../ui/tappable.dart';
 import '../../ui/design/design.dart';
 
@@ -75,11 +76,10 @@ class _MotionSequencerState extends State<MotionSequencer> {
   Widget build(BuildContext context) {
     var scope = widget.scope;
     if (scope == null) {
-      return Center(
-        child: Text(
-          'No motion mounted in the guest yet.',
-          style: context.type.bodyMuted,
-        ),
+      return const EmptyState(
+        icon: Icons.timeline,
+        title: 'Nothing mounted yet',
+        message: 'The guest has not put a motion on the stage.',
       );
     }
 
@@ -967,15 +967,10 @@ class MotionInspector extends StatelessWidget {
     return ColoredBox(
       color: context.colors.panel2,
       child: segment == null || selection == null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(FwSpacing.lg),
-                child: Text(
-                  'Select a span to see its values.',
-                  textAlign: TextAlign.center,
-                  style: context.type.bodyMuted,
-                ),
-              ),
+          ? const EmptyState(
+              icon: Icons.straighten,
+              title: 'Pick a span',
+              message: 'Opening one shows the values it drives.',
             )
           : ListView(
               padding: const EdgeInsets.all(FwSpacing.lg),
