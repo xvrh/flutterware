@@ -13,6 +13,7 @@ import 'handle.dart';
 import 'network_tracker.dart';
 import '../ui/design/design.dart';
 import '../ui/loading_state.dart';
+import '../ui/error_state.dart';
 
 final _logger = Logger('run_network');
 
@@ -100,20 +101,10 @@ class _NetworkTabState extends State<NetworkTab> {
     var tracker = _tracker;
     if (_loading) return const LoadingState(title: 'Reading the network log…');
     if (_error != null || tracker == null) {
-      return Center(
-        child: Text(
-          _error ?? 'Could not reach this app.',
-          style: theme.textTheme.bodyMedium,
-        ),
-      );
+      return ErrorState(title: 'Could not reach this app', message: _error);
     }
     if (tracker.broken) {
-      return Center(
-        child: Text(
-          'This app stopped answering.',
-          style: theme.textTheme.bodyMedium,
-        ),
-      );
+      return const ErrorState(title: 'This app stopped answering');
     }
     var requests = tracker.requests
       ..sort((a, b) => a.startTime.compareTo(b.startTime));

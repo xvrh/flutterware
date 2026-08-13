@@ -21,6 +21,7 @@ import 'motion_core.dart';
 import 'motion_highlight.dart';
 import 'motion_sequencer.dart';
 import '../../ui/design/design.dart';
+import '../../ui/error_state.dart';
 
 export 'motion_core.dart' show MotionCore, motionPluginId;
 
@@ -112,15 +113,7 @@ class _MotionPanelState extends State<_MotionPanel> {
     MotionRef? selected,
   ) {
     if (_core.errorFor(place.package) case var error?) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(FwSpacing.lg),
-          child: Text(
-            '$error',
-            style: context.type.body.copyWith(color: context.colors.red),
-          ),
-        ),
-      );
+      return ErrorState(title: 'The scan failed', message: '$error');
     }
     if (result == null) {
       return const LoadingState(title: 'Scanning for motions…');
@@ -865,15 +858,7 @@ class _MotionStageState extends State<_MotionStage> {
   ) {
     var engine = session?.engine;
     if (session?.errorMessage case var error?) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(FwSpacing.lg),
-          child: Text(
-            error,
-            style: context.type.body.copyWith(color: context.colors.red),
-          ),
-        ),
-      );
+      return ErrorState(title: 'The guest could not start', message: error);
     }
     if (engine == null || engine.phase != EmbeddedEnginePhase.running) {
       return LoadingState(

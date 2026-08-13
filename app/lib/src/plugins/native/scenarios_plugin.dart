@@ -30,6 +30,7 @@ import 'scenarios_address.dart';
 import 'scenarios_core.dart';
 import 'scenarios_results.dart';
 import '../../ui/loading_state.dart';
+import '../../ui/error_state.dart';
 
 export 'scenarios_core.dart' show ScenariosCore, scenariosPluginId;
 
@@ -403,16 +404,7 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
     var result = core.scanResultFor(package);
     if (result == null) {
       if (core.scanErrorFor(package) case var error?) {
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(FwSpacing.lg),
-            child: Text(
-              'The scan failed:\n$error',
-              textAlign: TextAlign.center,
-              style: context.type.bodyMuted,
-            ),
-          ),
-        );
+        return ErrorState(title: 'The scan failed', message: '$error');
       }
       return const LoadingState(title: 'Scanning for scenarios…');
     }

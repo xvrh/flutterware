@@ -10,7 +10,6 @@ import '../ui/empty_state.dart';
 import '../ui/panel_header.dart';
 import '../ui/table.dart';
 import '../ui/theme.dart';
-import '../utils.dart';
 import '../utils/async_value.dart';
 import '../utils/value_stream_builder.dart';
 import 'detail.dart';
@@ -18,6 +17,7 @@ import 'model/package_origin.dart';
 import 'model/service.dart';
 import 'upgrades.dart';
 import 'utils.dart';
+import '../ui/error_state.dart';
 
 class DependenciesScreen extends StatefulWidget {
   final DependenciesService dependencies;
@@ -248,8 +248,9 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
       },
       error: snapshot.error == null
           ? null
-          : ErrorPanel(
-              message: 'Failed to load dependencies',
+          : ErrorState(
+              title: 'Could not load dependencies',
+              message: '${snapshot.error}',
               onRetry: dependencies.dependencies.refresh,
             ),
       empty: EmptyState(

@@ -15,6 +15,7 @@ import 'model/wiring.dart';
 import 'ui/detail.dart';
 import 'ui/plate.dart';
 import '../ui/loading_state.dart';
+import '../ui/error_state.dart';
 
 /// Every launcher icon a package has: a plate per role on the left, and the
 /// selected one shown where it actually lives on the right.
@@ -94,11 +95,7 @@ class _LauncherIconScreenState extends State<LauncherIconScreen> {
     var core = widget.core;
     var failure = core.failureFor(widget.package, flavor: widget.flavor);
     if (failure != null) {
-      return EmptyState(
-        icon: Icons.error_outline,
-        title: 'Could not read the icons',
-        message: failure,
-      );
+      return ErrorState(title: 'Could not read the icons', message: failure);
     }
 
     var scan = core.scanFor(widget.package, flavor: widget.flavor);

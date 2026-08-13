@@ -14,6 +14,8 @@ import 'flag_memory.dart';
 import 'handle.dart';
 import 'panel_client.dart';
 import '../ui/loading_state.dart';
+import '../ui/error_state.dart';
+import '../ui/empty_state.dart';
 
 final _logger = Logger('run_panels');
 
@@ -208,23 +210,13 @@ class _PanelsTabState extends State<PanelsTab> {
   Widget build(BuildContext context) {
     if (_loading) return const LoadingState(title: 'Reading the panels…');
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(FwSpacing.xl),
-          child: Text(
-            _error!,
-            style: context.type.body.copyWith(color: context.colors.mut),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      );
+      return ErrorState(title: 'Could not read the panels', message: _error);
     }
     if (_descriptors.isEmpty) {
-      return Center(
-        child: Text(
-          'This app declares no panels.',
-          style: context.type.body.copyWith(color: context.colors.mut),
-        ),
+      return const EmptyState(
+        icon: Icons.dashboard_outlined,
+        title: 'No panels',
+        message: 'This app declares none.',
       );
     }
 

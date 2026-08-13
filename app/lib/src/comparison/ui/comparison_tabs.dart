@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../capture/settle.dart';
 import '../../shell/shell_controller.dart';
 import '../../shell/worktree.dart';
-import '../../ui/empty_state.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../channels.dart';
@@ -15,6 +14,7 @@ import '../shot_store_io.dart';
 import 'previews_tab.dart';
 import 'scenarios_tab.dart';
 import 'state_chip.dart';
+import '../../ui/error_state.dart';
 
 /// The tab strip's root, so a test can scope to it.
 const comparisonTabsKey = Key('comparison-tabs');
@@ -503,11 +503,8 @@ class _Refusal extends StatelessWidget {
   final String message;
 
   @override
-  Widget build(BuildContext context) => EmptyState(
-    icon: Icons.error_outline,
-    title: 'Not compared',
-    message: message,
-  );
+  Widget build(BuildContext context) =>
+      ErrorState(title: 'Not compared', message: message);
 }
 
 class _Working extends StatelessWidget {
