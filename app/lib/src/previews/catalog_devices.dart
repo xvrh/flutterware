@@ -1,34 +1,62 @@
 // `Devices` hidden: theirs is a hundred hand-drawn bodies, ours is the
-// offered table, and this file is where the two meet.
+// offered table, and this file is where the two meet. Prefixed a second time
+// because the meeting needs both names — [namedFrameFor] is the only thing
+// here that says theirs.
 import 'package:device_frame/device_frame.dart' hide Devices;
+import 'package:device_frame/device_frame.dart' as artwork show Devices;
 import 'package:flutter/widgets.dart';
 
 import 'devices.dart';
 
 export 'devices.dart';
 
-/// The silhouette to draw around a device, **built from our own measurements**.
+/// The silhouette to draw around a device — the one answer, wherever a frame
+/// is drawn: the preview canvas, a scenario's captured step, the flow.
 ///
-/// Not a lookup. [Devices.all] is the only list; this hands its numbers to
+/// Two sources, in this order. A handful of ids have a **hand-drawn body** in
+/// `device_frame` — an SE with its home button, a 13 with its notch — and
+/// [namedFrameFor] borrows it, because a wall of identical lozenges reads
+/// alike and the outline is half of what says *iPhone*. Everything else is
+/// **built from our own measurements**: [Devices.all] handed to
 /// `device_frame`'s generic builders, which take exactly what a [Device]
-/// already holds — screen size, safe areas, pixel ratio, a name and a platform.
-/// So there is nothing here to keep in step with anything, and nothing to
-/// drift.
+/// already holds — screen size, safe areas, pixel ratio, a name and a
+/// platform. Which is why a modern model can be added to the table without
+/// artwork.
 ///
-/// It used to map fourteen ids onto `device_frame`'s *named* devices, to borrow
-/// their hand-drawn bodies. That bought a more literal iPhone outline and cost
-/// a second list, a second set of measurements, and a test to hold the two
-/// together — for scenery around a picture whose size, ratio and safe areas
-/// were ours all along.
+/// The borrowed half is a second set of measurements, and the price of it is
+/// `app/test/scenarios/frames_test.dart`: it holds the two together, because a
+/// named body whose screen disagreed with ours would stretch every picture
+/// inside its frame. That is also why the list is five and not the fourteen it
+/// once was — an id is only on it when the numbers match exactly.
 ///
 /// Null for [DeviceKind.desktop], which gets no silhouette: the panel is
 /// already a desktop-shaped canvas, and a monitor body scaled down to fit
 /// inside it costs more room than it explains. A desktop entry is a *size*.
-/// Takes the device **as it stands upright**. `DeviceFrame` rotates a body it
-/// is given an orientation for, so the landscape numbers belong in
-/// [DeviceInfo.rotatedSafeAreas] here rather than in a second, sideways
-/// `DeviceInfo`.
-DeviceInfo? deviceFrameFor(Device device) {
+///
+/// Takes the device **as it stands upright**, and a caller drawing a turned one
+/// has to say so: `DeviceFrame` rotates a body it is given an orientation for,
+/// so the landscape numbers belong in [DeviceInfo.rotatedSafeAreas] here rather
+/// than in a second, sideways `DeviceInfo`. A hand-drawn body leaves no choice
+/// about it — the artwork is portrait, and handing it landscape screen numbers
+/// would draw a phone lying on its side inside an upright one.
+DeviceInfo? deviceFrameFor(Device device) =>
+    namedFrameFor(device.id) ?? _genericFrameFor(device);
+
+/// `device_frame`'s hand-drawn body for [id], or null when it has none.
+///
+/// Only ids whose named body matches our table exactly — screen, pixel ratio
+/// and rotated safe areas. `frames_test.dart` is what makes that claim true
+/// rather than a hope.
+DeviceInfo? namedFrameFor(String id) => switch (id) {
+  'iphone-se' => artwork.Devices.ios.iPhoneSE,
+  'iphone-13-mini' => artwork.Devices.ios.iPhone13Mini,
+  'iphone-13' => artwork.Devices.ios.iPhone13,
+  'iphone-12-pro-max' => artwork.Devices.ios.iPhone12ProMax,
+  'ipad' => artwork.Devices.ios.iPad,
+  _ => null,
+};
+
+DeviceInfo? _genericFrameFor(Device device) {
   var screen = Size(device.width, device.height);
   var safeAreas = EdgeInsets.fromLTRB(
     device.insetLeft,

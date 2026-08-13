@@ -319,15 +319,15 @@ class _CatalogViewState extends State<CatalogView> {
                       // was set.
                       child: Builder(
                         builder: (context) {
-                          // Turned here, once, and everything below meets a
-                          // device whose numbers already agree with it: the
-                          // screen it is sized to, the safe areas the guest is
-                          // told about, and the silhouette drawn around it are
-                          // all read off this one value.
-                          var device = _deviceOf(
-                            context,
-                            _session,
-                          )?.oriented(_orientationOf(context, _session));
+                          // Both halves, resolved here and here only: the
+                          // device as the table holds it, and which way up it
+                          // is being shown. The canvas turns the numbers itself
+                          // and leaves the body upright, because a hand-drawn
+                          // silhouette is artwork — `DeviceFrame` rotates it,
+                          // and there is no sideways version of it to hand
+                          // over.
+                          var device = _deviceOf(context, _session);
+                          var orientation = _orientationOf(context, _session);
                           return AddressScope(
                             namespace: _inspectNamespace,
                             child: LayoutBuilder(
@@ -335,7 +335,11 @@ class _CatalogViewState extends State<CatalogView> {
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   Expanded(
-                                    child: _buildCanvas(context, device),
+                                    child: _buildCanvas(
+                                      context,
+                                      device,
+                                      orientation,
+                                    ),
                                   ),
                                   // Always mounted, unlike the knob drawer it
                                   // replaced: that one was absent rather than
@@ -371,7 +375,11 @@ class _CatalogViewState extends State<CatalogView> {
     );
   }
 
-  Widget _buildCanvas(BuildContext context, Device? device) {
+  Widget _buildCanvas(
+    BuildContext context,
+    Device? device,
+    ScreenOrientation? orientation,
+  ) {
     switch (_session.phase) {
       case CatalogSessionPhase.starting:
         return Center(
@@ -411,7 +419,7 @@ class _CatalogViewState extends State<CatalogView> {
             onRetry: _session.busyWith == null ? _reload : null,
           );
         }
-        return _buildTexture(context, _session.engine!, device);
+        return _buildTexture(context, _session.engine!, device, orientation);
     }
   }
 
@@ -426,6 +434,7 @@ class _CatalogViewState extends State<CatalogView> {
     BuildContext context,
     EmbeddedEngine engine,
     Device? device,
+    ScreenOrientation? orientation,
   ) {
     if (device == null) {
       var dpr = MediaQuery.of(context).devicePixelRatio;
@@ -437,19 +446,24 @@ class _CatalogViewState extends State<CatalogView> {
       );
     }
 
-    var screen = Size(device.width, device.height);
+    // The numbers are the turned device's; the body below is the upright one's.
+    // Every measurement the guest meets comes from here — the window it renders
+    // into, its ratio, the insets it lays out against — so a landscape run is
+    // one device, read sideways, and not a second entry in the table.
+    var effective = device.oriented(orientation);
+    var screen = Size(effective.width, effective.height);
     _resizeAfterFrame(
       engine,
       screen,
-      device.pixelRatio,
+      effective.pixelRatio,
       // What the frame draws around the screen, told to the thing rendering
       // inside it — otherwise the notch is decoration and an AppBar sits under
       // it.
       safeAreas: EdgeInsets.fromLTRB(
-        device.insetLeft,
-        device.insetTop,
-        device.insetRight,
-        device.insetBottom,
+        effective.insetLeft,
+        effective.insetTop,
+        effective.insetRight,
+        effective.insetBottom,
       ),
     );
     // The one thing `device_frame` is here for, and the only place it is
@@ -458,7 +472,7 @@ class _CatalogViewState extends State<CatalogView> {
     var chrome = deviceFrameFor(device);
     var guest = _guestInput(
       engine,
-      device.pixelRatio,
+      effective.pixelRatio,
       SizedBox.fromSize(size: screen),
     );
     return Center(
@@ -470,7 +484,17 @@ class _CatalogViewState extends State<CatalogView> {
           fit: BoxFit.scaleDown,
           child: chrome == null || !_session.staging.frameVisible
               ? SizedBox.fromSize(size: screen, child: guest)
-              : DeviceFrame(device: chrome, screen: guest),
+              // Told which way up, because the body it is holding is not: a
+              // hand-drawn phone is drawn portrait and turned here, and the
+              // screen box handed to it has already traded its width for its
+              // height.
+              : DeviceFrame(
+                  device: chrome,
+                  screen: guest,
+                  orientation: orientation == ScreenOrientation.landscape
+                      ? Orientation.landscape
+                      : Orientation.portrait,
+                ),
         ),
       ),
     );

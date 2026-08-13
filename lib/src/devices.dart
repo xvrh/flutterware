@@ -190,7 +190,7 @@ const fitDeviceId = 'fit';
 /// The five with a hand-drawn `device_frame` body ([Devices.iphoneSe],
 /// [Devices.iphone13Mini], [Devices.iphone13], [Devices.iphone12ProMax],
 /// [Devices.iPad]) carry that package's own measurements, and
-/// `app/test/scenarios/frames_test.dart` pins the two together — a mismatch
+/// `app/test/previews/frames_test.dart` pins the two together — a mismatch
 /// would stretch every screenshot inside its frame. The rest render in a
 /// generic silhouette of their [DeviceKind], which is why a modern model can
 /// be added here without artwork.
