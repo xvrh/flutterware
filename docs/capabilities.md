@@ -90,7 +90,7 @@ Run one plugin action. Argument keys are the parameter ids reported by flutterwa
 
 ### `flutterware_act`
 
-One transaction against the running app — the loop tool for live work: edit code, hot-reload (flutterware_invoke run.reload), then act or observe here. Every reply is one settled moment of the app: screenshot, visible texts, what it printed since the last step, and what the human tapped since the last step (`human`) — nothing to correlate. Targets resolve inside the app at act time, retry through route transitions, and are refused loudly with the screen they were refused on; a silent wrong-target tap cannot happen. `settled: false` means the budget ran out with the app still animating — normal for a spinner, act anyway. Needs an app launched by flutterware (run.launch); every step lands in the run's journal, reviewable in the GUI's Steps tab. On a phone, keep the app in the foreground: iOS suspends a backgrounded app and it answers nothing until somebody brings it back — you get a timeout saying exactly that, and `{"verb": "foreground", "layer": "native"}` is how you fix it yourself. A hidden desktop window and a backgrounded Android app both drive fine. When a target is refused for something you can see in the screenshot but not in the texts — a permission dialog, a webview's contents — retry it with layer: native. For flows expressible headlessly, scenarios are milliseconds and deterministic — reach for this tool when it must be the real thing: real backend, real data, real device, or the flutterware GUI itself.
+One transaction against the running app — the loop tool for live work: edit code, hot-reload (flutterware_invoke run.reload), then act or observe here. Every reply is one settled moment of the app: screenshot, visible texts, what it printed since the last step, and what the human tapped since the last step (`human`) — nothing to correlate. Targets resolve inside the app at act time, retry through route transitions, and are refused loudly with the screen they were refused on; a silent wrong-target tap cannot happen. `settled` is about painting, not about loading: false means the budget ran out with the app still animating (normal for a spinner, act anyway), and true means nothing is animating — a pending fetch schedules no frame, so a screen still reading "Loading…" reports settled: true and wants another wait. Needs an app launched by flutterware (run.launch). Every step is archived whole — picture, tree, semantics, texts and a manifest — under the reply's `capture`, and the reply's `journal` is the JSON-lines index of all of them with absolute paths, so a client that can read files can go back to any step without asking. Read the `.png` and the `.capture.json` that way; do not read a `.tree.json`, which is ~120KB of raw nodes — that is what screen/find/at/styles exist to spare you. The GUI's Steps tab renders the same journal. On a phone, keep the app in the foreground: iOS suspends a backgrounded app and it answers nothing until somebody brings it back — you get a timeout saying exactly that, and `{"verb": "foreground", "layer": "native"}` is how you fix it yourself. A hidden desktop window and a backgrounded Android app both drive fine. When a target is refused for something you can see in the screenshot but not in the texts — a permission dialog, a webview's contents — retry it with layer: native. For flows expressible headlessly, scenarios are milliseconds and deterministic — reach for this tool when it must be the real thing: real backend, real data, real device, or the flutterware GUI itself.
 
 | argument | required | |
 |---|---|---|
@@ -102,9 +102,19 @@ One transaction against the running app — the loop tool for live work: edit co
 | `dx` | no | Drag distance, logical px. |
 | `dy` | no | Drag distance; negative moves the finger up. |
 | `waitMs` | no | For wait: real milliseconds. |
-| `settleMs` | no | Settle budget, default 800. Running out is reported, never an error. |
-| `tree` | no | Include the widget tree inline. Off by default — thousands of tokens on a real app; the texts ride along either way. |
-| `maxSide` | no | Cap the screenshot's longest side in pixels. Default 1200 here. |
+| `settleMs` | no | Settle budget, default 800. Running out is reported, never an error. It waits on frames, tickers and image decodes — a pending fetch is invisible to it, so raising this does not make a loading screen finish; `wait` and observe again does. |
+| `lens` | no | How much to hand back, as one word, for this call: "act" (the screen alone — the default, and what nearly every step wants), "look" (+ the picture), "design" (+ every text style on the screen), "raw" (+ the whole widget tree, ~20,000 tokens). Any flag you name explicitly beats it. To keep one shape for a stretch of work, pin it once with the run plugin’s `lens` action instead of repeating it — replies say which lens shaped them, and mark a pinned one. |
+| `item` | no | Act on the numbered thing from the last reply's screen, instead of naming a target. The way past "2 widgets match", and the only way to reach a control with no words. Resolved to that item's box centre and then through the usual ladder, so covered or gone is still refused. Numbers are per observation. |
+| `screen` | no | What is on the screen and what can be done to it — every control and every text, with its words, its box and whether it is the current one of its group, nested under the panes and lists that hold them. On by default, and the thing to read first: a twentieth of the tree, and it answers more, because a tree cannot say which control is disabled or which tab is selected. Pass false when you only want the picture. |
+| `find` | no | Report only nodes whose type, description or accessibility label contains this — "ElevatedButton", "Save". The cheap way to a widget's colour, size and source, and how to get a node id without reading a tree first. |
+| `at` | no | Report the chain of widgets under this point, as "x,y" in logical pixels — the same space every box in this reply uses, so a box centre from `screen` needs no translation. Outermost first, capped at the innermost eight. Where the layout answers are: the Row three levels out is what has the alignment. |
+| `styles` | no | Every distinct size/weight/colour of text on screen, most-used first, with a sample each — the type ramp and the palette as one small table. What to ask instead of reading a tree when the question is "are these two greys the same grey". |
+| `tree` | no | Include the widget tree inline. Off by default and the heaviest thing in a reply by an order of magnitude — `screen` says what is there, and find/at/styles answer most of what a whole tree gets read for. Scope it with treeRoot, treeDepth and treeNoise. |
+| `treeRoot` | no | Report this node and everything under it instead of the whole tree — a node id from an earlier read of the same screen, like "0/3/1/0". An id names a position, so one from a screen that has changed is refused rather than guessed at. |
+| `treeDepth` | no | How many levels below the reported root to include, counted after the noise filter. A node whose children were cut says how many with `elided`, so a bounded read is never mistaken for a complete one. |
+| `treeNoise` | no | Default true: drop widgets that share their only child's box — MouseRegion, GestureDetector, Gap, Expanded and the rest of the wrappers — keeping whichever of the two carries the words, the flex or the properties. Ids never move, so a surviving child can sit directly under a node that is not its parent. Pass false when the question is about the wrappers themselves. |
+| `screenshot` | no | Return the picture, not just archive it. Every step is photographed either way and the frame is on disk under the reply's `capture` — this decides whether it enters your context, at ~810 tokens. Off by default: `screen` answers most of what a picture used to be read for. Ask for it when the question is how something *looks*; it attaches itself when a step is refused or the app throws. |
+| `maxSide` | no | Cap the screenshot's longest side in pixels. 900 by default. |
 | `device` | no | Which device, when more than one app is running. |
 | `entrypoint` | no | Which entry point, when a device runs more than one. |
 | `worktree` | no | Worktree name or path, to drive a run another checkout launched. Only runs from this worktree match when omitted — the refusals name the worktrees that have one. |
@@ -591,7 +601,7 @@ note: String?
 One drive transaction against a running app: resolve the target, check the pointer can reach it (retrying through route transitions until a deadline), perform the verb, settle, and observe — texts, a screenshot, what was printed — all in one reply describing one moment. Needs the app to have been launched by flutterware (the launch wraps it in the drive guest); anything else is inspect-only. A refusal still observes: the error comes back with the screen it happened on. Every step is appended to the run's journal. On a phone the app has to be in the foreground: iOS suspends a backgrounded app, which answers nothing until somebody brings it back — that comes back as a timeout saying so, never a hang. A hidden desktop window is fine, and so is a backgrounded Android app.
 
 ```sh
-fw run run act [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --verb=<choice> [--layer=…] [--target=…] [--text=…] [--dx=…] [--dy=…] [--within=…] [--route=…] [--waitMs=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
+fw run run act [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --verb=<choice> [--layer=…] [--target=…] [--text=…] [--dx=…] [--dy=…] [--within=…] [--route=…] [--waitMs=…] [--settleMs=…] [--screenshot=…] [--lens=…] [--item=…] [--screen=…] [--find=…] [--at=…] [--styles=…] [--tree=…] [--treeRoot=…] [--treeDepth=…] [--treeNoise=…] [--maxSide=…] [--actor=…]
 ```
 
 Returns `RunActResult`:
@@ -614,8 +624,14 @@ framesEnabled: bool?   # False when the platform has the window hidden or occlud
 lifecycle: String?
 human: List<String>?   # What the human did in the app since the previous step — `tap "Pay"`, oldest first.
 texts: List<String>?   # Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.
-tree: Map<String, Object?>?   # The widget tree, when asked for.
-nodes: int?
+capture: String?   # This moment, on disk: `fw:///worktrees/<wt>/flutterware.run/<run>/steps/<stamp>`.
+lens: String?   # Which preset shaped this reply — `act`, `look`, `design`, `raw`, with `(pinned)` when it came from the run rather than from this call.
+screen: Screen?   # The screen: what is on it, what can be acted on, and how it is laid out.
+tree: Map<String, Object?>?   # The widget tree, when asked for — scoped by `treeRoot`, `treeDepth` and `treeNoise`, and written in the compact spelling (`InspectTree.toJson`'s `compact`): ids relative to the parent, sources indexed into `files`.
+find: List<Map<String, Object?>>?   # Nodes matching `find`, capped — the count is on the wire so a truncated answer says so.
+at: List<Map<String, Object?>>?   # The chain of nodes under `at`, outermost first and innermost last.
+styles: List<InspectStyle>?   # Every distinct text style on screen, most-used first, when `styles` asked.
+nodes: int?   # How many nodes the tree has *as reported* — after the noise filter and any depth cut, so it counts what came back rather than what exists.
 screenshot: String?   # Where the step's PNG was written — under the run's journal directory, one file per step.
 logs: List<RunLogEntry>?   # What the app printed during this step — since the previous act call, not since launch.
   source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
@@ -625,7 +641,8 @@ errors: List<RunLogEntry>?   # Framework errors this step produced or repeated.
   source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
   text: String
   error: bool   # The launcher marked it as an error.
-journal: String?   # The run's journal file this step was appended to.
+journal: String?   # The run's journal file this step was appended to — and the index of every capture this run has taken.
+next: String?   # One line naming what else can be asked of this same capture.
 note: String?
 layer: String?   # Which tree this step addressed — absent for the drive layer, `native` when it went through the platform's own accessibility tree.
 coordinateSpace: String?   # Native steps only: the space [nativeTree]'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.
@@ -649,10 +666,19 @@ reconciled: int?   # Native steps only: human entries dropped as this step's own
 | `within` | string | no | — | For scrollTo: which scrollable to walk, as a target. The first one on screen when omitted. |
 | `route` | string | no | — | For navigate: the route the app's registered navigation handler understands |
 | `waitMs` | integer | no | — | For wait: real milliseconds to let the app run |
-| `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
-| `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |
-| `tree` | boolean | no | false | Include the widget tree in the reply. Off by default because a real app is thousands of tokens of tree; the texts ride along either way. |
-| `maxSide` | integer | no | — | Cap the screenshot's longest side, in pixels — the render is scaled, not re-encoded. Full resolution when omitted. |
+| `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop painting before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. It waits on frames, tickers and image decodes, so settled: true means "nothing is animating", not "the screen has finished loading": a pending fetch or file read schedules no frame and is invisible to it. When the texts still say "Loading…", wait and observe again. |
+| `screenshot` | boolean | no | false | Return the picture, not just archive it. **Every step is photographed either way** and the frame is on disk under the capture — this decides whether it enters the reply, where it is about 810 tokens. Off by default because `screen` answers most of what a picture used to be read for; ask for it when the question is how something *looks*. It is attached without being asked for when the step was refused or the app threw, because looking is the useful thing to do then. |
+| `lens` | choice | no | act | How much to hand back, as one word, for this call — `act` (the screen alone), `look` (+ the picture), `design` (+ the text styles), `raw` (+ the whole tree, ~20,000 tokens). Beaten by any flag you name explicitly. `run lens` pins one for the whole run. |
+| `item` | integer | no | — | Act on the numbered thing from the last screen reply — `{"item": 20}` instead of a target. **The way past an ambiguous name**: `tap "Changes"` is refused when two widgets match, and a screen that lists exactly one Changes button has already told you which. It is also the only way to reach a control with no words at all, and there are usually a handful. Resolved to the centre of that item's box and then through the ordinary ladder, so covered or gone is refused rather than tapped blind. Numbers are per observation: a screen that changed renumbers, and the refusal says how many items the last one had. |
+| `screen` | boolean | no | true | What is on the screen and what can be done to it: every control and every piece of text, with its words, its box and whether it is the current one of its group, nested under the panes and lists that hold them. On by default and the thing to read first — it is a twentieth of the tree and answers more, because a tree cannot say which control is disabled or which tab is selected. A control with no words is reported as such rather than dropped: it has no accessible name, which an agent and a screen reader both trip on. |
+| `find` | string | no | — | Report only the nodes whose type, description or accessibility label contains this, case-insensitively — `ElevatedButton`, `Save`, `SizedBox`. The cheap way to a colour, a size and a source: 131 tokens against the whole tree's 19,500. Also how to get a node id without reading a tree first. |
+| `at` | string | no | — | Report the chain of widgets under this point, as `x,y` in logical pixels — the same space every box in this reply uses, so a box centre from `screen` lands here untranslated. Outermost first, innermost last, capped at the eight that matter: the thing under a point is usually a Text and the thing you meant is the Row three levels out whose crossAxisAlignment is the answer. |
+| `styles` | boolean | no | false | Every distinct size/weight/colour of text on screen, most-used first, with one sample each. The type ramp and the palette as a table — about 185 tokens, and the answer to "are these two greys the same grey" and "is the ramp consistent". Asking the same question as a search costs thirteen times more and truncates. |
+| `tree` | boolean | no | false | Include the widget tree in the reply. Off by default and the heaviest thing here by an order of magnitude — `screen` says what is there, and `find`, `at` and `styles` answer most of what people read a whole tree for at a hundredth of the cost. Reach for it when the question is genuinely about structure. Scoped by treeRoot, treeDepth and treeNoise. |
+| `treeRoot` | string | no | — | Report this node and its descendants instead of the whole tree. A node id from an earlier read of the same screen — `0/3/1/0`. Ids are positions in the tree, so one from a screen that has since changed is refused rather than approximated. |
+| `treeDepth` | integer | no | — | How many levels below the reported root to include. Counted after treeNoise has run, so the levels are the ones you would see. A node whose children were cut says how many with `elided`, so a bounded read cannot be mistaken for a complete one. |
+| `treeNoise` | boolean | no | true | Drop widgets that share their only child's box, keeping whichever of the two carries more — MouseRegion, GestureDetector, Gap, Expanded and the rest of the wrappers go, and the box, the words and the flex stay. On by default; measured on this GUI's Changes screen at 436 nodes down to 252. Pass false for every level, when the question is about the wrappers themselves. Ids never move either way, so a filtered child can sit directly under a node that is not its parent. |
+| `maxSide` | integer | no | 900 | Cap the screenshot's longest side, in pixels — the render is scaled, not re-encoded. 900 by default, which is ~810 image tokens and still legible; raise it when the pixels are the question. A step that returns no picture still photographs itself for the capture, at 600. |
 | `actor` | string | no | agent | Who this step is journaled as |
 
 #### `observe` — Observe
@@ -660,7 +686,7 @@ reconciled: int?   # Native steps only: human entries dropped as this step's own
 The act-less transaction: settle the running app and look — texts, a screenshot, what it printed since the last step. The opening move of a drive loop, and the call to make after a hot reload. Same reply shape and same journal as act. With layer: native it reads the platform's own tree instead and photographs the real device screen — keyboard, dialogs and platform views included.
 
 ```sh
-fw run run observe [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--layer=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
+fw run run observe [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--layer=…] [--settleMs=…] [--screenshot=…] [--lens=…] [--item=…] [--screen=…] [--find=…] [--at=…] [--styles=…] [--tree=…] [--treeRoot=…] [--treeDepth=…] [--treeNoise=…] [--maxSide=…] [--actor=…]
 ```
 
 Returns `RunActResult`:
@@ -683,8 +709,14 @@ framesEnabled: bool?   # False when the platform has the window hidden or occlud
 lifecycle: String?
 human: List<String>?   # What the human did in the app since the previous step — `tap "Pay"`, oldest first.
 texts: List<String>?   # Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.
-tree: Map<String, Object?>?   # The widget tree, when asked for.
-nodes: int?
+capture: String?   # This moment, on disk: `fw:///worktrees/<wt>/flutterware.run/<run>/steps/<stamp>`.
+lens: String?   # Which preset shaped this reply — `act`, `look`, `design`, `raw`, with `(pinned)` when it came from the run rather than from this call.
+screen: Screen?   # The screen: what is on it, what can be acted on, and how it is laid out.
+tree: Map<String, Object?>?   # The widget tree, when asked for — scoped by `treeRoot`, `treeDepth` and `treeNoise`, and written in the compact spelling (`InspectTree.toJson`'s `compact`): ids relative to the parent, sources indexed into `files`.
+find: List<Map<String, Object?>>?   # Nodes matching `find`, capped — the count is on the wire so a truncated answer says so.
+at: List<Map<String, Object?>>?   # The chain of nodes under `at`, outermost first and innermost last.
+styles: List<InspectStyle>?   # Every distinct text style on screen, most-used first, when `styles` asked.
+nodes: int?   # How many nodes the tree has *as reported* — after the noise filter and any depth cut, so it counts what came back rather than what exists.
 screenshot: String?   # Where the step's PNG was written — under the run's journal directory, one file per step.
 logs: List<RunLogEntry>?   # What the app printed during this step — since the previous act call, not since launch.
   source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
@@ -694,7 +726,8 @@ errors: List<RunLogEntry>?   # Framework errors this step produced or repeated.
   source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
   text: String
   error: bool   # The launcher marked it as an error.
-journal: String?   # The run's journal file this step was appended to.
+journal: String?   # The run's journal file this step was appended to — and the index of every capture this run has taken.
+next: String?   # One line naming what else can be asked of this same capture.
 note: String?
 layer: String?   # Which tree this step addressed — absent for the drive layer, `native` when it went through the platform's own accessibility tree.
 coordinateSpace: String?   # Native steps only: the space [nativeTree]'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.
@@ -710,10 +743,19 @@ reconciled: int?   # Native steps only: human entries dropped as this step's own
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 | `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `layer` | choice | no | flutter | Which tree to address. `flutter` (default) is the app's own widget tree — fast, exact, and where everything Flutter draws lives. `native` is the platform's accessibility tree, reached through adb or the OS: slower (seconds, not milliseconds) and blunter, but it sees what Flutter cannot — permission dialogs and other native popups, the contents of a webview or map, another app the flow jumped to — and its screenshot is the real device screen rather than a raster of the Flutter layer. Reach for it when a drive target is refused for something you can see in the picture but not in the texts, or to bring a suspended iOS app back with verb: foreground. It does observe, tap, enterText (Android) and foreground; drag, scrollTo, back and navigate stay on the drive layer. |
-| `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
-| `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |
-| `tree` | boolean | no | false | Include the widget tree in the reply. Off by default because a real app is thousands of tokens of tree; the texts ride along either way. |
-| `maxSide` | integer | no | — | Cap the screenshot's longest side, in pixels — the render is scaled, not re-encoded. Full resolution when omitted. |
+| `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop painting before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. It waits on frames, tickers and image decodes, so settled: true means "nothing is animating", not "the screen has finished loading": a pending fetch or file read schedules no frame and is invisible to it. When the texts still say "Loading…", wait and observe again. |
+| `screenshot` | boolean | no | false | Return the picture, not just archive it. **Every step is photographed either way** and the frame is on disk under the capture — this decides whether it enters the reply, where it is about 810 tokens. Off by default because `screen` answers most of what a picture used to be read for; ask for it when the question is how something *looks*. It is attached without being asked for when the step was refused or the app threw, because looking is the useful thing to do then. |
+| `lens` | choice | no | act | How much to hand back, as one word, for this call — `act` (the screen alone), `look` (+ the picture), `design` (+ the text styles), `raw` (+ the whole tree, ~20,000 tokens). Beaten by any flag you name explicitly. `run lens` pins one for the whole run. |
+| `item` | integer | no | — | Act on the numbered thing from the last screen reply — `{"item": 20}` instead of a target. **The way past an ambiguous name**: `tap "Changes"` is refused when two widgets match, and a screen that lists exactly one Changes button has already told you which. It is also the only way to reach a control with no words at all, and there are usually a handful. Resolved to the centre of that item's box and then through the ordinary ladder, so covered or gone is refused rather than tapped blind. Numbers are per observation: a screen that changed renumbers, and the refusal says how many items the last one had. |
+| `screen` | boolean | no | true | What is on the screen and what can be done to it: every control and every piece of text, with its words, its box and whether it is the current one of its group, nested under the panes and lists that hold them. On by default and the thing to read first — it is a twentieth of the tree and answers more, because a tree cannot say which control is disabled or which tab is selected. A control with no words is reported as such rather than dropped: it has no accessible name, which an agent and a screen reader both trip on. |
+| `find` | string | no | — | Report only the nodes whose type, description or accessibility label contains this, case-insensitively — `ElevatedButton`, `Save`, `SizedBox`. The cheap way to a colour, a size and a source: 131 tokens against the whole tree's 19,500. Also how to get a node id without reading a tree first. |
+| `at` | string | no | — | Report the chain of widgets under this point, as `x,y` in logical pixels — the same space every box in this reply uses, so a box centre from `screen` lands here untranslated. Outermost first, innermost last, capped at the eight that matter: the thing under a point is usually a Text and the thing you meant is the Row three levels out whose crossAxisAlignment is the answer. |
+| `styles` | boolean | no | false | Every distinct size/weight/colour of text on screen, most-used first, with one sample each. The type ramp and the palette as a table — about 185 tokens, and the answer to "are these two greys the same grey" and "is the ramp consistent". Asking the same question as a search costs thirteen times more and truncates. |
+| `tree` | boolean | no | false | Include the widget tree in the reply. Off by default and the heaviest thing here by an order of magnitude — `screen` says what is there, and `find`, `at` and `styles` answer most of what people read a whole tree for at a hundredth of the cost. Reach for it when the question is genuinely about structure. Scoped by treeRoot, treeDepth and treeNoise. |
+| `treeRoot` | string | no | — | Report this node and its descendants instead of the whole tree. A node id from an earlier read of the same screen — `0/3/1/0`. Ids are positions in the tree, so one from a screen that has since changed is refused rather than approximated. |
+| `treeDepth` | integer | no | — | How many levels below the reported root to include. Counted after treeNoise has run, so the levels are the ones you would see. A node whose children were cut says how many with `elided`, so a bounded read cannot be mistaken for a complete one. |
+| `treeNoise` | boolean | no | true | Drop widgets that share their only child's box, keeping whichever of the two carries more — MouseRegion, GestureDetector, Gap, Expanded and the rest of the wrappers go, and the box, the words and the flex stay. On by default; measured on this GUI's Changes screen at 436 nodes down to 252. Pass false for every level, when the question is about the wrappers themselves. Ids never move either way, so a filtered child can sit directly under a node that is not its parent. |
+| `maxSide` | integer | no | 900 | Cap the screenshot's longest side, in pixels — the render is scaled, not re-encoded. 900 by default, which is ~810 image tokens and still legible; raise it when the pixels are the question. A step that returns no picture still photographs itself for the capture, at 600. |
 | `actor` | string | no | agent | Who this step is journaled as |
 
 #### `navigate` — Navigate
@@ -721,7 +763,7 @@ reconciled: int?   # Native steps only: human entries dropped as this step's own
 Jumps the running app straight to a screen, through the navigation handler the app registered (router_outlet does, and any router can in one line: GuestDrive.navigator = …). Refuses plainly when the app declares none — it never falls back to hunting the UI with taps.
 
 ```sh
-fw run run navigate [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --route=<string> [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…]
+fw run run navigate [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --route=<string> [--settleMs=…] [--screenshot=…] [--lens=…] [--item=…] [--screen=…] [--find=…] [--at=…] [--styles=…] [--tree=…] [--treeRoot=…] [--treeDepth=…] [--treeNoise=…] [--maxSide=…]
 ```
 
 Returns `RunActResult`:
@@ -744,8 +786,14 @@ framesEnabled: bool?   # False when the platform has the window hidden or occlud
 lifecycle: String?
 human: List<String>?   # What the human did in the app since the previous step — `tap "Pay"`, oldest first.
 texts: List<String>?   # Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.
-tree: Map<String, Object?>?   # The widget tree, when asked for.
-nodes: int?
+capture: String?   # This moment, on disk: `fw:///worktrees/<wt>/flutterware.run/<run>/steps/<stamp>`.
+lens: String?   # Which preset shaped this reply — `act`, `look`, `design`, `raw`, with `(pinned)` when it came from the run rather than from this call.
+screen: Screen?   # The screen: what is on it, what can be acted on, and how it is laid out.
+tree: Map<String, Object?>?   # The widget tree, when asked for — scoped by `treeRoot`, `treeDepth` and `treeNoise`, and written in the compact spelling (`InspectTree.toJson`'s `compact`): ids relative to the parent, sources indexed into `files`.
+find: List<Map<String, Object?>>?   # Nodes matching `find`, capped — the count is on the wire so a truncated answer says so.
+at: List<Map<String, Object?>>?   # The chain of nodes under `at`, outermost first and innermost last.
+styles: List<InspectStyle>?   # Every distinct text style on screen, most-used first, when `styles` asked.
+nodes: int?   # How many nodes the tree has *as reported* — after the noise filter and any depth cut, so it counts what came back rather than what exists.
 screenshot: String?   # Where the step's PNG was written — under the run's journal directory, one file per step.
 logs: List<RunLogEntry>?   # What the app printed during this step — since the previous act call, not since launch.
   source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
@@ -755,7 +803,8 @@ errors: List<RunLogEntry>?   # Framework errors this step produced or repeated.
   source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
   text: String
   error: bool   # The launcher marked it as an error.
-journal: String?   # The run's journal file this step was appended to.
+journal: String?   # The run's journal file this step was appended to — and the index of every capture this run has taken.
+next: String?   # One line naming what else can be asked of this same capture.
 note: String?
 layer: String?   # Which tree this step addressed — absent for the drive layer, `native` when it went through the platform's own accessibility tree.
 coordinateSpace: String?   # Native steps only: the space [nativeTree]'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.
@@ -771,10 +820,46 @@ reconciled: int?   # Native steps only: human entries dropped as this step's own
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 | `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `route` | string | yes | — | The route, as the app's handler understands it |
-| `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
-| `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |
-| `tree` | boolean | no | false | Include the widget tree in the reply. Off by default because a real app is thousands of tokens of tree; the texts ride along either way. |
-| `maxSide` | integer | no | — | Cap the screenshot's longest side, in pixels — the render is scaled, not re-encoded. Full resolution when omitted. |
+| `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop painting before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. It waits on frames, tickers and image decodes, so settled: true means "nothing is animating", not "the screen has finished loading": a pending fetch or file read schedules no frame and is invisible to it. When the texts still say "Loading…", wait and observe again. |
+| `screenshot` | boolean | no | false | Return the picture, not just archive it. **Every step is photographed either way** and the frame is on disk under the capture — this decides whether it enters the reply, where it is about 810 tokens. Off by default because `screen` answers most of what a picture used to be read for; ask for it when the question is how something *looks*. It is attached without being asked for when the step was refused or the app threw, because looking is the useful thing to do then. |
+| `lens` | choice | no | act | How much to hand back, as one word, for this call — `act` (the screen alone), `look` (+ the picture), `design` (+ the text styles), `raw` (+ the whole tree, ~20,000 tokens). Beaten by any flag you name explicitly. `run lens` pins one for the whole run. |
+| `item` | integer | no | — | Act on the numbered thing from the last screen reply — `{"item": 20}` instead of a target. **The way past an ambiguous name**: `tap "Changes"` is refused when two widgets match, and a screen that lists exactly one Changes button has already told you which. It is also the only way to reach a control with no words at all, and there are usually a handful. Resolved to the centre of that item's box and then through the ordinary ladder, so covered or gone is refused rather than tapped blind. Numbers are per observation: a screen that changed renumbers, and the refusal says how many items the last one had. |
+| `screen` | boolean | no | true | What is on the screen and what can be done to it: every control and every piece of text, with its words, its box and whether it is the current one of its group, nested under the panes and lists that hold them. On by default and the thing to read first — it is a twentieth of the tree and answers more, because a tree cannot say which control is disabled or which tab is selected. A control with no words is reported as such rather than dropped: it has no accessible name, which an agent and a screen reader both trip on. |
+| `find` | string | no | — | Report only the nodes whose type, description or accessibility label contains this, case-insensitively — `ElevatedButton`, `Save`, `SizedBox`. The cheap way to a colour, a size and a source: 131 tokens against the whole tree's 19,500. Also how to get a node id without reading a tree first. |
+| `at` | string | no | — | Report the chain of widgets under this point, as `x,y` in logical pixels — the same space every box in this reply uses, so a box centre from `screen` lands here untranslated. Outermost first, innermost last, capped at the eight that matter: the thing under a point is usually a Text and the thing you meant is the Row three levels out whose crossAxisAlignment is the answer. |
+| `styles` | boolean | no | false | Every distinct size/weight/colour of text on screen, most-used first, with one sample each. The type ramp and the palette as a table — about 185 tokens, and the answer to "are these two greys the same grey" and "is the ramp consistent". Asking the same question as a search costs thirteen times more and truncates. |
+| `tree` | boolean | no | false | Include the widget tree in the reply. Off by default and the heaviest thing here by an order of magnitude — `screen` says what is there, and `find`, `at` and `styles` answer most of what people read a whole tree for at a hundredth of the cost. Reach for it when the question is genuinely about structure. Scoped by treeRoot, treeDepth and treeNoise. |
+| `treeRoot` | string | no | — | Report this node and its descendants instead of the whole tree. A node id from an earlier read of the same screen — `0/3/1/0`. Ids are positions in the tree, so one from a screen that has since changed is refused rather than approximated. |
+| `treeDepth` | integer | no | — | How many levels below the reported root to include. Counted after treeNoise has run, so the levels are the ones you would see. A node whose children were cut says how many with `elided`, so a bounded read cannot be mistaken for a complete one. |
+| `treeNoise` | boolean | no | true | Drop widgets that share their only child's box, keeping whichever of the two carries more — MouseRegion, GestureDetector, Gap, Expanded and the rest of the wrappers go, and the box, the words and the flex stay. On by default; measured on this GUI's Changes screen at 436 nodes down to 252. Pass false for every level, when the question is about the wrappers themselves. Ids never move either way, so a filtered child can sit directly under a node that is not its parent. |
+| `maxSide` | integer | no | 900 | Cap the screenshot's longest side, in pixels — the render is scaled, not re-encoded. 900 by default, which is ~810 image tokens and still legible; raise it when the pixels are the question. A step that returns no picture still photographs itself for the capture, at 600. |
+
+#### `lens` — Lens
+
+How much of an observation comes back, as one word — read it, or pin it for this run. `act` is the screen alone and the default, `look` adds the picture, `design` adds the text styles, `raw` adds the whole tree and costs about 20,000 tokens. Pin one when a stretch of work wants the same shape every step and you would rather not say so every call; every reply names the lens in force and marks a pinned one, because a human or another agent driving this run can pin it too. Anything a call names explicitly still beats the lens.
+
+```sh
+fw run run lens [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--lens=…]
+```
+
+Returns `RunLensResult`:
+
+```
+device: String
+entrypoint: String
+lens: String   # What is in force now.
+pinned: bool   # Whether that is a pin on this run, or just the default.
+was: String?   # What it was before this call changed it — absent when nothing changed, so a caller can tell "I set it" from "it was already".
+lenses: List<Map<String, Object?>>   # Every lens and what it contains, so the choice needs no second call.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
+| `lens` | choice | no | — | Pin this one. Omitted, the action reports what is in force without changing it; `none` clears the pin. |
 
 #### `panels` — Panels
 
@@ -1248,6 +1333,53 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at — `2026-01-01T09:00:00Z`. A scenario clock already advances deterministically under FakeAsync, but it starts at the wall time of the run, so any screen showing a date differs run to run. Pinning it is what makes two runs comparable. Reaches code that reads `package:clock`; a direct `DateTime.now()` cannot be intercepted by anything. |
 | `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips PNG encoding, which is ~80% of a capture's cost; for pipelines that consume pixels directly. |
 
+#### `read` — Read a captured step
+
+Asks a step a run already captured what is on it. Every run writes four legs per step — the picture, the widget tree, the semantics and the texts — and until now handed back paths and nothing that could read them. With no flags this answers the question worth asking first: **what is on this screen**, as a nested list of the things that carry words or respond to touch, with their boxes and their state. Everything heavier is one flag on the same capture: `find` for where something is, `at` for what is under a point, `styles` for the type ramp, `tree` for all of it. The same grammar `run act` answers with on a live app — a `find` here and a `find` there differ in which file was opened and in nothing you have to learn twice.
+
+```sh
+fw run scenarios read [--package=…] [--step=…] [--output=…] [--lens=…] [--screen=…] [--find=…] [--at=…] [--styles=…] [--texts=…] [--tree=…] [--treeRoot=…] [--treeDepth=…] [--treeNoise=…] [--screenshot=…]
+```
+
+Returns `ScenarioReadResult`:
+
+```
+step: String   # The capture this answers about, worktree-relative — the value to pass back as `step` to ask it something else.
+lens: String   # The lens the reply was produced under.
+scenario: String?
+file: String?
+index: int?   # The step's 1-based position in its scenario's capture sequence.
+failure: String?   # The error this step died on, when it is a failing step.
+image: String?   # The archived PNG, worktree-relative.
+screen: Screen?   # What is on the screen, what can be acted on, and how it is laid out.
+texts: List<String>?   # Every Text and text field of the step, as the capture recorded them.
+tree: Map<String, Object?>?   # The whole widget tree, compact.
+nodes: int?   # How many nodes the tree has, whether or not it rode back.
+find: List<Map<String, Object?>>?
+at: List<Map<String, Object?>>?
+styles: List<InspectStyle>?
+note: String?   # A query that could not be answered, said so the caller can fix it.
+next: String?   # One line naming what else this capture can be asked.
+steps: List<String>   # The other captures of the same scenario, as bare file names beside [step] — what makes walking a failing flow backwards one call each.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package the run belongs to; the only one when there is one |
+| `step` | string | no | — | Which capture. Any leg of it as `run` reported it — the `tree` path, the `image` path, either works — or a plain index into the run. Omitted takes the failing step when exactly one scenario went red, which is the read that happens most. Naming a directory instead lists what is in it, so browsing costs a refusal rather than a guess. |
+| `output` | string | no | — | The run to read, when `step` is an index or omitted. The newest under the package when omitted — which is the run you just did. |
+| `lens` | choice | no | act | How much to hand back, as one word. `act` is the screen alone; `look` adds the archived picture; `design` adds every distinct text style; `raw` adds the whole tree and costs about 20,000 tokens. The same four words `run` uses. A flag you set explicitly always beats the lens. |
+| `screen` | boolean | no | true | The nested list of what is on the step — the default answer. `false` when you only want a query. |
+| `find` | string | no | — | Report only the nodes matching this, case-insensitively against each node's type, its description and the words it puts on screen. What to reach for instead of `tree` when the question is "is the error message in there". |
+| `at` | string | no | — | The chain of widgets under this point as `x,y`, innermost last — in the same logical pixels every box in this reply is in, so a point read off the screen lands here without a transform. |
+| `styles` | boolean | no | false | Every distinct text size, weight and colour on the step, most-used first with a sample of each. ~185 tokens, and it settles most typography arguments — two greys that should be one, a ramp with both 11.5 and 12.5 in it. |
+| `texts` | boolean | no | false | The flat list of every string the step showed, as the capture recorded it. The screen carries the same words attached to what owns them; this is for grepping. |
+| `tree` | boolean | no | false | The whole widget tree. **~20,000 tokens** on a real screen — an order of magnitude past everything else here, and `find`, `at` and `styles` answer most of what anyone reads a tree for. Narrow it with `treeRoot` and `treeDepth`. |
+| `treeRoot` | string | no | — | Narrow `tree` to this node id and below. Ids come from tree shape, so one a `find` gave still names this node. |
+| `treeDepth` | integer | no | — | Stop `tree` this many levels below its root |
+| `treeNoise` | boolean | no | true | Drop the framework wrappers nobody wrote — `Padding`, `Semantics`, the twenty nodes under every `MaterialApp`. On by default; `false` keeps them. |
+| `screenshot` | boolean | no | false | Hand back the archived PNG as a picture rather than as a path. Off by default because the screen answers most questions for a fifth of the tokens; `lens: look` is the short way to say yes. |
+
 #### `export` — Export a web page
 
 Runs the scenarios and writes the result as a browsable page: the same flow canvas, step pages and inspect dock the GUI draws, over the run it just did. Takes every selector and axis `run` takes — the page shows what was run, so what to run is the question it asks. Needs serving over HTTP; the result says how. For a CI artifact, a review link, or anyone who has the app but not the checkout.
@@ -1701,10 +1833,10 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 
 #### `inspect` — Inspect
 
-One rendered build, and whatever you ask about it — whether it renders, its widget tree, the nodes matching a query, what is under a point, what it printed, a picture. With no flags it answers the only question worth asking first: did it render without the framework complaining. Everything heavier is opt-in, and every flag you add is answered off the **same** frame rather than costing another compile-and-render.
+One rendered build, and whatever you ask about it. With no flags it answers the two questions worth asking first: did it render without the framework complaining, and **what is on it** — the things that carry words or respond to touch, nested under the layout, with their boxes and their state. Everything heavier is one more flag on the same frame: `find` for where something is, `at` for what is under a point, `styles` for the type ramp, `tree` for all of it, `screenshot` for pixels. The same grammar the run plugin answers with on a live app and the scenarios plugin on a captured step, so a query is learned once.
 
 ```sh
-fw run previews inspect --entry=<choice> [--tree=…] [--find=…] [--at=…] [--errors=…] [--logs=…] [--node=…] [--depth=…] [--screenshot=…] [--output=…] [--annotate=…] [--device=…] [--width=…] [--height=…] [--knobs=…] [--axes=…] [--debug=…] [--live=…]
+fw run previews inspect --entry=<choice> [--lens=…] [--screen=…] [--styles=…] [--tree=…] [--find=…] [--at=…] [--errors=…] [--logs=…] [--node=…] [--depth=…] [--screenshot=…] [--output=…] [--annotate=…] [--device=…] [--width=…] [--height=…] [--knobs=…] [--axes=…] [--debug=…] [--live=…]
 ```
 
 Returns `CatalogInspectResult`:
@@ -1719,6 +1851,10 @@ errors: List<CatalogRenderError>
   library: String?   # `widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.
   context: String?   # What the framework was doing: `during layout`, `while painting`.
   count: int   # How many times this exact error was reported.
+lens: String   # The lens the unset flags came from — `act`, `look`, `design` or `raw`.
+screen: Screen?   # What rendered: the things that carry words or respond to touch, nested under the layout's branch points, with their boxes and their state.
+styles: List<InspectStyle>?   # Every distinct text size, weight and colour, most-used first with a sample.
+nodes: int?   # How many nodes the preview drew, whether or not the tree rode back — the number that says whether asking for `tree` is affordable.
 tree: List<CatalogTreeNode>?   # The tree, when `--tree` asked for it.
   id: String   # The child-index path from the demo's root — `''`, `0`, `0/1`.
   type: String   # The widget's runtime type.
@@ -1731,7 +1867,7 @@ tree: List<CatalogTreeNode>?   # The tree, when `--tree` asked for it.
   constraints: String?   # What the parent allowed: `w 0.0..900.0, h 0.0..∞`.
   flex: String?   # For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.
   flexChild: String?   # For a *child* of one: `flex 2 (tight)`, read off the parent data.
-matches: List<CatalogTreeNode>?   # The nodes matching `--find`.
+find: List<CatalogTreeNode>?   # The nodes matching `--find`.
   id: String   # The child-index path from the demo's root — `''`, `0`, `0/1`.
   type: String   # The widget's runtime type.
   depth: int   # How deep below the demo's root, so a flat list still reads as a tree.
@@ -1755,6 +1891,7 @@ at: List<CatalogTreeNode>?   # The chain under `--at`, outermost first — the t
   constraints: String?   # What the parent allowed: `w 0.0..900.0, h 0.0..∞`.
   flex: String?   # For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.
   flexChild: String?   # For a *child* of one: `flex 2 (tight)`, read off the parent data.
+atOuterElided: int?   # How many outer nodes of the chain were left out, when the cap bit.
 logs: List<String>?   # What the demo printed, when `--logs` asked.
 logsDropped: int?   # How many earlier lines fell off the guest's buffer, when any did.
 screenshot: Artifact?   # The picture, when `--screenshot` asked for one.
@@ -1763,14 +1900,18 @@ screenshot: Artifact?   # The picture, when `--screenshot` asked for one.
   path: String?   # Where it was written, when it was written.
   text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
   meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+next: String?   # One line naming what else can be asked of this frame.
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `entry` | choice (from `entries`) | yes | — | The id of the entry to inspect |
+| `lens` | choice | no | act | How much to hand back, as one word, instead of setting the flags one at a time. `act` is the screen alone; `look` adds a picture; `design` adds every distinct text style; `raw` adds the whole tree and costs about 20,000 tokens. The same four words run and scenarios take. A flag you set explicitly always beats the lens. |
+| `screen` | boolean | no | true | What rendered, as a nested list of the things that carry words or respond to touch — a few hundred tokens, and the handle for deciding what to dig into. On by default; `false` when you only want `ok` or a query. |
+| `styles` | boolean | no | false | Every distinct text size, weight and colour, most-used first with a sample of each. ~185 tokens for the whole type ramp, which settles most typography arguments — two greys that should be one, a scale with both 11.5 and 12.5 in it. |
 | `tree` | boolean | no | false | Report the widget tree, scoped to the preview rather than the catalog around it. Off by default because a real preview is thousands of tokens of tree — try `find` first. Offstage content (a route kept alive under the current one, an `Offstage`) is folded to one node marked `offstage: true`; pass its id to `node` to read inside it. |
 | `find` | string | no | — | Report only the nodes matching this, case-insensitively against each node's type and against the words it puts on screen — `ElevatedButton`, `Save`, `SizedBox`. What you want instead of `tree` when the question is "where is the submit button". |
-| `at` | string | no | — | Report the widgets under this point as `x,y`, outermost first — the chain, because the thing under a cursor is usually a Text and the thing you meant is the button around it. In the same coordinates a screenshot is taken in, so a point read off one lands here without a transform. |
+| `at` | string | no | — | Report the widgets under this point as `x,y`, outermost first — the chain, because the thing under a cursor is usually a Text and the thing you meant is the button around it. In the same coordinates a screenshot is taken in, so a point read off one lands here without a transform. The framework wrappers are dropped and the chain is capped at its innermost eight, which is where the answer always is. |
 | `errors` | boolean | no | true | Report build failures and layout overflows. On by default, and with no other flag it is the whole answer. `check` says whether an entry *compiles*, which is a different question. |
 | `logs` | boolean | no | false | Report what the preview printed while it built and painted. Attached to an open session this is everything it has printed since the person opened it, including whatever their clicking caused — output no fresh render can produce. |
 | `node` | string | no | — | Narrow `tree` to this node and below, and crop `screenshot` to it, by the id a previous read gave. Ids come from tree shape, so one taken in another process still names this node. |

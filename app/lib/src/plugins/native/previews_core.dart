@@ -13,6 +13,8 @@ import 'package:flutterware/src/inspect/log.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 // ignore: implementation_imports
+import 'package:flutterware/src/inspect/screen.dart';
+// ignore: implementation_imports
 import 'package:flutterware/src/ui_catalog/axis.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/ui_catalog/knob.dart';
@@ -28,6 +30,8 @@ import '../../previews/live_session.dart';
 import '../../previews/protocol.dart';
 import '../../previews/headless_catalog.dart';
 import '../../previews/web_build.dart';
+import '../../inspect/lens.dart';
+import '../../inspect/screen_read.dart';
 import '../plugin_core.dart';
 import 'previews_address.dart';
 import 'previews_results.dart';
@@ -638,13 +642,16 @@ class PreviewsCore extends PluginCore {
         'Inspect',
         returns: CatalogInspectResult,
         description:
-            'One rendered build, and whatever you ask about it — whether it '
-            'renders, its widget tree, the nodes matching a query, what is '
-            'under a point, what it printed, a picture. With no flags it '
-            'answers the only question worth asking first: did it render '
-            'without the framework complaining. Everything heavier is opt-in, '
-            'and every flag you add is answered off the **same** frame rather '
-            'than costing another compile-and-render.',
+            'One rendered build, and whatever you ask about it. With no flags '
+            'it answers the two questions worth asking first: did it render '
+            'without the framework complaining, and **what is on it** — the '
+            'things that carry words or respond to touch, nested under the '
+            'layout, with their boxes and their state. Everything heavier is '
+            'one more flag on the same frame: `find` for where something is, '
+            '`at` for what is under a point, `styles` for the type ramp, '
+            '`tree` for all of it, `screenshot` for pixels. The same grammar '
+            'the run plugin answers with on a live app and the scenarios '
+            'plugin on a captured step, so a query is learned once.',
         parameters: [
           ActionParameter(
             'entry',
@@ -652,6 +659,47 @@ class PreviewsCore extends PluginCore {
             kind: ActionParameterKind.choice,
             description: 'The id of the entry to inspect',
             optionsFrom: 'entries',
+          ),
+          ActionParameter(
+            'lens',
+            'Lens',
+            kind: ActionParameterKind.choice,
+            required: false,
+            defaultValue: 'act',
+            description:
+                'How much to hand back, as one word, instead of setting the '
+                'flags one at a time. `act` is the screen alone; `look` adds '
+                'a picture; `design` adds every distinct text style; `raw` '
+                'adds the whole tree and costs about 20,000 tokens. The same '
+                'four words run and scenarios take. A flag you set explicitly '
+                'always beats the lens.',
+            options: [
+              for (var lens in ObserveLens.values) ActionOption(lens.name),
+            ],
+          ),
+          const ActionParameter(
+            'screen',
+            'Screen',
+            kind: ActionParameterKind.boolean,
+            required: false,
+            defaultValue: 'true',
+            description:
+                'What rendered, as a nested list of the things that carry '
+                'words or respond to touch — a few hundred tokens, and the '
+                'handle for deciding what to dig into. On by default; '
+                '`false` when you only want `ok` or a query.',
+          ),
+          const ActionParameter(
+            'styles',
+            'Text styles',
+            kind: ActionParameterKind.boolean,
+            required: false,
+            defaultValue: 'false',
+            description:
+                'Every distinct text size, weight and colour, most-used '
+                'first with a sample of each. ~185 tokens for the whole type '
+                'ramp, which settles most typography arguments — two greys '
+                'that should be one, a scale with both 11.5 and 12.5 in it.',
           ),
           ActionParameter(
             'tree',
@@ -687,7 +735,9 @@ class PreviewsCore extends PluginCore {
                 'first — the chain, because the thing under a cursor is '
                 'usually a Text and the thing you meant is the button around '
                 'it. In the same coordinates a screenshot is taken in, so a '
-                'point read off one lands here without a transform.',
+                'point read off one lands here without a transform. The '
+                'framework wrappers are dropped and the chain is capped at '
+                'its innermost eight, which is where the answer always is.',
           ),
           ActionParameter(
             'errors',
@@ -1777,7 +1827,7 @@ class PreviewsCore extends PluginCore {
         // The tree is read whenever anything needs it — a query, a hit, a crop,
         // an annotation — and `observe` works that out for itself rather than
         // being told twice.
-        wantTree: want.tree || want.query != null,
+        wantTree: want.tree || want.query != null || want.screen || want.styles,
         wantLogs: want.logs,
         at: want.at == null
             ? null
@@ -1821,10 +1871,22 @@ class PreviewsCore extends PluginCore {
     required Address address,
   }) {
     var tree = observed.tree;
+    // `find`, `at` and `styles` run over the *filtered* tree, exactly as the
+    // run plugin runs them: the framework wrappers are never the answer to
+    // any of the three, and an unfiltered chain under a point is twenty nodes
+    // of root scaffolding before it reaches anything the preview drew.
+    var narrowed = tree?.filtered(const InspectFilter());
+    var hits = observed.hits == null
+        ? null
+        : [for (var id in observed.hits!) ?narrowed?.nodeAt(id)];
+    var elided = hits == null || hits.length <= ScreenRead.chainDepth
+        ? 0
+        : hits.length - ScreenRead.chainDepth;
     return CatalogInspectResult(
       entry: want.entryId,
       address: '$address',
       readFrom: live ? 'live' : 'render',
+      lens: want.lens.name,
       ok: observed.errors.isEmpty,
       // `ok` is answered whatever else was asked, so the list that explains it
       // is too — a caller told `ok: false` with no list has been told nothing it
@@ -1835,15 +1897,26 @@ class PreviewsCore extends PluginCore {
       tree: want.tree && tree != null
           ? _asNodes(_scoped(tree, want.node, want.depth, want.entryId))
           : null,
-      matches: want.query == null || tree == null
+      // The screen, which with no other flag is now the answer: what
+      // rendered, as a nested list of the things carrying words or responding
+      // to touch, rather than only the news that something did.
+      screen: want.screen && tree != null ? Screen.of(tree) : null,
+      styles: want.styles ? narrowed?.styles() : null,
+      nodes: narrowed?.length,
+      next: ScreenRead.offer,
+      find: want.query == null || narrowed == null
           ? null
-          : _asNodes(_matching(tree, want.query!)),
+          : _asNodes(
+              narrowed
+                  .matching(want.query!)
+                  .take(ScreenRead.findLimit)
+                  .toList(),
+            ),
       // Present-and-empty when the point missed, which is an answer: there is
       // nothing of the demo's there. A caller that probed outside the viewport
       // wants to see that it missed rather than that it did not ask.
-      at: observed.hits == null
-          ? null
-          : _asNodes([for (var id in observed.hits!) ?tree?.nodeAt(id)]),
+      at: hits == null ? null : _asNodes(hits.sublist(elided)),
+      atOuterElided: elided == 0 ? null : elided,
       logs: switch (observed.logs) {
         var report? => [for (var line in report.lines) line.text],
         null => null,
@@ -1868,21 +1941,6 @@ class PreviewsCore extends PluginCore {
         null => null,
       },
     );
-  }
-
-  /// The nodes whose type or on-screen words contain [query].
-  ///
-  /// [query] is folded once. The first version lowercased it twice per node,
-  /// which on the largest tree here is seventeen hundred throwaway strings to
-  /// answer one question.
-  static List<InspectNode> _matching(InspectTree tree, String query) {
-    var needle = query.toLowerCase();
-    return [
-      for (var node in tree.nodes)
-        if (node.type.toLowerCase().contains(needle) ||
-            (node.description?.toLowerCase().contains(needle) ?? false))
-          node,
-    ];
   }
 
   /// `tree` narrowed by `--node` and `--depth`.
@@ -2362,6 +2420,9 @@ class _InspectRequest {
     required this.node,
     required this.depth,
     required this.picture,
+    required this.screen,
+    required this.styles,
+    required this.lens,
     required this.annotate,
     required this.output,
     required this.deviceId,
@@ -2381,11 +2442,25 @@ class _InspectRequest {
     var axes = PreviewsCore.parsePairs(arguments['axes']);
     var debug = PreviewsCore.parsePairs(arguments['debug']);
     var (deviceId, viewport) = PreviewsCore._framing(arguments);
-    var picture = arguments['screenshot'] == true;
+    var lens = switch (arguments['lens']) {
+      String name when name.isNotEmpty =>
+        ObserveLens.byName(name) ??
+            (throw ArgumentError.value(
+              name,
+              'lens',
+              ObserveLens.unknown(name),
+            )),
+      _ => ObserveLens.act,
+    };
+    // The lens sets what nobody said; an explicit flag always beats it. A
+    // preset that overrode what the caller actually wrote would be a trap.
+    var picture = arguments['screenshot'] == null
+        ? lens.picture
+        : arguments['screenshot'] == true;
 
     return _InspectRequest._(
       entryId: entryId,
-      tree: arguments['tree'] == true,
+      tree: arguments['tree'] == null ? lens.tree : arguments['tree'] == true,
       logs: arguments['logs'] == true,
       errors: arguments['errors'] != false,
       query: switch (arguments['find']) {
@@ -2400,6 +2475,11 @@ class _InspectRequest {
       },
       depth: arguments['depth'],
       picture: picture,
+      screen: arguments['screen'] != false,
+      styles: arguments['styles'] == null
+          ? lens.styles
+          : arguments['styles'] == true,
+      lens: lens,
       annotate: arguments['annotate'] == true,
       output: arguments['output'] as String?,
       deviceId: deviceId,
@@ -2426,6 +2506,18 @@ class _InspectRequest {
   final bool logs;
   final bool errors;
   final bool picture;
+
+  /// The screen — what is on it, what can be acted on, how it is laid out.
+  /// **On by default**, and the reason a no-flag `inspect` now says what
+  /// rendered rather than only that something did.
+  final bool screen;
+
+  /// Every distinct text style, most-used first.
+  final bool styles;
+
+  /// The preset the unset flags came from. Named on every reply, because a
+  /// caller who does not know a picture was available cannot ask for one.
+  final ObserveLens lens;
 
   final String? query;
   final (int, int)? at;

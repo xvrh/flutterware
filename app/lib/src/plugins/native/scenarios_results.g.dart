@@ -263,3 +263,24 @@ Map<String, dynamic> _$ScenarioShotSetToJson(ScenarioShotSet instance) =>
       'images': instance.images,
       'failed': instance.failed,
     };
+
+Map<String, dynamic> _$ScenarioReadResultToJson(ScenarioReadResult instance) =>
+    <String, dynamic>{
+      'step': instance.step,
+      'lens': instance.lens,
+      'scenario': ?instance.scenario,
+      'file': ?instance.file,
+      'index': ?instance.index,
+      'failure': ?instance.failure,
+      'image': ?instance.image,
+      'screen': ?instance.screen?.toJson(),
+      'texts': ?instance.texts,
+      'tree': ?instance.tree,
+      'nodes': ?instance.nodes,
+      'find': ?instance.find,
+      'at': ?instance.at,
+      'styles': ?instance.styles?.map((e) => e.toJson()).toList(),
+      'note': ?instance.note,
+      'next': ?instance.next,
+      'steps': instance.steps,
+    };

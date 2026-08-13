@@ -1,0 +1,339 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/log_client.dart';
+import 'package:flutterware_app/src/context.dart';
+import 'package:flutterware_app/src/plugins/native/scenarios_core.dart';
+import 'package:flutterware_app/src/plugins/native/scenarios_results.dart';
+import 'package:flutterware_app/src/plugins/plugin_host.dart';
+import 'package:flutterware_app/src/shell/workspace.dart';
+import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:path/path.dart' as p;
+
+/// `scenarios read`: a run's archive in, the same screen every other surface
+/// answers with out. The tree here is a fixture rather than a real capture —
+/// what a real one produces is exercised against `examples/example` by hand;
+/// this pins the reading, the selector and the refusals.
+void main() {
+  late Directory worktree;
+  late ScenariosCore core;
+
+  /// `<worktree>/build/flutterware/scenario_runs/<stamp>` with one scenario in
+  /// it, laid out exactly as a run writes it.
+  String writeRun({
+    required String stamp,
+    required bool ok,
+    int steps = 3,
+    bool withTrees = true,
+  }) {
+    var runDir = p.join(
+      worktree.path,
+      'build',
+      'flutterware',
+      'scenario_runs',
+      stamp,
+    );
+    var stepsDir = p.join(runDir, 'checkout_test.dart', 'Checkout');
+    Directory(stepsDir).createSync(recursive: true);
+
+    var records = <Map<String, Object?>>[];
+    for (var index = 1; index <= steps; index++) {
+      var base = p.join(stepsDir, '$index-step');
+      File('$base.png').writeAsBytesSync(const [1, 2, 3]);
+      if (withTrees) {
+        File('$base.tree.json').writeAsStringSync(
+          jsonEncode({
+            'root': {
+              'id': '',
+              'type': 'Shop',
+              'layout': {'x': 0, 'y': 0, 'width': 300, 'height': 600},
+              'children': [
+                {
+                  'id': '0',
+                  'type': 'Text',
+                  'description': 'Text("Total: $index")',
+                  'layout': {'x': 0, 'y': 0, 'width': 300, 'height': 20},
+                },
+                {
+                  'id': '1',
+                  'type': 'ElevatedButton',
+                  'label': 'Pay',
+                  'layout': {'x': 0, 'y': 40, 'width': 120, 'height': 40},
+                },
+              ],
+            },
+          }),
+        );
+      }
+      records.add({
+        'index': index,
+        'position': '#$index',
+        'auto': false,
+        'image': p.relative('$base.png', from: worktree.path),
+        'format': 'png',
+        'width': 300,
+        'height': 600,
+        'tree': p.relative('$base.tree.json', from: worktree.path),
+        'texts': ['Total: $index', 'Pay'],
+        'address': 'fw:///worktrees/wt/flutterware.scenarios/./x/$index',
+        if (!ok && index == steps) 'failure': 'Expected "Total: 9"',
+      });
+    }
+
+    File(p.join(runDir, scenarioRunReportFile)).writeAsStringSync(
+      jsonEncode({
+        'packages': [
+          {
+            'path': '.',
+            'output': runDir,
+            'ms': 5,
+            'scenarios': [
+              {
+                'file': 'test/checkout_test.dart',
+                'name': 'Checkout',
+                'ok': ok,
+                'ms': 5,
+                'steps': records,
+                'stepCount': records.length,
+                'errors': [
+                  if (!ok) {'error': 'Expected "Total: 9"'},
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    return runDir;
+  }
+
+  Future<ScenarioReadResult> read([
+    Map<String, Object?> arguments = const {},
+  ]) => core
+      .invoke('read', arguments: arguments)
+      .then((r) => r! as ScenarioReadResult);
+
+  setUp(() {
+    worktree = Directory.systemTemp.createTempSync('fw-scenarios-read-');
+    var tree = Worktree(path: worktree.path, isMain: true);
+    core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: tree,
+        config: const {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+        workspace: Workspace(
+          root: tree.path,
+          declared: [],
+          discovered: [],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+      ),
+    );
+  });
+
+  tearDown(() {
+    core.dispose();
+    worktree.deleteSync(recursive: true);
+  });
+
+  test('with nothing said it takes the step the scenario failed on', () async {
+    writeRun(stamp: '100', ok: false);
+
+    var result = await read();
+
+    expect(result.index, 3);
+    expect(result.scenario, 'Checkout');
+    expect(result.file, 'test/checkout_test.dart');
+    expect(result.failure, 'Expected "Total: 9"');
+    expect(result.lens, 'act');
+    // The screen, which is the whole point of the action.
+    expect(result.screen!.items, hasLength(2));
+    expect(
+      result.screen!.toJson().toString(),
+      contains('Total: 3'),
+      reason: 'it read the failing step, not the first one',
+    );
+    // And the handles for going on: what else to ask, and where the other
+    // steps of the same flow are.
+    expect(result.next, contains('find'));
+    expect(
+      result.steps,
+      ['1-step.tree.json', '2-step.tree.json', '3-step.tree.json'],
+      reason: 'names beside `step`, not the same directory five times',
+    );
+  });
+
+  test('the newest run is the one read', () async {
+    writeRun(stamp: '100', ok: false);
+    writeRun(stamp: '200', ok: false, steps: 2);
+
+    expect((await read()).step, contains('/200/'));
+  });
+
+  test('a green run refuses, and the refusal is the listing', () async {
+    writeRun(stamp: '100', ok: true);
+
+    await expectLater(
+      read(),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '${e.message}',
+          'message',
+          allOf(
+            contains('nothing failed'),
+            contains('Checkout'),
+            contains('3 steps'),
+            // The value to pass next, so browsing costs a refusal not a guess.
+            contains('3-step.tree.json'),
+          ),
+        ),
+      ),
+    );
+  });
+
+  test('a step is named by any leg of its capture, or by its index', () async {
+    var runDir = writeRun(stamp: '100', ok: true);
+    var base = p.join(runDir, 'checkout_test.dart', 'Checkout', '2-step');
+
+    for (var named in [
+      p.relative('$base.tree.json', from: worktree.path),
+      p.relative('$base.png', from: worktree.path),
+      '$base.tree.json',
+      '2',
+    ]) {
+      var result = await read({'step': named});
+      expect(result.index, 2, reason: named);
+      expect(result.screen!.toJson().toString(), contains('Total: 2'));
+    }
+  });
+
+  test('naming a directory lists what is in it', () async {
+    var runDir = writeRun(stamp: '100', ok: true);
+
+    await expectLater(
+      read({'step': p.join(runDir, 'checkout_test.dart', 'Checkout')}),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '${e.message}',
+          'message',
+          allOf(contains('3 captures'), contains('1-step.tree.json')),
+        ),
+      ),
+    );
+    await expectLater(
+      read({'step': p.join(runDir, 'checkout_test.dart')}),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '${e.message}',
+          'message',
+          contains('directories there'),
+        ),
+      ),
+    );
+  });
+
+  test('the queries run over the same capture', () async {
+    writeRun(stamp: '100', ok: true);
+
+    var result = await read({
+      'step': '1',
+      'screen': false,
+      'find': 'Pay',
+      'at': '10,50',
+      'styles': true,
+      'texts': true,
+    });
+
+    expect(result.screen, isNull);
+    expect(result.find!.single['type'], 'ElevatedButton');
+    // Innermost last, and the button is what is at that point.
+    expect(result.at!.last['type'], 'ElevatedButton');
+    expect(result.styles, isEmpty);
+    expect(result.texts, ['Total: 1', 'Pay']);
+  });
+
+  test('a point that is not one rides the note, not an error', () async {
+    writeRun(stamp: '100', ok: true);
+
+    var result = await read({'step': '1', 'at': 'the button'});
+
+    expect(result.screen, isNotNull, reason: 'the read still happened');
+    expect(result.note, contains('not a point'));
+  });
+
+  test('the lens sets what nobody said, and names itself', () async {
+    writeRun(stamp: '100', ok: true);
+
+    var act = await read({'step': '1'});
+    expect(act.lens, 'act');
+    expect(act.tree, isNull);
+    expect(act.styles, isNull);
+    expect(act.artifacts, isEmpty);
+
+    var look = await read({'step': '1', 'lens': 'look'});
+    expect(look.lens, 'look');
+    expect(look.artifacts.single.path, endsWith('1-step.png'));
+    expect(look.tree, isNull);
+
+    var raw = await read({'step': '1', 'lens': 'raw'});
+    expect(raw.tree, isNotNull);
+    expect(raw.styles, isNotNull);
+
+    // Explicit always beats the preset.
+    var quiet = await read({'step': '1', 'lens': 'raw', 'tree': false});
+    expect(quiet.tree, isNull);
+    expect(quiet.nodes, isNotNull, reason: 'the count is free either way');
+  });
+
+  test('an unknown lens is refused with the four that exist', () async {
+    writeRun(stamp: '100', ok: true);
+
+    await expectLater(
+      read({'step': '1', 'lens': 'pretty'}),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '${e.message}',
+          'message',
+          allOf(contains('act'), contains('look'), contains('raw')),
+        ),
+      ),
+    );
+  });
+
+  test('a capture with no tree says which lane drops it', () async {
+    writeRun(stamp: '100', ok: true, withTrees: false);
+
+    await expectLater(
+      read({'step': '1'}),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '${e.message}',
+          'message',
+          allOf(contains('no widget tree'), contains('shots')),
+        ),
+      ),
+    );
+  });
+
+  test('no run at all says to make one', () async {
+    await expectLater(
+      read(),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '${e.message}',
+          'message',
+          contains('no scenario run on disk'),
+        ),
+      ),
+    );
+  });
+}

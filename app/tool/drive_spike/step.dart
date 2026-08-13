@@ -1,9 +1,11 @@
-// Throwaway one-shot driver: one run-plugin action per invocation, for
-// driving the GUI from a shell loop when the MCP server is not connected.
-// A fresh process per hop is the CLI's own shape — the run's state lives in
-// the run dir, not in this process.
+// Throwaway one-shot driver: one plugin action per invocation, for driving
+// the GUI from a shell loop when the MCP server is not connected — and for
+// exercising an action the connected server is too old to know about, since
+// it is frozen at the session's start. A fresh process per hop is the CLI's
+// own shape — the run's state lives in the run dir, not in this process.
 //
 //   cd app && dart run tool/drive_spike/step.dart <action> ['<json args>']
+//   cd app && dart run tool/drive_spike/step.dart scenarios/read '{...}'
 import 'dart:convert';
 import 'dart:io';
 
@@ -15,7 +17,11 @@ import 'package:flutterware_app/src/session/session.dart';
 import 'package:path/path.dart' as p;
 
 Future<void> main(List<String> args) async {
-  var action = args[0];
+  // `run` is the plugin this exists for; `<plugin>/<action>` reaches another.
+  var (plugin, action) = switch (args[0].split('/')) {
+    [var p, var a] => (p, a),
+    _ => ('run', args[0]),
+  };
   var arguments = args.length > 1
       ? (jsonDecode(args[1]) as Map).cast<String, Object?>()
       : <String, Object?>{};
@@ -27,7 +33,7 @@ Future<void> main(List<String> args) async {
   try {
     Object? reply;
     try {
-      var job = session.invoke('run', action, arguments: arguments);
+      var job = session.invoke(plugin, action, arguments: arguments);
       var result = await job.done;
       reply = !result.ok
           ? {'error': describeJobError(result.error!)}

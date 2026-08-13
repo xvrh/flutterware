@@ -5,9 +5,13 @@ import 'dart:isolate';
 
 import 'package:collection/collection.dart';
 import 'package:flutterware/plugins.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../../inspect/lens.dart';
+import '../../inspect/screen_read.dart';
 import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
@@ -725,6 +729,185 @@ class ScenariosCore extends PluginCore {
           ],
         ),
         PluginAction(
+          'read',
+          'Read a captured step',
+          returns: ScenarioReadResult,
+          description:
+              'Asks a step a run already captured what is on it. Every run '
+              'writes four legs per step — the picture, the widget tree, the '
+              'semantics and the texts — and until now handed back paths and '
+              'nothing that could read them. With no flags this answers the '
+              'question worth asking first: **what is on this screen**, as a '
+              'nested list of the things that carry words or respond to '
+              'touch, with their boxes and their state. Everything heavier is '
+              'one flag on the same capture: `find` for where something is, '
+              '`at` for what is under a point, `styles` for the type ramp, '
+              '`tree` for all of it. The same grammar `run act` answers with '
+              'on a live app — a `find` here and a `find` there differ in '
+              'which file was opened and in nothing you have to learn twice.',
+          parameters: [
+            ActionParameter(
+              'package',
+              'Package',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  'Which declared package the run belongs to; the only one '
+                  'when there is one',
+              options: [
+                for (var path in packages)
+                  ActionOption(path, label: path == '.' ? 'root' : path),
+              ],
+            ),
+            const ActionParameter(
+              'step',
+              'Step',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Which capture. Any leg of it as `run` reported it — the '
+                  '`tree` path, the `image` path, either works — or a plain '
+                  'index into the run. Omitted takes the failing step when '
+                  'exactly one scenario went red, which is the read that '
+                  'happens most. Naming a directory instead lists what is in '
+                  'it, so browsing costs a refusal rather than a guess.',
+            ),
+            const ActionParameter(
+              'output',
+              'Run directory',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'The run to read, when `step` is an index or omitted. The '
+                  'newest under the package when omitted — which is the run '
+                  'you just did.',
+            ),
+            ActionParameter(
+              'lens',
+              'Lens',
+              kind: ActionParameterKind.choice,
+              required: false,
+              defaultValue: 'act',
+              description:
+                  'How much to hand back, as one word. `act` is the screen '
+                  'alone; `look` adds the archived picture; `design` adds '
+                  'every distinct text style; `raw` adds the whole tree and '
+                  'costs about 20,000 tokens. The same four words `run` uses. '
+                  'A flag you set explicitly always beats the lens.',
+              options: [
+                for (var lens in ObserveLens.values) ActionOption(lens.name),
+              ],
+            ),
+            const ActionParameter(
+              'screen',
+              'Screen',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'true',
+              description:
+                  'The nested list of what is on the step — the default '
+                  'answer. `false` when you only want a query.',
+            ),
+            const ActionParameter(
+              'find',
+              'Find',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Report only the nodes matching this, case-insensitively '
+                  "against each node's type, its description and the words it "
+                  'puts on screen. What to reach for instead of `tree` when '
+                  'the question is "is the error message in there".',
+            ),
+            const ActionParameter(
+              'at',
+              'At a point',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'The chain of widgets under this point as `x,y`, innermost '
+                  'last — in the same logical pixels every box in this reply '
+                  'is in, so a point read off the screen lands here without a '
+                  'transform.',
+            ),
+            const ActionParameter(
+              'styles',
+              'Text styles',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'Every distinct text size, weight and colour on the step, '
+                  'most-used first with a sample of each. ~185 tokens, and it '
+                  'settles most typography arguments — two greys that should '
+                  'be one, a ramp with both 11.5 and 12.5 in it.',
+            ),
+            const ActionParameter(
+              'texts',
+              'Texts',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'The flat list of every string the step showed, as the '
+                  'capture recorded it. The screen carries the same words '
+                  'attached to what owns them; this is for grepping.',
+            ),
+            const ActionParameter(
+              'tree',
+              'Widget tree',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'The whole widget tree. **~20,000 tokens** on a real '
+                  'screen — an order of magnitude past everything else here, '
+                  'and `find`, `at` and `styles` answer most of what anyone '
+                  'reads a tree for. Narrow it with `treeRoot` and '
+                  '`treeDepth`.',
+            ),
+            const ActionParameter(
+              'treeRoot',
+              'Tree root',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Narrow `tree` to this node id and below. Ids come from '
+                  'tree shape, so one a `find` gave still names this node.',
+            ),
+            const ActionParameter(
+              'treeDepth',
+              'Tree depth',
+              kind: ActionParameterKind.integer,
+              required: false,
+              description: 'Stop `tree` this many levels below its root',
+            ),
+            const ActionParameter(
+              'treeNoise',
+              'Keep wrappers',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'true',
+              description:
+                  'Drop the framework wrappers nobody wrote — `Padding`, '
+                  '`Semantics`, the twenty nodes under every '
+                  '`MaterialApp`. On by default; `false` keeps them.',
+            ),
+            const ActionParameter(
+              'screenshot',
+              'Picture',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'Hand back the archived PNG as a picture rather than as a '
+                  'path. Off by default because the screen answers most '
+                  'questions for a fifth of the tokens; `lens: look` is the '
+                  'short way to say yes.',
+            ),
+          ],
+        ),
+        PluginAction(
           webExportActionId,
           'Export a web page',
           returns: ScenarioWebExportResult,
@@ -1154,9 +1337,359 @@ class ScenariosCore extends PluginCore {
       webExportActionId => _exportWeb(arguments),
       'new' => _new(arguments),
       'shots' => _shots(arguments),
+      'read' => _read(arguments),
       'restart' => _restart(arguments),
       _ => super.invoke(actionId, arguments: arguments),
     };
+  }
+
+  /// One archived step, answered.
+  ///
+  /// **The reader half of the archive.** A run has written four legs per step
+  /// for two milestones and handed back paths; an agent debugging a red
+  /// scenario got one inlined frame and a pile of file names. This opens the
+  /// tree beside the picture and answers the same questions the live surfaces
+  /// answer, in the same shape — `Screen.of` is a pure function of an
+  /// `InspectTree`, and a step's tree is one on disk.
+  ///
+  /// Nothing is re-run. A capture is a settled moment that already happened,
+  /// which is the one thing this surface has that the live ones do not: the
+  /// answer cannot drift between the question and the reply.
+  Future<ScenarioReadResult> _read(Map<String, Object?> arguments) async {
+    var lens = _lensFrom(arguments);
+    var picked = _pickStep(arguments);
+
+    var treeFile = File('${picked.base}.tree.json');
+    if (!treeFile.existsSync()) {
+      throw ArgumentError.value(
+        _relative(picked.base),
+        'step',
+        'that capture has a picture but no widget tree beside it — a `raw` '
+            'run or a `shots` run keeps only pixels. Re-run it with `run` to '
+            'get a step this can read.',
+      );
+    }
+    InspectTree tree;
+    try {
+      tree = InspectTree.fromJson(
+        (jsonDecode(treeFile.readAsStringSync()) as Map)
+            .cast<String, Object?>(),
+      );
+    } on FormatException catch (e) {
+      throw ArgumentError.value(
+        _relative(picked.base),
+        'step',
+        'its widget tree is not readable JSON ($e). Re-run the scenario.',
+      );
+    }
+
+    var wantsShot = ScreenRead.boolArgument(
+      arguments['screenshot'] ?? lens.picture,
+    );
+    var read = ScreenRead.of(
+      tree,
+      arguments,
+      wantsTree: ScreenRead.boolArgument(arguments['tree'] ?? lens.tree),
+      wantsStyles: ScreenRead.boolArgument(arguments['styles'] ?? lens.styles),
+      worktree: host.worktree.path,
+    );
+
+    var image = picked.image;
+    var showable =
+        wantsShot &&
+        image != null &&
+        p.extension(image) == '.png' &&
+        File(p.join(host.worktree.path, image)).existsSync();
+
+    return ScenarioReadResult(
+      step: _relative('${picked.base}.tree.json'),
+      lens: lens.name,
+      scenario: picked.scenario,
+      file: picked.file,
+      index: picked.index,
+      failure: picked.failure,
+      image: image,
+      screen: read.screen,
+      texts: ScreenRead.boolArgument(arguments['texts'])
+          ? _textsOf(picked.base)
+          : null,
+      tree: read.tree,
+      nodes: read.nodes,
+      find: read.find,
+      at: read.at,
+      styles: read.styles,
+      note: read.note,
+      next: ScreenRead.offer,
+      steps: picked.siblings,
+      picture: showable
+          ? Artifact(
+              kind: Artifact.png,
+              address: Address(
+                worktree: host.worktree.name,
+                plugin: host.id,
+                segments: ['read', p.basename(picked.base)],
+              ),
+              path: image,
+            )
+          : null,
+    );
+  }
+
+  /// The lens named for this call, or `act`.
+  ///
+  /// Per call and not pinnable, unlike the run plugin's. A pin pays for itself
+  /// in a loop against one long-lived subject; a scenario read names its
+  /// capture afresh every time, so a pin here would be hidden state with no
+  /// loop to amortise it.
+  static ObserveLens _lensFrom(Map<String, Object?> arguments) {
+    var name = arguments['lens'] as String?;
+    if (name == null || name.isEmpty) return ObserveLens.act;
+    return ObserveLens.byName(name) ??
+        (throw ArgumentError.value(name, 'lens', ObserveLens.unknown(name)));
+  }
+
+  /// The capture's texts leg, as the harness recorded it.
+  ///
+  /// Read off the report rather than off a `.texts.json`, because a scenario
+  /// step keeps its texts in `run.json` where every other surface writes a
+  /// fourth file.
+  List<String>? _textsOf(String base) => _stepRecordFor(base)?.$2.texts;
+
+  /// The legs a capture is written as, longest first so `.tree.json` is not
+  /// read as a `.json`.
+  static const _captureLegs = [
+    '.semantics.json',
+    '.capture.json',
+    '.events.json',
+    '.tree.json',
+    '.png',
+    '.raw',
+  ];
+
+  static String? _baseOf(String path) {
+    for (var leg in _captureLegs) {
+      if (path.endsWith(leg)) {
+        return path.substring(0, path.length - leg.length);
+      }
+    }
+    return null;
+  }
+
+  String _absolute(String path) =>
+      p.isAbsolute(path) ? path : p.join(host.worktree.path, path);
+
+  /// Which capture the call meant.
+  ///
+  /// **One parameter with a browse ladder, not four selectors.** A path names
+  /// a capture; a directory refuses with what is in it; an index counts into
+  /// a run; nothing at all takes the failing step, which is the read that
+  /// happens most. Every refusal lists the values that would have worked,
+  /// which is what makes browsing cost a call rather than a guess.
+  _PickedStep _pickStep(Map<String, Object?> arguments) {
+    var raw = arguments['step']?.toString().trim();
+    if (raw != null && raw.isNotEmpty && int.tryParse(raw) == null) {
+      var path = _absolute(raw);
+      if (_baseOf(path) case var base?) return _describe(base);
+      var directory = Directory(path);
+      if (directory.existsSync()) {
+        throw ArgumentError.value(raw, 'step', _listing(directory));
+      }
+      throw ArgumentError.value(
+        raw,
+        'step',
+        'no such file. Give a step as `run` reported it — its `tree` or its '
+            '`image` path — or an index into the run, or nothing at all for '
+            'the step a scenario failed on.',
+      );
+    }
+
+    var runDir = _runDirectory(arguments);
+    var report = _reportIn(runDir);
+    var index = raw == null || raw.isEmpty ? null : int.parse(raw);
+
+    if (report == null) {
+      throw ArgumentError.value(
+        _relative(runDir),
+        'output',
+        'no $scenarioRunReportFile in that directory, so there is no run to '
+            'count steps into. Name a capture directly with `step`.',
+      );
+    }
+
+    var outcomes = [
+      for (var package in report.packages)
+        for (var outcome in package.scenarios) outcome,
+    ];
+    if (index != null) {
+      var hits = [
+        for (var outcome in outcomes)
+          for (var step in outcome.steps)
+            if (step.index == index) (outcome, step),
+      ];
+      if (hits.length == 1) return _fromRecord(hits.single.$1, hits.single.$2);
+      throw ArgumentError.value(
+        index,
+        'step',
+        hits.isEmpty
+            ? 'no step $index in that run. ${_listing(Directory(runDir))}'
+            : 'step $index exists in ${hits.length} scenarios of that run — '
+                  'an index counts within a scenario, so name the capture '
+                  'itself. ${_listing(Directory(runDir))}',
+      );
+    }
+
+    var failed = [
+      for (var outcome in outcomes)
+        if (!outcome.ok && outcome.steps.isNotEmpty) outcome,
+    ];
+    if (failed.length == 1) {
+      return _fromRecord(failed.single, failed.single.steps.last);
+    }
+    throw ArgumentError.value(
+      null,
+      'step',
+      failed.isEmpty
+          ? 'nothing failed in that run, so there is no obvious step to read. '
+                '${_listing(Directory(runDir))}'
+          : '${failed.length} scenarios failed in that run, so "the failing '
+                'step" names more than one. ${_listing(Directory(runDir))}',
+    );
+  }
+
+  /// The run to count into: the one named, or the newest the package has.
+  String _runDirectory(Map<String, Object?> arguments) {
+    if (arguments['output'] case String given when given.isNotEmpty) {
+      var path = _absolute(given);
+      if (!Directory(path).existsSync()) {
+        throw ArgumentError.value(given, 'output', 'no such directory');
+      }
+      return path;
+    }
+    var candidates = <Directory>[];
+    for (var path in _requested(arguments)) {
+      var runs = Directory(
+        p.join(
+          host.workspace.packageFor(path).directory.path,
+          'build',
+          'flutterware',
+          'scenario_runs',
+        ),
+      );
+      if (!runs.existsSync()) continue;
+      candidates.addAll(runs.listSync().whereType<Directory>());
+    }
+    if (candidates.isEmpty) {
+      throw ArgumentError.value(
+        null,
+        'output',
+        'this package has no scenario run on disk. Run one first — `run '
+            'scenarios run` — or give `output` a directory that holds a '
+            '$scenarioRunReportFile.',
+      );
+    }
+    // Newest by name, which is the millisecond stamp `run` writes. Reading it
+    // off the directory name rather than off the filesystem keeps a checkout
+    // or a copy from reordering a run history.
+    candidates.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    return candidates.last.path;
+  }
+
+  ScenarioRunResult? _reportIn(String runDir) {
+    var file = File(p.join(runDir, scenarioRunReportFile));
+    if (!file.existsSync()) return null;
+    try {
+      return ScenarioRunResult.fromJson(
+        (jsonDecode(file.readAsStringSync()) as Map).cast<String, dynamic>(),
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// The report record for a capture, found by the tree path it names.
+  (ScenarioRunOutcome, ScenarioRunStep)? _stepRecordFor(String base) {
+    var report = _reportIn(p.dirname(p.dirname(p.dirname(base))));
+    if (report == null) return null;
+    var wanted = '$base.tree.json';
+    for (var package in report.packages) {
+      for (var outcome in package.scenarios) {
+        for (var step in outcome.steps) {
+          if (_absolute(step.tree) == wanted) return (outcome, step);
+        }
+      }
+    }
+    return null;
+  }
+
+  _PickedStep _describe(String base) {
+    if (_stepRecordFor(base) case var record?) {
+      return _fromRecord(record.$1, record.$2);
+    }
+    // No report to read — a hand-placed capture, or a run directory that was
+    // moved. The tree is still readable, and saying less is better than
+    // refusing something that works.
+    var directory = Directory(p.dirname(base));
+    var siblings = <String>[
+      if (directory.existsSync())
+        for (var file in directory.listSync().whereType<File>())
+          if (file.path.endsWith('.tree.json')) p.basename(file.path),
+    ]..sort();
+    return _PickedStep(
+      base: base,
+      siblings: siblings,
+      image: [
+        for (var extension in const ['.png', '.raw'])
+          if (File('$base$extension').existsSync())
+            _relative('$base$extension'),
+      ].firstOrNull,
+    );
+  }
+
+  _PickedStep _fromRecord(ScenarioRunOutcome outcome, ScenarioRunStep step) =>
+      _PickedStep(
+        base: _baseOf(_absolute(step.tree))!,
+        file: outcome.file,
+        scenario: outcome.name,
+        index: step.index,
+        failure:
+            step.failure ??
+            (outcome.steps.last == step
+                ? outcome.errors.firstOrNull?.error
+                : null),
+        image: step.image,
+        siblings: [for (var other in outcome.steps) p.basename(other.tree)],
+      );
+
+  /// What is in a directory, as values that can be passed straight back.
+  String _listing(Directory directory) {
+    var steps = [
+      for (var file in directory.listSync().whereType<File>())
+        if (file.path.endsWith('.tree.json')) _relative(file.path),
+    ]..sort();
+    if (steps.isNotEmpty) {
+      return '${steps.length} captures there: ${steps.join(', ')}';
+    }
+    if (_reportIn(directory.path) case var report?) {
+      var lines = <String>[
+        for (var package in report.packages)
+          for (var outcome in package.scenarios)
+            [
+              outcome.file,
+              outcome.name,
+              '${outcome.stepCount} steps',
+              outcome.ok ? 'ok' : 'FAILED',
+              ?outcome.steps.lastOrNull?.tree,
+            ].join(' · '),
+      ];
+      return 'that run holds:\n${lines.join('\n')}';
+    }
+    var children = [
+      for (var child in directory.listSync().whereType<Directory>())
+        _relative(child.path),
+    ]..sort();
+    return children.isEmpty
+        ? 'nothing readable in there'
+        : 'directories there: ${children.join(', ')}';
   }
 
   /// Runs the scenarios and keeps only what a store listing or a manual can
@@ -2088,3 +2621,31 @@ class ScenariosCore extends PluginCore {
 }
 
 PluginCore scenariosCoreFactory(PluginHost host) => ScenariosCore(host);
+
+/// One archived capture, chosen — and what the run record knows about it.
+class _PickedStep {
+  _PickedStep({
+    required this.base,
+    this.siblings = const [],
+    this.file,
+    this.scenario,
+    this.index,
+    this.failure,
+    this.image,
+  });
+
+  /// Absolute, without an extension: every leg is `$base.<leg>`.
+  final String base;
+
+  /// The other captures of the same scenario, as `step:` values — what makes
+  /// walking a failing flow backwards one call each.
+  final List<String> siblings;
+
+  final String? file;
+  final String? scenario;
+  final int? index;
+  final String? failure;
+
+  /// Worktree-relative, as the run reported it.
+  final String? image;
+}

@@ -3,10 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:flutterware/channels.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/screen.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart'
@@ -21,6 +24,8 @@ import '../../run/drive_session.dart';
 import '../../run/entrypoints.dart';
 import '../../run/flavors.dart';
 import '../../run/handle.dart';
+import '../../inspect/lens.dart';
+import '../../inspect/screen_read.dart';
 import '../../run/inspect.dart';
 import '../../run/inventory.dart';
 import '../../run/journal.dart';
@@ -1075,6 +1080,37 @@ class RunCore extends PluginCore {
           ],
         ),
         PluginAction(
+          'lens',
+          'Lens',
+          returns: RunLensResult,
+          description:
+              'How much of an observation comes back, as one word — read it, '
+              'or pin it for this run. `act` is the screen alone and the '
+              'default, `look` adds the picture, `design` adds the text '
+              'styles, `raw` adds the whole tree and costs about 20,000 '
+              'tokens. Pin one when a stretch of work wants the same shape '
+              'every step and you would rather not say so every call; every '
+              'reply names the lens in force and marks a pinned one, because '
+              'a human or another agent driving this run can pin it too. '
+              'Anything a call names explicitly still beats the lens.',
+          parameters: [
+            ..._appSelector,
+            ActionParameter(
+              'lens',
+              'Lens',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  'Pin this one. Omitted, the action reports what is in force '
+                  'without changing it; `none` clears the pin.',
+              options: [
+                for (var lens in ObserveLens.values) ActionOption(lens.name),
+                const ActionOption('none', label: 'Clear the pin'),
+              ],
+            ),
+          ],
+        ),
+        PluginAction(
           'panels',
           'Panels',
           returns: RunPanelsResult,
@@ -1539,28 +1575,119 @@ class RunCore extends PluginCore {
   );
 
   /// What every drive transaction lets you tune about its observation.
-  static const _observationParameters = [
-    ActionParameter(
+  static final _observationParameters = [
+    const ActionParameter(
       'settleMs',
       'Settle budget',
       kind: ActionParameterKind.integer,
       required: false,
       defaultValue: '800',
       description:
-          'Milliseconds to wait for the app to stop animating before '
+          'Milliseconds to wait for the app to stop painting before '
           'observing. Running out is reported (settled: false), never an '
-          'error — a spinner would otherwise hang every step.',
+          'error — a spinner would otherwise hang every step. It waits on '
+          'frames, tickers and image decodes, so settled: true means "nothing '
+          'is animating", not "the screen has finished loading": a pending '
+          'fetch or file read schedules no frame and is invisible to it. When '
+          'the texts still say "Loading…", wait and observe again.',
     ),
     ActionParameter(
       'screenshot',
       'Screenshot',
       kind: ActionParameterKind.boolean,
       required: false,
+      defaultValue: 'false',
+      description:
+          'Return the picture, not just archive it. **Every step is '
+          'photographed either way** and the frame is on disk under the '
+          'capture — this decides whether it enters the reply, where it is '
+          'about 810 tokens. Off by default because `screen` answers most of '
+          'what a picture used to be read for; ask for it when the question '
+          'is how something *looks*. It is attached without being asked for '
+          'when the step was refused or the app threw, because looking is '
+          'the useful thing to do then.',
+    ),
+    ActionParameter(
+      'lens',
+      'Lens',
+      kind: ActionParameterKind.choice,
+      required: false,
+      defaultValue: 'act',
+      description:
+          'How much to hand back, as one word, for this call — `act` (the '
+          'screen alone), `look` (+ the picture), `design` (+ the text '
+          'styles), `raw` (+ the whole tree, ~20,000 tokens). Beaten by any '
+          'flag you name explicitly. `run lens` pins one for the whole run.',
+      options: [for (var lens in ObserveLens.values) ActionOption(lens.name)],
+    ),
+    ActionParameter(
+      'item',
+      'Screen item',
+      kind: ActionParameterKind.integer,
+      required: false,
+      description:
+          'Act on the numbered thing from the last screen reply — '
+          '`{"item": 20}` instead of a target. **The way past an ambiguous '
+          'name**: `tap "Changes"` is refused when two widgets match, and a '
+          'screen that lists exactly one Changes button has already told you '
+          'which. It is also the only way to reach a control with no words at '
+          'all, and there are usually a handful. Resolved to the centre of '
+          "that item's box and then through the ordinary ladder, so covered "
+          'or gone is refused rather than tapped blind. Numbers are per '
+          'observation: a screen that changed renumbers, and the refusal says '
+          'how many items the last one had.',
+    ),
+    ActionParameter(
+      'screen',
+      'The screen',
+      kind: ActionParameterKind.boolean,
+      required: false,
       defaultValue: 'true',
       description:
-          "Write the step's PNG under the run's journal directory and "
-          'return its path. On by default — the picture is what makes the '
-          'loop self-verifying.',
+          'What is on the screen and what can be done to it: every control '
+          'and every piece of text, with its words, its box and whether it '
+          'is the current one of its group, nested under the panes and lists '
+          'that hold them. On by default and the thing to read first — it is '
+          'a twentieth of the tree and answers more, because a tree cannot '
+          'say which control is disabled or which tab is selected. A control '
+          'with no words is reported as such rather than dropped: it has no '
+          'accessible name, which an agent and a screen reader both trip on.',
+    ),
+    ActionParameter(
+      'find',
+      'Find',
+      required: false,
+      description:
+          'Report only the nodes whose type, description or accessibility '
+          'label contains this, case-insensitively — `ElevatedButton`, '
+          '`Save`, `SizedBox`. The cheap way to a colour, a size and a '
+          "source: 131 tokens against the whole tree's 19,500. Also how to "
+          'get a node id without reading a tree first.',
+    ),
+    ActionParameter(
+      'at',
+      'At a point',
+      required: false,
+      description:
+          'Report the chain of widgets under this point, as `x,y` in logical '
+          'pixels — the same space every box in this reply uses, so a box '
+          'centre from `screen` lands here untranslated. Outermost first, '
+          'innermost last, capped at the eight that matter: the thing under '
+          'a point is usually a Text and the thing you meant is the Row three '
+          'levels out whose crossAxisAlignment is the answer.',
+    ),
+    ActionParameter(
+      'styles',
+      'Text styles',
+      kind: ActionParameterKind.boolean,
+      required: false,
+      defaultValue: 'false',
+      description:
+          'Every distinct size/weight/colour of text on screen, most-used '
+          'first, with one sample each. The type ramp and the palette as a '
+          'table — about 185 tokens, and the answer to "are these two greys '
+          'the same grey" and "is the ramp consistent". Asking the same '
+          'question as a search costs thirteen times more and truncates.',
     ),
     ActionParameter(
       'tree',
@@ -1569,18 +1696,62 @@ class RunCore extends PluginCore {
       required: false,
       defaultValue: 'false',
       description:
-          'Include the widget tree in the reply. Off by default because a '
-          'real app is thousands of tokens of tree; the texts ride along '
-          'either way.',
+          'Include the widget tree in the reply. Off by default and the '
+          'heaviest thing here by an order of magnitude — `screen` says what '
+          'is there, and `find`, `at` and `styles` answer most of what people '
+          'read a whole tree for at a hundredth of the cost. Reach for it '
+          'when the question is genuinely about structure. Scoped by '
+          'treeRoot, treeDepth and treeNoise.',
+    ),
+    ActionParameter(
+      'treeRoot',
+      'Subtree root',
+      required: false,
+      description:
+          'Report this node and its descendants instead of the whole tree. A '
+          'node id from an earlier read of the same screen — `0/3/1/0`. Ids '
+          'are positions in the tree, so one from a screen that has since '
+          'changed is refused rather than approximated.',
+    ),
+    ActionParameter(
+      'treeDepth',
+      'Tree depth',
+      kind: ActionParameterKind.integer,
+      required: false,
+      description:
+          'How many levels below the reported root to include. Counted after '
+          'treeNoise has run, so the levels are the ones you would see. A '
+          'node whose children were cut says how many with `elided`, so a '
+          'bounded read cannot be mistaken for a complete one.',
+    ),
+    ActionParameter(
+      'treeNoise',
+      'Keep scaffolding',
+      kind: ActionParameterKind.boolean,
+      required: false,
+      defaultValue: 'true',
+      description:
+          "Drop widgets that share their only child's box, keeping whichever "
+          'of the two carries more — MouseRegion, GestureDetector, Gap, '
+          'Expanded and the rest of the wrappers go, and the box, the words '
+          "and the flex stay. On by default; measured on this GUI's Changes "
+          'screen at 436 nodes down to 252. Pass false for every level, when '
+          'the question is about the wrappers themselves. Ids never move '
+          'either way, so a filtered child can sit directly under a node that '
+          'is not its parent.',
     ),
     ActionParameter(
       'maxSide',
       'Screenshot cap',
       kind: ActionParameterKind.integer,
       required: false,
+      defaultValue: '900',
       description:
           "Cap the screenshot's longest side, in pixels — the render is "
-          'scaled, not re-encoded. Full resolution when omitted.',
+          'scaled, not re-encoded. 900 by default, which is ~810 image tokens '
+          'and still legible; raise it when the pixels are the question. A '
+          'step that returns no picture still photographs itself for the '
+          'capture, at 600.',
     ),
   ];
 
@@ -1603,6 +1774,7 @@ class RunCore extends PluginCore {
       'act' => _actAction(arguments),
       'observe' => _actAction({...arguments, 'verb': 'observe'}),
       'navigate' => _actAction({...arguments, 'verb': 'navigate'}),
+      'lens' => _lensAction(arguments),
       'panels' => _panelsAction(arguments),
       'panelInvoke' => _panelInvokeAction(arguments),
       'panelKnob' => _panelKnobAction(arguments),
@@ -3244,17 +3416,64 @@ class RunCore extends PluginCore {
     if (arguments['layer'] == 'native') {
       return _nativeAct(handle, arguments, verb: verb, actor: actor);
     }
-    var wantsTree = _boolArgument(arguments['tree']);
-    var wantsShot = arguments['screenshot'] == null
-        ? true
-        : _boolArgument(arguments['screenshot']);
-    // The tree is requested from the guest regardless of [wantsTree]: it is
-    // persisted as a journal artifact either way — a reviewer of the step
-    // strip gets the same three legs a scenario step has — and only *returned*
-    // inline when asked, because a real app is thousands of tokens of tree.
+    // The lens sets the defaults; anything the caller named beats it. A
+    // preset that overrode what was actually asked for would be a trap.
+    var pinned = pinnedLens(handle);
+    var lens = ObserveLens.byName(arguments['lens'] as String?);
+    if (lens == null && arguments['lens'] != null) {
+      return RunActResult(
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        worktree: handle.worktreeName,
+        verb: verb,
+        ok: false,
+        error: ObserveLens.unknown('${arguments['lens']}'),
+        journal: journalPathFor(handle),
+      );
+    }
+    var through = lens ?? pinned ?? ObserveLens.act;
+    var wantsTree = _boolArgument(arguments['tree'] ?? through.tree);
+    var wantsShot = _boolArgument(arguments['screenshot'] ?? through.picture);
+    // The guest sends the whole tree, unfiltered, every step, and the shaping
+    // all happens here: the screen is projected from it, `find`/`at`/`styles`
+    // are answered from it, and the journal archives it whole. That last one
+    // is the point of moving the narrowing across the wire — a journal holding
+    // whatever the call happened to ask for is a record of the answer, and
+    // what a reviewer wants is a record of the screen.
+    // `item: N` is a position on the screen this run last reported, and it
+    // becomes a point before it reaches the guest — so it resolves through
+    // the same ladder as every other target and a covered or vanished item is
+    // refused rather than tapped blind.
+    String? itemNote;
+    var wireArguments = arguments;
+    if (arguments['item'] case var wanted? when '$wanted'.isNotEmpty) {
+      switch (_pointForItem(handle, wanted)) {
+        case _ItemPoint(:var target, :var described):
+          wireArguments = {...arguments, 'target': target};
+          itemNote = described;
+        case _ItemMiss(:var why):
+          return RunActResult(
+            device: handle.device,
+            entrypoint: handle.entrypoint,
+            worktree: handle.worktreeName,
+            verb: verb,
+            ok: false,
+            error: why,
+            failure: 'notFound',
+            journal: journalPathFor(handle),
+          );
+      }
+    }
+
+    // One capture per step, at one cap, whatever the caller wants to see.
+    // Declining the picture makes it cheap rather than absent: measured at
+    // ~46ms against ~234ms, which is the difference between an archive that
+    // can answer a later question and one that has a hole in it.
+    var maxSide =
+        int.tryParse('${arguments['maxSide'] ?? ''}') ?? _replyMaxSide;
     var wire = <String, String>{
       'verb': verb,
-      if (!wantsShot) 'screenshot': 'false',
+      'maxSide': '${wantsShot ? maxSide : _declinedMaxSide}',
       for (var key in const [
         'target',
         'text',
@@ -3267,9 +3486,8 @@ class RunCore extends PluginCore {
         'waitMs',
         'settleMs',
         'actTimeoutMs',
-        'maxSide',
       ])
-        if (arguments[key] case var value?) key: '$value',
+        if (wireArguments[key] case var value?) key: '$value',
     };
     var started = DateTime.now();
 
@@ -3316,6 +3534,16 @@ class RunCore extends PluginCore {
       );
     }
 
+    var read = ScreenRead.of(
+      switch ((reply['tree'] as Map?)?.cast<String, Object?>()) {
+        var json? => InspectTree.fromJson(json),
+        null => null,
+      },
+      arguments,
+      wantsTree: wantsTree,
+      wantsStyles: _boolArgument(arguments['styles'] ?? through.styles),
+      worktree: handle.worktree,
+    );
     var step = (reply['step'] as Map?)?.cast<String, Object?>();
     var settle = (step?['settle'] as Map?)?.cast<String, Object?>();
     var error = reply['error'] as String?;
@@ -3329,34 +3557,22 @@ class RunCore extends PluginCore {
       (reply['human'] as List?)?.cast<Map>() ?? const [],
     );
 
-    String? shotPath;
-    String? treePath;
-    String? textsPath;
-    if (journalArtifactsDirFor(handle) case var dir?) {
-      var stem = p.join(dir, '${started.millisecondsSinceEpoch}-$pid');
-      File? write(String path, List<int> bytes) {
-        var file = File(path);
-        file.parent.createSync(recursive: true);
-        file.writeAsBytesSync(bytes);
-        return file;
-      }
-
-      if ((reply['screenshot'] as Map?)?['base64'] case String data) {
-        shotPath = write('$stem.png', base64Decode(data))?.absolute.path;
-      }
-      if (treeJson != null) {
-        treePath = write(
-          '$stem.tree.json',
-          utf8.encode(jsonEncode(treeJson)),
-        )?.absolute.path;
-      }
-      if (texts != null) {
-        textsPath = write(
-          '$stem.texts.json',
-          utf8.encode(jsonEncode(texts)),
-        )?.absolute.path;
-      }
-    }
+    var capture = _Capture.write(
+      handle: handle,
+      stamp: '${started.millisecondsSinceEpoch}-$pid',
+      at: started,
+      verb: (step?['verb'] as String?) ?? verb,
+      target: itemNote ?? step?['target'] as String?,
+      shot: (reply['screenshot'] as Map?)?.cast<String, Object?>(),
+      tree: treeJson,
+      semantics: (reply['semantics'] as Map?)?.cast<String, Object?>(),
+      texts: texts,
+      screen: read.screen,
+      reported: read.reported(wantsShot: wantsShot),
+    );
+    var shotPath = capture?.shot;
+    var treePath = capture?.tree;
+    var textsPath = capture?.texts;
 
     // What the human did on the way here, ahead of the step that saw it —
     // the guest buffers between transactions, so these precede this step in
@@ -3379,7 +3595,11 @@ class RunCore extends PluginCore {
         at: started.toUtc().toIso8601String(),
         verb: (step?['verb'] as String?) ?? verb,
         actor: actor,
+        // `item 20 "All / 15"` rather than the point it became: the number
+        // and the words are what the caller said and what a reviewer can
+        // recognise, where `{"at":{"x":30,"y":35}}` is neither.
         target:
+            itemNote ??
             step?['target'] as String? ??
             arguments['target'] as String? ??
             arguments['route'] as String?,
@@ -3390,9 +3610,12 @@ class RunCore extends PluginCore {
         settled: settle?['settled'] as bool?,
         settleMs: settle?['elapsedMs'] as int?,
         lifecycle: reply['lifecycle'] as String?,
+        capture: capture?.address,
+        reported: read.reported(wantsShot: wantsShot),
         screenshot: shotPath,
         tree: treePath,
         texts: textsPath,
+        semantics: capture?.semantics,
         logLines: logs?.length,
         errorCount: guestErrors?.length,
         reconciled: reconciled == 0 ? null : reconciled,
@@ -3404,8 +3627,20 @@ class RunCore extends PluginCore {
       entrypoint: handle.entrypoint,
       worktree: handle.worktreeName,
       verb: (step?['verb'] as String?) ?? verb,
-      target: step?['target'] as String? ?? arguments['target'] as String?,
-      screenshotArtifact: shotPath == null
+      target:
+          itemNote ??
+          step?['target'] as String? ??
+          arguments['target'] as String?,
+      // The picture is *shown* when it was asked for — or when the step went
+      // wrong, because "look at it yourself" is the one useful thing to say to
+      // an agent whose target was refused or whose app threw. It is archived
+      // either way, so this decides what enters a context window, not what
+      // exists.
+      screenshotArtifact:
+          shotPath == null ||
+              !(wantsShot ||
+                  error != null ||
+                  (guestErrors?.isNotEmpty ?? false))
           ? null
           : Artifact(
               kind: Artifact.png,
@@ -3438,8 +3673,20 @@ class RunCore extends PluginCore {
           ? null
           : [for (var action in human) '${action['verb']} ${action['target']}'],
       texts: texts,
-      tree: wantsTree ? treeJson : null,
-      nodes: treeJson == null ? null : _countNodes(treeJson['root']),
+      capture: capture?.address,
+      // Named on every reply, because a pinned lens is state somebody else
+      // may have set — a human, or another agent co-driving this run. The
+      // marker is the difference between "this is the default" and "someone
+      // chose this", which is the whole of what makes hidden state survivable.
+      lens: lens == null && pinned != null
+          ? '${through.name} (pinned)'
+          : through.name,
+      screen: read.screen,
+      tree: read.tree,
+      nodes: read.nodes,
+      find: read.find,
+      at: read.at,
+      styles: read.styles,
       screenshot: shotPath,
       logs: logs == null
           ? null
@@ -3463,11 +3710,80 @@ class RunCore extends PluginCore {
                 ),
             ],
       journal: journalPathFor(handle),
-      note: framesEnabled == false
-          ? 'The window is hidden or occluded; every frame this step saw was '
-                'forced. What a human sees on screen may lag this reply.'
-          : null,
+      next: ScreenRead.offer,
+      note: _note([
+        // The tree was refused and the rest of the step was not, so it rides
+        // the note rather than `error`: the verb landed, and saying it did
+        // not would send the caller back to redo it.
+        read.note,
+        if (framesEnabled == false) _hiddenWindowNote,
+      ]),
     );
+  }
+
+  /// The reply's screenshot cap when a caller asks for a picture and names no
+  /// size.
+  ///
+  /// 900 rather than 1200: ~810 image tokens against ~1440 and 143ms against
+  /// 234, and this GUI's 10.5pt text is still legible at it. A caller that
+  /// needs the pixels says so.
+  /// Reading or pinning the run's lens.
+  Future<RunLensResult> _lensAction(Map<String, Object?> arguments) async {
+    var handle = await _selectRunningApp(arguments);
+    var wanted = arguments['lens'] as String?;
+    var before = pinnedLens(handle);
+
+    ObserveLens? pin;
+    var changing = wanted != null && wanted.isNotEmpty;
+    if (changing && wanted != 'none') {
+      pin = ObserveLens.byName(wanted);
+      if (pin == null) throw ArgumentError(ObserveLens.unknown(wanted));
+      pinLens(handle, pin);
+    } else if (changing) {
+      pinLens(handle, null);
+    }
+
+    var now = changing ? pin : before;
+    return RunLensResult(
+      device: handle.device,
+      entrypoint: handle.entrypoint,
+      lens: (now ?? ObserveLens.act).name,
+      pinned: now != null,
+      // Only when it moved: "was act, is act" reads as a change and was not.
+      was: changing && before?.name != now?.name
+          ? (before ?? ObserveLens.act).name
+          : null,
+      lenses: [
+        for (var lens in ObserveLens.values)
+          {
+            'lens': lens.name,
+            'screen': true,
+            'picture': lens.picture,
+            'styles': lens.styles,
+            'tree': lens.tree,
+          },
+      ],
+    );
+  }
+
+  static const _replyMaxSide = 900;
+
+  /// The cap for the archive-only picture, when the caller declined one.
+  ///
+  /// Small on purpose — it exists so a later question about this step has a
+  /// frame to look at, not so it can be zoomed. ~46ms.
+  static const _declinedMaxSide = 600;
+
+  static const _hiddenWindowNote =
+      'The window is hidden or occluded; every frame this step saw was '
+      'forced. What a human sees on screen may lag this reply.';
+
+  static String? _note(List<String?> parts) {
+    var said = [
+      for (var part in parts)
+        if (part != null && part.isNotEmpty) part,
+    ];
+    return said.isEmpty ? null : said.join(' ');
   }
 
   /// The sentence that teaches the other layer, appended to a drive refusal.
@@ -3570,6 +3886,11 @@ class RunCore extends PluginCore {
   }) async {
     var session = _nativeSessionFor(handle);
     var wantsTree = _boolArgument(arguments['tree']);
+    // Still on by default here, unlike the drive layer, and the difference is
+    // the point of this layer: there is no `screen` projection of a platform
+    // accessibility tree, and what brings anyone to `layer: native` is
+    // something Flutter cannot see — a permission dialog, a webview, another
+    // app. The picture is the answer rather than a second opinion on it.
     var wantsShot = arguments['screenshot'] == null
         ? true
         : _boolArgument(arguments['screenshot']);
@@ -3679,15 +4000,6 @@ class RunCore extends PluginCore {
       journal: journalPathFor(handle),
       note: observation == null ? null : _nativeNote(observation),
     );
-  }
-
-  static int? _countNodes(Object? node) {
-    if (node is! Map) return null;
-    var count = 1;
-    for (var child in (node['children'] as List?) ?? const []) {
-      count += _countNodes(child) ?? 0;
-    }
-    return count;
   }
 
   static String? _inspectNote({required bool up, required bool wanted}) {
@@ -3961,4 +4273,226 @@ class _NativeEcho {
 
   bool contains(DateTime at) =>
       !at.isBefore(from.toUtc()) && !at.isAfter(to.toUtc());
+}
+
+/// One settled moment, written whole.
+///
+/// **The archive, as distinct from the testimony.** Every step leaves the same
+/// four legs a scenario step leaves — the picture, the tree, the semantics, the
+/// texts — plus a manifest naming them, and it leaves them whatever the call
+/// asked to see. What the step *reported* is the journal entry's business
+/// (`JournalEntry.reported`); this is the screen, and it is complete or it is
+/// not worth keeping.
+///
+/// The measurement that made it affordable: the guest was already building the
+/// whole tree on every observe and throwing it away, so the tree and the texts
+/// cost nothing new. Only the picture does, and only when nobody asked to look
+/// — which is why the host caps that one at [_declinedMaxSide] (~46ms) rather
+/// than at the reply's cap (~234ms at 1200).
+class _Capture {
+  const _Capture({
+    required this.address,
+    required this.manifest,
+    this.shot,
+    this.tree,
+    this.semantics,
+    this.texts,
+  });
+
+  /// `fw:///worktrees/<wt>/flutterware.run/<runKey>/steps/<stamp>` — what to
+  /// hand back to ask a different question about this moment.
+  final String address;
+  final String manifest;
+  final String? shot;
+  final String? tree;
+  final String? semantics;
+  final String? texts;
+
+  static _Capture? write({
+    required RunHandle handle,
+    required String stamp,
+    required DateTime at,
+    required String verb,
+    String? target,
+    Map<String, Object?>? shot,
+    Map<String, Object?>? tree,
+    Map<String, Object?>? semantics,
+    List<String>? texts,
+    Screen? screen,
+    List<String> reported = const [],
+  }) {
+    var dir = journalArtifactsDirFor(handle);
+    if (dir == null) return null;
+    var stem = p.join(dir, stamp);
+
+    String? write(String suffix, List<int> bytes) {
+      try {
+        var file = File('$stem$suffix');
+        file.parent.createSync(recursive: true);
+        file.writeAsBytesSync(bytes);
+        return file.absolute.path;
+      } on FileSystemException {
+        // A full disk or a swept run dir must not fail the step: the verb
+        // landed, and losing the archive is worse news than losing the step
+        // but it is not the same news.
+        return null;
+      }
+    }
+
+    String? json(String suffix, Object? value) =>
+        value == null ? null : write(suffix, utf8.encode(jsonEncode(value)));
+
+    var shotPath = switch (shot?['base64']) {
+      String data => write('.png', base64Decode(data)),
+      _ => null,
+    };
+    var treePath = json('.tree.json', tree);
+    var semanticsPath = json('.semantics.json', semantics);
+    var textsPath = json('.texts.json', texts);
+
+    var address = Address(
+      worktree: handle.worktreeName,
+      plugin: runPluginId,
+      segments: [handle.key, 'steps', stamp],
+    ).toString();
+
+    var manifest = {
+      'capture': address,
+      'at': at.toUtc().toIso8601String(),
+      'verb': verb,
+      'target': ?target,
+      'run': handle.key,
+      'device': handle.device,
+      'entrypoint': handle.entrypoint,
+      // What is here, and how much of it — so a reader knows what it has
+      // before opening anything.
+      if (shotPath != null)
+        'screenshot': {
+          'path': shotPath,
+          'width': ?shot?['width'],
+          'height': ?shot?['height'],
+          'pixelRatio': ?shot?['pixelRatio'],
+        },
+      if (treePath != null)
+        'tree': {'path': treePath, 'nodes': _countTree(tree?['root'])},
+      if (semanticsPath != null) 'semantics': {'path': semanticsPath},
+      if (textsPath != null)
+        'texts': {'path': textsPath, 'count': texts?.length ?? 0},
+      if (screen != null)
+        'screen': {
+          'items': screen.length,
+          if (screen.anonymousControls > 0)
+            'anonymous': screen.anonymousControls,
+        },
+      // The one place the two halves meet: the archive says what it holds, and
+      // names what the step chose to hand back, so a reviewer never has to
+      // infer one from the other.
+      if (reported.isNotEmpty) 'reported': reported,
+    };
+
+    return _Capture(
+      address: address,
+      manifest: write('.capture.json', utf8.encode(jsonEncode(manifest))) ?? '',
+      shot: shotPath,
+      tree: treePath,
+      semantics: semanticsPath,
+      texts: textsPath,
+    );
+  }
+
+  static int _countTree(Object? node) {
+    if (node is! Map) return 0;
+    var count = 1;
+    for (var child in (node['children'] as List?) ?? const []) {
+      count += _countTree(child);
+    }
+    return count;
+  }
+}
+
+/// What `item: N` resolved to, or why it did not.
+sealed class _ItemLookup {
+  const _ItemLookup();
+}
+
+class _ItemPoint extends _ItemLookup {
+  const _ItemPoint({required this.target, required this.described});
+
+  /// The wire spelling of a point target — `{"at": {"x": …, "y": …}}`.
+  final String target;
+
+  /// `item 20 "All / 15"`, for the journal and the reply, so a reader of the
+  /// step sees what was aimed at rather than a bare number.
+  final String described;
+}
+
+class _ItemMiss extends _ItemLookup {
+  const _ItemMiss(this.why);
+
+  final String why;
+}
+
+/// The point at the centre of screen item [wanted], from the last capture
+/// this run wrote.
+///
+/// **Resolved from disk, not from memory.** Every surface here opens a fresh
+/// session per call, so "the screen you last saw" cannot live in a field; it
+/// lives in the run's journal, which is also what makes an item usable from
+/// `fw` after an MCP call took the observation.
+///
+/// The screen is recomputed from the archived tree rather than stored, because
+/// [Screen.of] is deterministic: the same tree numbers the same items, and one
+/// fewer thing on disk is one fewer thing that can disagree with the tree
+/// beside it.
+_ItemLookup _pointForItem(RunHandle handle, Object wanted) {
+  var n = int.tryParse('$wanted');
+  if (n == null) {
+    return _ItemMiss(
+      'item: "$wanted" is not a number — pass the `n` of something in the '
+      "last reply's screen.",
+    );
+  }
+
+  var entry = readJournal(
+    handle,
+    tail: 40,
+  ).lastWhereOrNull((entry) => entry.tree != null);
+  var path = entry?.tree;
+  if (path == null) {
+    return const _ItemMiss(
+      'nothing has observed this app yet, so item numbers mean nothing. '
+      'Observe first; every reply numbers what is on the screen.',
+    );
+  }
+
+  InspectTree tree;
+  try {
+    tree = InspectTree.fromJson(
+      jsonDecode(File(path).readAsStringSync()) as Map<String, Object?>,
+    );
+  } on Object {
+    return const _ItemMiss(
+      'the last observation could not be read back from the run journal. '
+      'Observe again and use an item number from that reply.',
+    );
+  }
+
+  var screen = Screen.of(tree);
+  var item = screen.items.where((item) => item.n == n).firstOrNull;
+  if (item == null) {
+    return _ItemMiss(
+      'no item $n on the screen this run last reported — it had '
+      '${screen.length}. Observe again; the numbers are per observation and '
+      'a screen that changed renumbers.',
+    );
+  }
+
+  var x = item.box[0] + item.box[2] / 2;
+  var y = item.box[1] + item.box[3] / 2;
+  return _ItemPoint(
+    target: jsonEncode({
+      'at': {'x': x, 'y': y},
+    }),
+    described: 'item $n${item.words == null ? '' : ' "${item.words}"'}',
+  );
 }

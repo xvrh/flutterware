@@ -29,9 +29,12 @@ class JournalEntry {
     this.settled,
     this.settleMs,
     this.lifecycle,
+    this.capture,
+    this.reported,
     this.screenshot,
     this.tree,
     this.texts,
+    this.semantics,
     this.logLines,
     this.errorCount,
     this.layer,
@@ -51,9 +54,15 @@ class JournalEntry {
     settled: json['settled'] as bool?,
     settleMs: json['settleMs'] as int?,
     lifecycle: json['lifecycle'] as String?,
+    capture: json['capture'] as String?,
+    reported: switch (json['reported']) {
+      List reported => [for (var what in reported) '$what'],
+      _ => null,
+    },
     screenshot: json['screenshot'] as String?,
     tree: json['tree'] as String?,
     texts: json['texts'] as String?,
+    semantics: json['semantics'] as String?,
     logLines: json['logLines'] as int?,
     errorCount: json['errorCount'] as int?,
     layer: json['layer'] as String?,
@@ -83,7 +92,27 @@ class JournalEntry {
   final int? settleMs;
   final String? lifecycle;
 
-  /// Absolute path of the step's screenshot, when one was taken.
+  /// The `fw://` address of this step's capture — what to hand back to ask a
+  /// different question about this moment.
+  ///
+  /// The manifest beside it (`<stamp>.capture.json`) lists the four legs and
+  /// what is in each.
+  final String? capture;
+
+  /// What this step actually handed back — `screen`, `tree`, `screenshot`,
+  /// `find`, `at`, `styles`.
+  ///
+  /// **This is where the scoping lives, and the reason the artifacts no longer
+  /// carry it.** A journal is testimony: it has to say what the step reported,
+  /// or a reviewer reads a complete tree beside a step that returned two
+  /// levels of one subtree and concludes the agent saw more than it did. The
+  /// files beside it are the archive and hold the whole screen. One file
+  /// cannot be both, and when it tried, the archive lost — measured, 17 steps
+  /// had left 5 screenshots.
+  final List<String>? reported;
+
+  /// Absolute path of the step's screenshot. Always taken; see [reported] for
+  /// whether the step *returned* it.
   final String? screenshot;
 
   /// The step's widget tree, written beside the screenshot — persisted even
@@ -93,6 +122,9 @@ class JournalEntry {
 
   /// The step's visible-text projection, as a JSON list beside the tree.
   final String? texts;
+
+  /// The semantics tree as the app published it, beside the rest.
+  final String? semantics;
 
   /// How many log lines the step produced. The lines themselves ride the act
   /// result; the journal keeps the count.
@@ -131,9 +163,12 @@ class JournalEntry {
     if (settled != null) 'settled': settled,
     if (settleMs != null) 'settleMs': settleMs,
     if (lifecycle != null) 'lifecycle': lifecycle,
+    if (capture != null) 'capture': capture,
+    if (reported != null) 'reported': reported,
     if (screenshot != null) 'screenshot': screenshot,
     if (tree != null) 'tree': tree,
     if (texts != null) 'texts': texts,
+    if (semantics != null) 'semantics': semantics,
     if (logLines != null) 'logLines': logLines,
     if (errorCount != null) 'errorCount': errorCount,
     if (layer != null) 'layer': layer,

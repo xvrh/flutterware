@@ -117,12 +117,18 @@ Map<String, dynamic> _$CatalogInspectResultToJson(
   'readFrom': instance.readFrom,
   'ok': instance.ok,
   'errors': instance.errors.map((e) => e.toJson()).toList(),
+  'lens': instance.lens,
+  'screen': ?instance.screen?.toJson(),
+  'styles': ?instance.styles?.map((e) => e.toJson()).toList(),
+  'nodes': ?instance.nodes,
   'tree': ?instance.tree?.map((e) => e.toJson()).toList(),
-  'matches': ?instance.matches?.map((e) => e.toJson()).toList(),
+  'find': ?instance.find?.map((e) => e.toJson()).toList(),
   'at': ?instance.at?.map((e) => e.toJson()).toList(),
+  'atOuterElided': ?instance.atOuterElided,
   'logs': ?instance.logs,
   'logsDropped': ?instance.logsDropped,
   'screenshot': ?instance.screenshot?.toJson(),
+  'next': ?instance.next,
 };
 
 Map<String, dynamic> _$CatalogAuditResultToJson(CatalogAuditResult instance) =>

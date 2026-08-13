@@ -44,6 +44,18 @@ FutureOr<void> runGuest(FutureOr<void> Function() appMain) {
       rootOf: () => WidgetsBinding.instance.rootElement,
       entryIdOf: () => null,
     )..registerExtensions();
+    // Held for the life of the run, unlike the catalog's — which turns it on
+    // only while the Semantics tab is open, because there it is a tab nobody
+    // may have opened. Here it is load-bearing: it is what says which control
+    // is the current one, and what labels the ones the app never labelled, so
+    // the screen in every reply depends on it.
+    //
+    // Free, and measured rather than assumed: 24 timed taps came back at a
+    // median of 431ms without the handle and 434ms with it, and a frame-timing
+    // probe over 30 whole-tree-dirty frames could not separate the two. iOS
+    // turns semantics on by itself; Android does not, which is the case this
+    // covers.
+    inspector.enableSemantics(true);
     // The other half of co-driving: the human's taps between tool steps ride
     // the next reply and land in the journal as `actor: human`.
     var humanActions = HumanActions()..install();

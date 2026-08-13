@@ -140,7 +140,10 @@ void main() {
       );
       // The assertion is that this does not throw. It did.
       var encoded = jsonEncode(constraints.toJson());
-      expect(encoded, contains('"maxWidth":null'));
+      // Left out rather than written as null — the same thing to the reader
+      // below, and sixteen characters cheaper on every node of a real tree.
+      expect(encoded, isNot(contains('maxWidth')));
+      expect(encoded, contains('"maxHeight":700'));
     });
 
     test('and comes back unbounded rather than zero', () {

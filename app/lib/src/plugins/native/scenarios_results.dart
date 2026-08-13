@@ -1,4 +1,8 @@
 import 'package:flutterware/plugins.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart' show InspectStyle;
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/screen.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 // The one thing in this file that needs a filesystem, behind the one seam that
@@ -722,4 +726,109 @@ class ScenarioShotSet {
   final int failed;
 
   Map<String, Object?> toJson() => _$ScenarioShotSetToJson(this);
+}
+
+/// `read` — one archived step, answered.
+///
+/// The other half of what a run leaves on disk. A run writes four legs per
+/// step and hands back paths; this reads them and answers the same questions
+/// the live surfaces answer — the screen, `find`, `at`, `styles`, the tree —
+/// in the same shape, so a `find` against a scenario step and a `find` against
+/// a running app differ in which file was opened and in nothing an agent has
+/// to learn twice.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioReadResult implements PluginResult, ProducesArtifacts {
+  ScenarioReadResult({
+    required this.step,
+    required this.lens,
+    this.scenario,
+    this.file,
+    this.index,
+    this.failure,
+    this.image,
+    this.screen,
+    this.texts,
+    this.tree,
+    this.nodes,
+    this.find,
+    this.at,
+    this.styles,
+    this.note,
+    this.next,
+    this.steps = const [],
+    this.picture,
+  });
+
+  /// The capture this answers about, worktree-relative — the value to pass
+  /// back as `step` to ask it something else.
+  final String step;
+
+  /// The lens the reply was produced under. Said on every reply, because a
+  /// caller who does not know a picture was available cannot ask for one.
+  final String lens;
+
+  final String? scenario;
+  final String? file;
+
+  /// The step's 1-based position in its scenario's capture sequence.
+  final int? index;
+
+  /// The error this step died on, when it is a failing step. The reason most
+  /// reads of an archive happen at all.
+  final String? failure;
+
+  /// The archived PNG, worktree-relative. Always named; inlined as an
+  /// artifact only when a picture was asked for.
+  final String? image;
+
+  /// What is on the screen, what can be acted on, and how it is laid out.
+  final Screen? screen;
+
+  /// Every Text and text field of the step, as the capture recorded them.
+  final List<String>? texts;
+
+  /// The whole widget tree, compact. The heaviest thing here by an order of
+  /// magnitude — `find`, `at` and `styles` answer most of what anyone reads a
+  /// tree for, at a fiftieth of the tokens.
+  final Map<String, Object?>? tree;
+
+  /// How many nodes the tree has, whether or not it rode back.
+  final int? nodes;
+
+  final List<Map<String, Object?>>? find;
+  final List<Map<String, Object?>>? at;
+  final List<InspectStyle>? styles;
+
+  /// A query that could not be answered, said so the caller can fix it. The
+  /// read still happened; this is not an error.
+  final String? note;
+
+  /// One line naming what else this capture can be asked.
+  final String? next;
+
+  /// The other captures of the same scenario, as bare file names beside
+  /// [step] — what makes walking a failing flow backwards one call each.
+  ///
+  /// Names rather than paths because they share a directory with [step] and
+  /// repeating it is most of the list: measured at 137 of the 365 tokens of a
+  /// default reply, for the same eighty characters five times over.
+  final List<String> steps;
+
+  /// The archived PNG as a thing to *look at*, set only when a picture was
+  /// asked for. [image] names it either way; this is what makes a client that
+  /// can show an image show it, and it is opt-in because a picture is ~810
+  /// tokens and the screen answers most questions without one.
+  @JsonKey(includeToJson: false)
+  final Artifact? picture;
+
+  @override
+  @JsonKey(includeToJson: false)
+  List<Artifact> get artifacts => [?picture];
+
+  @override
+  Map<String, Object?> toJson() => _$ScenarioReadResultToJson(this);
 }

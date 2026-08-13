@@ -45,7 +45,16 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
              'spawns a process is an action — list them with '
              'flutterware_actions and run them with flutterware_invoke. '
              'To work on a *running* app, launch it with the run plugin and '
-             'live in flutterware_act: edit, reload, act, observe.',
+             'live in flutterware_act: edit, reload, act, observe. '
+             'Whatever you are looking at — a live app (flutterware_act), a '
+             'preview (previews.inspect) or a step a scenario captured '
+             '(scenarios.read) — the reply is the same **screen**: the things '
+             'carrying words or responding to touch, nested under the layout, '
+             'with their boxes and their state. And it takes the same '
+             'questions: `find` for where something is, `at` for what is '
+             'under a point, `styles` for the type ramp, `tree` for all of it '
+             '(expensive), and `lens: act|look|design|raw` for how much to '
+             'hand back at once. Learn it once; it is the same everywhere.',
        ) {
     registerTool(_statusTool, _status);
     registerTool(_actionsTool, _actions);
@@ -391,10 +400,20 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         'correlate. Targets resolve inside the app at act time, '
         'retry through route transitions, and are refused loudly with the '
         'screen they were refused on; a silent wrong-target tap cannot '
-        'happen. `settled: false` means the budget ran out with the app '
-        'still animating — normal for a spinner, act anyway. Needs an app '
-        'launched by flutterware (run.launch); every step lands in the '
-        "run's journal, reviewable in the GUI's Steps tab. On a phone, keep "
+        'happen. `settled` is about painting, not about loading: false means '
+        'the budget ran out with the app still animating (normal for a '
+        'spinner, act anyway), and true means nothing is animating — a '
+        'pending fetch schedules no frame, so a screen still reading '
+        '"Loading…" reports settled: true and wants another wait. Needs an '
+        'app '
+        'launched by flutterware (run.launch). Every step is archived whole '
+        "— picture, tree, semantics, texts and a manifest — under the reply's "
+        "`capture`, and the reply's `journal` is the JSON-lines index of all "
+        'of them with absolute paths, so a client that can read files can go '
+        'back to any step without asking. Read the `.png` and the '
+        '`.capture.json` that way; do not read a `.tree.json`, which is ~120KB '
+        'of raw nodes — that is what screen/find/at/styles exist to spare you. '
+        "The GUI's Steps tab renders the same journal. On a phone, keep "
         'the app in the foreground: iOS suspends a backgrounded app and it '
         'answers nothing until somebody brings it back — you get a timeout '
         'saying exactly that, and `{"verb": "foreground", "layer": '
@@ -460,18 +479,106 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         'waitMs': Schema.int(description: 'For wait: real milliseconds.'),
         'settleMs': Schema.int(
           description:
-              'Settle budget, default 800. Running out is reported, '
-              'never an error.',
+              'Settle budget, default 800. Running out is reported, never an '
+              'error. It waits on frames, tickers and image decodes — a '
+              'pending fetch is invisible to it, so raising this does not '
+              'make a loading screen finish; `wait` and observe again does.',
+        ),
+        'lens': Schema.string(
+          description:
+              'How much to hand back, as one word, for this call: "act" (the '
+              'screen alone — the default, and what nearly every step wants), '
+              '"look" (+ the picture), "design" (+ every text style on the '
+              'screen), "raw" (+ the whole widget tree, ~20,000 tokens). Any '
+              'flag you name explicitly beats it. To keep one shape for a '
+              'stretch of work, pin it once with the run plugin\u2019s `lens` '
+              'action instead of repeating it — replies say which lens shaped '
+              'them, and mark a pinned one.',
+        ),
+        'item': Schema.int(
+          description:
+              "Act on the numbered thing from the last reply's screen, "
+              'instead of naming a target. The way past "2 widgets match", '
+              'and the only way to reach a control with no words. Resolved to '
+              "that item's box centre and then through the usual ladder, so "
+              'covered or gone is still refused. Numbers are per observation.',
+        ),
+        'screen': Schema.bool(
+          description:
+              'What is on the screen and what can be done to it — every '
+              'control and every text, with its words, its box and whether '
+              'it is the current one of its group, nested under the panes '
+              'and lists that hold them. On by default, and the thing to '
+              'read first: a twentieth of the tree, and it answers more, '
+              'because a tree cannot say which control is disabled or which '
+              'tab is selected. Pass false when you only want the picture.',
+        ),
+        'find': Schema.string(
+          description:
+              'Report only nodes whose type, description or accessibility '
+              'label contains this — "ElevatedButton", "Save". The cheap way '
+              "to a widget's colour, size and source, and how to get a node "
+              'id without reading a tree first.',
+        ),
+        'at': Schema.string(
+          description:
+              'Report the chain of widgets under this point, as "x,y" in '
+              'logical pixels — the same space every box in this reply uses, '
+              'so a box centre from `screen` needs no translation. Outermost '
+              'first, capped at the innermost eight. Where the layout answers '
+              'are: the Row three levels out is what has the alignment.',
+        ),
+        'styles': Schema.bool(
+          description:
+              'Every distinct size/weight/colour of text on screen, most-used '
+              'first, with a sample each — the type ramp and the palette as '
+              'one small table. What to ask instead of reading a tree when '
+              'the question is "are these two greys the same grey".',
         ),
         'tree': Schema.bool(
           description:
-              'Include the widget tree inline. Off by default — thousands '
-              'of tokens on a real app; the texts ride along either way.',
+              'Include the widget tree inline. Off by default and the '
+              'heaviest thing in a reply by an order of magnitude — `screen` '
+              'says what is there, and find/at/styles answer most of what a '
+              'whole tree gets read for. Scope it with treeRoot, treeDepth '
+              'and treeNoise.',
+        ),
+        'treeRoot': Schema.string(
+          description:
+              'Report this node and everything under it instead of the whole '
+              'tree — a node id from an earlier read of the same screen, like '
+              '"0/3/1/0". An id names a position, so one from a screen that '
+              'has changed is refused rather than guessed at.',
+        ),
+        'treeDepth': Schema.int(
+          description:
+              'How many levels below the reported root to include, counted '
+              'after the noise filter. A node whose children were cut says '
+              'how many with `elided`, so a bounded read is never mistaken '
+              'for a complete one.',
+        ),
+        'treeNoise': Schema.bool(
+          description:
+              "Default true: drop widgets that share their only child's box "
+              '— MouseRegion, GestureDetector, Gap, Expanded and the rest of '
+              'the wrappers — keeping whichever of the two carries the words, '
+              'the flex or the properties. Ids never move, so a surviving '
+              'child can sit directly under a node that is not its parent. '
+              'Pass false when the question is about the wrappers themselves.',
+        ),
+        'screenshot': Schema.bool(
+          description:
+              'Return the picture, not just archive it. Every step is '
+              'photographed either way and the frame is on disk under the '
+              "reply's `capture` — this decides whether it enters your "
+              'context, at ~810 tokens. Off by default: `screen` answers most '
+              'of what a picture used to be read for. Ask for it when the '
+              'question is how something *looks*; it attaches itself when a '
+              'step is refused or the app throws.',
         ),
         'maxSide': Schema.int(
           description:
-              "Cap the screenshot's longest side in pixels. Default 1200 "
-              'here.',
+              "Cap the screenshot's longest side in pixels. 900 by default.",
         ),
         'device': Schema.string(
           description: 'Which device, when more than one app is running.',
@@ -504,13 +611,23 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
     'verb',
     'layer',
     'target',
+    'item',
+    'lens',
     'text',
     'route',
     'dx',
     'dy',
     'waitMs',
     'settleMs',
+    'screen',
+    'find',
+    'at',
+    'styles',
     'tree',
+    'treeRoot',
+    'treeDepth',
+    'treeNoise',
+    'screenshot',
     'maxSide',
     'device',
     'entrypoint',
@@ -523,7 +640,6 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         var arguments = <String, Object?>{
           for (var key in actArguments) key: ?request.arguments?[key],
         };
-        arguments.putIfAbsent('maxSide', () => 1200);
 
         Job job;
         try {
