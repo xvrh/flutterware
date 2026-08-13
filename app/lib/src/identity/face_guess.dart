@@ -5,8 +5,8 @@ import 'package:path/path.dart' as p;
 import '../launcher_icon/model/scan.dart';
 import 'stock_icons.dart';
 
-/// Which package a repository would probably call its face, before anyone has
-/// said.
+/// Which package a repository would probably call its face, and which of its
+/// files to point at, before anyone has said.
 ///
 /// **This runs once, at `init`, and its answer is written into
 /// `tool/flutterware.dart` where it can be read and corrected.** That is the
@@ -27,7 +27,15 @@ import 'stock_icons.dart';
 /// 9-package one and a single-package project — and correct on all three, in
 /// about a second. That is a demonstration of feasibility, not a validated
 /// weighting: they are also the repositories it was tuned on.
-String? guessFacePackage(String root) {
+///
+/// **This is the one place [isStockIcon] is still asked**, and the stakes are
+/// what make that all right. Resolving the face by hash put the Flutter logo in
+/// a real app's Dock with nothing on screen to explain it; a hash that has gone
+/// stale *here* writes a line of Dart, under a comment that says it was guessed,
+/// next to a picture the author can see is wrong. One is a bug, the other is a
+/// scaffold. If the list rots completely the guess degrades to "this package has
+/// an icon at all", which is still a better opening move than a blank.
+({String package, String icon})? guessFace(String root) {
   var candidates = <_Candidate>[];
   for (var pubspec in _pubspecs(root)) {
     var packageRoot = pubspec.parent.path;
@@ -40,19 +48,27 @@ String? guessFacePackage(String root) {
 
     var scan = scanIcons(packageRoot: packageRoot, packagePath: relative);
     var dressed = 0;
+    String? best;
     for (var role in faceRoles) {
       for (var found in scan.roles) {
         if (found.role != role || found.files.isEmpty) continue;
         var file = File(found.files.last.absolutePath);
-        if (file.existsSync() && !isStockIcon(file)) dressed++;
+        if (file.existsSync() && !isStockIcon(file)) {
+          dressed++;
+          // Package-relative, which is what the declaration takes, and the
+          // roles are in preference order so the first one to get here is the
+          // one to write down.
+          best ??= p.relative(file.path, from: packageRoot);
+        }
         break;
       }
     }
-    if (dressed == 0) continue;
+    if (dressed == 0 || best == null) continue;
 
     candidates.add(
       _Candidate(
         path: relative == '.' ? '.' : relative,
+        icon: best,
         dressed: dressed,
         platforms: platforms,
         // A demo inside a package is never the repository's app, however well
@@ -72,7 +88,8 @@ String? guessFacePackage(String root) {
     // Shallower wins: `packages/web_app` over `packages/sdk/plugin/example`.
     return p.split(a.path).length.compareTo(p.split(b.path).length);
   });
-  return candidates.first.path;
+  var winner = candidates.first;
+  return (package: winner.path, icon: winner.icon);
 }
 
 /// Directories never worth descending into: build output, caches, and the
@@ -120,12 +137,17 @@ Iterable<File> _pubspecs(String root) sync* {
 class _Candidate {
   _Candidate({
     required this.path,
+    required this.icon,
     required this.dressed,
     required this.platforms,
     required this.demo,
   });
 
   final String path;
+
+  /// The icon to write down, relative to this package's root.
+  final String icon;
+
   final int dressed;
   final int platforms;
   final bool demo;

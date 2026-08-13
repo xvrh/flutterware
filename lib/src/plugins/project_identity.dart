@@ -1,4 +1,5 @@
-/// What a project says about which of its packages *is* the project.
+/// What a project says about which of its packages *is* the project, and which
+/// picture stands for it.
 ///
 /// Declared in `tool/flutterware.dart` like everything else:
 ///
@@ -6,7 +7,7 @@
 /// const webApp = Pkg('packages/web_app');
 ///
 /// void main() => Flutterware.configure((fw) {
-///   fw.identity(const ProjectIdentity(package: webApp));
+///   fw.identity(const ProjectIdentity(package: webApp, icon: 'logo.png'));
 ///   fw.use(Previews());
 /// });
 /// ```
@@ -14,9 +15,10 @@
 /// **Why a repository has to be asked.** A user runs one flutterware window per
 /// repository and several at once, and every window looks the same: the same
 /// name, the same icon. What tells them apart has to come from the project, and
-/// a monorepo has no obvious answer to give — `rimbaud` holds a web app, an
-/// admin app, a macOS utility and two plugin examples, all of them real. Which
-/// one *is* the repository is a claim only the person who works there can make.
+/// a monorepo has no obvious answer to give — one real repository holds a web
+/// app, an admin app, a macOS utility and two plugin examples, all of them real.
+/// Which one *is* the repository is a claim only the person who works there can
+/// make.
 ///
 /// So this is a declaration and not an inference. `fw init` may scaffold a
 /// guess, because a first launch has to show something, but the guess lands in
@@ -31,9 +33,9 @@ library;
 
 import 'package.dart';
 
-/// The package that stands for the whole repository.
+/// The package that stands for the whole repository, and its picture.
 class ProjectIdentity {
-  const ProjectIdentity({required this.package});
+  const ProjectIdentity({required this.package, required this.icon});
 
   /// Whose launcher icon and name represent this project.
   ///
@@ -41,17 +43,47 @@ class ProjectIdentity {
   /// below it are configured with and a rename moves one constant.
   final Pkg package;
 
-  Map<String, Object?> toJson() => {'package': package.path};
+  /// The picture, relative to [package]'s root — `'logo.png'`,
+  /// `'assets/brand/mark.png'`, `'macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png'`.
+  ///
+  /// **Named, not found, and that is the whole of what this field is for.** The
+  /// first version of this searched the declared package's platform directories
+  /// for its best launcher icon, skipping any file whose bytes matched a
+  /// `flutter create` default. It picked the Flutter logo for a real mobile app
+  /// — one whose generator writes iOS and Android icons and leaves `macos/`
+  /// alone — because the macOS icon there *was* the template's, written by an
+  /// older Flutter than the one the hashes were taken from. A byte-exact list of
+  /// somebody else's template files is a promise that expires quietly, on their
+  /// schedule, and the way it expires is a window wearing the wrong face with
+  /// nothing on screen to say why.
+  ///
+  /// Naming the file cannot expire. It also lets a project point at the art it
+  /// actually thinks of as its logo — the source image its icon generator reads
+  /// — rather than at whichever generated platform variant happened to rank
+  /// highest.
+  ///
+  /// Anything Flutter can decode works; a `.ico` does not, and neither does a
+  /// path that is not there. Both are reported against the worktree rather than
+  /// passed over, because a declaration that went nowhere is a mistake and the
+  /// whole point of naming the file is that a mistake can be pointed at.
+  final String icon;
+
+  Map<String, Object?> toJson() => {'package': package.path, 'icon': icon};
 
   /// **Tolerant of everything except a wrong shape**, like every other decoder
   /// that reads a manifest a previous version of flutterware wrote.
   ///
-  /// A missing or non-string package is *no identity* rather than a throw: the
+  /// A missing or non-string field is *no identity* rather than a throw: the
   /// worst this costs is a window that looks like every other window, which is
   /// exactly where the project started. Refusing to open it would be worse.
+  ///
+  /// Note this arm is mostly unreachable in practice — `tool/flutterware.dart`
+  /// is Dart, so a config that omits a required argument fails to compile and is
+  /// reported as the compile error it is, long before anything decodes.
   static ProjectIdentity? fromJson(Map<String, Object?> json) =>
-      switch (json['package']) {
-        String path when path.isNotEmpty => ProjectIdentity(package: Pkg(path)),
+      switch ((json['package'], json['icon'])) {
+        (String path, String icon) when path.isNotEmpty && icon.isNotEmpty =>
+          ProjectIdentity(package: Pkg(path), icon: icon),
         _ => null,
       };
 }

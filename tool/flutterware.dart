@@ -53,11 +53,19 @@ void main() => Flutterware.configure((fw) {
     ),
   );
 
-  // **Which of the three packages is this repository.** `app` — the desktop
-  // GUI — because that is the thing a window of flutterware is showing you.
-  // `.` is the published library and `examples/example` is a fixture; neither
-  // is what you point at to say "that project".
-  fw.identity(const ProjectIdentity(package: app));
+  // **Which of the three packages is this repository, and its picture.** `app`
+  // — the desktop GUI — because that is the thing a window of flutterware is
+  // showing you. `.` is the published library and `examples/example` is a
+  // fixture; neither is what you point at to say "that project".
+  //
+  // The icon is the macOS art rather than a source file because that is where
+  // `app/tool/icon/generate.dart` writes the largest version of it.
+  fw.identity(
+    const ProjectIdentity(
+      package: app,
+      icon: 'macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png',
+    ),
+  );
 
   fw.use(
     Dependencies(packages: DependenciesPackage.each([root, app, example])),

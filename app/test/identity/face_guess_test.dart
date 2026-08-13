@@ -16,20 +16,33 @@ void main() {
     // `.` is a published library with no platform directories, and
     // `examples/example` is a stock `flutter create` project — so the only
     // package here with an icon of its own is the app.
-    expect(guessFacePackage(repoRoot), 'app');
+    expect(guessFace(repoRoot)?.package, 'app');
+  });
+
+  /// The guess has to name a *file*, because that is what the declaration takes
+  /// — a package alone is no longer enough to scaffold a working line.
+  test('the guess names an icon inside the package it picked', () {
+    var guess = guessFace(repoRoot);
+    expect(guess, isNotNull);
+    expect(guess!.icon, endsWith('.png'));
+    expect(p.isRelative(guess.icon), isTrue);
+    expect(
+      File(p.join(repoRoot, guess.package, guess.icon)).existsSync(),
+      isTrue,
+    );
   });
 
   test('a tree with no packages at all has no answer', () async {
     var dir = await Directory.systemTemp.createTemp('face_guess');
     addTearDown(() => dir.delete(recursive: true));
-    expect(guessFacePackage(dir.path), isNull);
+    expect(guessFace(dir.path), isNull);
   });
 
   test('a package with no platform directories is not a candidate', () async {
     var dir = await Directory.systemTemp.createTemp('face_guess');
     addTearDown(() => dir.delete(recursive: true));
     File(p.join(dir.path, 'pubspec.yaml')).writeAsStringSync('name: lib_only');
-    expect(guessFacePackage(dir.path), isNull);
+    expect(guessFace(dir.path), isNull);
   });
 
   /// The case that made the whole scan worth writing: a project can have every
@@ -41,7 +54,7 @@ void main() {
     for (var platform in ['android', 'ios', 'macos', 'web']) {
       Directory(p.join(dir.path, platform)).createSync();
     }
-    expect(guessFacePackage(dir.path), isNull);
+    expect(guessFace(dir.path), isNull);
   });
 
   test('a package whose icon is really drawn wins', () async {
@@ -77,6 +90,6 @@ void main() {
       '"info":{"version":1,"author":"xcode"}}',
     );
 
-    expect(guessFacePackage(dir.path), 'packages/real_app');
+    expect(guessFace(dir.path)?.package, 'packages/real_app');
   });
 }

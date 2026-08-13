@@ -17,9 +17,9 @@ identity there.
 
 ## What is already decided
 
-Decided by rendering against three real repos (`rimbaud`, `pal/mobile-app`,
-`djm_thomas_piron`), not by argument. Details and the rejected alternatives are
-in the session that produced them; the conclusions:
+Decided by rendering against three real repos — a 19-package monorepo, a
+9-package one and a single-package project — not by argument. Details and the
+rejected alternatives are in the session that produced them; the conclusions:
 
 **The project's icon rides in a chip that replaces the cursor.** Not beside it —
 *in its slot*. Beside it reads as two stickers; in its slot the lockup stays one
@@ -63,8 +63,8 @@ shipped in `app/tool/icon/generate.dart` and is unaffected — it just is not
 per-project.
 
 **Colour** is derived from the project icon: most saturated usable colour,
-normalised to L=0.62 / S≥0.55. Normalisation is not optional — `pal`'s icon is
-near-black and raw derivation makes it vanish into the tile.
+normalised to L=0.62 / S≥0.55. Normalisation is not optional — one of the icons
+tested is near-black, and raw derivation makes it vanish into the tile.
 
 **The colour registry is dropped for v1.** It existed to guarantee separation
 when two projects derive similar hues (Chrome and Notes both landed on orange in
@@ -102,7 +102,7 @@ Mirror `fw.changes(...)`: a project-level declaration that is **not** a plugin,
 and refuses a second call rather than merging.
 
 ```dart
-fw.identity(ProjectIdentity(package: 'packages/web_app'));
+fw.identity(ProjectIdentity(package: webApp, icon: 'assets/logo.png'));
 ```
 
 Deliberately not an extension of the `LauncherIcon` plugin. `icon_core.dart`
@@ -125,20 +125,22 @@ packages: consider packages with platform directories; score by **count of
 platforms whose launcher icon is not the `flutter create` default**; demote paths
 containing `example`/`demo`; tie-break on total platforms, then path depth.
 
-Platform count alone is not enough — `wound_analysis_app` has five platforms and
-would win, but its iOS and Android icons are stock. Hashing against the known
+Platform count alone is not enough — in one monorepo a five-platform app would
+win on count, but its iOS and Android icons are stock. Hashing against the known
 defaults did the real work, and also correctly demoted both `/example` packages
-and left `service_manager` (a macOS-only utility) fourth.
+and left a macOS-only utility fourth.
 
 Ship the default-icon hashes with it.
 
-### P3 — Resolve the icon — done
+### P3 — Resolve the icon — done, then replaced
 
-Given the declared package, find its best available icon (the launcher-icon scan
-already knows the per-platform paths), decode, cache per worktree session.
+Shipped as: given the declared package, find its best available icon (the
+launcher-icon scan already knows the per-platform paths), decode, cache per
+worktree session. Must handle, because all three occur in the wild: no icon at
+all; a stock Flutter icon; a logo with a transparent or non-solid background.
 
-Must handle, because all three occur in the wild: no icon at all; a stock Flutter
-icon; a logo with a transparent or non-solid background.
+The search is gone — the declaration names the file. See the note under
+**Risks**; the middle case above is what took it down.
 
 ### P4 — Compose the tile — done
 
@@ -219,6 +221,25 @@ neutral plate when the background is not solid.
 
 **A declared package with a stock icon.** Falls back to colour-only. Should be
 silent, not an error — it is the normal state of a young project.
+
+> **Superseded by what actually happened.** P3 shipped as a search — best
+> available icon per platform, skipping any file whose bytes matched a
+> `flutter create` default — and the skipping is what broke. A real mobile app
+> whose generator writes `ios:` and `android:` and never touches `macos/` got the
+> Flutter logo in its Dock: the macOS icon there *was* the template's, from an
+> older Flutter than the hashes had been taken from, so it hashed to nothing and
+> ranked first for being the largest art in the package. Nothing on screen could
+> say why.
+>
+> The risk above assumed the stock check would hold. It cannot: a byte-exact list
+> of somebody else's template files is a promise that expires on their schedule,
+> and it fails *silently and wrongly* rather than loudly. `ProjectIdentity` now
+> takes a required `icon:` path relative to the package, resolved and reported —
+> a path that is not there, or a format Flutter has no decoder for, is an error
+> on the worktree rather than a window that quietly looks like every other one.
+>
+> The hashes survive in `stock_icons.dart` for the P2 `init` guess alone, where
+> going stale costs a scaffolded line under a comment saying it was guessed.
 
 **The icon changing on disk** while the app runs. v1 reads at worktree open and
 does not watch.

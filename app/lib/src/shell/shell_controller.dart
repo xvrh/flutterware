@@ -9,6 +9,7 @@ import 'package:watcher/watcher.dart';
 import '../changes/change_range.dart';
 import '../changes/changes_config_cache.dart';
 import '../context.dart';
+import '../identity/project_face.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/plugin_core.dart';
 import '../plugins/registry.dart';
@@ -821,7 +822,7 @@ class ShellController extends ChangeNotifier {
       // The config did not move; the disk may have. This is the one check that
       // does not follow from the manifest, so an unchanged load still has to
       // make it — see [_checkDeclarations].
-      _checkDeclarations(open);
+      _checkDeclarations(open, manifest);
       return done(
         ConfigLoadOutcome.unchanged,
         plugins: existing.plugins.length,
@@ -858,7 +859,7 @@ class ShellController extends ChangeNotifier {
         flutterSdk: flutterSdk,
       );
       open.workspace = workspace;
-      _checkDeclarations(open);
+      _checkDeclarations(open, manifest);
 
       open.session = WorktreeSession.resolve(
         worktree: worktree,
@@ -876,23 +877,36 @@ class ShellController extends ChangeNotifier {
     }
   }
 
-  /// Re-derives the "you named a package that is not there" error.
+  /// Re-derives the errors about things the config named that are not there:
+  /// a package, and the icon [ProjectIdentity] points at.
   ///
-  /// **Run on every load, including one that changed nothing.** It is the one
-  /// error whose truth lives on disk rather than in the config, so a load that
-  /// skipped it would either keep a warning about a package you have since
+  /// **Run on every load, including one that changed nothing.** These are the
+  /// errors whose truth lives on disk rather than in the config, so a load that
+  /// skipped them would either keep a warning about a package you have since
   /// created, or — worse — drop a warning that is still true, because the load
   /// clears the error before deciding whether to rebuild.
   ///
   /// Never clobbers a config-load failure: that is the more useful error, and a
   /// broken config is often *why* the declarations look wrong.
-  void _checkDeclarations(_Open open) {
+  void _checkDeclarations(_Open open, PluginManifest manifest) {
+    if (open.error != null) return;
     var unknown = open.workspace?.unknownDeclarations ?? const <String>[];
-    if (unknown.isNotEmpty && open.error == null) {
+    if (unknown.isNotEmpty) {
       open.error = WorktreeError(
         open.worktree,
         'Declared package(s) not found on disk: ${unknown.join(', ')}',
       );
+      return;
+    }
+    // Said out loud rather than left as a window with no chip: naming the file
+    // is the whole of what identity asks for, so a name that goes nowhere is
+    // the one thing it has to be able to report.
+    var problem = projectFaceProblem(
+      worktreeRoot: open.worktree.path,
+      manifest: manifest,
+    );
+    if (problem != null) {
+      open.error = WorktreeError(open.worktree, problem);
     }
   }
 
