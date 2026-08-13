@@ -1731,6 +1731,34 @@ class RunCore extends PluginCore {
     return null;
   }
 
+  /// The declaration [handle] was launched from, or null if this worktree has
+  /// none matching.
+  ///
+  /// **By name first, then path.** #119 made "declare one file several times
+  /// under different names" the documented way to run one app against several
+  /// configurations, so a path matches several entry points and only the name
+  /// separates them. Their *signatures* are identical — it is the same file —
+  /// but their config annotations are not, so taking the first match would read
+  /// another declaration's `label`, `options` and `from:` script, and
+  /// [applyKnobs] would resolve a port from the wrong one.
+  EntrypointRef? entrypointOf(RunHandle handle) {
+    var package = handle.package;
+    if (package == null) return null;
+    var candidates = entrypointsFor(package);
+    if (handle.entrypointName case var name?) {
+      for (var candidate in candidates) {
+        if (candidate.name == name) return candidate;
+      }
+    }
+    // A scanned entry point carries no name, and one declared since the launch
+    // may have been renamed. The path is the weaker answer and still the right
+    // fallback: at worst it is the same file under a sibling declaration.
+    for (var candidate in candidates) {
+      if (candidate.path == handle.entrypoint) return candidate;
+    }
+    return null;
+  }
+
   /// Every line to show for [entry] — its knobs, plus one per `required`
   /// parameter saying why it cannot be launched.
   ///
@@ -2318,9 +2346,7 @@ class RunCore extends PluginCore {
             'declare, so there is no signature to read.',
       );
     }
-    var entry = entrypointsFor(
-      package,
-    ).where((candidate) => candidate.path == handle.entrypoint).firstOrNull;
+    var entry = entrypointOf(handle);
     if (entry == null) {
       return (
         knobs: const [],
@@ -2372,9 +2398,7 @@ class RunCore extends PluginCore {
         'no wrapper to rewrite.',
       );
     }
-    var entry = entrypointsFor(
-      package,
-    ).where((candidate) => candidate.path == handle.entrypoint).firstOrNull;
+    var entry = entrypointOf(handle);
     if (entry == null) {
       // Refused rather than written unchecked. Without the entry point there is
       // nothing to validate against, and an unvalidated value becomes a literal

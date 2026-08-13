@@ -1420,6 +1420,67 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       );
     });
 
+    test('finds the declaration by name when a file has several', () async {
+      // #119 made "declare one file several times under different names" the
+      // documented way to run one app against several configurations. Their
+      // signatures are identical — it is the same file — but their config
+      // annotations are not, so matching on the path took the first
+      // declaration and would have resolved the wrong `from:` script.
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': "void main({String apiHost = 'localhost'}) {}",
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main.dart',
+                  'name': 'Dev',
+                  'knobs': [
+                    {
+                      'knob': 'apiHost',
+                      'label': 'Dev host',
+                      'options': ['dev.example.com'],
+                    },
+                  ],
+                },
+                {
+                  'path': 'lib/main.dart',
+                  'name': 'Staging',
+                  'knobs': [
+                    {
+                      'knob': 'apiHost',
+                      'label': 'Staging host',
+                      'options': ['staging.example.com'],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      );
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        entrypointName: 'Staging',
+        package: 'app',
+        launcherPid: pid,
+      );
+      await core.computeAll();
+
+      var knob = core.knobEntriesFor(handle).knobs.single;
+
+      expect(knob.label, 'Staging host');
+      expect(knob.options, ['staging.example.com']);
+    });
+
     test('a rollback that cannot write still reports the restart', () async {
       // `previous` was valid when it was set; the signature can have moved
       // since, which is the loop this feature exists for. The rollback then
