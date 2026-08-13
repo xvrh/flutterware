@@ -438,10 +438,35 @@ class ScenarioTester {
   Future<void> pumpWidget(Widget widget, {Shot? shot, Settle? settle}) => _step(
     shot,
     settle,
-    () => tester.pumpWidget(widget),
+    () async {
+      await tester.pumpWidget(widget);
+      await _realAsyncTurn();
+      await tester.pump();
+    },
     verb: 'pumpWidget',
     target: '${widget.runtimeType}',
   );
+
+  /// Lets whatever the app started on its first frame actually happen.
+  ///
+  /// A scenario runs under fake time, where a real asset read — the shape
+  /// every app that loads translations or a font manifest at boot has —
+  /// completes on an event loop no pump reaches. So the tree builds with
+  /// nothing in it and every screen after this captures blank.
+  ///
+  /// The alternative was answering `flutter/assets` from Dart, which is what
+  /// `flutter test` does with `UNIT_TEST_ASSETS`. Measured against a real
+  /// suite, that deadlocks a `tester.runAsync` that loads an asset itself —
+  /// `flutter test` hangs where this does not. A turn of the real event loop
+  /// costs a few milliseconds once per pumped app and has no such edge.
+  ///
+  /// Deliberately not on every verb: this is about *boot*, and a scenario
+  /// that needs real async mid-flow says so with its own `s.tester.runAsync`.
+  Future<void> _realAsyncTurn() => tester.runAsync(() async {
+    for (var i = 0; i < 5; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+  });
 
   /// Taps [target] — a `Finder`, a `String` (visible text), a `Key`, an
   /// `IconData`, a `Type`, or a [Target] for the rest (a semantics label, a
@@ -724,6 +749,12 @@ class ScenarioTester {
     coveredEscapeHatch:
         ' `s.tester` is the raw tester if hitting whatever is on top is the '
         'point.',
+    blankScreenHint:
+        'Nothing has rendered — there is no text on screen at all, so this '
+        'is not something `s.scrollTo` can reach. A scenario runs under fake '
+        'time: anything the app waits on for real — a database, a socket, an '
+        'http call — never completes between pumps. Give it a turn with '
+        '`await s.tester.runAsync(() async { … })`.',
   );
 
   /// The actionability ladder every pointer verb climbs — shared with the

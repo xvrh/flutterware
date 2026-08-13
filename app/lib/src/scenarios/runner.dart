@@ -239,7 +239,17 @@ class ScenarioRunner {
         '--flutter-assets-dir=$_assetsDir',
         dill,
       ],
+      // Deliberately *not* `UNIT_TEST_ASSETS`, which is how `flutter test`
+      // makes an asset read complete under FakeAsync — it installs a handler
+      // that answers `flutter/assets` from Dart. Measured on a real suite:
+      // that deadlocks any `tester.runAsync` that itself loads an asset, and
+      // is why `flutter test` hangs on a scenario that generates a PDF.
+      // `ScenarioTester.pumpWidget` gives the boot a real-async turn instead.
       environment: {'FLUTTER_TEST': 'true'},
+      // `flutter test` runs the tester from the package root, so a fixture
+      // read at a relative path resolves there. Inherited, this would be
+      // wherever `fw` happened to be started from.
+      workingDirectory: packageRoot,
     );
 
     guest.stderr
@@ -493,6 +503,13 @@ class ScenarioRunner {
     );
     if (response!['error'] case String error) {
       throw StateError('the harness failed:\n$error\n${response['stack']}');
+    }
+    // A scenario blew its deadline, so its body is still in there holding the
+    // binding. The report is good — it is what the run got to — but the guest
+    // is not, and a warm one is exactly what the next run would reuse.
+    if (response['abandoned'] == true) {
+      onLog?.call('[scenarios] a scenario timed out — restarting the harness');
+      await _restartGuest();
     }
     return response.cast<String, Object?>();
   });

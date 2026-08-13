@@ -38,6 +38,36 @@ void main() {
     expect('$error', contains('Visible text: Buy'));
   });
 
+  testWidgets('a screen with no text at all gets the blank hint instead of '
+      'the lazy-list guess', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    var resolver = TargetResolver(
+      tester,
+      messages: const TargetMessages(blankScreenHint: 'Nothing has rendered.'),
+    );
+
+    var error = await _refusal(() => resolver.resolve('Pay', 'tap'));
+
+    expect(error.failure, TargetFailure.notFound);
+    expect('$error', contains('Nothing has rendered.'));
+    expect('$error', isNot(contains('lazy list')));
+  });
+
+  testWidgets('a screen that has content keeps the lazy-list hint', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_covered());
+    var resolver = TargetResolver(
+      tester,
+      messages: const TargetMessages(blankScreenHint: 'Nothing has rendered.'),
+    );
+
+    var error = await _refusal(() => resolver.resolve('Pay', 'tap'));
+
+    expect('$error', contains('lazy list'));
+    expect('$error', isNot(contains('Nothing has rendered.')));
+  });
+
   testWidgets('several matches are refused with the multiple kind', (
     tester,
   ) async {
