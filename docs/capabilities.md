@@ -1248,7 +1248,7 @@ packages: List<ScenarioListPackage>
 Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured **at** the failure, whatever the capture policy.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--devices=…] [--languages=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--orientation=…] [--language=…] [--devices=…] [--languages=…] [--orientations=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -1325,9 +1325,11 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
 | `output` | string | no | — | Where step artifacts are written; a fresh directory under the package's build/ when omitted |
 | `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted lets each scenario run as its own folder says — the first device of the profile its `flutter_test_config.dart` declares, or iphone-13 where a folder declares none. `fit` means the bare 800×600 test surface. The same vocabulary Previews frames with. |
+| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height and the safe areas become the ones that device declares for landscape, which is not a permutation of the portrait four — a phone loses its status bar rather than moving it. Ignored by anything that cannot turn, which is every desktop size and `fit`. Applies to whatever device the run ends up as, including one a folder's profile chose rather than this call. |
 | `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale for the whole run |
 | `devices` | string | no | — | A comma-separated matrix — `iphone-se,android-tall`. Runs everything once per device, each into its own `<output>/<device>-<language>/` directory with an `index.json` beside them. The same plural vocabulary as `flutter test --dart-define=fw.devices=`. Overrides `device`. |
 | `languages` | string | no | — | The other half of the matrix — `en,fr,de`. Crossed with `devices`, and overrides `language`. |
+| `orientations` | string | no | — | The third axis — `portrait,landscape`. Crossed with the other two, and overrides `orientation`. A device that cannot turn contributes one point rather than two identical ones, so mixing a desktop into the devices does not double the run. |
 | `tag` | string | no | — | Run only scenarios carrying this tag — the same tag `scenario(tags: [...])` declares and `flutter test --tags` filters on |
 | `steps` | choice | no | failing | How many steps ride back in the answer. Every run writes all of them to `run.json` in its output directory either way and each package names that file, so this is about what arrives without asking: `failing` (default) is the frame each red scenario died on, `all` is every step of every scenario — a matrix suite is hundreds — and `none` is the summary alone. Every scenario reports its `stepCount` whatever this says. |
 | `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
@@ -1391,7 +1393,7 @@ steps: List<String>   # The other captures of the same scenario, as bare file na
 Runs the scenarios and writes the result as a browsable page: the same flow canvas, step pages and inspect dock the GUI draws, over the run it just did. Takes every selector and axis `run` takes — the page shows what was run, so what to run is the question it asks. Needs serving over HTTP; the result says how. For a CI artifact, a review link, or anyone who has the app but not the checkout.
 
 ```sh
-fw run scenarios export [--package=…] [--file=…] [--scenario=…] [--tag=…] [--output=…] [--base-href=…] [--offline=…] [--device=…] [--language=…] [--devices=…] [--languages=…] [--brightness=…] [--capture-scale=…] [--clock=…]
+fw run scenarios export [--package=…] [--file=…] [--scenario=…] [--tag=…] [--output=…] [--base-href=…] [--offline=…] [--device=…] [--orientation=…] [--language=…] [--devices=…] [--languages=…] [--brightness=…] [--capture-scale=…] [--clock=…]
 ```
 
 Returns `ScenarioWebExportResult`:
@@ -1418,6 +1420,7 @@ ok: bool
 | `base-href` | string | no | — | What the page is mounted under when it is not the root — `/scenarios/`. Leading and trailing slash. |
 | `offline` | choice | no | — | Bundle CanvasKit into the page instead of fetching it from Google's CDN. Bigger, and the only form that works behind a firewall or after the engine revision stops being hosted. |
 | `device` | choice | no | — | Run as a device before capturing the page |
+| `orientation` | choice | no | — | Which way up that device is, before capturing |
 | `language` | string | no | — | A locale tag — `fr`, `fr-CA` |
 | `devices` | string | no | — | A matrix — `iphone-se,ipad`. Every point lands on the same page, each scenario labelled with what it ran as. |
 | `languages` | string | no | — | The other half of the matrix — `en,fr,de` |
@@ -1811,7 +1814,7 @@ shell: String?   # Which shell declared [axes].
 Render one entry to a PNG
 
 ```sh
-fw run previews screenshot --entry=<choice> [--output=…] [--knobs=…] [--device=…] [--width=…] [--height=…] [--axes=…] [--debug=…] [--node=…] [--annotate=…]
+fw run previews screenshot --entry=<choice> [--output=…] [--knobs=…] [--device=…] [--orientation=…] [--width=…] [--height=…] [--axes=…] [--debug=…] [--node=…] [--annotate=…]
 ```
 
 Returns `Artifact`:
@@ -1830,6 +1833,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 | `output` | string | no | — | Where to write the PNG; a build path when omitted |
 | `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the preview asked for while it built — a preview calling `context.knobs.string("label", "Hello")` declares one named `label` — so the names come from the preview itself and differ per entry. Read them with `describe --entry=<id> --with-knobs=true`. Each value is coerced to the kind the preview declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. Recorded on the address, so two settings are two artifacts rather than one file written twice. |
 | `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the preview reads the phone from `MediaQuery` rather than a rectangle. Omitted means the panel. The same value the GUI writes as `?device=`, so an address captured here reopens framed the way it was shot. |
+| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height and the safe areas become the ones that device declares for landscape, which is not a permutation of the portrait four — a phone loses its status bar rather than moving it. Ignored by anything that cannot turn, which is every desktop size and `fit`. |
 | `width` | integer | no | 900 | — |
 | `height` | integer | no | 700 | — |
 | `axes` | string | no | — | Values for the shell *around* the preview — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the preview and travels with the entry, an axis is declared by the `PreviewShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --with-axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
@@ -1842,7 +1846,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 One rendered build, and whatever you ask about it. With no flags it answers the two questions worth asking first: did it render without the framework complaining, and **what is on it** — the things that carry words or respond to touch, nested under the layout, with their boxes and their state. Everything heavier is one more flag on the same frame: `find` for where something is, `at` for what is under a point, `styles` for the type ramp, `tree` for all of it, `screenshot` for pixels. The same grammar the run plugin answers with on a live app and the scenarios plugin on a captured step, so a query is learned once.
 
 ```sh
-fw run previews inspect --entry=<choice> [--lens=…] [--screen=…] [--styles=…] [--tree=…] [--find=…] [--at=…] [--errors=…] [--logs=…] [--node=…] [--depth=…] [--screenshot=…] [--output=…] [--annotate=…] [--device=…] [--width=…] [--height=…] [--knobs=…] [--axes=…] [--debug=…] [--live=…]
+fw run previews inspect --entry=<choice> [--lens=…] [--screen=…] [--styles=…] [--tree=…] [--find=…] [--at=…] [--errors=…] [--logs=…] [--node=…] [--depth=…] [--screenshot=…] [--output=…] [--annotate=…] [--device=…] [--orientation=…] [--width=…] [--height=…] [--knobs=…] [--axes=…] [--debug=…] [--live=…]
 ```
 
 Returns `CatalogInspectResult`:
@@ -1926,6 +1930,7 @@ next: String?   # One line naming what else can be asked of this frame.
 | `output` | string | no | — | Where to write the PNG; a build path derived from the address when omitted, the same as `screenshot` uses |
 | `annotate` | boolean | no | false | Draw a box and its node id over every widget of the screenshot. Now genuinely the same tree as the one reported rather than a second reading that happened to agree, which was the point of having it. |
 | `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the preview reads the phone from `MediaQuery` rather than a rectangle. Omitted means the panel. **This is what makes "why does it look wrong on a phone" one render**: the tree, the constraints and the picture all describe the same framed build. Forces a render, like any other change to what is drawn. |
+| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height and the safe areas become the ones that device declares for landscape, which is not a permutation of the portrait four — a phone loses its status bar rather than moving it. Ignored by anything that cannot turn, which is every desktop size and `fit`. |
 | `width` | integer | no | — | Override the viewport width — how to ask for a size no device has, and on a device it stretches the screen rather than dropping its ratio and its notch |
 | `height` | integer | no | — | See width |
 | `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the preview asked for while it built — a preview calling `context.knobs.string("label", "Hello")` declares one named `label` — so the names come from the preview itself and differ per entry. Read them with `describe --entry=<id> --with-knobs=true`. Each value is coerced to the kind the preview declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. A tree is of one build, and a knob can change which widgets there are. |

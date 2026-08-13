@@ -17,6 +17,7 @@ import 'package:test_api/src/backend/suite.dart';
 import 'package:test_api/src/backend/suite_platform.dart';
 import 'package:test_api/src/backend/test.dart';
 
+import '../devices.dart';
 import '../inspect/guest_inspect.dart';
 import 'events.dart';
 import 'motion.dart';
@@ -114,6 +115,14 @@ Future<void> _runHarness(
         // the geometry that did arrive is only the host's fallback.
         device: args['device'],
         deviceUnspecified: args['deviceUnspecified'] == 'true',
+        // Travels as an axis rather than baked into the geometry above,
+        // because the device it applies to may still be undecided: when the
+        // folder's profile is the one that picks, the rotation has to happen
+        // in here, after it has spoken.
+        orientation: switch (args['orientation']) {
+          null => null,
+          var name => orientationById(name),
+        },
       );
       return developer.ServiceExtensionResponse.result(jsonEncode(report));
     } catch (error, stack) {
@@ -494,6 +503,7 @@ Future<Map<String, Object?>> _run(
   Map<String, ScenarioProfile> profiles = const {},
   String? device,
   bool deviceUnspecified = false,
+  ScreenOrientation? orientation,
 }) async {
   var mains = file == null
       ? scenarioMains
@@ -519,7 +529,10 @@ Future<Map<String, Object?>> _run(
         var chosen = _profileFor(file, profiles)?.devices.firstOrNull;
         if (chosen == null) return (runArgs, device);
         return (
-          (runArgs ?? const ScenarioRunArgs()).withDevice(chosen),
+          (runArgs ?? const ScenarioRunArgs()).withDevice(
+            chosen,
+            orientation: orientation,
+          ),
           chosen.id,
         );
       });

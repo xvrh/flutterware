@@ -80,6 +80,8 @@ const _inlinedOptions = 50;
 /// `optionsFrom` cannot help here the way it does for `entry`: a knob's names
 /// depend on the entry, so there is no one list to point at. What an agent can
 /// be given instead is where the names come from and how to ask.
+const _orientationDoc = orientationParameterDoc;
+
 const _knobsDoc =
     'Values to turn before this runs: `name=value,name=value`, or a JSON '
     'object. A knob is whatever the preview asked for while it built — a '
@@ -594,6 +596,14 @@ class PreviewsCore extends PluginCore {
                 ),
             ],
           ),
+          ActionParameter(
+            'orientation',
+            'Orientation',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: _orientationDoc,
+            options: [for (var id in orientationIds) ActionOption(id)],
+          ),
           // Declared because they change the pixels, and anything that changes
           // the pixels is recorded on the artifact's address.
           const ActionParameter(
@@ -845,6 +855,14 @@ class PreviewsCore extends PluginCore {
                       : Devices.all.firstWhere((d) => d.id == id).label,
                 ),
             ],
+          ),
+          ActionParameter(
+            'orientation',
+            'Orientation',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: _orientationDoc,
+            options: [for (var id in orientationIds) ActionOption(id)],
           ),
           const ActionParameter(
             'width',
@@ -1787,6 +1805,7 @@ class PreviewsCore extends PluginCore {
       packagePath: packagePath,
       entryId: want.entryId,
       deviceId: want.deviceId,
+      orientationId: want.orientationId,
       viewport: want.viewport,
       knobs: want.knobs,
       axes: want.axes,
@@ -2179,7 +2198,7 @@ class PreviewsCore extends PluginCore {
     var packageRoot = p.join(host.worktree.path, packagePath);
     var entry = _scans[packagePath]!.entries.firstWhere((e) => e.id == entryId);
 
-    var (deviceId, viewport) = _framing(arguments);
+    var (deviceId, orientationId, viewport) = _framing(arguments);
 
     var knobs = parsePairs(arguments['knobs']);
     var axes = parsePairs(arguments['axes']);
@@ -2194,6 +2213,7 @@ class PreviewsCore extends PluginCore {
       packagePath: packagePath,
       entryId: entryId,
       deviceId: deviceId,
+      orientationId: orientationId,
       viewport: viewport,
       knobs: knobs,
       axes: axes,
@@ -2333,6 +2353,7 @@ class PreviewsCore extends PluginCore {
     required String packagePath,
     required String entryId,
     required String? deviceId,
+    required String? orientationId,
     required CaptureViewport viewport,
     required Map<String, String> knobs,
     required Map<String, String> axes,
@@ -2348,6 +2369,9 @@ class PreviewsCore extends PluginCore {
       // same picture in different vocabularies and the round-trip silently
       // loses the framing.
       'device': ?deviceId,
+      // Absent for portrait, so an address written before orientation existed
+      // and one written now are the same string for the same picture.
+      'orientation': ?orientationId,
       'width': '${viewport.width}',
       'height': '${viewport.height}',
       for (var knob in knobs.entries) 'knob.${knob.key}': knob.value,
@@ -2373,7 +2397,9 @@ class PreviewsCore extends PluginCore {
   /// this build does not know is the one failure that has to be loud: quietly
   /// framing as the panel produces a PNG that is wrong without looking wrong,
   /// and something downstream files it as evidence.
-  static (String?, CaptureViewport) _framing(Map<String, Object?> arguments) {
+  static (String?, String?, CaptureViewport) _framing(
+    Map<String, Object?> arguments,
+  ) {
     var deviceId = arguments['device'];
     if (deviceId != null && (deviceId is! String || !isDeviceId(deviceId))) {
       throw ArgumentError.value(
@@ -2382,17 +2408,36 @@ class PreviewsCore extends PluginCore {
         'no such device. Accepted: ${deviceIds.join(', ')}',
       );
     }
+    var orientationId = arguments['orientation'];
+    if (orientationId != null &&
+        (orientationId is! String || !isOrientationId(orientationId))) {
+      throw ArgumentError.value(
+        orientationId,
+        'orientation',
+        'no such orientation. Accepted: ${orientationIds.join(', ')}',
+      );
+    }
     // Width and height still win where they are given: they are how you ask for
     // a size no device has, and on a device they stretch its screen rather than
     // dropping its ratio and its notch.
     // `fit` names the panel and resolves to no device, which is the same
     // viewport by a different route.
-    var device = deviceId is String ? deviceById(deviceId) : null;
+    // Rotated before it becomes a viewport, which is the one place this has to
+    // happen: everything past here is four numbers and a ratio.
+    var device = (deviceId is String ? deviceById(deviceId) : null)?.oriented(
+      orientationId is String ? orientationById(orientationId) : null,
+    );
     var viewport = device == null
         ? CaptureViewport.panel
         : CaptureViewport.of(device);
     return (
       deviceId as String?,
+      // Only a departure travels: portrait is what an address that says nothing
+      // already means, and writing it would churn every link saved so far.
+      orientationId == ScreenOrientation.landscape.name &&
+              (device?.canRotate ?? false)
+          ? orientationId as String?
+          : null,
       viewport.resized(
         width: _intArgument(arguments, 'width'),
         height: _intArgument(arguments, 'height'),
@@ -2436,6 +2481,7 @@ class _InspectRequest {
     required this.annotate,
     required this.output,
     required this.deviceId,
+    required this.orientationId,
     required this.viewport,
     required this.knobs,
     required this.axes,
@@ -2451,7 +2497,7 @@ class _InspectRequest {
     var knobs = PreviewsCore.parsePairs(arguments['knobs']);
     var axes = PreviewsCore.parsePairs(arguments['axes']);
     var debug = PreviewsCore.parsePairs(arguments['debug']);
-    var (deviceId, viewport) = PreviewsCore._framing(arguments);
+    var (deviceId, orientationId, viewport) = PreviewsCore._framing(arguments);
     var lens = switch (arguments['lens']) {
       String name when name.isNotEmpty =>
         ObserveLens.byName(name) ??
@@ -2493,6 +2539,7 @@ class _InspectRequest {
       annotate: arguments['annotate'] == true,
       output: arguments['output'] as String?,
       deviceId: deviceId,
+      orientationId: orientationId,
       viewport: viewport,
       knobs: knobs,
       axes: axes,
@@ -2540,6 +2587,10 @@ class _InspectRequest {
   final String? output;
 
   final String? deviceId;
+
+  /// `landscape`, or null for the portrait every other value means.
+  final String? orientationId;
+
   final CaptureViewport viewport;
   final Map<String, String> knobs;
   final Map<String, String> axes;

@@ -88,4 +88,94 @@ void main() {
     expect(assignment.slug, 'iphone-16-fr');
     expect(assignment.label, 'iPhone 16 · fr');
   });
+
+  test('orientation crosses the other two axes', () {
+    var assignments = scenarioAssignments(
+      phones,
+      devicesOverride: 'ipad,iphone-se',
+      languagesOverride: 'en,fr',
+      orientationsOverride: 'portrait,landscape',
+    );
+
+    expect(assignments, hasLength(8));
+    expect(assignments.map((a) => a.slug), [
+      'ipad-en',
+      'ipad-fr',
+      'ipad-landscape-en',
+      'ipad-landscape-fr',
+      'iphone-se-en',
+      'iphone-se-fr',
+      'iphone-se-landscape-en',
+      'iphone-se-landscape-fr',
+    ]);
+  });
+
+  test('portrait writes nothing, so existing artifact paths do not move', () {
+    var portrait = ScenarioAssignment(
+      device: Devices.iphone16,
+      orientation: ScreenOrientation.portrait,
+      language: 'fr',
+    );
+
+    expect(portrait.slug, 'iphone-16-fr');
+    expect(portrait.label, 'iPhone 16 · fr');
+
+    var landscape = ScenarioAssignment(
+      device: Devices.iPad,
+      orientation: ScreenOrientation.landscape,
+      language: 'fr',
+    );
+
+    expect(landscape.slug, 'ipad-landscape-fr');
+    expect(landscape.label, 'iPad · landscape · fr');
+  });
+
+  test('a device that cannot turn contributes one point, not two', () {
+    var assignments = scenarioAssignments(
+      phones,
+      devicesOverride: 'ipad,macbook-pro',
+      orientationsOverride: 'portrait,landscape',
+    );
+
+    // Three, not four: the MacBook would have produced the same pixels twice.
+    expect(assignments.map((a) => a.slug), [
+      'ipad-en',
+      'ipad-landscape-en',
+      'macbook-pro-en',
+    ]);
+  });
+
+  test('the bare surface collapses for the same reason', () {
+    var assignments = scenarioAssignments(
+      phones,
+      devicesOverride: 'fit',
+      orientationsOverride: 'portrait,landscape',
+    );
+
+    expect(assignments, hasLength(1));
+    expect(assignments.single.device, isNull);
+  });
+
+  test('an orientation this build does not know is refused', () {
+    expect(
+      () => scenarioAssignments(phones, orientationsOverride: 'sideways'),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '$e',
+          'message',
+          allOf(contains('no such orientation'), contains('landscape')),
+        ),
+      ),
+    );
+  });
+
+  test('a landscape assignment hands down a device already turned', () {
+    var assignment = ScenarioAssignment(
+      device: Devices.iPad,
+      orientation: ScreenOrientation.landscape,
+    );
+
+    expect(assignment.orientedDevice!.width, Devices.iPad.height);
+    expect(assignment.orientedDevice!.height, Devices.iPad.width);
+  });
 }

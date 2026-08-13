@@ -52,6 +52,22 @@ Address get _deep => Address(
   axes: {'axis.theme': 'dark'},
 );
 
+/// The shape that overflowed: a deep path, a leaf long enough to matter, and a
+/// device framed sideways — which is two chips rather than one, because
+/// orientation rides beside the device it applies to.
+Address get _crowded => Address(
+  worktree: '~',
+  plugin: 'flutterware.previews',
+  segments: [
+    'app',
+    'tool',
+    'catalog',
+    'demos',
+    'avatar_tile.dart#avatarTileEmpty',
+  ],
+  axes: {'device': 'iphone-16', 'orientation': 'landscape'},
+);
+
 @Preview(name: 'Live', group: 'Address bar', wrapper: wrapInAppTheme)
 Widget addressBarLive() => const _Live();
 
@@ -66,8 +82,12 @@ Widget addressBarStates() => ListView(
     ),
     _Labelled('a deep entry with an axis applied', _Strip(_deep)),
     _Labelled(
-      'squeezed — every middle segment gives way, the ends never do',
+      'squeezed — the middle gives way first, the leaf only once it must',
       _Strip(_deep, width: 480),
+    ),
+    _Labelled(
+      'a long leaf and two axes — what used to run off the end',
+      _Strip(_crowded),
     ),
     _Labelled(
       'an address naming a worktree this repo does not have',
