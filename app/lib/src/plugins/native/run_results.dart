@@ -1,4 +1,8 @@
 import 'package:flutterware/plugins.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/screen.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'run_results.g.dart';
@@ -782,12 +786,19 @@ class RunActResult implements PluginResult, ProducesArtifacts {
     this.lifecycle,
     this.human,
     this.texts,
+    this.capture,
+    this.lens,
+    this.screen,
     this.tree,
     this.nodes,
+    this.find,
+    this.at,
+    this.styles,
     this.screenshot,
     this.logs,
     this.errors,
     this.journal,
+    this.next,
     this.note,
     this.layer,
     this.coordinateSpace,
@@ -826,6 +837,15 @@ class RunActResult implements PluginResult, ProducesArtifacts {
 
   /// False means the settle budget ran out with the app still animating — a
   /// spinner, an infinite animation. Reported, never thrown.
+  ///
+  /// **True means nothing is painting, not that the screen is done.** The
+  /// settle waits on scheduled frames, tickers and image decodes; a pending
+  /// network fetch or file read schedules none of those, so a screen that is
+  /// still fetching its data reports `settled: true, frames: 0` while it says
+  /// "Loading…". Measured on this GUI's own Changes screen, where the navigate
+  /// settled instantly and the pane read "Reading…" for another two seconds.
+  /// The reply's [texts] are the honest test of whether the content arrived;
+  /// `wait` and observe again when they say it has not.
   final bool? settled;
 
   final int? settleMs;
@@ -847,8 +867,57 @@ class RunActResult implements PluginResult, ProducesArtifacts {
   /// agent reasons about next to the picture.
   final List<String>? texts;
 
-  /// The widget tree, when asked for.
+  /// This moment, on disk: `fw:///worktrees/<wt>/flutterware.run/<run>/steps/<stamp>`.
+  ///
+  /// Every step leaves the same four legs a scenario step leaves — the
+  /// picture, the tree, the semantics, the texts — beside a
+  /// `<stamp>.capture.json` naming them, **whatever this reply chose to
+  /// return**. That is what makes a second question about a step possible:
+  /// the reply is a projection of the capture, not the only copy of it.
+  final String? capture;
+
+  /// Which preset shaped this reply — `act`, `look`, `design`, `raw`, with
+  /// `(pinned)` when it came from the run rather than from this call.
+  ///
+  /// Said on every reply on purpose. A pinned lens is state a human or a
+  /// co-driving agent may have set, and a reply shaped by something invisible
+  /// is the one failure this feature could plausibly cause.
+  final String? lens;
+
+  /// The screen: what is on it, what can be acted on, and how it is laid out.
+  ///
+  /// **The default reply**, and the thing to read before anything else. About
+  /// a twentieth of the tree's tokens, and it answers more — a tree cannot say
+  /// which control is disabled or which tab is the current one. Pass
+  /// `screen: false` to drop it.
+  final Screen? screen;
+
+  /// The widget tree, when asked for — scoped by `treeRoot`, `treeDepth` and
+  /// `treeNoise`, and written in the compact spelling (`InspectTree.toJson`'s
+  /// `compact`): ids relative to the parent, sources indexed into `files`.
+  ///
+  /// The heaviest thing in this reply by an order of magnitude. `find`, `at`
+  /// and `styles` answer most of what people read a whole tree for, at a
+  /// hundredth of the cost.
   final Map<String, Object?>? tree;
+
+  /// Nodes matching `find`, capped — the count is on the wire so a truncated
+  /// answer says so.
+  final List<Map<String, Object?>>? find;
+
+  /// The chain of nodes under `at`, outermost first and innermost last.
+  ///
+  /// The chain rather than the hit, because the thing under a point is usually
+  /// a `Text` and the thing you meant is the button — or the `Row` three
+  /// levels out whose `crossAxisAlignment` is the actual answer.
+  final List<Map<String, Object?>>? at;
+
+  /// Every distinct text style on screen, most-used first, when `styles`
+  /// asked. The type ramp and the palette in one table.
+  final List<InspectStyle>? styles;
+
+  /// How many nodes the tree has *as reported* — after the noise filter and
+  /// any depth cut, so it counts what came back rather than what exists.
   final int? nodes;
 
   /// Where the step's PNG was written — under the run's journal directory,
@@ -862,8 +931,29 @@ class RunActResult implements PluginResult, ProducesArtifacts {
   /// Framework errors this step produced or repeated.
   final List<RunLogEntry>? errors;
 
-  /// The run's journal file this step was appended to.
+  /// The run's journal file this step was appended to — and the index of
+  /// every capture this run has taken.
+  ///
+  /// **Worth reading directly, if you can read files.** It is JSON-lines, one
+  /// object per step, each carrying that step's `capture` address and the
+  /// absolute path of its picture, tree, semantics and texts. So "what did
+  /// step 7 look like" and "which step changed this" are a file read away
+  /// rather than a round trip.
+  ///
+  /// Two of the legs repay that and two do not: the `.png` and the
+  /// `.capture.json` manifest are small and are the point. The `.tree.json` is
+  /// **~120 KB of raw nodes** — reading it whole is the 19,500-token mistake
+  /// `screen`, `find`, `at` and `styles` exist to avoid. Ask for those instead
+  /// and let the host do the narrowing.
   final String? journal;
+
+  /// One line naming what else can be asked of this same capture.
+  ///
+  /// The same rule the refusals follow: a schema read once at connection time
+  /// is not where anyone looks on step forty, so the reply that could have
+  /// answered more says what it could have answered. About twenty tokens, and
+  /// the same sentence previews and scenarios end their replies with.
+  final String? next;
 
   final String? note;
 
@@ -1029,4 +1119,40 @@ class RunNetworkRequestResult implements PluginResult {
 
   @override
   Map<String, Object?> toJson() => _$RunNetworkRequestResultToJson(this);
+}
+
+/// `lens` — reading or pinning how much of an observation comes back.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunLensResult implements PluginResult {
+  RunLensResult({
+    required this.device,
+    required this.entrypoint,
+    required this.lens,
+    required this.pinned,
+    this.was,
+    required this.lenses,
+  });
+
+  final String device;
+  final String entrypoint;
+
+  /// What is in force now.
+  final String lens;
+
+  /// Whether that is a pin on this run, or just the default.
+  final bool pinned;
+
+  /// What it was before this call changed it — absent when nothing changed,
+  /// so a caller can tell "I set it" from "it was already".
+  final String? was;
+
+  /// Every lens and what it contains, so the choice needs no second call.
+  final List<Map<String, Object?>> lenses;
+
+  @override
+  Map<String, Object?> toJson() => _$RunLensResultToJson(this);
 }

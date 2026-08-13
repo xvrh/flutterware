@@ -979,6 +979,33 @@ final resultShapes = <String, ResultShape>{
         },
       },
       <String, Object?>{
+        'name': 'lens',
+        'type': 'String',
+        'doc':
+            'The lens the unset flags came from — `act`, `look`, `design` or `raw`.',
+      },
+      <String, Object?>{
+        'name': 'screen',
+        'type': 'Screen',
+        'optional': true,
+        'doc':
+            'What rendered: the things that carry words or respond to touch, nested under the layout\'s branch points, with their boxes and their state.',
+      },
+      <String, Object?>{
+        'name': 'styles',
+        'type': 'List<InspectStyle>',
+        'optional': true,
+        'doc':
+            'Every distinct text size, weight and colour, most-used first with a sample.',
+      },
+      <String, Object?>{
+        'name': 'nodes',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'How many nodes the preview drew, whether or not the tree rode back — the number that says whether asking for `tree` is affordable.',
+      },
+      <String, Object?>{
         'name': 'tree',
         'type': 'List<CatalogTreeNode>',
         'optional': true,
@@ -1059,7 +1086,7 @@ final resultShapes = <String, ResultShape>{
         },
       },
       <String, Object?>{
-        'name': 'matches',
+        'name': 'find',
         'type': 'List<CatalogTreeNode>',
         'optional': true,
         'doc': 'The nodes matching `--find`.',
@@ -1220,6 +1247,13 @@ final resultShapes = <String, ResultShape>{
         },
       },
       <String, Object?>{
+        'name': 'atOuterElided',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'How many outer nodes of the chain were left out, when the cap bit.',
+      },
+      <String, Object?>{
         'name': 'logs',
         'type': 'List<String>',
         'optional': true,
@@ -1272,6 +1306,12 @@ final resultShapes = <String, ResultShape>{
             },
           ],
         },
+      },
+      <String, Object?>{
+        'name': 'next',
+        'type': 'String',
+        'optional': true,
+        'doc': 'One line naming what else can be asked of this frame.',
       },
     ],
   }),
@@ -2473,12 +2513,61 @@ final resultShapes = <String, ResultShape>{
             'Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.',
       },
       <String, Object?>{
+        'name': 'capture',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'This moment, on disk: `fw:///worktrees/<wt>/flutterware.run/<run>/steps/<stamp>`.',
+      },
+      <String, Object?>{
+        'name': 'lens',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Which preset shaped this reply — `act`, `look`, `design`, `raw`, with `(pinned)` when it came from the run rather than from this call.',
+      },
+      <String, Object?>{
+        'name': 'screen',
+        'type': 'Screen',
+        'optional': true,
+        'doc':
+            'The screen: what is on it, what can be acted on, and how it is laid out.',
+      },
+      <String, Object?>{
         'name': 'tree',
         'type': 'Map<String, Object?>',
         'optional': true,
-        'doc': 'The widget tree, when asked for.',
+        'doc':
+            'The widget tree, when asked for — scoped by `treeRoot`, `treeDepth` and `treeNoise`, and written in the compact spelling (`InspectTree.toJson`\'s `compact`): ids relative to the parent, sources indexed into `files`.',
       },
-      <String, Object?>{'name': 'nodes', 'type': 'int', 'optional': true},
+      <String, Object?>{
+        'name': 'find',
+        'type': 'List<Map<String, Object?>>',
+        'optional': true,
+        'doc':
+            'Nodes matching `find`, capped — the count is on the wire so a truncated answer says so.',
+      },
+      <String, Object?>{
+        'name': 'at',
+        'type': 'List<Map<String, Object?>>',
+        'optional': true,
+        'doc':
+            'The chain of nodes under `at`, outermost first and innermost last.',
+      },
+      <String, Object?>{
+        'name': 'styles',
+        'type': 'List<InspectStyle>',
+        'optional': true,
+        'doc':
+            'Every distinct text style on screen, most-used first, when `styles` asked.',
+      },
+      <String, Object?>{
+        'name': 'nodes',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'How many nodes the tree has *as reported* — after the noise filter and any depth cut, so it counts what came back rather than what exists.',
+      },
       <String, Object?>{
         'name': 'screenshot',
         'type': 'String',
@@ -2537,7 +2626,14 @@ final resultShapes = <String, ResultShape>{
         'name': 'journal',
         'type': 'String',
         'optional': true,
-        'doc': 'The run\'s journal file this step was appended to.',
+        'doc':
+            'The run\'s journal file this step was appended to — and the index of every capture this run has taken.',
+      },
+      <String, Object?>{
+        'name': 'next',
+        'type': 'String',
+        'optional': true,
+        'doc': 'One line naming what else can be asked of this same capture.',
       },
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
       <String, Object?>{
@@ -3773,6 +3869,36 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),
+  'RunLensResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunLensResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'lens',
+        'type': 'String',
+        'doc': 'What is in force now.',
+      },
+      <String, Object?>{
+        'name': 'pinned',
+        'type': 'bool',
+        'doc': 'Whether that is a pin on this run, or just the default.',
+      },
+      <String, Object?>{
+        'name': 'was',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What it was before this call changed it — absent when nothing changed, so a caller can tell "I set it" from "it was already".',
+      },
+      <String, Object?>{
+        'name': 'lenses',
+        'type': 'List<Map<String, Object?>>',
+        'doc':
+            'Every lens and what it contains, so the choice needs no second call.',
+      },
+    ],
+  }),
   'RunLogEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'RunLogEntry',
     'fields': <Object?>[
@@ -3989,6 +4115,103 @@ final resultShapes = <String, ResultShape>{
         'name': 'next',
         'type': 'String',
         'doc': 'The command that runs what was just written.',
+      },
+    ],
+  }),
+  'ScenarioReadResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioReadResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'step',
+        'type': 'String',
+        'doc':
+            'The capture this answers about, worktree-relative — the value to pass back as `step` to ask it something else.',
+      },
+      <String, Object?>{
+        'name': 'lens',
+        'type': 'String',
+        'doc': 'The lens the reply was produced under.',
+      },
+      <String, Object?>{'name': 'scenario', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'file', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'index',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'The step\'s 1-based position in its scenario\'s capture sequence.',
+      },
+      <String, Object?>{
+        'name': 'failure',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The error this step died on, when it is a failing step.',
+      },
+      <String, Object?>{
+        'name': 'image',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The archived PNG, worktree-relative.',
+      },
+      <String, Object?>{
+        'name': 'screen',
+        'type': 'Screen',
+        'optional': true,
+        'doc':
+            'What is on the screen, what can be acted on, and how it is laid out.',
+      },
+      <String, Object?>{
+        'name': 'texts',
+        'type': 'List<String>',
+        'optional': true,
+        'doc':
+            'Every Text and text field of the step, as the capture recorded them.',
+      },
+      <String, Object?>{
+        'name': 'tree',
+        'type': 'Map<String, Object?>',
+        'optional': true,
+        'doc': 'The whole widget tree, compact.',
+      },
+      <String, Object?>{
+        'name': 'nodes',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many nodes the tree has, whether or not it rode back.',
+      },
+      <String, Object?>{
+        'name': 'find',
+        'type': 'List<Map<String, Object?>>',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'at',
+        'type': 'List<Map<String, Object?>>',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'styles',
+        'type': 'List<InspectStyle>',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'note',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'A query that could not be answered, said so the caller can fix it.',
+      },
+      <String, Object?>{
+        'name': 'next',
+        'type': 'String',
+        'optional': true,
+        'doc': 'One line naming what else this capture can be asked.',
+      },
+      <String, Object?>{
+        'name': 'steps',
+        'type': 'List<String>',
+        'doc':
+            'The other captures of the same scenario, as bare file names beside [step] — what makes walking a failing flow backwards one call each.',
       },
     ],
   }),

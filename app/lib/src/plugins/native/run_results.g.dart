@@ -209,12 +209,19 @@ Map<String, dynamic> _$RunActResultToJson(RunActResult instance) =>
       'lifecycle': ?instance.lifecycle,
       'human': ?instance.human,
       'texts': ?instance.texts,
+      'capture': ?instance.capture,
+      'lens': ?instance.lens,
+      'screen': ?instance.screen?.toJson(),
       'tree': ?instance.tree,
+      'find': ?instance.find,
+      'at': ?instance.at,
+      'styles': ?instance.styles?.map((e) => e.toJson()).toList(),
       'nodes': ?instance.nodes,
       'screenshot': ?instance.screenshot,
       'logs': ?instance.logs?.map((e) => e.toJson()).toList(),
       'errors': ?instance.errors?.map((e) => e.toJson()).toList(),
       'journal': ?instance.journal,
+      'next': ?instance.next,
       'note': ?instance.note,
       'layer': ?instance.layer,
       'coordinateSpace': ?instance.coordinateSpace,
@@ -259,3 +266,13 @@ Map<String, dynamic> _$RunNetworkRequestResultToJson(
   'request': instance.request,
   'note': ?instance.note,
 };
+
+Map<String, dynamic> _$RunLensResultToJson(RunLensResult instance) =>
+    <String, dynamic>{
+      'device': instance.device,
+      'entrypoint': instance.entrypoint,
+      'lens': instance.lens,
+      'pinned': instance.pinned,
+      'was': ?instance.was,
+      'lenses': instance.lenses,
+    };

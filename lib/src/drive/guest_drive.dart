@@ -225,15 +225,39 @@ class GuestDrive {
     ];
     _errorCounts = {for (var error in errors.errors) error.key: error.count};
 
+    // The **whole** tree, every step, unfiltered.
+    //
+    // Not gated on the caller wanting one, and not narrowed here: the host
+    // projects the screen out of it, answers `find`/`at`/`styles` from it and
+    // archives it, and every one of those needs the nodes the noise filter
+    // drops. Narrowing is the host's decision because the host is where the
+    // reply is shaped — see `2026-08-13-screen-handback-design.md` § M1.
+    //
+    // It costs what it costs either way: the guest built this tree on every
+    // observe already, including calls that asked for no tree at all, and the
+    // difference between the filtered and unfiltered spellings is 78KB against
+    // 121KB over a local socket. Compact, because the host expands the
+    // spelling before anything that consumes nodes sees it.
+    var tree = inspector?.read().toJson(compact: true);
+
     return {
       'lifecycle': binding.lifecycleState?.name,
       'texts': drive.visibleTexts(),
-      if (params['tree'] != 'false' && inspector != null)
-        'tree': inspector!.read().toJson(),
-      if (params['screenshot'] != 'false')
-        'screenshot': await _screenshot(
-          maxSide: int.tryParse(params['maxSide'] ?? ''),
-        ),
+      'tree': ?tree,
+      // The semantics tree, as the app publishes it — the same leg a scenario
+      // step has kept for two milestones, so the run journal and a scenario
+      // step archive the same four things. The nodes already carry the label
+      // and the selected state read out of it; this is the rest, for a
+      // reviewer asking what a screen reader would have said.
+      'semantics': ?inspector?.readSemantics().root,
+      // Always taken, never conditional. Whether the caller wants to *see* a
+      // picture is the host's business; whether the step is photographed is
+      // not, because a journal missing the frame cannot answer a question
+      // asked one step later. The host picks the cap, and picks a small one
+      // when nobody asked to look — measured at ~46ms against ~234ms.
+      'screenshot': await _screenshot(
+        maxSide: int.tryParse(params['maxSide'] ?? ''),
+      ),
       if (newLines.isNotEmpty)
         'logs': [for (var line in newLines) line.toJson()],
       if (changed.isNotEmpty)
@@ -326,11 +350,14 @@ dynamic _wireTarget(Object? json) {
       );
     case {'nth': {'target': Object target, 'index': int index}}:
       return Target.nth(_wireTarget(target) as Object, index);
+    case {'at': {'x': num x, 'y': num y}}:
+      return Target.at(x.toDouble(), y.toDouble());
     default:
       throw ArgumentError(
         'not a target: $json — a bare string is visible text, or one of '
         '{"text"}, {"key"}, {"label"}, {"tooltip"}, {"containing"}, '
-        '{"within": {"scope", "child"}}, {"nth": {"target", "index"}}',
+        '{"within": {"scope", "child"}}, {"nth": {"target", "index"}}, '
+        '{"at": {"x", "y"}}',
       );
   }
 }

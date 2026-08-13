@@ -182,6 +182,22 @@ class InspectLayout {
     if (flexFit != null) 'flexFit': flexFit,
   };
 
+  /// Whether [other] is the same box, laid out the same way.
+  ///
+  /// Every field, including the flex ones: a `Row` and the `Padding` that
+  /// happens to fit it exactly are not interchangeable, and neither are a
+  /// child given `flex: 2` and its wrapper.
+  bool sameAs(InspectLayout other) =>
+      x == other.x &&
+      y == other.y &&
+      width == other.width &&
+      height == other.height &&
+      isRepaintBoundary == other.isRepaintBoundary &&
+      flexFactor == other.flexFactor &&
+      flexFit == other.flexFit &&
+      (constraints?.sameAs(other.constraints) ?? other.constraints == null) &&
+      (flex?.sameAs(other.flex) ?? other.flex == null);
+
   static double _double(Object? value) => switch (value) {
     num n => n.toDouble(),
     _ => 0,
@@ -212,27 +228,36 @@ class InspectConstraints {
   final double minHeight;
   final double maxHeight;
 
-  /// **Unbounded is `null`, not `Infinity`.** JSON has no infinity and
+  /// **Unbounded is absent, not `Infinity`.** JSON has no infinity and
   /// `jsonEncode` throws on one, which is not a theoretical corner: an
   /// unbounded `maxWidth` is what most of a real tree is laid out under, so
   /// the first entry with a `Column` in it failed to encode at all.
   ///
-  /// Null is unambiguous here because all four are always present — the
-  /// constraints object either exists with every bound or does not exist.
+  /// It was written as an explicit `null` first, which [_in] has always read
+  /// the same way as a missing key. Leaving the key out says the identical
+  /// thing in sixteen fewer characters, and `"maxWidth": null` on two axes of
+  /// every node of a real tree was 8 KB of a 234 KB read.
   Map<String, Object?> toJson() => {
-    'minWidth': _out(minWidth),
-    'maxWidth': _out(maxWidth),
-    'minHeight': _out(minHeight),
-    'maxHeight': _out(maxHeight),
+    'minWidth': ?_out(minWidth),
+    'maxWidth': ?_out(maxWidth),
+    'minHeight': ?_out(minHeight),
+    'maxHeight': ?_out(maxHeight),
   };
 
-  static Object? _out(double value) => value.isFinite ? value : null;
+  static double? _out(double value) => value.isFinite ? value : null;
 
   static double _in(Object? value) => switch (value) {
     num n => n.toDouble(),
     // Absent means unbounded, per [toJson].
     _ => double.infinity,
   };
+
+  bool sameAs(InspectConstraints? other) =>
+      other != null &&
+      minWidth == other.minWidth &&
+      maxWidth == other.maxWidth &&
+      minHeight == other.minHeight &&
+      maxHeight == other.maxHeight;
 
   /// `w 0..900, h 0..∞` — how a human reads it, and infinity written as
   /// something a terminal can print.
@@ -271,6 +296,13 @@ class InspectFlex {
   final String? crossAxisAlignment;
   final String? mainAxisSize;
 
+  bool sameAs(InspectFlex? other) =>
+      other != null &&
+      direction == other.direction &&
+      mainAxisAlignment == other.mainAxisAlignment &&
+      crossAxisAlignment == other.crossAxisAlignment &&
+      mainAxisSize == other.mainAxisSize;
+
   Map<String, Object?> toJson() => {
     'direction': direction,
     if (mainAxisAlignment != null) 'mainAxisAlignment': mainAxisAlignment,
@@ -290,7 +322,10 @@ class InspectNode {
     this.offstage = false,
     this.properties = const {},
     this.layout,
+    this.label,
+    this.selected,
     this.children = const [],
+    this.elidedChildren = 0,
   });
 
   factory InspectNode.fromJson(Map<String, Object?> json) => InspectNode(
@@ -299,6 +334,9 @@ class InspectNode {
     description: json['description'] as String?,
     createdByLocalProject: json['local'] as bool? ?? false,
     offstage: json['offstage'] as bool? ?? false,
+    elidedChildren: json['elided'] as int? ?? 0,
+    label: json['label'] as String?,
+    selected: json['selected'] as bool?,
     properties: switch (json['properties']) {
       Map properties => properties.cast<String, String>(),
       _ => const {},
@@ -384,7 +422,47 @@ class InspectNode {
   /// different answers and only one of them is a bug.
   final InspectLayout? layout;
 
+  /// What a screen reader would call this, from the semantics node this
+  /// widget's render object contributes to.
+  ///
+  /// **Reached through the render tree, never by comparing rectangles.** A
+  /// semantics node and a widget's box are not the same rectangle and the
+  /// mismatch goes both ways: a `Checkbox`'s node is smaller than the
+  /// `CheckboxListTile` that owns it, and a `Tab`'s is **9.5× larger** than the
+  /// `Tab` widget, which is only its label. Matching by rect reported "Flutter
+  /// does not publish tab selection", which is false — see
+  /// `2026-08-13-screen-handback-spike-findings.md` § S6.
+  ///
+  /// It carries more than the words: Flutter writes its own positional hints in
+  /// here, so a tab reads `"Tab A\nTab 1 of 2"`. Null off the VM-service path
+  /// (`run`'s `inspect`), which cannot reach widgets, and null when the app has
+  /// no semantics tree — a live app has none until something holds a
+  /// `SemanticsHandle`.
+  final String? label;
+
+  /// Whether this is the current one of its group — **tri-state, and the third
+  /// state is the point.**
+  ///
+  /// True when semantics says `isSelected`/`isChecked`/`isToggled`, false when
+  /// it says only `hasSelectedState`/`hasCheckedState`/`hasToggledState`, and
+  /// **null when nothing said** — which is different from false. Without the
+  /// distinction "not selected" and "not selectable" are the same answer, and
+  /// that difference is the whole value of the field.
+  ///
+  /// Eight of the ten Material selection idioms publish it (measured);
+  /// `SegmentedButton` and hand-rolled `InkWell` tabs publish nothing, and for
+  /// those this stays null rather than being guessed from a colour.
+  final bool? selected;
+
   final List<InspectNode> children;
+
+  /// How many children a depth cut removed, when one did.
+  ///
+  /// Zero everywhere in an unfiltered tree. It exists so a bounded read cannot
+  /// be misread as a complete one: without it a node cut at the depth limit is
+  /// indistinguishable from a leaf, and "this Row has no children" is a wrong
+  /// answer rather than a short one. See [InspectFilter.maxDepth].
+  final int elidedChildren;
 
   /// This node and everything under it, depth-first, with offstage subtrees
   /// folded to their flagged top node — reported, so a reader knows the
@@ -415,22 +493,358 @@ class InspectNode {
     if (offstage) 'offstage': true,
     if (properties.isNotEmpty) 'properties': properties,
     if (layout != null) 'layout': layout!.toJson(),
+    if (label != null) 'label': label,
+    if (selected != null) 'selected': selected,
+    if (elidedChildren > 0) 'elided': elidedChildren,
     if (children.isNotEmpty)
       'children': [for (var child in children) child.toJson()],
   };
+
+  /// This node in the compact spelling — see [InspectTree.toJson].
+  ///
+  /// [files] is grown as the walk finds new ones, so the table comes out in
+  /// first-seen order and every index in it is one a node used.
+  Map<String, Object?> _toCompactJson(String parentId, Map<String, int> files) {
+    var own = parentId.isNotEmpty && id.startsWith('$parentId/')
+        ? id.substring(parentId.length + 1)
+        : id;
+    return {
+      'id': own,
+      'type': type,
+      if (description != null) 'description': description,
+      if (source case var source?)
+        'source':
+            '${files.putIfAbsent(source.file, () => files.length)}'
+            ':${source.line}:${source.column}',
+      'local': createdByLocalProject,
+      if (offstage) 'offstage': true,
+      if (properties.isNotEmpty) 'properties': properties,
+      if (layout != null) 'layout': _rounded(layout!.toJson()),
+      if (label != null) 'label': label,
+      if (selected != null) 'selected': selected,
+      if (elidedChildren > 0) 'elided': elidedChildren,
+      if (children.isNotEmpty)
+        'children': [
+          for (var child in children) child._toCompactJson(id, files),
+        ],
+    };
+  }
+
+  static Map<String, Object?> _rounded(Map<String, Object?> json) => {
+    for (var entry in json.entries)
+      entry.key: switch (entry.value) {
+        double value => _round(value),
+        Map nested => _rounded(nested.cast<String, Object?>()),
+        var other => other,
+      },
+  };
+
+  /// Two decimals, and whole numbers without the `.0` — the same notation
+  /// [InspectConstraints._n] settled on, for the same reason: `573.0` and
+  /// `573` in one reply read as two different kinds of measurement.
+  static num _round(double value) {
+    var rounded = (value * 100).roundToDouble() / 100;
+    return rounded == rounded.roundToDouble() ? rounded.toInt() : rounded;
+  }
+
+  InspectNode _with({List<InspectNode>? children, int? elidedChildren}) =>
+      InspectNode(
+        id: id,
+        type: type,
+        description: description,
+        source: source,
+        createdByLocalProject: createdByLocalProject,
+        offstage: offstage,
+        properties: properties,
+        layout: layout,
+        label: label,
+        selected: selected,
+        children: children ?? this.children,
+        elidedChildren: elidedChildren ?? this.elidedChildren,
+      );
+
+  /// Whether this node and [other] occupy the very same box under the very
+  /// same constraints — the test for "one of these two is scaffolding".
+  ///
+  /// Two nodes with no layout at all count as the same: neither has a box, so
+  /// neither can be the one that explains where anything is.
+  bool _sameBox(InspectNode other) {
+    var mine = layout;
+    var theirs = other.layout;
+    if (mine == null || theirs == null) return mine == null && theirs == null;
+    return mine.sameAs(theirs);
+  }
+
+  /// How much this node would be missed, used only to pick which node of a
+  /// single-box chain to keep.
+  ///
+  /// Not a measure of importance in general — a `Text` that lost to nothing
+  /// still scores 8. It ranks *rivals for one box*, which is why words and
+  /// flex outrank everything: they are the two things no sibling in the chain
+  /// can be carrying too.
+  int get _weight {
+    var weight = 0;
+    // `Text("Save")` — the only description the walk mints, and the words are
+    // why anyone reads a tree.
+    if (description != null && description!.contains('"')) weight += 8;
+    // A Row is never scaffolding: `crossAxisAlignment` is the answer to half
+    // the layout questions asked of a tree, and only this node has it.
+    if (layout?.flex != null) weight += 8;
+    if (properties.isNotEmpty) weight += 2;
+    if (!_scaffolding.contains(_bareType) && !type.startsWith('_')) weight += 1;
+    return weight;
+  }
+
+  /// The type without its generics — `NotificationListener` for a
+  /// `NotificationListener<ScrollNotification>`, which is how it is spelled in
+  /// [_scaffolding] and how anyone would have written the name.
+  String get _bareType {
+    var at = type.indexOf('<');
+    return at < 0 ? type : type.substring(0, at);
+  }
+
+  /// Widgets that wrap without saying anything a reader can act on.
+  ///
+  /// They are not *dropped* for being on this list — a node is only ever
+  /// dropped for sharing another node's box, and this list breaks the tie
+  /// about which of the two goes. It matters because the loser's name is what
+  /// survives into the reply: with `Gap` on the list, a spacer reads as
+  /// `SizedBox(width: 8.0)` rather than as a bare `Gap` with the measurement
+  /// thrown away.
+  ///
+  /// `Expanded` and `Flexible` are here for a sharper reason: what they do to
+  /// a child is reported *on the child*, as [InspectLayout.flexFactor] and
+  /// [InspectLayout.flexFit], read off its parent data. Keeping the wrapper as
+  /// well would be reporting the same fact twice.
+  static const _scaffolding = {
+    'MouseRegion',
+    'GestureDetector',
+    'RawGestureDetector',
+    'Listener',
+    'Semantics',
+    'ExcludeSemantics',
+    'MergeSemantics',
+    'BlockSemantics',
+    'Focus',
+    'FocusScope',
+    'FocusTraversalGroup',
+    'RepaintBoundary',
+    'KeyedSubtree',
+    'NotificationListener',
+    'Builder',
+    'AnimatedBuilder',
+    'ListenableBuilder',
+    'ValueListenableBuilder',
+    'LayoutBuilder',
+    'Expanded',
+    'Flexible',
+    // Not a framework widget, but `package:gap` is in enough Flutter apps to
+    // be worth naming: every `Gap` is a `SizedBox` wearing a hat.
+    'Gap',
+  };
+
+  /// This subtree with the scaffolding taken out — see [InspectFilter.noise].
+  InspectNode _withoutScaffolding() {
+    var children = [
+      for (var child in this.children) child._withoutScaffolding(),
+    ];
+    if (children.length == 1 && _sameBox(children.single)) {
+      var child = children.single;
+      // Ties go to this node rather than the child: it is the outer one, so
+      // its source is the call site the author wrote rather than a line inside
+      // whatever it built.
+      if (child._weight > _weight) return child;
+      return _with(children: child.children, elidedChildren: 0);
+    }
+    return _with(children: children);
+  }
+
+  /// This subtree cut to [depth] more levels, marking what the cut removed.
+  InspectNode _toDepth(int depth) {
+    if (depth <= 0) {
+      return _with(children: const [], elidedChildren: children.length);
+    }
+    return _with(children: [for (var c in children) c._toDepth(depth - 1)]);
+  }
+}
+
+/// How much of a tree a caller wants.
+///
+/// **Every field narrows what is *reported*, never what is walked.** The walk
+/// costs the same either way — the ids are positions in the whole tree and
+/// have to stay that way, or a node id from one read would not name the same
+/// node in the next. So this is about the size of the answer, which on a real
+/// screen is the thing that was unusable: one observation of the flutterware
+/// GUI's own Changes screen came back as 482 nodes and blew a 50,000-token
+/// budget without reaching the bottom of the left pane.
+class InspectFilter {
+  const InspectFilter({this.root, this.maxDepth, this.noise = true});
+
+  /// Report this node and its descendants instead of the whole tree.
+  ///
+  /// An [InspectNode.id] from an earlier read of the same screen. Unknown ids
+  /// are refused rather than approximated, for the reason [InspectTree.nodeAt]
+  /// gives: an id names a position, and a position that moved holds something
+  /// else now.
+  final String? root;
+
+  /// How many levels below the reported root to include. Null is all of them.
+  ///
+  /// Counted over the tree *after* [noise] has run, because that is the tree
+  /// the caller is looking at: on the Changes screen the app's own content
+  /// starts nineteen wrappers down, and a depth counted before the filter
+  /// would spend every level of the budget on them.
+  final int? maxDepth;
+
+  /// Drop widgets that share their only child's box, keeping whichever of the
+  /// two carries more (see [InspectNode._weight]). On by default.
+  ///
+  /// This is where the bulk goes, and it is not a heuristic about importance:
+  /// two nodes with byte-identical geometry are one thing on the screen
+  /// described twice, and a reader can act on the description only once. Every
+  /// surviving node is a real node with its real id, type, source and
+  /// properties — nothing is merged or invented — so the reply stays a subset
+  /// of the full tree rather than a rendering of it. Measured on the Changes
+  /// screen: 436 nodes to 252, with `MouseRegion`, `GestureDetector`, `Gap`,
+  /// `Expanded`, `InkWell` and `Builder` gone entirely.
+  ///
+  /// **A dropped node takes its level with it, not its subtree.** Its children
+  /// are hoisted to its parent, so ids stay what they always were and a child
+  /// may now sit under a node that is not its parent — `0/3/1/0/2` directly
+  /// under `0/3`. Ask for `noise: false` to see the levels in between.
+  final bool noise;
+
+  static const none = InspectFilter(noise: false);
+
+  bool get isEmpty => root == null && maxDepth == null && !noise;
+}
+
+/// A rendered diagnostic value, cut down to what a reader can use.
+///
+/// Two cuts, in this order and for this reason:
+///
+/// 1. **Colours become hex.** The framework describes one as
+///    `Color(alpha: 1.0000, red: 0.4196, green: 0.4471, blue: 0.5020,
+///    colorSpace: ColorSpace.sRGB)` — 91 characters that every reader has to
+///    multiply by 255 to learn is `#6B7280`. They were 7.6 KB of one 234 KB
+///    read, across 84 properties.
+/// 2. **What is still too long keeps its head.** The elision used to take the
+///    middle, which on the values that actually overflow ate the payload and
+///    kept the boilerplate: `BoxDecoration(color: Color(alpha: 1.0000, red:  …
+///    ircular(7.0), topRight: Radius.circular(7.0)))` — the colour, the one
+///    thing being asked about, is what the ellipsis removed.
+///
+/// Colours first is what makes the second cut rare: most of the values that
+/// overflowed did so because they had a colour spelled out inside them, and
+/// once it is six characters the whole value fits.
+String shortenPropertyValue(String value) {
+  var short = value.replaceAllMapped(_colorPattern, _hexColor);
+  if (short.length <= _maxPropertyLength) return short;
+  return '${short.substring(0, _maxPropertyLength - 1)}…';
+}
+
+const _maxPropertyLength = 96;
+
+final _colorPattern = RegExp(
+  r'Color\(alpha: ([\d.]+), red: ([\d.]+), green: ([\d.]+), blue: ([\d.]+)'
+  r'(?:, colorSpace: ColorSpace\.(\w+))?\)',
+);
+
+/// `#RRGGBB`, with CSS's trailing alpha pair when it is not opaque and the
+/// colour space appended when it is not the one everybody assumes.
+String _hexColor(Match match) {
+  String channel(String? value) => ((double.tryParse(value ?? '') ?? 0) * 255)
+      .round()
+      .clamp(0, 255)
+      .toRadixString(16)
+      .padLeft(2, '0')
+      .toUpperCase();
+  var alpha = double.tryParse(match[1] ?? '') ?? 1;
+  var space = match[5];
+  return '#${channel(match[2])}${channel(match[3])}${channel(match[4])}'
+      '${alpha >= 1 ? '' : channel(match[1])}'
+      '${space == null || space == 'sRGB' ? '' : ' $space'}';
 }
 
 /// One entry's tree, as of one build of it.
 class InspectTree {
-  const InspectTree({required this.entryId, required this.root});
+  const InspectTree({required this.entryId, this.root});
 
-  factory InspectTree.fromJson(Map<String, Object?> json) => InspectTree(
-    entryId: json['entry'] as String?,
-    root: switch (json['root']) {
-      Map root => InspectNode.fromJson(root.cast<String, Object?>()),
+  /// Reads either spelling — see [toJson] for what `compact` changes and why
+  /// a reader has to know both.
+  factory InspectTree.fromJson(Map<String, Object?> json) {
+    var root = switch (json['root']) {
+      Map root => root.cast<String, Object?>(),
       _ => null,
-    },
-  );
+    };
+    if (root == null) return InspectTree(entryId: json['entry'] as String?);
+    return InspectTree(
+      entryId: json['entry'] as String?,
+      root: json['compact'] == true
+          ? _readCompact(root, '', [
+              for (var file in json['files'] as List? ?? const []) '$file',
+            ])
+          : InspectNode.fromJson(root),
+    );
+  }
+
+  /// The compact spelling, expanded back into ordinary nodes.
+  ///
+  /// Ids come back absolute and sources come back with their whole path, so
+  /// nothing downstream of here can tell which spelling arrived.
+  static InspectNode _readCompact(
+    Map<String, Object?> json,
+    String parentId,
+    List<String> files,
+  ) {
+    var own = json['id'] as String? ?? '';
+    var id = parentId.isEmpty || own.isEmpty ? own : '$parentId/$own';
+    return InspectNode(
+      id: id,
+      type: json['type'] as String? ?? '',
+      description: json['description'] as String?,
+      createdByLocalProject: json['local'] as bool? ?? false,
+      offstage: json['offstage'] as bool? ?? false,
+      elidedChildren: json['elided'] as int? ?? 0,
+      label: json['label'] as String?,
+      selected: json['selected'] as bool?,
+      properties: switch (json['properties']) {
+        Map properties => properties.cast<String, String>(),
+        _ => const {},
+      },
+      layout: switch (json['layout']) {
+        Map layout => InspectLayout.fromJson(layout.cast<String, Object?>()),
+        _ => null,
+      },
+      source: switch (json['source']) {
+        String source => _readCompactSource(source, files),
+        // Tolerated rather than expected: a guest that spelled the tree
+        // compact but the source long is not a shape this ever writes, and
+        // dropping the location over that would be losing the one field that
+        // says where the widget came from.
+        Map source => InspectSource.fromJson(source.cast<String, Object?>()),
+        _ => null,
+      },
+      children: [
+        for (var child in json['children'] as List? ?? const [])
+          if (child is Map)
+            _readCompact(child.cast<String, Object?>(), id, files),
+      ],
+    );
+  }
+
+  /// `3:402:11` against the tree's file table.
+  static InspectSource? _readCompactSource(String source, List<String> files) {
+    var parts = source.split(':');
+    if (parts.length != 3) return null;
+    var file = int.tryParse(parts[0]);
+    if (file == null || file < 0 || file >= files.length) return null;
+    return InspectSource(
+      file: files[file],
+      line: int.tryParse(parts[1]) ?? 0,
+      column: int.tryParse(parts[2]) ?? 0,
+    );
+  }
 
   static const empty = InspectTree(entryId: null, root: null);
 
@@ -527,6 +941,90 @@ class InspectTree {
   /// about a position that may now hold something else — answering with
   /// whatever moved into it would be a confident wrong answer. The caller
   /// re-reads the tree.
+  /// Nodes whose type, description or semantics label contains [query],
+  /// case-insensitively.
+  ///
+  /// **What to reach for instead of reading a tree**, and the measurement is
+  /// lopsided enough to be worth stating: `find "Watching"` answers "what
+  /// colour and size is that label" in 131 tokens where the whole tree is
+  /// 19 500. It is also the way out of the `treeRoot` chicken-and-egg — an id
+  /// is a position, so you needed a tree to get one, and now you do not.
+  ///
+  /// The label is searched as well as the words, so `find "Tab 1 of 2"` reaches
+  /// what Flutter says about a control rather than only what it draws.
+  Iterable<InspectNode> matching(String query) sync* {
+    var needle = query.toLowerCase();
+    for (var node in nodes) {
+      if (node.type.toLowerCase().contains(needle) ||
+          (node.description?.toLowerCase().contains(needle) ?? false) ||
+          (node.label?.toLowerCase().contains(needle) ?? false)) {
+        yield node;
+      }
+    }
+  }
+
+  /// Every on-stage node whose box contains ([x], [y]), outermost first.
+  ///
+  /// The *chain*, not the innermost hit, because the thing under a cursor is
+  /// usually a `Text` and the thing you meant is the button around it — and
+  /// because the chain is where the layout answer is: the `Row` three levels
+  /// out is what has the `crossAxisAlignment`.
+  ///
+  /// Rectangles only, like [nodeAtPoint]: no transforms, no clips. Run it over
+  /// a [filtered] tree — measured, the unfiltered chain is 35 nodes of which 20
+  /// are the same root wrapper run present under every point on every screen.
+  List<InspectNode> chainAt(double x, double y) => [
+    for (var node in _onstage)
+      if (node.layout case var layout?)
+        if (x >= layout.x &&
+            y >= layout.y &&
+            x < layout.x + layout.width &&
+            y < layout.y + layout.height)
+          node,
+  ];
+
+  /// Every distinct text style on screen, most-used first.
+  ///
+  /// **An aggregate, because "what is the type ramp" is a table and not a list
+  /// of nodes.** Asking it as a search returned 63 hits, cost 2451 tokens and
+  /// was still truncated; this is the whole answer in about 185 — which makes
+  /// it the cheapest question in the drill-down and the one that settles most
+  /// design arguments (two greys that should be one, a ramp with 11.5 *and*
+  /// 12.5 in it).
+  List<InspectStyle> styles() {
+    var buckets = <String, InspectStyle>{};
+    for (var node in _onstage) {
+      var properties = node.properties;
+      if (properties['size'] == null && properties['color'] == null) continue;
+      // Text nodes only: a `size` on something that draws no words is a
+      // different measurement wearing the same name.
+      if (node.description?.contains('"') != true) continue;
+      var style = InspectStyle(
+        size: properties['size'],
+        weight: properties['weight'],
+        color: properties['color'],
+        count: 1,
+        sample: _words(node) ?? '',
+      );
+      var existing = buckets[style.key];
+      buckets[style.key] = existing == null
+          ? style
+          : existing.plusOne(style.sample);
+    }
+    return buckets.values.toList()..sort((a, b) => b.count.compareTo(a.count));
+  }
+
+  /// `Text("Save")` → `Save`, or null when the node draws no words.
+  static String? _words(InspectNode node) {
+    var description = node.description;
+    if (description == null) return null;
+    var open = description.indexOf('"');
+    var close = description.lastIndexOf('"');
+    if (open == -1 || close <= open) return null;
+    var words = description.substring(open + 1, close);
+    return words.isEmpty ? null : words;
+  }
+
   InspectNode? nodeAt(String id) {
     for (var node in nodes) {
       if (node.id == id) return node;
@@ -534,5 +1032,118 @@ class InspectTree {
     return null;
   }
 
-  Map<String, Object?> toJson() => {'entry': entryId, 'root': root?.toJson()};
+  /// This tree, narrowed to what [filter] asks for.
+  ///
+  /// Throws when [InspectFilter.root] names no node, for the reason
+  /// [nodeAt] gives: answering about whatever moved into that position would
+  /// be a confident wrong answer.
+  InspectTree filtered(InspectFilter filter) {
+    if (filter.isEmpty || root == null) return this;
+    var from = root!;
+    if (filter.root case var id? when id.isNotEmpty) {
+      var found = nodeAt(id);
+      if (found == null) {
+        throw ArgumentError(
+          'no node "$id" in this tree — ids are positions in the tree as it '
+          'was when you read it, so one from an older screen names nothing '
+          'here. Observe again and take the id from that reply.',
+        );
+      }
+      from = found;
+    }
+    if (filter.noise) from = from._withoutScaffolding();
+    if (filter.maxDepth case var depth?) from = from._toDepth(depth);
+    return InspectTree(entryId: entryId, root: from);
+  }
+
+  /// The tree as JSON, in one of two spellings.
+  ///
+  /// Verbose is the original and the default: every node's id absolute, every
+  /// source its own object with a whole `file://` path. It is what the panel,
+  /// the scenario artifacts and the comparison caches have always been written
+  /// in, and changing it under them would be changing files already on disk.
+  ///
+  /// **Compact is the same tree written for a reader that pays per byte.** Two
+  /// substitutions, both undone by [fromJson] before anything downstream sees
+  /// a node:
+  ///
+  /// - **Ids relative to the parent.** A node twenty levels down spells its id
+  ///   `0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/1/0` and its child spells the same
+  ///   twenty characters again plus one. Measured: 34 KB of a 234 KB read, for
+  ///   a prefix the reader already has.
+  /// - **A file table.** 436 nodes of the Changes screen named 13 distinct
+  ///   files between them, and repeated the absolute path of one on every
+  ///   node: 71 KB, 30% of the read, to say `changes_screen.dart` 153 times.
+  ///   Compact writes `files` once and `"source": "0:402:11"` per node.
+  ///
+  /// Sub-pixel geometry is rounded to two decimals here too — `7.26` rather
+  /// than `7.261507987976074`. Only in this spelling: the comparison caches
+  /// diff trees field by field and a rounded number would read as a change.
+  Map<String, Object?> toJson({bool compact = false}) {
+    if (!compact) return {'entry': entryId, 'root': root?.toJson()};
+    var files = <String, int>{};
+    var written = root?._toCompactJson('', files);
+    return {
+      'entry': entryId,
+      'compact': true,
+      // Filled by the walk above, so it is read after it.
+      'files': [for (var file in files.keys) file],
+      'root': written,
+    };
+  }
+}
+
+/// One distinct text style on a screen, and how many things wear it.
+///
+/// The unit of [InspectTree.styles]. Deliberately three fields and a count
+/// rather than a whole `TextStyle`: the questions this answers — "is the ramp
+/// consistent", "are these two greys the same grey", "what is the heading" —
+/// are all about size, weight and colour, and everything else is what the
+/// per-node `properties` are for.
+class InspectStyle {
+  const InspectStyle({
+    this.size,
+    this.weight,
+    this.color,
+    required this.count,
+    required this.sample,
+  });
+
+  final String? size;
+  final String? weight;
+  final String? color;
+
+  /// How many texts on this screen have exactly this size/weight/colour.
+  final int count;
+
+  /// One of them, so a row can be recognised without looking it up.
+  final String sample;
+
+  String get key => '${size ?? '?'}/${weight ?? '?'}/${color ?? '?'}';
+
+  InspectStyle plusOne(String other) => InspectStyle(
+    size: size,
+    weight: weight,
+    color: color,
+    count: count + 1,
+    // The first one seen stays: it is the one nearest the top of the screen,
+    // which is the one a reader is most likely to recognise.
+    sample: sample.isEmpty ? other : sample,
+  );
+
+  Map<String, Object?> toJson() => {
+    if (size != null) 'size': size,
+    if (weight != null) 'weight': weight,
+    if (color != null) 'color': color,
+    'count': count,
+    if (sample.isNotEmpty) 'sample': sample,
+  };
+
+  static InspectStyle fromJson(Map<String, Object?> json) => InspectStyle(
+    size: json['size'] as String?,
+    weight: json['weight'] as String?,
+    color: json['color'] as String?,
+    count: json['count'] as int? ?? 0,
+    sample: json['sample'] as String? ?? '',
+  );
 }

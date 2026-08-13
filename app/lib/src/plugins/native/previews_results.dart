@@ -1,4 +1,8 @@
 import 'package:flutterware/plugins.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart' show InspectStyle;
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/screen.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'previews_results.g.dart';
@@ -438,12 +442,18 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
     required this.readFrom,
     required this.ok,
     required this.errors,
+    required this.lens,
+    this.screen,
+    this.styles,
+    this.nodes,
     this.tree,
-    this.matches,
+    this.find,
     this.at,
+    this.atOuterElided,
     this.logs,
     this.logsDropped,
     this.screenshot,
+    this.next,
   });
 
   final String entry;
@@ -479,6 +489,28 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
 
   final List<CatalogRenderError> errors;
 
+  /// The lens the unset flags came from — `act`, `look`, `design` or `raw`.
+  /// Said on every reply, because a caller who does not know a picture was
+  /// available cannot ask for one.
+  final String lens;
+
+  /// What rendered: the things that carry words or respond to touch, nested
+  /// under the layout's branch points, with their boxes and their state.
+  ///
+  /// **The default answer now.** `inspect` used to report only whether the
+  /// framework complained, which says a build happened and nothing about what
+  /// it drew; this is a rough picture of the screen in a few hundred tokens,
+  /// and the handle for deciding what to ask next.
+  final Screen? screen;
+
+  /// Every distinct text size, weight and colour, most-used first with a
+  /// sample. ~185 tokens for the whole type ramp.
+  final List<InspectStyle>? styles;
+
+  /// How many nodes the preview drew, whether or not the tree rode back — the
+  /// number that says whether asking for `tree` is affordable.
+  final int? nodes;
+
   /// The tree, when `--tree` asked for it. Depth-first, root first.
   final List<CatalogTreeNode>? tree;
 
@@ -488,13 +520,26 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
   /// questions and a caller that asked both should get both labelled. Merging
   /// them into one list would make "the tree" and "the three nodes I searched
   /// for" indistinguishable in the reply.
-  final List<CatalogTreeNode>? matches;
+  ///
+  /// Named `find` after the flag that asks for it, the same word the run
+  /// plugin answers under — the point of a shared grammar is that a query
+  /// against a preview and one against a live app differ in which frame was
+  /// read and in nothing anyone has to learn twice.
+  final List<CatalogTreeNode>? find;
 
   /// The chain under `--at`, outermost first — the thing under a cursor is
   /// usually a `Text` and the thing meant is the button around it.
   ///
+  /// **Filtered and capped**, like every other query here. The raw chain is
+  /// measured at 35 nodes and 1258 tokens, of which the outer twenty are the
+  /// wrapper run that sits under every point of every screen; the innermost
+  /// eight carry the answer.
+  ///
   /// An empty list is an answer: nothing of the demo's is at that point.
   final List<CatalogTreeNode>? at;
+
+  /// How many outer nodes of the chain were left out, when the cap bit.
+  final int? atOuterElided;
 
   /// What the demo printed, when `--logs` asked.
   final List<String>? logs;
@@ -515,6 +560,14 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
   /// would have made this the one place in the surface where a picture is less
   /// than an artifact.
   final Artifact? screenshot;
+
+  /// One line naming what else can be asked of this frame.
+  ///
+  /// The same rule the refusals follow. A schema read once at connection time
+  /// is not where anyone looks on step forty, so the reply that could have
+  /// answered more says what it could have answered — about twenty tokens,
+  /// and the difference between a drill-down that exists and one that is used.
+  final String? next;
 
   /// [screenshot], where a surface that can render a picture will look for it.
   ///

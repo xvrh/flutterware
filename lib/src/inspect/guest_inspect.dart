@@ -90,7 +90,16 @@ class GuestInspector {
   /// capability and does nothing. It was written that way first and measured:
   /// 44 nodes either way, zero of them non-local. If the whole tree is ever
   /// wanted it is a host-side call and its own decision.
-  InspectTree read() => _build().tree;
+  ///
+  /// [filter] narrows what comes back and nothing else — the walk is the same
+  /// walk, because the ids have to keep meaning positions in the whole tree.
+  /// Unfiltered by default, which is what the inspect panel and the previews
+  /// client have always been handed; the drive loop is the caller that asks
+  /// for less.
+  InspectTree read({InspectFilter? filter}) {
+    var tree = _build().tree;
+    return filter == null ? tree : tree.filtered(filter);
+  }
 
   /// The handle that keeps semantics on while somebody is looking.
   ///
@@ -354,6 +363,8 @@ class GuestInspector {
         _ => null,
       },
       layout: _layoutOf(render),
+      label: _labelOf(render),
+      selected: _selectedOf(render),
       children: [
         for (var (index, child) in children.indexed)
           if (child is Map)
@@ -400,12 +411,12 @@ class GuestInspector {
   ///
   /// The framework's diagnostics are written for dumps and are mostly noise
   /// at a detail pane's distance, so three cuts: only `DiagnosticLevel.info`
-  /// and up (`fine` is `dependencies: [MediaQuery]` and friends), values over
-  /// 96 characters elided mid-value (a `TextStyle` describes itself in a
-  /// paragraph), and at most twelve per node. The walk pays this on every
-  /// node of every read — measured before keeping, like the semantics capture
-  /// before it: +168µs on the shop tree's 1.5ms read, +6KB on its 37KB JSON
-  /// (see the consolidation spec).
+  /// and up (`fine` is `dependencies: [MediaQuery]` and friends), the value
+  /// itself cut down by [shortenPropertyValue] (a colour to its hex, a
+  /// `TextStyle`'s paragraph to its head), and at most twelve per node. The
+  /// walk pays this on every node of every read — measured before keeping,
+  /// like the semantics capture before it: +168µs on the shop tree's 1.5ms
+  /// read, +6KB on its 37KB JSON (see the consolidation spec).
   static Map<String, String> _propertiesOf(Widget? widget) {
     if (widget == null) return const {};
     var properties = <String, String>{};
@@ -419,11 +430,7 @@ class GuestInspector {
       if (name == 'inherit') continue;
       var value = property.toDescription();
       if (value.isEmpty || value == 'null') continue;
-      if (value.length > 96) {
-        value =
-            '${value.substring(0, 47)} … ${value.substring(value.length - 46)}';
-      }
-      properties[name] = value;
+      properties[name] = shortenPropertyValue(value);
       if (properties.length >= 12) break;
     }
     return properties;
@@ -445,6 +452,105 @@ class GuestInspector {
     });
     return found;
   }
+}
+
+/// The semantics node [render] contributes to, or null.
+///
+/// **Up the render tree, never by comparing rectangles.** A widget with no
+/// semantics of its own is inside somebody's, so the walk climbs until it finds
+/// one — which is exact, and cheap because the render object is already in
+/// hand. The rectangle alternative was tried and is wrong in both directions:
+/// a `Checkbox`'s node is smaller than the `CheckboxListTile` that owns it and
+/// a `Tab`'s is 9.5× larger than the `Tab` widget, so a containment test
+/// reported that Flutter publishes no tab selection. It does. Measured 60 of 60
+/// controls matched this way — see the S6 spike findings.
+///
+/// Null outside debug mode and whenever the app holds no `SemanticsHandle`;
+/// both are absences rather than answers, which is why [InspectNode.selected]
+/// is a tri-state.
+SemanticsNode? _semanticsOf(RenderObject? render) {
+  var at = render;
+  while (at != null) {
+    if (at.debugSemantics case var node?) return node;
+    at = at.parent;
+  }
+  return null;
+}
+
+/// This widget's own accessibility label — **no climbing.**
+///
+/// The two fields want different walks, and running one for both was a bug
+/// worth recording. Semantics merges: a header wrapped in `MergeSemantics`
+/// owns one node whose label is every string under it concatenated, and its
+/// descendants own nothing. Climbing from a `Text` in that header therefore
+/// returns the *whole header* as that text's label — measured live, eight
+/// different texts on one screen all reporting
+/// `"Changes / …/ Watching / 14 files / +583 / …"`.
+///
+/// A label describes the thing it is on, so it is read off the render object
+/// itself or not at all. A widget with nothing of its own falls through to the
+/// words inside it, which is what [Screen] does next and what the Brewline
+/// cards needed anyway. [_selectedOf] still climbs, because a selection state
+/// genuinely belongs to the control above: a `Tab`'s flags live on the tab's
+/// semantics node, not on the `Tab` widget's 38pt label box.
+/// Down, not up, and only when the answer is unambiguous: the *one* semantics
+/// node in this widget's subtree, when there is exactly one.
+///
+/// This is what a `TextField` needs. Its hint is built by the framework's own
+/// internals, so it is not in the summary tree and no roll-up can reach it —
+/// measured, `find "Filter"` matches nothing on a screen with a "Filter paths"
+/// field on it — but the `EditableText` inside does publish it. One node in
+/// the subtree is that widget describing itself through a child. Two or more
+/// is a container, and the roll-up is the honest answer there.
+///
+/// Bounded on both counts, because this runs per node of every read: it stops
+/// at the second node it finds and six render objects down.
+String? _labelOf(RenderObject? render) {
+  if (render == null) return null;
+  var own = render.debugSemantics?.getSemanticsData().label;
+  if (own != null && own.isNotEmpty) return own;
+
+  SemanticsNode? only;
+  var many = false;
+  void descend(RenderObject node, int depth) {
+    if (many || depth > 6) return;
+    node.visitChildren((child) {
+      if (many) return;
+      if (child.debugSemantics case var semantics?) {
+        if (only != null) {
+          many = true;
+          return;
+        }
+        only = semantics;
+        return;
+      }
+      descend(child, depth + 1);
+    });
+  }
+
+  descend(render, 0);
+  if (many || only == null) return null;
+  var label = only!.getSemanticsData().label;
+  return label.isEmpty ? null : label;
+}
+
+/// Whether this is the current one of its group: true, false, or *nothing
+/// said*. See [InspectNode.selected] for why the third state is load-bearing.
+bool? _selectedOf(RenderObject? render) {
+  var data = _semanticsOf(render)?.getSemanticsData();
+  if (data == null) return null;
+  var flags = data.flagsCollection.toStrings().toSet();
+  if (flags.contains('isSelected') ||
+      flags.contains('isChecked') ||
+      flags.contains('isToggled')) {
+    return true;
+  }
+  if (flags.contains('hasSelectedState') ||
+      flags.contains('hasCheckedState') ||
+      flags.contains('hasToggledState')) {
+    return false;
+  }
+  return null;
 }
 
 /// The geometry of one render object, or null when it has none to report.

@@ -27,6 +27,7 @@ void main() {
         entry: 'demo/buttons.dart#buttons',
         address: 'fw:///worktrees/wt/flutterware.previews/./demo',
         readFrom: 'render',
+        lens: 'act',
         ok: true,
         errors: const [],
         screenshot: screenshot,
