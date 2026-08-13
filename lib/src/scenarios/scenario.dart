@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meta/meta.dart';
+import 'package:path/path.dart' as p;
 
 import '../drive/resolve.dart';
 import 'events.dart';
@@ -69,10 +70,25 @@ void scenario(
 
   scenarioDeclarationSink?.add(name);
 
+  // Only the standalone lane needs it, and only it pays for it: under the
+  // runner the harness knows the file it generated the group from, and a suite
+  // that configures no destination captures nothing to file at all.
+  var source = ScenarioTester._screenshotsDestination == null
+      ? null
+      : scenarioDeclaringFile(StackTrace.current);
+
   testWidgets(name, skip: skip, timeout: timeout, tags: tags, (tester) async {
     var origin = scenarioRunArgs?.clockOrigin ?? _scenarioClockOrigin;
     if (origin == null) {
-      return _runScenario(tester, description, body, shots, settle, assignment);
+      return _runScenario(
+        tester,
+        description,
+        body,
+        shots,
+        settle,
+        assignment,
+        source,
+      );
     }
     // Pinned, but still ticking with FakeAsync: the offset from where this
     // scenario's fake clock started is what `s.wait` moves, so a flow that
@@ -81,10 +97,52 @@ void scenario(
     var started = tester.binding.clock.now();
     return withClock(
       Clock(() => origin.add(tester.binding.clock.now().difference(started))),
-      () => _runScenario(tester, description, body, shots, settle, assignment),
+      () => _runScenario(
+        tester,
+        description,
+        body,
+        shots,
+        settle,
+        assignment,
+        source,
+      ),
     );
   });
 }
+
+/// The test file a `scenario()` call was made from, `/`-separated and relative
+/// to the package when it sits under it, or null when the frame says nothing.
+///
+/// Read off the declaring stack because nothing else can say it: a bare
+/// `flutter test` tells a test nothing about which file it is, and a scenario
+/// must not have to repeat its own path to get its screenshots filed under it.
+/// The runner's lane never asks — the harness generated the group and knows.
+@visibleForTesting
+String? scenarioDeclaringFile(StackTrace stack) {
+  for (var line in stack.toString().split('\n')) {
+    var location = _frameLocation.firstMatch(line)?.group(1);
+    if (location == null) continue;
+    // This library's own frames sit above the caller — `scenario()` itself,
+    // and anything it is reached through — whether the runtime spells them as
+    // a package uri or as a path into a checkout.
+    if (location.endsWith('flutterware/src/scenarios/scenario.dart') ||
+        location.endsWith('flutterware/lib/src/scenarios/scenario.dart')) {
+      continue;
+    }
+    var uri = Uri.tryParse(location);
+    if (uri == null || uri.scheme != 'file') return null;
+    var path = uri.toFilePath();
+    var root = Directory.current.path;
+    return p.url.joinAll(
+      p.split(p.isWithin(root, path) ? p.relative(path, from: root) : path),
+    );
+  }
+  return null;
+}
+
+/// The `(uri:line:column)` a stack frame ends with, in either of the two
+/// spellings a Dart trace uses.
+final _frameLocation = RegExp(r'\((.+?\.dart):\d+(?::\d+)?\)\s*$');
 
 /// What `clock.now()` reads at the start of every scenario, from the host —
 /// a dart-define first, then the environment, the same pair
@@ -103,6 +161,7 @@ Future<void> _runScenario(
   Shots shots,
   Settle settle,
   ScenarioAssignment? assignment,
+  String? source,
 ) async {
   var restore = _applyRunArgs(tester, assignment);
   _countFrames(tester);
@@ -130,6 +189,7 @@ Future<void> _runScenario(
         settle,
         state,
         assignment,
+        source,
       );
       try {
         await body(s);
@@ -375,6 +435,7 @@ class ScenarioTester {
     this.settle,
     this._state,
     this.assignment,
+    this._source,
   );
 
   /// The real tester — the escape hatch to the full `flutter_test` surface.
@@ -386,6 +447,11 @@ class ScenarioTester {
   final Settle settle;
 
   final String _description;
+
+  /// The test file this scenario was declared in, when the standalone lane
+  /// looked it up — the directory above [_description] in a destination, so
+  /// that two files naming the same screen do not write into each other.
+  final String? _source;
 
   /// The axes this scenario is running under, when a folder profile or a CI
   /// list assigned any — what keeps a matrix's captures out of each other's
@@ -1024,11 +1090,15 @@ class ScenarioTester {
       var label = failure != null ? 'failed' : shot?.name ?? 'step $index';
       // The axis above the scenario: a matrix writes every combination under
       // one destination, and without it the last language to run would be the
-      // only one on disk.
+      // only one on disk. The file above the scenario for the same reason, and
+      // spelled the way the harness spells it (`<file>/<name>`): a name is
+      // unique per file, not per suite, so two files naming the same screen
+      // were overwriting each other step for step.
       var slug = assignment?.slug ?? '';
       var directory = Directory(
         '$destination/'
         '${slug.isEmpty ? '' : '${_fileSafe(slug)}/'}'
+        '${_source == null ? '' : '${_fileSafe(_source)}/'}'
         '${_fileSafe(_description)}',
       )..createSync(recursive: true);
       var base = '${directory.path}/$index-${_fileSafe(label)}';

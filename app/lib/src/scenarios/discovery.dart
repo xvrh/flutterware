@@ -113,22 +113,35 @@ class ScenarioScanner {
     }
   }
 
-  /// Two scenarios with one name are both real, but an address naming them is
-  /// ambiguous. Reported per package, not rejected — the runtime listing is
-  /// what would refuse.
+  /// Two scenarios with one name are both real, and the name is only
+  /// ambiguous **within a file**.
+  ///
+  /// A name repeated across files costs nothing: the file is part of a
+  /// scenario's address (`<package>/<file…>/<scenario>`), `run --scenario=`
+  /// refuses without one, and the harness writes its artifacts under
+  /// `<file>/<name>`. All three tell two `Overview`s in two files apart on
+  /// their own, so warning about them was a rule nothing in the tool actually
+  /// held — a suite that names the same screen once per feature file was
+  /// reading a warning it could do nothing useful about.
+  ///
+  /// Repeated *in one file* is the case where those three have nothing left to
+  /// choose by. Reported, not rejected: the run honours a name matching twice
+  /// by running both, which is the honest reading of a request that names only
+  /// what the panel displays.
   void _reportDuplicates(
     List<ScenarioRef> scenarios,
     List<String> diagnostics,
   ) {
-    var byName = <String, List<ScenarioRef>>{};
+    var byName = <(String, String), List<ScenarioRef>>{};
     for (var ref in scenarios) {
-      byName.putIfAbsent(ref.name, () => []).add(ref);
+      byName.putIfAbsent((ref.file, ref.name), () => []).add(ref);
     }
-    for (var MapEntry(key: name, value: refs) in byName.entries) {
+    for (var MapEntry(key: (file, name), value: refs) in byName.entries) {
       if (refs.length < 2) continue;
       diagnostics.add(
-        'scenario "$name" is declared ${refs.length} times: '
-        '${refs.map((r) => '${r.file}:${r.line}').join(', ')}',
+        '$file: scenario "$name" is declared ${refs.length} times '
+        '(lines ${refs.map((r) => r.line).join(', ')}) — running or opening '
+        'one of them addresses them all.',
       );
     }
   }
