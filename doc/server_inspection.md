@@ -1,5 +1,14 @@
 # Server inspection — adapter snippets
 
+**This is for Dart servers, and the reason is the import.** A server announces
+itself by importing `package:flutterware/server.dart` in its own process and
+calling into it, so what it inspects is whatever runs Dart. A backend written
+in anything else — a .NET or Go API beside your Flutter app, which is an
+ordinary shape for a repo to have — gets nothing from this and cannot be made
+to: there is no out-of-process shipper, no agent and no log format to point at
+it, and none is planned. A mixed-stack repo should expect to inspect its Dart
+services here and its others wherever it already does.
+
 `package:flutterware/server.dart` ships **primitives only**: `event`,
 `span`/`spanSync`, `handle`, and zone correlation. Everything that binds them
 to a specific framework or driver is a snippet on this page that you paste

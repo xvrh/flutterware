@@ -303,8 +303,7 @@ class AssetFinding {
   });
 
   /// A stable slug, so a caller can filter without matching prose:
-  /// `declared-missing`, `unreachable-file`, `density-gap`, `duplicate`,
-  /// `oversized`, `over-budget`.
+  /// `declared-missing`, `unreachable-file`, `oversized`, `over-budget`.
   final String kind;
 
   /// One line, for a human reading a list.

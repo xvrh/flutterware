@@ -4,6 +4,7 @@ import '../third_party/device_frame/lib/device_frame.dart';
 import 'app.dart';
 import 'device_choice_panel.dart';
 import 'figma/view.dart';
+import 'axes_controls.dart';
 import 'knobs.dart';
 import 'knobs_editor.dart';
 import 'toolbar.dart';
@@ -100,6 +101,10 @@ class _DetailViewState extends State<DetailView> {
     );
     var toolbar = Toolbar(
       children: [
+        // First, because an axis outranks a device: it is the app-wide switch
+        // the shell declared, and on a page whose reason for existing is
+        // "look at every screen in Dutch" it is the control people came for.
+        const AxesControls(),
         ToolbarPanel(
           button: Row(
             crossAxisAlignment: CrossAxisAlignment.center,

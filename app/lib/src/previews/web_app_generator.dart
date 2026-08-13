@@ -23,9 +23,13 @@ import 'catalog_wrapper.dart';
 /// because the panel is in another process; here the panel and the demo are one
 /// isolate and there is no wire at all.
 ///
-/// What it does *not* carry over is the top bar's axes: a `PreviewShell` still
-/// declares them, and with nothing driving `CatalogAxes` they answer with the
-/// defaults the shell wrote.
+/// The axes carry over on the same terms, and for the same reason. Nothing
+/// drove `CatalogAxes` here, so a `PreviewShell` declared its axes and then
+/// answered with the defaults it had written — silently, because a bar that is
+/// absent does not look broken the way a dead one would, so a page published
+/// to be read in a second language quietly only ever showed the first.
+/// `AxesControls` reads `describe()` and calls `apply` directly; the shell
+/// already rebuilds on `CatalogAxes.revision` by itself.
 class WebAppGenerator {
   WebAppGenerator({
     required this.outputDir,

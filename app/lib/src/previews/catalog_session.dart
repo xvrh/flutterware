@@ -174,6 +174,8 @@ class CatalogSession extends ChangeNotifier {
     this.worktreeRoot,
     this.roots = const [defaultCatalogRoot],
     this.previewAnnotations = defaultPreviewAnnotations,
+    this.defaultDevice,
+    this.defaultOrientation,
     this.connectToDaemon = CompilerDaemonClient.connect,
   }) {
     // Forwarded, so a renderer has one thing to listen to.
@@ -235,6 +237,17 @@ class CatalogSession extends ChangeNotifier {
   /// The annotation names that mark an entry. Part of the daemon address, so
   /// this has to be the plugin's answer rather than a second one.
   final List<String> previewAnnotations;
+
+  /// What the canvas frames as when the address names no device — the package's
+  /// declared default, or null for the plain rectangle.
+  ///
+  /// The core's answer rather than a second one, for the same reason [roots] is:
+  /// the panel and `previews screenshot` have to open on the same picture, and a
+  /// default resolved twice is a default that eventually differs. It is the
+  /// whole point of the setting that they agree — a project says "we are a
+  /// phone" once and both surfaces stop rendering it as a small desktop.
+  final Device? defaultDevice;
+  final ScreenOrientation? defaultOrientation;
 
   CatalogSessionPhase phase = CatalogSessionPhase.starting;
   String? errorMessage;

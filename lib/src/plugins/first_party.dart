@@ -14,6 +14,7 @@
 /// config file runs under a plain `dart run` and cannot see the GUI.
 library;
 
+import '../../devices.dart';
 import 'package.dart';
 import 'plugin.dart';
 
@@ -84,7 +85,35 @@ class Previews extends Plugin {
 }
 
 class PreviewsPackage extends PluginPackage {
-  const PreviewsPackage(super.pkg, {this.directory, this.previewAnnotations});
+  const PreviewsPackage(
+    super.pkg, {
+    this.directory,
+    this.previewAnnotations,
+    this.device,
+    this.orientation,
+  });
+
+  /// What this package's previews are framed as when a caller names no device
+  /// — the panel's canvas, every `screenshot`, `inspect` and `compare`, and the
+  /// page `build-web` writes.
+  ///
+  /// **Null is a rectangle, and for a phone app that is the wrong picture.**
+  /// Without a device a preview renders at 900 × 700, which is landscape and
+  /// desktop-shaped: a phone screen laid out in it does not overflow, does not
+  /// wrap and looks fine, so the default hides the bug you opened the preview
+  /// to find. Nothing about it *looks* wrong either, which is why this is
+  /// declared rather than left to be passed — an agent taking screenshots has
+  /// no way to know it should have said `--device`.
+  ///
+  /// One line for the project instead of a `--device` on every call site,
+  /// script and CI invocation, one of which will forget. A call that names a
+  /// device still wins, and `--device=fit` is how one call asks for the plain
+  /// rectangle back.
+  final Device? device;
+
+  /// Which way up [device] is. Ignored when nothing can turn — every desktop
+  /// size, and the plain rectangle.
+  final ScreenOrientation? orientation;
 
   /// Narrows the scan to one directory, relative to the package.
   ///
@@ -111,6 +140,8 @@ class PreviewsPackage extends PluginPackage {
     ...super.toJson(),
     if (directory != null) 'directory': directory,
     if (previewAnnotations != null) 'previewAnnotations': previewAnnotations,
+    if (device != null) 'device': device!.id,
+    if (orientation != null) 'orientation': orientation!.name,
   };
 
   static List<PreviewsPackage> each(List<Pkg> packages) => [
