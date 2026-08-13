@@ -161,6 +161,24 @@ class ScenarioWebExporter {
             copied++;
           }
 
+          // What the flow produced, on the same terms as the four above: a
+          // page a reviewer downloads is exactly where a generated document
+          // is worth having, and it is the one artifact that is the point of
+          // the step rather than a description of it.
+          for (var attachment
+              in ((step as Map)['attachments'] as List? ?? const [])) {
+            var source = (attachment as Map)['file'];
+            if (source is! String) continue;
+            var from = File(p.join(worktreeRoot, source));
+            if (!from.existsSync()) continue;
+            var name = claim(source);
+            var destination = p.join(output, artifactsDir, into, name);
+            Directory(p.dirname(destination)).createSync(recursive: true);
+            from.copySync(destination);
+            attachment['file'] = p.url.join(artifactsDir, into, name);
+            copied++;
+          }
+
           // The recorded transition is **not** exported (owner, 2026-08-11:
           // "this would be too big"). A recording is by far the bulkiest thing
           // a run produces — every frame of every transition, against five

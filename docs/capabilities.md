@@ -1303,6 +1303,11 @@ packages: List<ScenarioRunPackage>
       settled: bool   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
       strayFrames: int   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
       failure: String?   # The error, when this is the step a scenario broke on.
+      attachments: List<ScenarioRunAttachment>   # What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.
+        name: String   # What the scenario called it — `'report'`.
+        file: String   # The file, **relative to the worktree root**, like the step's own image.
+        mimeType: String?   # What it is, when the scenario said — `application/pdf`.
+        bytes: int   # How big it is, so a reader knows before opening it.
     stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
     errors: List<ScenarioRunError>   # The failure, when [ok] is false.
       error: String

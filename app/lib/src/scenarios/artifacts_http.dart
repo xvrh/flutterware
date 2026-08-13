@@ -43,6 +43,9 @@ class HttpScenarioArtifacts extends ScenarioArtifacts {
       NetworkImage(_uri(path).toString());
 
   @override
+  Uri uriOf(String path) => _uri(path);
+
+  @override
   bool operator ==(Object other) =>
       other is HttpScenarioArtifacts && other.base == base;
 

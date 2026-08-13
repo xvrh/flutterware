@@ -4225,6 +4225,33 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'ScenarioRunAttachment': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioRunAttachment',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'name',
+        'type': 'String',
+        'doc': 'What the scenario called it — `\'report\'`.',
+      },
+      <String, Object?>{
+        'name': 'file',
+        'type': 'String',
+        'doc':
+            'The file, **relative to the worktree root**, like the step\'s own image.',
+      },
+      <String, Object?>{
+        'name': 'mimeType',
+        'type': 'String',
+        'optional': true,
+        'doc': 'What it is, when the scenario said — `application/pdf`.',
+      },
+      <String, Object?>{
+        'name': 'bytes',
+        'type': 'int',
+        'doc': 'How big it is, so a reader knows before opening it.',
+      },
+    ],
+  }),
   'ScenarioRunError': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioRunError',
     'fields': <Object?>[
@@ -4459,6 +4486,41 @@ final resultShapes = <String, ResultShape>{
               'type': 'String',
               'optional': true,
               'doc': 'The error, when this is the step a scenario broke on.',
+            },
+            <String, Object?>{
+              'name': 'attachments',
+              'type': 'List<ScenarioRunAttachment>',
+              'doc':
+                  'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
+              'shape': <String, Object?>{
+                'type': 'ScenarioRunAttachment',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'name',
+                    'type': 'String',
+                    'doc': 'What the scenario called it — `\'report\'`.',
+                  },
+                  <String, Object?>{
+                    'name': 'file',
+                    'type': 'String',
+                    'doc':
+                        'The file, **relative to the worktree root**, like the step\'s own image.',
+                  },
+                  <String, Object?>{
+                    'name': 'mimeType',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'What it is, when the scenario said — `application/pdf`.',
+                  },
+                  <String, Object?>{
+                    'name': 'bytes',
+                    'type': 'int',
+                    'doc':
+                        'How big it is, so a reader knows before opening it.',
+                  },
+                ],
+              },
             },
           ],
         },
@@ -4747,6 +4809,41 @@ final resultShapes = <String, ResultShape>{
                     'optional': true,
                     'doc':
                         'The error, when this is the step a scenario broke on.',
+                  },
+                  <String, Object?>{
+                    'name': 'attachments',
+                    'type': 'List<ScenarioRunAttachment>',
+                    'doc':
+                        'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
+                    'shape': <String, Object?>{
+                      'type': 'ScenarioRunAttachment',
+                      'fields': <Object?>[
+                        <String, Object?>{
+                          'name': 'name',
+                          'type': 'String',
+                          'doc': 'What the scenario called it — `\'report\'`.',
+                        },
+                        <String, Object?>{
+                          'name': 'file',
+                          'type': 'String',
+                          'doc':
+                              'The file, **relative to the worktree root**, like the step\'s own image.',
+                        },
+                        <String, Object?>{
+                          'name': 'mimeType',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'What it is, when the scenario said — `application/pdf`.',
+                        },
+                        <String, Object?>{
+                          'name': 'bytes',
+                          'type': 'int',
+                          'doc':
+                              'How big it is, so a reader knows before opening it.',
+                        },
+                      ],
+                    },
                   },
                 ],
               },
@@ -5059,6 +5156,42 @@ final resultShapes = <String, ResultShape>{
                           'doc':
                               'The error, when this is the step a scenario broke on.',
                         },
+                        <String, Object?>{
+                          'name': 'attachments',
+                          'type': 'List<ScenarioRunAttachment>',
+                          'doc':
+                              'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
+                          'shape': <String, Object?>{
+                            'type': 'ScenarioRunAttachment',
+                            'fields': <Object?>[
+                              <String, Object?>{
+                                'name': 'name',
+                                'type': 'String',
+                                'doc':
+                                    'What the scenario called it — `\'report\'`.',
+                              },
+                              <String, Object?>{
+                                'name': 'file',
+                                'type': 'String',
+                                'doc':
+                                    'The file, **relative to the worktree root**, like the step\'s own image.',
+                              },
+                              <String, Object?>{
+                                'name': 'mimeType',
+                                'type': 'String',
+                                'optional': true,
+                                'doc':
+                                    'What it is, when the scenario said — `application/pdf`.',
+                              },
+                              <String, Object?>{
+                                'name': 'bytes',
+                                'type': 'int',
+                                'doc':
+                                    'How big it is, so a reader knows before opening it.',
+                              },
+                            ],
+                          },
+                        },
                       ],
                     },
                   },
@@ -5300,6 +5433,39 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc': 'The error, when this is the step a scenario broke on.',
+      },
+      <String, Object?>{
+        'name': 'attachments',
+        'type': 'List<ScenarioRunAttachment>',
+        'doc':
+            'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
+        'shape': <String, Object?>{
+          'type': 'ScenarioRunAttachment',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'name',
+              'type': 'String',
+              'doc': 'What the scenario called it — `\'report\'`.',
+            },
+            <String, Object?>{
+              'name': 'file',
+              'type': 'String',
+              'doc':
+                  'The file, **relative to the worktree root**, like the step\'s own image.',
+            },
+            <String, Object?>{
+              'name': 'mimeType',
+              'type': 'String',
+              'optional': true,
+              'doc': 'What it is, when the scenario said — `application/pdf`.',
+            },
+            <String, Object?>{
+              'name': 'bytes',
+              'type': 'int',
+              'doc': 'How big it is, so a reader knows before opening it.',
+            },
+          ],
+        },
       },
     ],
   }),

@@ -2536,6 +2536,17 @@ class ScenariosCore extends PluginCore {
       settled: step['settled'] as bool? ?? true,
       strayFrames: step['strayFrames'] as int? ?? 0,
       failure: step['failure'] as String?,
+      attachments: [
+        for (var attachment
+            in (step['attachments'] as List?)?.cast<Map<String, Object?>>() ??
+                const <Map<String, Object?>>[])
+          ScenarioRunAttachment(
+            name: attachment['name']! as String,
+            file: _relative(attachment['file']! as String),
+            mimeType: attachment['mimeType'] as String?,
+            bytes: attachment['bytes'] as int? ?? 0,
+          ),
+      ],
       address: Address(
         worktree: host.worktree.name,
         plugin: host.id,

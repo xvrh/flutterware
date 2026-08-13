@@ -27,6 +27,15 @@ abstract class ScenarioArtifacts {
   /// The text at [path], or null when there is nothing there.
   Future<String?> readString(String path);
 
+  /// Where [path] lives, for handing to whatever opens files here: the
+  /// desktop's own file association in the panel, a download in an exported
+  /// page. Both are `launchUrl`'s job; only the scheme differs.
+  ///
+  /// The one artifact this is for is an attachment — a step's other files are
+  /// read and rendered in place, where a PDF or a payload is a thing you open
+  /// elsewhere.
+  Uri uriOf(String path);
+
   /// A provider for an already-encoded image — the PNG case, where the
   /// framework's own decoding and caching are worth going through rather than
   /// around.

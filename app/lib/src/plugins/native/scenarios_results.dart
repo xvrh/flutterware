@@ -323,6 +323,7 @@ class ScenarioRunStep {
     this.settled = true,
     this.strayFrames = 0,
     this.failure,
+    this.attachments = const [],
   });
 
   /// 1-based position in the scenario's capture sequence.
@@ -504,7 +505,45 @@ class ScenarioRunStep {
   /// reached it.
   final String? failure;
 
+  /// What the flow produced on the way to this step that is not a widget —
+  /// what `s.attach` handed over. Empty on almost every step.
+  final List<ScenarioRunAttachment> attachments;
+
   Map<String, Object?> toJson() => _$ScenarioRunStepToJson(this);
+}
+
+/// A file a step carries beside its screenshot — a PDF, a payload, an email
+/// body.
+///
+/// A path rather than the bytes, like the tree and the events beside it: a
+/// run's report stays readable, and the thing a reader wants to do with a
+/// document is open it.
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
+class ScenarioRunAttachment {
+  factory ScenarioRunAttachment.fromJson(Map<String, dynamic> json) =>
+      _$ScenarioRunAttachmentFromJson(json);
+
+  ScenarioRunAttachment({
+    required this.name,
+    required this.file,
+    required this.bytes,
+    this.mimeType,
+  });
+
+  /// What the scenario called it — `'report'`.
+  final String name;
+
+  /// The file, **relative to the worktree root**, like the step's own image.
+  final String file;
+
+  /// What it is, when the scenario said — `application/pdf`. A viewer
+  /// switches on this; absent means "offer it as a download".
+  final String? mimeType;
+
+  /// How big it is, so a reader knows before opening it.
+  final int bytes;
+
+  Map<String, Object?> toJson() => _$ScenarioRunAttachmentToJson(this);
 }
 
 /// What a step's verb did — `tap`, and what it acted on.

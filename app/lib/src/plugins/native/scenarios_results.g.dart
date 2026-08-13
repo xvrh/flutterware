@@ -151,6 +151,14 @@ ScenarioRunStep _$ScenarioRunStepFromJson(Map<String, dynamic> json) =>
       settled: json['settled'] as bool? ?? true,
       strayFrames: (json['strayFrames'] as num?)?.toInt() ?? 0,
       failure: json['failure'] as String?,
+      attachments:
+          (json['attachments'] as List<dynamic>?)
+              ?.map(
+                (e) =>
+                    ScenarioRunAttachment.fromJson(e as Map<String, dynamic>),
+              )
+              .toList() ??
+          const [],
     );
 
 Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
@@ -189,7 +197,26 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
       'settled': instance.settled,
       'strayFrames': instance.strayFrames,
       'failure': ?instance.failure,
+      'attachments': instance.attachments.map((e) => e.toJson()).toList(),
     };
+
+ScenarioRunAttachment _$ScenarioRunAttachmentFromJson(
+  Map<String, dynamic> json,
+) => ScenarioRunAttachment(
+  name: json['name'] as String,
+  file: json['file'] as String,
+  bytes: (json['bytes'] as num).toInt(),
+  mimeType: json['mimeType'] as String?,
+);
+
+Map<String, dynamic> _$ScenarioRunAttachmentToJson(
+  ScenarioRunAttachment instance,
+) => <String, dynamic>{
+  'name': instance.name,
+  'file': instance.file,
+  'mimeType': ?instance.mimeType,
+  'bytes': instance.bytes,
+};
 
 ScenarioStepAction _$ScenarioStepActionFromJson(Map<String, dynamic> json) =>
     ScenarioStepAction(
