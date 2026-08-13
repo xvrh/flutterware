@@ -327,7 +327,7 @@ class _CatalogViewState extends State<CatalogView> {
                           var device = _deviceOf(
                             context,
                             _session,
-                          )?.oriented(_orientationOf(context));
+                          )?.oriented(_orientationOf(context, _session));
                           return AddressScope(
                             namespace: _inspectNamespace,
                             child: LayoutBuilder(
@@ -1102,7 +1102,7 @@ class _TopBar extends StatelessWidget {
     // Upright: the picker finds its selection by identity in its own list, and
     // a turned device is a different object that matches nothing there.
     var device = _deviceOf(context, session);
-    var orientation = _orientationOf(context);
+    var orientation = _orientationOf(context, session);
     return Container(
       color: context.colors.panel,
       padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
@@ -2258,7 +2258,13 @@ Device? _deviceOf(BuildContext context, CatalogSession session) {
     'device is un-namespaced: read it above any namespaced scope, or it asks '
     'for <namespace>.device and nobody writes that.',
   );
-  return resolveDevice(AddressScope.param(context, 'device'));
+  var param = AddressScope.param(context, 'device');
+  // The package's declaration only when the address says nothing at all. `fit`
+  // is something the address *says* — it is how somebody asks for the plain
+  // rectangle back — so it must not be overridden by the default it is
+  // countermanding.
+  if (param == null) return session.defaultDevice;
+  return resolveDevice(param);
 }
 
 /// Which way up the picked device is, read from the same un-namespaced level as
@@ -2267,5 +2273,16 @@ Device? _deviceOf(BuildContext context, CatalogSession session) {
 /// Kept out of [_deviceOf] because the two consumers want opposite things: the
 /// canvas wants the device already turned, and the picker wants the upright one
 /// it can find in its own list.
-ScreenOrientation? _orientationOf(BuildContext context) =>
-    resolveOrientation(AddressScope.param(context, 'orientation'));
+ScreenOrientation? _orientationOf(
+  BuildContext context,
+  CatalogSession session,
+) {
+  var param = AddressScope.param(context, 'orientation');
+  if (param != null) return resolveOrientation(param);
+  // Only with the declared device, matching the headless rule: an orientation
+  // turns the device it was declared for, and a person who has picked a phone
+  // should not inherit the landscape the project declared for its tablet.
+  return AddressScope.param(context, 'device') == null
+      ? session.defaultOrientation
+      : null;
+}

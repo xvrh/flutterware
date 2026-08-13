@@ -169,6 +169,21 @@ previewer, those previews open here unchanged — on a real device frame, with
 is only for what the annotation does not carry: a shell (`PreviewShell`) and
 knobs (`context.knobs.*`).
 
+**It also goes on a widget's constructor**, as long as the constructor is
+public and takes no required arguments. That is Flutter's rule, not ours, and
+it is the one worth knowing if you are *moving* a catalog rather than starting
+one: a catalog written against a map API already has a widget per entry, so
+annotating each is two import lines and one annotation per file, where writing
+a top-level function per entry would leave you with a function, a class and a
+`main()` for every one of them.
+
+```dart
+class SymptomCardExample extends StatelessWidget {
+  @Preview(name: 'Card')
+  const SymptomCardExample({super.key});
+  ...
+```
+
 **Previews are found wherever you write them.** The whole package is scanned —
 beside the widget in `lib/`, in `demo/`, wherever — skipping what `git` skips,
 so nothing you have ignored is compiled. A package that wants the scan bounded
@@ -177,6 +192,29 @@ to one directory says so once:
 ```dart
 fw.use(Previews(packages: [.new(app, directory: 'demo')]));
 ```
+
+**The tree in the panel is your directory layout.** A preview in
+`demo/care_planner/add_or_edit.dart` lands under `Care planner`, and a file
+holding several entries becomes a level of its own — so the folders you already
+have are the grouping, and there is nothing to declare. `@Preview(group:)` is a
+flat label rendered beside the name as `group / name`; it labels an entry
+within the tree and does **not** build folders, so `group: 'Assessment/Detail'`
+is one label with a slash in it rather than two levels.
+
+**Say what your app is shaped like, once.** With no device a preview renders in
+a 900 × 700 rectangle — landscape, desktop-shaped — which for a phone app is
+the wrong picture in the direction that hides the bug: nothing overflows,
+nothing wraps, and the screenshot looks fine. A package that is all phones says
+so in one place instead of passing `--device` to every screenshot, script and
+CI invocation:
+
+```dart
+fw.use(Previews(packages: [.new(app, device: Devices.iphone16)]));
+```
+
+The panel opens on it, `screenshot`, `inspect` and `compare` frame with it, and
+a call that names its own `--device` still wins — `--device=fit` is how one call
+asks for the plain rectangle back. `orientation:` turns it.
 
 If you have never written one, `fw run previews new --name='Buttons'` writes
 the first — or press **New preview** in the panel, which is what it shows when
@@ -270,6 +308,10 @@ see [doc/server_inspection.md](doc/server_inspection.md).
 The same answers reach the CLI and MCP: `requests`, `errors` and `sql`
 actions return the correlated data with no GUI running.
 
+Dart servers only — the server announces itself by importing that library in
+its own process, so a backend in another language is out of scope rather than
+unsupported-for-now.
+
 ![A request opened in the server inspector: the N+1 warning naming the
 repeated query, and the waterfall of its queries](doc/screenshots/server.png)
 
@@ -281,7 +323,7 @@ They are independent of the tools above.
 | Library | What it is |
 |---|---|
 | `previews.dart` | What a `@Preview` needs beyond Flutter's annotation: `PreviewShell` for the top bar's axes, and `context.knobs.*` for knobs |
-| `ui_catalog.dart` | `UICatalog` — a standalone, browsable catalog app with its own map-based API, hosting the same previews; builds for the web or runs on a device |
+| `ui_catalog.dart` | `UICatalog` — the shell `previews build-web` mounts to make a browsable page of your previews. Mountable in your own app too, through its older map-based API |
 | `devbar.dart` | A hidden developer overlay inside your app: logs, network, analytics, device frames, knobs, feature flags |
 | `feature_flag.dart` | Feature flags, readable and overridable at runtime |
 | `router_outlet.dart` | Nested, URL-driven routing |

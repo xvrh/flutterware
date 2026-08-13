@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
@@ -207,6 +206,26 @@ class AssetsCore extends PluginCore {
         _packageParameter,
       ],
     ),
+    // **Every finding here is a bug or a number you asked for, never an
+    // opinion about a choice.** There is no way to silence one, and until
+    // there is, a finding a project has already decided against is a finding
+    // it will decide against again every run — which is how a panel teaches
+    // people to ignore it, and takes the real findings down with it.
+    //
+    // Two used to break that rule and are gone. `duplicate` reported identical
+    // bytes under several keys and concluded the extra copies were "shipped
+    // for nothing": measured on a real bundle it was 20 of 27 findings, all of
+    // them one deliberate icon aliased per symptom so a generated map could
+    // stay readable. `density-gap` judged a ladder a project may have chosen
+    // not to fill. Both were right on the facts and wrong to conclude.
+    //
+    // What survives says something nobody argues with: a declaration that
+    // resolves to nothing and a file no declaration reaches are broken;
+    // `oversized` has `maxEdge` and found 1.4 MB of slides exported at print
+    // size on that same bundle; `over-budget` only speaks when you set a
+    // budget. A new finding belongs here only if it clears the same bar — or
+    // if suppression exists by then, which is a plugin-framework question and
+    // not an assets one.
     PluginAction(
       'audit',
       'Audit',
@@ -214,8 +233,8 @@ class AssetsCore extends PluginCore {
       description:
           'Everything wrong with a bundle that can be found without running '
           'the app: declarations that resolve to nothing, files a directory '
-          'declaration does not reach, gaps in a density ladder, duplicates, '
-          'and weight',
+          'declaration does not reach, rasters bigger than anything that will '
+          'draw them, and weight',
       parameters: [
         _packageParameter,
         const ActionParameter(
@@ -608,8 +627,6 @@ class AssetsCore extends PluginCore {
 
       findings.addAll(_declaredMissing(path, scan));
       findings.addAll(_unreachableFiles(path, scan));
-      findings.addAll(_densityGaps(path, scan));
-      findings.addAll(await _duplicates(path, scan));
       findings.addAll(await _oversized(path, scan, maxEdge));
 
       if (budget != null && scan.totalBytes > budget) {
@@ -709,83 +726,6 @@ class AssetsCore extends PluginCore {
       }
     }
     return findings;
-  }
-
-  /// A density ladder with a rung missing.
-  ///
-  /// Not an error — the engine picks the nearest density it has — but a `3.0x`
-  /// with no `2.0x` means every 2× device downloads and downscales the largest
-  /// file you shipped.
-  Iterable<AssetFinding> _densityGaps(String path, AssetScan scan) {
-    var findings = <AssetFinding>[];
-    for (var asset in scan.own) {
-      var scales = {1.0, for (var file in asset.variants) file.scale!};
-      var highest = scales.reduce((a, b) => a > b ? a : b);
-      var missing = [
-        for (var rung = 2.0; rung < highest; rung++)
-          if (!scales.contains(rung)) rung,
-      ];
-      if (missing.isEmpty) continue;
-      findings.add(
-        AssetFinding(
-          kind: 'density-gap',
-          package: path,
-          key: asset.key,
-          address: '${addressFor(path, asset.key)}',
-          summary: 'A density is missing between the ones that are there.',
-          detail:
-              'Has ${_scaleList(scales)}; missing ${_scaleList(missing.toSet())}. '
-              'A device at the missing density takes the '
-              '${_scale(highest)} file and scales it down.',
-        ),
-      );
-    }
-    return findings;
-  }
-
-  String _scaleList(Set<double> scales) =>
-      (scales.toList()..sort()).map(_scale).join(', ');
-
-  String _scale(double scale) =>
-      '${scale == scale.roundToDouble() ? scale.toInt() : scale}×';
-
-  /// The same bytes under two keys.
-  ///
-  /// Hashes the main file of each of the package's own assets. This is the one
-  /// check that reads every byte, which is why it is an action and not part of
-  /// the scan.
-  Future<Iterable<AssetFinding>> _duplicates(
-    String path,
-    AssetScan scan,
-  ) async {
-    var byDigest = <String, List<ResolvedAsset>>{};
-    for (var asset in scan.own) {
-      try {
-        var digest = sha1.convert(await File(asset.main.path).readAsBytes());
-        byDigest.putIfAbsent('$digest', () => []).add(asset);
-      } catch (_) {
-        // A file that cannot be read is already a finding of another kind, or
-        // it vanished between the scan and now. Either way it is not a
-        // duplicate of anything.
-      }
-    }
-
-    return [
-      for (var group in byDigest.values)
-        if (group.length > 1)
-          AssetFinding(
-            kind: 'duplicate',
-            package: path,
-            key: group.first.key,
-            address: '${addressFor(path, group.first.key)}',
-            summary: 'The same file is in the bundle under more than one key.',
-            detail:
-                '${group.map((a) => a.key).join(', ')} — identical bytes, '
-                '${formatBytes(group.first.main.length)} each, so '
-                '${formatBytes(group.first.main.length * (group.length - 1))} '
-                'of it is shipped for nothing.',
-          ),
-    ];
   }
 
   /// Rasters bigger than anything that will be drawn.

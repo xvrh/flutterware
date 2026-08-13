@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutterware/plugins.dart';
+import 'package:meta/meta.dart';
 // The tree types, not the umbrella: same rule as `headless_catalog.dart`, and
 // for the same reason — `node.dart` is plain Dart and `ui_catalog.dart` is not.
 // ignore: implementation_imports
@@ -106,6 +107,14 @@ const _debugDoc =
     '`banner=false` drops the DEBUG ribbon, `platform=iOS` changes what '
     '`defaultTargetPlatform` reports, `timeDilation=5` slows animations enough '
     'to photograph. Only what you name is set; the rest are left as they are.';
+
+/// What `--width` and `--height` are, on both actions that take them.
+const _sizeOverrideDoc =
+    'Override the viewport, whatever it would otherwise have been — the '
+    "package's declared `device:`, the one this call named, or the plain "
+    'rectangle. This is how to ask for a size no device has; on a device it '
+    'stretches the screen rather than dropping its ratio, its notch and its '
+    'safe areas.';
 
 /// What `--axes` is. The distinction from a knob is the whole content.
 const _axesDoc =
@@ -312,6 +321,40 @@ class PreviewsCore extends PluginCore {
   String authoringDirectoryFor(String path) {
     var root = rootFor(path);
     return root.isEmpty ? defaultAuthoringDirectory : root;
+  }
+
+  /// What [path]'s previews are framed as when nobody names a device, or null
+  /// for the plain rectangle.
+  ///
+  /// **One answer for every surface**, which is the whole of the fix: the panel
+  /// canvas, `screenshot`, `inspect` and `compare` each took `device`
+  /// separately, so a project that is all phones had to repeat itself into
+  /// every call site and CI invocation — and the one that forgot rendered at
+  /// 900 × 700 and looked fine, because a phone layout laid out as a tablet
+  /// does not overflow. A default that is wrong *and* looks right is the kind
+  /// worth spending a config field on.
+  ///
+  /// An unknown id is ignored rather than refused. This is read on the way to
+  /// drawing something, not while validating a command line, and a typo that
+  /// blanked the panel would be a worse report than one that renders the
+  /// rectangle it always used to.
+  ({Device? device, ScreenOrientation? orientation}) defaultFramingFor(
+    String path,
+  ) {
+    for (var config in host.packageConfigs) {
+      if (config['path'] != path) continue;
+      return (
+        device: switch (config['device']) {
+          String id => deviceById(id),
+          _ => null,
+        },
+        orientation: switch (config['orientation']) {
+          String name => orientationById(name),
+          _ => null,
+        },
+      );
+    }
+    return (device: null, orientation: null);
   }
 
   /// The annotation names that mark an entry in [path], without their `@`.
@@ -583,7 +626,8 @@ class PreviewsCore extends PluginCore {
             description:
                 'Render as a device: its screen, its pixel ratio and its safe '
                 'areas, so the preview reads the phone from `MediaQuery` rather '
-                'than a rectangle. Omitted means the panel. The same value the '
+                "than a rectangle. Omitted takes the package's declared `device:`, "
+                'and a plain rectangle when it declares none. The same value the '
                 'GUI writes as `?device=`, so an address captured here reopens '
                 'framed the way it was shot.',
             options: [
@@ -606,19 +650,26 @@ class PreviewsCore extends PluginCore {
           ),
           // Declared because they change the pixels, and anything that changes
           // the pixels is recorded on the artifact's address.
+          //
+          // No `defaultValue`. They used to say 900 and 700, which stopped
+          // being true the moment a package could declare a device — and a
+          // stated default that the tool then ignores is worse than none,
+          // because it is the number somebody reasons about without checking.
+          // What they actually do is override whatever the framing resolved to,
+          // which is what the descriptions now say.
           const ActionParameter(
             'width',
             'Width',
             kind: ActionParameterKind.integer,
             required: false,
-            defaultValue: '$_defaultWidth',
+            description: _sizeOverrideDoc,
           ),
           const ActionParameter(
             'height',
             'Height',
             kind: ActionParameterKind.integer,
             required: false,
-            defaultValue: '$_defaultHeight',
+            description: _sizeOverrideDoc,
           ),
           const ActionParameter(
             'axes',
@@ -841,7 +892,8 @@ class PreviewsCore extends PluginCore {
             description:
                 'Render as a device: its screen, its pixel ratio and its safe '
                 'areas, so the preview reads the phone from `MediaQuery` rather '
-                'than a rectangle. Omitted means the panel. **This is what '
+                "than a rectangle. Omitted takes the package's declared `device:`, "
+                'and a plain rectangle when it declares none. **This is what '
                 'makes "why does it look wrong on a phone" one render**: the '
                 'tree, the constraints and the picture all describe the same '
                 'framed build. Forces a render, like any other change to what '
@@ -1800,6 +1852,15 @@ class PreviewsCore extends PluginCore {
     var want = _InspectRequest.of(arguments);
     if (_scans.isEmpty && _failures.isEmpty) await computeAll();
     var packagePath = _packageHolding(want.entryId);
+    // Read again, now that the package the entry belongs to is known and its
+    // declared framing can be applied. The first pass is what makes a typo in a
+    // flag cost nothing — it runs before the scan — and the package default
+    // cannot be looked up until the scan says which package this is. Parsing
+    // twice is a few string splits against a compile and a render.
+    want = _InspectRequest.of(
+      arguments,
+      fallback: defaultFramingFor(packagePath),
+    );
 
     var address = _pixelAddress(
       packagePath: packagePath,
@@ -2198,7 +2259,10 @@ class PreviewsCore extends PluginCore {
     var packageRoot = p.join(host.worktree.path, packagePath);
     var entry = _scans[packagePath]!.entries.firstWhere((e) => e.id == entryId);
 
-    var (deviceId, orientationId, viewport) = _framing(arguments);
+    var (deviceId, orientationId, viewport) = framingFor(
+      arguments,
+      fallback: defaultFramingFor(packagePath),
+    );
 
     var knobs = parsePairs(arguments['knobs']);
     var axes = parsePairs(arguments['axes']);
@@ -2312,9 +2376,6 @@ class PreviewsCore extends PluginCore {
     return knobs;
   }
 
-  static const _defaultWidth = 900;
-  static const _defaultHeight = 700;
-
   /// A file name that differs whenever the address does.
   ///
   /// The axes are in it because they are part of the address: capturing the
@@ -2397,10 +2458,21 @@ class PreviewsCore extends PluginCore {
   /// this build does not know is the one failure that has to be loud: quietly
   /// framing as the panel produces a PNG that is wrong without looking wrong,
   /// and something downstream files it as evidence.
-  static (String?, String?, CaptureViewport) _framing(
-    Map<String, Object?> arguments,
-  ) {
-    var deviceId = arguments['device'];
+  ///
+  /// [fallback] is what the package declared — see [defaultFramingFor]. It is
+  /// applied here rather than at each caller so that the argument checking, the
+  /// rotation and the address all see one device: a default resolved later
+  /// would frame the picture and leave the address saying nothing, and two
+  /// different framings would share one file name.
+  @visibleForTesting
+  static (String?, String?, CaptureViewport) framingFor(
+    Map<String, Object?> arguments, {
+    ({Device? device, ScreenOrientation? orientation}) fallback = (
+      device: null,
+      orientation: null,
+    ),
+  }) {
+    var deviceId = arguments['device'] ?? fallback.device?.id;
     if (deviceId != null && (deviceId is! String || !isDeviceId(deviceId))) {
       throw ArgumentError.value(
         deviceId,
@@ -2408,7 +2480,12 @@ class PreviewsCore extends PluginCore {
         'no such device. Accepted: ${deviceIds.join(', ')}',
       );
     }
-    var orientationId = arguments['orientation'];
+    // Only when the device is the declared one too: an orientation belongs to
+    // the device it turns, so a caller naming a phone should not inherit the
+    // landscape the project declared for its tablet.
+    var orientationId =
+        arguments['orientation'] ??
+        (arguments['device'] == null ? fallback.orientation?.name : null);
     if (orientationId != null &&
         (orientationId is! String || !isOrientationId(orientationId))) {
       throw ArgumentError.value(
@@ -2489,7 +2566,13 @@ class _InspectRequest {
     required this.mayAttach,
   });
 
-  factory _InspectRequest.of(Map<String, Object?> arguments) {
+  factory _InspectRequest.of(
+    Map<String, Object?> arguments, {
+    ({Device? device, ScreenOrientation? orientation}) fallback = (
+      device: null,
+      orientation: null,
+    ),
+  }) {
     var entryId = arguments['entry'];
     if (entryId is! String || entryId.isEmpty) {
       throw ArgumentError.value(entryId, 'entry', 'required');
@@ -2497,7 +2580,10 @@ class _InspectRequest {
     var knobs = PreviewsCore.parsePairs(arguments['knobs']);
     var axes = PreviewsCore.parsePairs(arguments['axes']);
     var debug = PreviewsCore.parsePairs(arguments['debug']);
-    var (deviceId, orientationId, viewport) = PreviewsCore._framing(arguments);
+    var (deviceId, orientationId, viewport) = PreviewsCore.framingFor(
+      arguments,
+      fallback: fallback,
+    );
     var lens = switch (arguments['lens']) {
       String name when name.isNotEmpty =>
         ObserveLens.byName(name) ??

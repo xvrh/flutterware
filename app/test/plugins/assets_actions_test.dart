@@ -313,43 +313,29 @@ flutter:
       );
     });
 
-    test('finds a gap in a density ladder', () async {
+    test('says nothing about a choice a project has already made', () async {
+      // Both of these were findings once, and both were right on the facts and
+      // wrong to conclude. Measured on a real bundle, `duplicate` was 20 of 27
+      // findings — one deliberate icon aliased per symptom so a generated map
+      // could stay readable — and a project cannot silence a finding, so it
+      // would have decided against them again every run. An audit is only
+      // worth reading if a clean run means something.
       writeText('pubspec.yaml', '''
 name: app
 flutter:
   assets:
     - assets/badge.png
     - assets/logo.png
-''');
-      write('assets/badge.png', _png(2, 2));
-      write('assets/3.0x/badge.png', _png(6, 6));
-      write('assets/logo.png', _png(2, 2));
-      write('assets/2.0x/logo.png', _png(4, 4));
-
-      var gaps = (await audit()).findings.where((f) => f.kind == 'density-gap');
-
-      expect(gaps, hasLength(1));
-      expect(gaps.single.key, 'assets/badge.png');
-      expect(gaps.single.detail, contains('missing 2×'));
-    });
-
-    test('finds the same bytes under two keys', () async {
-      writeText('pubspec.yaml', '''
-name: app
-flutter:
-  assets:
-    - assets/logo.png
     - assets/wordmark.png
 ''');
+      // A ladder with 3× and no 2×.
+      write('assets/badge.png', _png(2, 2));
+      write('assets/3.0x/badge.png', _png(6, 6));
+      // The same bytes under two keys.
       write('assets/logo.png', _png(4, 4));
       write('assets/wordmark.png', _png(4, 4));
 
-      var finding = (await audit()).findings.singleWhere(
-        (f) => f.kind == 'duplicate',
-      );
-
-      expect(finding.detail, contains('assets/logo.png'));
-      expect(finding.detail, contains('assets/wordmark.png'));
+      expect((await audit()).findings, isEmpty);
     });
 
     test('finds a raster bigger than anything will draw', () async {
