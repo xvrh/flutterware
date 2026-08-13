@@ -1,3 +1,4 @@
+import 'package:flutterware/channels.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'catalog_entry.g.dart';
@@ -17,6 +18,7 @@ class CatalogEntry {
     this.group,
     this.declaredId,
     this.ordinal = 0,
+    this.knobs = const [],
   });
 
   factory CatalogEntry.fromJson(Map<String, dynamic> json) =>
@@ -28,6 +30,14 @@ class CatalogEntry {
 
   /// The annotated top-level function.
   final String symbol;
+
+  /// The controls this entry's *signature* declares, read without running it.
+  ///
+  /// Empty means the signature declares none — not that nobody looked. An entry
+  /// can still declare knobs at runtime by reading `context.uiCatalog`, and
+  /// those cost a compile and a frame to learn; these cost a parse. The two
+  /// coexist deliberately (`2026-07-27-knobs-static-and-runtime.md`).
+  final List<KnobDescriptor> knobs;
 
   /// The annotation's source text with the `@` stripped — `Preview(name: 'x')`.
   /// Emitted verbatim into generated code and evaluated as Dart; nothing here

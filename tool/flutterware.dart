@@ -157,12 +157,13 @@ void main() => Flutterware.configure((fw) {
               'lib/main.dart',
               name: 'App',
               description: 'The example app, with the devbar mounted',
-              defines: [
-                DartDefine(
-                  'FW_MARKER',
+              knobs: [
+                Knob(
+                  'fwMarker',
+                  label: 'Marker',
                   description:
-                      'Shown on the home page, to prove which build '
-                      'is on the device',
+                      'Shown on the home page, to prove which launch is on '
+                      'the device',
                 ),
               ],
             ),

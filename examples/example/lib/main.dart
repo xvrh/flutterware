@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-const _fwMarker = String.fromEnvironment('FW_MARKER', defaultValue: '<none>');
+/// Shown on the home page, to prove which build is on the device.
+///
+/// A **knob**: an optional named parameter of `main`, so the cockpit offers it
+/// with its own default and changing it costs a hot restart. It used to be a
+/// `--dart-define`, which cost a rebuild.
+String marker = '<none>';
 
-void main() {
+void main({String fwMarker = '<none>'}) {
+  marker = fwMarker;
   runApp(const MyApp());
 }
 
@@ -64,7 +70,7 @@ class _MyHomePageState extends State<MyHomePage> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         children: [
           Text(
-            'FW_MARKER: $_fwMarker',
+            'FW_MARKER: $marker',
             key: const Key('fw-marker'),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),

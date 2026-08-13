@@ -1680,48 +1680,6 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
-  'DartDefineEntry': ResultShape.fromJson(<String, Object?>{
-    'type': 'DartDefineEntry',
-    'fields': <Object?>[
-      <String, Object?>{
-        'name': 'define',
-        'type': 'String',
-        'doc': 'The name `String.fromEnvironment` reads.',
-      },
-      <String, Object?>{'name': 'label', 'type': 'String', 'optional': true},
-      <String, Object?>{
-        'name': 'description',
-        'type': 'String',
-        'optional': true,
-      },
-      <String, Object?>{'name': 'default', 'type': 'String', 'optional': true},
-      <String, Object?>{
-        'name': 'options',
-        'type': 'List<String>',
-        'doc':
-            'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now, such as this machine\'s addresses on the local network or a list a script in the project printed.',
-      },
-      <String, Object?>{
-        'name': 'kind',
-        'type': 'String',
-        'optional': true,
-        'doc':
-            '`String`, `int`, `bool` or `double` — how the app\'s own source reads this define.',
-      },
-      <String, Object?>{
-        'name': 'readAt',
-        'type': 'String',
-        'optional': true,
-        'doc': 'The package-relative file the read is in.',
-      },
-      <String, Object?>{
-        'name': 'problem',
-        'type': 'String',
-        'optional': true,
-        'doc': 'What is wrong with this define, when something is.',
-      },
-    ],
-  }),
   'DependencyEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'DependencyEntry',
     'fields': <Object?>[
@@ -2820,7 +2778,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'action',
         'type': 'String',
-        'doc': '`reload`, `restart` or `stop`.',
+        'doc': '`reload`, `restart`, `stop` or `setKnobs`.',
       },
       <String, Object?>{
         'name': 'run',
@@ -2839,6 +2797,13 @@ final resultShapes = <String, ResultShape>{
       },
       <String, Object?>{'name': 'error', 'type': 'String', 'optional': true},
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'knobs',
+        'type': 'Map<String, String>',
+        'optional': true,
+        'doc':
+            'For `setKnobs`: everything the app is now running with, not only what this call changed.',
+      },
     ],
   }),
   'RunDeviceEntry': ResultShape.fromJson(<String, Object?>{
@@ -3172,15 +3137,17 @@ final resultShapes = <String, ResultShape>{
             'The ids of the devices currently connected that [platforms] allows.',
       },
       <String, Object?>{
-        'name': 'defines',
-        'type': 'List<DartDefineEntry>',
+        'name': 'knobs',
+        'type': 'List<RunKnobEntry>',
+        'doc':
+            'The knobs this entry point\'s `main` takes — the optional named parameters of its signature, with what the config annotated them with.',
         'shape': <String, Object?>{
-          'type': 'DartDefineEntry',
+          'type': 'RunKnobEntry',
           'fields': <Object?>[
             <String, Object?>{
-              'name': 'define',
+              'name': 'knob',
               'type': 'String',
-              'doc': 'The name `String.fromEnvironment` reads.',
+              'doc': 'The parameter\'s name — what `launch` takes as a key.',
             },
             <String, Object?>{
               'name': 'label',
@@ -3193,34 +3160,31 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
             },
             <String, Object?>{
+              'name': 'kind',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
+            },
+            <String, Object?>{
               'name': 'default',
               'type': 'String',
               'optional': true,
+              'doc':
+                  'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
             },
             <String, Object?>{
               'name': 'options',
               'type': 'List<String>',
               'doc':
-                  'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now, such as this machine\'s addresses on the local network or a list a script in the project printed.',
-            },
-            <String, Object?>{
-              'name': 'kind',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  '`String`, `int`, `bool` or `double` — how the app\'s own source reads this define.',
-            },
-            <String, Object?>{
-              'name': 'readAt',
-              'type': 'String',
-              'optional': true,
-              'doc': 'The package-relative file the read is in.',
+                  'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
             },
             <String, Object?>{
               'name': 'problem',
               'type': 'String',
               'optional': true,
-              'doc': 'What is wrong with this define, when something is.',
+              'doc':
+                  'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
             },
           ],
         },
@@ -3287,15 +3251,18 @@ final resultShapes = <String, ResultShape>{
                   'The ids of the devices currently connected that [platforms] allows.',
             },
             <String, Object?>{
-              'name': 'defines',
-              'type': 'List<DartDefineEntry>',
+              'name': 'knobs',
+              'type': 'List<RunKnobEntry>',
+              'doc':
+                  'The knobs this entry point\'s `main` takes — the optional named parameters of its signature, with what the config annotated them with.',
               'shape': <String, Object?>{
-                'type': 'DartDefineEntry',
+                'type': 'RunKnobEntry',
                 'fields': <Object?>[
                   <String, Object?>{
-                    'name': 'define',
+                    'name': 'knob',
                     'type': 'String',
-                    'doc': 'The name `String.fromEnvironment` reads.',
+                    'doc':
+                        'The parameter\'s name — what `launch` takes as a key.',
                   },
                   <String, Object?>{
                     'name': 'label',
@@ -3308,34 +3275,31 @@ final resultShapes = <String, ResultShape>{
                     'optional': true,
                   },
                   <String, Object?>{
+                    'name': 'kind',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
+                  },
+                  <String, Object?>{
                     'name': 'default',
                     'type': 'String',
                     'optional': true,
+                    'doc':
+                        'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
                   },
                   <String, Object?>{
                     'name': 'options',
                     'type': 'List<String>',
                     'doc':
-                        'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now, such as this machine\'s addresses on the local network or a list a script in the project printed.',
-                  },
-                  <String, Object?>{
-                    'name': 'kind',
-                    'type': 'String',
-                    'optional': true,
-                    'doc':
-                        '`String`, `int`, `bool` or `double` — how the app\'s own source reads this define.',
-                  },
-                  <String, Object?>{
-                    'name': 'readAt',
-                    'type': 'String',
-                    'optional': true,
-                    'doc': 'The package-relative file the read is in.',
+                        'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
                   },
                   <String, Object?>{
                     'name': 'problem',
                     'type': 'String',
                     'optional': true,
-                    'doc': 'What is wrong with this define, when something is.',
+                    'doc':
+                        'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
                   },
                 ],
               },
@@ -3411,15 +3375,18 @@ final resultShapes = <String, ResultShape>{
                         'The ids of the devices currently connected that [platforms] allows.',
                   },
                   <String, Object?>{
-                    'name': 'defines',
-                    'type': 'List<DartDefineEntry>',
+                    'name': 'knobs',
+                    'type': 'List<RunKnobEntry>',
+                    'doc':
+                        'The knobs this entry point\'s `main` takes — the optional named parameters of its signature, with what the config annotated them with.',
                     'shape': <String, Object?>{
-                      'type': 'DartDefineEntry',
+                      'type': 'RunKnobEntry',
                       'fields': <Object?>[
                         <String, Object?>{
-                          'name': 'define',
+                          'name': 'knob',
                           'type': 'String',
-                          'doc': 'The name `String.fromEnvironment` reads.',
+                          'doc':
+                              'The parameter\'s name — what `launch` takes as a key.',
                         },
                         <String, Object?>{
                           'name': 'label',
@@ -3432,35 +3399,31 @@ final resultShapes = <String, ResultShape>{
                           'optional': true,
                         },
                         <String, Object?>{
+                          'name': 'kind',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
+                        },
+                        <String, Object?>{
                           'name': 'default',
                           'type': 'String',
                           'optional': true,
+                          'doc':
+                              'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
                         },
                         <String, Object?>{
                           'name': 'options',
                           'type': 'List<String>',
                           'doc':
-                              'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now, such as this machine\'s addresses on the local network or a list a script in the project printed.',
-                        },
-                        <String, Object?>{
-                          'name': 'kind',
-                          'type': 'String',
-                          'optional': true,
-                          'doc':
-                              '`String`, `int`, `bool` or `double` — how the app\'s own source reads this define.',
-                        },
-                        <String, Object?>{
-                          'name': 'readAt',
-                          'type': 'String',
-                          'optional': true,
-                          'doc': 'The package-relative file the read is in.',
+                              'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
                         },
                         <String, Object?>{
                           'name': 'problem',
                           'type': 'String',
                           'optional': true,
                           'doc':
-                              'What is wrong with this define, when something is.',
+                              'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
                         },
                       ],
                     },
@@ -3635,6 +3598,49 @@ final resultShapes = <String, ResultShape>{
             'The launcher\'s log file, for anyone who would rather tail it themselves.',
       },
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunKnobEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunKnobEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'knob',
+        'type': 'String',
+        'doc': 'The parameter\'s name — what `launch` takes as a key.',
+      },
+      <String, Object?>{'name': 'label', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'description',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'kind',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
+      },
+      <String, Object?>{
+        'name': 'default',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
+      },
+      <String, Object?>{
+        'name': 'options',
+        'type': 'List<String>',
+        'doc':
+            'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
+      },
+      <String, Object?>{
+        'name': 'problem',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
+      },
     ],
   }),
   'RunLaunchResult': ResultShape.fromJson(<String, Object?>{

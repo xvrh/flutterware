@@ -3,6 +3,11 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:pubspec_parse/pubspec_parse.dart';
 
+import 'package:flutterware/channels.dart';
+
+import '../utils/parameter_knobs.dart';
+import 'entrypoint_knobs.dart';
+
 /// What a launch should pass to `--target`: the generated guest wrapper when
 /// one could be written, the plain [entrypoint] otherwise, with the reason.
 class GuestEntrypoint {
@@ -31,9 +36,16 @@ class GuestEntrypoint {
 /// the package's name. When either is missing the launch proceeds
 /// uninstrumented rather than failing — stated in [GuestEntrypoint.reason],
 /// which the caller logs.
+///
+/// [knobs] are the values to pass `main` as named arguments, keyed by parameter
+/// name — `2026-08-12-run-knobs-design.md` § K3. Rewriting this file and hot
+/// restarting is what makes changing one cost 262ms rather than a rebuild, so
+/// the same function has to produce it at launch *and* on a knob change, or the
+/// two drift.
 GuestEntrypoint writeGuestEntrypoint({
   required String packageRoot,
   required String entrypoint,
+  Map<String, Object?> knobs = const {},
 }) {
   if (!entrypoint.startsWith('lib/')) {
     return GuestEntrypoint._(
@@ -63,6 +75,11 @@ GuestEntrypoint writeGuestEntrypoint({
     'run',
     '${p.basenameWithoutExtension(entrypoint)}_guest.dart',
   );
+  var scan = knobs.isEmpty
+      ? const EntrypointKnobs()
+      : scanEntrypointKnobs(packageRoot: packageRoot, entrypoint: entrypoint);
+  var arguments = _arguments(knobs, scan.knobs);
+
   File(p.joinAll([packageRoot, ...p.posix.split(target)]))
     ..parent.createSync(recursive: true)
     ..writeAsStringSync('''
@@ -72,11 +89,15 @@ GuestEntrypoint writeGuestEntrypoint({
 // logs, errors) and the drive transaction (ext.flutterware.act) over the VM
 // service. Compiling this needs `flutterware` and `flutter_test` in the
 // project's dev_dependencies.
-import 'dart:async';
-
-import 'package:flutterware/run_guest.dart';
-
+${arguments.isEmpty ? "import 'dart:async';\n\n" : ''}import 'package:flutterware/run_guest.dart' as guest;
+${arguments.isEmpty ? '' : '''
+// The entry point's own imports, so a value written here can name what the
+// entry point names — an enum declared anywhere but this file is otherwise
+// `Undefined name`. Unused ones are ordinary: nothing analyses this file.
+${scan.imports.join('\n')}
+'''}
 import '$importUri' as entry;
+${arguments.isEmpty ? '''
 
 // Checked at runtime because the signature cannot be known here: an app's
 // main legally takes `List<String> args`, and a wrapper assuming zero
@@ -86,11 +107,74 @@ import '$importUri' as entry;
 void main(List<String> args) {
   Object? entryMain = entry.main;
   if (entryMain is FutureOr<void> Function(List<String>)) {
-    runGuest(() => entryMain(args));
+    guest.runGuest(() => entryMain(args));
   } else {
-    runGuest(entryMain as FutureOr<void> Function());
-  }
+    guest.runGuest(entryMain as FutureOr<void> Function());
+  }''' : '''
+
+// Named arguments rather than the runtime shape check the other branch does:
+// a main taking knobs is called with them by name, so the compiler checks
+// this call and a value for a parameter that moved fails the build here
+// rather than doing nothing at runtime.
+void main(List<String> args) {
+  guest.runGuest(() => entry.main(
+$arguments      ));'''}
 }
 ''');
   return GuestEntrypoint._(target, guest: true);
 }
+
+/// The named arguments to pass `main`, one indented line each.
+///
+/// Only knobs the signature actually declares: a value for a parameter that is
+/// not there would not compile, and refusing to write it turns a stale wish
+/// into a knob that does nothing rather than a launch that fails.
+///
+/// A picker's value is a bare constant name, so it is written back through the
+/// type the entry point wrote — `staging` becomes `m.Backend.staging`.
+String _arguments(Map<String, Object?> values, List<ParameterKnob> declared) {
+  var byName = {for (var knob in declared) knob.name: knob};
+  var lines = <String>[];
+  for (var MapEntry(key: name, value: value) in values.entries) {
+    var knob = byName[name];
+    if (knob == null || value == null) continue;
+    var literal = _literalFor(knob, value);
+    if (literal == null) continue;
+    lines.add('        $name: $literal,\n');
+  }
+  return lines.join();
+}
+
+/// A value as Dart source, written for the type the **signature** declares.
+///
+/// Not for the value's own runtime type — that was the bug an end-to-end launch
+/// found and the unit tests could not. Every value arriving from the CLI or MCP
+/// is a `String`, so an `int` parameter was handed `r'8186'` and the build died
+/// on *String can't be assigned to int*. The parameter list is the only thing
+/// that knows what a value is meant to be.
+///
+/// Null for a value that does not fit its kind. The action refuses those before
+/// anything is built; this is the second line, so a bad value can never reach
+/// the compiler as generated source.
+String? _literalFor(ParameterKnob knob, Object? value) {
+  var text = '$value';
+  return switch (knob.knob.kind) {
+    KnobKind.picker => knob.enumType == null ? null : '${knob.enumType}.$text',
+    KnobKind.integer => int.tryParse(text)?.toString(),
+    KnobKind.number => double.tryParse(text)?.toString(),
+    KnobKind.boolean => switch (text) {
+      'true' => 'true',
+      'false' => 'false',
+      _ => null,
+    },
+    KnobKind.string => _stringLiteral(text),
+  };
+}
+
+/// Strings are quoted `r'...'` unless they carry something a raw string cannot
+/// — a URL or a Windows path then arrives with no escaping to get wrong, which
+/// is the shape a knob's value tends to have.
+String _stringLiteral(String value) =>
+    !value.contains("'") && !value.contains(r'$')
+    ? "r'$value'"
+    : "'${value.replaceAll(r'\', r'\\').replaceAll("'", r"\'").replaceAll(r'$', r'\$')}'";

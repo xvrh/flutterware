@@ -5,19 +5,19 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
-import '../../run/defines.dart';
 import '../../run/entrypoints.dart';
 import '../../run/flavors.dart';
 import '../../run/handle.dart';
 import '../../run/inventory.dart';
 import '../../run/flag_memory.dart';
 import '../../run/journal.dart';
+import '../../run/knob_field.dart';
+import '../../run/knobs_tab.dart';
 import '../../run/network_tab.dart';
 import '../../run/panels_tab.dart';
 import '../../run/launch.dart';
@@ -36,6 +36,7 @@ import '../../ui/theme.dart';
 import '../../utils/daemon/device.dart';
 import '../native_plugin.dart';
 import 'run_address.dart';
+import 'run_results.dart';
 import 'run_core.dart';
 
 export 'run_core.dart' show RunCore, runPluginId;
@@ -354,6 +355,7 @@ class _RunViewState extends State<_RunView> {
               key: ValueKey(handle.key),
               handle: handle,
             ),
+            RunViewKind.knobs => _knobsTab(core, handle),
             RunViewKind.panels => PanelsTab(
               // Keyed by run: attaching is per app, and a different run behind
               // the same tab is a different app to attach to.
@@ -596,6 +598,17 @@ class _CapabilityPill extends StatelessWidget {
 /// [InspectTabStrip] rather than a row of buttons: it is what ui_catalog and
 /// scenarios already draw above a widget tree, and three surfaces showing the
 /// same thing should not be two designs.
+/// One lookup, not one per field: it parses the entry point's signature.
+Widget _knobsTab(RunCore core, RunHandle handle) {
+  var offered = core.knobEntriesFor(handle);
+  return KnobsTab(
+    handle: handle,
+    knobs: offered.knobs,
+    unknown: offered.unknown,
+    onApply: (values) => core.applyKnobs(handle, values),
+  );
+}
+
 class _ViewTabs extends StatelessWidget {
   const _ViewTabs({
     required this.runKey,
@@ -633,6 +646,7 @@ class _ViewTabs extends StatelessWidget {
         InspectDockTab(id: 'logs', label: 'Logs', body: _unused),
         InspectDockTab(id: 'network', label: 'Network', body: _unused),
         InspectDockTab(id: 'panels', label: 'App', body: _unused),
+        InspectDockTab(id: 'knobs', label: 'Knobs', body: _unused),
       ],
       current: view.name,
       onSelect: (id) {
@@ -1505,7 +1519,6 @@ class _NewRunPage extends StatefulWidget {
 class _NewRunPageState extends State<_NewRunPage> {
   String? _device;
   ({String package, EntrypointRef entry})? _entry;
-  final _defines = <String, TextEditingController>{};
   final _flavor = TextEditingController();
 
   /// True once the user has taken the flavor off what the project declares.
@@ -1516,6 +1529,11 @@ class _NewRunPageState extends State<_NewRunPage> {
   /// filling in something the project had settled two files away.
   var _overridingFlavor = false;
   var _launching = false;
+
+  /// What the form has been told to pass `main`, by parameter name. Absent
+  /// means "left alone", which is not the same as empty — the parameter's own
+  /// default then applies and nothing is written into the wrapper.
+  final _knobs = <String, String>{};
   String? _error;
 
   RunCore get _core => widget.core;
@@ -1528,9 +1546,6 @@ class _NewRunPageState extends State<_NewRunPage> {
 
   @override
   void dispose() {
-    for (var field in _defines.values) {
-      field.dispose();
-    }
     _flavor.dispose();
     super.dispose();
   }
@@ -1611,28 +1626,25 @@ class _NewRunPageState extends State<_NewRunPage> {
   /// the action used to disagree about the same launch. An empty field now
   /// means "whatever the default is", which is also what it looks like.
   void _rebuildKnobs(Map<String, String> values) {
-    for (var field in _defines.values) {
-      field.dispose();
-    }
-    _defines.clear();
-    for (var (:define, read: _) in _offered) {
-      _defines[define.name] = TextEditingController(
-        text: values[define.name] ?? '',
-      );
-    }
+    // A knob set for one entry point means nothing on another: they are
+    // different signatures.
+    _knobs.clear();
   }
 
-  /// The defines this entry point offers — what the config declared, or what a
-  /// scan of the package's `lib/` found it reads.
-  ///
-  /// Through the core rather than off `entry.defines`, so the form and the
-  /// `entrypoints` action offer the same list. One that only the panel had
-  /// would be a control an agent could not see.
-  List<({DartDefine define, DefineRef? read})> get _offered {
+  /// The knobs this entry point's `main` takes, as the cockpit and the
+  /// `entrypoints` action both see them. Through the core for the same reason
+  /// a control only the panel had would be one an agent could not see.
+  List<RunKnobEntry> get _offeredKnobs {
     var choice = _entry;
     return choice == null
         ? const []
-        : _core.definesFor(choice.package, choice.entry);
+        : [
+            for (var (:read, :declared) in _core.knobsFor(
+              choice.package,
+              choice.entry,
+            ))
+              _core.knobEntry(read, declared),
+          ];
   }
 
   @override
@@ -1710,26 +1722,25 @@ class _NewRunPageState extends State<_NewRunPage> {
                 onRevert: () => setState(_resetFlavor),
               ),
             ),
-            if (_defines.isNotEmpty) ...[
+            if (_offeredKnobs.isNotEmpty) ...[
               const Gap(FwSpacing.lg),
               _Field(
-                label: 'Defines',
-                hint: 'compiled in — changing one is a rebuild',
+                label: 'Knobs',
+                hint: 'passed to main — changing one is a hot restart',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (var (:define, :read) in _offered) ...[
-                      _KnobField(
-                        define: define,
-                        read: read,
-                        options: _core.optionsFor(define),
-                        interfaceOf: _core.hostInterfaceOf,
-                        hint:
-                            _core.scriptValueFor(define) ??
-                            define.defaultValue ??
-                            read?.defaultValue,
-                        problem: _core.scriptProblemFor(define),
-                        controller: _defines[define.name]!,
+                    for (var knob in _offeredKnobs) ...[
+                      KnobField(
+                        knob: knob,
+                        value: _knobs[knob.name],
+                        onChanged: (value) => setState(() {
+                          if (value == null) {
+                            _knobs.remove(knob.name);
+                          } else {
+                            _knobs[knob.name] = value;
+                          }
+                        }),
                       ),
                       const Gap(FwSpacing.md),
                     ],
@@ -1786,10 +1797,6 @@ class _NewRunPageState extends State<_NewRunPage> {
     var choice = _entry;
     var device = _device;
     if (choice == null || device == null) return;
-    var defines = {
-      for (var entry in _defines.entries)
-        if (entry.value.text.isNotEmpty) entry.key: entry.value.text,
-    };
     var flavor = _flavor.text.trim();
     setState(() {
       _launching = true;
@@ -1801,14 +1808,14 @@ class _NewRunPageState extends State<_NewRunPage> {
         package: choice.package,
         entry: choice.entry,
         flavor: flavor.isEmpty ? null : flavor,
-        defines: defines,
+        knobs: {..._knobs},
       );
       _core.lastLaunch = (
         device: device,
         package: choice.package,
         entrypoint: choice.entry.path,
         flavor: flavor.isEmpty ? null : flavor,
-        defines: defines,
+        defines: const {},
       );
       widget.onLaunched(handle);
     } on Object catch (e) {
@@ -2359,121 +2366,6 @@ class _Action extends StatelessWidget {
 /// DefineSource.hostAddresses` fills that list with this machine's LAN
 /// addresses — so "point the app at my dev machine" is a click rather than a
 /// trip to `ifconfig`.
-class _KnobField extends StatelessWidget {
-  const _KnobField({
-    required this.define,
-    required this.read,
-    required this.options,
-    required this.interfaceOf,
-    required this.hint,
-    required this.problem,
-    required this.controller,
-  });
-
-  final DartDefine define;
-
-  /// Where the app reads this define, when it does. Null is the case worth
-  /// saying out loud: a define nothing reads is a control that does nothing, and
-  /// it looks exactly like one that does.
-  final DefineRef? read;
-
-  final List<String> options;
-
-  /// The interface an offered value was found on, when it is one of this
-  /// machine's addresses. Five bare IPv4s say nothing about which one the phone
-  /// can reach; `en0` next to one of them does.
-  final String? Function(String) interfaceOf;
-
-  /// What this define will be if the field is left alone — a script's computed
-  /// answer, or a declared default. Shown rather than typed in, so that leaving
-  /// the field empty and leaving it at its default are the same thing.
-  final String? hint;
-
-  /// Why there is no computed value, when a script source could not answer.
-  final String? problem;
-
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(define.label ?? define.name, style: context.type.fieldLabel),
-            if (read case var found?) ...[
-              const Gap(FwSpacing.sm),
-              Flexible(
-                child: Text(
-                  '${found.kind} · ${found.file}',
-                  style: context.type.caption.copyWith(
-                    color: context.colors.mut3,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ] else ...[
-              const Gap(FwSpacing.sm),
-              Flexible(
-                child: Text(
-                  'nothing reads this — setting it changes nothing',
-                  style: context.type.caption.copyWith(
-                    color: context.colors.amber,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        if (define.description != null)
-          Text(define.description!, style: context.type.caption),
-        const Gap(FwSpacing.xxs),
-        TextField(
-          controller: controller,
-          decoration: InputDecoration(hintText: hint),
-        ),
-        if (problem case var failure?) ...[
-          const Gap(FwSpacing.xxs),
-          Text(
-            failure,
-            style: context.type.caption.copyWith(color: context.colors.amber),
-          ),
-        ],
-        if (options.isNotEmpty) ...[
-          const Gap(FwSpacing.xs),
-          Wrap(
-            spacing: FwSpacing.xs,
-            runSpacing: FwSpacing.xxs,
-            children: [
-              for (var option in options)
-                ActionChip(
-                  label: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(option, style: context.type.micro),
-                      if (interfaceOf(option) case var interface?) ...[
-                        const Gap(FwSpacing.xxs),
-                        Text(
-                          interface,
-                          style: context.type.micro.copyWith(
-                            color: context.colors.mut3,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  onPressed: () => controller.text = option,
-                  visualDensity: VisualDensity.compact,
-                ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
-
 class _Tag extends StatelessWidget {
   const _Tag(this.label);
 

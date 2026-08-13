@@ -40,6 +40,7 @@ class RunHandle {
     this.appId,
     this.logPath,
     this.defines = const {},
+    this.knobs = const {},
     this.protocol = runHandleProtocol,
     this.handlePath,
   });
@@ -97,6 +98,15 @@ class RunHandle {
   /// answered by the entry point alone.
   final Map<String, String> defines;
 
+  /// The values this run's `main` was called with, by parameter name.
+  ///
+  /// Recorded for a different reason than [defines]: those cost a rebuild to
+  /// change, so knowing them tells you what is running there. These cost a hot
+  /// restart, so knowing them is what lets the cockpit *show* them and offer to
+  /// change one — a knob whose current value the tool had forgotten would be a
+  /// field you can only overwrite blind.
+  final Map<String, String> knobs;
+
   /// Where the launcher's `--machine` stream is being written.
   final String? logPath;
 
@@ -106,6 +116,44 @@ class RunHandle {
 
   /// Where this handle was read from; null on the writing side.
   final String? handlePath;
+
+  /// This run with some fields replaced.
+  ///
+  /// **One copy, not one per caller.** There were three, written out field by
+  /// field, and a field added to only two of them was silently dropped by the
+  /// third: `knobs` survived the launch, survived `publish`'s file, and
+  /// vanished from the handle `publish` *returned* — so the first
+  /// `refreshFromLog` a second later wrote it back without them. The cockpit
+  /// then showed empty fields for an app plainly running with values. Sixteen
+  /// fields is too many to copy by hand more than once.
+  RunHandle _copy({
+    String? vmService,
+    String? appId,
+    Map<String, String>? knobs,
+    String? handlePath,
+  }) => RunHandle(
+    worktree: worktree,
+    worktreeName: worktreeName,
+    device: device,
+    deviceName: deviceName,
+    entrypoint: entrypoint,
+    entrypointName: entrypointName,
+    package: package,
+    flavor: flavor,
+    launcherPid: launcherPid,
+    vmService: vmService ?? this.vmService,
+    appId: appId ?? this.appId,
+    defines: defines,
+    knobs: knobs ?? this.knobs,
+    logPath: logPath,
+    startedAt: startedAt,
+    protocol: protocol,
+    handlePath: handlePath ?? this.handlePath,
+  );
+
+  /// The same run with different knob values — what [publish] writes after the
+  /// wrapper has been rewritten and the app restarted.
+  RunHandle withKnobs(Map<String, String> values) => _copy(knobs: values);
 
   Map<String, Object?> toJson() => {
     'worktree': worktree,
@@ -120,6 +168,7 @@ class RunHandle {
     if (vmService != null) 'vmService': vmService,
     if (appId != null) 'appId': appId,
     if (defines.isNotEmpty) 'defines': defines,
+    if (knobs.isNotEmpty) 'knobs': knobs,
     if (logPath != null) 'logPath': logPath,
     'startedAt': startedAt.toUtc().toIso8601String(),
     'protocol': protocol,
@@ -149,6 +198,10 @@ class RunHandle {
         defines: {
           for (var entry in (map['defines'] as Map? ?? const {}).entries)
             if (entry.value is String) '${entry.key}': entry.value! as String,
+        },
+        knobs: {
+          for (var entry in (map['knobs'] as Map? ?? const {}).entries)
+            '${entry.key}': '${entry.value}',
         },
         protocol: map['protocol'] as int? ?? runHandleProtocol,
         handlePath: file.path,
@@ -191,24 +244,8 @@ class RunHandle {
       flavor == null ? entrypointLabel : '$entrypointLabel ($flavor)';
 
   /// The same run, now that its VM service is known.
-  RunHandle withService({String? vmService, String? appId}) => RunHandle(
-    worktree: worktree,
-    worktreeName: worktreeName,
-    device: device,
-    deviceName: deviceName,
-    entrypoint: entrypoint,
-    entrypointName: entrypointName,
-    package: package,
-    flavor: flavor,
-    launcherPid: launcherPid,
-    vmService: vmService ?? this.vmService,
-    appId: appId ?? this.appId,
-    defines: defines,
-    logPath: logPath,
-    startedAt: startedAt,
-    protocol: protocol,
-    handlePath: handlePath,
-  );
+  RunHandle withService({String? vmService, String? appId}) =>
+      _copy(vmService: vmService, appId: appId);
 
   /// Writes this handle into [runDir] under its own name, and returns it
   /// knowing where it went.
@@ -225,24 +262,7 @@ class RunHandle {
     );
     Directory(runDir).createSync(recursive: true);
     File(path).writeAsStringSync(jsonEncode(toJson()));
-    return RunHandle(
-      worktree: worktree,
-      worktreeName: worktreeName,
-      device: device,
-      deviceName: deviceName,
-      entrypoint: entrypoint,
-      entrypointName: entrypointName,
-      package: package,
-      flavor: flavor,
-      launcherPid: launcherPid,
-      vmService: vmService,
-      appId: appId,
-      defines: defines,
-      logPath: logPath,
-      startedAt: startedAt,
-      protocol: protocol,
-      handlePath: path,
-    );
+    return _copy(handlePath: path);
   }
 
   /// Rewrites the file this handle was read from. A no-op for one that has no

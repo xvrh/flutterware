@@ -57,7 +57,11 @@ enum RunViewKind {
   /// What the *app* reports about itself — the devbar plugins that declared a
   /// panel. `Screen` is what flutterware can see of a run; this is what the
   /// app chose to say.
-  panels;
+  panels,
+
+  /// The values this run's `main` was called with, changeable here because the
+  /// only other route to the launch form is Stop — which is a rebuild.
+  knobs;
 
   static RunViewKind? byName(String name) {
     for (var kind in values) {
