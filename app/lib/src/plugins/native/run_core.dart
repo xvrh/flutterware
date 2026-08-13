@@ -1658,10 +1658,7 @@ class RunCore extends PluginCore {
                   devices: entry.platforms.isEmpty
                       ? const []
                       : [for (var device in devicesFor(entry)) device.id],
-                  knobs: [
-                    for (var (:read, :declared) in knobsFor(path, entry))
-                      knobEntry(read, declared),
-                  ],
+                  knobs: knobEntriesOf(path, entry),
                 ),
             ],
           ),
@@ -1733,6 +1730,27 @@ class RunCore extends PluginCore {
     }
     return null;
   }
+
+  /// Every line to show for [entry] — its knobs, plus one per `required`
+  /// parameter saying why it cannot be launched.
+  ///
+  /// **One list, three surfaces.** The `entrypoints` action, the running app's
+  /// Knobs tab and the New run form each built this loop themselves, so a line
+  /// added to one appeared on one. A required parameter is exactly such a line:
+  /// it is not a knob, it is the reason there will be no launch, and all three
+  /// have to say so.
+  List<RunKnobEntry> knobEntriesOf(String package, EntrypointRef entry) => [
+    for (var (:read, :declared) in knobsFor(package, entry))
+      knobEntry(read, declared),
+    for (var name in knobsReadBy(package, entry.path).required)
+      RunKnobEntry(
+        name: name,
+        problem:
+            'main requires this, so nothing can launch it. A knob has to be '
+            "optional — give it a default (String $name = 'x') and it becomes "
+            'one.',
+      ),
+  ];
 
   /// One knob as the wire reports it — the signature's facts, the config's
   /// annotations, and a value worked out just now when a source could.
@@ -2077,6 +2095,20 @@ class RunCore extends PluginCore {
     EntrypointRef entry,
     Map<String, String> given,
   ) {
+    // Before the names, because it is not about them: a `required` named
+    // parameter has no default to fall back to, so there is no launch to check
+    // the knobs *of*. Refused here, by name, rather than left to the wrapper —
+    // its no-knobs branch casts `main` to `FutureOr<void> Function()`, which a
+    // function with a required parameter cannot satisfy, so the app died at
+    // startup on a cast error that named nothing.
+    var required = knobsReadBy(package, entry.path).required;
+    if (required.isNotEmpty) {
+      throw StateError(
+        "${entry.name}'s main requires ${required.join(', ')}, so it cannot "
+        'start without one. A knob has to be optional — give the parameter a '
+        "default (String apiHost = 'localhost') and it becomes one.",
+      );
+    }
     var known = <String, ParameterKnob>{};
     for (var (:read, declared: _) in knobsFor(package, entry)) {
       if (read != null) known[read.name] = read;
@@ -2297,13 +2329,7 @@ class RunCore extends PluginCore {
             'renamed or removed since this run started.',
       );
     }
-    return (
-      knobs: [
-        for (var (:read, :declared) in knobsFor(package, entry))
-          knobEntry(read, declared),
-      ],
-      unknown: null,
-    );
+    return (knobs: knobEntriesOf(package, entry), unknown: null);
   }
 
   /// Rewrites [handle]'s wrapper with [values] and hot restarts it.
@@ -2413,7 +2439,23 @@ class RunCore extends PluginCore {
       // wrapper on the new one would fail every later reload as well — on a
       // change nobody asked for any more — and a handle on the new one would
       // report values the app never took.
-      write(previous);
+      try {
+        write(previous);
+      } on Object {
+        // **The rollback may not throw.** `previous` was valid when it was set,
+        // and the signature can have moved since — this is the edit-reload loop
+        // the whole feature exists for. An unwritable literal would then escape
+        // from inside this catch, so the `rethrow` never ran: the caller was
+        // told the value was malformed instead of why the restart failed, and
+        // because the generator throws before it writes, the wrapper was left
+        // on the *new* values — the exact state being rolled back from.
+        //
+        // No knobs is the fallback because it always writes and always
+        // compiles. The app keeps running whatever it already had; the next
+        // reload puts it on the signature's defaults, which is the honest
+        // answer once the old values no longer fit the signature.
+        write(const {});
+      }
       notifyChanged();
       rethrow;
     }

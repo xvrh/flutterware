@@ -1099,6 +1099,76 @@ void main({
     expect(knob.problem, isNot(contains('prod, canary')));
   });
 
+  group('a main that requires a parameter', () {
+    // Not a knob and not skippable: there is no default to leave it at, so
+    // nothing can launch it. It used to be dropped silently, which made the
+    // entry point look knob-less — `--knobs=apiHost=x` came back "takes no
+    // knobs", and launching without it produced a wrapper whose
+    // `entry.main as FutureOr<void> Function()` cast cannot hold a function
+    // with a required parameter, so the app died at startup naming nothing.
+    setUp(() {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({required String apiHost}) {}',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+    });
+
+    test('is refused by name rather than crashing on the cast', () async {
+      await expectLater(
+        core.invoke('launch', arguments: {'device': 'phone'}),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('apiHost'), contains('has to be optional')),
+          ),
+        ),
+      );
+    });
+
+    test('and passing it does not talk the launch round', () async {
+      // The old message was actively wrong here: "takes no knobs" about a main
+      // that visibly takes one.
+      await expectLater(
+        core.invoke(
+          'launch',
+          arguments: {'device': 'phone', 'knobs': 'apiHost=x'},
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            isNot(contains('takes no knobs')),
+          ),
+        ),
+      );
+    });
+
+    test('and the cockpit shows the reason instead of nothing', () async {
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+
+      var knob = result.packages.single.entrypoints.single.knobs.single;
+      expect(knob.name, 'apiHost');
+      expect(knob.problem, contains('main requires this'));
+      // No kind: there is no control, and drawing one would suggest there is
+      // something to set.
+      expect(knob.kind, isNull);
+    });
+  });
+
   group('a knob value the signature cannot take', () {
     // Refused here rather than left to the compiler: the value becomes a
     // literal in generated source, so a bad one is a build failure pointing at
@@ -1348,6 +1418,50 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
         {'serverPort': '8186'},
         reason: 'and the cockpit is told what it is actually running',
       );
+    });
+
+    test('a rollback that cannot write still reports the restart', () async {
+      // `previous` was valid when it was set; the signature can have moved
+      // since, which is the loop this feature exists for. The rollback then
+      // threw from inside the catch, so the `rethrow` never ran: the caller was
+      // told the value was malformed instead of why the restart failed, and
+      // because the generator throws before it writes, the wrapper was left on
+      // the values being rolled back *from*.
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({int serverPort = 1}) {}',
+      });
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        package: 'app',
+        launcherPid: pid,
+        // What the run was launched with, back when the parameter was a String.
+        knobs: {'serverPort': 'localhost'},
+      );
+      await core.computeAll();
+      core.debugControl = (action, handle) async =>
+          throw StateError('the app went away mid-restart');
+
+      await expectLater(
+        core.applyKnobs(handle, {'serverPort': '9'}),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('went away mid-restart'),
+          ),
+        ),
+      );
+
+      // Not left on 9, which is the state the rollback exists to undo. `9` is
+      // unwritable as the old `localhost`, so the fallback is no knobs at all —
+      // a wrapper that compiles, on the signature's own default.
+      var wrapper = _wrapperFor(worktree);
+      expect(wrapper, isNot(contains('serverPort: 9')));
+      expect(wrapper, isNot(contains('entry.main(')));
     });
 
     test('refuses an entry point this worktree does not declare', () async {

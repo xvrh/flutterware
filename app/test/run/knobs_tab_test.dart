@@ -35,6 +35,7 @@ void main() {
     List<RunKnobEntry>? offered,
     String? unknown,
     String? Function(String)? interfaceOf,
+    Map<String, String> Function(Map<String, String> values)? running,
   }) async {
     var applied = <Map<String, String>>[];
     await tester.pumpWidget(
@@ -45,7 +46,13 @@ void main() {
             knobs: offered ?? knobs,
             unknown: unknown,
             interfaceOf: interfaceOf,
-            onApply: (values) async => applied.add(values),
+            // Answers with what the app is now running, as `applyKnobs` does.
+            // [running] stands in for a source refilling a knob the caller left
+            // out, which is the case where the answer differs from the ask.
+            onApply: (values) async {
+              applied.add(values);
+              return running?.call(values) ?? values;
+            },
           ),
         ),
       ),
@@ -182,6 +189,64 @@ void main() {
     await tester.tap(find.byType(FilledButton));
     await tester.pump();
     expect(applied.single, isEmpty);
+  });
+
+  testWidgets('a line with nothing to set draws no control', (tester) async {
+    // Two kinds of line have no parameter behind them — a config knob naming
+    // one that is not there, and a `required` parameter that cannot be a knob.
+    // Both carry a problem saying exactly that, and a text field beside it
+    // would be the control-that-does-nothing the problem complains about.
+    await pump(
+      tester,
+      offered: [
+        RunKnobEntry(name: 'apiHost', problem: 'main requires this, so …'),
+      ],
+    );
+
+    expect(find.text('apiHost'), findsOneWidget);
+    expect(find.textContaining('main requires this'), findsOneWidget);
+    expect(find.byType(TextFormField), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+    expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+  });
+
+  testWidgets('an apply that changes nothing still settles the form', (
+    tester,
+  ) async {
+    // The stuck-dirty case. Resetting a knob whose source recomputes the same
+    // value means the apply lands and `handle.knobs` does not move — so
+    // `didUpdateWidget`, which only reacts to a change, cannot settle this. The
+    // form used to keep claiming a pending edit it could never finish: button
+    // live, field on its hint, every press restarting the app again.
+    await pump(
+      tester,
+      offered: [
+        RunKnobEntry(name: 'serverPort', kind: 'integer', defaultValue: '8086'),
+      ],
+      handle: handleWith({'serverPort': '8186'}),
+      running: (_) => {'serverPort': '8186'},
+    );
+
+    await tester.tap(find.text('Reset'));
+    await tester.pump();
+    expect(
+      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+      isNotNull,
+    );
+
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+      isNull,
+      reason: 'the edit is done, so there is nothing left to apply',
+    );
+    // And the field shows what the run is holding rather than an empty box.
+    expect(
+      tester.widget<TextFormField>(find.byType(TextFormField)).controller?.text,
+      '8186',
+    );
   });
 
   testWidgets('a picker whose value is not among its options still draws', (

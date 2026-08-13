@@ -1646,13 +1646,7 @@ class _NewRunPageState extends State<_NewRunPage> {
     var choice = _entry;
     return choice == null
         ? const []
-        : [
-            for (var (:read, :declared) in _core.knobsFor(
-              choice.package,
-              choice.entry,
-            ))
-              _core.knobEntry(read, declared),
-          ];
+        : _core.knobEntriesOf(choice.package, choice.entry);
   }
 
   @override

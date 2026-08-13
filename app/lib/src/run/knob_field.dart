@@ -245,6 +245,11 @@ class _KnobFieldState extends State<KnobField> {
       ],
       onChanged: widget.onChanged,
     ),
+    // No kind means there is no parameter to set: a config naming one that is
+    // not there, or a `required` one that cannot be a knob at all. Both already
+    // carry a [RunKnobEntry.problem] saying so, and a field beside it would be
+    // precisely the control-that-does-nothing the problem is complaining about.
+    null => const SizedBox.shrink(),
     _ => TextFormField(
       controller: _text,
       // The default is shown rather than filled in, so leaving the field alone

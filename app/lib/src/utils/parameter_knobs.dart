@@ -29,8 +29,13 @@ List<ParameterKnob> knobsFromParameters(
 }) {
   var knobs = <ParameterKnob>[];
   for (var parameter in parameters?.parameters ?? const <FormalParameter>[]) {
-    // A required parameter is not a knob — there is no value to fall back to,
-    // and callers reject the whole entry over it before reaching here.
+    // A required parameter is not a knob: there is no value to fall back to, so
+    // it cannot be left alone. **What to do about one is the caller's**, and the
+    // two callers differ — a demo with any is not a catalog entry at all
+    // (`CatalogScanner`), while an entry point with one is a launch that has to
+    // be refused by name (`scanEntrypointKnobs`). Skipping quietly here and
+    // asserting somebody else had already refused was wrong for entry points,
+    // and the symptom was a wrapper that cast `main` to `Function()` and died.
     if (parameter.isRequired) continue;
     var name = parameter.name?.lexeme;
     if (name == null || name.isEmpty) continue;

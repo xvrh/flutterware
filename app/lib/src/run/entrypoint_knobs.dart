@@ -14,6 +14,7 @@ class EntrypointKnobs {
     this.knobs = const [],
     this.imports = const [],
     this.problems = const [],
+    this.required = const [],
   });
 
   /// One per optional parameter, in signature order — which is the order the
@@ -31,6 +32,20 @@ class EntrypointKnobs {
   /// Parameters that could not be drawn, said out loud. A knob missing with no
   /// explanation looks like a broken tool.
   final List<String> problems;
+
+  /// Named parameters `main` declares `required`, which make it unlaunchable.
+  ///
+  /// **Not knobs, and not skippable either.** A knob is optional by definition:
+  /// the wrapper writes the ones somebody set and leaves the rest to their
+  /// defaults, and a parameter with no default has none to leave it to. Nothing
+  /// here can invent a value, so the launch is refused by name.
+  ///
+  /// Carried rather than merely counted because the refusal has to say *which*
+  /// one. Before this the parameter was skipped silently and the wrapper took
+  /// its no-knobs branch, whose `entry.main as FutureOr<void> Function()` cast
+  /// cannot hold a function with a required parameter — so the app died at
+  /// startup on a cast error with nothing pointing at the signature.
+  final List<String> required;
 }
 
 /// Reads [entrypoint]'s `main` — names, types, defaults, and the imports a
@@ -85,6 +100,13 @@ EntrypointKnobs scanEntrypointKnobs({
     knobs: knobs,
     imports: _importsOf(unit, packageRoot: packageRoot, entrypoint: entrypoint),
     problems: problems,
+    required: [
+      for (var parameter
+          in main.functionExpression.parameters?.parameters ??
+              const <FormalParameter>[])
+        if (parameter.isRequired)
+          if (parameter.name?.lexeme case var name? when name.isNotEmpty) name,
+    ],
   );
 }
 

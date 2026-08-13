@@ -48,9 +48,12 @@ class KnobsTab extends StatefulWidget {
   /// point takes none.
   final String? unknown;
 
-  /// Rewrites the wrapper and restarts. Errors surface here rather than as a
+  /// Rewrites the wrapper and restarts, and answers with what the app is
+  /// **now running** — which is not always what was asked for, because a knob
+  /// left out is re-asked of its source. Errors surface here rather than as a
   /// snackbar somewhere else.
-  final Future<void> Function(Map<String, String> values) onApply;
+  final Future<Map<String, String>> Function(Map<String, String> values)
+  onApply;
 
   /// Passed to [KnobField] — which interface an offered address belongs to.
   final String? Function(String)? interfaceOf;
@@ -88,7 +91,15 @@ class _KnobsTabState extends State<KnobsTab> {
       _error = null;
     });
     try {
-      await widget.onApply(_edited);
+      // Adopt what came back, not what was sent. `didUpdateWidget` cannot carry
+      // this on its own: it only reacts when `handle.knobs` *changes*, and the
+      // case that needs it most is the one where it does not — resetting a knob
+      // whose source then recomputes the same value. The edit was applied, the
+      // run is unchanged, and the tab was left claiming a pending change it
+      // could never finish, with the button live and every press restarting the
+      // app again.
+      var running = await widget.onApply(_edited);
+      if (mounted) setState(() => _edited = {...running});
     } on Object catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
