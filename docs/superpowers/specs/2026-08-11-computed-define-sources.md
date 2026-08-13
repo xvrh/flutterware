@@ -5,9 +5,9 @@ thing that replaces it runs a script rather than a command.
 
 ## The case
 
-rimbaud (`/Users/xavier/projects/iot-d/rimbaud`) allocates each git worktree a
-contiguous 100-port block, so concurrent dev stacks do not collide. Its Flutter
-clients read the result as two defines:
+A real consumer allocates each git worktree a contiguous 100-port block, so
+concurrent dev stacks do not collide. Its Flutter clients read the result as two
+defines:
 
 ```dart
 static const localHost = String.fromEnvironment('LOCALDEV_HOST', defaultValue: 'localhost');
@@ -30,8 +30,8 @@ looking up".
 `hostAddresses` covers `LOCALDEV_HOST`. Nothing covered the port:
 
 - `servers` only sees servers announcing themselves through
-  `package:flutterware/server.dart`. rimbaud's `server_local` is a plain Dart
-  server and announces nothing.
+  `package:flutterware/server.dart`. That consumer's local server is a plain
+  Dart server and announces nothing.
 - It yields a base URL string; the config wants a bare int.
 - The value lives in an allocation table, not in a running process. With the
   stack down the list is empty and the launch silently bakes in `8086`.
@@ -142,8 +142,8 @@ and leaving it at its default are the same thing.
 
 ## Not done
 
-Dogfooding against rimbaud's real `local_env.dart`: declare `LOCALDEV_HOST` and
-`LOCALDEV_SERVER_PORT` in its config, launch from a worktree with an allocated
-block, and confirm the app reaches that worktree's server and not `8086` — then
-confirm the refusal fires with the stack down. That is the only thing that will
-prove the shape is right.
+Dogfooding against that consumer's real port-allocation script: declare
+`LOCALDEV_HOST` and `LOCALDEV_SERVER_PORT` in its config, launch from a worktree
+with an allocated block, and confirm the app reaches that worktree's server and
+not `8086` — then confirm the refusal fires with the stack down. That is the only
+thing that will prove the shape is right.

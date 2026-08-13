@@ -107,8 +107,8 @@ the reference project's web-app package — a real ~300-entry catalog.
    `web_app/lib/src/utils.dart:6` — the barrel every View imports — has
    `export 'package:server/client.dart' show Date, WeekDay;`. `show` filters
    *names*, not compilation, so two date types drag the entire backend closure
-   (`aws_client`, `convoy_api`, powersync) into the closure of a widget that
-   renders an avatar row.
+   (`aws_client`, a generated API client, powersync) into the closure of a widget
+   that renders an avatar row.
 3. **Catalog breadth — +2.3k libs / +3.4s** for one entry → all 300. The
    *cheapest* term. Compiling one entry instead of the whole catalog saves 26%,
    not an order of magnitude.

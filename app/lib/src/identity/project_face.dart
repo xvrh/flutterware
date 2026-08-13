@@ -3,69 +3,95 @@ import 'dart:io';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
-import '../launcher_icon/model/role.dart';
-import '../launcher_icon/model/scan.dart';
-import 'stock_icons.dart';
-
-/// The picture that stands for the open project — the user's own launcher icon,
-/// resolved from what `tool/flutterware.dart` declared.
+/// The picture that stands for the open project — the file
+/// `tool/flutterware.dart` named.
 ///
 /// One window per repository, several at once, all identical: the thing that
 /// tells them apart has to come from the project, and the only picture a
-/// project already has is the icon it ships. So this reads it rather than
+/// project already has is the one it ships. So this reads it rather than
 /// inventing a mark.
 ///
-/// **Reuses the launcher-icon scan and nothing else of that plugin.** A project
-/// does not have to declare `LauncherIcon` to have a window, so this calls
-/// [scanIcons] directly — the plugin and this feature happen to read the same
-/// files, which is not the same as one depending on the other.
+/// **A path, not a search.** This used to walk the declared package's platform
+/// directories and take the largest icon that was not a `flutter create`
+/// default, recognised by hashing against a list of template files. That list is
+/// a promise about somebody else's repository, and it expired: a mobile app
+/// whose generator writes iOS and Android icons and never touches `macos/` got
+/// the Flutter logo in its Dock, because the template icon sitting in `macos/`
+/// had been written by an older Flutter than the hashes were taken from. See
+/// [ProjectIdentity.icon].
 class ProjectFace {
   const ProjectFace({
     required this.file,
-    required this.role,
     required this.package,
+    required this.icon,
   });
 
-  /// The image on disk. Always a PNG: the roles below are chosen partly so it
-  /// is, because `.ico` needs a decoder Flutter does not ship.
+  /// The image on disk.
   final File file;
 
-  /// Which platform's icon this came from, for saying so in a tooltip.
-  final IconRole role;
-
-  /// The package that was declared, for the same reason.
+  /// The package that was declared, for saying so in a tooltip.
   final String package;
+
+  /// The icon path that was declared, relative to [package] — the other half of
+  /// that tooltip, and the thing to correct when the picture is wrong.
+  final String icon;
 }
 
-/// The face for [manifest]'s declared package, or null when there is none.
+/// The face [manifest] declared, or null when it declared none.
 ///
-/// Null is an ordinary answer with several ordinary causes: the project
-/// declared no identity, the package it named is not there, it has no launcher
-/// icons yet, or every icon it has is still the template's. None of them is an
-/// error and none is worth a log line — the result is a window that looks like
-/// it did before, which is where every project starts.
+/// Null here means only *no identity in the config*, which is an ordinary
+/// answer: the window looks like it did before, which is where every project
+/// starts. A declaration that names a file which is not there is **not** this
+/// function's null — it is [projectFaceProblem], reported against the worktree,
+/// because a path somebody typed is worth a sentence rather than a shrug.
 ProjectFace? resolveProjectFace({
   required String worktreeRoot,
   required PluginManifest manifest,
 }) {
-  var declared = manifest.identity?.package;
-  if (declared == null) return null;
+  var identity = manifest.identity;
+  if (identity == null) return null;
 
-  var packageRoot = p.normalize(p.join(worktreeRoot, declared.path));
-  if (!Directory(packageRoot).existsSync()) return null;
+  var file = File(projectFacePath(worktreeRoot, identity));
+  if (!file.existsSync()) return null;
 
-  var scan = scanIcons(packageRoot: packageRoot, packagePath: declared.path);
-  for (var role in faceRoles) {
-    for (var found in scan.roles) {
-      if (found.role != role || found.files.isEmpty) continue;
-      // Sorted smallest first, so the last is the most pixels to work with.
-      var file = File(found.files.last.absolutePath);
-      if (!file.existsSync()) continue;
-      // This role is still the template's, so the next one is worth a look —
-      // a project that customised iOS but not macOS is ordinary.
-      if (isStockIcon(file)) break;
-      return ProjectFace(file: file, role: role, package: declared.path);
-    }
+  return ProjectFace(
+    file: file,
+    package: identity.package.path,
+    icon: identity.icon,
+  );
+}
+
+/// Where [identity] says its picture is.
+String projectFacePath(String worktreeRoot, ProjectIdentity identity) =>
+    p.normalize(p.join(worktreeRoot, identity.package.path, identity.icon));
+
+/// What is wrong with [manifest]'s declared icon, or null when nothing is.
+///
+/// Run at config load rather than when the chip is drawn: the two ways to get
+/// this wrong — a typo in the path, and an image format Flutter has no decoder
+/// for — both look identical from the chip's side, which is a window with no
+/// chip and no reason given. That is the failure this whole field exists to stop
+/// happening.
+String? projectFaceProblem({
+  required String worktreeRoot,
+  required PluginManifest manifest,
+}) {
+  var identity = manifest.identity;
+  if (identity == null) return null;
+
+  var declared = p.join(identity.package.path, identity.icon);
+  if (!File(projectFacePath(worktreeRoot, identity)).existsSync()) {
+    return 'Declared identity icon not found: $declared';
+  }
+  var extension = p.extension(identity.icon).toLowerCase();
+  if (!_decodable.contains(extension)) {
+    return 'Declared identity icon $declared is a $extension, which Flutter '
+        'cannot decode. Point it at one of: ${_decodable.join(', ')}.';
   }
   return null;
 }
+
+/// The formats Flutter's own image codecs read. `.ico` and `.svg` are the two
+/// that get declared anyway — a Windows launcher icon and a logo — and both
+/// would reach the chip as an empty box.
+const _decodable = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'};

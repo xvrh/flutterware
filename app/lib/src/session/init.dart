@@ -426,18 +426,25 @@ ${_identityLine(root)}
 /// the setting exists.
 String _identityLine(String root) {
   const preamble =
-      '  // Which package stands for this repository. Its launcher icon is what\n'
-      '  // the window and the Dock show, so several checkouts open at once can\n'
-      '  // be told apart.';
-  var guessed = guessFacePackage(root);
+      '  // Which package stands for this repository, and the picture that\n'
+      '  // stands for it. The window and the Dock show that picture, so several\n'
+      '  // checkouts open at once can be told apart.';
+  var guessed = guessFace(root);
   if (guessed == null) {
-    return '$preamble Nothing here has a launcher icon of\n'
-        '  // its own yet, so this is left for you to fill in.\n'
-        "  // fw.identity(const ProjectIdentity(package: Pkg('.')));\n";
+    return '$preamble Nothing here has an icon\n'
+        '  // of its own yet, so this is left for you to fill in.\n'
+        '  // fw.identity(const ProjectIdentity(\n'
+        "  //   package: Pkg('.'),\n"
+        "  //   icon: 'assets/logo.png',\n"
+        '  // ));\n';
   }
-  return '$preamble Guessed from the icons found\n'
-      '  // here — change it if that is the wrong app.\n'
-      "  fw.identity(const ProjectIdentity(package: Pkg('$guessed')));\n";
+  return '$preamble Guessed from the icons\n'
+      '  // found here — change either if that is the wrong app, or point `icon`\n'
+      '  // at the source art your icon generator reads.\n'
+      '  fw.identity(const ProjectIdentity(\n'
+      "    package: Pkg('${guessed.package}'),\n"
+      "    icon: '${guessed.icon}',\n"
+      '  ));\n';
 }
 
 /// The leading whitespace of the line [offset] sits on.

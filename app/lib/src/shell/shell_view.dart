@@ -783,10 +783,11 @@ Key worktreeTabKey(Worktree worktree) => ValueKey('tab:${worktree.path}');
 /// picture down the band. Here it says what this *window* is, which is the
 /// question several identical windows raise.
 ///
-/// Nothing when the project declares no identity, names a package that is not
-/// there, or still ships the `flutter create` icon — see [resolveProjectFace].
-/// An absent chip is the shell as it was, which is the right amount of noise for
-/// a project that has not said anything.
+/// Nothing when the project declares no identity — see [resolveProjectFace]. An
+/// absent chip is the shell as it was, which is the right amount of noise for a
+/// project that has not said anything. A project that *did* say something and
+/// got the path wrong is a different case, and says so on the worktree instead
+/// of going quiet here.
 class _ProjectFaceChip extends StatelessWidget {
   const _ProjectFaceChip(this.shell);
 
@@ -799,7 +800,7 @@ class _ProjectFaceChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: FwSpacing.xs),
       child: Tooltip(
-        message: '${face.package} · ${face.role.label}',
+        message: '${face.package} · ${face.icon}',
         child: ClipRRect(
           // The chip's own corner ratio, the same 0.225 the launcher icon uses.
           borderRadius: BorderRadius.circular(_faceChipSize * 0.225),

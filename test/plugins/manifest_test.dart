@@ -163,9 +163,12 @@ void main() {
 
     test('survives being printed and parsed back', () {
       var manifest = emitted(
-        (fw) => fw.identity(const ProjectIdentity(package: Pkg('app'))),
+        (fw) => fw.identity(
+          const ProjectIdentity(package: Pkg('app'), icon: 'logo.png'),
+        ),
       );
       expect(manifest.identity?.package, const Pkg('app'));
+      expect(manifest.identity?.icon, 'logo.png');
     });
 
     test('a config that declares none reports none', () {
@@ -176,8 +179,8 @@ void main() {
       expect(
         () => Flutterware.configure((fw) {
           fw
-            ..identity(const ProjectIdentity(package: Pkg('a')))
-            ..identity(const ProjectIdentity(package: Pkg('b')));
+            ..identity(const ProjectIdentity(package: Pkg('a'), icon: 'a.png'))
+            ..identity(const ProjectIdentity(package: Pkg('b'), icon: 'b.png'));
         }, emit: (_) {}),
         throwsA(isA<StateError>()),
       );
@@ -195,6 +198,13 @@ void main() {
       expect(ProjectIdentity.fromJson(const {}), isNull);
       expect(ProjectIdentity.fromJson(const {'package': 42}), isNull);
       expect(ProjectIdentity.fromJson(const {'package': ''}), isNull);
+      // A package with no icon is half a declaration, and half of this one
+      // shows nothing — so it is no identity rather than a package on its own.
+      expect(ProjectIdentity.fromJson(const {'package': 'app'}), isNull);
+      expect(
+        ProjectIdentity.fromJson(const {'package': 'app', 'icon': ''}),
+        isNull,
+      );
       expect(
         PluginManifest.parse(
           '{"version":1,"plugins":[],"identity":"packages/web_app"}',
@@ -208,7 +218,12 @@ void main() {
       // it does not have to appear in the derived package list.
       var manifest = emitted((fw) {
         fw
-          ..identity(const ProjectIdentity(package: Pkg('packages/web_app')))
+          ..identity(
+            const ProjectIdentity(
+              package: Pkg('packages/web_app'),
+              icon: 'logo.png',
+            ),
+          )
           ..use(Dependencies(packages: DependenciesPackage.each([app])));
       });
       expect(manifest.identity?.package.path, 'packages/web_app');

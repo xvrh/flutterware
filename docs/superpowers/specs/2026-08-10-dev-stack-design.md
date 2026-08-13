@@ -31,9 +31,9 @@ looking at what those 50 scripts now are:
 The general observation behind those three, and the one worth keeping:
 
 > **A panel that runs scripts is a panel built for a person who runs scripts.**
-> That was the daily reality when `service_manager` was written. It is much less
-> so now — an agent runs the script, and it wants a command and an exit code,
-> not a form and a log pane.
+> That was the daily reality when the reference project's dev app was written.
+> It is much less so now — an agent runs the script, and it wants a command and
+> an exit code, not a form and a log pane.
 
 `fw run <plugin> <action>` and MCP already give an agent every action a plugin
 declares. A browsable grid of fifty scripts adds discovery for a human who has
@@ -49,9 +49,9 @@ into §3's `commands:` list**, in the only form that was carrying its weight.
 withdrawn draft. Previews already implements the sidebar-children → filterable
 tree column → detail → bottom drawer layout, and anything in this app that ever
 needs to browse hundreds of grouped items should reuse it rather than invent a
-second one. Cards, specifically, are the wrong container — `service_manager`'s
-`tool_card.dart` is 538 lines, which is what a card looks like once it has grown
-a form, a log stream, a status and an env editor.
+second one. Cards, specifically, are the wrong container — the equivalent card
+in the reference project's dev app is 538 lines, which is what a card looks like
+once it has grown a form, a log stream, a status and an env editor.
 
 ---
 
@@ -75,7 +75,8 @@ Three consequences, each of which three side-by-side buttons cannot express:
 ## 2. It delegates. It does not supervise.
 
 - **A supervisor** owns the process, holds the pid, captures the logs, restarts
-  it. That is `service_manager`, and it loses all of it on every GUI restart.
+  it. That is what the reference project's dev app does, and it loses all of it
+  on every GUI restart.
 - **A delegated lifecycle** owns *nothing*. It polls a status command, renders
   one control, and hands every verb to the project's own CLI.
 

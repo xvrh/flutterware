@@ -81,6 +81,13 @@ nothing here changes existing code, and a project that does not declare
 - `MotionScope` now mixes in `TickerProviderStateMixin` rather than the single
   variant, so writing `MotionScope(controller: MotionController(...))` inline
   in a `build` no longer dies on the second build.
+- **`fw.identity(ProjectIdentity(package: …, icon: …))`** says which package is
+  the repository and which picture stands for it. One window per repository and
+  several open at once all look the same; this is what puts the project's own
+  icon in the Dock tile, in ⌘-Tab and in the tab band. `icon:` is a path
+  relative to the package, and a path that is not there — or one Flutter has no
+  decoder for, such as a `.ico` — is reported on the worktree rather than
+  silently leaving the window blank. `fw init` scaffolds a guess.
 
 ## 0.5.1
 
