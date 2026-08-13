@@ -505,7 +505,7 @@ knobs: Map<String, String>?   # For `setKnobs`: everything the app is now runnin
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 | `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
-| `knobs` | string | yes | — | The values to run with, `name=value,name=value` or a JSON object. This replaces the set rather than merging into it: a name left out goes back to its parameter default, which is the only way to say "stop overriding this". |
+| `knobs` | string | yes | — | The values to run with, `name=value,name=value` or a JSON object. This replaces the set rather than merging into it: a name left out stops being overridden, which is the only way to say so. It then falls back to whatever the project works out for it — a `from:` script is re-asked, exactly as at launch — and to the parameter default only when nothing else answers. |
 
 #### `stop` — Stop
 

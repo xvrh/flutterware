@@ -14,6 +14,11 @@ import 'knob_field.dart';
 /// costs a wrapper rewrite and a hot restart: 262ms on desktop, 3.07s on an
 /// Android emulator.
 ///
+/// **The bar is pinned, not the last thing in the list.** A knob is a short
+/// list today and an app with eight of them is ordinary; a button that scrolls
+/// away is a button you have to go and find, and the sentence beside it is the
+/// cost of pressing it. Both belong where the decision is made.
+///
 /// Two things it deliberately does not do:
 ///
 /// - **It does not restart on its own.** Losing the cart because somebody typed
@@ -93,82 +98,139 @@ class _KnobsTabState extends State<KnobsTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.unknown case var reason?) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(FwSpacing.xl),
-          child: Text(
-            reason,
-            textAlign: TextAlign.center,
-            style: context.type.caption,
-          ),
-        ),
-      );
-    }
+    if (widget.unknown case var reason?) return _centred(context, reason);
     if (widget.knobs.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(FwSpacing.xl),
-          child: Text(
-            // Said rather than left blank, because "no knobs" and "we did not
-            // look" are different answers and only one of them is true here.
-            '${widget.handle.entrypointLabel} takes no knobs.\n\n'
-            'Give its main() optional named parameters — '
-            "void main({String apiHost = 'localhost'}) — and they appear "
-            'here, changeable with a hot restart instead of a rebuild.',
-            textAlign: TextAlign.center,
-            style: context.type.caption,
-          ),
-        ),
+      return _centred(
+        context,
+        // Said rather than left blank, because "no knobs" and "we did not
+        // look" are different answers and only one of them is true here.
+        '${widget.handle.entrypointLabel} takes no knobs.\n\n'
+        'Give its main() optional named parameters — '
+        "void main({String apiHost = 'localhost'}) — and they appear "
+        'here, changeable with a hot restart instead of a rebuild.',
       );
     }
-    return ListView(
-      padding: const EdgeInsets.all(FwSpacing.lg),
+    return Column(
       children: [
-        for (var knob in widget.knobs) ...[
-          KnobField(
-            knob: knob,
-            value: _edited[knob.name],
-            interfaceOf: widget.interfaceOf,
-            onChanged: (value) => setState(() {
-              if (value == null) {
-                _edited.remove(knob.name);
-              } else {
-                _edited[knob.name] = value;
-              }
-            }),
-          ),
-          const Gap(FwSpacing.md),
-        ],
-        const Gap(FwSpacing.sm),
-        Row(
-          children: [
-            FilledButton(
-              onPressed: _dirty && !_applying ? _apply : null,
-              child: Text(_applying ? 'Restarting…' : 'Restart to apply'),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.xl,
+              vertical: FwSpacing.lg,
             ),
-            const Gap(FwSpacing.md),
-            if (_dirty)
-              Flexible(
-                child: Text(
-                  // The cost, before the click rather than after it.
-                  'A restart re-runs main, so the app starts from its first '
-                  'screen.',
-                  style: context.type.caption.copyWith(
-                    color: context.colors.mut3,
-                  ),
+            children: [
+              Text(
+                'What main() was called with',
+                style: context.type.caption.copyWith(
+                  color: context.colors.mut3,
                 ),
               ),
-          ],
-        ),
-        if (_error case var error?) ...[
-          const Gap(FwSpacing.md),
-          Text(
-            error,
-            style: context.type.caption.copyWith(color: context.colors.red),
+              const Gap(FwSpacing.md),
+              for (var (index, knob) in widget.knobs.indexed) ...[
+                if (index > 0)
+                  Divider(height: FwSpacing.xxl, color: context.colors.line),
+                KnobField(
+                  // Keyed by name, so a field keeps its cursor when the run is
+                  // read back and the list is rebuilt around it.
+                  key: ValueKey(knob.name),
+                  knob: knob,
+                  value: _edited[knob.name],
+                  interfaceOf: widget.interfaceOf,
+                  onChanged: (value) => setState(() {
+                    if (value == null) {
+                      _edited.remove(knob.name);
+                    } else {
+                      _edited[knob.name] = value;
+                    }
+                  }),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
+        _ApplyBar(
+          dirty: _dirty,
+          applying: _applying,
+          error: _error,
+          onApply: _apply,
+        ),
       ],
+    );
+  }
+
+  Widget _centred(BuildContext context, String message) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(FwSpacing.xl),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: context.type.caption,
+        ),
+      ),
+    ),
+  );
+}
+
+/// The consent, and what it costs, at the bottom of the pane.
+class _ApplyBar extends StatelessWidget {
+  const _ApplyBar({
+    required this.dirty,
+    required this.applying,
+    required this.error,
+    required this.onApply,
+  });
+
+  final bool dirty;
+  final bool applying;
+  final String? error;
+  final VoidCallback onApply;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.xl,
+        vertical: FwSpacing.lg,
+      ),
+      decoration: BoxDecoration(
+        color: context.colors.panel,
+        border: Border(top: BorderSide(color: context.colors.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              FilledButton(
+                onPressed: dirty && !applying ? onApply : null,
+                child: Text(applying ? 'Restarting…' : 'Restart to apply'),
+              ),
+              const Gap(FwSpacing.md),
+              if (dirty)
+                Flexible(
+                  child: Text(
+                    // The cost, before the click rather than after it.
+                    'A restart re-runs main, so the app starts from its first '
+                    'screen.',
+                    style: context.type.caption.copyWith(
+                      color: context.colors.mut3,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (error case var failure?) ...[
+            const Gap(FwSpacing.md),
+            Text(
+              failure,
+              style: context.type.caption.copyWith(color: context.colors.red),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

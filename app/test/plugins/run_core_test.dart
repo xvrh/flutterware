@@ -1264,6 +1264,47 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       });
     });
 
+    test('a knob left out is re-asked of its source, not dropped', () async {
+      // "Replaces the set" is about what the *caller* chose. Saying nothing
+      // about `serverPort` used to put it back to the signature's default — an
+      // app quietly talking to another worktree's database, which is the one
+      // failure a launch is refused over. Whatever the project can work out, it
+      // works out again.
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({int serverPort = 8086}) {}',
+      });
+      _writeScript(worktree, 'void main() { print(8186); }');
+      core = _coreFor(
+        worktree,
+        sdk: _sdkWithRealDart(worktree),
+        config: _configWithScript(),
+      );
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        package: 'app',
+        launcherPid: pid,
+        knobs: {'serverPort': '9999'},
+      );
+      await core.computeAll();
+      core.debugControl = (action, handle) async {};
+
+      var running = await core.applyKnobs(handle, const {});
+
+      // Neither 8086 (the signature's default) nor 9999 (the value that was
+      // being overridden). The script still knows the port this worktree got.
+      expect(running, {'serverPort': '8186'});
+      expect(_wrapperFor(worktree), contains('serverPort: 8186,'));
+      expect(
+        RunHandle.tryRead(File(handle.handlePath!))!.knobs,
+        {'serverPort': '8186'},
+        reason: 'and the cockpit is told what it is actually running',
+      );
+    });
+
     test('refuses an entry point this worktree does not declare', () async {
       // Without it there is nothing to validate against, and an unvalidated
       // value becomes a literal in generated source.
@@ -2042,6 +2083,11 @@ void _writePackage(Directory worktree, String path, Map<String, String> files) {
 String _event(String name, Map<String, Object?> params) => jsonEncode([
   {'event': name, 'params': params},
 ]);
+
+/// The generated guest wrapper for `app`'s `lib/main.dart`.
+String _wrapperFor(Directory worktree) => File(
+  p.join(worktree.path, 'app', '.dart_tool/flutterware/run/main_guest.dart'),
+).readAsStringSync();
 
 RunHandle _writeHandle(
   Directory runDir,

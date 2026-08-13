@@ -290,6 +290,91 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Use dev'), findsOneWidget);
   });
+
+  testWidgets("the New run page comes back holding last time's knobs", (
+    tester,
+  ) async {
+    // Running the same thing again should be opening this page and pressing
+    // Start. `lastLaunch` carried a `defines` map the form stopped filling in
+    // when defines were deleted, so it came back empty every time — the values
+    // somebody had actually chosen were the ones being dropped.
+    File(p.join(worktree.path, 'pubspec.yaml'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('name: app\n');
+    File(p.join(worktree.path, 'lib', 'main.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("void main({String apiHost = 'localhost'}) {}");
+    DeviceCache.write(runDir.path, const [
+      DaemonDevice(id: 'phone', name: 'Pixel', platformType: 'android'),
+    ]);
+
+    var core = RunCore(
+      PluginHost(
+        id: runPluginId,
+        label: 'Run',
+        worktree: Worktree(path: worktree.path),
+        workspace: Workspace(
+          root: worktree.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: const {
+          'packages': [
+            {
+              'path': '.',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    addTearDown(core.dispose);
+    // One run in the ledger, so the desk is not drawn under the form — it
+    // starts the device daemon, and a real process is not this test's subject.
+    RunHandle(
+      worktree: worktree.path,
+      worktreeName: Worktree(path: worktree.path).name,
+      device: 'phone',
+      entrypoint: 'lib/main.dart',
+      launcherPid: pid,
+      startedAt: DateTime.now(),
+    ).publish(runDir.path);
+    await tester.runAsync(core.computeAll);
+    core.lastLaunch = (
+      device: 'phone',
+      package: '.',
+      entrypoint: 'lib/main.dart',
+      flavor: null,
+      knobs: {'apiHost': 'staging.example.com'},
+    );
+
+    var address = ValueNotifier(
+      Address(
+        worktree: 'wt',
+        plugin: runPluginId,
+        segments: const [newRunSegment],
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: AddressRoot(
+            address: address,
+            onChanged: (a) => address.value = a,
+            child: Builder(builder: RunPlugin(core).buildPanel),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('staging.example.com'), findsOneWidget);
+  });
 }
 
 /// One opaque white pixel: signature, IHDR, IDAT, IEND.

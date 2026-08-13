@@ -135,11 +135,13 @@ void main() {
       interfaceOf: (address) => address.startsWith('192.') ? 'en0' : null,
     );
 
-    expect(find.widgetWithText(ActionChip, '192.168.1.24'), findsOneWidget);
+    // Once: the chip. The field is empty, because a default is a hint and an
+    // offered value is not a choice until it is picked.
+    expect(find.text('192.168.1.24'), findsOneWidget);
     // Five bare IPv4s say nothing about which one the phone can reach.
     expect(find.text('en0'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ActionChip, '192.168.1.24'));
+    await tester.tap(find.text('192.168.1.24'));
     await tester.pump();
 
     // The field shows it, not just the form state behind it: `initialValue` is
@@ -160,8 +162,26 @@ void main() {
     await pump(tester);
 
     // The dropdown already is the list; a second copy below it would be the
-    // same facts twice.
-    expect(find.byType(ActionChip), findsNothing);
+    // same facts twice. `dev` is on screen because it is selected; the other
+    // two constants exist only inside the menu, which is not open.
+    expect(find.text('dev'), findsOneWidget);
+    expect(find.text('staging'), findsNothing);
+    expect(find.text('prod'), findsNothing);
+  });
+
+  testWidgets('a knob that has been set can be put back', (tester) async {
+    // The only way to say "stop overriding this". A text field can be emptied,
+    // but a switch and a dropdown have no empty — without this a picker moved
+    // off its default could never go back.
+    var applied = await pump(tester, handle: handleWith({'backend': 'prod'}));
+
+    expect(find.text('Reset'), findsOneWidget);
+    await tester.tap(find.text('Reset'));
+    await tester.pump();
+
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump();
+    expect(applied.single, isEmpty);
   });
 
   testWidgets('a picker whose value is not among its options still draws', (

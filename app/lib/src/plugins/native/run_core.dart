@@ -797,8 +797,11 @@ class RunCore extends PluginCore {
               description:
                   'The values to run with, `name=value,name=value` or a JSON '
                   'object. This replaces the set rather than merging into it: '
-                  'a name left out goes back to its parameter default, which '
-                  'is the only way to say "stop overriding this".',
+                  'a name left out stops being overridden, which is the only '
+                  'way to say so. It then falls back to whatever the project '
+                  'works out for it — a `from:` script is re-asked, exactly as '
+                  'at launch — and to the parameter default only when nothing '
+                  'else answers.',
             ),
           ],
         ),
@@ -2151,7 +2154,7 @@ class RunCore extends PluginCore {
     var values = PreviewsCore.parsePairs(arguments['knobs']);
     var started = DateTime.now();
     try {
-      await applyKnobs(handle, values);
+      var running = await applyKnobs(handle, values);
       appendJournal(
         handle,
         JournalEntry(
@@ -2167,7 +2170,9 @@ class RunCore extends PluginCore {
         entrypoint: handle.entrypoint,
         ok: true,
         ms: DateTime.now().difference(started).inMilliseconds,
-        knobs: values,
+        // What it is running with, not what was asked for — the two differ
+        // whenever a source filled in a knob this call left out.
+        knobs: running,
       );
     } on Object catch (e) {
       return RunControlResult(
@@ -2292,7 +2297,12 @@ class RunCore extends PluginCore {
   /// one it had forgotten would be a field you can only overwrite blind. It
   /// moves with the wrapper — see the comment on the write below for why that
   /// has to happen before the restart rather than after it.
-  Future<void> applyKnobs(RunHandle handle, Map<String, String> values) async {
+  /// Returns what the app is now running with, which is not always what was
+  /// asked for: a knob left out of [values] is re-asked of its source.
+  Future<Map<String, String>> applyKnobs(
+    RunHandle handle,
+    Map<String, String> values,
+  ) async {
     // Refused before anything is written. `absolutePathOf` resolves in *this*
     // worktree, so applying to another checkout's run would rewrite this
     // worktree's wrapper and restart that app onto this worktree's code — a
@@ -2325,6 +2335,21 @@ class RunCore extends PluginCore {
       );
     }
     _checkKnobNames(package, entry, values);
+    // The same fill-in a launch does, for the same reason. "Replaces the set"
+    // is about what the *caller* chose, not about forgetting what the project
+    // can work out: leaving `serverPort` out of a call that sets `backend`
+    // would otherwise drop a script-computed port back to the parameter's
+    // default — an app talking to another worktree's database, which is the one
+    // failure `_resolveKnobs` refuses a launch over. A source that cannot
+    // answer refuses this the same way.
+    var resolved = {
+      for (var MapEntry(:key, :value) in (await _resolveKnobs(
+        package,
+        entry,
+        values,
+      )).entries)
+        key: '$value',
+    };
 
     var packageRoot = host.workspace.absolutePathOf(package);
 
@@ -2354,7 +2379,7 @@ class RunCore extends PluginCore {
       ];
     }
 
-    write(values);
+    write(resolved);
     notifyChanged();
     try {
       await control('restart', handle);
@@ -2367,10 +2392,16 @@ class RunCore extends PluginCore {
       notifyChanged();
       rethrow;
     }
+    return resolved;
   }
+
+  /// Stands in for the VM service round trip, so a test can reach what happens
+  /// *after* a restart lands. The same seam [debugRead] and [debugAct] are.
+  Future<void> Function(String action, RunHandle handle)? debugControl;
 
   /// Does one thing to one running app. The panel's entry point as well.
   Future<void> control(String action, RunHandle handle) async {
+    if (debugControl case var stub?) return stub(action, handle);
     var uri = handle.vmService;
     if (uri == null && action != 'stop') {
       throw StateError(
@@ -2519,12 +2550,15 @@ class RunCore extends PluginCore {
   /// persisted to disk — "what I ran a minute ago" is a fact about this
   /// session, and restoring it from last week would be a worse guess than the
   /// first device in the list.
+  /// Knobs rather than defines: the form has no define fields any more, so
+  /// recording them was recording a map that is always empty, and the values
+  /// somebody actually chose were the ones being dropped.
   ({
     String device,
     String package,
     String entrypoint,
     String? flavor,
-    Map<String, String> defines,
+    Map<String, String> knobs,
   })?
   lastLaunch;
 

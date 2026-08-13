@@ -1569,11 +1569,11 @@ class _NewRunPageState extends State<_NewRunPage> {
           )
           .firstOrNull;
       _entry = restored ?? entries.first;
-      // Only when it really is last time's entry point. The defines and the
+      // Only when it really is last time's entry point. The knobs and the
       // flavor of a run belong to the `main()` they were typed for, and
       // restoring them onto whatever entry point happened to sort first put a
       // stale flavor on an unrelated build.
-      _rebuildKnobs(restored != null ? last?.defines ?? const {} : const {});
+      _rebuildKnobs(restored != null ? last?.knobs ?? const {} : const {});
       _resetFlavor(used: restored != null ? last?.flavor : null);
     }
     _device ??= _pickDevice(preferred: last?.device);
@@ -1630,10 +1630,13 @@ class _NewRunPageState extends State<_NewRunPage> {
   /// here would send it back as an explicit choice, which is how the panel and
   /// the action used to disagree about the same launch. An empty field now
   /// means "whatever the default is", which is also what it looks like.
+  /// The caller decides whether [values] belong here: a knob set for one entry
+  /// point means nothing on another, because they are different signatures.
+  /// [_prime] passes an empty map for exactly that case.
   void _rebuildKnobs(Map<String, String> values) {
-    // A knob set for one entry point means nothing on another: they are
-    // different signatures.
-    _knobs.clear();
+    _knobs
+      ..clear()
+      ..addAll(values);
   }
 
   /// The knobs this entry point's `main` takes, as the cockpit and the
@@ -1821,7 +1824,7 @@ class _NewRunPageState extends State<_NewRunPage> {
         package: choice.package,
         entrypoint: choice.entry.path,
         flavor: flavor.isEmpty ? null : flavor,
-        defines: const {},
+        knobs: {..._knobs},
       );
       widget.onLaunched(handle);
     } on Object catch (e) {
