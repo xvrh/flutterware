@@ -688,12 +688,20 @@ class RunCore extends PluginCore {
               kind: ActionParameterKind.choice,
               required: false,
               description:
-                  'Package-relative path, as `entrypoints` reports it. The '
-                  "package's only entry point when omitted.",
+                  'The name or the package-relative path, as `entrypoints` '
+                  'reports them. Two entry points may share a path — '
+                  'declaring one file several times is how one app is run '
+                  'against several configurations — so the name is the '
+                  "selector that always separates them. The package's only "
+                  'entry point when omitted.',
+              // The name, not the path: a path is not unique, and two options
+              // carrying the same value is a picker whose rows do the same
+              // thing. `_resolveEntrypoint` takes either, so a caller already
+              // passing a path keeps working.
               options: [
                 for (var path in packages)
                   for (var entry in entrypointsFor(path))
-                    ActionOption(entry.path, label: entry.name),
+                    ActionOption(entry.name),
               ],
             ),
             const ActionParameter(
@@ -1894,7 +1902,15 @@ class RunCore extends PluginCore {
 
   /// The package and entry point a launch means, or an [ArgumentError] naming
   /// what it could have meant.
-  (String, EntrypointRef) _resolveEntrypoint(String? package, String? path) {
+  ///
+  /// [selector] is a name or a package-relative path. Both, because a path is
+  /// **not unique**: declaring one file several times under different names is
+  /// the documented way to run one app against several configurations, and the
+  /// name is the only thing that separates those.
+  (String, EntrypointRef) _resolveEntrypoint(
+    String? package,
+    String? selector,
+  ) {
     var candidates = package == null
         ? packages
         : [
@@ -1911,25 +1927,63 @@ class RunCore extends PluginCore {
     var matches = [
       for (var candidate in candidates)
         for (var entry in entrypointsFor(candidate))
-          if (path == null || entry.path == path || entry.name == path)
+          if (selector == null ||
+              entry.path == selector ||
+              entry.name == selector)
             (candidate, entry),
     ];
     if (matches.isEmpty) {
       throw ArgumentError.value(
-        path,
+        selector,
         'entrypoint',
         'no such entry point; known: ${[for (var candidate in candidates)
-          for (var entry in entrypointsFor(candidate)) entry.path].join(', ')}',
+          for (var entry in entrypointsFor(candidate)) _labelFor(entry)].join(', ')}',
       );
     }
     if (matches.length > 1) {
       throw ArgumentError.value(
-        path,
+        selector,
         'entrypoint',
-        'ambiguous; name one of: ${[for (var (_, entry) in matches) entry.path].join(', ')}',
+        _ambiguity(matches, package),
       );
     }
     return matches.single;
+  }
+
+  /// How an entry point is offered back to a caller that has to pick one.
+  ///
+  /// The name, and the path too when they differ — a scanned entry point is
+  /// named after its file, so `"App" (lib/main.dart)` is worth two words while
+  /// `lib/main.dart` twice is not.
+  static String _labelFor(EntrypointRef entry) =>
+      entry.name == entry.path ? entry.path : '"${entry.name}" (${entry.path})';
+
+  /// What to say when more than one entry point answers to a selector.
+  ///
+  /// **Never the paths.** The set this refusal exists for is usually one file
+  /// declared several times, so their paths are the *same string* and listing
+  /// them offers a choice between identical options — which is what this
+  /// message used to do. What separates the matches is the name within a
+  /// package and the package across them, so the refusal asks for whichever of
+  /// the two actually differs.
+  String _ambiguity(List<(String, EntrypointRef)> matches, String? package) {
+    var packagesInPlay = {for (var (candidate, _) in matches) candidate};
+    if (package == null && packagesInPlay.length > 1) {
+      return 'ambiguous — ${matches.length} entry points match, in different '
+          'packages. Pass `package` with one of: '
+          '${packagesInPlay.join(', ')}';
+    }
+    var names = {for (var (_, entry) in matches) entry.name};
+    if (names.length == matches.length) {
+      return 'ambiguous — ${matches.length} entry points share this path. '
+          'Pass `entrypoint` with one of the names: '
+          '${names.map((name) => '"$name"').join(', ')}';
+    }
+    // Two declarations with one name in one package. Nothing the caller can
+    // pass separates them, so the refusal is about the config, not the call.
+    return 'ambiguous — ${matches.length} entry points match and share the '
+        'name ${names.map((name) => '"$name"').join(', ')}. Give them distinct '
+        'names in tool/flutterware.dart';
   }
 
   /// Refuses a device [entry] declared it cannot run on.
