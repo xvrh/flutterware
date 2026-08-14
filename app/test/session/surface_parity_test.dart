@@ -72,11 +72,30 @@ void main() {
     test('the parameters of every action are declared identically', () async {
       var cli = await surfaces.cliJson(['actions', '--json']);
 
-      Map<String, Object?> parameters(Map<String, Object?> payload) => {
+      Map<String, Object?> fromCli(Map<String, Object?> payload) => {
         for (var plugin in payload['plugins']! as List)
           for (var action in (plugin as Map)['actions']! as List)
             '${plugin['id']}/${(action as Map)['id']}': action['parameters'],
       };
+
+      // MCP says each parameter once in a top-level table and has its actions
+      // name the keys, because `act`, `observe` and `navigate` take the same
+      // twenty and spelling them out three times was most of a 93KB reply. So
+      // this resolves the table back before comparing — which also pins the
+      // property that makes the table safe: **every key in `takes` is in
+      // `parameters`**. A key that resolved to nothing would show up here as a
+      // null against the CLI's declaration.
+      Map<String, Object?> fromMcpPayload(Map<String, Object?> payload) {
+        var table = (payload['parameters'] as Map?)?.cast<String, Object?>();
+        return {
+          for (var plugin in payload['plugins']! as List)
+            for (var action in (plugin as Map)['actions']! as List)
+              '${plugin['id']}/${(action as Map)['id']}':
+                  action['takes'] == null
+                  ? null
+                  : [for (var key in action['takes']! as List) table?[key]],
+        };
+      }
 
       // Plugin by plugin, because MCP documents the parameters only when asked
       // for one — the whole catalogue at once does not fit in a reply. Walking
@@ -85,7 +104,7 @@ void main() {
       var fromMcp = <String, Object?>{};
       for (var plugin in cli['plugins']! as List) {
         fromMcp.addAll(
-          parameters(
+          fromMcpPayload(
             await surfaces.mcpJson('flutterware_actions', {
               'plugin': (plugin as Map)['id'],
             }),
@@ -93,8 +112,42 @@ void main() {
         );
       }
 
-      expect(parameters(cli), fromMcp);
+      expect(fromCli(cli), fromMcp);
     });
+
+    test('naming an action answers that one alone', () async {
+      var full = await surfaces.mcpJson('flutterware_actions', {
+        'plugin': 'test.fake',
+      });
+      var actions =
+          ((full['plugins']! as List).single as Map)['actions']! as List;
+      expect(actions.length, greaterThan(1));
+
+      var one = await surfaces.mcpJson('flutterware_actions', {
+        'plugin': 'test.fake',
+        'action': 'query',
+      });
+      var only = ((one['plugins']! as List).single as Map)['actions']! as List;
+      expect([for (var a in only) (a as Map)['id']], ['query']);
+
+      // And it carries what that action needs, not what its siblings do.
+      var table = (one['parameters']! as Map).cast<String, Object?>();
+      expect(table.keys.toSet(), {
+        for (var key in (only.single as Map)['takes']! as List) key,
+      });
+    });
+
+    test(
+      'an action the plugin does not have is refused with the list',
+      () async {
+        var reply = await surfaces.mcpError('flutterware_actions', {
+          'plugin': 'test.fake',
+          'action': 'nope',
+        });
+        expect(reply, contains('nope'));
+        expect(reply, contains('query'));
+      },
+    );
 
     test('the index names every action, and the plugin fills one in', () async {
       var index = await surfaces.mcpJson('flutterware_actions');
