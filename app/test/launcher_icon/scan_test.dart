@@ -142,6 +142,55 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
       expect(background.color, '#FF102030');
     });
 
+    test('classifies an adaptive foreground written under drawable', () {
+      // What `flutter_launcher_icons` writes by default: the XML points at
+      // `@drawable/…` and the densities land in `drawable-<dpi>/`. Classifying
+      // by name under `mipmap*` alone found none of them, and then said the
+      // XML pointed at an image that was not on disk — five times over.
+      writeManifest();
+      writeAdaptive(
+        background: '@color/ic_launcher_background',
+        foreground: '@drawable/ic_launcher_foreground',
+      );
+      for (var dpi in ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
+        writePng(
+          'android/app/src/main/res/drawable-$dpi/ic_launcher_foreground.png',
+          162,
+        );
+      }
+
+      var result = scan();
+      var foreground = result.forRole(IconRole.androidAdaptiveForeground)!;
+      expect(foreground.files, hasLength(5));
+      expect(foreground.referenced, isTrue);
+      expect(result.findings.where((f) => f.tone == Tone.error), isEmpty);
+    });
+
+    test('a reference resolves by the type it names, not by name alone', () {
+      // The name matches and the file is real, but `@mipmap/…` does not reach
+      // into `drawable-hdpi/`. Both halves of that are worth saying: nothing
+      // points at the file, and the resource the XML names is missing.
+      writeManifest();
+      writeAdaptive(
+        background: '@color/ic_launcher_background',
+        foreground: '@mipmap/ic_launcher_foreground',
+      );
+      writePng(
+        'android/app/src/main/res/drawable-hdpi/ic_launcher_foreground.png',
+        162,
+      );
+
+      var result = scan();
+      expect(
+        result.forRole(IconRole.androidAdaptiveForeground)!.referenced,
+        isFalse,
+      );
+      expect(
+        result.findings.where((f) => f.tone == Tone.error).single.message,
+        contains('@mipmap/ic_launcher_foreground'),
+      );
+    });
+
     test('finds notification icons in drawable folders', () {
       writeManifest();
       writePng(
@@ -227,6 +276,54 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
       var errors = scan().findings.where((f) => f.tone == Tone.error);
       expect(errors, hasLength(1));
       expect(errors.single.message, contains('ic_launcher_background'));
+    });
+
+    test('a layer answered by a vector drawable is wired, not broken', () {
+      // The foreground is a `<vector>`, so no PNG carries that name anywhere.
+      // Reporting it missing is wrong twice over: the resource is on disk, and
+      // Android draws it perfectly.
+      writeManifest();
+      writeAdaptive(
+        background: '@color/ic_launcher_background',
+        foreground: '@drawable/ic_launcher_foreground',
+      );
+      write('android/app/src/main/res/drawable/ic_launcher_foreground.xml', '''
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+  <path android:fillColor="#FF000000" android:pathData="M0,0h108v108h-108z"/>
+</vector>
+''');
+
+      var findings = scan().findings;
+      expect(findings.where((f) => f.tone == Tone.error), isEmpty);
+      expect(
+        findings.singleWhere((f) => f.tone == Tone.info).message,
+        allOf(
+          contains('@drawable/ic_launcher_foreground'),
+          contains('drawable/ic_launcher_foreground.xml'),
+        ),
+      );
+    });
+
+    test('a vector under the other resource type is still missing', () {
+      // Type-aware to the end: `@mipmap/…` does not reach a `drawable/` vector
+      // any more than it reaches a `drawable/` PNG.
+      writeManifest();
+      writeAdaptive(
+        background: '@color/ic_launcher_background',
+        foreground: '@mipmap/ic_launcher_foreground',
+      );
+      write(
+        'android/app/src/main/res/drawable/ic_launcher_foreground.xml',
+        '<vector/>',
+      );
+
+      expect(
+        scan().findings.where((f) => f.tone == Tone.error).single.message,
+        contains('no such image is on disk'),
+      );
     });
 
     test('adaptive icons below API 26 with no bitmap fallback', () {
