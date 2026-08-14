@@ -52,6 +52,16 @@ class _ServerPanelState extends State<_ServerPanel> {
     _core.track();
   }
 
+  /// Mounting starts tracking, and a config reload is not a mount: the session
+  /// is rebuilt under a panel that keeps its position, so this `State` is
+  /// reused and the new core is never tracked. The panel then reports on a
+  /// core nothing has ever looked at.
+  @override
+  void didUpdateWidget(_ServerPanel old) {
+    super.didUpdateWidget(old);
+    if (old.plugin != widget.plugin) _core.track();
+  }
+
   ServerPlace? _resolve(BuildContext context) => serverPlace(
     [for (var i = 0; i < 3; i++) AddressScope.segment(context, i) ?? '']
       ..removeWhere((s) => s.isEmpty),

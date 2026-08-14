@@ -125,6 +125,22 @@ class _RunPanelState extends State<_RunPanel> {
     _core.track();
   }
 
+  /// **A config reload swaps the core under a panel that stays mounted.**
+  ///
+  /// Rebuilding the session builds a new [RunCore]; the widget above this one
+  /// keeps its position, so Flutter reuses this `State` and `initState` never
+  /// runs again. Without this the new core is never tracked: `computeAll` does
+  /// not run, so `entrypointsFor` stays empty and the panel says *no entry
+  /// points* about a project that declares several — while an app launched
+  /// from one of them is still running and still driveable. No daemon starts
+  /// either, so the run vanishes from the cockpit and there is no way left to
+  /// stop it. Saving `tool/flutterware.dart` was enough to get there.
+  @override
+  void didUpdateWidget(_RunPanel old) {
+    super.didUpdateWidget(old);
+    if (old.plugin != widget.plugin) _core.track();
+  }
+
   RunPlace _resolve(BuildContext context) => runPlace(
     [for (var i = 0; i < 2; i++) AddressScope.segment(context, i) ?? '']
       ..removeWhere((s) => s.isEmpty),
