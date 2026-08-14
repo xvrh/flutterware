@@ -747,7 +747,13 @@ class LauncherIconPackage extends PluginPackage {
 /// ```dart
 /// fw.use(DevStack.background(
 ///   workingDirectory: 'packages/server',
-///   probe: Probe.exitCode(['docker', 'compose', 'ps', '--quiet']),
+///   // Not `docker compose ps --quiet` on its own: that exits 0 whether or
+///   // not anything is up. See [Probe.exitCode].
+///   probe: Probe.exitCode([
+///     'sh',
+///     '-c',
+///     'test -n "$(docker compose ps --quiet --status running)"',
+///   ]),
 ///   start: ['docker', 'compose', 'up', '--wait'],
 ///   stop:  ['docker', 'compose', 'down', '--volumes'],
 ///   stopIsDestructive: true,
@@ -836,11 +842,40 @@ class Probe {
   ///
   /// The floor, and it works today against `minikube status`,
   /// `supabase status` and any health check a project already has, without
-  /// asking anyone to change anything. What it cannot do is tell *down* from *broken*: a health check
-  /// that fails because Docker Desktop is asleep exits non-zero exactly like
-  /// one that fails because nothing is up, and reporting "down" there offers a
-  /// Bring-up button that cannot work. Use [Probe.json] where that distinction
-  /// matters.
+  /// asking anyone to change anything.
+  ///
+  /// **The command has to say no when the stack is down, and a lister does
+  /// not.** `docker compose ps --quiet` exits 0 and prints nothing for a
+  /// stopped project — it succeeded at listing zero containers — so a probe
+  /// declared that way reads `up` forever, and the panel is confidently green
+  /// with no Bring-up button on it. The same goes for anything whose exit code
+  /// is about whether the *tool* ran rather than what it found: `docker ps`,
+  /// `kubectl get pods`, `ls`. The question to ask of a candidate is not "does
+  /// this tell me about the stack" but "does this fail when there is nothing
+  /// there".
+  ///
+  /// Where the answer is only in the output, the emptiness has to be turned
+  /// into an exit code, and that needs a shell — [command] is spawned
+  /// directly, so `$(…)`, pipes and `&&` exist only if `sh -c` is part of what
+  /// you declared:
+  ///
+  /// ```dart
+  /// Probe.exitCode([
+  ///   'sh',
+  ///   '-c',
+  ///   'test -n "$(docker compose ps --quiet --status running)"',
+  /// ])
+  /// ```
+  ///
+  /// That names a Unix shell and is as portable as one. A project that needs
+  /// more than one platform is better off putting the check in a script of its
+  /// own — which is most of the work of earning a [Probe.json], and gets the
+  /// service list and the *broken* state with it.
+  ///
+  /// What it cannot do is tell *down* from *broken*: a health check that fails
+  /// because Docker Desktop is asleep exits non-zero exactly like one that
+  /// fails because nothing is up, and reporting "down" there offers a Bring-up
+  /// button that cannot work. Use [Probe.json] where that distinction matters.
   const Probe.exitCode(this.command) : shape = ProbeShape.exitCode;
 
   /// The command prints one JSON object on stdout:

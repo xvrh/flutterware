@@ -810,3 +810,57 @@ Two decisions there reach back into this document:
   derived from the services rather than written beside them.
 - **A transition is clocked on the core** (`busySince`), not in the widget, so
   two surfaces watching one bring-up agree about how long it has been.
+
+---
+
+## The example probe was wrong (2026-08-14)
+
+Reported by a consumer with a plain compose stack: the copy-paste declaration in
+`DevStack`'s own doc comment used
+`Probe.exitCode(['docker', 'compose', 'ps', '--quiet'])`, which **exits 0 with
+empty output when nothing is running**. It succeeded at listing zero containers.
+So the panel was green, the state was `up`, and the Bring-up button never
+appeared — the block draws `Tear down` in its place for a stack it believes is
+already running, which is exactly right for the state it was handed. Nothing in
+the app was wrong;
+`_read` maps zero to `up` exactly as designed and as tested. The defect was
+entirely in the sentence people copy.
+
+**Fixed in two places, because the trap is bigger than the example.** The
+headline now declares the check that actually fails when the project is
+stopped — `sh -c 'test -n "$(docker compose ps --quiet --status running)"'` —
+and `Probe.exitCode` states the requirement on the *command* rather than only
+the reading of it: the exit code must be about what the check found, not about
+whether the tool ran. `docker ps`, `kubectl get pods` and `ls` fail the same way
+and are named. The doc also now says that the command is spawned directly, which
+nothing had said before: `$(…)` and pipes exist only if `sh -c` is in the list.
+
+**A general lesson about the two shapes.** §"the honest floor" is right that
+`Probe.exitCode` costs a project nothing *when it already has a health check*.
+What the example did was reach for a command that was merely *about* the stack.
+The floor is only honest for checks that already answer yes/no; everything else
+is a script, and a script that is being written anyway should print JSON.
+
+### `Probe.dockerCompose()` — asked for, not built
+
+The same report suggested a first-party compose probe, on the grounds that every
+consumer with a compose stack otherwise writes the same wrapper script. The
+argument is real and the counter-arguments are the ones this document has
+already taken:
+
+- **It re-opens `ProbeShape.composePs`**, which §3's own draft proposed and the
+  shipped design dropped for two shapes — "the honest floor and the useful
+  ceiling". A third shape has to be a third thing the app parses, forever.
+- **It encodes another project's CLI.** `--status`, `--format json` and what
+  `ps` lists by default have all moved across compose versions. A first-party
+  probe keyed to those flags is a heuristic about somebody else's release
+  schedule, and it goes stale silently — the panel keeps drawing a state.
+- **Nothing about `DevStack` is docker-specific** (§3), and the first member
+  named after one tool is the one that decides the class is a docker plugin
+  with escape hatches.
+
+One report is not a population, which is decision 3's test. **Deferred, with the
+evidence recorded here**: if a second and third consumer arrive writing the same
+wrapper, the thing to build is not `Probe.dockerCompose()` but a way for a
+project to *declare* the mapping from a lister's output to a state — which does
+not name a vendor and does not go stale when compose changes a flag.
