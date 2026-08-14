@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
+import 'package:flutterware/src/scenarios/fonts.dart';
 
 /// The profile lane end to end: no runner, no daemon — the folder's
 /// `flutter_test_config.dart` is the only thing that said anything, and the app
@@ -39,5 +40,16 @@ void main() {
       s.tester.platformDispatcher.locale,
       Locale(s.assignment?.language ?? 'fr'),
     );
+  });
+
+  scenario('measures text in the project fonts, not the fallback', (s) async {
+    // `runScenarios` is the only thing standing between a `flutter test`
+    // scenario and fallback metrics, and for a while nothing stood there at
+    // all: the harness loaded the bundle's fonts and this lane did not, so the
+    // same screen was a few pixels wider here and reported it as
+    // `RenderFlex overflowed by 3.5 pixels`. Not-null and not the families —
+    // this fixture's project declares none, and what broke was the loading,
+    // not the manifest.
+    expect(loadedScenarioFonts, isNotNull);
   });
 }

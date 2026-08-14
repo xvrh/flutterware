@@ -20,6 +20,7 @@ import 'package:test_api/src/backend/test.dart';
 import '../devices.dart';
 import '../inspect/guest_inspect.dart';
 import 'events.dart';
+import 'fonts.dart';
 import 'motion.dart';
 import 'profile.dart';
 import 'run_args.dart';
@@ -61,7 +62,9 @@ const _maxInlineTitles = 12;
 ///   races.
 ///
 /// Fonts load once at startup from the asset bundle's `FontManifest.json` —
-/// the harness's job, not every user's (S4's fonts finding).
+/// flutterware's job, not every user's (S4's fonts finding). [runScenarios]
+/// does the same for the `flutter test` lane, so the two agree about how wide
+/// a line of text is.
 Future<void> runHarness(
   Map<String, void Function()> scenarioMains, {
   Map<String, Future<void> Function(FutureOr<void> Function())> configs =
@@ -85,7 +88,7 @@ Future<void> _runHarness(
   Map<String, Future<void> Function(FutureOr<void> Function())> configs,
 ) async {
   var binding = _HarnessBinding();
-  var fonts = await _loadBundleFonts();
+  var fonts = await loadScenarioFonts();
   var profiles = await _probeProfiles(configs);
 
   var inspector = GuestInspector(
@@ -250,25 +253,6 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
         },
         var other => {'arguments': other},
       };
-}
-
-/// Loads every font the asset bundle's `FontManifest.json` declares — the
-/// project's own families plus `MaterialIcons`.
-Future<List<String>> _loadBundleFonts() async {
-  var manifest =
-      jsonDecode(await rootBundle.loadString('FontManifest.json'))
-          as List<dynamic>;
-  var families = <String>[];
-  for (var entry in manifest.cast<Map<String, dynamic>>()) {
-    var family = entry['family']! as String;
-    var loader = FontLoader(family);
-    for (var font in (entry['fonts']! as List).cast<Map<String, dynamic>>()) {
-      loader.addFont(rootBundle.load(font['asset']! as String));
-    }
-    await loader.load();
-    families.add(family);
-  }
-  return families;
 }
 
 /// Declares every scenario file as a group named by its path, so a test's

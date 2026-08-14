@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:meta/meta.dart';
 
 import '../devices.dart';
+import 'fonts.dart';
 
 /// What a folder of scenarios is *for* — the devices and languages worth
 /// offering them in.
@@ -127,6 +128,12 @@ ScenarioAssignment? scenarioAmbientAssignment;
 /// `screenshots-destination` — one convention for "the host tells the test
 /// process something", not two. The loop lives here rather than outside, so a
 /// matrix is one invocation and one compile.
+///
+/// Also loads the project's fonts, once, before anything is declared — the
+/// step `flutter test` otherwise leaves to each project's own
+/// `flutter_test_config.dart`. Without it this lane measures text in the
+/// fallback font while the flutterware harness measures it in the real one,
+/// and the disagreement surfaces as overflows on screens that do not overflow.
 Future<void> runScenarios(
   FutureOr<void> Function() testMain, {
   ScenarioProfile? profile,
@@ -140,6 +147,11 @@ Future<void> runScenarios(
     scenarioProbedProfile = profile;
     return;
   }
+
+  // Before the first declaration and after the probe returns: the harness
+  // loads its own, and a scenario laid out in the fallback font reports itself
+  // as `RenderFlex overflowed by 3.5 pixels` rather than as a font problem.
+  await loadScenarioFonts();
 
   var assignments = scenarioAssignments(profile);
   try {
