@@ -450,9 +450,9 @@ class _Header extends StatelessWidget {
       // Reading the constant is what keeps it from drifting anyway.
       padding: EdgeInsets.fromLTRB(
         panelGutter,
-        showTitle ? FwSpacing.xl : FwSpacing.lg,
+        showTitle ? FwSpacing.xl : FwSpacing.md,
         panelGutter,
-        FwSpacing.lg,
+        showTitle ? FwSpacing.lg : FwSpacing.md,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -489,19 +489,10 @@ class _Header extends StatelessWidget {
               // **Centred against the refresh button, not against the title.**
               // These two are one cluster and read as one: aligned to the top
               // of the row, the badge sat seventeen pixels above the icon it
-              // belongs beside, because a 14 px label and a 48 px `IconButton`
-              // have nothing in common but their top edge.
+              // belongs beside.
               _Watching(live: live, isWatching: isWatching, readAt: readAt),
               const Gap(FwSpacing.sm),
-              IconButton(
-                onPressed: isLoading ? null : onRefresh,
-                tooltip: 'Read this checkout again',
-                icon: Icon(
-                  Icons.refresh,
-                  size: FwIconSize.lg,
-                  color: isLoading ? colors.mut3 : colors.mut,
-                ),
-              ),
+              _Refresh(onTap: isLoading ? null : onRefresh),
             ],
           ),
           if (showTitle) ...[const Gap(FwSpacing.md), _Summary(set)],
@@ -608,6 +599,42 @@ class _Watching extends StatelessWidget {
       '${at.hour.toString().padLeft(2, '0')}:'
       '${at.minute.toString().padLeft(2, '0')}:'
       '${at.second.toString().padLeft(2, '0')}';
+}
+
+/// Re-read, as an icon the size of the line it sits on.
+///
+/// **Not an `IconButton`.** Material's minimum tap target is 40 px tall, which
+/// is more than twice the 18 px of text beside it — under a tab strip it was
+/// the only thing setting the header's height, and the band was 65 px to hold
+/// one line. A pointer does not need a thumb's target.
+class _Refresh extends StatelessWidget {
+  const _Refresh({required this.onTap});
+
+  /// Null while a read is in flight.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tooltip(
+      message: 'Read this checkout again',
+      child: Tappable.builder(
+        onTap: onTap,
+        builder: (context, hovered) => Container(
+          padding: const EdgeInsets.all(FwSpacing.xs),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+            color: hovered && onTap != null ? colors.hoverOverlay : null,
+          ),
+          child: Icon(
+            Icons.refresh,
+            size: FwIconSize.md,
+            color: onTap == null ? colors.mut3 : colors.mut,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Summary extends StatelessWidget {
