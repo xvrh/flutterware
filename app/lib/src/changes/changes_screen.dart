@@ -156,19 +156,6 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   var _query = '';
 
-  /// **The lens.** One toggle over the index, with a count.
-  ///
-  /// *Just changed* is what has moved while this screen has been open — an
-  /// agent's current sentence, not its paragraph. It replaced an *uncommitted*
-  /// lens, which was the wrong question: committed-versus-not is a distinction
-  /// that matters when a person is deciding what to push, and this screen is
-  /// for watching something that commits on its own schedule. "What is it doing
-  /// **now**" is the question that was actually being asked.
-  ///
-  /// With the Important tab, the two questions a fifty-file branch raises: what
-  /// a **rule** says matters, and what is **moving**. A *low-signal* lens sat
-  /// beside this one and is gone with the ranking tier behind it.
-
   /// Null until you pick one, which is what lets the default depend on what the
   /// checkout turned out to contain — see [_tabFor]. Set the moment a tab is
   /// clicked, and never re-derived after that: a screen that switches tabs
