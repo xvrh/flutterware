@@ -106,16 +106,11 @@ class ChangesProbe {
   /// an isolate that is already doing file and process work; resolving the
   /// config on the UI isolate to hand it in would put a synchronous JSON read
   /// on the frame that opens the screen.
-  ///
-  /// [range] narrows the delta to a contiguous run of the branch's history.
-  /// Defaults to [ChangeRange.everything], which is v1's answer and the only
-  /// one anything but the screen's own picker asks for.
   Future<ChangeSet> probe(
     String worktreePath, {
     String? base,
     ChangesConfig? config,
     ChangesConfigState configState = ChangesConfigState.none,
-    ChangeRange range = ChangeRange.everything,
   }) async {
     var head = await _git(worktreePath, ['rev-parse', '--verify', 'HEAD']);
     var headSha = head.ok && head.text.isNotEmpty ? head.text : null;
@@ -126,18 +121,11 @@ class ChangesProbe {
     // Pinned here rather than in `rankChanges`: an untracked entry has no
     // diff, so it is not a `RankedFile` — but a new file an agent has not
     // staged yet is exactly what an attention rule is for.
-    //
-    // **Not read at all for a range that ends at a commit.** An untracked file
-    // is in no commit, so listing it beside a frozen run of history would be
-    // showing something the range does not contain — and skipping it saves the
-    // `status` process rather than filtering its answer away.
     var pins = attentionGlobs(config);
-    var untracked = range.endsAtWorkingTree
-        ? [
-            for (var entry in await _untracked(worktreePath))
-              entry.withReason(attentionForUntracked(entry.path, pins)),
-          ]
-        : const <UntrackedEntry>[];
+    var untracked = [
+      for (var entry in await _untracked(worktreePath))
+        entry.withReason(attentionForUntracked(entry.path, pins)),
+    ];
 
     // The caller's own override first, then the project's `base:`, then
     // inference. Both of the first two are somebody *naming* a base, which is
@@ -152,16 +140,16 @@ class ChangesProbe {
 
     // **No base is a state, not an error to paper over.** Nothing is diffed
     // against a guess. What is still answerable is the uncommitted work, and
-    // showing that beats an empty screen — so the range falls back to HEAD and
-    // the caller is told which it got.
+    // showing that beats an empty screen — so the left side falls back to HEAD
+    // and the caller is told which it got.
     String? mergeBase;
     if (resolved != null && headSha != null) {
       var found = await _git(worktreePath, ['merge-base', resolved, 'HEAD']);
       if (found.ok && found.text.isNotEmpty) mergeBase = found.text;
     }
 
-    var arguments = range.argumentsFrom(mergeBase ?? headSha);
-    if (arguments == null) {
+    var left = mergeBase ?? headSha;
+    if (left == null) {
       // A repository with no commit at all: everything is untracked.
       return ChangeSet(
         worktreePath: worktreePath,
@@ -171,32 +159,16 @@ class ChangesProbe {
         untracked: untracked,
         configState: configState,
         attentionConfigured: pinsDeclared,
-        range: range,
       );
     }
 
-    // **The whole history, whatever the range is.** The picker has to be able
-    // to widen a selection it narrowed, so the list it draws from is always
-    // merge-base…HEAD — and it is read on every probe rather than when the
-    // popover opens, because a popover that hitches on open gets disabled
-    // within a day, and because a commit landing while the screen is open
-    // moves this list without moving a byte of the delta.
-    var commits = mergeBase == null
-        ? const <CommitEntry>[]
-        : await _commits(worktreePath, mergeBase);
-
-    // Only answerable against `HEAD`, and only meaningful for a range that
-    // reaches the working tree — inside a frozen run, "uncommitted" is a
-    // comparison with something the reader is not looking at.
-    var uncommitted = range.endsAtWorkingTree
-        ? await _uncommitted(worktreePath)
-        : const <String>{};
+    var uncommitted = await _uncommitted(worktreePath);
 
     var patch = await _git(worktreePath, [
       'diff',
       ..._diffHardening,
       '-M',
-      ...arguments,
+      left,
     ]);
     if (!patch.ok) {
       return ChangeSet(
@@ -210,31 +182,6 @@ class ChangesProbe {
         untracked: untracked,
         configState: configState,
         attentionConfigured: pinsDeclared,
-        commits: commits,
-        range: range,
-      );
-    }
-
-    if (patch.stdout.length > ChangesLimits.wholePatchBytes) {
-      var files = await _numstatOnly(worktreePath, arguments);
-      return ChangeSet(
-        worktreePath: worktreePath,
-        patch: PatchIndex.empty,
-        files: files,
-        base: resolved,
-        baseSource: source,
-        mergeBase: mergeBase,
-        head: headSha,
-        uncommitted: uncommitted,
-        untracked: untracked,
-        refusal: ChangesRefusal(patchBytes: patch.stdout.length),
-        // A refused patch is still ranked: the globs need the file list and
-        // nothing else.
-        ranking: rankChanges(files, config: config),
-        configState: configState,
-        attentionConfigured: pinsDeclared,
-        commits: commits,
-        range: range,
       );
     }
 
@@ -251,42 +198,7 @@ class ChangesProbe {
       ranking: rankChanges(index.files, config: config),
       configState: configState,
       attentionConfigured: pinsDeclared,
-      commits: commits,
-      range: range,
     );
-  }
-
-  /// The branch's own commits, newest first, capped at
-  /// [ChangesLimits.commits].
-  ///
-  /// **`--first-parent`, which is what makes the range arithmetic sound.** The
-  /// picker computes the left side of a run as *the row below its oldest
-  /// commit*, and that is only well defined for a linear list. It is also what
-  /// a person means by "the commits on this branch": a merge is one row, and
-  /// the branch it brought in is not this branch's history.
-  ///
-  /// Records are NUL-terminated (`-z`) and their fields separated by git's
-  /// own `%x1f`, so a subject containing a newline — or a tab, or a quote
-  /// — arrives whole. A commit subject is user input, and every printable
-  /// separator has been inside one.
-  Future<List<CommitEntry>> _commits(
-    String worktreePath,
-    String mergeBase,
-  ) async {
-    var result = await _git(worktreePath, [
-      'log',
-      '-z',
-      '--first-parent',
-      '--no-color',
-      // One past the cap, so the caller can tell "exactly at the cap" from
-      // "there are more" without a second call.
-      '-n',
-      '${ChangesLimits.commits + 1}',
-      '--format=%H%x1f%h%x1f%an%x1f%cI%x1f%s',
-      '$mergeBase..HEAD',
-    ]);
-    if (!result.ok) return const [];
-    return parseCommitLog(_splitNul(result.stdout));
   }
 
   /// One file's patch, for `fw changes --file` and for MCP.
@@ -388,21 +300,6 @@ class ChangesProbe {
     return parseUntrackedV2Z(_splitNul(result.stdout));
   }
 
-  /// The file list without the patch, for when the patch was refused.
-  Future<List<FileChange>> _numstatOnly(
-    String worktreePath,
-    List<String> range,
-  ) async {
-    var result = await _git(worktreePath, [
-      'diff',
-      '--numstat',
-      '-M',
-      '-z',
-      ...range,
-    ]);
-    return result.ok ? parseNumstatZ(result.stdout) : const [];
-  }
-
   static Future<GitOutput> _defaultRunner(
     String directory,
     List<String> arguments,
@@ -452,39 +349,6 @@ String? renameSourceIn(List<String> records, String path) {
   return null;
 }
 
-/// Parses the records of `git log -z --format=%H%x1f%h%x1f%an%x1f%cI%x1f%s`.
-///
-/// **The subject is whatever is left**, joined back together rather than taken
-/// as field four: `%s` is the last field precisely so a subject that contains
-/// the separator cannot shift anything, and a split with a limit is the one way
-/// to spell that which does not silently truncate.
-///
-/// A record with too few fields is dropped rather than half-read. It means git
-/// answered something this does not understand, and a commit row with an empty
-/// sha is a row that cannot be clicked.
-List<CommitEntry> parseCommitLog(List<String> records) {
-  var commits = <CommitEntry>[];
-  for (var record in records) {
-    // git separates entries with NUL under `-z` but still writes the newline
-    // its format ends with, so the next record arrives with one on the front.
-    var fields = record.trimLeft().split(_unitSeparator);
-    if (fields.length < 5) continue;
-    commits.add(
-      CommitEntry(
-        sha: fields[0],
-        shortSha: fields[1],
-        author: fields[2],
-        at: DateTime.tryParse(fields[3]),
-        subject: fields.sublist(4).join(_unitSeparator),
-      ),
-    );
-  }
-  return commits;
-}
-
-/// git's `%x1f`, the one byte a commit subject cannot contain by accident.
-const _unitSeparator = '\u001f';
-
 /// Pulls the untracked entries out of `status --porcelain=v2 -z`.
 ///
 /// The records are NUL-separated and a rename (`2 `) carries **an extra record**
@@ -524,45 +388,3 @@ List<UntrackedEntry> parseUntrackedV2Z(List<String> records) {
 ///
 /// Binary files report `-` for both counts. They are counted as files —
 /// deleting a 2 MB asset is a real change — and contribute no lines, because
-/// they have none to contribute.
-List<FileChange> parseNumstatZ(Uint8List bytes) {
-  var records = const Utf8Decoder(
-    allowMalformed: true,
-  ).convert(bytes).split('\u0000');
-  var files = <FileChange>[];
-
-  for (var i = 0; i < records.length; i++) {
-    var record = records[i];
-    if (record.isEmpty) continue;
-    var parts = record.split('\t');
-    if (parts.length < 3) continue;
-
-    var isBinary = parts[0] == '-';
-    var added = int.tryParse(parts[0]) ?? 0;
-    var removed = int.tryParse(parts[1]) ?? 0;
-
-    String path;
-    String? oldPath;
-    if (parts[2].isEmpty && i + 2 < records.length) {
-      oldPath = records[++i];
-      path = records[++i];
-    } else {
-      path = parts[2];
-    }
-
-    files.add(
-      FileChange(
-        path: path,
-        oldPath: oldPath,
-        status: oldPath != null ? ChangeStatus.renamed : ChangeStatus.modified,
-        added: added,
-        removed: removed,
-        isBinary: isBinary,
-        hunks: const [],
-        byteStart: 0,
-        byteEnd: 0,
-      ),
-    );
-  }
-  return files;
-}

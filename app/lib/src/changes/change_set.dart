@@ -6,35 +6,16 @@ library;
 
 import 'dart:typed_data';
 
-import 'change_range.dart';
 import 'changes_config_cache.dart';
 import 'patch_index.dart';
 import 'ranking.dart';
-
-export 'change_range.dart';
 
 /// The bounds. Every one is checked **before** the work it bounds, and every
 /// one is visible when it bites: a screen that quietly drops files is worse
 /// than one that refuses, because you cannot tell which it did.
 class ChangesLimits {
-  /// Past this the patch is not indexed at all and the file list comes from
-  /// `--numstat` instead.
-  ///
-  /// 3.6 MB was the worst case reachable in this repository, so this is not a
-  /// tuned number — it is chosen to be obviously above anything real, so that
-  /// hitting it means something is *wrong* rather than something is big.
-  static const wholePatchBytes = 64 * 1024 * 1024;
-
   /// Past this a file is listed and counted but not expandable.
   static const filePatchBytes = 512 * 1024;
-
-  /// How many commits the range picker lists.
-  ///
-  /// A branch with more than this is one nobody is picking a single commit out
-  /// of by eye, and the list is the only thing on this screen whose length is
-  /// unbounded by the *delta* — a rebase of somebody's fork can put thousands
-  /// of commits between a merge base and HEAD.
-  static const commits = 200;
 }
 
 /// Where the base came from. The header shows this, because the one thing
@@ -48,19 +29,6 @@ enum BaseSource {
 
   /// None of the above resolved. Nothing is diffed against a guess.
   none,
-}
-
-/// Why the patch was not indexed.
-class ChangesRefusal {
-  const ChangesRefusal({required this.patchBytes});
-
-  final int patchBytes;
-
-  @override
-  String toString() =>
-      'the diff is ${(patchBytes / (1024 * 1024)).toStringAsFixed(1)} MB, past '
-      'the ${ChangesLimits.wholePatchBytes ~/ (1024 * 1024)} MB the viewer '
-      'will index. Showing the file list only.';
 }
 
 /// An untracked path, exactly as git reported it.
@@ -105,13 +73,10 @@ class ChangeSet {
     this.head,
     this.uncommitted = const {},
     this.untracked = const [],
-    this.refusal,
     this.files,
     Ranking? ranking,
     this.configState = ChangesConfigState.none,
     this.attentionConfigured = false,
-    this.commits = const [],
-    this.range = ChangeRange.everything,
     // ignore: prefer_initializing_formals
   }) : _ranking = ranking;
 
@@ -125,28 +90,13 @@ class ChangeSet {
   final String? mergeBase;
   final String? head;
 
-  /// The branch's own commits, newest first — **the whole branch, whatever
-  /// [range] is**, because the picker has to widen what it narrowed.
-  ///
-  /// Capped at [ChangesLimits.commits] + 1, so [commitsTruncated] can tell
-  /// "exactly at the cap" from "there are more" without a second call.
-  final List<CommitEntry> commits;
-
-  bool get commitsTruncated => commits.length > ChangesLimits.commits;
-
-  /// Which part of that history this set is. [ChangeRange.everything] is the
-  /// default and is what everything except the screen's picker asks for.
-  final ChangeRange range;
-
-  /// The commits [range] covers — empty when it is only the working tree.
-  List<CommitEntry> get rangeCommits => commitsIn(range, commits);
-
-  /// The patch, indexed. [PatchIndex.empty] when [refusal] is set, or when
-  /// there is nothing to compare against.
+  /// The patch, indexed. [PatchIndex.empty] when there is nothing to compare
+  /// against.
   final PatchIndex patch;
 
-  /// Overrides [PatchIndex.files] when the patch was refused and the list came
-  /// from `--numstat` instead. Null in the normal case.
+  /// Overrides [PatchIndex.files]. Null in the normal case, where the list is
+  /// indexed from the patch bytes — set only by tests, which describe a delta
+  /// without authoring a patch to index.
   final List<FileChange>? files;
 
   /// Paths whose delta is **not all committed**. An attribute of a file, not a
@@ -154,8 +104,6 @@ class ChangeSet {
   final Set<String> uncommitted;
 
   final List<UntrackedEntry> untracked;
-
-  final ChangesRefusal? refusal;
 
   /// How much the ranking rules are worth believing. Only [ChangesConfigState]
   /// `.stale` says anything on screen.
@@ -235,8 +183,8 @@ class ChangeSet {
   ///
   /// Equal bytes make [changed] equal by construction — the file list is
   /// indexed *from* them — so only what is not derived from the patch is
-  /// compared beside it. [files] is the exception: when the patch was refused
-  /// that list came from `--numstat` instead, and the bytes are empty.
+  /// compared beside it. [files] is the exception: when it is injected the
+  /// bytes are empty.
   bool sameAnswerAs(ChangeSet other) {
     if (identical(this, other)) return true;
     if (worktreePath != other.worktreePath ||
@@ -244,20 +192,8 @@ class ChangeSet {
         baseSource != other.baseSource ||
         mergeBase != other.mergeBase ||
         head != other.head ||
-        range != other.range ||
-        configState != other.configState ||
-        refusal?.patchBytes != other.refusal?.patchBytes) {
+        configState != other.configState) {
       return false;
-    }
-    // **A commit is the one thing that moves this list without moving a byte
-    // of the patch.** Committing the whole delta changes nothing about what is
-    // drawn on the left and everything about what the picker has to offer, so
-    // a set that compared only the diff would leave the popover a commit
-    // behind for as long as the screen stayed open. Shas only: nothing else
-    // about a commit can change once it exists.
-    if (commits.length != other.commits.length) return false;
-    for (var i = 0; i < commits.length; i++) {
-      if (commits[i].sha != other.commits[i].sha) return false;
     }
     if (uncommitted.length != other.uncommitted.length ||
         !uncommitted.containsAll(other.uncommitted)) {
@@ -273,7 +209,7 @@ class ChangeSet {
       }
     }
     if (!_sameBytes(patch.bytes, other.patch.bytes)) return false;
-    // Only reachable when the patch was refused; otherwise this is the same
+    // Only reachable when [files] was injected; otherwise this is the same
     // list read twice.
     if (files != null || other.files != null) {
       var mine = changed, theirs = other.changed;
@@ -302,54 +238,6 @@ class ChangeSet {
     return true;
   }
 
-  /// Which paths read differently here than in [previous].
-  ///
-  /// **What an agent is doing right now**, and it costs nothing extra: the live
-  /// screen already compares every re-probe against the last one to decide
-  /// whether to redraw, so the paths that moved fall out of the same pass.
-  ///
-  /// A file's own patch bytes are compared, not its counts — an edit that swaps
-  /// one line for another of the same length moves neither `+n` nor `−n`, and
-  /// is exactly the sort of thing you want to have noticed.
-  Set<String> movedFrom(ChangeSet previous) {
-    var before = {for (var file in previous.changed) file.path: file};
-    var moved = <String>{};
-    for (var file in changed) {
-      var was = before.remove(file.path);
-      if (was == null ||
-          was.status != file.status ||
-          was.added != file.added ||
-          was.removed != file.removed ||
-          !_sameSlice(previous.patch, was, patch, file)) {
-        moved.add(file.path);
-      }
-    }
-    // A file that left the delta has moved too, though nothing on screen can
-    // hold it — the caller keeps a session-long set and this stops it lying.
-    moved.addAll(before.keys);
-
-    var untrackedNow = {for (var entry in untracked) entry.path};
-    var untrackedWas = {for (var entry in previous.untracked) entry.path};
-    moved
-      ..addAll(untrackedNow.difference(untrackedWas))
-      ..addAll(untrackedWas.difference(untrackedNow));
-    return moved;
-  }
-
-  static bool _sameSlice(
-    PatchIndex a,
-    FileChange fa,
-    PatchIndex b,
-    FileChange fb,
-  ) {
-    var lengthA = fa.byteEnd - fa.byteStart;
-    if (lengthA != fb.byteEnd - fb.byteStart) return false;
-    for (var i = 0; i < lengthA; i++) {
-      if (a.bytes[fa.byteStart + i] != b.bytes[fb.byteStart + i]) return false;
-    }
-    return true;
-  }
-
   static bool _sameBytes(Uint8List a, Uint8List b) {
     if (identical(a, b)) return true;
     if (a.length != b.length) return false;
@@ -365,11 +253,9 @@ class ChangeSet {
     'baseSource': baseSource.name,
     'mergeBase': ?mergeBase,
     'head': ?head,
-    if (!range.isEverything) 'range': range.toParams(),
     'files': changed.length,
     'added': added,
     'removed': removed,
-    'refused': ?refusal?.toString(),
     if (configState == ChangesConfigState.stale) 'configStale': true,
     'changed': [
       for (var file in changed)

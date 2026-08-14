@@ -333,13 +333,12 @@ class WorktreeWatcher {
 ///
 /// The cost this does not dodge: 3,000 build outputs are 9,002 events, and
 /// nothing here can tell they were all gitignored without asking git. The
-/// [minInterval] floor is the bound — a continuous writer costs one re-probe
-/// every two seconds, not one per write.
+/// [minInterval] floor is the only bound there is.
 class WorkingTreeWatcher {
   WorkingTreeWatcher({
     required this.worktreePath,
     this.debounce = const Duration(milliseconds: 300),
-    this.minInterval = const Duration(seconds: 2),
+    this.minInterval = const Duration(seconds: 5),
     WatchDirectory? watch,
     DateTime Function()? now,
     this.onFailure,
@@ -354,6 +353,15 @@ class WorkingTreeWatcher {
   /// The floor between two fires. See [WorktreeWatcher.minInterval]: an agent
   /// writing continuously never offers a quiet moment, so a debounce alone
   /// would either never fire or fire on every write.
+  ///
+  /// **Longer than the explorer's, because a fire here costs incomparably
+  /// more**: that one re-reads a small file per worktree, this one spawns an
+  /// isolate and half a dozen git subprocesses including the whole `git diff`.
+  ///
+  /// It is also nearly free to lengthen. After any quiet moment the floor has
+  /// already elapsed, so a save still lands in [debounce] — this bounds only
+  /// the *continuous* writer, which is the `build/` case it exists for and the
+  /// one case where re-probing at speed buys nothing.
   final Duration minInterval;
 
   final WatchDirectory _watch;

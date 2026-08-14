@@ -32,11 +32,8 @@ class ChangesController extends ChangeNotifier {
     required this.worktreePath,
     this.repoRoot,
     Future<ChangeSet> Function(String path)? load,
-    ChangeRange range = ChangeRange.everything,
     // ignore: prefer_initializing_formals
-  }) : _load = load,
-       // ignore: prefer_initializing_formals
-       _range = range;
+  }) : _load = load;
 
   final String worktreePath;
 
@@ -58,10 +55,6 @@ class ChangesController extends ChangeNotifier {
 
   Future<ChangeSet> _withConfig(String path) {
     var root = repoRoot;
-    // Captured by value before the isolate is spawned — a `ChangeRange` is two
-    // strings, and reading `_range` from inside the closure would capture
-    // `this`, which does not cross.
-    var range = _range;
     return Isolate.run(() {
       var resolved = root == null
           ? ResolvedChangesConfig.defaults
@@ -70,34 +63,8 @@ class ChangesController extends ChangeNotifier {
         path,
         config: resolved.config,
         configState: resolved.state,
-        range: range,
       );
     });
-  }
-
-  /// Which part of the branch's history is being shown.
-  ///
-  /// **The controller's, not the set's**, because the set is the *answer* and
-  /// this is the question: it has to survive a load that has not landed yet, a
-  /// load that failed, and the first frame — all three of which have no
-  /// `ChangeSet` to read it off.
-  ChangeRange get range => _range;
-  ChangeRange _range;
-
-  /// Re-reads the checkout for [range]. A no-op when it is already showing.
-  ///
-  /// The previous answer is **dropped**, unlike a refresh: stale-then-fresh is
-  /// right for the same range read twice and wrong here, where the old counts
-  /// under a new range's label would be a screen actively lying for the ~100 ms
-  /// the probe takes.
-  Future<void> setRange(ChangeRange range) {
-    if (range == _range) return Future.value();
-    _range = range;
-    _value = null;
-    // What moved *since the screen opened* is a claim about one range. Kept
-    // across a range change, it would mark files that never moved at all.
-    _moved.clear();
-    return refresh();
   }
 
   ChangeSet? get value => _value;
@@ -110,20 +77,6 @@ class ChangesController extends ChangeNotifier {
 
   Object? get failure => _failure;
   Object? _failure;
-
-  /// Every path that has read differently at some point since this screen
-  /// opened — **what the agent has been doing while you watched.**
-  ///
-  /// Deliberately cumulative rather than "since the last probe": a probe fires
-  /// every couple of seconds, so a per-probe set would empty itself before you
-  /// could look at it. This grows for as long as the screen is open and is
-  /// gone when it closes, which is the right lifetime — it answers "what has
-  /// happened *while I have been here*", and nothing else has to be persisted
-  /// for it to be true.
-  ///
-  /// Empty on the first read, because there is nothing to have moved from.
-  Set<String> get moved => _moved;
-  final _moved = <String>{};
 
   /// When the last load finished, whatever it found. The header shows this, so
   /// a screen that has been sitting open says how old what it is showing is.
@@ -191,9 +144,6 @@ class ChangesController extends ChangeNotifier {
       // build output git ignores, and re-probing it produces this set again.
       // Keeping the old one keeps every expanded hunk's decoded text, and the
       // screen does not rebuild. See [ChangeSet.sameAnswerAs].
-      if (_value case var was? when !was.sameAnswerAs(set)) {
-        _moved.addAll(set.movedFrom(was));
-      }
       _value = _value?.sameAnswerAs(set) ?? false ? _value : set;
       _failure = null;
       _readAt = DateTime.now();

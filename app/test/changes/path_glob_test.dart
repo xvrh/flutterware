@@ -9,7 +9,7 @@ import 'package:flutterware_app/src/changes/path_glob.dart';
 void main() {
   void expectMatch(String pattern, String path, {required bool matches}) {
     expect(
-      PathGlob(pattern).matches(path),
+      PathGlobSet([pattern]).firstMatch(path) != null,
       matches,
       reason: '$pattern vs $path',
     );
@@ -60,12 +60,12 @@ void main() {
     });
   });
 
-  test('a pattern that will not compile matches nothing and does not throw', () {
-    // The probe runs inside an isolate: a stray bracket in one noise rule must
-    // cost that rule, not the file list.
-    late PathGlob glob;
-    expect(() => glob = PathGlob('lib/[.dart'), returnsNormally);
-    expect(glob.matches('lib/a.dart'), isFalse);
+  test('a pattern that will not compile costs that rule and nothing else', () {
+    // The probe runs inside an isolate: a stray bracket in one attention rule
+    // must cost that rule, not the file list.
+    late PathGlobSet set;
+    expect(() => set = PathGlobSet(['lib/[.dart', 'lib/**']), returnsNormally);
+    expect(set.firstMatch('lib/a.dart'), 'lib/**');
   });
 
   group('PathGlobSet', () {

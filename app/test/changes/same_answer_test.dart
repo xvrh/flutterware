@@ -31,7 +31,6 @@ void main() {
     List<UntrackedEntry> untracked = const [],
     Ranking? ranking,
     List<FileChange>? files,
-    ChangesRefusal? refusal,
     ChangesConfigState config = ChangesConfigState.none,
   }) => ChangeSet(
     worktreePath: '/repo/feature',
@@ -46,7 +45,6 @@ void main() {
     untracked: untracked,
     ranking: ranking,
     files: files,
-    refusal: refusal,
     configState: config,
   );
 
@@ -132,31 +130,14 @@ void main() {
     );
   });
 
-  test(
-    'a refused patch is compared by its file list, since it has no bytes',
-    () {
-      // Both sides carry an empty `PatchIndex`, so bytes say nothing here and
-      // the `--numstat` list is the only evidence there is.
-      var refusal = const ChangesRefusal(patchBytes: 99 * 1024 * 1024);
-      var a = setOf(patch: '', refusal: refusal, files: [file('lib/a.dart')]);
-      var b = setOf(patch: '', refusal: refusal, files: [file('lib/a.dart')]);
-      var c = setOf(
-        patch: '',
-        refusal: refusal,
-        files: [file('lib/a.dart', added: 5)],
-      );
+  test('an injected file list is compared, since it has no bytes', () {
+    // Both sides carry an empty `PatchIndex`, so the bytes say nothing and the
+    // overriding list is the only evidence there is.
+    var a = setOf(patch: '', files: [file('lib/a.dart')]);
+    var b = setOf(patch: '', files: [file('lib/a.dart')]);
+    var c = setOf(patch: '', files: [file('lib/a.dart', added: 5)]);
 
-      expect(a.sameAnswerAs(b), isTrue);
-      expect(a.sameAnswerAs(c), isFalse);
-    },
-  );
-
-  test('refusing where it did not refuse before', () {
-    expect(
-      setOf(patch: '').sameAnswerAs(
-        setOf(patch: '', refusal: const ChangesRefusal(patchBytes: 1)),
-      ),
-      isFalse,
-    );
+    expect(a.sameAnswerAs(b), isTrue);
+    expect(a.sameAnswerAs(c), isFalse);
   });
 }

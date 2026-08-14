@@ -18,12 +18,6 @@ import 'ranking.dart';
 List<String> changesReport(ChangeSet set) {
   var lines = <String>[_headline(set)];
 
-  if (set.refusal case var why?) {
-    lines
-      ..add('')
-      ..add('  $why');
-  }
-
   if (set.baseSource == BaseSource.none) {
     lines
       ..add('')
