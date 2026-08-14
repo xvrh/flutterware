@@ -228,6 +228,37 @@ Future<int> sweepRunDir({
   return deleted;
 }
 
+/// Whether this process has already swept.
+bool _sweptThisProcess = false;
+
+/// [sweepRunDir], at most once in the life of this process.
+///
+/// **For callers on a hot path.** The sweep walks the directory and stats every
+/// entry; a long-lived GUI that launched a run every few minutes would pay that
+/// repeatedly to find nothing, because the litter it is looking for is left by
+/// processes that have already died. Once per process is what a launcher wants,
+/// and what a daemon that sweeps at startup already does by construction.
+///
+/// Returns how many entries were removed, or zero for the calls that did not
+/// run. Failures are swallowed rather than thrown: this is housekeeping, and no
+/// caller should fail over it.
+Future<int> sweepRunDirOnce(
+  String? directory, {
+  Duration keepFor = const Duration(days: 1),
+}) async {
+  if (_sweptThisProcess) return 0;
+  _sweptThisProcess = true;
+  try {
+    return await sweepRunDir(keepFor: keepFor, directory: directory);
+  } on Object {
+    return 0;
+  }
+}
+
+/// Lets a test run [sweepRunDirOnce] more than once per process.
+@visibleForTesting
+void debugResetRunDirSweep() => _sweptThisProcess = false;
+
 final _daemonKey = RegExp(r'^[0-9a-f]{16}$');
 
 /// Whether a run handle's `flutter run` is still there.
