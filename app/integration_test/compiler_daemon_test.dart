@@ -792,6 +792,75 @@ Widget fixtureBroken() => const Placeholder();
       ),
     );
   });
+
+  test('a snapshot this Dart cannot load is rebuilt, not waited out', () async {
+    // The snapshot is a cache, and this is the case where it holds bytes the
+    // VM will not accept. It happens because the file outlives the project
+    // that compiled it: a hosted install lives at
+    // `~/.flutterware/<sha1(packageRoot)>/app/`, which is keyed on the
+    // flutterware revision, so every project on the machine pinning that
+    // revision shares it while each brings its own Flutter. Two of them on
+    // two betas took turns — whichever compiled last owned the file, and the
+    // other one got 30 seconds of polling a socket that would never appear
+    // and a message blaming the socket. Permanently, because a snapshot the
+    // VM refuses still has a perfectly fresh mtime.
+    //
+    // The path is keyed on the SDK now, so that pair no longer collides. This
+    // covers the other half: a snapshot that is wrong anyway is recompiled
+    // once, whatever made it wrong.
+    var sdk = DartSdkIdentity.of(dartExecutable);
+    var snapshot = File(daemonSnapshotPath(appRoot, sdk));
+    expect(
+      snapshot.existsSync(),
+      isTrue,
+      reason: 'the connect in setUpAll compiled it',
+    );
+
+    // A foreign SDK's kernel, near enough: the magic number is intact — so the
+    // VM reads the file as a kernel rather than compiling it as source — and
+    // nothing after it survives. A real version mismatch says `Invalid SDK
+    // hash`, a far enough one says `Invalid kernel binary format version`, and
+    // this says `Indicated size is invalid`. One refusal, one remedy.
+    var good = snapshot.readAsBytesSync();
+    snapshot.writeAsBytesSync(good.sublist(0, 2000));
+
+    // `emitProbe` is in the config and so in the address: this connect has to
+    // spawn, where every other client in this file would attach to a daemon
+    // that read the snapshot into memory minutes ago and cannot be told
+    // anything by corrupting it now.
+    var logs = <String>[];
+    var (healed, healedReady) = await CompilerDaemonClient.connect(
+      dartExecutable: dartExecutable,
+      config: DaemonConfig.forPackage(
+        appToolDirectory: appRoot,
+        packageRoot: appRoot,
+        flutterSdkRoot: flutterRoot,
+        roots: const ['tool/catalog'],
+        emitProbe: true,
+      ),
+      onLog: (line) {
+        logs.add(line);
+        print('  [healed] $line');
+      },
+    );
+    addTearDown(healed.stopDaemon);
+
+    expect(
+      healedReady.entries,
+      isNotEmpty,
+      reason: 'it started, which is the whole claim',
+    );
+    expect(
+      logs.join('\n'),
+      contains('would not load the daemon snapshot'),
+      reason: 'it started by way of the retry, not by ignoring the snapshot',
+    );
+    expect(
+      snapshot.lengthSync(),
+      greaterThan(2000),
+      reason: 'the cache was rebuilt rather than worked around',
+    );
+  });
 }
 
 /// This package's root, from its own package URI rather than from
