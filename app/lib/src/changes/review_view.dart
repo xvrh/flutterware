@@ -29,6 +29,15 @@ const reviewComposerKey = Key('review-composer');
 /// still carries every line.
 const _quoteLimit = 6;
 
+/// What the amber dot means, said once.
+///
+/// The thread has room to write it out and the index row has room for a dot
+/// and a tooltip, and the two must not drift into two different claims — this
+/// is the only honest one we can make. See [ReviewComment.fileDigest].
+const driftMessage =
+    'This file changed after you commented. The code you quoted is kept as it '
+    'was.';
+
 /// A comment as it appears in the diff, under the line it is about.
 ///
 /// **The left edge is the accent bar**, the same 2 px device the index uses for
@@ -140,8 +149,7 @@ class ReviewThread extends StatelessWidget {
                 const Gap(FwSpacing.sm),
                 Expanded(
                   child: Text(
-                    'This file changed after you commented. The code you '
-                    'quoted is kept as it was.',
+                    driftMessage,
                     style: context.type.micro.copyWith(color: colors.mut2),
                   ),
                 ),
@@ -519,6 +527,13 @@ class _ReviewComposerState extends State<ReviewComposer> {
 /// **Numbered.** The list is what you hand off, in this order, and a number is
 /// what lets you say *the third one* to the agent afterwards — the one thing
 /// the anchor cannot do when three comments sit on one file.
+///
+/// **A row, not a paragraph.** Three notes with a two-line body and a line of
+/// code each ran together into one block of text: nothing said where one ended
+/// and the next began except a faint digit in the margin, while the threads
+/// they mirror had become composed objects. It carries the same four things a
+/// thread does, in the same order — kind, where, when, then the note over the
+/// code it is about — and a rule underneath so the eye can find the seam.
 class ReviewIndexRow extends StatelessWidget {
   const ReviewIndexRow({
     required this.number,
@@ -531,7 +546,12 @@ class ReviewIndexRow extends StatelessWidget {
 
   final int number;
   final ReviewComment comment;
+
+  /// The note the screen is currently on — the one you last opened, or the one
+  /// being rewritten. Marking it is what makes the list and the diff feel like
+  /// two views of one thing rather than a jump into an unrelated file.
   final bool selected;
+
   final bool drifted;
   final VoidCallback onTap;
 
@@ -541,14 +561,17 @@ class ReviewIndexRow extends StatelessWidget {
     return Tappable.builder(
       onTap: onTap,
       builder: (context, hovered) => Container(
-        color: selected
-            ? colors.accentSoft
-            : hovered
-            ? colors.hoverOverlay
-            : null,
+        decoration: BoxDecoration(
+          color: selected
+              ? colors.accentSoft
+              : hovered
+              ? colors.hoverOverlay
+              : null,
+          border: Border(bottom: BorderSide(color: colors.line)),
+        ),
         padding: const EdgeInsets.symmetric(
           horizontal: FwSpacing.md,
-          vertical: FwSpacing.sm,
+          vertical: FwSpacing.md,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,47 +580,79 @@ class ReviewIndexRow extends StatelessWidget {
               width: 16,
               child: Text(
                 '$number',
-                style: context.type.micro.copyWith(color: colors.mut3),
+                style: context.type.micro.copyWith(
+                  color: selected ? colors.accent : colors.mut3,
+                ),
               ),
             ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // **The directory gives way first.** `path_glob.dart:3` is
-                  // what tells two rows apart at a glance; the six segments in
-                  // front of it are what an ellipsis should eat, and putting
-                  // the whole path in one `Text` ellipsised the name instead.
                   Row(
                     children: [
-                      if (comment.anchor.directory case var it?)
-                        Flexible(
-                          child: Text(
-                            it,
-                            style: context.type.micro.copyWith(
-                              color: colors.mut3,
+                      Icon(
+                        _iconFor(comment.anchor),
+                        size: FwIconSize.xs,
+                        color: colors.mut3,
+                      ),
+                      const Gap(FwSpacing.sm),
+                      // **The directory is given up, not squeezed.** Drawn
+                      // beside the name it used to share the squeeze with it,
+                      // and once a clock and a drift dot joined the line, a
+                      // 320 px column ellipsised *both* — leaving
+                      // `example_server.da…` next to `examples/example…`, which
+                      // is two half-truths where the point was to keep one
+                      // whole one. `name:line` is what tells two rows apart;
+                      // the whole path is a hover away, and the quoted line
+                      // below tells apart two files that share a name.
+                      // **One flexible child on this line, not two.** A
+                      // `Spacer` to push the clock right is itself flex, so it
+                      // split the free width with the name and ellipsised it at
+                      // half a column wide. The name's box takes the leftover
+                      // instead, and the clock is simply what comes after it.
+                      Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Tooltip(
+                                message: comment.anchor.label,
+                                child: Text(
+                                  comment.anchor.shortLabel,
+                                  style: context.type.micro.copyWith(
+                                    color: colors.mut2,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                            softWrap: false,
-                          ),
-                        ),
-                      Flexible(
-                        child: Text(
-                          comment.anchor.shortLabel,
-                          style: context.type.micro.copyWith(
-                            color: colors.mut2,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: false,
+                            if (drifted) ...[
+                              const Gap(FwSpacing.xs),
+                              // The dot said nothing on its own. The thread has
+                              // room for the sentence; a 320 px row has room
+                              // for the dot and a pointer.
+                              Tooltip(
+                                message: driftMessage,
+                                child: Icon(
+                                  Icons.circle,
+                                  size: 6,
+                                  color: colors.amber,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      if (drifted) ...[
-                        const Gap(FwSpacing.xs),
-                        Icon(Icons.circle, size: 6, color: colors.amber),
-                      ],
+                      const Gap(FwSpacing.sm),
+                      Text(
+                        clockOf(comment.createdAt),
+                        style: context.type.micro.copyWith(color: colors.mut3),
+                      ),
                     ],
                   ),
-                  const Gap(FwSpacing.xxs),
+                  const Gap(FwSpacing.xs),
                   // Two lines of the note, not one: the first line of a review
                   // comment is often the setup and the second is the ask.
                   Text(
@@ -609,17 +664,27 @@ class ReviewIndexRow extends StatelessWidget {
                   // **One line of what it is about.** Three notes on one file
                   // read as three copies of that filename otherwise; the line
                   // of code under each is what tells them apart without
-                  // opening any of them.
+                  // opening any of them. Ruled rather than merely dimmed —
+                  // under two lines of prose, a third line of grey text reads
+                  // as more prose.
                   if (_firstCode(comment.quote) case var line?) ...[
-                    const Gap(FwSpacing.xxs),
-                    Text(
-                      line,
-                      style: diffTextStyle(
-                        context,
-                      ).copyWith(color: colors.mut3),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: false,
+                    const Gap(FwSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.only(left: FwSpacing.sm),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          left: BorderSide(color: colors.line2, width: 2),
+                        ),
+                      ),
+                      child: Text(
+                        line,
+                        style: diffTextStyle(
+                          context,
+                        ).copyWith(color: colors.mut3),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
                     ),
                   ],
                 ],
@@ -643,6 +708,11 @@ class ReviewIndexRow extends StatelessWidget {
 }
 
 /// A handed-off batch, collapsed to one row.
+///
+/// **How it left is the useful half.** *Copied* and *written to a file* have
+/// different next steps when the agent says it saw nothing, so the route gets
+/// an icon of its own rather than sharing a middot-joined line with the clock
+/// — and for the file route the path is what you need to hand over again.
 class ReviewBatchRow extends StatelessWidget {
   const ReviewBatchRow({required this.batch, required this.onCopy, super.key});
 
@@ -653,29 +723,45 @@ class ReviewBatchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var count = batch.comments.length;
-    return Padding(
+    var saved = batch.savedTo;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.line)),
+      ),
       padding: const EdgeInsets.symmetric(
         horizontal: FwSpacing.md,
-        vertical: FwSpacing.sm,
+        vertical: FwSpacing.md,
       ),
       child: Row(
         children: [
-          Text(
-            '$count ${count == 1 ? 'comment' : 'comments'}',
-            style: context.type.bodySmall.copyWith(color: colors.mut),
+          Icon(
+            saved == null ? Icons.content_copy : Icons.description_outlined,
+            size: FwIconSize.xs,
+            color: colors.mut3,
           ),
-          const Gap(FwSpacing.md),
+          const Gap(FwSpacing.sm),
           Expanded(
-            child: Text(
-              [
-                clockOf(batch.handedOffAt),
-                if (batch.savedTo case var path?) path else batch.route,
-              ].join(' · '),
-              style: context.type.micro.copyWith(color: colors.mut3),
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$count ${count == 1 ? 'comment' : 'comments'} · '
+                  '${clockOf(batch.handedOffAt)}',
+                  style: context.type.micro.copyWith(color: colors.mut2),
+                ),
+                const Gap(FwSpacing.xxs),
+                Text(
+                  saved ?? 'Copied to the clipboard',
+                  style: saved == null
+                      ? context.type.micro.copyWith(color: colors.mut3)
+                      : diffTextStyle(context).copyWith(color: colors.mut3),
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+              ],
             ),
           ),
+          const Gap(FwSpacing.sm),
           _Action(label: 'Copy', onTap: onCopy),
         ],
       ),

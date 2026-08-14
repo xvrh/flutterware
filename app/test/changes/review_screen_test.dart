@@ -264,6 +264,32 @@ void main() {
     expect(find.byType(ReviewThread), findsOneWidget);
   });
 
+  testWidgets('the row you open is the row that stays marked', (tester) async {
+    await pump(tester);
+    await openFile(tester, 'a.dart');
+    await plus(tester, 0);
+    await write(tester, 'about a');
+
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+
+    ReviewIndexRow row() =>
+        tester.widgetList<ReviewIndexRow>(find.byType(ReviewIndexRow)).single;
+    expect(row().selected, isFalse);
+
+    // The list and the diff are two views of one thing: opening a note from
+    // here jumps the body to it, and the row has to say which one that was.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(ReviewIndexRow),
+        matching: find.text('about a'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(row().selected, isTrue);
+  });
+
   testWidgets('deleting takes it off the screen, and can be taken back', (
     tester,
   ) async {

@@ -58,6 +58,11 @@ sealed class ReviewAnchor {
 
   /// Everything before [shortLabel], with its trailing slash, or null when the
   /// anchor names no directory.
+  ///
+  /// Drawn beside [shortLabel] where there is room for it — the composer — and
+  /// given up entirely where there is not. The index row carries it in a
+  /// tooltip instead: sharing a 320 px line, it ellipsised the name it was
+  /// supposed to make room for.
   String? get directory {
     var slash = label.lastIndexOf('/');
     return slash < 0 ? null : label.substring(0, slash + 1);

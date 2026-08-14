@@ -692,7 +692,12 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         onQuery: (q) => setState(() => _query = q),
                         onSelect: _show,
                         review: _review.state,
-                        selectedComment: _editing,
+                        // **The note the screen is on**, which is the one being
+                        // rewritten or, failing that, the last one opened. It
+                        // was the editing one alone, so clicking a row marked
+                        // nothing: the diff jumped and the list you clicked in
+                        // gave no sign of which row you were now looking at.
+                        selectedComment: _editing ?? _reveal,
                         deleted: _pendingDelete,
                         onUndoDelete: _undoDelete,
                         drifted: (c) => _drifted(c, set),
