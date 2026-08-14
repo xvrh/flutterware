@@ -1778,9 +1778,6 @@ class _Panel extends StatelessWidget {
           repoRoot: shell.repoRoot,
           initialPath: _changesFilePath(shell),
           onPathChanged: (path) => shell.selectChangesFile(changesFor, path),
-          initialRange: shell.changesRange,
-          onRangeChanged: (range) =>
-              shell.selectChangesRange(changesFor, range),
           gitMoved: shell.gitMoved,
         ),
       );

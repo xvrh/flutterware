@@ -18,7 +18,6 @@ import 'hunk_ruler.dart';
 import 'hunk_syntax.dart';
 import 'patch_index.dart';
 import 'ranking.dart';
-import 'range_picker.dart';
 
 /// The changes screen's root, so a test can scope to it.
 const changesScreenKey = Key('changes-screen');
@@ -79,8 +78,6 @@ class ChangesScreen extends StatefulWidget {
     this.repoRoot,
     this.initialPath,
     this.onPathChanged,
-    this.initialRange = ChangeRange.everything,
-    this.onRangeChanged,
     this.gitMoved,
     this.load,
     this.live = true,
@@ -108,15 +105,6 @@ class ChangesScreen extends StatefulWidget {
   /// Writes the expansion back into the address, so what you are looking at is
   /// what the bar says and what a link would reopen.
   final ValueChanged<String?>? onPathChanged;
-
-  /// Which part of the branch's history to open on, from `?from=` and `?to=`.
-  ///
-  /// In the address for the same reason the file is: a range you cannot paste
-  /// is one you re-pick every time somebody asks what you are looking at.
-  final ChangeRange initialRange;
-
-  /// Writes a picked range back into the address.
-  final ValueChanged<ChangeRange>? onRangeChanged;
 
   /// The shell's repository-wide git signal. Staging and committing write a
   /// linked worktree's index under the *main* checkout, so no watch on this
@@ -235,13 +223,6 @@ class _ChangesScreenState extends State<ChangesScreen> {
         when path != old.initialPath && path != _selected) {
       _show(path);
     }
-    // The same for the range. It comes back down through the address rather
-    // than being held here, which is what makes the picker's write and a
-    // pasted `?from=` the same code path — and what stops the two disagreeing
-    // when the back button moves one of them.
-    if (widget.initialRange != _changes.range) {
-      unawaited(_changes.setRange(widget.initialRange));
-    }
   }
 
   void _start() {
@@ -249,7 +230,6 @@ class _ChangesScreenState extends State<ChangesScreen> {
       worktreePath: widget.worktree.path,
       repoRoot: widget.repoRoot,
       load: widget.load,
-      range: widget.initialRange,
     )..addListener(_onChanged);
     // **Watching is scoped to this screen being mounted**, which is what makes
     // one recursive watch affordable: the explorer refuses fourteen of them,
@@ -327,26 +307,6 @@ class _ChangesScreenState extends State<ChangesScreen> {
     return visible;
   }
 
-  /// Narrows to [range], and says so in the address.
-  ///
-  /// **The selection is dropped with it.** A file that is in the whole delta is
-  /// often not in one commit of it, and the right pane already has a state for
-  /// a path the set no longer holds — `This file is no longer part of the
-  /// delta`, which would be a confusing thing to read about a file you had just
-  /// been looking at and had not touched. Going back to the index is the honest
-  /// answer to *the question changed*.
-  void _pickRange(ChangeRange range) {
-    if (range == _changes.range) return;
-    _show(null);
-    // Written to the address rather than applied here: it comes back down as
-    // `initialRange`, which is the same path a pasted link takes.
-    if (widget.onRangeChanged case var write?) {
-      write(range);
-    } else {
-      unawaited(_changes.setRange(range));
-    }
-  }
-
   /// Shows [path] in the right pane, from the top.
   ///
   /// **The body scrolls back to the start.** Two files' diffs share a scroll
@@ -401,8 +361,6 @@ class _ChangesScreenState extends State<ChangesScreen> {
           readAt: _changes.readAt,
           failure: _changes.failure,
           showTitle: widget.showTitle,
-          range: _changes.range,
-          onRange: _pickRange,
           onRefresh: () => unawaited(_changes.refresh()),
         ),
         Divider(height: 1, color: context.colors.line),
@@ -468,8 +426,6 @@ class _Header extends StatelessWidget {
     required this.readAt,
     required this.failure,
     required this.showTitle,
-    required this.range,
-    required this.onRange,
     required this.onRefresh,
   });
 
@@ -482,12 +438,6 @@ class _Header extends StatelessWidget {
   final Object? failure;
   final bool showTitle;
 
-  /// Read from the controller rather than from [set], because the range is the
-  /// *question*: it is picked before the answer exists, and the first frame
-  /// after picking one has no set at all.
-  final ChangeRange range;
-
-  final ValueChanged<ChangeRange> onRange;
   final VoidCallback onRefresh;
 
   @override
@@ -530,9 +480,7 @@ class _Header extends StatelessWidget {
                 // Under a strip, the summary *is* the header: the delta's
                 // counts move up onto the line the title used to have, rather
                 // than leaving an empty band where it was.
-                Expanded(
-                  child: _Summary(set, onRange: onRange, showBase: false),
-                ),
+                Expanded(child: _Summary(set, showBase: false)),
               // **What makes the liveness believable.** A screen that updates
               // by itself and never says so is indistinguishable from one that
               // has stopped — and the one thing worse than a stale screen is a
@@ -543,12 +491,7 @@ class _Header extends StatelessWidget {
               // of the row, the badge sat seventeen pixels above the icon it
               // belongs beside, because a 14 px label and a 48 px `IconButton`
               // have nothing in common but their top edge.
-              _Watching(
-                live: live,
-                isWatching: isWatching,
-                readAt: readAt,
-                pinned: !range.endsAtWorkingTree,
-              ),
+              _Watching(live: live, isWatching: isWatching, readAt: readAt),
               const Gap(FwSpacing.sm),
               IconButton(
                 onPressed: isLoading ? null : onRefresh,
@@ -561,10 +504,7 @@ class _Header extends StatelessWidget {
               ),
             ],
           ),
-          if (showTitle) ...[
-            const Gap(FwSpacing.md),
-            _Summary(set, onRange: onRange),
-          ],
+          if (showTitle) ...[const Gap(FwSpacing.md), _Summary(set)],
           if (failure case var why?) ...[
             const Gap(FwSpacing.md),
             _Note('Could not read this checkout: $why'),
@@ -625,21 +565,11 @@ class _Watching extends StatelessWidget {
     required this.live,
     required this.isWatching,
     required this.readAt,
-    required this.pinned,
   });
 
   final bool live;
   final bool isWatching;
   final DateTime? readAt;
-
-  /// Whether the range ends at a commit rather than at the files on disk.
-  ///
-  /// **Then nothing can move it, and saying *Watching* would be the exact
-  /// failure this widget exists to prevent** — a screen that claims to be live
-  /// while showing frozen history is the stale screen you trust. The watch is
-  /// still armed and the badge still says something true; it just stops being
-  /// a claim about the thing on screen.
-  final bool pinned;
 
   @override
   Widget build(BuildContext context) {
@@ -647,39 +577,26 @@ class _Watching extends StatelessWidget {
     if (!live) return const SizedBox.shrink();
     var stale = !isWatching;
     return Tooltip(
-      message: pinned
-          ? 'Pinned to a range of commits — nothing on disk can change it'
-          : stale
+      message: stale
           ? 'This checkout is not being watched — refresh to read it again'
           : 'Re-read whenever this checkout changes'
                 '${readAt == null ? '' : '\nLast read at ${_clock(readAt!)}'}',
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (pinned)
-            Icon(
-              Icons.push_pin_outlined,
-              size: FwIconSize.xs,
-              color: colors.mut3,
-            )
-          else
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: stale ? colors.mut3 : colors.grn,
-              ),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: stale ? colors.mut3 : colors.grn,
             ),
+          ),
           const Gap(FwSpacing.xs),
           Text(
-            pinned
-                ? 'Pinned'
-                : stale
-                ? 'Not watching'
-                : 'Watching',
+            stale ? 'Not watching' : 'Watching',
             style: context.type.micro.copyWith(
-              color: stale && !pinned ? colors.mut2 : colors.mut3,
+              color: stale ? colors.mut2 : colors.mut3,
             ),
           ),
         ],
@@ -694,10 +611,9 @@ class _Watching extends StatelessWidget {
 }
 
 class _Summary extends StatelessWidget {
-  const _Summary(this.set, {required this.onRange, this.showBase = true});
+  const _Summary(this.set, {this.showBase = true});
 
   final ChangeSet? set;
-  final ValueChanged<ChangeRange> onRange;
 
   /// False under the comparison strip, which states the base for all three
   /// tabs. `base master (inferred)` under `against origin/master` is one fact
@@ -725,12 +641,18 @@ class _Summary extends StatelessWidget {
               '$uncommitted uncommitted',
               style: style.copyWith(color: colors.amber),
             ),
-          // **The base statement became the control.** It already answered
-          // *against what*, which is the same question a range answers with
-          // more in it — so the range is picked where the answer is read,
-          // rather than from a second affordance in a header that is one line
-          // tall. See `RangePicker`.
-          RangePicker(set: it, onRange: onRange, withBase: showBase),
+          // **`no base` is said either way**: it is not a duplicate of the
+          // strip's `against <base>` — it is the reason every count beside it
+          // is smaller than it looks, and the one state where the two halves
+          // of this screen can be answering different questions.
+          if (it.baseSource == BaseSource.none)
+            Text('no base', style: style.copyWith(color: colors.mut2))
+          else if (showBase)
+            Text(switch (it.baseSource) {
+              BaseSource.configured => 'base ${it.base} (configured)',
+              BaseSource.inferred => 'base ${it.base} (inferred)',
+              BaseSource.none => '',
+            }, style: style.copyWith(color: colors.mut2)),
         ],
       );
     }
