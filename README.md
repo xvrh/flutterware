@@ -3,8 +3,8 @@
 Development tooling for Flutter projects.
 
 Declare the tools you want in `tool/flutterware.dart`. You then get them three
-ways: a desktop app, a `fw` command line, and an MCP server. They all run the
-same code, so an agent can do anything you can do from the window.
+ways: a desktop app, a command line, and an MCP server. They all run the same
+code, so an agent can do anything you can do from the window.
 
 ## Quick start
 
@@ -35,12 +35,18 @@ version manager. An alias is worth having:
 alias fw='fvm dart run flutterware'   # or 'dart run flutterware'
 ```
 
+Put that in your shell's rc file — `~/.zshrc`, `~/.bashrc` — and the rest of
+this README reads as written: **`fw` below is that alias**, and nothing
+installs a binary by that name. Because the alias names the `dart` in it, the
+SDK stays yours to choose, and a project that switches version managers is one
+edited line rather than a reinstall.
+
 Anything after `dart run flutterware` is passed to the CLI instead:
 
 ```shell
-dart run flutterware status     # what every tool says about this project
-dart run flutterware actions    # what can be invoked, and with what
-dart run flutterware help
+fw status     # what every tool says about this project
+fw actions    # what can be invoked, and with what
+fw help
 ```
 
 ### Agents
@@ -388,11 +394,13 @@ server ones, which need a hand anyway) — flutterware
 photographs itself:
 
 ```sh
-dart tool/screenshots.dart
+fvm dart tool/screenshots.dart
 ```
+
+The script shoots with the `dart` that ran it, so this repo's own pin is the
+one to name — see [CONTRIBUTING.md](CONTRIBUTING.md) for the fvm setup.
 
 Each one is a `fw capture` of the GUI at a fixed size, density and theme, so
 re-running it leaves the files untouched unless what they show has actually
 changed. See [tool/screenshots.dart](tool/screenshots.dart) for the list, and
-`dart run flutterware help capture` for how a panel can tell it is being
-photographed.
+`fw help capture` for how a panel can tell it is being photographed.

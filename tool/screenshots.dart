@@ -1,8 +1,11 @@
 /// Regenerates the screenshots `README.md` links to.
 ///
 /// ```sh
-/// dart tool/screenshots.dart
+/// fvm dart tool/screenshots.dart
 /// ```
+///
+/// Named through fvm because the shots are taken with the `dart` that runs
+/// this script: the one on PATH is older than the workspace floor.
 ///
 /// Each shot is one `fw capture` against this checkout, at a fixed size,
 /// density and theme so that re-running it produces byte-identical files and
