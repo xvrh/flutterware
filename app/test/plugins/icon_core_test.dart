@@ -148,6 +148,38 @@ void main() {
       expect(role.files.single.width, 72);
     });
 
+    test('reports an adaptive foreground written under drawable', () async {
+      // A project generated the common way: the XML names `@drawable/…` and
+      // the densities land beside the notification icons. Both the row and the
+      // silence are the point — the foreground used to be missing from the
+      // report, and an error used to claim it was not on disk.
+      writeManifest();
+      write('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', '''
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+  <background android:drawable="@color/ic_launcher_background"/>
+  <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+</adaptive-icon>
+''');
+      writePng('android/app/src/main/res/mipmap-hdpi/ic_launcher.png', 72);
+      writePng(
+        'android/app/src/main/res/drawable-xxhdpi/ic_launcher_foreground.png',
+        432,
+      );
+
+      var result = (await core().invoke('inventory'))! as IconInventoryResult;
+
+      var foreground = result.roles.singleWhere(
+        (r) => r.role == 'android.adaptive-foreground',
+      );
+      expect(foreground.referenced, isTrue);
+      expect(
+        foreground.files.single.path,
+        'android/app/src/main/res/drawable-xxhdpi/ic_launcher_foreground.png',
+      );
+      expect(result.findings.where((f) => f.tone == Tone.error.name), isEmpty);
+    });
+
     test('loads on demand, so an agent need not warm it first', () async {
       writeManifest();
       writePng('android/app/src/main/res/mipmap-hdpi/ic_launcher.png', 72);

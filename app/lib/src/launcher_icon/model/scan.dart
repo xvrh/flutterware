@@ -8,9 +8,13 @@
 ///
 /// Discovery is deliberately **broad, then classified**. Globbing for
 /// `ic_launcher_foreground.png` by name would only find icons a particular
-/// generator wrote; listing every PNG in `mipmap-*` and then asking the
-/// project's own wiring what each one is finds them whoever wrote them — and,
-/// more usefully, finds the ones nothing references at all.
+/// generator wrote; listing every PNG in `mipmap-*` and `drawable-*` and then
+/// asking the project's own wiring what each one is finds them whoever wrote
+/// them — and, more usefully, finds the ones nothing references at all.
+///
+/// Asking the wiring means asking it for a whole reference, type and all. A
+/// launcher icon lives under whichever of the two directory families its own
+/// project put it in, and `@drawable/x` answers only for `drawable*`.
 library;
 
 import 'dart:convert';
@@ -33,6 +37,7 @@ class IconFile {
     this.height,
     this.hasAlpha = false,
     this.density,
+    this.resourceType,
     this.icoFrames = const [],
     this.declaredSize,
   });
@@ -58,6 +63,14 @@ class IconFile {
   /// `xxhdpi`, `@3x`, `192` — whatever the platform calls this variant. Null
   /// when the platform has only one.
   final String? density;
+
+  /// The Android resource type this was found under — `mipmap`, `drawable`.
+  /// Null off Android, where nothing addresses a file by type.
+  ///
+  /// Carried because a name is only half of what a reference names, and the
+  /// half that does not distinguish `@drawable/ic_launcher_foreground` from
+  /// `@mipmap/ic_launcher_foreground`.
+  final String? resourceType;
 
   /// The sizes an `.ico` packs, largest last. Empty for every other format.
   final List<int> icoFrames;
@@ -201,8 +214,9 @@ IconScan scanIcons({
 }) {
   var roles = <IconRole, IconRoleScan>{};
   var findings = <IconFinding>[];
+  var resources = <_Resource>[];
 
-  var android = _scanAndroid(packageRoot, flavor, roles);
+  var android = _scanAndroid(packageRoot, flavor, roles, resources);
   var (ios, bundles) = _scanApple(packageRoot, roles);
   _scanWeb(packageRoot, roles);
   _scanDesktop(packageRoot, roles);
@@ -221,7 +235,7 @@ IconScan scanIcons({
     iconBundles: bundles,
   );
 
-  findings.addAll(_findings(scan));
+  findings.addAll(_findings(scan, resources));
   return scan;
 }
 
@@ -246,10 +260,20 @@ List<String> androidFlavors(String packageRoot) {
   ]..sort();
 }
 
+/// One file in a `mipmap*` or `drawable*` directory, named the way a reference
+/// would name it.
+///
+/// Collected beside the icons because a reference resolves against *this*, not
+/// against the bitmaps the scan classified. The two are not the same set: a
+/// `<foreground>` naming a vector drawable is wired perfectly and has no PNG
+/// anywhere, which is a different thing from a reference pointing at nothing.
+typedef _Resource = ({String type, String name, String path});
+
 AndroidWiring? _scanAndroid(
   String packageRoot,
   String? flavor,
   Map<IconRole, IconRoleScan> roles,
+  List<_Resource> resources,
 ) {
   var sourceSet = p.join(
     packageRoot,
@@ -282,28 +306,46 @@ AndroidWiring? _scanAndroid(
 
   var byRole = <IconRole, List<IconFile>>{};
 
+  // The roles the wiring itself pointed at, as opposed to the ones a naming
+  // convention guessed. Collected as the files are classified rather than
+  // compared again afterwards: asking "what is this file?" and then,
+  // separately, "does anything point at it?" is two resolutions that can
+  // disagree, and they did.
+  var wired = <IconRole>{};
+
   for (var dir in Directory(resFolder).listSync().whereType<Directory>()) {
     var dirName = p.basename(dir.path);
     var isMipmap = dirName.startsWith('mipmap-') || dirName == 'mipmap';
     var isDrawable = dirName.startsWith('drawable-') || dirName == 'drawable';
     if (!isMipmap && !isDrawable) continue;
-    // The adaptive XML is wiring, not an image; `wiring.dart` has it.
-    if (dirName == 'mipmap-anydpi-v26') continue;
 
+    var type = isMipmap ? 'mipmap' : 'drawable';
+    // The adaptive XML is wiring, not an image; `wiring.dart` has it. It is
+    // still a resource, though, and something may point at it.
+    var classifies = dirName != 'mipmap-anydpi-v26';
     var density = dirName.contains('-')
         ? dirName.substring(dirName.indexOf('-') + 1)
         : null;
 
     for (var file in dir.listSync().whereType<File>()) {
-      if (p.extension(file.path).toLowerCase() != '.png') continue;
       var name = p.basenameWithoutExtension(file.path);
-      var role = isMipmap
-          ? _classifyMipmap(name, wiring)
-          : _classifyDrawable(name);
-      if (role == null) continue;
+      resources.add((
+        type: type,
+        name: name,
+        path: p.relative(file.path, from: packageRoot),
+      ));
+
+      if (!classifies) continue;
+      if (p.extension(file.path).toLowerCase() != '.png') continue;
+      var classified = _classify(type, name, wiring);
+      if (classified == null) continue;
+      var (role, pointedAt) = classified;
+      if (pointedAt) wired.add(role);
       byRole
           .putIfAbsent(role, () => [])
-          .add(_pngFile(packageRoot, file, density: density));
+          .add(
+            _pngFile(packageRoot, file, density: density, resourceType: type),
+          );
     }
   }
 
@@ -314,23 +356,19 @@ AndroidWiring? _scanAndroid(
         .add(_pngFile(packageRoot, playStore));
   }
 
-  var referenced = wiring.referencedNames;
   // Only meaningful once something was actually read: with an unreadable
   // manifest and no adaptive XML, every file would look unreferenced and the
   // panel would cry wolf about all of them.
-  var wiringIsKnown = referenced.isNotEmpty;
+  var wiringIsKnown = wiring.referencedNames.isNotEmpty;
 
   for (var entry in byRole.entries) {
-    var files = entry.value..sort(_bySize);
     roles[entry.key] = IconRoleScan(
       role: entry.key,
-      files: files,
+      files: entry.value..sort(_bySize),
       color: entry.key == IconRole.androidAdaptiveBackground
           ? wiring.backgroundColor
           : null,
-      referenced: wiringIsKnown
-          ? files.any((f) => referenced.contains(f.name))
-          : null,
+      referenced: wiringIsKnown ? wired.contains(entry.key) : null,
     );
   }
 
@@ -348,29 +386,52 @@ AndroidWiring? _scanAndroid(
   return wiring;
 }
 
-/// What a mipmap PNG is, asking the wiring before the naming convention.
+/// What one Android resource is, and whether the wiring is what said so.
 ///
 /// The wiring first is what makes this generator-agnostic: a project whose
 /// manifest says `android:icon="@mipmap/launcher"` gets its launcher icon
 /// recognised, where a list of `icons_launcher`'s output names would miss it
 /// entirely.
-IconRole? _classifyMipmap(String name, AndroidWiring wiring) {
-  if (name == _nameOrNull(wiring.manifestIcon)) return IconRole.androidLegacy;
-  if (name == _nameOrNull(wiring.manifestRoundIcon)) {
-    return IconRole.androidRound;
+///
+/// [type] is where the file was found — `mipmap` or `drawable` — and it is half
+/// the question, because a reference names a type too. The same questions are
+/// asked of both: an adaptive foreground under `drawable-<dpi>/`, which is what
+/// `flutter_launcher_icons` writes by default, is an adaptive foreground.
+///
+/// The second half of the answer travels with the first because it is the same
+/// resolution. A file the wiring named is one the OS reaches; a file only a
+/// naming convention recognised is one nothing points at yet, which is worth
+/// saying out loud.
+(IconRole, bool)? _classify(String type, String name, AndroidWiring wiring) {
+  bool pointsHere(String? reference) =>
+      reference != null && _resolves(reference, type, name);
+
+  if (pointsHere(wiring.manifestIcon)) return (IconRole.androidLegacy, true);
+  if (pointsHere(wiring.manifestRoundIcon)) {
+    return (IconRole.androidRound, true);
   }
   for (var xml in [wiring.launcher, wiring.launcherRound]) {
     if (xml == null) continue;
-    if (name == _nameOrNull(xml.foreground)) {
-      return IconRole.androidAdaptiveForeground;
+    if (pointsHere(xml.foreground)) {
+      return (IconRole.androidAdaptiveForeground, true);
     }
-    if (name == _nameOrNull(xml.background)) {
-      return IconRole.androidAdaptiveBackground;
+    if (pointsHere(xml.background)) {
+      return (IconRole.androidAdaptiveBackground, true);
     }
-    if (name == _nameOrNull(xml.monochrome)) return IconRole.androidMonochrome;
+    if (pointsHere(xml.monochrome)) return (IconRole.androidMonochrome, true);
   }
 
-  return switch (name) {
+  // Notification icons are recognised by name alone, and only as drawables.
+  // Unlike the launcher icon they are referenced from application code or from
+  // a `<meta-data>` element naming a library's convention, so there is no
+  // single place to read. `ic_notification` and `ic_stat_*` are what the
+  // Android and Firebase docs use.
+  if (type == 'drawable' &&
+      (name == 'ic_notification' || name.startsWith('ic_stat'))) {
+    return (IconRole.androidNotification, false);
+  }
+
+  var byConvention = switch (name) {
     'ic_launcher' => IconRole.androidLegacy,
     'ic_launcher_round' => IconRole.androidRound,
     'ic_launcher_foreground' => IconRole.androidAdaptiveForeground,
@@ -378,21 +439,32 @@ IconRole? _classifyMipmap(String name, AndroidWiring wiring) {
     'ic_launcher_monochrome' => IconRole.androidMonochrome,
     _ => null,
   };
+  return byConvention == null ? null : (byConvention, false);
 }
 
-/// Notification icons are recognised by name alone.
+/// Whether [reference] resolves to the resource [type]/[name].
 ///
-/// Unlike the launcher icon they are referenced from application code or from a
-/// `<meta-data>` element naming a library's convention, so there is no single
-/// place to read. `ic_notification` and `ic_stat_*` are what the Android and
-/// Firebase docs use.
-IconRole? _classifyDrawable(String name) =>
-    name == 'ic_notification' || name.startsWith('ic_stat')
-    ? IconRole.androidNotification
-    : null;
+/// A reference carrying no type at all is matched on the name, which is what a
+/// malformed manifest gets rather than a silent miss.
+bool _resolves(String reference, String? type, String name) {
+  if (resourceName(reference) != name) return false;
+  var referencedType = resourceType(reference);
+  return referencedType == null || referencedType == type;
+}
 
-String? _nameOrNull(String? reference) =>
-    reference == null ? null : resourceName(reference);
+/// The file [reference] resolves to, whatever its format, or null when nothing
+/// on disk answers it.
+///
+/// Asked through [_resolves] rather than a second rule of its own, so what
+/// counts as a match cannot drift from what the classifier believed.
+String? _resolvedFile(String reference, List<_Resource> resources) {
+  for (var resource in resources) {
+    if (_resolves(reference, resource.type, resource.name)) {
+      return resource.path;
+    }
+  }
+  return null;
+}
 
 // ---- Apple -----------------------------------------------------------------
 
@@ -627,7 +699,7 @@ void _scanDesktop(String packageRoot, Map<IconRole, IconRoleScan> roles) {
 /// Every rule here is a **fact about the files**, never an opinion about how
 /// they were made: nothing reads a generator's config, so nothing can complain
 /// about one.
-List<IconFinding> _findings(IconScan scan) {
+List<IconFinding> _findings(IconScan scan, List<_Resource> resources) {
   var findings = <IconFinding>[];
   var wiring = scan.android;
 
@@ -661,18 +733,32 @@ List<IconFinding> _findings(IconScan scan) {
         if (reference == null) continue;
         // A `@color/…` background resolves in colors.xml, not to a file.
         if (reference.startsWith('@color/')) continue;
-        var name = resourceName(reference);
-        var found = scan.roles.any(
-          (role) => role.files.any((file) => file.name == name),
+        var bitmap = scan.roles.any(
+          (role) => role.files.any(
+            (file) => _resolves(reference, file.resourceType, file.name),
+          ),
         );
-        if (!found) {
-          findings.add(
-            IconFinding(
-              Tone.error,
-              '${xml.path} points at $reference, and no such image is on disk.',
-            ),
-          );
-        }
+        if (bitmap) continue;
+
+        // Nothing was classified, which is two different situations. The
+        // reference may answer to a file this scan does not read — a vector
+        // drawable, a WebP — and then it is wired and simply not drawable
+        // here. Only a reference nothing on disk answers is a broken one.
+        var resource = _resolvedFile(reference, resources);
+        findings.add(
+          resource == null
+              ? IconFinding(
+                  Tone.error,
+                  '${xml.path} points at $reference, and no such image is on '
+                  'disk.',
+                )
+              : IconFinding(
+                  Tone.info,
+                  '${xml.path} points at $reference, which resolves to '
+                  '$resource. It is wired; PNG is the only format previewed '
+                  'here.',
+                ),
+        );
       }
     }
 
@@ -771,6 +857,7 @@ IconFile _pngFile(
   String packageRoot,
   File file, {
   String? density,
+  String? resourceType,
   int? declaredSize,
 }) {
   Uint8List bytes;
@@ -782,6 +869,7 @@ IconFile _pngFile(
       absolutePath: file.path,
       modified: _modified(file),
       density: density,
+      resourceType: resourceType,
       declaredSize: declaredSize,
     );
   }
@@ -795,6 +883,7 @@ IconFile _pngFile(
     height: header?.height,
     hasAlpha: header?.hasAlpha ?? false,
     density: density,
+    resourceType: resourceType,
     declaredSize: declaredSize,
   );
 }

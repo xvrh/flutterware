@@ -107,6 +107,19 @@ class AndroidWiring {
 /// `@mipmap/ic_launcher` → `ic_launcher`.
 String resourceName(String reference) => reference.split('/').last;
 
+/// `@mipmap/ic_launcher` → `mipmap`, or null when the reference names no type.
+///
+/// The type is the other half of a reference, and it is what decides where
+/// Android looks: `@drawable/x` resolves against `drawable*` and `@mipmap/x`
+/// against `mipmap*`. Compare names alone and the two become the same
+/// resource — which is how a foreground sitting in `drawable-xxhdpi/`, where
+/// `flutter_launcher_icons` writes it by default, gets reported as missing.
+String? resourceType(String reference) {
+  var slash = reference.indexOf('/');
+  if (slash <= 0) return null;
+  return reference.substring(0, slash).replaceFirst('@', '');
+}
+
 /// Parses an Android resource colour to ARGB, or null when it is not one.
 ///
 /// The platform accepts `#RGB`, `#ARGB`, `#RRGGBB` and `#AARRGGBB`, and the
