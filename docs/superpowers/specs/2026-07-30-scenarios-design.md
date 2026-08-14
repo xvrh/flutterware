@@ -322,12 +322,14 @@ From dev_studio: the flow-graph collapse model, translation-capture *hooks*
 (overridable, no vendor links), network-image mocking, the status bar,
 device presets, split-path replay.
 
-## Known gaps in the flutter_test superset (found by review, 2026-07-31)
+## Known gaps in the flutter_test superset (review 2026-07-31, consumer 2026-08-14)
 
 The API promises a strict superset: an existing widget-test file compiles and
-runs with only its import changed. Two constructs the superset re-exports were
-not honoured by the harness's own walk, and both failed **silently** — which is
-what makes them worth writing down rather than leaving to be rediscovered.
+runs with only its import changed. Three things broke that promise, and every
+one of them failed **silently** — which is what makes them worth writing down
+rather than leaving to be rediscovered. The first two are constructs the
+superset re-exports that the harness's own walk did not honour; the third is
+fake time meeting a cache the SDK ships.
 
 1. ~~**`scenario()` inside a `group()` cannot be run individually.**~~ **Fixed
    2026-07-31.** The scan and the harness's `list` report the *leaf* name,
@@ -357,6 +359,40 @@ what makes them worth writing down rather than leaving to be rediscovered.
    hooks run inside a zone of their own, because `test_api` builds them
    unguarded and their failures would otherwise vanish into the harness's
    outermost guard while the LiveTest stayed green.
+
+3. ~~**An asset read twice deadlocks the run, silently, for ten minutes.**~~
+   **Fixed 2026-08-14.** `rootBundle` is a `CachingAssetBundle`, which memoizes
+   the *future* of a read rather than the value. Under fake time that future
+   completes only when a pump flushes the fake microtask queue — and no pump
+   can run inside `tester.runAsync`, so a key the app read while building, still
+   in flight, wedges a `runAsync` that reads it again. Neither half is exotic: a
+   screen showing an SVG and a step reading the same SVG is the whole recipe,
+   and `runAsync` is what the blank-screen hint recommends. Reported by a
+   consumer whose report scenario hit it and cost a day.
+
+   Three things, because each covers a case the others cannot. A
+   `ScenarioAssetBundle` (`lib/src/scenarios/asset_bundle.dart`) extends
+   `AssetBundle` and caches *values*: a hit is a `SynchronousFuture`, which
+   resolves in whichever zone asks, and a miss inside `runAsync` reads on the
+   real event loop. It is installed as the `DefaultAssetBundle` over whatever
+   `s.pumpWidget` pumps, and reachable as `s.assets`. `rootBundle.clear()` at
+   the top of every scenario, because a future left in flight when a scenario
+   ends belongs to a FakeAsync zone nothing will ever flush again — the next
+   scenario awaiting it waits for the rest of the run, and app code that reads
+   `rootBundle` directly is out of the bundle's reach. And a watchdog
+   (`async_watchdog.dart`) on every `runAsync`, at `s.runAsync` and at the
+   harness binding both: a real-time timer that cannot break the deadlock —
+   the body is suspended inside it — but names it, on stderr in seconds and in
+   the timeout the run reports.
+
+   Found while proving that last part: the harness's 30s scenario deadline was
+   dead letter. `testWidgets` stamps the binding's ten minutes on any test that
+   names no timeout, and `Timeout.apply` honours it, so `_defaultScenarioTimeout`
+   never applied — measured at 600s on a deliberately wedged scenario, which is
+   exactly the ten minutes of silence the report describes. The harness now
+   declares its default (`scenarioDefaultTimeout`) as the scenario is declared,
+   rather than trying to read one back it cannot tell from an author's. Same
+   probe after: 30s, with the diagnosis.
 
 The remaining divergence is not a gap but a rule worth knowing: a `split`
 replays the body, and `setUp` runs once per *test*, so state built in `setUp`

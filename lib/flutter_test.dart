@@ -7,6 +7,7 @@ export 'package:flutter_test/flutter_test.dart';
 
 export 'src/devices.dart';
 export 'src/motion/testing.dart';
+export 'src/scenarios/asset_bundle.dart' show ScenarioAssetBundle;
 export 'src/scenarios/events.dart'
     show ScenarioChannel, ScenarioEvent, recordScenarioEvent;
 export 'src/scenarios/profile.dart'

@@ -11,6 +11,8 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../drive/resolve.dart';
+import 'asset_bundle.dart';
+import 'async_watchdog.dart';
 import 'events.dart';
 import 'motion.dart';
 import 'profile.dart';
@@ -49,6 +51,15 @@ import 'target.dart';
 /// Null outside the harness, where nothing is collecting.
 List<String>? scenarioDeclarationSink;
 
+/// What a scenario that names no [Timeout] of its own gets.
+///
+/// Null here, so a bare `flutter test` keeps `flutter_test`'s answer. The
+/// harness sets it at startup, because `testWidgets` stamps every test with the
+/// binding's ten minutes and a runner that wants its own deadline has no other
+/// way to say so — the metadata it reads back cannot tell a default apart from
+/// an author who wrote ten minutes on purpose.
+Timeout? scenarioDefaultTimeout;
+
 @isTest
 void scenario(
   String description,
@@ -77,37 +88,43 @@ void scenario(
       ? null
       : scenarioDeclaringFile(StackTrace.current);
 
-  testWidgets(name, skip: skip, timeout: timeout, tags: tags, (tester) async {
-    var origin = scenarioRunArgs?.clockOrigin ?? _scenarioClockOrigin;
-    if (origin == null) {
-      return _runScenario(
-        tester,
-        description,
-        body,
-        shots,
-        settle,
-        assignment,
-        source,
+  testWidgets(
+    name,
+    skip: skip,
+    timeout: timeout ?? scenarioDefaultTimeout,
+    tags: tags,
+    (tester) async {
+      var origin = scenarioRunArgs?.clockOrigin ?? _scenarioClockOrigin;
+      if (origin == null) {
+        return _runScenario(
+          tester,
+          description,
+          body,
+          shots,
+          settle,
+          assignment,
+          source,
+        );
+      }
+      // Pinned, but still ticking with FakeAsync: the offset from where this
+      // scenario's fake clock started is what `s.wait` moves, so a flow that
+      // waits a day still reads a day later — from a date that is the same on
+      // every run.
+      var started = tester.binding.clock.now();
+      return withClock(
+        Clock(() => origin.add(tester.binding.clock.now().difference(started))),
+        () => _runScenario(
+          tester,
+          description,
+          body,
+          shots,
+          settle,
+          assignment,
+          source,
+        ),
       );
-    }
-    // Pinned, but still ticking with FakeAsync: the offset from where this
-    // scenario's fake clock started is what `s.wait` moves, so a flow that
-    // waits a day still reads a day later — from a date that is the same on
-    // every run.
-    var started = tester.binding.clock.now();
-    return withClock(
-      Clock(() => origin.add(tester.binding.clock.now().difference(started))),
-      () => _runScenario(
-        tester,
-        description,
-        body,
-        shots,
-        settle,
-        assignment,
-        source,
-      ),
-    );
-  });
+    },
+  );
 }
 
 /// The test file a `scenario()` call was made from, `/`-separated and relative
@@ -164,6 +181,14 @@ Future<void> _runScenario(
   String? source,
 ) async {
   var restore = _applyRunArgs(tester, assignment);
+  // Whatever the scenario before this one left memoized on `rootBundle`
+  // belongs to *its* FakeAsync zone. A read still in flight when that scenario
+  // ended can never complete again — nothing will ever flush that zone — and
+  // this scenario awaiting it waits forever. Cleared at the top rather than at
+  // the bottom, so a run also survives whatever ran before the first scenario:
+  // the harness loads the app's fonts through `rootBundle` at startup.
+  rootBundle.clear();
+  var assets = ScenarioAssetBundle();
   _countFrames(tester);
   var state = _ReplayState();
   try {
@@ -190,6 +215,7 @@ Future<void> _runScenario(
         state,
         assignment,
         source,
+        assets,
       );
       try {
         await body(s);
@@ -436,10 +462,26 @@ class ScenarioTester {
     this._state,
     this.assignment,
     this._source,
+    this.assets,
   );
 
   /// The real tester — the escape hatch to the full `flutter_test` surface.
   final WidgetTester tester;
+
+  /// The bundle this scenario reads assets through, installed over whatever
+  /// [pumpWidget] pumps — so `DefaultAssetBundle.of(context)`, and everything
+  /// built on it, is already this one.
+  ///
+  /// It caches values where `rootBundle` caches futures, which is what makes an
+  /// asset the app has already read safe to read again from inside
+  /// [runAsync]. Pass it wherever a widget takes a bundle explicitly:
+  ///
+  /// ```dart
+  /// SvgPicture.asset('assets/logo.svg', bundle: s.assets);
+  /// ```
+  ///
+  /// One per scenario, shared by every replay of its splits.
+  final ScenarioAssetBundle assets;
 
   final Shots shots;
 
@@ -505,13 +547,36 @@ class ScenarioTester {
     shot,
     settle,
     () async {
-      await tester.pumpWidget(widget);
+      // Wrapped in the scenario's own bundle, so every `Image.asset`,
+      // `AssetImage` and `SvgPicture.asset` under the app reads through
+      // something that caches values rather than futures — see [assets]. An
+      // app that installs a `DefaultAssetBundle` of its own still wins, since
+      // its is the nearer ancestor.
+      await tester.pumpWidget(
+        DefaultAssetBundle(bundle: assets, child: widget),
+      );
       await _realAsyncTurn();
       await tester.pump();
     },
     verb: 'pumpWidget',
     target: '${widget.runtimeType}',
   );
+
+  /// `tester.runAsync` with a watchdog on it: real async work, and a sentence
+  /// rather than a hang when it turns out not to be work at all.
+  ///
+  /// Everything a scenario waits on for real — a database, a socket, an http
+  /// call, an asset the app has not read yet — needs a turn of the real event
+  /// loop, and this is the turn. The catch is that no pump can run while it is
+  /// open, so awaiting a future that was made *outside* it, and that only a
+  /// pump could complete, deadlocks the whole run silently. The watchdog says
+  /// so in seconds, and names the cache that is nearly always behind it.
+  ///
+  /// ```dart
+  /// var bytes = await s.runAsync(() => report.generatePdf());
+  /// ```
+  Future<T?> runAsync<T>(Future<T> Function() callback) =>
+      watchRunAsync(() => tester.runAsync(callback));
 
   /// Lets whatever the app started on its first frame actually happen.
   ///
@@ -527,7 +592,7 @@ class ScenarioTester {
   /// costs a few milliseconds once per pumped app and has no such edge.
   ///
   /// Deliberately not on every verb: this is about *boot*, and a scenario
-  /// that needs real async mid-flow says so with its own `s.tester.runAsync`.
+  /// that needs real async mid-flow says so with its own [runAsync].
   Future<void> _realAsyncTurn() => tester.runAsync(() async {
     for (var i = 0; i < 5; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 1));
@@ -688,7 +753,7 @@ class ScenarioTester {
   /// generally exists before the screen that announces it.
   ///
   /// ```dart
-  /// var bytes = await tester.runAsync(() => report.generatePdf());
+  /// var bytes = await s.runAsync(() => report.generatePdf());
   /// s.attach('report', bytes!, fileName: 'report.pdf');
   /// await s.screen('PDF report');
   /// ```
@@ -861,7 +926,7 @@ class ScenarioTester {
         'is not something `s.scrollTo` can reach. A scenario runs under fake '
         'time: anything the app waits on for real — a database, a socket, an '
         'http call — never completes between pumps. Give it a turn with '
-        '`await s.tester.runAsync(() async { … })`.',
+        '`await s.runAsync(() async { … })`.',
   );
 
   /// The actionability ladder every pointer verb climbs — shared with the
