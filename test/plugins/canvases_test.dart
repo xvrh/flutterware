@@ -1,0 +1,204 @@
+import 'package:flutterware/plugins.dart';
+import 'package:test/test.dart';
+
+/// The half of the canvas that a project can hold itself.
+///
+/// [PreviewCanvas] and [canvasFor] are pure Dart and exported by `plugins.dart`,
+/// `devices.dart` and `flutter_test.dart` alike, so the list can live in the
+/// project's own package and be handed to `tool/flutterware.dart` and to a
+/// plain `flutter test` both. That is the point of the type: a rule applied
+/// twice is a rule that eventually differs, and the value of writing the shape
+/// of a repository down is that everything looking at it agrees.
+void main() {
+  const app = Pkg('app');
+
+  group('the prefix', () {
+    test('the empty one covers everything', () {
+      expect(const PreviewCanvas('').covers('anything/at/all.dart'), isTrue);
+      expect(const PreviewCanvas('').covers(''), isTrue);
+    });
+
+    test('slashes and a lone dot are tidied to the same rule', () {
+      for (var written in ['demo', '/demo', 'demo/', ' demo ']) {
+        expect(PreviewCanvas(written).root, 'demo', reason: written);
+      }
+      for (var written in ['', '.', '/', '  ']) {
+        expect(PreviewCanvas(written).root, isEmpty, reason: '"$written"');
+      }
+    });
+
+    test('it matches on segments, never as text', () {
+      var canvas = const PreviewCanvas('src/mobile');
+
+      expect(canvas.covers('src/mobile/tile.dart'), isTrue);
+      // Named as a file rather than a directory, which is a fine way to say
+      // "this one entry".
+      expect(canvas.covers('src/mobile'), isTrue);
+      expect(canvas.covers('src/mobile_legacy/tile.dart'), isFalse);
+      expect(canvas.covers('src/desktop/bar.dart'), isFalse);
+    });
+  });
+
+  group('canvasFor', () {
+    const mobile = PreviewCanvas('src/mobile', devices: [Devices.iphone16]);
+    const wide = PreviewCanvas('src/mobile/wide', devices: [Devices.iPad]);
+    const whole = PreviewCanvas('', devices: [Devices.macbookPro]);
+
+    test('the longest prefix wins, in either declaration order', () {
+      for (var canvases in [
+        [mobile, wide],
+        [wide, mobile],
+      ]) {
+        expect(canvasFor(canvases, 'src/mobile/tile.dart'), same(mobile));
+        expect(canvasFor(canvases, 'src/mobile/wide/grid.dart'), same(wide));
+      }
+    });
+
+    test('a subtree beats the whole package', () {
+      expect(canvasFor([whole, mobile], 'src/mobile/tile.dart'), same(mobile));
+      expect(canvasFor([whole, mobile], 'src/other.dart'), same(whole));
+    });
+
+    test('nothing covering the path is no canvas, not the first one', () {
+      expect(canvasFor([mobile], 'src/desktop/bar.dart'), isNull);
+      expect(canvasFor(const [], 'anything.dart'), isNull);
+    });
+
+    test('the head is the default and the list is the offered set', () {
+      const both = PreviewCanvas(
+        'src/mobile',
+        devices: [Devices.iphone16, Devices.iphoneSe],
+        orientations: [ScreenOrientation.landscape],
+      );
+
+      expect(both.defaultDevice, Devices.iphone16);
+      expect(both.defaultOrientation, ScreenOrientation.landscape);
+      expect(both.devices, hasLength(2));
+    });
+
+    test('an empty canvas is a subtree opting out of the one above it', () {
+      const plain = PreviewCanvas('src/raw');
+
+      expect(
+        canvasFor([whole, plain], 'src/raw/x.dart')?.defaultDevice,
+        isNull,
+      );
+    });
+  });
+
+  group('over the wire', () {
+    test('it survives being printed and read back', () {
+      var read = PreviewCanvas.fromJson(
+        const PreviewCanvas(
+          'demo/mobile/',
+          devices: [Devices.iphone16, Devices.iphoneSe],
+          orientations: [ScreenOrientation.landscape],
+        ).toJson(),
+      );
+
+      // Normalised on the way out, so the two sides compare one spelling.
+      expect(read?.root, 'demo/mobile');
+      expect(read?.devices.map((d) => d.id), ['iphone-16', 'iphone-se']);
+      expect(read?.orientations, [ScreenOrientation.landscape]);
+    });
+
+    test('a device the reader has no entry for drops out', () {
+      // The config is written against the flutterware the project pins, which
+      // can run ahead of the GUI reading its manifest. Fewer devices, never a
+      // canvas that refuses to resolve.
+      var read = PreviewCanvas.fromJson(const {
+        'prefix': 'demo',
+        'devices': ['iphone-99', 'iphone-16'],
+      });
+
+      expect(read?.devices.map((d) => d.id), ['iphone-16']);
+    });
+
+    test('a shape this is not is null rather than a throw', () {
+      expect(PreviewCanvas.fromJson('demo'), isNull);
+      expect(PreviewCanvas.fromJson(const {'devices': []}), isNull);
+    });
+  });
+
+  group('the declaration', () {
+    test('canvases ride the manifest', () {
+      late String emitted;
+      Flutterware.configure((fw) {
+        fw.use(
+          Previews(
+            packages: [
+              PreviewsPackage(
+                app,
+                directory: 'demo',
+                canvases: const [
+                  PreviewCanvas('demo/mobile', devices: [Devices.iphone16]),
+                  PreviewCanvas('demo/desktop', devices: [Devices.macbookPro]),
+                ],
+              ),
+            ],
+          ),
+        );
+      }, emit: (line) => emitted = line);
+
+      expect(PluginManifest.parse(emitted).plugins.single.config['packages'], [
+        {
+          'path': 'app',
+          'directory': 'demo',
+          'canvases': [
+            {
+              'prefix': 'demo/mobile',
+              'devices': ['iphone-16'],
+            },
+            {
+              'prefix': 'demo/desktop',
+              'devices': ['macbook-pro'],
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('one prefix declared twice is refused', () {
+      // Longest prefix wins, so two of one prefix is one rule written twice and
+      // either resolution drops an answer somebody wrote down — the same
+      // reasoning that refuses a package declared twice, one level up.
+      expect(
+        () => Flutterware.configure(
+          (fw) => fw.use(
+            Previews(
+              packages: [
+                PreviewsPackage(
+                  app,
+                  canvases: const [
+                    PreviewCanvas('demo/', devices: [Devices.iphone16]),
+                    PreviewCanvas('demo', devices: [Devices.iPad]),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          emit: (_) {},
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('"demo"'),
+          ),
+        ),
+      );
+    });
+
+    test('a package declaring none says nothing about them', () {
+      late String emitted;
+      Flutterware.configure(
+        (fw) => fw.use(Previews(packages: [PreviewsPackage(app)])),
+        emit: (line) => emitted = line,
+      );
+
+      expect(PluginManifest.parse(emitted).plugins.single.config['packages'], [
+        {'path': 'app'},
+      ]);
+    });
+  });
+}

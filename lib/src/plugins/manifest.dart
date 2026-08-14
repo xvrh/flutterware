@@ -129,6 +129,9 @@ class PluginManifest {
           'screens.',
         );
       }
+      if (_duplicatePackagePath(plugin.config) case var path?) {
+        throw FormatException(_duplicatePackageMessage(plugin.id, path));
+      }
     }
 
     return PluginManifest(
@@ -208,6 +211,9 @@ class FlutterwareConfig {
         'screens. Give the plugin a dotted, globally unique id.',
       );
     }
+    if (_duplicatePackagePath(plugin.config) case var path?) {
+      throw StateError(_duplicatePackageMessage(plugin.id, path));
+    }
     _plugins.add(plugin);
   }
 
@@ -220,6 +226,38 @@ class FlutterwareConfig {
     identity: _identity,
   );
 }
+
+/// The package path [config] names twice, or null when each one is named once.
+///
+/// **The path is the identity of a per-package entry, everywhere below this
+/// file** — a plugin's report children are keyed on it, `fw:///` addresses
+/// carry it, and the previews compiler hashes it into a daemon address. So two
+/// entries naming one package are not two things the tool could tell apart if
+/// it tried: the second one's options are simply unreachable. What actually
+/// happened before this check is that the first entry won and its result was
+/// emitted once per declaration, which reads as though both had been honoured.
+///
+/// Refused rather than merged, for the reason a duplicate plugin id is: a
+/// silent resolution loses one of two answers, and this one loses it while
+/// showing you a copy of the other.
+String? _duplicatePackagePath(Map<String, Object?> config) {
+  var seen = <String>{};
+  for (var entry in (config['packages'] as List? ?? const [])) {
+    if (entry is! Map) continue;
+    if (entry['path'] case String path) {
+      if (!seen.add(path)) return path;
+    }
+  }
+  return null;
+}
+
+/// Names the way out as well as the fault, because "declared twice" on its own
+/// reads as a typo and the case that gets here usually is not one: it is
+/// somebody asking for two configurations of one package. That is a real wish,
+/// and the plugin's own options are where it has to be granted.
+String _duplicatePackageMessage(String pluginId, String path) =>
+    'Plugin "$pluginId" declares package "$path" twice. A package may be '
+    'named once per plugin — put every option for it in one entry.';
 
 /// Entry point for a project's `tool/flutterware.dart`:
 ///

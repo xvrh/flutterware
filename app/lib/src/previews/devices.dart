@@ -125,4 +125,33 @@ class CaptureViewport {
     insetBottom: insetBottom,
     insetLeft: insetLeft,
   );
+
+  /// By value, because "is this the same screen" is a question about the seven
+  /// numbers and never about which object holds them. An audit walking a
+  /// catalog of mixed form factors asks it once per entry, to resize the warm
+  /// guest only where the canvas actually changed.
+  @override
+  bool operator ==(Object other) =>
+      other is CaptureViewport &&
+      other.width == width &&
+      other.height == height &&
+      other.pixelRatio == pixelRatio &&
+      other.insetTop == insetTop &&
+      other.insetRight == insetRight &&
+      other.insetBottom == insetBottom &&
+      other.insetLeft == insetLeft;
+
+  @override
+  int get hashCode => Object.hash(
+    width,
+    height,
+    pixelRatio,
+    insetTop,
+    insetRight,
+    insetBottom,
+    insetLeft,
+  );
+
+  @override
+  String toString() => 'CaptureViewport(${width}x$height @$pixelRatio)';
 }

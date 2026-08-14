@@ -216,6 +216,41 @@ The panel opens on it, `screenshot`, `inspect` and `compare` frame with it, and
 a call that names its own `--device` still wins — `--device=fit` is how one call
 asks for the plain rectangle back. `orientation:` turns it.
 
+**One package, two form factors.** A phone app and a desktop dashboard sharing a
+theme and a widget library is an ordinary monorepo shape, and one device on the
+package frames half the catalog on the wrong screen. Say where each of them
+lives instead, and the longest prefix wins:
+
+```dart
+fw.use(Previews(packages: [
+  .new(app, directory: 'demo', canvases: [
+    PreviewCanvas('demo/mobile', devices: [Devices.iphone16, Devices.iphoneSe]),
+    PreviewCanvas('demo/desktop', devices: [Devices.macbookPro]),
+  ]),
+]));
+```
+
+`device:` is the same thing with no prefix, so nothing above changes. **The list
+is the offered set, and its head is the default** — the panel's picker offers
+all of them under *Declared*, and anything drawing one picture takes the first.
+
+**Your tests can read the same list.** `PreviewCanvas` is plain Dart, so keep it
+in your own package and hand it to both this config and a test that walks your
+catalog — a desktop entry pumped on a phone surface reports overflows that are
+not real, and this is the one fact that stops the tool and the test disagreeing
+about your directories:
+
+```dart
+import 'package:flutterware/flutter_test.dart';
+import 'package:demo/canvases.dart';
+
+testWidgets(entry.name, (tester) async {
+  var reset = tester.applyCanvas(canvasFor(canvases, entry.path));
+  await tester.pumpWidget(entry.build());
+  reset(); // in the body — a tearDown runs too late to undo the platform
+});
+```
+
 If you have never written one, `fw run previews new --name='Buttons'` writes
 the first — or press **New preview** in the panel, which is what it shows when
 it finds none. New files land in `demo/`, or in the directory you named.

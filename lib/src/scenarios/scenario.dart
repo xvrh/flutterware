@@ -19,6 +19,7 @@ import 'profile.dart';
 import 'run_args.dart';
 import 'run_listener.dart';
 import 'settle.dart';
+import 'staging.dart';
 import 'target.dart';
 
 /// A scenario: a widget test with per-step screenshots.
@@ -360,15 +361,15 @@ class _SplitPlan {
   }
 }
 
-/// Applies the harness's axis assignment through the test binding's own test
-/// values, exactly as a hand-written widget test would — so a scenario under
-/// an axis and a test that sets `tester.view.physicalSize` itself are the
-/// same machinery, and bare `flutter test` (null args) pays nothing.
+/// Applies the harness's axis assignment, when there is one to apply.
 ///
-/// Returns the reset, which the caller must run **inside the test body** — a
-/// tearDown is too late: the binding verifies its foundation debug variables
-/// (`debugDefaultTargetPlatformOverride` among them) at the end of the body,
-/// before tearDowns run.
+/// The application itself is [applyScenarioRunArgs], which is also what
+/// `tester.applyDevice` calls — one implementation, so a scenario on an axis
+/// and a plain widget test staged by hand cannot end up on subtly different
+/// surfaces. Only the *resolution* is here, because only a scenario has two
+/// places an assignment can come from.
+///
+/// Null args are a bare `flutter test` with no profile, which pays nothing.
 VoidCallback? _applyRunArgs(WidgetTester tester, ScenarioAssignment? ambient) {
   // The runner's assignment wins where there is one: it is answering a request
   // that named its axes. The ambient one is the other lane — a bare
@@ -379,51 +380,7 @@ VoidCallback? _applyRunArgs(WidgetTester tester, ScenarioAssignment? ambient) {
           ? null
           : ScenarioRunArgs.forAssignment(ambient));
   if (args == null) return null;
-
-  var view = tester.view;
-  var dispatcher = tester.platformDispatcher;
-
-  var ratio = args.pixelRatio ?? view.devicePixelRatio;
-  if (args.pixelRatio != null) view.devicePixelRatio = ratio;
-  if (args.size case var size?) view.physicalSize = size * ratio;
-  if (args.padding case var padding?) {
-    // FakeViewPadding speaks physical pixels; the args speak logical, like
-    // the device table they come from.
-    var fake = FakeViewPadding(
-      left: padding.left * ratio,
-      top: padding.top * ratio,
-      right: padding.right * ratio,
-      bottom: padding.bottom * ratio,
-    );
-    view.padding = fake;
-    view.viewPadding = fake;
-  }
-  if (args.platform case var platform?) {
-    debugDefaultTargetPlatformOverride = platform;
-  }
-  if (args.locale case var locale?) {
-    dispatcher.localeTestValue = locale;
-    dispatcher.localesTestValue = [locale];
-  }
-  if (args.textScale case var scale?) {
-    dispatcher.textScaleFactorTestValue = scale;
-  }
-  if (args.brightness case var brightness?) {
-    dispatcher.platformBrightnessTestValue = brightness;
-  }
-  if (!args.accessibility.isDefault) {
-    dispatcher.accessibilityFeaturesTestValue = FakeAccessibilityFeatures(
-      boldText: args.accessibility.boldText,
-      highContrast: args.accessibility.highContrast,
-      invertColors: args.accessibility.invertColors,
-    );
-  }
-
-  return () {
-    debugDefaultTargetPlatformOverride = null;
-    view.reset();
-    dispatcher.clearAllTestValues();
-  };
+  return applyScenarioRunArgs(tester, args);
 }
 
 /// Whether a scenario captures a screenshot after every high-level action, or

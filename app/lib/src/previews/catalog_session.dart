@@ -174,8 +174,7 @@ class CatalogSession extends ChangeNotifier {
     this.worktreeRoot,
     this.roots = const [defaultCatalogRoot],
     this.previewAnnotations = defaultPreviewAnnotations,
-    this.defaultDevice,
-    this.defaultOrientation,
+    this.canvases = const [],
     this.connectToDaemon = CompilerDaemonClient.connect,
   }) {
     // Forwarded, so a renderer has one thing to listen to.
@@ -238,16 +237,27 @@ class CatalogSession extends ChangeNotifier {
   /// this has to be the plugin's answer rather than a second one.
   final List<String> previewAnnotations;
 
-  /// What the canvas frames as when the address names no device — the package's
-  /// declared default, or null for the plain rectangle.
+  /// What the canvas frames as when the address names no device — what the
+  /// package declared for the subtree the entry lives in, or null for the plain
+  /// rectangle.
   ///
   /// The core's answer rather than a second one, for the same reason [roots] is:
   /// the panel and `previews screenshot` have to open on the same picture, and a
   /// default resolved twice is a default that eventually differs. It is the
   /// whole point of the setting that they agree — a project says "we are a
   /// phone" once and both surfaces stop rendering it as a small desktop.
-  final Device? defaultDevice;
-  final ScreenOrientation? defaultOrientation;
+  ///
+  /// **The list rather than one device**, because a package is allowed to hold
+  /// more than one form factor and the answer is then a function of the entry
+  /// rather than of the package. A session that had been handed a single device
+  /// would have to ask the plugin again on every selection, which is the two
+  /// copies this field exists to prevent.
+  final List<PreviewCanvas> canvases;
+
+  /// The canvas that applies to [entry], or the package's own when nothing is
+  /// selected yet.
+  PreviewCanvas? canvasOf(CatalogEntry? entry) =>
+      canvasFor(canvases, entry?.path ?? '');
 
   CatalogSessionPhase phase = CatalogSessionPhase.starting;
   String? errorMessage;

@@ -89,8 +89,9 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
       // daemon than `fw run previews` does for the same package.
       roots: [core.rootFor(path)],
       previewAnnotations: core.previewAnnotationsFor(path),
-      defaultDevice: core.defaultFramingFor(path).device,
-      defaultOrientation: core.defaultFramingFor(path).orientation,
+      // The whole list, not one resolved device: which of them applies is a
+      // function of the entry on screen, and the panel is where that changes.
+      canvases: core.canvasesFor(path),
     )..addListener(core.notifyChanged);
     unawaited(session.start());
     return session;

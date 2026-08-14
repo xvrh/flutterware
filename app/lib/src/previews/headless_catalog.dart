@@ -258,9 +258,18 @@ class HeadlessCatalog {
   /// Entries the compiler refused never get a guest — they are in the
   /// handshake, and an entry that does not build cannot be rendered to find out
   /// what it would have said.
+  ///
+  /// [viewportFor] frames each entry — the package's canvas for the subtree it
+  /// lives in, when the caller has one. **Without it every entry rendered at
+  /// 900 × 700**, which is the audit that cannot find the bug it exists to find:
+  /// a phone layout laid out in a desktop rectangle does not overflow, so a
+  /// catalog of phone screens came back green whatever the project had
+  /// declared. The warm guest is resized where the answer changes, which costs
+  /// a message and a frame against a compile.
   Future<CatalogAudit> auditAll({
     List<String>? entryIds,
     void Function(int done, int total, String entryId)? onEntry,
+    CaptureViewport Function(CatalogEntry entry)? viewportFor,
   }) async {
     var (daemon, ready) = await CompilerDaemonClient.connect(
       dartExecutable: dartExecutable,
@@ -281,12 +290,17 @@ class HeadlessCatalog {
       ];
 
       var rendered = <String, InspectErrors>{};
+      // What the guest is currently sized as, so a run of entries sharing a
+      // canvas — which is what a catalog organised by directory looks like —
+      // resizes once rather than per entry.
+      CaptureViewport? staged;
       for (var (index, entry) in servable.indexed) {
         // Before the work rather than after it: a name that appears when an
         // entry *finishes* is the name of something already done, and the one
         // worth reading during a two-minute audit is the one being compiled
         // right now.
         onEntry?.call(index + 1, servable.length, entry.id);
+        var viewport = viewportFor?.call(entry) ?? CaptureViewport.panel;
         if (guest == null) {
           var compiled = await daemon.select(entry.id, full: true);
           if (!compiled.ok) continue;
@@ -295,9 +309,24 @@ class HeadlessCatalog {
             assetsDir: ready.assetsDir,
             icuData: ready.icuData,
             name: ready.sessionId,
-            viewport: CaptureViewport.panel,
+            viewport: viewport,
           );
+          staged = viewport;
         } else {
+          // **Before the reload, and measured to matter.** The guest paints as
+          // soon as it has the new dill, and an entry's errors are whatever its
+          // frames reported — so a resize queued behind the reload lands after
+          // the frame this entry is judged on, and the entry is judged at the
+          // previous one's size. Audited that way, a demo declared 1800 wide
+          // was still reported overflowing at 900: the row named the right
+          // device and the picture had been taken at the wrong one.
+          //
+          // Resizing here repaints whatever is still mounted — the *previous*
+          // entry, whose answer was read and recorded an iteration ago.
+          if (viewport != staged) {
+            guest._resize(viewport);
+            staged = viewport;
+          }
           var compiled = await daemon.select(entry.id);
           if (!compiled.ok) continue;
           await guest.reload(compiled.dill!);
