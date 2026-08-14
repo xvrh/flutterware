@@ -16,8 +16,10 @@ import 'shell_controller.dart';
 /// complain about a segment it does not know — navigate does, because it *is*
 /// a `go`. The two refusals below are the two ways a route can fail before
 /// reaching `go`: not the grammar, or not a worktree git knows.
-void registerDriveNavigator(ShellController shell) {
-  GuestDrive.navigator = (route) {
+/// Returns the handler it installed, so a scope disposing later can tell
+/// whether the one in [GuestDrive.navigator] is still its own.
+void Function(String route) registerDriveNavigator(ShellController shell) {
+  return GuestDrive.navigator = (route) {
     var address = Address.tryParse(route);
     if (address == null) {
       throw TargetError(
@@ -57,27 +59,45 @@ class DriveNavigatorScope extends StatefulWidget {
 }
 
 class _DriveNavigatorScopeState extends State<DriveNavigatorScope> {
+  /// The handler this scope last installed. [GuestDrive.navigator] is one
+  /// global slot, so this is what says whether the handler standing there is
+  /// still ours.
+  void Function(String route)? _installed;
+
   @override
   void initState() {
     super.initState();
-    registerDriveNavigator(widget.shell);
+    _installed = registerDriveNavigator(widget.shell);
   }
 
   @override
   void reassemble() {
     super.reassemble();
-    registerDriveNavigator(widget.shell);
+    _installed = registerDriveNavigator(widget.shell);
   }
 
   @override
   void didUpdateWidget(DriveNavigatorScope old) {
     super.didUpdateWidget(old);
-    if (old.shell != widget.shell) registerDriveNavigator(widget.shell);
+    if (old.shell != widget.shell) {
+      _installed = registerDriveNavigator(widget.shell);
+    }
   }
 
+  /// **Only if the handler is still ours.**
+  ///
+  /// Flutter builds a subtree's replacement before retiring the old one, so a
+  /// rebuild that moves this scope — a window resize was enough — runs the new
+  /// scope's `initState` and *then* this `dispose`. Clearing the slot
+  /// unconditionally threw away the registration the new scope had just made,
+  /// and `navigate` refused every route from then on with *this app declares
+  /// no navigation handler* while the handler's own widget sat in the tree.
+  /// Nothing short of a restart brought it back.
   @override
   void dispose() {
-    GuestDrive.navigator = null;
+    if (identical(GuestDrive.navigator, _installed)) {
+      GuestDrive.navigator = null;
+    }
     super.dispose();
   }
 
