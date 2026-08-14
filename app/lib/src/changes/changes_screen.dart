@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -1842,6 +1843,14 @@ class _FilePaneState extends State<_FilePane> {
   /// This build's rows — what [_revealNow] counts positions in.
   List<ChangeRow> _rows = const [];
 
+  /// How far right the code column is, shared by every row it draws.
+  final _scrollX = DiffScrollX();
+
+  /// One character's advance in the diff face, measured when the face changes
+  /// rather than per row. Monospace, so a line's width is its length times it.
+  double _charWidth = 0;
+  TextStyle? _measuredFor;
+
   /// How many times a reveal re-estimates before giving up.
   ///
   /// A virtualised list can only be scrolled to an *offset*, and the offset of
@@ -1853,13 +1862,30 @@ class _FilePaneState extends State<_FilePane> {
   @override
   void didUpdateWidget(_FilePane old) {
     super.didUpdateWidget(old);
+    // A new file is a new set of line lengths, and a position 400 px in would
+    // open it on whatever happens to sit at that column.
+    if (old.file?.path != widget.file?.path) _scrollX.reset();
     _scheduleReveal();
   }
 
   @override
   void dispose() {
+    _scrollX.dispose();
     _threads.clear();
     super.dispose();
+  }
+
+  /// One character's width in the diff face, measured once per face.
+  double _measure(BuildContext context) {
+    var style = diffTextStyle(context);
+    if (_measuredFor == style) return _charWidth;
+    // Ten of them, so the answer is not a rounding of one.
+    var painter = TextPainter(
+      text: TextSpan(text: 'M' * 10, style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    _measuredFor = style;
+    return _charWidth = painter.width / 10;
   }
 
   void _scheduleReveal() {
@@ -1923,73 +1949,17 @@ class _FilePaneState extends State<_FilePane> {
           ),
           Divider(height: 1, color: context.colors.line),
           Expanded(
-            child: ListView.builder(
-              key: changesFileKey,
-              controller: widget.controller,
-              itemCount: rows.length,
-              itemBuilder: (context, index) => switch (rows[index]) {
-                HunkRow(:var hunk) => HunkHeaderLine(hunk: hunk),
-                // The one place a byte slice becomes text, and it happens for
-                // the rows the list actually builds.
-                DiffLineRow(:var hunk, :var index) => HunkLineView(
-                  lines: lines,
-                  hunk: hunk,
-                  index: index,
-                  tokens: widget.tokens,
-                  selected: span.contains((
-                    hunkStart: hunk.byteStart,
-                    index: index,
-                  )),
-                  onComment: (line) => widget.onCommentLine(it, line),
-                ),
-                CommentRow(:var comment, :var drifted) =>
-                  comment.id == widget.deleted
-                      ? ReviewUndoStrip(onUndo: widget.onUndoDelete)
-                      : ReviewThread(
-                          // The key is what `ensureVisible` needs, and it is
-                          // only ever right for a thread that is on screen —
-                          // see [_threads].
-                          key: _threads[comment.id] ??= GlobalKey(),
-                          comment: comment,
-                          drifted: drifted,
-                          highlighted: comment.id == widget.flash,
-                          onEdit: () => widget.onEditComment(comment),
-                          onDelete: () => widget.onDeleteComment(comment.id),
-                        ),
-                ComposerRow(:var anchor) => ReviewComposer(
-                  anchor: anchor,
-                  controller: widget.draft,
-                  editing: widget.editing,
-                  // Read here rather than counted: the composer shows the same
-                  // lines the diff has just tinted behind it, and the submit
-                  // reads them again for keeps — see `_submitComment`.
-                  quote:
-                      widget.editingQuote ??
-                      (anchor is LineAnchor
-                          ? quoteFor(
-                              it,
-                              anchor.from,
-                              anchor.to,
-                              anchor.side,
-                              lines.linesFor,
-                            )
-                          : const []),
-                  onSubmit: widget.onSubmit,
-                  onCancel: widget.onCancel,
-                ),
-                FileNoticeRow(:var message) => Padding(
-                  padding: const EdgeInsets.all(FwSpacing.xxl),
-                  child: Text(
-                    message,
-                    style: context.type.bodySmall.copyWith(
-                      color: context.colors.mut2,
-                    ),
-                  ),
-                ),
-                _ => const SizedBox.shrink(),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // What the code column actually has to itself: the gutters and
+                // the comment margin are pinned, so they are not part of the
+                // window the offset is clamped against.
+                _scrollX.setViewport(constraints.maxWidth - diffChromeWidth);
+                return _body(context, rows, lines, span, it);
               },
             ),
           ),
+          DiffScrollBar(model: _scrollX),
         ],
       );
     }
@@ -2025,6 +1995,107 @@ class _FilePaneState extends State<_FilePane> {
       body:
           'All is every path in this delta, as a tree. Important is what a '
           'rule in tool/flutterware.dart pinned.',
+    );
+  }
+
+  /// The rows themselves.
+  ///
+  /// **One [SelectionArea] over the whole body.** Nothing in a diff was
+  /// selectable: the rows are `Text`, and the app has no selection region
+  /// anywhere — so the one thing everybody does with a line of code, take it
+  /// somewhere else, could not be done here at all. It wraps the list rather
+  /// than each row, because a selection that cannot cross a line is not a
+  /// selection of code.
+  Widget _body(
+    BuildContext context,
+    List<ChangeRow> rows,
+    HunkLineCache lines,
+    Set<RowSpot> span,
+    FileChange it,
+  ) {
+    var charWidth = _measure(context);
+    return Listener(
+      // Trackpad and shift-wheel, which is how a horizontal scroll arrives.
+      // Read rather than claimed: the vertical list is resolving the same
+      // event for its own axis, and both of us are entitled to our half of it.
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent && event.scrollDelta.dx != 0) {
+          _scrollX.moveBy(event.scrollDelta.dx);
+        }
+      },
+      onPointerPanZoomUpdate: (event) {
+        if (event.panDelta.dx != 0) _scrollX.moveBy(-event.panDelta.dx);
+      },
+      child: SelectionArea(
+        child: ListView.builder(
+          key: changesFileKey,
+          controller: widget.controller,
+          itemCount: rows.length,
+          itemBuilder: (context, index) => switch (rows[index]) {
+            HunkRow(:var hunk) => HunkHeaderLine(hunk: hunk),
+            // The one place a byte slice becomes text, and it happens for
+            // the rows the list actually builds.
+            DiffLineRow(:var hunk, :var index) => HunkLineView(
+              lines: lines,
+              hunk: hunk,
+              index: index,
+              tokens: widget.tokens,
+              scrollX: _scrollX,
+              charWidth: charWidth,
+              selected: span.contains((
+                hunkStart: hunk.byteStart,
+                index: index,
+              )),
+              onComment: (line) => widget.onCommentLine(it, line),
+            ),
+            CommentRow(:var comment, :var drifted) =>
+              comment.id == widget.deleted
+                  ? ReviewUndoStrip(onUndo: widget.onUndoDelete)
+                  : ReviewThread(
+                      // The key is what `ensureVisible` needs, and it is
+                      // only ever right for a thread that is on screen —
+                      // see [_threads].
+                      key: _threads[comment.id] ??= GlobalKey(),
+                      comment: comment,
+                      drifted: drifted,
+                      highlighted: comment.id == widget.flash,
+                      onEdit: () => widget.onEditComment(comment),
+                      onDelete: () => widget.onDeleteComment(comment.id),
+                    ),
+            ComposerRow(:var anchor) => ReviewComposer(
+              anchor: anchor,
+              controller: widget.draft,
+              editing: widget.editing,
+              // Read here rather than counted: the composer shows the same
+              // lines the diff has just tinted behind it, and the submit
+              // reads them again for keeps — see `_submitComment`.
+              quote:
+                  widget.editingQuote ??
+                  (anchor is LineAnchor
+                      ? quoteFor(
+                          it,
+                          anchor.from,
+                          anchor.to,
+                          anchor.side,
+                          lines.linesFor,
+                        )
+                      : const []),
+              onSubmit: widget.onSubmit,
+              onCancel: widget.onCancel,
+            ),
+            FileNoticeRow(:var message) => Padding(
+              padding: const EdgeInsets.all(FwSpacing.xxl),
+              child: Text(
+                message,
+                style: context.type.bodySmall.copyWith(
+                  color: context.colors.mut2,
+                ),
+              ),
+            ),
+            _ => const SizedBox.shrink(),
+          },
+        ),
+      ),
     );
   }
 

@@ -131,9 +131,13 @@ class ReviewThread extends StatelessWidget {
             ReviewQuote(comment.quote),
           ],
           const Gap(FwSpacing.sm),
-          // **Selectable.** The first thing anybody does with a note they wrote
-          // for an agent is take a piece of it somewhere else.
-          SelectableText(
+          // **Selectable, but not on its own.** The first thing anybody does
+          // with a note they wrote for an agent is take a piece of it somewhere
+          // else — and the body pane now has one [SelectionArea] over all of
+          // it, which is what lets a selection run from a note into the code
+          // under it. A `SelectableText` inside that would be a second
+          // selection model fighting the first.
+          Text(
             comment.body,
             style: context.type.bodySmall.copyWith(color: colors.ink),
           ),
