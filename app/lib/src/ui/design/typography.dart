@@ -90,6 +90,18 @@ class FwTypography {
   final TextStyle micro;
   final TextStyle button;
 
+  /// Machine data — a query, a header, a path, a duration.
+  ///
+  /// A token because it was six copies: seven files each spelled out the same
+  /// family, the same three fallbacks and the same tabular figures, and they
+  /// had already drifted on size. Tabular figures are the point of it — a
+  /// column of durations that shifts as the digits change is a column nobody
+  /// can compare down.
+  ///
+  /// Deliberately not routed through [FwTypeSpec.applyFont]: a theme picks the
+  /// face for prose, and prose is exactly what this is not.
+  final TextStyle mono;
+
   /// The spec these styles were built from — kept so chrome (e.g. the Material
   /// [TextTheme] in `buildAppTheme`) can apply the same font.
   final FwTypeSpec spec;
@@ -112,6 +124,7 @@ class FwTypography {
     required this.caption,
     required this.micro,
     required this.button,
+    required this.mono,
     required this.spec,
   });
 
@@ -156,6 +169,15 @@ class FwTypography {
       caption: style(11.5, weight: spec.body, color: p.mut),
       micro: style(10.5, weight: spec.strong, color: p.mut, letterSpacing: 0.2),
       button: style(13, weight: spec.strong),
+      mono: TextStyle(
+        fontSize: 12.5 * spec.scale,
+        fontWeight: spec.body,
+        color: p.ink,
+        fontFamily: 'monospace',
+        fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
+        letterSpacing: 0,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
       spec: spec,
     );
   }
@@ -181,6 +203,7 @@ class FwTypography {
       caption: s(a.caption, b.caption),
       micro: s(a.micro, b.micro),
       button: s(a.button, b.button),
+      mono: s(a.mono, b.mono),
       spec: t < 0.5 ? a.spec : b.spec,
     );
   }

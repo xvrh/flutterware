@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
+import 'diff_view.dart' show diffTextStyle;
 import 'review_comment.dart';
 
 /// The composer's field, so a test and the drive tools can reach it. Its hint
@@ -20,16 +21,42 @@ import 'review_comment.dart';
 /// is refused as covered.
 const reviewComposerKey = Key('review-composer');
 
+/// How many quoted lines a thread shows before it stops.
+///
+/// A span is whatever you shift-clicked, and forty lines of quote would push
+/// the note itself off the screen — the quote is the note's evidence, not its
+/// subject. Beyond this the rest is counted rather than drawn; the handoff
+/// still carries every line.
+const _quoteLimit = 6;
+
+/// What the amber dot means, said once.
+///
+/// The thread has room to write it out and the index row has room for a dot
+/// and a tooltip, and the two must not drift into two different claims — this
+/// is the only honest one we can make. See [ReviewComment.fileDigest].
+const driftMessage =
+    'This file changed after you commented. The code you quoted is kept as it '
+    'was.';
+
 /// A comment as it appears in the diff, under the line it is about.
 ///
 /// **The left edge is the accent bar**, the same 2 px device the index uses for
 /// a pinned file: at a glance down a long diff it says *somebody wrote here*
 /// without needing to be read.
+///
+/// **It shows what it captured.** The quote is the whole design — a note
+/// carries the code it was written about so the agent may keep editing while
+/// you type — and for one release it was the one thing on this screen you could
+/// not see: written into the comment, rendered only in the handoff markdown.
+/// A note about a line the agent has since deleted looked exactly like a note
+/// about whatever now sits there, which is the failure mode carrying the quote
+/// exists to prevent.
 class ReviewThread extends StatelessWidget {
   const ReviewThread({
     required this.comment,
     required this.onDelete,
     this.drifted = false,
+    this.highlighted = false,
     this.onEdit,
     super.key,
   });
@@ -41,10 +68,16 @@ class ReviewThread extends StatelessWidget {
   /// Whether the file moved after this was written.
   final bool drifted;
 
+  /// Just arrived here from the index. Held for a moment and then dropped —
+  /// the index row you clicked and the thread you landed on are otherwise two
+  /// unconnected things in a diff of four thousand rows.
+  final bool highlighted;
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
       margin: const EdgeInsets.fromLTRB(
         FwSpacing.xxl,
         FwSpacing.sm,
@@ -52,7 +85,7 @@ class ReviewThread extends StatelessWidget {
         FwSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: colors.panel2,
+        color: highlighted ? colors.accentSoft : colors.panel2,
         border: Border(left: BorderSide(color: colors.accent, width: 2)),
         borderRadius: BorderRadius.only(
           topRight: Radius.circular(context.radii.radiusSmall),
@@ -65,6 +98,12 @@ class ReviewThread extends StatelessWidget {
         children: [
           Row(
             children: [
+              Icon(
+                _iconFor(comment.anchor),
+                size: FwIconSize.xs,
+                color: colors.mut3,
+              ),
+              const Gap(FwSpacing.sm),
               // The short form: the file's name is in the header six pixels
               // above this, and the whole path twice is the same sentence said
               // twice.
@@ -76,16 +115,29 @@ class ReviewThread extends StatelessWidget {
                   softWrap: false,
                 ),
               ),
+              const Gap(FwSpacing.md),
+              Text(
+                clockOf(comment.createdAt),
+                style: context.type.micro.copyWith(color: colors.mut3),
+              ),
               const Spacer(),
               if (onEdit case var edit?) _Action(label: 'Edit', onTap: edit),
               const Gap(FwSpacing.md),
               _Action(label: 'Delete', onTap: onDelete),
             ],
           ),
-          const Gap(FwSpacing.xs),
-          // **Selectable.** The first thing anybody does with a note they wrote
-          // for an agent is take a piece of it somewhere else.
-          SelectableText(
+          if (comment.quote.isNotEmpty) ...[
+            const Gap(FwSpacing.sm),
+            ReviewQuote(comment.quote),
+          ],
+          const Gap(FwSpacing.sm),
+          // **Selectable, but not on its own.** The first thing anybody does
+          // with a note they wrote for an agent is take a piece of it somewhere
+          // else — and the body pane now has one [SelectionArea] over all of
+          // it, which is what lets a selection run from a note into the code
+          // under it. A `SelectableText` inside that would be a second
+          // selection model fighting the first.
+          Text(
             comment.body,
             style: context.type.bodySmall.copyWith(color: colors.ink),
           ),
@@ -101,8 +153,7 @@ class ReviewThread extends StatelessWidget {
                 const Gap(FwSpacing.sm),
                 Expanded(
                   child: Text(
-                    'This file changed after you commented. The code you '
-                    'quoted is kept as it was.',
+                    driftMessage,
                     style: context.type.micro.copyWith(color: colors.mut2),
                   ),
                 ),
@@ -115,11 +166,122 @@ class ReviewThread extends StatelessWidget {
   }
 }
 
+/// The code a note carries, drawn the way the diff draws it.
+///
+/// [diffTextStyle] rather than a mono face of its own: this is a slice of the
+/// file three rows above it, and two typefaces for the same bytes would read as
+/// two different things. Lines clip instead of wrapping, for the same reason
+/// they do in the diff — a wrapped quote is one whose indentation lies.
+class ReviewQuote extends StatelessWidget {
+  const ReviewQuote(this.lines, {this.limit = _quoteLimit, super.key});
+
+  final List<String> lines;
+  final int limit;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var shown = lines.take(limit).toList();
+    var rest = lines.length - shown.length;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.md,
+        vertical: FwSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: colors.panel,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        border: Border.all(color: colors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var line in shown)
+            Text(
+              line,
+              style: diffTextStyle(context).copyWith(color: colors.mut),
+              softWrap: false,
+              overflow: TextOverflow.clip,
+            ),
+          if (rest > 0)
+            Text(
+              '…and $rest more ${rest == 1 ? 'line' : 'lines'}',
+              style: context.type.micro.copyWith(color: colors.mut3),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A note that has just been deleted, and can still be taken back.
+///
+/// **The delete is not written yet.** It stands in the deleted note's place
+/// until the window closes, and only then does the tombstone reach the log —
+/// so taking it back costs nothing and restores the note exactly, in the
+/// position it held. Delete was a single click on a 10.5 px text link beside
+/// Edit, against an append-only log with no way back.
+class ReviewUndoStrip extends StatelessWidget {
+  const ReviewUndoStrip({
+    required this.onUndo,
+    this.inset = FwSpacing.xxl,
+    super.key,
+  });
+
+  final VoidCallback onUndo;
+  final double inset;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Container(
+      margin: EdgeInsets.fromLTRB(inset, FwSpacing.sm, inset, FwSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.md,
+        vertical: FwSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: colors.panel2,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        border: Border.all(color: colors.line),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.delete_outline, size: FwIconSize.sm, color: colors.mut3),
+          const Gap(FwSpacing.sm),
+          Expanded(
+            child: Text(
+              'Comment deleted',
+              style: context.type.micro.copyWith(color: colors.mut2),
+            ),
+          ),
+          _Action(label: 'Undo', onTap: onUndo, strong: true),
+        ],
+      ),
+    );
+  }
+}
+
+IconData _iconFor(ReviewAnchor anchor) => switch (anchor) {
+  LineAnchor() => Icons.code,
+  FileAnchor() => Icons.description_outlined,
+  ReviewWide() => Icons.rate_review_outlined,
+};
+
 class _Action extends StatelessWidget {
-  const _Action({required this.label, required this.onTap});
+  const _Action({
+    required this.label,
+    required this.onTap,
+    this.strong = false,
+  });
 
   final String label;
   final VoidCallback onTap;
+
+  /// Accent whether or not the pointer is on it — for the one action in a row
+  /// that is being offered rather than merely available.
+  final bool strong;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +291,7 @@ class _Action extends StatelessWidget {
       builder: (context, hovered) => Text(
         label,
         style: context.type.micro.copyWith(
-          color: hovered ? colors.accent : colors.mut3,
+          color: strong || hovered ? colors.accent : colors.mut3,
         ),
       ),
     );
@@ -138,10 +300,18 @@ class _Action extends StatelessWidget {
 
 /// The box you write a comment in.
 ///
-/// **It states its anchor and what it captured**, in that order, above the
-/// text. That one line is the entire staleness contract, put where you accept
+/// **It shows its anchor and the code it is about to capture**, in that order,
+/// above the text. That is the entire staleness contract, put where you accept
 /// it rather than in a doc nobody opens: *these three lines, as they are now,
-/// travel with what you are about to write.*
+/// travel with what you are about to write.* It said `3 lines captured`, which
+/// is the claim without the evidence — and the lines it means are the ones the
+/// diff has just tinted behind the box, so naming them and not showing them
+/// made the reader count rows to check.
+///
+/// **One border, not two.** The box had an accent outline and the field inside
+/// it had another, so writing a note happened inside two concentric blue
+/// rectangles four pixels apart. The box *is* the field: the outline is the
+/// focus, and the input draws none of its own.
 ///
 /// The text itself is held by the caller — see [controller] — because this
 /// lives inside a virtualised list and a composer scrolled past its cache
@@ -153,7 +323,7 @@ class ReviewComposer extends StatefulWidget {
     required this.controller,
     required this.onSubmit,
     required this.onCancel,
-    this.quotedLines = 0,
+    this.quote = const [],
     this.editing = false,
     this.inset = FwSpacing.xxl,
     super.key,
@@ -162,9 +332,13 @@ class ReviewComposer extends StatefulWidget {
   final ReviewAnchor anchor;
   final TextEditingController controller;
 
-  /// How many lines of code travel with this comment. Zero for a file or
-  /// review anchor, which quote nothing.
-  final int quotedLines;
+  /// The code that will travel with this comment. Empty for a file or review
+  /// anchor, which quote nothing.
+  ///
+  /// While **editing**, this is the quote the comment already carries rather
+  /// than a fresh read of the patch — the whole point of storing it is that it
+  /// does not change under you, and rewriting the body is not re-capturing.
+  final List<String> quote;
 
   /// Whether this is rewriting an existing comment rather than adding one.
   final bool editing;
@@ -203,11 +377,6 @@ class _ReviewComposerState extends State<ReviewComposer> {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var lines = widget.quotedLines;
-    var notes = [
-      widget.anchor.label,
-      if (lines > 0) '$lines ${lines == 1 ? 'line' : 'lines'} captured',
-    ];
 
     return Container(
       margin: EdgeInsets.fromLTRB(
@@ -219,17 +388,46 @@ class _ReviewComposerState extends State<ReviewComposer> {
       decoration: BoxDecoration(
         color: colors.panel2,
         border: Border.all(color: colors.accent),
-        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        borderRadius: BorderRadius.circular(context.radii.radius),
       ),
-      padding: const EdgeInsets.all(FwSpacing.md),
+      padding: const EdgeInsets.all(FwSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            notes.join(' · '),
-            style: context.type.micro.copyWith(color: colors.mut2),
-            overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              Icon(
+                _iconFor(widget.anchor),
+                size: FwIconSize.xs,
+                color: colors.mut3,
+              ),
+              const Gap(FwSpacing.sm),
+              // The same two-part path the index row uses: the name and its
+              // line are what identify the anchor, and the six directories in
+              // front of them are what an ellipsis should eat.
+              if (widget.anchor.directory case var it?)
+                Flexible(
+                  child: Text(
+                    it,
+                    style: context.type.micro.copyWith(color: colors.mut3),
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                  ),
+                ),
+              Flexible(
+                child: Text(
+                  widget.anchor.shortLabel,
+                  style: context.type.micro.copyWith(color: colors.mut2),
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+              ),
+            ],
           ),
+          if (widget.quote.isNotEmpty) ...[
+            const Gap(FwSpacing.sm),
+            ReviewQuote(widget.quote),
+          ],
           const Gap(FwSpacing.sm),
           // **Both shortcuts are bound here rather than on the screen**, so
           // they cannot fire while the focus is somewhere else — Esc in
@@ -248,17 +446,24 @@ class _ReviewComposerState extends State<ReviewComposer> {
               focusNode: _focus,
               style: context.type.bodySmall,
               maxLines: null,
-              minLines: 3,
+              // Two, not three. The box carries a header and often a quote now,
+              // and an empty field taller than the code it is about makes the
+              // composer the biggest thing in the diff. It grows as you type.
+              minLines: 2,
+              cursorColor: colors.accent,
               decoration: InputDecoration(
                 isDense: true,
                 hintText: 'What should the agent change here?',
                 hintStyle: context.type.bodySmall.copyWith(color: colors.mut3),
-                border: const OutlineInputBorder(),
-                contentPadding: const EdgeInsets.all(FwSpacing.sm),
+                // The container above is the field's edge — see the class doc.
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
           ),
-          const Gap(FwSpacing.sm),
+          const Gap(FwSpacing.md),
           Row(
             children: [
               // **The hint gives way, the buttons never do.** At 480 px — the
@@ -290,24 +495,26 @@ class _ReviewComposerState extends State<ReviewComposer> {
               ),
               _Action(label: 'Cancel', onTap: widget.onCancel),
               const Gap(FwSpacing.lg),
+              // The house primary — an accent border over [FwPalette
+              // .accentSoft], the same one the Review tab's *Hand off* wears.
+              // A solid fill was the loudest thing in a panel of greys, and it
+              // no longer matched the only other primary in the feature.
               Tappable.builder(
                 onTap: widget.onSubmit,
-                builder: (context, hovered) => Container(
+                builder: (context, hovered) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
                   padding: const EdgeInsets.symmetric(
                     horizontal: FwSpacing.lg,
                     vertical: FwSpacing.sm,
                   ),
                   decoration: BoxDecoration(
-                    color: hovered ? colors.accentDark : colors.accent,
-                    borderRadius: BorderRadius.circular(
-                      context.radii.radiusSmall,
-                    ),
+                    color: hovered ? colors.accentSoft2 : colors.accentSoft,
+                    borderRadius: BorderRadius.circular(context.radii.radius),
+                    border: Border.all(color: colors.accent),
                   ),
                   child: Text(
                     widget.editing ? 'Save' : 'Add comment',
-                    style: context.type.micro.copyWith(
-                      color: colors.primaryOnMenu,
-                    ),
+                    style: context.type.caption.copyWith(color: colors.accent),
                   ),
                 ),
               ),
@@ -324,6 +531,13 @@ class _ReviewComposerState extends State<ReviewComposer> {
 /// **Numbered.** The list is what you hand off, in this order, and a number is
 /// what lets you say *the third one* to the agent afterwards — the one thing
 /// the anchor cannot do when three comments sit on one file.
+///
+/// **A row, not a paragraph.** Three notes with a two-line body and a line of
+/// code each ran together into one block of text: nothing said where one ended
+/// and the next began except a faint digit in the margin, while the threads
+/// they mirror had become composed objects. It carries the same four things a
+/// thread does, in the same order — kind, where, when, then the note over the
+/// code it is about — and a rule underneath so the eye can find the seam.
 class ReviewIndexRow extends StatelessWidget {
   const ReviewIndexRow({
     required this.number,
@@ -336,7 +550,12 @@ class ReviewIndexRow extends StatelessWidget {
 
   final int number;
   final ReviewComment comment;
+
+  /// The note the screen is currently on — the one you last opened, or the one
+  /// being rewritten. Marking it is what makes the list and the diff feel like
+  /// two views of one thing rather than a jump into an unrelated file.
   final bool selected;
+
   final bool drifted;
   final VoidCallback onTap;
 
@@ -346,14 +565,17 @@ class ReviewIndexRow extends StatelessWidget {
     return Tappable.builder(
       onTap: onTap,
       builder: (context, hovered) => Container(
-        color: selected
-            ? colors.accentSoft
-            : hovered
-            ? colors.hoverOverlay
-            : null,
+        decoration: BoxDecoration(
+          color: selected
+              ? colors.accentSoft
+              : hovered
+              ? colors.hoverOverlay
+              : null,
+          border: Border(bottom: BorderSide(color: colors.line)),
+        ),
         padding: const EdgeInsets.symmetric(
           horizontal: FwSpacing.md,
-          vertical: FwSpacing.sm,
+          vertical: FwSpacing.md,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,47 +584,79 @@ class ReviewIndexRow extends StatelessWidget {
               width: 16,
               child: Text(
                 '$number',
-                style: context.type.micro.copyWith(color: colors.mut3),
+                style: context.type.micro.copyWith(
+                  color: selected ? colors.accent : colors.mut3,
+                ),
               ),
             ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // **The directory gives way first.** `path_glob.dart:3` is
-                  // what tells two rows apart at a glance; the six segments in
-                  // front of it are what an ellipsis should eat, and putting
-                  // the whole path in one `Text` ellipsised the name instead.
                   Row(
                     children: [
-                      if (comment.anchor.directory case var it?)
-                        Flexible(
-                          child: Text(
-                            it,
-                            style: context.type.micro.copyWith(
-                              color: colors.mut3,
+                      Icon(
+                        _iconFor(comment.anchor),
+                        size: FwIconSize.xs,
+                        color: colors.mut3,
+                      ),
+                      const Gap(FwSpacing.sm),
+                      // **The directory is given up, not squeezed.** Drawn
+                      // beside the name it used to share the squeeze with it,
+                      // and once a clock and a drift dot joined the line, a
+                      // 320 px column ellipsised *both* — leaving
+                      // `example_server.da…` next to `examples/example…`, which
+                      // is two half-truths where the point was to keep one
+                      // whole one. `name:line` is what tells two rows apart;
+                      // the whole path is a hover away, and the quoted line
+                      // below tells apart two files that share a name.
+                      // **One flexible child on this line, not two.** A
+                      // `Spacer` to push the clock right is itself flex, so it
+                      // split the free width with the name and ellipsised it at
+                      // half a column wide. The name's box takes the leftover
+                      // instead, and the clock is simply what comes after it.
+                      Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Tooltip(
+                                message: comment.anchor.label,
+                                child: Text(
+                                  comment.anchor.shortLabel,
+                                  style: context.type.micro.copyWith(
+                                    color: colors.mut2,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                            softWrap: false,
-                          ),
-                        ),
-                      Flexible(
-                        child: Text(
-                          comment.anchor.shortLabel,
-                          style: context.type.micro.copyWith(
-                            color: colors.mut2,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: false,
+                            if (drifted) ...[
+                              const Gap(FwSpacing.xs),
+                              // The dot said nothing on its own. The thread has
+                              // room for the sentence; a 320 px row has room
+                              // for the dot and a pointer.
+                              Tooltip(
+                                message: driftMessage,
+                                child: Icon(
+                                  Icons.circle,
+                                  size: 6,
+                                  color: colors.amber,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      if (drifted) ...[
-                        const Gap(FwSpacing.xs),
-                        Icon(Icons.circle, size: 6, color: colors.amber),
-                      ],
+                      const Gap(FwSpacing.sm),
+                      Text(
+                        clockOf(comment.createdAt),
+                        style: context.type.micro.copyWith(color: colors.mut3),
+                      ),
                     ],
                   ),
-                  const Gap(FwSpacing.xxs),
+                  const Gap(FwSpacing.xs),
                   // Two lines of the note, not one: the first line of a review
                   // comment is often the setup and the second is the ask.
                   Text(
@@ -411,6 +665,32 @@ class ReviewIndexRow extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  // **One line of what it is about.** Three notes on one file
+                  // read as three copies of that filename otherwise; the line
+                  // of code under each is what tells them apart without
+                  // opening any of them. Ruled rather than merely dimmed —
+                  // under two lines of prose, a third line of grey text reads
+                  // as more prose.
+                  if (_firstCode(comment.quote) case var line?) ...[
+                    const Gap(FwSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.only(left: FwSpacing.sm),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          left: BorderSide(color: colors.line2, width: 2),
+                        ),
+                      ),
+                      child: Text(
+                        line,
+                        style: diffTextStyle(
+                          context,
+                        ).copyWith(color: colors.mut3),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -419,9 +699,24 @@ class ReviewIndexRow extends StatelessWidget {
       ),
     );
   }
+
+  /// The first line of the quote with anything on it, trimmed of the
+  /// indentation that would otherwise spend the whole row's width.
+  static String? _firstCode(List<String> quote) {
+    for (var line in quote) {
+      var trimmed = line.trim();
+      if (trimmed.isNotEmpty) return trimmed;
+    }
+    return null;
+  }
 }
 
 /// A handed-off batch, collapsed to one row.
+///
+/// **How it left is the useful half.** *Copied* and *written to a file* have
+/// different next steps when the agent says it saw nothing, so the route gets
+/// an icon of its own rather than sharing a middot-joined line with the clock
+/// — and for the file route the path is what you need to hand over again.
 class ReviewBatchRow extends StatelessWidget {
   const ReviewBatchRow({required this.batch, required this.onCopy, super.key});
 
@@ -432,29 +727,45 @@ class ReviewBatchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var count = batch.comments.length;
-    return Padding(
+    var saved = batch.savedTo;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.line)),
+      ),
       padding: const EdgeInsets.symmetric(
         horizontal: FwSpacing.md,
-        vertical: FwSpacing.sm,
+        vertical: FwSpacing.md,
       ),
       child: Row(
         children: [
-          Text(
-            '$count ${count == 1 ? 'comment' : 'comments'}',
-            style: context.type.bodySmall.copyWith(color: colors.mut),
+          Icon(
+            saved == null ? Icons.content_copy : Icons.description_outlined,
+            size: FwIconSize.xs,
+            color: colors.mut3,
           ),
-          const Gap(FwSpacing.md),
+          const Gap(FwSpacing.sm),
           Expanded(
-            child: Text(
-              [
-                _clock(batch.handedOffAt),
-                if (batch.savedTo case var path?) path else batch.route,
-              ].join(' · '),
-              style: context.type.micro.copyWith(color: colors.mut3),
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$count ${count == 1 ? 'comment' : 'comments'} · '
+                  '${clockOf(batch.handedOffAt)}',
+                  style: context.type.micro.copyWith(color: colors.mut2),
+                ),
+                const Gap(FwSpacing.xxs),
+                Text(
+                  saved ?? 'Copied to the clipboard',
+                  style: saved == null
+                      ? context.type.micro.copyWith(color: colors.mut3)
+                      : diffTextStyle(context).copyWith(color: colors.mut3),
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+              ],
             ),
           ),
+          const Gap(FwSpacing.sm),
           _Action(label: 'Copy', onTap: onCopy),
         ],
       ),
@@ -462,6 +773,9 @@ class ReviewBatchRow extends StatelessWidget {
   }
 }
 
-String _clock(DateTime at) =>
+/// Wall-clock, to the minute. A note's own time — not a duration and not a
+/// date, because everything on this screen was written in the session you are
+/// still in.
+String clockOf(DateTime at) =>
     '${at.hour.toString().padLeft(2, '0')}:'
     '${at.minute.toString().padLeft(2, '0')}';

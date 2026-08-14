@@ -6,7 +6,9 @@ import 'package:flutterware/server.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../address/address_scope.dart';
+import '../../inspect/inspect_dock.dart';
 import '../../ui/json_view.dart';
+import '../../ui/panel_header.dart';
 import '../../ui/tappable.dart';
 import '../native_plugin.dart';
 import 'server_address.dart';
@@ -115,18 +117,33 @@ class _ServerPanelState extends State<_ServerPanel> {
 
         var view = place?.view ?? ServerViewKind.overview;
         var info = server.info;
-        // The rail already lists every server (report.children) — repeating
-        // that here for one healthy server is noise. The bar appears only
-        // when it says something the rail row beside it does not: several
-        // servers to switch between in place, or a session that is stopped
-        // or reconnecting.
-        var showBar = servers.length > 1 || server.stopped || !server.connected;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (showBar) _ServerBar(servers, shown: server),
-            _ViewTabs(server: server, view: view, info: info),
-            const Divider(height: 1),
+            FwPanelHeader(
+              server.handle.name,
+              badge: _Identity(server: server, info: info),
+              subtitle: [
+                'pid ${server.handle.pid}',
+                if (server.stopped)
+                  'no longer announcing'
+                else if (!server.connected)
+                  'attaching',
+              ],
+              trailing: info.baseUrl == null ? null : _UrlLink(info.baseUrl!),
+              // The rail already lists every server, so one healthy server
+              // needs no switcher. Two do: the rail row beside this one cannot
+              // say which of them the panel is showing.
+              below: servers.length > 1
+                  ? _ServerBar(servers, shown: server)
+                  : null,
+              toolbar: _ViewTabs(
+                server: server,
+                view: view,
+                requests: requests.length,
+              ),
+            ),
+            Divider(height: 1, color: context.colors.line),
             Expanded(
               child: switch (view) {
                 ServerViewKind.sql =>
@@ -178,6 +195,61 @@ class _ServerPanelState extends State<_ServerPanel> {
   }
 }
 
+/// What the panel is showing, beside its name: the session's state and, when
+/// the server declared one, the environment it is pointed at.
+class _Identity extends StatelessWidget {
+  const _Identity({required this.server, required this.info});
+
+  final TrackedServer server;
+  final ServerInfo info;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      _StatePill(server),
+      if (info.environment case var it?) ...[
+        const Gap(FwSpacing.sm),
+        _EnvironmentChip(it),
+      ],
+    ],
+  );
+}
+
+/// Running, attaching, or gone — the one thing a row of numbers cannot say.
+class _StatePill extends StatelessWidget {
+  const _StatePill(this.server);
+
+  final TrackedServer server;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var (label, color) = server.stopped
+        ? ('stopped', colors.mut3)
+        : server.connected
+        ? ('running', colors.grn)
+        : ('reconnecting', colors.amber);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.md,
+        vertical: 2,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(context.radii.pill),
+      ),
+      child: Text(
+        label,
+        style: context.type.micro.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
 class _ServerBar extends StatelessWidget {
   const _ServerBar(this.servers, {required this.shown});
 
@@ -187,124 +259,152 @@ class _ServerBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 4,
-        children: [
-          for (var server in servers)
-            Tappable.builder(
-              onTap: () => AddressScope.write(
-                context,
-              ).setSegments(serverSegments(server.handle.name)),
-              builder: (context, hovered) {
-                var selected = identical(server, shown);
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
+    return Wrap(
+      spacing: FwSpacing.md,
+      runSpacing: FwSpacing.xs,
+      children: [
+        for (var server in servers)
+          Tappable.builder(
+            onTap: () => AddressScope.write(
+              context,
+            ).setSegments(serverSegments(server.handle.name)),
+            builder: (context, hovered) {
+              var selected = identical(server, shown);
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: FwSpacing.lg,
+                  vertical: FwSpacing.xs,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? colors.accentSoft
+                      : hovered
+                      ? colors.hoverOverlay
+                      : null,
+                  borderRadius: BorderRadius.circular(context.radii.pill),
+                  border: Border.all(
+                    color: selected ? colors.accentSoft2 : colors.line,
                   ),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? colors.accentSoft
-                        : hovered
-                        ? colors.hoverOverlay
-                        : null,
-                    borderRadius: BorderRadius.circular(context.radii.pill),
-                    border: Border.all(
-                      color: selected ? colors.accentSoft2 : colors.line,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.circle,
+                      size: FwIconSize.xs - 4,
+                      color: server.stopped
+                          ? colors.mut3
+                          : server.connected
+                          ? colors.grn
+                          : colors.amber,
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.circle,
-                        size: 8,
-                        color: server.stopped
-                            ? colors.mut3
-                            : server.connected
-                            ? colors.grn
-                            : colors.amber,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        server.stopped
-                            ? '${server.handle.name} (stopped)'
-                            : server.connected
-                            ? '${server.handle.name} · pid ${server.handle.pid}'
-                            : '${server.handle.name} · reconnecting',
-                        style: context.type.bodySmall,
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-        ],
-      ),
+                    const Gap(FwSpacing.sm),
+                    Text(
+                      server.stopped
+                          ? '${server.handle.name} (stopped)'
+                          : server.connected
+                          ? '${server.handle.name} · pid ${server.handle.pid}'
+                          : '${server.handle.name} · reconnecting',
+                      style: context.type.bodySmall,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 }
 
 /// Requests | SQL | Info | Events — which pane of the shown server, written
-/// into the address. The right edge promotes what the server said about
-/// itself: the environment chip and the base URL, visible whichever pane is
-/// open, because "which server, pointed where" is context for all of them.
+/// into the address.
+///
+/// [InspectTabStrip] rather than a row of `TextButton`s, for the reason the run
+/// cockpit swapped first: this was the app's second hand-rolled strip, and two
+/// panels showing tabs in two designs is a difference the reader has to spend
+/// attention ruling out. Which server, and where it points, moved up into the
+/// header — it is context for every pane, not a member of the strip.
 class _ViewTabs extends StatelessWidget {
   const _ViewTabs({
     required this.server,
     required this.view,
-    required this.info,
+    required this.requests,
   });
 
   final TrackedServer server;
   final ServerViewKind view;
-  final ServerInfo info;
+
+  /// Badged on the Requests tab. Free — the panel counted them to draw the
+  /// list. The SQL count deliberately is not: it costs a normalisation pass
+  /// over every event, which is not a thing to pay for on every frame.
+  final int requests;
 
   @override
   Widget build(BuildContext context) {
     var name = server.handle.name;
-    return Padding(
-      padding: const EdgeInsets.only(left: 8, right: 12, bottom: 4),
-      child: Row(
-        children: [
-          for (var (label, segments, selected) in [
-            (
-              'Requests',
-              serverSegments(name),
-              view == ServerViewKind.overview || view == ServerViewKind.request,
-            ),
-            ('SQL', sqlSegments(name), view == ServerViewKind.sql),
-            ('Info', infoSegments(name), view == ServerViewKind.info),
-            ('Events', eventsSegments(name), view == ServerViewKind.events),
-          ])
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: TextButton(
-                style: selected
-                    ? TextButton.styleFrom(
-                        backgroundColor: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
-                      )
-                    : null,
-                onPressed: () =>
-                    AddressScope.write(context).setSegments(segments),
-                child: Text(label),
-              ),
-            ),
-          const Spacer(),
-          if (info.environment != null) ...[
-            _EnvironmentChip(info.environment!),
-            const SizedBox(width: 8),
-          ],
-          if (info.baseUrl != null) _UrlLink(info.baseUrl!),
-        ],
-      ),
+    var current = switch (view) {
+      ServerViewKind.overview || ServerViewKind.request => 'requests',
+      ServerViewKind.sql => 'sql',
+      ServerViewKind.info => 'info',
+      ServerViewKind.events => 'events',
+    };
+    return InspectTabStrip(
+      tabs: [
+        InspectDockTab(
+          id: 'requests',
+          label: 'Requests',
+          badge: requests,
+          body: _unused,
+        ),
+        const InspectDockTab(id: 'sql', label: 'SQL', body: _unused),
+        const InspectDockTab(id: 'info', label: 'Info', body: _unused),
+        const InspectDockTab(id: 'events', label: 'Events', body: _unused),
+      ],
+      current: current,
+      onSelect: (id) => AddressScope.write(context).setSegments(switch (id) {
+        'sql' => sqlSegments(name),
+        'info' => infoSegments(name),
+        'events' => eventsSegments(name),
+        _ => serverSegments(name),
+      }),
     );
   }
+
+  /// The strip reads ids, labels and badges and never builds a body — the
+  /// panel keeps its panes, which are switched on the address.
+  static Widget _unused(BuildContext context) => const SizedBox.shrink();
+}
+
+/// [InspectTabStrip] over a plain id → label map, for the request detail's own
+/// strip. The panel has two strips and they must not drift apart again.
+class _InspectStrip extends StatelessWidget {
+  const _InspectStrip({
+    required this.tabs,
+    required this.current,
+    required this.onSelect,
+    this.badges = const {},
+  });
+
+  final Map<String, String> tabs;
+  final String current;
+  final Map<String, int> badges;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) => InspectTabStrip(
+    tabs: [
+      for (var tab in tabs.entries)
+        InspectDockTab(
+          id: tab.key,
+          label: tab.value,
+          badge: badges[tab.key] ?? 0,
+          body: _ViewTabs._unused,
+        ),
+    ],
+    current: current,
+    onSelect: onSelect,
+  );
 }
 
 /// The declared environment, colored by how much it should worry you: quiet
@@ -317,26 +417,46 @@ class _EnvironmentChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var colors = context.colors;
     var lower = environment.toLowerCase();
     var color = const {'prod', 'production', 'live'}.contains(lower)
-        ? Colors.red
+        ? colors.red
         : const {'dev', 'development', 'local', 'debug', 'test'}.contains(lower)
-        ? Colors.grey
-        : Colors.orange;
+        ? colors.mut
+        : colors.amber;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.sm,
+        vertical: 1,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(context.radii.micro),
       ),
       child: Text(
         environment,
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall!.copyWith(color: color.shade700),
+        style: context.type.micro.copyWith(color: color),
       ),
     );
   }
+}
+
+/// A heading inside a pane — *Headers*, *Occurrences*, *Links*.
+///
+/// Uppercase `fieldLabel`, which is what the dev stack's panel next door
+/// already uses for the same job. These were Material's `titleSmall`: a
+/// sentence-case 14 px semibold that reads as a title rather than as a label,
+/// and is the only such face in the app.
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    label.toUpperCase(),
+    style: context.type.fieldLabel.copyWith(color: context.colors.mut),
+  );
 }
 
 /// An absolute URL as a clickable piece of text.
@@ -350,13 +470,12 @@ class _UrlLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     return Tappable.builder(
       onTap: () => launchUrl(Uri.parse(url)),
       builder: (context, hovered) => Text(
         label ?? url,
-        style: _mono(context).copyWith(
-          color: theme.colorScheme.primary,
+        style: context.type.mono.copyWith(
+          color: context.colors.accent,
           decoration: hovered ? TextDecoration.underline : null,
         ),
       ),
@@ -372,7 +491,6 @@ class _SqlView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     var stats = sqlStats(server.events);
     if (stats.isEmpty) {
       return const EmptyState(
@@ -380,13 +498,16 @@ class _SqlView extends StatelessWidget {
         title: 'No queries recorded',
       );
     }
-    var header = theme.textTheme.bodySmall!.copyWith(color: theme.hintColor);
-    var numbers = _mono(context);
+    var header = context.type.micro.copyWith(color: context.colors.mut2);
+    var numbers = context.type.mono;
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: const EdgeInsets.symmetric(
+            horizontal: panelGutter,
+            vertical: FwSpacing.xs,
+          ),
           child: Row(
             children: [
               SizedBox(width: 50, child: Text('count', style: header)),
@@ -406,7 +527,7 @@ class _SqlView extends StatelessWidget {
             ],
           ),
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: context.colors.line),
         for (var shape in stats)
           Tappable.builder(
             onTap: () => AddressScope.write(
@@ -414,7 +535,10 @@ class _SqlView extends StatelessWidget {
             ).setSegments(sqlSegments(server.handle.name, queryKey: shape.key)),
             builder: (context, hovered) => Container(
               color: hovered ? context.colors.hoverOverlay : null,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(
+                horizontal: panelGutter,
+                vertical: FwSpacing.sm,
+              ),
               child: Row(
                 children: [
                   SizedBox(
@@ -426,7 +550,7 @@ class _SqlView extends StatelessWidget {
                       shape.normalized,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: _mono(context),
+                      style: context.type.mono,
                     ),
                   ),
                   SizedBox(
@@ -507,7 +631,7 @@ class _QueryDetailState extends State<_QueryDetail> {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
+    var colors = context.colors;
     var stats = sqlStats(
       widget.server.events,
     ).where((s) => s.key == widget.queryKey).firstOrNull;
@@ -520,7 +644,7 @@ class _QueryDetailState extends State<_QueryDetail> {
     }
     var latestQuery = stats.latest.payload['query']! as String;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(panelGutter),
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -528,7 +652,7 @@ class _QueryDetailState extends State<_QueryDetail> {
             Expanded(
               child: Text(
                 stats.normalized,
-                style: _mono(context, fontSize: 15),
+                style: context.type.mono.copyWith(fontSize: 14),
               ),
             ),
             IconButton(
@@ -540,18 +664,18 @@ class _QueryDetailState extends State<_QueryDetail> {
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        const Gap(FwSpacing.xs),
         Text(
           '${stats.count}× · total ${_ms(stats.totalMs)} · '
           'avg ${_ms(stats.averageMs)} · max ${_ms(stats.maxMs)}',
-          style: theme.textTheme.bodySmall,
+          style: context.type.caption,
         ),
-        const SizedBox(height: 12),
+        const Gap(FwSpacing.lg),
         Row(
           children: [
             for (var method in ['explain', 'requery'])
               Padding(
-                padding: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.only(right: FwSpacing.md),
                 child: OutlinedButton(
                   onPressed: _busy || !widget.server.connected
                       ? null
@@ -560,23 +684,26 @@ class _QueryDetailState extends State<_QueryDetail> {
                 ),
               ),
             if (!widget.server.connected)
-              Text('not attached', style: theme.textTheme.bodySmall),
+              Text(
+                'not attached',
+                style: context.type.caption.copyWith(color: colors.mut2),
+              ),
           ],
         ),
         if (_resultTitle != null) ...[
-          const SizedBox(height: 12),
-          Text(_resultTitle!, style: theme.textTheme.titleSmall),
-          const SizedBox(height: 4),
+          const Gap(FwSpacing.lg),
+          _SectionLabel(_resultTitle!),
+          const Gap(FwSpacing.xs),
           _busy
               ? const Padding(
-                  padding: EdgeInsets.all(8),
+                  padding: EdgeInsets.all(FwSpacing.md),
                   child: Center(child: CircularProgressIndicator()),
                 )
               : _CommandResult(_result),
         ],
-        const SizedBox(height: 16),
-        Text('Occurrences', style: theme.textTheme.titleSmall),
-        const SizedBox(height: 4),
+        const Gap(FwSpacing.xl),
+        const _SectionLabel('Occurrences'),
+        const Gap(FwSpacing.xs),
         // Newest first, and every one of them — the ring already bounds it.
         for (var occurrence in stats.occurrences.reversed)
           _OccurrenceRow(server: widget.server, occurrence: occurrence),
@@ -595,8 +722,8 @@ class _OccurrenceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
-    var mono = _mono(context);
+    var colors = context.colors;
+    var mono = context.type.mono;
     var params = occurrence.payload['params'];
     var request = occurrence.rid == null
         ? null
@@ -605,15 +732,15 @@ class _OccurrenceRow extends StatelessWidget {
               .firstOrNull;
     var time = occurrence.time;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: FwSpacing.xxs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}',
-            style: theme.textTheme.bodySmall!.copyWith(color: theme.hintColor),
+            style: mono.copyWith(color: colors.mut2),
           ),
-          const SizedBox(width: 8),
+          const Gap(FwSpacing.md),
           SizedBox(
             width: 60,
             child: Text(_ms(occurrence.payload['ms']), style: mono),
@@ -626,7 +753,7 @@ class _OccurrenceRow extends StatelessWidget {
                 if (params != null)
                   Text(
                     'params: ${jsonEncode(params)}',
-                    style: mono.copyWith(color: theme.hintColor),
+                    style: mono.copyWith(color: colors.mut2),
                   ),
               ],
             ),
@@ -711,7 +838,8 @@ class _RequestRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
+    var colors = context.colors;
+    var mono = context.type.mono;
     var p = request.payload;
     var failed = _failed(request);
     return Tappable.builder(
@@ -720,57 +848,72 @@ class _RequestRow extends StatelessWidget {
       ).setSegments(serverSegments(server.handle.name, requestId: request.id)),
       builder: (context, hovered) => Container(
         color: selected
-            ? theme.colorScheme.primary.withValues(alpha: 0.08)
+            ? colors.accentSoft
             : hovered
-            ? context.colors.hoverOverlay
+            ? colors.hoverOverlay
             : null,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          // The full-width list sits on the panel gutter like everything else;
+          // the 380 px column beside a detail cannot afford it.
+          horizontal: showTime ? panelGutter : FwSpacing.lg,
+          vertical: FwSpacing.sm,
+        ),
         child: Row(
           children: [
             if (showTime) ...[
               Text(
                 _timestamp(request.time),
-                style: _mono(context, color: theme.hintColor),
+                style: mono.copyWith(color: colors.mut2),
               ),
-              const SizedBox(width: 10),
+              const Gap(FwSpacing.lg),
             ],
             _StatusDot(failed: failed),
-            const SizedBox(width: 8),
+            const Gap(FwSpacing.md),
             Expanded(
               child: Text(
                 '${p['method']} ${p['path']}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: _mono(context, fontSize: 13),
+                style: mono,
               ),
             ),
             if (repeatedCount > 0) ...[
-              const SizedBox(width: 6),
-              Tooltip(
-                message:
-                    'A query repeats $repeatedCount× in this request — '
-                    'the N+1 shape.',
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(context.radii.micro),
-                  ),
-                  child: Text(
-                    'N+1',
-                    style: theme.textTheme.bodySmall!.copyWith(
-                      color: Colors.amber.shade900,
-                    ),
-                  ),
-                ),
-              ),
+              const Gap(FwSpacing.sm),
+              _NPlusOneBadge(repeatedCount),
             ],
-            const SizedBox(width: 8),
-            Text(_ms(p['ms']), style: _mono(context, color: theme.hintColor)),
+            const Gap(FwSpacing.md),
+            Text(_ms(p['ms']), style: mono.copyWith(color: colors.mut2)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The one finding this list makes on its own: a query the request ran over
+/// and over.
+class _NPlusOneBadge extends StatelessWidget {
+  const _NPlusOneBadge(this.count);
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tooltip(
+      message: 'A query repeats $count× in this request — the N+1 shape.',
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.sm,
+          vertical: 1,
+        ),
+        decoration: BoxDecoration(
+          color: colors.amber.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(context.radii.micro),
+        ),
+        child: Text(
+          'N+1',
+          style: context.type.micro.copyWith(color: colors.warningText),
         ),
       ),
     );
@@ -785,8 +928,8 @@ class _StatusDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Icon(
     Icons.circle,
-    size: 8,
-    color: failed ? Colors.red.shade600 : Colors.green.shade600,
+    size: FwIconSize.xs - 4,
+    color: failed ? context.colors.red : context.colors.grn,
   );
 }
 
@@ -806,29 +949,54 @@ class _RequestDetail extends StatelessWidget {
   final ServerEvent request;
   final List<ServerEvent> caused;
 
-  static const _tabs = ['waterfall', 'sql', 'request', 'response', 'logs'];
+  /// Ids and their labels. The ids are the address's — a link somebody pasted
+  /// says `?tab=waterfall` — while the labels are the strip's, and the strip
+  /// spells a label the way every other tab in the app is spelled.
+  static const _tabs = {
+    'waterfall': 'Waterfall',
+    'sql': 'SQL',
+    'request': 'Request',
+    'response': 'Response',
+    'logs': 'Logs',
+  };
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
+    var colors = context.colors;
     var p = request.payload;
     var tab = AddressScope.param(context, 'tab') ?? 'waterfall';
-    if (!_tabs.contains(tab)) tab = 'waterfall';
+    if (!_tabs.containsKey(tab)) tab = 'waterfall';
+    var queries = [
+      for (var event in caused)
+        if (event.channel == 'sql') event,
+    ];
+    var logs = [
+      for (var event in caused)
+        if (event.channel == 'log') event,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+          padding: const EdgeInsets.fromLTRB(
+            FwSpacing.xl,
+            FwSpacing.lg,
+            FwSpacing.md,
+            FwSpacing.md,
+          ),
           child: Row(
             children: [
               Expanded(
                 child: Text(
                   '${p['method']} ${p['path']} → ${p['status']}',
-                  style: _mono(context, fontSize: 15),
+                  style: context.type.mono.copyWith(fontSize: 14),
                 ),
               ),
-              Text(_ms(p['ms']), style: _mono(context, fontSize: 15)),
-              const SizedBox(width: 8),
+              Text(
+                _ms(p['ms']),
+                style: context.type.mono.copyWith(fontSize: 14),
+              ),
+              const Gap(FwSpacing.md),
               _CopyAsCurlButton(server: server, request: request),
               IconButton(
                 icon: const Icon(Icons.close, size: FwIconSize.lg),
@@ -842,46 +1010,27 @@ class _RequestDetail extends StatelessWidget {
         ),
         if (p['error'] != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.xl,
+              0,
+              FwSpacing.xl,
+              FwSpacing.md,
+            ),
             child: Text(
               '${p['error']}',
-              style: theme.textTheme.bodyMedium!.copyWith(
-                color: theme.colorScheme.error,
-              ),
+              style: context.type.bodySmall.copyWith(color: colors.red),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-          child: Row(
-            children: [
-              for (var name in _tabs)
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: TextButton(
-                    style: name == tab
-                        ? TextButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary
-                                .withValues(alpha: 0.1),
-                          )
-                        : null,
-                    onPressed: () =>
-                        AddressScope.write(context).setParam('tab', name),
-                    child: Text(name),
-                  ),
-                ),
-            ],
-          ),
+        _InspectStrip(
+          tabs: _tabs,
+          current: tab,
+          badges: {'sql': queries.length, 'logs': logs.length},
+          onSelect: (name) => AddressScope.write(context).setParam('tab', name),
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: colors.line),
         Expanded(
           child: switch (tab) {
-            'sql' => _RequestSqlTab(
-              server: server,
-              queries: [
-                for (var event in caused)
-                  if (event.channel == 'sql') event,
-              ],
-            ),
+            'sql' => _RequestSqlTab(server: server, queries: queries),
             'request' => _HttpMessageTab(
               server: server,
               request: request,
@@ -892,10 +1041,7 @@ class _RequestDetail extends StatelessWidget {
               request: request,
               response: true,
             ),
-            'logs' => _RequestLogsTab([
-              for (var event in caused)
-                if (event.channel == 'log') event,
-            ]),
+            'logs' => _RequestLogsTab(logs),
             _ => _WaterfallTab(
               server: server,
               request: request,
@@ -961,32 +1107,51 @@ class _WaterfallTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
+    var colors = context.colors;
     var repeated = repeatedQueries(caused);
     var spans = [
       for (var event in caused)
         if (event.payload['ms'] is num) event,
     ];
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(FwSpacing.xl),
       children: [
         for (var entry in repeated.entries)
           Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: FwSpacing.lg),
+            padding: const EdgeInsets.all(FwSpacing.lg),
             decoration: BoxDecoration(
-              color: Colors.amber.withValues(alpha: 0.15),
+              color: colors.amber.withValues(alpha: 0.13),
               borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+              border: Border.all(color: colors.amber.withValues(alpha: 0.35)),
             ),
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'N+1: this query runs ${entry.value}× in this request',
-                  style: theme.textTheme.bodySmall,
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Icon(
+                    Icons.warning_amber_rounded,
+                    size: FwIconSize.sm,
+                    color: colors.warningText,
+                  ),
                 ),
-                const SizedBox(height: 2),
-                Text(entry.key, style: _mono(context)),
+                const Gap(FwSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'N+1: this query runs ${entry.value}× in this request',
+                        style: context.type.bodySmall.copyWith(
+                          color: colors.warningText,
+                        ),
+                      ),
+                      const Gap(FwSpacing.xxs),
+                      Text(entry.key, style: context.type.mono),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -1033,8 +1198,8 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
-    var mono = _mono(context);
+    var colors = context.colors;
+    var mono = context.type.mono;
     if (widget.queries.isEmpty) {
       return const EmptyState(
         icon: Icons.storage_outlined,
@@ -1042,7 +1207,7 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
       );
     }
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
       children: [
         for (var event in widget.queries) ...[
           Tappable.builder(
@@ -1052,8 +1217,11 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
                   : _expanded.add(event.id);
             }),
             builder: (context, hovered) => Container(
-              color: hovered ? context.colors.hoverOverlay : null,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              color: hovered ? colors.hoverOverlay : null,
+              padding: const EdgeInsets.symmetric(
+                horizontal: FwSpacing.xl,
+                vertical: FwSpacing.sm,
+              ),
               child: Row(
                 children: [
                   Icon(
@@ -1061,9 +1229,9 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
                         ? Icons.expand_more
                         : Icons.chevron_right,
                     size: FwIconSize.md,
-                    color: theme.hintColor,
+                    color: colors.mut3,
                   ),
-                  const SizedBox(width: 4),
+                  const Gap(FwSpacing.xs),
                   Expanded(
                     child: Text(
                       '${event.payload['query']}',
@@ -1073,15 +1241,13 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
                     ),
                   ),
                   if (event.payload['rows'] is int) ...[
-                    const SizedBox(width: 8),
+                    const Gap(FwSpacing.md),
                     Text(
                       '${event.payload['rows']} rows',
-                      style: theme.textTheme.bodySmall!.copyWith(
-                        color: theme.hintColor,
-                      ),
+                      style: context.type.caption.copyWith(color: colors.mut2),
                     ),
                   ],
-                  const SizedBox(width: 8),
+                  const Gap(FwSpacing.md),
                   Text(_ms(event.payload['ms']), style: mono),
                 ],
               ),
@@ -1089,20 +1255,25 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
           ),
           if (_expanded.contains(event.id))
             Padding(
-              padding: const EdgeInsets.fromLTRB(36, 0, 16, 8),
+              padding: const EdgeInsets.fromLTRB(
+                FwSpacing.xxxl + FwSpacing.xs,
+                0,
+                FwSpacing.xl,
+                FwSpacing.md,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SelectableText('${event.payload['query']}', style: mono),
                   if (event.payload['params'] != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.only(top: FwSpacing.xxs),
                       child: Text(
                         'params: ${jsonEncode(event.payload['params'])}',
-                        style: mono.copyWith(color: theme.hintColor),
+                        style: mono.copyWith(color: colors.mut2),
                       ),
                     ),
-                  const SizedBox(height: 6),
+                  const Gap(FwSpacing.sm),
                   Row(
                     children: [
                       OutlinedButton(
@@ -1112,7 +1283,7 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
                             : () => _explain(event),
                         child: const Text('explain'),
                       ),
-                      const SizedBox(width: 8),
+                      const Gap(FwSpacing.md),
                       TextButton(
                         onPressed: () =>
                             AddressScope.write(context).setSegments(
@@ -1131,12 +1302,12 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
                   ),
                   if (_busy.contains(event.id))
                     const Padding(
-                      padding: EdgeInsets.all(8),
+                      padding: EdgeInsets.all(FwSpacing.md),
                       child: CircularProgressIndicator(),
                     ),
                   if (_explained[event.id] != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 6),
+                      padding: const EdgeInsets.only(top: FwSpacing.sm),
                       child: _CommandResult(_explained[event.id]),
                     ),
                 ],
@@ -1166,18 +1337,31 @@ class _CommandResult extends StatelessWidget {
         maxHeight: 360,
       );
     }
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Theme.of(
-          context,
-        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-      ),
-      child: SelectableText('$result', style: _mono(context)),
-    );
+    return _Slab(child: SelectableText('$result', style: context.type.mono));
   }
+}
+
+/// A block of machine text on the panel's own recessed surface.
+///
+/// Three call sites drew this by hand out of `colorScheme.surfaceContainer
+/// Highest` at half alpha — a Material surface that has no relationship to the
+/// palette the rest of the panel is painted from.
+class _Slab extends StatelessWidget {
+  const _Slab({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(FwSpacing.lg),
+    decoration: BoxDecoration(
+      color: context.colors.panel2,
+      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+      border: Border.all(color: context.colors.line),
+    ),
+    child: child,
+  );
 }
 
 /// One side of the HTTP exchange: headers and body, fetched lazily from the
@@ -1197,8 +1381,7 @@ class _HttpMessageTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
-    var mono = _mono(context);
+    var mono = context.type.mono;
     return FutureBuilder(
       future: server.detailsFor(request),
       builder: (context, snapshot) {
@@ -1218,10 +1401,10 @@ class _HttpMessageTab extends StatelessWidget {
           );
         }
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(FwSpacing.xl),
           children: [
-            Text('Headers', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 4),
+            const _SectionLabel('Headers'),
+            const Gap(FwSpacing.sm),
             for (var entry in headers.entries)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 1),
@@ -1230,30 +1413,21 @@ class _HttpMessageTab extends StatelessWidget {
                   style: mono,
                 ),
               ),
-            const SizedBox(height: 16),
-            Text('Body', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 4),
+            const Gap(FwSpacing.xl),
+            const _SectionLabel('Body'),
+            const Gap(FwSpacing.sm),
             body is! String
                 ? Text(
                     'Not captured — binary, streamed, or over the size cap.',
-                    style: theme.textTheme.bodySmall,
+                    style: context.type.caption.copyWith(
+                      color: context.colors.mut2,
+                    ),
                   )
                 // A JSON body folds; anything else stays plain text. Sniffing
                 // the first character beats trusting content-type, which lies.
                 : body.trimLeft().startsWith(RegExp(r'[\[{]'))
                 ? JsonView.source(body, maxHeight: 520)
-                : Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(
-                        context.radii.radiusSmall,
-                      ),
-                    ),
-                    child: SelectableText(body, style: mono),
-                  ),
+                : _Slab(child: SelectableText(body, style: mono)),
           ],
         );
       },
@@ -1268,7 +1442,7 @@ class _RequestLogsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var mono = _mono(context);
+    var mono = context.type.mono;
     if (logs.isEmpty) {
       return const EmptyState(
         icon: Icons.article_outlined,
@@ -1276,11 +1450,11 @@ class _RequestLogsTab extends StatelessWidget {
       );
     }
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(FwSpacing.xl),
       children: [
         for (var log in logs)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.symmetric(vertical: FwSpacing.xxs),
             child: SelectableText(_summary(log), style: mono),
           ),
       ],
@@ -1307,7 +1481,7 @@ class _Waterfall extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
+    var colors = context.colors;
     var requestMs = (request.payload['ms'] as num?)?.toDouble() ?? 0;
     var end = request.time.millisecondsSinceEpoch.toDouble();
     var start = end - requestMs;
@@ -1315,7 +1489,7 @@ class _Waterfall extends StatelessWidget {
 
     Widget row(String label, double fromMs, double widthMs, Color color) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.symmetric(vertical: FwSpacing.xxs),
         child: Row(
           children: [
             SizedBox(
@@ -1324,10 +1498,10 @@ class _Waterfall extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: _mono(context),
+                style: context.type.mono,
               ),
             ),
-            const SizedBox(width: 8),
+            const Gap(FwSpacing.md),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -1364,13 +1538,16 @@ class _Waterfall extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Waterfall', style: theme.textTheme.titleSmall),
-        const SizedBox(height: 4),
+        const _SectionLabel('Waterfall'),
+        const Gap(FwSpacing.sm),
+        // The request is the ruler the spans are read against, so it is the
+        // accent; what it caused is quieter than it, and a query is told from
+        // anything else by hue rather than by weight.
         row(
           'request (${_ms(request.payload['ms'])})',
           0,
           total,
-          Colors.blue.shade300,
+          colors.accent.withValues(alpha: 0.55),
         ),
         for (var span in spans)
           // A sql span is a door into its shape's detail — same query, seen
@@ -1387,7 +1564,7 @@ class _Waterfall extends StatelessWidget {
                     ),
                   ),
             builder: (context, hovered) => Container(
-              color: hovered ? context.colors.hoverOverlay : null,
+              color: hovered ? colors.hoverOverlay : null,
               child: row(
                 _summary(span),
                 ((span.time.millisecondsSinceEpoch -
@@ -1395,9 +1572,7 @@ class _Waterfall extends StatelessWidget {
                         start)
                     .toDouble(),
                 (span.payload['ms']! as num).toDouble(),
-                span.channel == 'sql'
-                    ? Colors.teal.shade400
-                    : Colors.purple.shade300,
+                span.channel == 'sql' ? colors.grn : colors.info,
               ),
             ),
           ),
@@ -1429,34 +1604,33 @@ class _InfoViewState extends State<_InfoView> {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     var info = widget.info;
     if (info.isEmpty) return const _NoInfoHint();
     var links = info.links ?? const [];
     var connections = info.connections ?? const [];
     var config = info.config ?? const {};
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(panelGutter),
       children: [
         if (links.isNotEmpty) ...[
-          Text('Links', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 4),
+          const _SectionLabel('Links'),
+          const Gap(FwSpacing.sm),
           for (var link in links) _LinkRow(link, baseUrl: info.baseUrl),
-          const SizedBox(height: 16),
+          const Gap(FwSpacing.xl),
         ],
         if (connections.isNotEmpty) ...[
-          Text('Connections', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 4),
+          const _SectionLabel('Connections'),
+          const Gap(FwSpacing.sm),
           for (var (index, connection) in connections.indexed)
             _connectionRow(context, 'conn-$index', connection),
-          const SizedBox(height: 16),
+          const Gap(FwSpacing.xl),
         ],
         for (var group in config.entries) ...[
-          Text(group.key, style: theme.textTheme.titleSmall),
-          const SizedBox(height: 4),
+          _SectionLabel(group.key),
+          const Gap(FwSpacing.sm),
           for (var entry in group.value.entries)
             _configRow(context, '${group.key}/${entry.key}', entry),
-          const SizedBox(height: 16),
+          const Gap(FwSpacing.xl),
         ],
       ],
     );
@@ -1471,23 +1645,20 @@ class _InfoViewState extends State<_InfoView> {
     var secret = masked != connection.dsn;
     var revealed = _revealed.contains(key);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: FwSpacing.xxs),
       child: Row(
         children: [
           _KindChip(connection.kind),
-          const SizedBox(width: 8),
+          const Gap(FwSpacing.md),
           if (connection.label != null) ...[
-            Text(
-              connection.label!,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(width: 8),
+            Text(connection.label!, style: context.type.bodySmall),
+            const Gap(FwSpacing.md),
           ],
           Flexible(
             child: SelectableText(
               revealed ? connection.dsn : masked,
               maxLines: 1,
-              style: _mono(context),
+              style: context.type.mono,
             ),
           ),
           if (secret)
@@ -1521,7 +1692,7 @@ class _InfoViewState extends State<_InfoView> {
         padding: const EdgeInsets.symmetric(vertical: 1),
         child: Row(
           children: [
-            Text('${entry.key}: ••••', style: _mono(context)),
+            Text('${entry.key}: ••••', style: context.type.mono),
             _SmallIconButton(
               Icons.visibility,
               tooltip: 'Reveal',
@@ -1537,9 +1708,9 @@ class _InfoViewState extends State<_InfoView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${entry.key}:', style: _mono(context)),
+            Text('${entry.key}:', style: context.type.mono),
             Padding(
-              padding: const EdgeInsets.only(left: 16),
+              padding: const EdgeInsets.only(left: FwSpacing.xl),
               child: JsonView(
                 data: value,
                 showToolbar: false,
@@ -1559,7 +1730,7 @@ class _InfoViewState extends State<_InfoView> {
             child: SelectableText(
               '${entry.key}: $value',
               maxLines: 1,
-              style: _mono(context),
+              style: context.type.mono,
             ),
           ),
           if (secret)
@@ -1585,34 +1756,32 @@ class _LinkRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
+    var colors = context.colors;
     var resolved = resolveLinkUrl(link.url, baseUrl: baseUrl);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: FwSpacing.xxs),
       child: Row(
         children: [
           resolved == null
-              ? Text(link.label, style: theme.textTheme.bodySmall)
+              ? Text(link.label, style: context.type.bodySmall)
               : _UrlLink(resolved, label: link.label),
-          const SizedBox(width: 8),
+          const Gap(FwSpacing.md),
           Flexible(
             child: Text(
               resolved ?? link.url,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: _mono(context, color: theme.hintColor),
+              style: context.type.mono.copyWith(color: colors.mut2),
             ),
           ),
           if (link.description != null) ...[
-            const SizedBox(width: 8),
+            const Gap(FwSpacing.md),
             Flexible(
               child: Text(
                 link.description!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall!.copyWith(
-                  color: theme.hintColor,
-                ),
+                style: context.type.caption.copyWith(color: colors.mut2),
               ),
             ),
           ],
@@ -1632,16 +1801,17 @@ class _KindChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.sm,
+        vertical: 1,
+      ),
       decoration: BoxDecoration(
-        color: Colors.teal.withValues(alpha: 0.15),
+        color: context.colors.accentSoft,
         borderRadius: BorderRadius.circular(context.radii.micro),
       ),
       child: Text(
         kind,
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall!.copyWith(color: Colors.teal.shade700),
+        style: context.type.micro.copyWith(color: context.colors.accent),
       ),
     );
   }
@@ -1661,7 +1831,7 @@ class _SmallIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 6),
+      padding: const EdgeInsets.only(left: FwSpacing.sm),
       child: Tooltip(
         message: tooltip,
         child: Tappable.builder(
@@ -1669,9 +1839,7 @@ class _SmallIconButton extends StatelessWidget {
           builder: (context, hovered) => Icon(
             icon,
             size: FwIconSize.sm,
-            color: hovered
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).hintColor,
+            color: hovered ? context.colors.accent : context.colors.mut3,
           ),
         ),
       ),
@@ -1684,39 +1852,36 @@ class _NoInfoHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
+    var colors = context.colors;
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'This server has not published anything about itself.',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'It can, in one call after `serve` returns:',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.5,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This server has not published anything about itself.',
+              style: context.type.bodySmall.copyWith(color: colors.mut),
+            ),
+            const Gap(FwSpacing.sm),
+            Text(
+              'It can, in one call after `serve` returns:',
+              style: context.type.caption.copyWith(color: colors.mut2),
+            ),
+            const Gap(FwSpacing.lg),
+            _Slab(
+              child: SelectableText(
+                'FlutterwareServer.info(ServerInfo(\n'
+                "  baseUrl: 'http://localhost:\$port',\n"
+                "  environment: 'dev',\n"
+                "  links: [ServerLink('Health', '/health')],\n"
+                '));',
+                style: context.type.mono.copyWith(color: colors.mut),
               ),
-              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
             ),
-            child: SelectableText(
-              'FlutterwareServer.info(ServerInfo(\n'
-              "  baseUrl: 'http://localhost:\$port',\n"
-              "  environment: 'dev',\n"
-              "  links: [ServerLink('Health', '/health')],\n"
-              '));',
-              style: _mono(context),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1750,24 +1915,26 @@ class _EventRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: panelGutter,
+        vertical: FwSpacing.xs,
+      ),
       child: Row(
         children: [
           Text(
             _timestamp(event.time),
-            style: _mono(context, color: theme.hintColor),
+            style: context.type.mono.copyWith(color: context.colors.mut2),
           ),
-          const SizedBox(width: 8),
+          const Gap(FwSpacing.md),
           _ChannelChip(event),
-          const SizedBox(width: 8),
+          const Gap(FwSpacing.md),
           Expanded(
             child: Text(
               _summary(event),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: _mono(context, fontSize: 13),
+              style: context.type.mono,
             ),
           ),
         ],
@@ -1781,28 +1948,36 @@ class _ChannelChip extends StatelessWidget {
 
   final ServerEvent event;
 
+  /// Fixed width, so the summaries beside them line up down the stream: the
+  /// channel is a column, and a column whose left edge moves per row is one the
+  /// eye cannot run down.
+  static const _width = 34.0;
+
   @override
   Widget build(BuildContext context) {
+    var colors = context.colors;
     var failed = _failed(event);
     var color = failed
-        ? Colors.red
+        ? colors.red
         : switch (event.channel) {
-            'http' => Colors.blue,
-            'sql' => Colors.teal,
-            'log' => Colors.grey,
-            _ => Colors.purple,
+            'http' => colors.accent,
+            'sql' => colors.grn,
+            'log' => colors.mut,
+            _ => colors.info,
           };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      width: _width,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(vertical: 1),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(context.radii.micro),
       ),
       child: Text(
         event.channel,
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall!.copyWith(color: color.shade700),
+        maxLines: 1,
+        overflow: TextOverflow.clip,
+        style: context.type.micro.copyWith(color: color),
       ),
     );
   }
@@ -1842,18 +2017,6 @@ String _summary(ServerEvent event) {
 
 String _ms(Object? value) =>
     value is num ? '${value.toStringAsFixed(1)}ms' : '';
-
-/// The panel's one mono style — everything that is machine data (paths,
-/// queries, headers, durations) wears it; prose stays in the UI face.
-TextStyle _mono(BuildContext context, {Color? color, double? fontSize}) =>
-    Theme.of(context).textTheme.bodySmall!.copyWith(
-      fontFamily: 'monospace',
-      fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
-      letterSpacing: 0,
-      fontFeatures: const [FontFeature.tabularFigures()],
-      color: color,
-      fontSize: fontSize,
-    );
 
 String _timestamp(DateTime time) =>
     '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}'

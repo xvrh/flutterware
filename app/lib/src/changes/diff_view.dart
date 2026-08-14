@@ -5,6 +5,8 @@
 /// subtree per row shows up as jank while scrolling a four-thousand-line file.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../ui/syntax.dart';
@@ -267,12 +269,23 @@ class HunkLineView extends StatelessWidget {
     this.tokens,
     this.onComment,
     this.selected = false,
+    this.scrollX,
+    this.charWidth = 0,
     super.key,
   });
 
   final HunkLineCache lines;
   final HunkSpan hunk;
   final int index;
+
+  /// The body's shared horizontal position, or null for a host without one.
+  final DiffScrollX? scrollX;
+
+  /// One character's advance in [diffTextStyle], measured once by the pane.
+  ///
+  /// A monospace line's width is its length times this, which is how the body
+  /// learns how far right it can go without a `TextPainter` per row.
+  final double charWidth;
 
   /// Called with the line, when its `+` is pressed. Null on a screen with no
   /// review — a widget test pumping a diff, and the CLI's renderer.
@@ -300,10 +313,13 @@ class HunkLineView extends StatelessWidget {
       );
     }
     var line = decoded[index];
+    // Reported from `build`, which is why [DiffScrollX.see] does not notify.
+    scrollX?.see(line.text.length * charWidth);
     return DiffLineView(
       line: line,
       tokens: tokens?.forHunk(hunk).at(index),
       selected: selected,
+      scrollX: scrollX,
       // A meta line — `\ No newline at end of file` — is not a line of the
       // file, so there is nothing to say about it and nothing to quote.
       onComment: onComment == null || line.kind == DiffLineKind.meta
@@ -331,6 +347,7 @@ class DiffLineView extends StatefulWidget {
     this.tokens,
     this.onComment,
     this.selected = false,
+    this.scrollX,
     super.key,
   });
 
@@ -347,6 +364,11 @@ class DiffLineView extends StatefulWidget {
   /// Inside the span the composer is about, so you can see what you picked
   /// while you are writing about it.
   final bool selected;
+
+  /// Where the code column is scrolled to, or null for a host that does not
+  /// offer horizontal reach — the CLI's renderer and a widget test pumping one
+  /// row on its own.
+  final DiffScrollX? scrollX;
 
   @override
   State<DiffLineView> createState() => _DiffLineViewState();
@@ -404,34 +426,12 @@ class _DiffLineViewState extends State<DiffLineView> {
               child: Text(marker, style: style.copyWith(color: tone)),
             ),
             Expanded(
-              child: switch (widget.tokens) {
-                // **The same `Text`, given spans instead of a string.** Not a
-                // different widget for the coloured case: the row's height, its
-                // clipping and its never-wrapping are the properties that keep a
-                // virtualised list smooth, and two widgets is two places to lose
-                // one of them.
-                var it? when line.kind != DiffLineKind.meta => Text.rich(
-                  TextSpan(children: spansFor(context, it, style: style)),
-                  style: style,
-                  softWrap: false,
-                  overflow: TextOverflow.clip,
-                ),
-                _ => Text(
-                  line.text,
-                  style: line.kind == DiffLineKind.meta
-                      ? style.copyWith(
-                          color: colors.mut3,
-                          fontStyle: FontStyle.italic,
-                        )
-                      : style,
-                  // **Never wrapped.** A wrapped line changes a row's height, and
-                  // a virtualised list whose rows change height as they are built
-                  // is one whose scrollbar jumps under your hand. Long lines
-                  // clip; the list scrolls horizontally as a whole.
-                  softWrap: false,
-                  overflow: TextOverflow.clip,
-                ),
-              },
+              child: _Code(
+                line: line,
+                tokens: widget.tokens,
+                style: style,
+                scrollX: widget.scrollX,
+              ),
             ),
           ],
         ),
@@ -439,6 +439,93 @@ class _DiffLineViewState extends State<DiffLineView> {
     );
   }
 }
+
+/// A line's text, shifted by the body's shared horizontal offset.
+///
+/// **Translated inside a clip, not put in a scroll view.** Every row must move
+/// by the same amount or the columns stop lining up, and a scroll view per row
+/// cannot promise that: a short line's own extent is zero, so it would stay
+/// put while its neighbours moved. Here the text is laid out at its natural
+/// width — [OverflowBox] is what lifts the row's width constraint off it — and
+/// the row shows the window onto it.
+///
+/// Only this subtree rebuilds as the offset changes, not the row: forty rows
+/// re-running their token spans on every frame of a swipe is the jank the
+/// virtualised list is otherwise careful to avoid.
+class _Code extends StatelessWidget {
+  const _Code({
+    required this.line,
+    required this.tokens,
+    required this.style,
+    required this.scrollX,
+  });
+
+  final DiffLine line;
+  final List<Token>? tokens;
+  final TextStyle style;
+  final DiffScrollX? scrollX;
+
+  @override
+  Widget build(BuildContext context) {
+    // **The same `Text`, given spans instead of a string.** Not a different
+    // widget for the coloured case: the row's height and its never-wrapping are
+    // the properties that keep a virtualised list smooth, and two widgets is
+    // two places to lose one of them.
+    //
+    // **Never wrapped.** A wrapped line changes a row's height, and a
+    // virtualised list whose rows change height as they are built is one whose
+    // scrollbar jumps under your hand.
+    var text = switch (tokens) {
+      var it? when line.kind != DiffLineKind.meta => Text.rich(
+        TextSpan(children: spansFor(context, it, style: style)),
+        style: style,
+        softWrap: false,
+        overflow: TextOverflow.clip,
+      ),
+      _ => Text(
+        line.text,
+        style: line.kind == DiffLineKind.meta
+            ? style.copyWith(
+                color: context.colors.mut3,
+                fontStyle: FontStyle.italic,
+              )
+            : style,
+        softWrap: false,
+        overflow: TextOverflow.clip,
+      ),
+    };
+
+    var model = scrollX;
+    if (model == null) return text;
+    // **The row's height is stated, not discovered.** An [OverflowBox] takes
+    // the biggest size its own constraints allow, and a list row's height is
+    // unbounded — so without this it asks for an infinite one. Saying it
+    // outright costs nothing here (every row is one line of monospace, whose
+    // height is arithmetic) and hands the virtualised list the predictable
+    // extent its doc has always claimed for these rows.
+    return SizedBox(
+      height: diffLineHeight(style),
+      child: ClipRect(
+        child: AnimatedBuilder(
+          animation: model,
+          builder: (context, child) => Transform.translate(
+            offset: Offset(-model.x, 0),
+            child: OverflowBox(
+              alignment: Alignment.centerLeft,
+              maxWidth: double.infinity,
+              child: child,
+            ),
+          ),
+          child: text,
+        ),
+      ),
+    );
+  }
+}
+
+/// How tall one line of diff is: the face's size times its line height.
+double diffLineHeight(TextStyle style) =>
+    (style.fontSize ?? 12.5) * (style.height ?? 1.45);
 
 /// The `+` in the left margin.
 ///
@@ -502,6 +589,66 @@ class _AddComment extends StatelessWidget {
   }
 
   static const _width = FwSpacing.lg + 8;
+}
+
+/// The body's horizontal scrollbar: a thumb you can drag, and the only thing on
+/// the screen that says there is more line out there.
+///
+/// **It appears only when it has somewhere to go**, and it sits under the rows
+/// rather than over them: a diff's last line is as readable as its first, and a
+/// bar floating over it would cover exactly the text somebody scrolled to see.
+class DiffScrollBar extends StatelessWidget {
+  const DiffScrollBar({required this.model, super.key});
+
+  final DiffScrollX model;
+
+  static const _height = 10.0;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return AnimatedBuilder(
+      animation: model,
+      builder: (context, _) {
+        if (!model.canScroll) return const SizedBox.shrink();
+        return SizedBox(
+          height: _height,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              var track = constraints.maxWidth;
+              // Never thinner than a thing you can hit.
+              var thumb = math.max(28.0, track * model.visibleFraction);
+              var left = (track - thumb) * model.progress;
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragUpdate: (event) {
+                  var travel = track - thumb;
+                  if (travel <= 0) return;
+                  model.moveBy(event.delta.dx * (model.maxX / travel));
+                },
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: left,
+                      top: 3,
+                      width: thumb,
+                      height: 4,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: colors.mut3,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _Gutter extends StatelessWidget {
@@ -625,8 +772,90 @@ class IndexUntrackedRow extends StatelessWidget {
 ///
 /// Monospace, because a diff is columns: an indent that does not line up with
 /// the line above it is a diff you cannot read.
-TextStyle diffTextStyle(BuildContext context) => context.type.micro.copyWith(
-  fontFamily: 'monospace',
-  fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
-  height: 1.5,
-);
+///
+/// **Built on `mono`, which is body text, and not on `micro`, which is a
+/// label.** It was `micro` plus a family override, and `micro` is defined as
+/// `10.5, weight: strong, color: mut, letterSpacing: 0.2` — the face the app
+/// uses for `PLUGINS`. So every line of code on the screen was rendered at the
+/// smallest step in the ramp, in semibold, in a muted grey, with tracking added
+/// to a typeface whose entire purpose is that characters line up on a grid.
+/// Read against a full screen of diff, there was not one regular-weight glyph
+/// in it.
+///
+/// The line height stays generous: a diff is scanned down as much as read
+/// across, and 1.45 is what keeps the `+` and `-` washes reading as bands.
+TextStyle diffTextStyle(BuildContext context) =>
+    context.type.mono.copyWith(height: 1.45);
+
+/// What a row spends before its code starts: the comment margin, two gutters,
+/// a gap and the `+`/`-` marker.
+///
+/// Named because the body has to subtract it to know how wide the code column
+/// is, and a viewport that is wrong by 118 px is a scroll that stops short of
+/// the end of the longest line.
+const diffChromeWidth =
+    _AddComment._width + 44 * 2 + FwSpacing.sm + 10 + FwSpacing.lg;
+
+/// Where the body is scrolled to horizontally, shared by every row.
+///
+/// **One offset for all the rows, not a scroll view each.** The lines of a diff
+/// are columns; if each row scrolled by its own amount — or if short rows
+/// clamped at their own width while long ones kept going — the indentation
+/// would stop lining up, which is the one thing the monospace is for. So the
+/// rows do not scroll: they are translated, all by this, and a row with nothing
+/// out there simply shows blank space.
+///
+/// The content width is what the widest row *built so far* needs. A patch's
+/// true widest line is not knowable without decoding all of it, which is the
+/// work the virtualised list exists to avoid — so the extent grows as you meet
+/// longer lines, and never lies in the direction that would strand text off
+/// the edge.
+class DiffScrollX extends ChangeNotifier {
+  double _x = 0;
+  double _content = 0;
+  double _viewport = 0;
+
+  /// Logical pixels the code column is shifted left by.
+  double get x => _x;
+
+  double get maxX => math.max(0, _content - _viewport);
+
+  /// Whether there is anything out of sight to reach.
+  bool get canScroll => maxX > 0.5;
+
+  /// The visible fraction, for a thumb's width.
+  double get visibleFraction =>
+      _content <= 0 ? 1 : (_viewport / _content).clamp(0.0, 1.0);
+
+  /// How far along, 0..1.
+  double get progress => maxX <= 0 ? 0 : (_x / maxX).clamp(0.0, 1.0);
+
+  /// Called from `build`, so it must not notify — nothing reads [maxX] except
+  /// input handling, which happens between frames.
+  void see(double width) {
+    if (width > _content) _content = width;
+  }
+
+  void setViewport(double width) {
+    if (width == _viewport) return;
+    _viewport = width;
+    moveTo(_x);
+  }
+
+  void moveBy(double dx) => moveTo(_x + dx);
+
+  void moveTo(double value) {
+    var clamped = value.clamp(0.0, maxX);
+    if (clamped == _x) return;
+    _x = clamped;
+    notifyListeners();
+  }
+
+  /// A new file is a new horizontal position: staying 400 px in would open it
+  /// on whatever happened to be at that column.
+  void reset() {
+    _content = 0;
+    moveTo(0);
+    _x = 0;
+  }
+}

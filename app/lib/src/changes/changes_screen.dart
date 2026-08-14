@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../shell/worktree.dart';
+import '../ui/empty_state.dart';
 import '../ui/syntax.dart';
 import '../ui/tappable.dart';
 import '../ui/panel_header.dart';
@@ -197,6 +199,55 @@ class _ChangesScreenState extends State<ChangesScreen> {
   /// add.
   String? _editing;
 
+  /// A note you deleted a moment ago, whose tombstone has **not been written**.
+  ///
+  /// **The undo window is the delete.** The log is append-only and a tombstone
+  /// cannot be unwritten, so an undo that re-added the comment would give it a
+  /// new place at the end of the batch — the third note becoming the sixth is
+  /// not the note you took back. Holding the delete instead costs a few
+  /// seconds of a row saying so, and restores the note exactly, in place.
+  ///
+  /// Deferring is also the safe direction: a crash inside the window loses the
+  /// deletion, not the writing.
+  String? _pendingDelete;
+  Timer? _deleteTimer;
+
+  /// Long enough to notice the row and reach it.
+  static const _undoWindow = Duration(seconds: 6);
+
+  /// Which note the body should scroll to, and how many times it has been
+  /// asked. The counter is what makes clicking the same row twice a second
+  /// scroll rather than nothing — after the first, you may have scrolled away.
+  String? _reveal;
+  var _revealSeq = 0;
+
+  /// The note drawn in the accent for a moment after arriving at it.
+  String? _flash;
+  Timer? _flashTimer;
+
+  /// How long that lasts. Long enough to catch the eye landing, short enough
+  /// not to read as a selection that will stay.
+  static const _flashFor = Duration(milliseconds: 1600);
+
+  /// The open batch, without the note whose delete is still being held.
+  List<ReviewComment> get _live => [
+    for (var comment in _review.open)
+      if (comment.id != _pendingDelete) comment,
+  ];
+
+  /// The quote an *edit* shows: the one the comment already carries.
+  ///
+  /// Null when the composer is writing a new comment, which reads the patch
+  /// instead. Re-reading it here would show the code as it is **now** under a
+  /// note whose whole promise is that it kept what was there then — and the
+  /// moment that differs is the moment the note matters.
+  List<String>? get _editingQuote {
+    if (_editing case var id?) {
+      return _review.open.where((c) => c.id == id).firstOrNull?.quote;
+    }
+    return null;
+  }
+
   /// The draft, owned here rather than by the composer: the composer lives
   /// inside the virtualised body, and scrolling it past the cache extent
   /// disposes it. Holding the text a level up makes that a redraw instead of a
@@ -267,9 +318,11 @@ class _ChangesScreenState extends State<ChangesScreen> {
     super.didUpdateWidget(old);
     if (old.worktree.path != widget.worktree.path) {
       _changes.dispose();
-      _review
-        ..removeListener(_onChanged)
-        ..dispose();
+      // Same as [dispose]: this checkout's held delete belongs to this
+      // checkout's log, and the controller about to replace it writes another.
+      _review.removeListener(_onChanged);
+      _commitPendingDelete(rebuild: false);
+      _review.dispose();
       _selected = widget.initialPath;
       // A draft is about a line in the checkout you were looking at. Carrying
       // it to the next one would attach it to whatever happens to be there.
@@ -315,9 +368,12 @@ class _ChangesScreenState extends State<ChangesScreen> {
     _changes
       ..removeListener(_onChanged)
       ..dispose();
-    _review
-      ..removeListener(_onChanged)
-      ..dispose();
+    // Leaving the screen closes the window: you deleted it and walked away.
+    // Before the controller goes, or the write has nowhere to land.
+    _flashTimer?.cancel();
+    _review.removeListener(_onChanged);
+    _commitPendingDelete(rebuild: false);
+    _review.dispose();
     _draft.dispose();
     _index.dispose();
     _body.dispose();
@@ -490,14 +546,57 @@ class _ChangesScreenState extends State<ChangesScreen> {
     setState(_cancelComposing);
   }
 
+  /// Takes the note off the screen, and holds the tombstone.
+  ///
+  /// One at a time: deleting a second note commits the first, which is also
+  /// what stops the held id from being a queue.
   void _deleteComment(String id) {
     if (_editing == id) setState(_cancelComposing);
-    _review.delete(id);
+    _commitPendingDelete();
+    setState(() => _pendingDelete = id);
+    _deleteTimer = Timer(_undoWindow, _commitPendingDelete);
   }
 
-  /// Opens what a review row is about.
+  /// Writes the held tombstone, if there is one.
+  ///
+  /// [rebuild] is false where a rebuild is already happening or can no longer
+  /// happen — a worktree swap, and teardown. Callers that turn it off remove
+  /// the listener first, so the controller's own notification cannot ask for
+  /// one either.
+  void _commitPendingDelete({bool rebuild = true}) {
+    _deleteTimer?.cancel();
+    _deleteTimer = null;
+    var id = _pendingDelete;
+    if (id == null) return;
+    _pendingDelete = null;
+    _review.delete(id);
+    if (rebuild && mounted) setState(() {});
+  }
+
+  void _undoDelete() {
+    _deleteTimer?.cancel();
+    _deleteTimer = null;
+    setState(() => _pendingDelete = null);
+  }
+
+  /// Opens what a review row is about, and goes to it.
+  ///
+  /// **Opening the file is not arriving at the note.** This selected the path
+  /// and jumped the body to line one, which on a six-hundred-line diff leaves
+  /// the note you clicked somewhere below the fold — and when the file was
+  /// already open it did nothing at all, because [_show] returns early on the
+  /// selection it already has.
   void _openComment(ReviewComment comment) {
     if (comment.anchor.path case var path?) _show(path);
+    _flashTimer?.cancel();
+    setState(() {
+      _reveal = comment.id;
+      _revealSeq++;
+      _flash = comment.id;
+    });
+    _flashTimer = Timer(_flashFor, () {
+      if (mounted) setState(() => _flash = null);
+    });
   }
 
   /// The batch, as it would be handed off.
@@ -519,7 +618,10 @@ class _ChangesScreenState extends State<ChangesScreen> {
   );
 
   Future<void> _handOff(ChangeSet? set) async {
-    var comments = [..._review.open];
+    // The live batch: a note whose delete is still being held is not part of
+    // what leaves, and handing off is a decision that closes the window on it.
+    var comments = _live;
+    _commitPendingDelete();
     if (comments.isEmpty) return;
     var at = DateTime.now();
     var result = await showHandoffSheet(
@@ -592,7 +694,14 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         onQuery: (q) => setState(() => _query = q),
                         onSelect: _show,
                         review: _review.state,
-                        selectedComment: _editing,
+                        // **The note the screen is on**, which is the one being
+                        // rewritten or, failing that, the last one opened. It
+                        // was the editing one alone, so clicking a row marked
+                        // nothing: the diff jumped and the list you clicked in
+                        // gave no sign of which row you were now looking at.
+                        selectedComment: _editing ?? _reveal,
+                        deleted: _pendingDelete,
+                        onUndoDelete: _undoDelete,
                         drifted: (c) => _drifted(c, set),
                         onOpenComment: _openComment,
                         onDeleteComment: _deleteComment,
@@ -634,6 +743,12 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         editing: _editing != null,
                         draft: _draft,
                         drifted: (c) => _drifted(c, set),
+                        deleted: _pendingDelete,
+                        flash: _flash,
+                        reveal: _reveal,
+                        revealSeq: _revealSeq,
+                        editingQuote: _editingQuote,
+                        onUndoDelete: _undoDelete,
                         onCommentLine: _composeLine,
                         onCommentFile: _composeFile,
                         onSubmit: () => _submitComment(set),
@@ -951,6 +1066,8 @@ class _IndexPane extends StatelessWidget {
     required this.visible,
     required this.review,
     required this.selectedComment,
+    required this.deleted,
+    required this.onUndoDelete,
     required this.drifted,
     required this.onOpenComment,
     required this.onDeleteComment,
@@ -979,6 +1096,10 @@ class _IndexPane extends StatelessWidget {
 
   /// The comment the composer is currently rewriting, if any.
   final String? selectedComment;
+
+  /// The note whose delete is being held. Its row is the undo strip.
+  final String? deleted;
+  final VoidCallback onUndoDelete;
 
   final bool Function(ReviewComment) drifted;
   final ValueChanged<ReviewComment> onOpenComment;
@@ -1034,7 +1155,7 @@ class _IndexPane extends StatelessWidget {
           tab: tab,
           all: set.changed.length + set.untracked.length,
           important: pinned,
-          review: review.open.length,
+          review: _liveCount,
           onTab: onTab,
         ),
         Expanded(
@@ -1046,7 +1167,7 @@ class _IndexPane extends StatelessWidget {
         ),
         if (tab == IndexTab.review)
           _ReviewFooter(
-            count: review.open.length,
+            count: _liveCount,
             onHandOff: onHandOff,
             onCommentReview: onCommentReview,
           ),
@@ -1054,8 +1175,14 @@ class _IndexPane extends StatelessWidget {
     );
   }
 
+  /// Notes still waiting, which is what the tab's count and the footer mean.
+  int get _liveCount =>
+      review.open.where((comment) => comment.id != deleted).length;
+
   /// What you have written, and what you have already sent.
   Widget _review(BuildContext context) {
+    // A whole-review note is about no file, so it quotes nothing — the one
+    // composer on this screen with only its header above the text.
     var wide = composing is ReviewWide
         ? ReviewComposer(
             anchor: const ReviewWide(),
@@ -1067,19 +1194,25 @@ class _IndexPane extends StatelessWidget {
           )
         : null;
     if (review.isEmpty && wide == null) return const _NoComments();
+    // Numbered over the live ones only — the number is what you say out loud
+    // to the agent, so a held delete must not leave a gap in it.
+    var number = 0;
     return ListView(
       key: changesListKey,
       controller: controller,
       children: [
         ?wide,
-        for (var (index, comment) in review.open.indexed)
-          ReviewIndexRow(
-            number: index + 1,
-            comment: comment,
-            selected: comment.id == selectedComment,
-            drifted: drifted(comment),
-            onTap: () => onOpenComment(comment),
-          ),
+        for (var comment in review.open)
+          if (comment.id == deleted)
+            ReviewUndoStrip(inset: FwSpacing.md, onUndo: onUndoDelete)
+          else
+            ReviewIndexRow(
+              number: ++number,
+              comment: comment,
+              selected: comment.id == selectedComment,
+              drifted: drifted(comment),
+              onTap: () => onOpenComment(comment),
+            ),
         if (review.history.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -1106,9 +1239,11 @@ class _IndexPane extends StatelessWidget {
       visible: visible,
     );
     if (tree.totalFiles == 0 && untracked.isEmpty) {
-      return _Nothing(
-        set.changed.isEmpty ? 'Nothing to show.' : 'Nothing matches.',
-      );
+      // Two silences: a checkout with no delta at all, and a filter that
+      // matched none of one — the icon is the quicker way to tell them apart.
+      return set.changed.isEmpty
+          ? const _Nothing('Nothing to show.', icon: Icons.check_circle_outline)
+          : const _Nothing('Nothing matches.');
     }
     // **Not virtualised, deliberately.** The index is the file count, not the
     // line count — a 228-file branch is a few hundred rows, where the list it
@@ -1145,7 +1280,10 @@ class _IndexPane extends StatelessWidget {
       // is looking at a feature that appears not to work, and a project whose
       // rules matched nothing is looking at good news.
       return set.attentionConfigured
-          ? const _Nothing('No file matched an attention rule.')
+          ? const _Nothing(
+              'No file matched an attention rule.',
+              icon: Icons.push_pin_outlined,
+            )
           : const _NoRulesYet();
     }
     return ListView(
@@ -1328,40 +1466,26 @@ class _Tab extends StatelessWidget {
 /// What the **Review** tab says before anything has been written.
 ///
 /// **It names the gesture**, because nothing else on the screen advertises it:
-/// the `+` only exists on hover, which is the right call for a list of three
-/// thousand rows and the wrong one for discovery.
+/// the `+` in the margin is drawn on hover, which is the right call for a list
+/// of three thousand rows and the wrong one for discovery.
+///
+/// [EmptyState], like every other *nothing here yet* in the app. This screen
+/// had four hand-built ones, each with its own icon size, type and alignment —
+/// four answers to a question the app had already answered once.
 class _NoComments extends StatelessWidget {
   const _NoComments();
 
   @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(FwSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.mode_comment_outlined, size: 28, color: colors.mut3),
-            const Gap(FwSpacing.lg),
-            Text(
-              'No comments yet',
-              style: context.type.bodySmall.copyWith(color: colors.mut),
-            ),
-            const Gap(FwSpacing.xs),
-            Text(
-              'Hover a line in the diff and click + to leave one for the '
-              'agent. Shift-click a second line to cover a span.',
-              textAlign: TextAlign.center,
-              // `caption`, not `micro`: micro is a bold label face, and three
-              // lines of it reads as a warning rather than as an instruction.
-              style: context.type.caption.copyWith(color: colors.mut2),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const EmptyState(
+    icon: Icons.mode_comment_outlined,
+    title: 'No comments yet',
+    // Not *hover a line*: the margin is a live target whether or not a pointer
+    // is over it, and saying otherwise sends people looking for a hover state
+    // they do not need.
+    message:
+        'Click the + in a diff line’s margin to leave one for the agent. '
+        'Shift-click a second line to cover a span.',
+  );
 }
 
 /// The Review tab's foot: the one action the whole tab is for.
@@ -1369,6 +1493,13 @@ class _NoComments extends StatelessWidget {
 /// **Pinned below the list rather than at the end of it.** A batch of twelve
 /// comments would put *Hand off* below the fold, which is the one place a
 /// primary action may not be.
+///
+/// **Primary, not loud.** It was a solid full-bleed accent slab with the
+/// second action as a 10.5 px link under it — between them the heaviest and
+/// nearly the lightest thing on the screen, for two actions a note-taker
+/// alternates between. The house primary is [FwActionButton]'s: an accent
+/// border over [FwPalette.accentSoft], which is emphatic in a panel of greys
+/// without being the loudest object in the app.
 class _ReviewFooter extends StatelessWidget {
   const _ReviewFooter({
     required this.count,
@@ -1393,15 +1524,19 @@ class _ReviewFooter extends StatelessWidget {
         children: [
           Tappable.builder(
             onTap: count == 0 ? null : onHandOff,
-            builder: (context, hovered) => Container(
+            builder: (context, hovered) => AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
               padding: const EdgeInsets.symmetric(vertical: FwSpacing.md),
               decoration: BoxDecoration(
                 color: count == 0
-                    ? colors.panel2
+                    ? null
                     : hovered
-                    ? colors.accentDark
-                    : colors.accent,
-                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+                    ? colors.accentSoft2
+                    : colors.accentSoft,
+                borderRadius: BorderRadius.circular(context.radii.radius),
+                border: Border.all(
+                  color: count == 0 ? colors.line : colors.accent,
+                ),
               ),
               child: Text(
                 count == 0
@@ -1409,8 +1544,8 @@ class _ReviewFooter extends StatelessWidget {
                     : 'Hand off $count '
                           '${count == 1 ? 'comment' : 'comments'}',
                 textAlign: TextAlign.center,
-                style: context.type.bodySmall.copyWith(
-                  color: count == 0 ? colors.mut3 : colors.primaryOnMenu,
+                style: context.type.caption.copyWith(
+                  color: count == 0 ? colors.mut3 : colors.accent,
                 ),
               ),
             ),
@@ -1418,16 +1553,18 @@ class _ReviewFooter extends StatelessWidget {
           const Gap(FwSpacing.sm),
           // The third anchor, and the only one with nowhere else to be
           // offered: *three of these are the same problem* is about the review,
-          // not about any line in it.
+          // not about any line in it. `caption`, matching the button above it —
+          // these are two things you alternate between, not a control and its
+          // footnote.
           Tappable.builder(
             onTap: onCommentReview,
             builder: (context, hovered) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
+              padding: const EdgeInsets.symmetric(vertical: FwSpacing.sm),
               child: Text(
                 'Comment on the whole review',
                 textAlign: TextAlign.center,
-                style: context.type.micro.copyWith(
-                  color: hovered ? colors.accent : colors.mut2,
+                style: context.type.caption.copyWith(
+                  color: hovered ? colors.accent : colors.mut,
                 ),
               ),
             ),
@@ -1440,21 +1577,14 @@ class _ReviewFooter extends StatelessWidget {
 
 /// One line, centred, for a list that has nothing in it.
 class _Nothing extends StatelessWidget {
-  const _Nothing(this.message);
+  const _Nothing(this.message, {this.icon = Icons.filter_alt_off_outlined});
 
   final String message;
+  final IconData icon;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(FwSpacing.xl),
-      child: Text(
-        message,
-        textAlign: TextAlign.center,
-        style: context.type.bodySmall.copyWith(color: context.colors.mut2),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) =>
+      EmptyState(icon: icon, title: message, minHeight: 0);
 }
 
 /// What the **Important** tab says to a project that has never written an
@@ -1471,36 +1601,25 @@ class _NoRulesYet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(FwSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Nothing is pinned yet.',
-              style: context.type.bodySmall.copyWith(color: colors.mut),
-            ),
-            const Gap(FwSpacing.sm),
-            Text(
-              'Name what you want to see first in tool/flutterware.dart:',
-              style: context.type.micro.copyWith(color: colors.mut2),
-            ),
-            const Gap(FwSpacing.sm),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(FwSpacing.sm),
-              decoration: BoxDecoration(
-                color: colors.panel2,
-                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-              ),
-              child: Text(
-                "fw.changes(ChangesConfig(\n  attention: ['lib/api/**'],\n));",
-                style: diffTextStyle(context).copyWith(color: colors.mut2),
-              ),
-            ),
-          ],
+    return EmptyState(
+      icon: Icons.push_pin_outlined,
+      title: 'Nothing is pinned yet',
+      message: 'Name what you want to see first in tool/flutterware.dart:',
+      minHeight: 0,
+      // **The snippet is the action.** Everything else here is a sentence
+      // about a file you have to open anyway; this is the line you paste into
+      // it. Bordered like the quote a comment carries, because it is the same
+      // thing — code sitting inside prose.
+      action: Container(
+        padding: const EdgeInsets.all(FwSpacing.md),
+        decoration: BoxDecoration(
+          color: colors.panel2,
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          border: Border.all(color: colors.line),
+        ),
+        child: SelectableText(
+          "fw.changes(ChangesConfig(\n  attention: ['lib/api/**'],\n));",
+          style: diffTextStyle(context).copyWith(color: colors.mut),
         ),
       ),
     );
@@ -1632,7 +1751,7 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
 }
 
 /// The **body**: one file's diff, or the reason there is not one.
-class _FilePane extends StatelessWidget {
+class _FilePane extends StatefulWidget {
   const _FilePane({
     required this.file,
     required this.untracked,
@@ -1646,6 +1765,12 @@ class _FilePane extends StatelessWidget {
     required this.editing,
     required this.draft,
     required this.drifted,
+    required this.deleted,
+    required this.flash,
+    required this.reveal,
+    required this.revealSeq,
+    required this.editingQuote,
+    required this.onUndoDelete,
     required this.onCommentLine,
     required this.onCommentFile,
     required this.onSubmit,
@@ -1679,6 +1804,22 @@ class _FilePane extends StatelessWidget {
   final TextEditingController draft;
   final bool Function(ReviewComment) drifted;
 
+  /// The note whose delete is being held. Drawn as the undo strip, in its own
+  /// place in the diff rather than as a bar somewhere else on the screen.
+  final String? deleted;
+  final VoidCallback onUndoDelete;
+
+  /// The note to draw in the accent, having just been arrived at.
+  final String? flash;
+
+  /// The note to scroll to, and the nth time it has been asked for.
+  final String? reveal;
+  final int revealSeq;
+
+  /// The quote the open composer shows while rewriting an existing comment.
+  /// Null when it is writing a new one, which reads the patch.
+  final List<String>? editingQuote;
+
   final void Function(FileChange, DiffLine) onCommentLine;
   final ValueChanged<String> onCommentFile;
   final VoidCallback onSubmit;
@@ -1687,14 +1828,113 @@ class _FilePane extends StatelessWidget {
   final ValueChanged<String> onDeleteComment;
 
   @override
+  State<_FilePane> createState() => _FilePaneState();
+}
+
+class _FilePaneState extends State<_FilePane> {
+  /// A key per thread on screen, so a built one can be brought into view
+  /// exactly. Keyed by comment id and cleared with the file, because a key
+  /// that outlives its widget is a key whose `currentContext` lies.
+  final _threads = <String, GlobalKey>{};
+
+  /// The reveal request already served, so a rebuild does not re-scroll.
+  int? _served;
+
+  /// This build's rows — what [_revealNow] counts positions in.
+  List<ChangeRow> _rows = const [];
+
+  /// How far right the code column is, shared by every row it draws.
+  final _scrollX = DiffScrollX();
+
+  /// One character's advance in the diff face, measured when the face changes
+  /// rather than per row. Monospace, so a line's width is its length times it.
+  double _charWidth = 0;
+  TextStyle? _measuredFor;
+
+  /// How many times a reveal re-estimates before giving up.
+  ///
+  /// A virtualised list can only be scrolled to an *offset*, and the offset of
+  /// row 900 is not knowable until rows near it are built. Each pass gets
+  /// closer, because `maxScrollExtent` is itself refined by whatever the last
+  /// jump built.
+  static const _revealTries = 4;
+
+  @override
+  void didUpdateWidget(_FilePane old) {
+    super.didUpdateWidget(old);
+    // A new file is a new set of line lengths, and a position 400 px in would
+    // open it on whatever happens to sit at that column.
+    if (old.file?.path != widget.file?.path) _scrollX.reset();
+    _scheduleReveal();
+  }
+
+  @override
+  void dispose() {
+    _scrollX.dispose();
+    _threads.clear();
+    super.dispose();
+  }
+
+  /// One character's width in the diff face, measured once per face.
+  double _measure(BuildContext context) {
+    var style = diffTextStyle(context);
+    if (_measuredFor == style) return _charWidth;
+    // Ten of them, so the answer is not a rounding of one.
+    var painter = TextPainter(
+      text: TextSpan(text: 'M' * 10, style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    _measuredFor = style;
+    return _charWidth = painter.width / 10;
+  }
+
+  void _scheduleReveal() {
+    if (widget.reveal == null || widget.revealSeq == _served) return;
+    _served = widget.revealSeq;
+    // After this frame: the file may have only just been selected, so the rows
+    // holding the note do not exist yet.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _revealNow(widget.reveal!, _revealTries);
+    });
+  }
+
+  void _revealNow(String id, int tries) {
+    if (!mounted || tries <= 0) return;
+    if (_threads[id]?.currentContext case var target?) {
+      // A third of the way down, not at the very top: a note is read together
+      // with the lines above it.
+      unawaited(
+        Scrollable.ensureVisible(
+          target,
+          alignment: 0.3,
+          duration: const Duration(milliseconds: 180),
+        ),
+      );
+      return;
+    }
+    var index = _rows.indexWhere(
+      (row) => row is CommentRow && row.comment.id == id,
+    );
+    var controller = widget.controller;
+    if (index < 0 || !controller.hasClients || _rows.isEmpty) return;
+    var position = controller.position;
+    var estimate = position.maxScrollExtent * (index / _rows.length);
+    controller.jumpTo(estimate.clamp(0.0, position.maxScrollExtent));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _revealNow(id, tries - 1),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (file case var it?) {
-      var rows = _rowsFor(it);
+    if (widget.file case var it?) {
+      var rows = _rows = _rowsFor(it);
+      var lines = widget.lines;
       // The lines the composer's anchor covers, so you can see what you picked
       // while you write about it. Resolved per line rather than per span
       // because a span crosses hunks and its two ends are two lookups anyway.
       var span = <RowSpot>{
-        if (composing case LineAnchor a when a.path == it.path)
+        if (widget.composing case LineAnchor a when a.path == it.path)
           for (var line = a.from; line <= a.to; line++)
             ?spotOf(it, line, a.side, lines.linesFor),
       };
@@ -1704,65 +1944,29 @@ class _FilePane extends StatelessWidget {
         children: [
           _FileHeader(
             file: it,
-            uncommitted: uncommitted.contains(it.path),
-            onComment: () => onCommentFile(it.path),
+            uncommitted: widget.uncommitted.contains(it.path),
+            onComment: () => widget.onCommentFile(it.path),
           ),
           Divider(height: 1, color: context.colors.line),
           Expanded(
-            child: ListView.builder(
-              key: changesFileKey,
-              controller: controller,
-              itemCount: rows.length,
-              itemBuilder: (context, index) => switch (rows[index]) {
-                HunkRow(:var hunk) => HunkHeaderLine(hunk: hunk),
-                // The one place a byte slice becomes text, and it happens for
-                // the rows the list actually builds.
-                DiffLineRow(:var hunk, :var index) => HunkLineView(
-                  lines: lines,
-                  hunk: hunk,
-                  index: index,
-                  tokens: tokens,
-                  selected: span.contains((
-                    hunkStart: hunk.byteStart,
-                    index: index,
-                  )),
-                  onComment: (line) => onCommentLine(it, line),
-                ),
-                CommentRow(:var comment, :var drifted) => ReviewThread(
-                  comment: comment,
-                  drifted: drifted,
-                  onEdit: () => onEditComment(comment),
-                  onDelete: () => onDeleteComment(comment.id),
-                ),
-                ComposerRow(:var anchor) => ReviewComposer(
-                  anchor: anchor,
-                  controller: draft,
-                  editing: editing,
-                  quotedLines: anchor is LineAnchor
-                      ? anchor.to - anchor.from + 1
-                      : 0,
-                  onSubmit: onSubmit,
-                  onCancel: onCancel,
-                ),
-                FileNoticeRow(:var message) => Padding(
-                  padding: const EdgeInsets.all(FwSpacing.xxl),
-                  child: Text(
-                    message,
-                    style: context.type.bodySmall.copyWith(
-                      color: context.colors.mut2,
-                    ),
-                  ),
-                ),
-                _ => const SizedBox.shrink(),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // What the code column actually has to itself: the gutters and
+                // the comment margin are pinned, so they are not part of the
+                // window the offset is clamped against.
+                _scrollX.setViewport(constraints.maxWidth - diffChromeWidth);
+                return _body(context, rows, lines, span, it);
               },
             ),
           ),
+          DiffScrollBar(model: _scrollX),
         ],
       );
     }
 
-    if (untracked case var it?) {
+    if (widget.untracked case var it?) {
       return _Empty(
+        icon: it.isDirectory ? Icons.folder_outlined : Icons.note_add_outlined,
         title: it.path,
         // Untracked means git has no other side to compare against — there is
         // no diff to render, and saying "no changes" would be a lie about a
@@ -1775,9 +1979,10 @@ class _FilePane extends StatelessWidget {
       );
     }
 
-    if (missing != null) {
+    if (widget.missing case var it?) {
       return _Empty(
-        title: missing!,
+        icon: Icons.search_off,
+        title: it,
         body:
             'This file is no longer part of the delta — it may have been '
             'committed away, reverted, or renamed.',
@@ -1785,10 +1990,112 @@ class _FilePane extends StatelessWidget {
     }
 
     return const _Empty(
+      icon: Icons.difference_outlined,
       title: 'Pick a file',
       body:
           'All is every path in this delta, as a tree. Important is what a '
           'rule in tool/flutterware.dart pinned.',
+    );
+  }
+
+  /// The rows themselves.
+  ///
+  /// **One [SelectionArea] over the whole body.** Nothing in a diff was
+  /// selectable: the rows are `Text`, and the app has no selection region
+  /// anywhere — so the one thing everybody does with a line of code, take it
+  /// somewhere else, could not be done here at all. It wraps the list rather
+  /// than each row, because a selection that cannot cross a line is not a
+  /// selection of code.
+  Widget _body(
+    BuildContext context,
+    List<ChangeRow> rows,
+    HunkLineCache lines,
+    Set<RowSpot> span,
+    FileChange it,
+  ) {
+    var charWidth = _measure(context);
+    return Listener(
+      // Trackpad and shift-wheel, which is how a horizontal scroll arrives.
+      // Read rather than claimed: the vertical list is resolving the same
+      // event for its own axis, and both of us are entitled to our half of it.
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent && event.scrollDelta.dx != 0) {
+          _scrollX.moveBy(event.scrollDelta.dx);
+        }
+      },
+      onPointerPanZoomUpdate: (event) {
+        if (event.panDelta.dx != 0) _scrollX.moveBy(-event.panDelta.dx);
+      },
+      child: SelectionArea(
+        child: ListView.builder(
+          key: changesFileKey,
+          controller: widget.controller,
+          itemCount: rows.length,
+          itemBuilder: (context, index) => switch (rows[index]) {
+            HunkRow(:var hunk) => HunkHeaderLine(hunk: hunk),
+            // The one place a byte slice becomes text, and it happens for
+            // the rows the list actually builds.
+            DiffLineRow(:var hunk, :var index) => HunkLineView(
+              lines: lines,
+              hunk: hunk,
+              index: index,
+              tokens: widget.tokens,
+              scrollX: _scrollX,
+              charWidth: charWidth,
+              selected: span.contains((
+                hunkStart: hunk.byteStart,
+                index: index,
+              )),
+              onComment: (line) => widget.onCommentLine(it, line),
+            ),
+            CommentRow(:var comment, :var drifted) =>
+              comment.id == widget.deleted
+                  ? ReviewUndoStrip(onUndo: widget.onUndoDelete)
+                  : ReviewThread(
+                      // The key is what `ensureVisible` needs, and it is
+                      // only ever right for a thread that is on screen —
+                      // see [_threads].
+                      key: _threads[comment.id] ??= GlobalKey(),
+                      comment: comment,
+                      drifted: drifted,
+                      highlighted: comment.id == widget.flash,
+                      onEdit: () => widget.onEditComment(comment),
+                      onDelete: () => widget.onDeleteComment(comment.id),
+                    ),
+            ComposerRow(:var anchor) => ReviewComposer(
+              anchor: anchor,
+              controller: widget.draft,
+              editing: widget.editing,
+              // Read here rather than counted: the composer shows the same
+              // lines the diff has just tinted behind it, and the submit
+              // reads them again for keeps — see `_submitComment`.
+              quote:
+                  widget.editingQuote ??
+                  (anchor is LineAnchor
+                      ? quoteFor(
+                          it,
+                          anchor.from,
+                          anchor.to,
+                          anchor.side,
+                          lines.linesFor,
+                        )
+                      : const []),
+              onSubmit: widget.onSubmit,
+              onCancel: widget.onCancel,
+            ),
+            FileNoticeRow(:var message) => Padding(
+              padding: const EdgeInsets.all(FwSpacing.xxl),
+              child: Text(
+                message,
+                style: context.type.bodySmall.copyWith(
+                  color: context.colors.mut2,
+                ),
+              ),
+            ),
+            _ => const SizedBox.shrink(),
+          },
+        ),
+      ),
     );
   }
 
@@ -1799,15 +2106,16 @@ class _FilePane extends StatelessWidget {
   /// from under it, which is exactly the moment the note matters — and it still
   /// carries the code it was written about, so it reads on its own.
   List<ChangeRow> _rowsFor(FileChange file) {
+    var lines = widget.lines;
     var mine = [
-      for (var comment in comments)
+      for (var comment in widget.comments)
         if (comment.anchor.path == file.path) comment,
     ];
     var placed = <RowSpot, List<CommentRow>>{};
     var unplaced = <ChangeRow>[];
 
     for (var comment in mine) {
-      var row = CommentRow(comment, drifted: drifted(comment));
+      var row = CommentRow(comment, drifted: widget.drifted(comment));
       if (comment.anchor case LineAnchor anchor) {
         if (spotOf(file, anchor.to, anchor.side, lines.linesFor)
             case var spot?) {
@@ -1819,7 +2127,7 @@ class _FilePane extends StatelessWidget {
     }
 
     var composer = <RowSpot, ComposerRow>{};
-    if (composing case var anchor? when anchor.path == file.path) {
+    if (widget.composing case var anchor? when anchor.path == file.path) {
       var row = ComposerRow(anchor);
       var spot = anchor is LineAnchor
           ? spotOf(file, anchor.to, anchor.side, lines.linesFor)
@@ -1841,37 +2149,24 @@ class _FilePane extends StatelessWidget {
 }
 
 /// What the right pane says when it has nothing to draw.
+///
+/// The whole body of the screen, so it is the one empty state nobody can miss —
+/// and it was the one with no icon, left-aligned prose at two greys, resembling
+/// nothing else in the app.
 class _Empty extends StatelessWidget {
-  const _Empty({required this.title, required this.body});
+  const _Empty({required this.title, required this.body, required this.icon});
 
   final String title;
   final String body;
+  final IconData icon;
 
   @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: context.type.bodySmall.copyWith(color: colors.mut),
-              overflow: TextOverflow.ellipsis,
-            ),
-            const Gap(FwSpacing.sm),
-            Text(
-              body,
-              style: context.type.bodySmall.copyWith(color: colors.mut2),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 460),
+      child: EmptyState(icon: icon, title: title, message: body, minHeight: 0),
+    ),
+  );
 }
 
 /// The right pane's own header: which file, and what it costs.
