@@ -25,10 +25,12 @@ void main() {
   ];
 
   late List<String> opened;
+  late List<String> changes;
   late String query;
 
   Future<void> pump(WidgetTester tester, {List<ExplorerEntry>? rows}) async {
     opened = [];
+    changes = [];
     query = '';
     await tester.pumpWidget(
       MaterialApp(
@@ -41,6 +43,7 @@ void main() {
               query: query,
               onQueryChanged: (value) => setState(() => query = value),
               onOpen: (entry) => opened.add(entry.worktree.branch!),
+              onOpenChanges: (entry) => changes.add(entry.worktree.branch!),
             ),
           ),
         ),
@@ -132,6 +135,28 @@ void main() {
     await press(tester, LogicalKeyboardKey.enter);
     expect(opened, isEmpty);
     expect(find.text('PATH'), findsNothing);
+  });
+
+  testWidgets('c opens what the cursor row changed', (tester) async {
+    // It used to open a hover card over the list, which held its own
+    // `ChangesController` and ran the full probe. The card is gone; `c` goes
+    // where the card's own footer link went.
+    await pump(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.keyC);
+
+    expect(changes, ['alpha']);
+    expect(opened, isEmpty, reason: 'c is not open');
+  });
+
+  testWidgets('c with no cursor types instead, because the filter wants it', (
+    tester,
+  ) async {
+    // A bare letter can only be a binding in the state where the keyboard is
+    // driving the list rather than the field.
+    await pump(tester);
+    await press(tester, LogicalKeyboardKey.keyC);
+    expect(changes, isEmpty);
   });
 
   testWidgets('escape clears the filter', (tester) async {
