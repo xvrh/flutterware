@@ -180,33 +180,6 @@ void main() {
     );
   });
 
-  testWidgets('the lens stays on across a re-index', (tester) async {
-    current = setOf([file('lib/quiet.dart'), file('lib/busy.dart')]);
-    await pump(tester);
-
-    // One file moved, so the lens appears; turning it on narrows to that file.
-    await reprobe(
-      tester,
-      setOf([file('lib/quiet.dart'), file('lib/busy.dart', added: 90)]),
-    );
-    await tester.tap(find.textContaining('just changed'));
-    await tester.pumpAndSettle();
-    expect(inIndex('busy.dart'), findsOneWidget);
-    expect(inIndex('quiet.dart'), findsNothing);
-
-    // A probe that finds a new file must not put the whole list back.
-    await reprobe(
-      tester,
-      setOf([
-        file('lib/second.dart'),
-        file('lib/quiet.dart'),
-        file('lib/busy.dart', added: 90),
-      ]),
-    );
-    expect(inIndex('quiet.dart'), findsNothing);
-    expect(inIndex('busy.dart'), findsOneWidget);
-  });
-
   testWidgets('a live screen says it is watching; a dead one says that', (
     tester,
   ) async {

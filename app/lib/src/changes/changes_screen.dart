@@ -43,15 +43,6 @@ enum IndexTab {
   important,
 }
 
-/// Whether the *just changed* lens is drawn over — and so narrows — [tab].
-///
-/// **One declaration, read by both halves.** It was two: the widget-tree
-/// condition that draws the chip, and a conjunct in the filter. They agreed,
-/// until they did not — a lens left on under *All* went on narrowing the
-/// *Important* tab, which does not draw it, so the pinned list emptied from a
-/// control that was nowhere on screen. Drawn and filtering are now one fact.
-bool lensApplies(IndexTab tab) => tab == IndexTab.all;
-
 /// **`fw:///worktrees/<worktree>/changes`** — what this checkout has changed
 /// against its base branch, committed and uncommitted together.
 ///
@@ -177,7 +168,6 @@ class _ChangesScreenState extends State<ChangesScreen> {
   /// With the Important tab, the two questions a fifty-file branch raises: what
   /// a **rule** says matters, and what is **moving**. A *low-signal* lens sat
   /// beside this one and is gone with the ranking tier behind it.
-  var _justChangedOnly = false;
 
   /// Null until you pick one, which is what lets the default depend on what the
   /// checkout turned out to contain — see [_tabFor]. Set the moment a tab is
@@ -282,29 +272,13 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// Null when nothing is narrowing the index at all.
   ///
-  /// The typed query and the lens compose by intersection, so `motion` plus
-  /// *just changed* means both, which is what anybody would expect of two
-  /// controls sitting next to each other.
-  ///
-  /// **The lens narrows the tab that draws it, and only that one.** It applied
-  /// to both, and the *Important* tab does not draw it — so a lens left on
-  /// under *All* emptied the pinned list from a control that was not on screen,
-  /// under a tab label still counting the files it had just hidden, and the
-  /// empty state said `No file matched an attention rule` about files that
-  /// had. The filter box is drawn under both tabs and so narrows both.
-  Set<String>? _visible(ChangeSet set, IndexTab tab) {
-    Set<String>? visible;
-    if (_query.trim().isNotEmpty) {
-      visible = pathsMatching([
-        ...set.changed.map((f) => f.path),
-        ...set.untracked.map((e) => e.path),
-      ], _query);
-    }
-    if (_justChangedOnly && lensApplies(tab)) {
-      var moved = _changes.moved;
-      visible = visible == null ? {...moved} : visible.intersection(moved);
-    }
-    return visible;
+  /// The filter box is drawn under both tabs and so narrows both.
+  Set<String>? _visible(ChangeSet set) {
+    if (_query.trim().isEmpty) return null;
+    return pathsMatching([
+      ...set.changed.map((f) => f.path),
+      ...set.untracked.map((e) => e.path),
+    ], _query);
   }
 
   /// Shows [path] in the right pane, from the top.
@@ -378,15 +352,10 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         controller: _index,
                         query: _query,
                         selected: _selected,
-                        visible: _visible(set, tab),
-                        justChanged: _changes.moved,
-                        justChangedOnly: _justChangedOnly,
+                        visible: _visible(set),
                         onTab: (tab) => setState(() => _tab = tab),
                         onQuery: (q) => setState(() => _query = q),
                         onSelect: _show,
-                        onToggleJustChanged: () => setState(
-                          () => _justChangedOnly = !_justChangedOnly,
-                        ),
                       ),
                     ),
                     VerticalDivider(width: 1, color: context.colors.line),
@@ -714,9 +683,6 @@ class _IndexPane extends StatelessWidget {
     required this.onTab,
     required this.onQuery,
     required this.onSelect,
-    required this.onToggleJustChanged,
-    required this.justChanged,
-    required this.justChangedOnly,
     required this.visible,
   });
 
@@ -729,9 +695,6 @@ class _IndexPane extends StatelessWidget {
   final ValueChanged<IndexTab> onTab;
   final ValueChanged<String> onQuery;
   final ValueChanged<String> onSelect;
-  final VoidCallback onToggleJustChanged;
-  final Set<String> justChanged;
-  final bool justChangedOnly;
   final Set<String>? visible;
 
   @override
@@ -774,14 +737,6 @@ class _IndexPane extends StatelessWidget {
           important: pinned,
           onTab: onTab,
         ),
-        // Drawn and filtering are one fact — see [lensApplies]. Narrowing four
-        // pinned files to the two that moved is not a question anyone has.
-        if (lensApplies(tab))
-          _LensRow(
-            justChanged: justChanged.length,
-            justChangedOnly: justChangedOnly,
-            onToggleJustChanged: onToggleJustChanged,
-          ),
         Expanded(
           child: switch (tab) {
             IndexTab.all => _all(context),
@@ -1051,53 +1006,6 @@ class _NoRulesYet extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The lens, drawn only when it would say something.
-///
-/// **It appears when it becomes true, which is exactly when it is useful.**
-/// Nothing has moved on arrival, so there is no chip; the first time the agent
-/// writes something, one shows up saying so. A chip reading `0` is a control
-/// that does nothing, which is worse than no control — the same rule the
-/// section headings follow.
-class _LensRow extends StatelessWidget {
-  const _LensRow({
-    required this.justChanged,
-    required this.justChangedOnly,
-    required this.onToggleJustChanged,
-  });
-
-  /// How many paths have moved since the screen opened. A count, not the set:
-  /// the count is all this draws, and taking the set invited reading it.
-  final int justChanged;
-
-  final bool justChangedOnly;
-  final VoidCallback onToggleJustChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    if (justChanged == 0) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        FwSpacing.md,
-        0,
-        FwSpacing.md,
-        FwSpacing.sm,
-      ),
-      // The index stretches its children; a chip that fills 320 px is a button
-      // pretending to be a banner.
-      child: Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: IndexLens(
-          label: 'just changed',
-          count: justChanged,
-          on: justChangedOnly,
-          onTap: onToggleJustChanged,
         ),
       ),
     );
