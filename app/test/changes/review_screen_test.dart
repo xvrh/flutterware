@@ -246,7 +246,7 @@ void main() {
     expect(find.byType(ReviewThread), findsOneWidget);
   });
 
-  testWidgets('deleting one is for the typos, and is immediate', (
+  testWidgets('deleting takes it off the screen, and can be taken back', (
     tester,
   ) async {
     await pump(tester);
@@ -257,8 +257,79 @@ void main() {
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
 
+    // Gone from the screen at once — that is what a delete has to look like —
+    // while the log still has it, which is what makes the undo lossless.
     expect(find.byType(ReviewThread), findsNothing);
+    expect(find.byType(ReviewUndoStrip), findsOneWidget);
+    expect(store.read().open, hasLength(1));
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ReviewThread), findsOneWidget);
+    expect(store.read().open.single.body, 'oops');
+  });
+
+  testWidgets('the delete lands when the window closes', (tester) async {
+    await pump(tester);
+    await openFile(tester, 'a.dart');
+    await plus(tester, 0);
+    await write(tester, 'oops');
+
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    // Past the undo window. The tombstone is written now, and not before.
+    await tester.pump(const Duration(seconds: 7));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ReviewUndoStrip), findsNothing);
     expect(store.read().open, isEmpty);
+  });
+
+  testWidgets('a deleted comment does not travel with the batch', (
+    tester,
+  ) async {
+    await pump(tester);
+    await openFile(tester, 'a.dart');
+    await plus(tester, 0);
+    await write(tester, 'keep this');
+    await plus(tester, 1);
+    await write(tester, 'oops');
+
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+    // The count is what is waiting, not what the log happens to hold.
+    expect(find.text('Hand off 1 comment'), findsOneWidget);
+
+    await tester.tap(find.text('Hand off 1 comment'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hand off'));
+    await tester.pumpAndSettle();
+
+    expect(copied, contains('keep this'));
+    expect(copied, isNot(contains('oops')));
+    expect(store.read().open, isEmpty);
+  });
+
+  testWidgets('a comment shows the code it captured', (tester) async {
+    await pump(tester);
+    await openFile(tester, 'a.dart');
+    await plus(tester, 0);
+    await write(tester, 'this line is wrong');
+
+    // The quote is the whole design — a comment carries the code it is about —
+    // and for one release it was written into the comment and drawn nowhere.
+    expect(find.byType(ReviewQuote), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ReviewQuote),
+        matching: find.text('first'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('editing rewrites the body and keeps the anchor', (tester) async {

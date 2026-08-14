@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
+import 'diff_view.dart' show diffTextStyle;
 import 'review_comment.dart';
 
 /// The composer's field, so a test and the drive tools can reach it. Its hint
@@ -20,16 +21,33 @@ import 'review_comment.dart';
 /// is refused as covered.
 const reviewComposerKey = Key('review-composer');
 
+/// How many quoted lines a thread shows before it stops.
+///
+/// A span is whatever you shift-clicked, and forty lines of quote would push
+/// the note itself off the screen — the quote is the note's evidence, not its
+/// subject. Beyond this the rest is counted rather than drawn; the handoff
+/// still carries every line.
+const _quoteLimit = 6;
+
 /// A comment as it appears in the diff, under the line it is about.
 ///
 /// **The left edge is the accent bar**, the same 2 px device the index uses for
 /// a pinned file: at a glance down a long diff it says *somebody wrote here*
 /// without needing to be read.
+///
+/// **It shows what it captured.** The quote is the whole design — a note
+/// carries the code it was written about so the agent may keep editing while
+/// you type — and for one release it was the one thing on this screen you could
+/// not see: written into the comment, rendered only in the handoff markdown.
+/// A note about a line the agent has since deleted looked exactly like a note
+/// about whatever now sits there, which is the failure mode carrying the quote
+/// exists to prevent.
 class ReviewThread extends StatelessWidget {
   const ReviewThread({
     required this.comment,
     required this.onDelete,
     this.drifted = false,
+    this.highlighted = false,
     this.onEdit,
     super.key,
   });
@@ -41,10 +59,16 @@ class ReviewThread extends StatelessWidget {
   /// Whether the file moved after this was written.
   final bool drifted;
 
+  /// Just arrived here from the index. Held for a moment and then dropped —
+  /// the index row you clicked and the thread you landed on are otherwise two
+  /// unconnected things in a diff of four thousand rows.
+  final bool highlighted;
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
       margin: const EdgeInsets.fromLTRB(
         FwSpacing.xxl,
         FwSpacing.sm,
@@ -52,7 +76,7 @@ class ReviewThread extends StatelessWidget {
         FwSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: colors.panel2,
+        color: highlighted ? colors.accentSoft : colors.panel2,
         border: Border(left: BorderSide(color: colors.accent, width: 2)),
         borderRadius: BorderRadius.only(
           topRight: Radius.circular(context.radii.radiusSmall),
@@ -65,6 +89,12 @@ class ReviewThread extends StatelessWidget {
         children: [
           Row(
             children: [
+              Icon(
+                _iconFor(comment.anchor),
+                size: FwIconSize.xs,
+                color: colors.mut3,
+              ),
+              const Gap(FwSpacing.sm),
               // The short form: the file's name is in the header six pixels
               // above this, and the whole path twice is the same sentence said
               // twice.
@@ -76,13 +106,22 @@ class ReviewThread extends StatelessWidget {
                   softWrap: false,
                 ),
               ),
+              const Gap(FwSpacing.md),
+              Text(
+                clockOf(comment.createdAt),
+                style: context.type.micro.copyWith(color: colors.mut3),
+              ),
               const Spacer(),
               if (onEdit case var edit?) _Action(label: 'Edit', onTap: edit),
               const Gap(FwSpacing.md),
               _Action(label: 'Delete', onTap: onDelete),
             ],
           ),
-          const Gap(FwSpacing.xs),
+          if (comment.quote.isNotEmpty) ...[
+            const Gap(FwSpacing.sm),
+            ReviewQuote(comment.quote),
+          ],
+          const Gap(FwSpacing.sm),
           // **Selectable.** The first thing anybody does with a note they wrote
           // for an agent is take a piece of it somewhere else.
           SelectableText(
@@ -115,11 +154,122 @@ class ReviewThread extends StatelessWidget {
   }
 }
 
+/// The code a note carries, drawn the way the diff draws it.
+///
+/// [diffTextStyle] rather than a mono face of its own: this is a slice of the
+/// file three rows above it, and two typefaces for the same bytes would read as
+/// two different things. Lines clip instead of wrapping, for the same reason
+/// they do in the diff — a wrapped quote is one whose indentation lies.
+class ReviewQuote extends StatelessWidget {
+  const ReviewQuote(this.lines, {this.limit = _quoteLimit, super.key});
+
+  final List<String> lines;
+  final int limit;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var shown = lines.take(limit).toList();
+    var rest = lines.length - shown.length;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.md,
+        vertical: FwSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: colors.panel,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        border: Border.all(color: colors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var line in shown)
+            Text(
+              line,
+              style: diffTextStyle(context).copyWith(color: colors.mut),
+              softWrap: false,
+              overflow: TextOverflow.clip,
+            ),
+          if (rest > 0)
+            Text(
+              '…and $rest more ${rest == 1 ? 'line' : 'lines'}',
+              style: context.type.micro.copyWith(color: colors.mut3),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A note that has just been deleted, and can still be taken back.
+///
+/// **The delete is not written yet.** It stands in the deleted note's place
+/// until the window closes, and only then does the tombstone reach the log —
+/// so taking it back costs nothing and restores the note exactly, in the
+/// position it held. Delete was a single click on a 10.5 px text link beside
+/// Edit, against an append-only log with no way back.
+class ReviewUndoStrip extends StatelessWidget {
+  const ReviewUndoStrip({
+    required this.onUndo,
+    this.inset = FwSpacing.xxl,
+    super.key,
+  });
+
+  final VoidCallback onUndo;
+  final double inset;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Container(
+      margin: EdgeInsets.fromLTRB(inset, FwSpacing.sm, inset, FwSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.md,
+        vertical: FwSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: colors.panel2,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        border: Border.all(color: colors.line),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.delete_outline, size: FwIconSize.sm, color: colors.mut3),
+          const Gap(FwSpacing.sm),
+          Expanded(
+            child: Text(
+              'Comment deleted',
+              style: context.type.micro.copyWith(color: colors.mut2),
+            ),
+          ),
+          _Action(label: 'Undo', onTap: onUndo, strong: true),
+        ],
+      ),
+    );
+  }
+}
+
+IconData _iconFor(ReviewAnchor anchor) => switch (anchor) {
+  LineAnchor() => Icons.code,
+  FileAnchor() => Icons.description_outlined,
+  ReviewWide() => Icons.rate_review_outlined,
+};
+
 class _Action extends StatelessWidget {
-  const _Action({required this.label, required this.onTap});
+  const _Action({
+    required this.label,
+    required this.onTap,
+    this.strong = false,
+  });
 
   final String label;
   final VoidCallback onTap;
+
+  /// Accent whether or not the pointer is on it — for the one action in a row
+  /// that is being offered rather than merely available.
+  final bool strong;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +279,7 @@ class _Action extends StatelessWidget {
       builder: (context, hovered) => Text(
         label,
         style: context.type.micro.copyWith(
-          color: hovered ? colors.accent : colors.mut3,
+          color: strong || hovered ? colors.accent : colors.mut3,
         ),
       ),
     );
@@ -411,6 +561,22 @@ class ReviewIndexRow extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  // **One line of what it is about.** Three notes on one file
+                  // read as three copies of that filename otherwise; the line
+                  // of code under each is what tells them apart without
+                  // opening any of them.
+                  if (_firstCode(comment.quote) case var line?) ...[
+                    const Gap(FwSpacing.xxs),
+                    Text(
+                      line,
+                      style: diffTextStyle(
+                        context,
+                      ).copyWith(color: colors.mut3),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -418,6 +584,16 @@ class ReviewIndexRow extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// The first line of the quote with anything on it, trimmed of the
+  /// indentation that would otherwise spend the whole row's width.
+  static String? _firstCode(List<String> quote) {
+    for (var line in quote) {
+      var trimmed = line.trim();
+      if (trimmed.isNotEmpty) return trimmed;
+    }
+    return null;
   }
 }
 
@@ -447,7 +623,7 @@ class ReviewBatchRow extends StatelessWidget {
           Expanded(
             child: Text(
               [
-                _clock(batch.handedOffAt),
+                clockOf(batch.handedOffAt),
                 if (batch.savedTo case var path?) path else batch.route,
               ].join(' · '),
               style: context.type.micro.copyWith(color: colors.mut3),
@@ -462,6 +638,9 @@ class ReviewBatchRow extends StatelessWidget {
   }
 }
 
-String _clock(DateTime at) =>
+/// Wall-clock, to the minute. A note's own time — not a duration and not a
+/// date, because everything on this screen was written in the session you are
+/// still in.
+String clockOf(DateTime at) =>
     '${at.hour.toString().padLeft(2, '0')}:'
     '${at.minute.toString().padLeft(2, '0')}';
