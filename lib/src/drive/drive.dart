@@ -93,6 +93,11 @@ class Drive {
   late final TargetResolver _resolver = TargetResolver(
     controller,
     messages: const TargetMessages(
+      narrowHint:
+          'Narrow it: `{"nth": {"target": <the same target>, "index": 0}}` '
+          'takes the first match, or `item: <n>` acts on a numbered thing '
+          'from the last reply\'s screen. `{"within": {"scope": …, "child": '
+          '…}}` picks the one inside a named pane.',
       blankScreenHint:
           'Nothing has rendered in the widget tree — there is no text on '
           'screen at all, so this is not something `scrollTo` can reach. '

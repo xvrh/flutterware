@@ -36,6 +36,9 @@ class TargetMessages {
     this.prefix = '',
     this.coveredEscapeHatch = '',
     this.blankScreenHint = '',
+    this.narrowHint =
+        'Narrow it: give the widget a Key and use that, or pass a Finder — '
+        '`finder.first`, `find.descendant(of: …, matching: …)`.',
   });
 
   /// Goes in front of verb names in messages — `'s.'` for scenarios, where
@@ -68,10 +71,18 @@ class TargetMessages {
         '${screen == null ? '' : '\nVisible text: $screen'}';
   }
 
+  /// How to get from many matches to one, flavored per host.
+  ///
+  /// A scenario author edits the app and retypes the call, so a `Key` and a
+  /// `Finder` are the right answers. An agent driving a live app can do
+  /// neither — it cannot add a key to a running app and has no `Finder` to
+  /// pass — so the default advice was a refusal that told it to do the one
+  /// thing it could not do. It has `nth` and `item`; the message says so.
+  final String narrowHint;
+
   String multiple(int count, String verb, String described) =>
       '$count widgets match $described, and `$prefix$verb` needs one. '
-      'Narrow it: give the widget a Key and use that, or pass a Finder — '
-      '`finder.first`, `find.descendant(of: …, matching: …)`.';
+      '$narrowHint';
 
   String covered(String verb, String described) =>
       '$described is on screen, but `$prefix$verb` at its center would not '
