@@ -2,9 +2,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutterware/previews_guest.dart';
+// `InspectFilter` is not on the guest's public surface — the same import
+// `screen_read.dart` makes, so both trees are trimmed by one rule.
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart' show InspectFilter;
 
 import '../address/address_scope.dart';
 import 'inspect_dock.dart';
+import '../ui/tappable.dart';
 import '../ui/theme.dart';
 
 /// Tree on the left, the selected node's detail on the right — the Elements
@@ -63,6 +68,17 @@ class _ElementsViewState extends State<ElementsView> {
   /// source all read on one line — while a detail is a short column of pairs.
   double _split = 0.62;
 
+  /// Whether to show the wrappers too.
+  ///
+  /// **Off, so this pane says what the drive verbs say.** An agent's `tree` has
+  /// dropped the scaffolding since the noise filter landed, and this pane had
+  /// not learned to: it opened on fifteen levels of `AppDevbar → Devbar →
+  /// FutureBuilder → Builder → FeatureFlags → …` before the first widget anyone
+  /// wrote, so the two surfaces disagreed about the shape of the same app. The
+  /// wrappers are still one click away, because a question about a `MouseRegion`
+  /// is a real question — just not the one this pane opens on.
+  var _showAll = false;
+
   @override
   Widget build(BuildContext context) {
     var root = widget.root;
@@ -79,10 +95,20 @@ class _ElementsViewState extends State<ElementsView> {
       );
     }
 
+    var full = InspectTree(entryId: null, root: root);
+    // The same call `screen_read.dart` makes for the agent's tree, so the two
+    // drop exactly the same nodes.
+    var trimmed = full.filtered(const InspectFilter());
+    var shown = (_showAll ? full : trimmed).root ?? root;
+    var hidden = full.length - trimmed.length;
+
     var selectedId = AddressScope.params(context)['node'];
-    var selected = selectedId == null
-        ? null
-        : InspectTree(entryId: null, root: root).nodeAt(selectedId);
+    // Resolved against the **full** tree, never the shown one. Ids are
+    // positions in the tree as it was read, so they survive the filter — but a
+    // wrapper the filter dropped still has one, and a selection made with the
+    // wrappers showing must not lose its detail pane when they are hidden
+    // again.
+    var selected = selectedId == null ? null : full.nodeAt(selectedId);
 
     // Its own (invisible) Material: the tree rows are `InkWell`s, and this was
     // inheriting one from [InspectDock] purely because both hosts happened to
@@ -100,10 +126,23 @@ class _ElementsViewState extends State<ElementsView> {
             children: [
               SizedBox(
                 width: treeWidth,
-                child: _TreeView(
-                  root: root,
-                  selectedId: selectedId,
-                  highlight: widget.highlight,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (hidden > 0)
+                      _WrapperToggle(
+                        hidden: hidden,
+                        showAll: _showAll,
+                        onToggle: () => setState(() => _showAll = !_showAll),
+                      ),
+                    Expanded(
+                      child: _TreeView(
+                        root: shown,
+                        selectedId: selectedId,
+                        highlight: widget.highlight,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               InspectSplitGrip(
@@ -129,6 +168,65 @@ class _ElementsViewState extends State<ElementsView> {
       ),
     );
   }
+}
+
+/// The one line that says the tree is not the whole tree.
+///
+/// It exists because a filtered tree with nothing saying so is a tree that
+/// lies. The count is the honest part — *what* was dropped is a rule
+/// (`InspectFilter`'s scaffolding pass), but *how much* is this app, this
+/// frame, and the difference between "a couple of wrappers" and "forty" is
+/// worth seeing before deciding whether to look.
+class _WrapperToggle extends StatelessWidget {
+  const _WrapperToggle({
+    required this.hidden,
+    required this.showAll,
+    required this.onToggle,
+  });
+
+  final int hidden;
+  final bool showAll;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    color: context.colors.panel,
+    padding: const EdgeInsets.fromLTRB(
+      FwSpacing.md,
+      FwSpacing.xs,
+      FwSpacing.xs,
+      FwSpacing.xs,
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            showAll ? '$hidden wrappers shown' : '$hidden wrappers hidden',
+            style: context.type.micro.copyWith(color: context.colors.mut),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Tappable.builder(
+          onTap: onToggle,
+          builder: (context, hovered) => Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.sm,
+              vertical: FwSpacing.xxs,
+            ),
+            decoration: BoxDecoration(
+              color: hovered ? context.colors.hoverOverlay : null,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              showAll ? 'Hide' : 'Show all',
+              style: context.type.micro.copyWith(color: context.colors.accent),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _TreeView extends StatefulWidget {
