@@ -14,14 +14,6 @@ import 'ranking.dart';
 /// one is visible when it bites: a screen that quietly drops files is worse
 /// than one that refuses, because you cannot tell which it did.
 class ChangesLimits {
-  /// Past this the patch is not indexed at all and the file list comes from
-  /// `--numstat` instead.
-  ///
-  /// 3.6 MB was the worst case reachable in this repository, so this is not a
-  /// tuned number — it is chosen to be obviously above anything real, so that
-  /// hitting it means something is *wrong* rather than something is big.
-  static const wholePatchBytes = 64 * 1024 * 1024;
-
   /// Past this a file is listed and counted but not expandable.
   static const filePatchBytes = 512 * 1024;
 }
@@ -37,19 +29,6 @@ enum BaseSource {
 
   /// None of the above resolved. Nothing is diffed against a guess.
   none,
-}
-
-/// Why the patch was not indexed.
-class ChangesRefusal {
-  const ChangesRefusal({required this.patchBytes});
-
-  final int patchBytes;
-
-  @override
-  String toString() =>
-      'the diff is ${(patchBytes / (1024 * 1024)).toStringAsFixed(1)} MB, past '
-      'the ${ChangesLimits.wholePatchBytes ~/ (1024 * 1024)} MB the viewer '
-      'will index. Showing the file list only.';
 }
 
 /// An untracked path, exactly as git reported it.
@@ -94,7 +73,6 @@ class ChangeSet {
     this.head,
     this.uncommitted = const {},
     this.untracked = const [],
-    this.refusal,
     this.files,
     Ranking? ranking,
     this.configState = ChangesConfigState.none,
@@ -112,12 +90,13 @@ class ChangeSet {
   final String? mergeBase;
   final String? head;
 
-  /// The patch, indexed. [PatchIndex.empty] when [refusal] is set, or when
-  /// there is nothing to compare against.
+  /// The patch, indexed. [PatchIndex.empty] when there is nothing to compare
+  /// against.
   final PatchIndex patch;
 
-  /// Overrides [PatchIndex.files] when the patch was refused and the list came
-  /// from `--numstat` instead. Null in the normal case.
+  /// Overrides [PatchIndex.files]. Null in the normal case, where the list is
+  /// indexed from the patch bytes — set only by tests, which describe a delta
+  /// without authoring a patch to index.
   final List<FileChange>? files;
 
   /// Paths whose delta is **not all committed**. An attribute of a file, not a
@@ -125,8 +104,6 @@ class ChangeSet {
   final Set<String> uncommitted;
 
   final List<UntrackedEntry> untracked;
-
-  final ChangesRefusal? refusal;
 
   /// How much the ranking rules are worth believing. Only [ChangesConfigState]
   /// `.stale` says anything on screen.
@@ -206,8 +183,8 @@ class ChangeSet {
   ///
   /// Equal bytes make [changed] equal by construction — the file list is
   /// indexed *from* them — so only what is not derived from the patch is
-  /// compared beside it. [files] is the exception: when the patch was refused
-  /// that list came from `--numstat` instead, and the bytes are empty.
+  /// compared beside it. [files] is the exception: when it is injected the
+  /// bytes are empty.
   bool sameAnswerAs(ChangeSet other) {
     if (identical(this, other)) return true;
     if (worktreePath != other.worktreePath ||
@@ -215,8 +192,7 @@ class ChangeSet {
         baseSource != other.baseSource ||
         mergeBase != other.mergeBase ||
         head != other.head ||
-        configState != other.configState ||
-        refusal?.patchBytes != other.refusal?.patchBytes) {
+        configState != other.configState) {
       return false;
     }
     if (uncommitted.length != other.uncommitted.length ||
@@ -233,7 +209,7 @@ class ChangeSet {
       }
     }
     if (!_sameBytes(patch.bytes, other.patch.bytes)) return false;
-    // Only reachable when the patch was refused; otherwise this is the same
+    // Only reachable when [files] was injected; otherwise this is the same
     // list read twice.
     if (files != null || other.files != null) {
       var mine = changed, theirs = other.changed;
@@ -280,7 +256,6 @@ class ChangeSet {
     'files': changed.length,
     'added': added,
     'removed': removed,
-    'refused': ?refusal?.toString(),
     if (configState == ChangesConfigState.stale) 'configStale': true,
     'changed': [
       for (var file in changed)

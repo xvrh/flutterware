@@ -82,7 +82,6 @@ void main() {
     List<UntrackedEntry> untracked = const [],
     String? base = 'master',
     BaseSource source = BaseSource.inferred,
-    ChangesRefusal? refusal,
     Ranking? ranking,
     ChangesConfigState configState = ChangesConfigState.none,
   }) => ChangeSet(
@@ -93,7 +92,6 @@ void main() {
     baseSource: source,
     uncommitted: uncommitted,
     untracked: untracked,
-    refusal: refusal,
     ranking: ranking,
     configState: configState,
   );
@@ -253,20 +251,6 @@ void main() {
     expect(find.text('packages/newpkg/build/'), findsOneWidget);
     expect(find.text('directory, not scanned'), findsOneWidget);
     expect(find.textContaining('files'), findsWidgets); // the header only
-  });
-
-  testWidgets('a refused patch says how big it was', (tester) async {
-    await pump(
-      tester,
-      setOf(
-        files: [file('a.dart')],
-        refusal: const ChangesRefusal(patchBytes: 80 * 1024 * 1024),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('80.0 MB'), findsOneWidget);
-    expect(find.textContaining('file list only'), findsOneWidget);
   });
 
   testWidgets('a clean checkout says so instead of showing an empty page', (

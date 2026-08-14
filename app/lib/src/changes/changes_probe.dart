@@ -185,27 +185,6 @@ class ChangesProbe {
       );
     }
 
-    if (patch.stdout.length > ChangesLimits.wholePatchBytes) {
-      var files = await _numstatOnly(worktreePath, [left]);
-      return ChangeSet(
-        worktreePath: worktreePath,
-        patch: PatchIndex.empty,
-        files: files,
-        base: resolved,
-        baseSource: source,
-        mergeBase: mergeBase,
-        head: headSha,
-        uncommitted: uncommitted,
-        untracked: untracked,
-        refusal: ChangesRefusal(patchBytes: patch.stdout.length),
-        // A refused patch is still ranked: the globs need the file list and
-        // nothing else.
-        ranking: rankChanges(files, config: config),
-        configState: configState,
-        attentionConfigured: pinsDeclared,
-      );
-    }
-
     var index = indexPatch(patch.stdout);
     return ChangeSet(
       worktreePath: worktreePath,
@@ -321,21 +300,6 @@ class ChangesProbe {
     return parseUntrackedV2Z(_splitNul(result.stdout));
   }
 
-  /// The file list without the patch, for when the patch was refused.
-  Future<List<FileChange>> _numstatOnly(
-    String worktreePath,
-    List<String> range,
-  ) async {
-    var result = await _git(worktreePath, [
-      'diff',
-      '--numstat',
-      '-M',
-      '-z',
-      ...range,
-    ]);
-    return result.ok ? parseNumstatZ(result.stdout) : const [];
-  }
-
   static Future<GitOutput> _defaultRunner(
     String directory,
     List<String> arguments,
@@ -424,45 +388,3 @@ List<UntrackedEntry> parseUntrackedV2Z(List<String> records) {
 ///
 /// Binary files report `-` for both counts. They are counted as files —
 /// deleting a 2 MB asset is a real change — and contribute no lines, because
-/// they have none to contribute.
-List<FileChange> parseNumstatZ(Uint8List bytes) {
-  var records = const Utf8Decoder(
-    allowMalformed: true,
-  ).convert(bytes).split('\u0000');
-  var files = <FileChange>[];
-
-  for (var i = 0; i < records.length; i++) {
-    var record = records[i];
-    if (record.isEmpty) continue;
-    var parts = record.split('\t');
-    if (parts.length < 3) continue;
-
-    var isBinary = parts[0] == '-';
-    var added = int.tryParse(parts[0]) ?? 0;
-    var removed = int.tryParse(parts[1]) ?? 0;
-
-    String path;
-    String? oldPath;
-    if (parts[2].isEmpty && i + 2 < records.length) {
-      oldPath = records[++i];
-      path = records[++i];
-    } else {
-      path = parts[2];
-    }
-
-    files.add(
-      FileChange(
-        path: path,
-        oldPath: oldPath,
-        status: oldPath != null ? ChangeStatus.renamed : ChangeStatus.modified,
-        added: added,
-        removed: removed,
-        isBinary: isBinary,
-        hunks: const [],
-        byteStart: 0,
-        byteEnd: 0,
-      ),
-    );
-  }
-  return files;
-}

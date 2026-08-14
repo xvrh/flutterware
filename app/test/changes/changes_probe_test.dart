@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/changes/change_set.dart';
 import 'package:flutterware_app/src/changes/changes_probe.dart';
-import 'package:flutterware_app/src/changes/patch_index.dart';
 
 /// The parsers and the sequencing, with no repository and no git — the same
 /// posture `GitProbe` and `WorktreeDiscovery` take, and for the same reason.
@@ -43,46 +42,6 @@ void main() {
     test('no untracked files is an empty list, not a failure', () {
       expect(parseUntrackedV2Z(['1 .M N... 1 1 1 a b lib/a.dart']), isEmpty);
       expect(parseUntrackedV2Z([]), isEmpty);
-    });
-  });
-
-  group('numstat -z, the refused-patch fallback', () {
-    Uint8List records(List<String> parts) =>
-        Uint8List.fromList(utf8.encode(parts.join('\u0000')));
-
-    test('reads counts and paths', () {
-      var files = parseNumstatZ(
-        records(['12\t3\tlib/a.dart', '0\t8\tlib/b.dart', '']),
-      );
-      expect(files, hasLength(2));
-      expect(files[0].path, 'lib/a.dart');
-      expect(files[0].added, 12);
-      expect(files[0].removed, 3);
-      expect(files[1].removed, 8);
-    });
-
-    test('a rename spends two extra records on its two paths', () {
-      var files = parseNumstatZ(
-        records([
-          '4\t2\t',
-          'lib/old.dart',
-          'lib/new.dart',
-          '1\t1\tlib/c.dart',
-          '',
-        ]),
-      );
-      expect(files, hasLength(2));
-      expect(files[0].status, ChangeStatus.renamed);
-      expect(files[0].oldPath, 'lib/old.dart');
-      expect(files[0].path, 'lib/new.dart');
-      expect(files[1].path, 'lib/c.dart', reason: 'the cursor stayed aligned');
-    });
-
-    test('a binary file counts as a file and contributes no lines', () {
-      var files = parseNumstatZ(records(['-\t-\tassets/logo.png', '']));
-      expect(files.single.isBinary, isTrue);
-      expect(files.single.added, 0);
-      expect(files.single.removed, 0);
     });
   });
 

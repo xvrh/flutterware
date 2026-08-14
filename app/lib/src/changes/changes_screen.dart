@@ -14,7 +14,6 @@ import 'changes_controller.dart';
 import 'changes_tree.dart';
 import 'diff_lines.dart';
 import 'diff_view.dart';
-import 'hunk_ruler.dart';
 import 'hunk_syntax.dart';
 import 'patch_index.dart';
 import 'ranking.dart';
@@ -464,10 +463,6 @@ class _Header extends StatelessWidget {
                 'here, so nothing is compared against a guess. Showing '
                 'uncommitted work only.',
               ),
-            ],
-            if (it.refusal case var why?) ...[
-              const Gap(FwSpacing.md),
-              _Note('$why'),
             ],
             // Ranking by rules that have since been edited is worth one line.
             // Nothing is said in the fresh case: a screen that narrates its
@@ -1311,20 +1306,7 @@ class _FileHeader extends StatelessWidget {
             ],
           ),
           const Gap(FwSpacing.xs),
-          Row(
-            children: [
-              // **The ruler kept its place, and this is a better one.** It used
-              // to sit on a full-width file row; in a 320 px index there is no
-              // width for it, and here it is directly above the hunks it is
-              // describing — where "the change is all at the top" is a thing
-              // you check before you start scrolling.
-              HunkRuler(file: file, width: 120, height: 6),
-              const Gap(FwSpacing.md),
-              Expanded(
-                child: _FileCounts(file: file, uncommitted: uncommitted),
-              ),
-            ],
-          ),
+          _FileCounts(file: file, uncommitted: uncommitted),
         ],
       ),
     );
