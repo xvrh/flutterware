@@ -133,46 +133,43 @@ class _HandoffSheetState extends State<_HandoffSheet> {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Dialog(
-      backgroundColor: colors.panel,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 620),
+    // [AlertDialog], like the teardown and web-export dialogs: this was a bare
+    // [Dialog] with a hand-built title block and a hand-built action row, so
+    // the app's three dialogs sat at three corner radii with three button
+    // treatments.
+    return AlertDialog(
+      backgroundColor: colors.bg,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Hand off ${widget.count} '
+            '${widget.count == 1 ? 'comment' : 'comments'}',
+            style: context.type.heading,
+          ),
+          const Gap(FwSpacing.xxs),
+          Text(
+            [
+              widget.worktree,
+              if (widget.base case var it?) 'against $it',
+            ].join('  ·  '),
+            style: context.type.caption.copyWith(color: colors.mut2),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 560,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                FwSpacing.xxl,
-                FwSpacing.xl,
-                FwSpacing.xxl,
-                FwSpacing.md,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Hand off ${widget.count} '
-                    '${widget.count == 1 ? 'comment' : 'comments'}',
-                    style: context.type.bodyStrong,
-                  ),
-                  const Gap(FwSpacing.xxs),
-                  Text(
-                    [
-                      widget.worktree,
-                      if (widget.base case var it?) 'against $it',
-                    ].join(' · '),
-                    style: context.type.micro.copyWith(color: colors.mut2),
-                  ),
-                ],
-              ),
-            ),
             _Channel(
               on: _route == HandoffRoute.copy,
               title: 'Copy as markdown',
               body: 'Paste it straight into the agent’s chat.',
               onTap: () => setState(() => _route = HandoffRoute.copy),
             ),
+            const Gap(FwSpacing.md),
             _Channel(
               on: _route == HandoffRoute.file,
               title: 'Save to a file…',
@@ -182,99 +179,120 @@ class _HandoffSheetState extends State<_HandoffSheet> {
                   'very screen.',
               onTap: () => setState(() => _route = HandoffRoute.file),
             ),
-            const Gap(FwSpacing.md),
+            const Gap(FwSpacing.xl),
+            const _Label('What leaves'),
+            const Gap(FwSpacing.sm),
             // **What leaves, shown before it leaves.** A handoff you cannot
             // preview is one you re-check by pasting it somewhere else first.
+            //
+            // **Flexible, then capped** — not capped alone. A flat 300 px is a
+            // height the dialog does not have in a 600 px window, and the
+            // overflow it caused was the preview pushing the buttons off the
+            // bottom: the one part of the sheet that may not go missing.
             Flexible(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: FwSpacing.xxl),
-                padding: const EdgeInsets.all(FwSpacing.md),
-                decoration: BoxDecoration(
-                  color: colors.panel2,
-                  borderRadius: BorderRadius.circular(
-                    context.radii.radiusSmall,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 300),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(FwSpacing.lg),
+                  decoration: BoxDecoration(
+                    color: colors.panel2,
+                    borderRadius: BorderRadius.circular(
+                      context.radii.radiusSmall,
+                    ),
+                    border: Border.all(color: colors.line),
                   ),
-                  border: Border.all(color: colors.line),
-                ),
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    widget.markdown,
-                    style: context.type.micro.copyWith(
-                      fontFamily: 'monospace',
-                      fontFamilyFallback: const [
-                        'Menlo',
-                        'Consolas',
-                        'Courier New',
-                      ],
-                      color: colors.mut,
-                      height: 1.5,
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      widget.markdown,
+                      style: context.type.mono.copyWith(
+                        color: colors.mut,
+                        height: 1.5,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(FwSpacing.xxl),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _failure ??
-                          'Moves these to history. You can copy a past batch '
-                              'again.',
-                      style: context.type.micro.copyWith(
-                        color: _failure == null ? colors.mut3 : colors.red,
-                      ),
-                    ),
-                  ),
-                  Tappable.builder(
-                    onTap: () => Navigator.of(context).pop(),
-                    builder: (context, hovered) => Padding(
-                      padding: const EdgeInsets.all(FwSpacing.sm),
-                      child: Text(
-                        'Cancel',
-                        style: context.type.bodySmall.copyWith(
-                          color: hovered ? colors.ink : colors.mut2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const Gap(FwSpacing.md),
-                  Tappable.builder(
-                    onTap: _busy ? null : () => unawaited(_go()),
-                    builder: (context, hovered) => Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: FwSpacing.xl,
-                        vertical: FwSpacing.md,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _busy
-                            ? colors.mut3
-                            : hovered
-                            ? colors.accentDark
-                            : colors.accent,
-                        borderRadius: BorderRadius.circular(
-                          context.radii.radiusSmall,
-                        ),
-                      ),
-                      child: Text(
-                        'Hand off',
-                        style: context.type.bodySmall.copyWith(
-                          color: colors.primaryOnMenu,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+            const Gap(FwSpacing.lg),
+            Text(
+              _failure ??
+                  'Moves these to history. You can copy a past batch again.',
+              style: context.type.caption.copyWith(
+                color: _failure == null ? colors.mut3 : colors.red,
               ),
             ),
           ],
         ),
       ),
+      actions: [
+        Tappable.builder(
+          onTap: () => Navigator.of(context).pop(),
+          builder: (context, hovered) => Padding(
+            padding: const EdgeInsets.all(FwSpacing.sm),
+            child: Text(
+              'Cancel',
+              style: context.type.caption.copyWith(
+                color: hovered ? colors.ink : colors.mut2,
+              ),
+            ),
+          ),
+        ),
+        const Gap(FwSpacing.md),
+        // The house primary — the same one the composer and the Review footer
+        // wear. This was the last solid accent fill in the feature, which made
+        // the loudest object on the screen the confirmation of an action you
+        // had already chosen.
+        Tappable.builder(
+          onTap: _busy ? null : () => unawaited(_go()),
+          builder: (context, hovered) => AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.xl,
+              vertical: FwSpacing.md,
+            ),
+            decoration: BoxDecoration(
+              color: _busy
+                  ? null
+                  : hovered
+                  ? colors.accentSoft2
+                  : colors.accentSoft,
+              borderRadius: BorderRadius.circular(context.radii.radius),
+              border: Border.all(color: _busy ? colors.line : colors.accent),
+            ),
+            child: Text(
+              _busy ? 'Handing off…' : 'Hand off',
+              style: context.type.caption.copyWith(
+                color: _busy ? colors.mut3 : colors.accent,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
+/// A heading inside the sheet. Uppercase `fieldLabel`, the app's section voice.
+class _Label extends StatelessWidget {
+  const _Label(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    label.toUpperCase(),
+    style: context.type.fieldLabel.copyWith(color: context.colors.mut),
+  );
+}
+
+/// One of the two ways a batch can leave.
+///
+/// **A card, not a band.** The chosen one was a full-bleed accent stripe across
+/// the dialog and the other was bare text on the background, so the two options
+/// did not look like two of anything — only the radio glyph said they were a
+/// pair. Bordered and inset, they are the same object in two states, which is
+/// what a choice looks like.
 class _Channel extends StatelessWidget {
   const _Channel({
     required this.on,
@@ -293,21 +311,26 @@ class _Channel extends StatelessWidget {
     var colors = context.colors;
     return Tappable.builder(
       onTap: onTap,
-      builder: (context, hovered) => Container(
-        color: on
-            ? colors.accentSoft
-            : hovered
-            ? colors.hoverOverlay
-            : null,
+      builder: (context, hovered) => AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          color: on
+              ? colors.accentSoft
+              : hovered
+              ? colors.hoverOverlay
+              : null,
+          borderRadius: BorderRadius.circular(context.radii.radius),
+          border: Border.all(color: on ? colors.accent : colors.line),
+        ),
         padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.xxl,
+          horizontal: FwSpacing.lg,
           vertical: FwSpacing.lg,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 1),
               child: Icon(
                 on ? Icons.radio_button_checked : Icons.radio_button_unchecked,
                 size: FwIconSize.md,
@@ -319,11 +342,16 @@ class _Channel extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: context.type.bodySmall),
+                  Text(
+                    title,
+                    style: context.type.bodySmall.copyWith(
+                      color: on ? colors.accent : colors.ink,
+                    ),
+                  ),
                   const Gap(FwSpacing.xxs),
                   Text(
                     body,
-                    style: context.type.micro.copyWith(color: colors.mut2),
+                    style: context.type.caption.copyWith(color: colors.mut2),
                   ),
                 ],
               ),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../shell/worktree.dart';
+import '../ui/empty_state.dart';
 import '../ui/syntax.dart';
 import '../ui/tappable.dart';
 import '../ui/panel_header.dart';
@@ -1237,9 +1238,11 @@ class _IndexPane extends StatelessWidget {
       visible: visible,
     );
     if (tree.totalFiles == 0 && untracked.isEmpty) {
-      return _Nothing(
-        set.changed.isEmpty ? 'Nothing to show.' : 'Nothing matches.',
-      );
+      // Two silences: a checkout with no delta at all, and a filter that
+      // matched none of one — the icon is the quicker way to tell them apart.
+      return set.changed.isEmpty
+          ? const _Nothing('Nothing to show.', icon: Icons.check_circle_outline)
+          : const _Nothing('Nothing matches.');
     }
     // **Not virtualised, deliberately.** The index is the file count, not the
     // line count — a 228-file branch is a few hundred rows, where the list it
@@ -1276,7 +1279,10 @@ class _IndexPane extends StatelessWidget {
       // is looking at a feature that appears not to work, and a project whose
       // rules matched nothing is looking at good news.
       return set.attentionConfigured
-          ? const _Nothing('No file matched an attention rule.')
+          ? const _Nothing(
+              'No file matched an attention rule.',
+              icon: Icons.push_pin_outlined,
+            )
           : const _NoRulesYet();
     }
     return ListView(
@@ -1459,40 +1465,26 @@ class _Tab extends StatelessWidget {
 /// What the **Review** tab says before anything has been written.
 ///
 /// **It names the gesture**, because nothing else on the screen advertises it:
-/// the `+` only exists on hover, which is the right call for a list of three
-/// thousand rows and the wrong one for discovery.
+/// the `+` in the margin is drawn on hover, which is the right call for a list
+/// of three thousand rows and the wrong one for discovery.
+///
+/// [EmptyState], like every other *nothing here yet* in the app. This screen
+/// had four hand-built ones, each with its own icon size, type and alignment —
+/// four answers to a question the app had already answered once.
 class _NoComments extends StatelessWidget {
   const _NoComments();
 
   @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(FwSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.mode_comment_outlined, size: 28, color: colors.mut3),
-            const Gap(FwSpacing.lg),
-            Text(
-              'No comments yet',
-              style: context.type.bodySmall.copyWith(color: colors.mut),
-            ),
-            const Gap(FwSpacing.xs),
-            Text(
-              'Hover a line in the diff and click + to leave one for the '
-              'agent. Shift-click a second line to cover a span.',
-              textAlign: TextAlign.center,
-              // `caption`, not `micro`: micro is a bold label face, and three
-              // lines of it reads as a warning rather than as an instruction.
-              style: context.type.caption.copyWith(color: colors.mut2),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const EmptyState(
+    icon: Icons.mode_comment_outlined,
+    title: 'No comments yet',
+    // Not *hover a line*: the margin is a live target whether or not a pointer
+    // is over it, and saying otherwise sends people looking for a hover state
+    // they do not need.
+    message:
+        'Click the + in a diff line’s margin to leave one for the agent. '
+        'Shift-click a second line to cover a span.',
+  );
 }
 
 /// The Review tab's foot: the one action the whole tab is for.
@@ -1584,21 +1576,14 @@ class _ReviewFooter extends StatelessWidget {
 
 /// One line, centred, for a list that has nothing in it.
 class _Nothing extends StatelessWidget {
-  const _Nothing(this.message);
+  const _Nothing(this.message, {this.icon = Icons.filter_alt_off_outlined});
 
   final String message;
+  final IconData icon;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(FwSpacing.xl),
-      child: Text(
-        message,
-        textAlign: TextAlign.center,
-        style: context.type.bodySmall.copyWith(color: context.colors.mut2),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) =>
+      EmptyState(icon: icon, title: message, minHeight: 0);
 }
 
 /// What the **Important** tab says to a project that has never written an
@@ -1615,36 +1600,25 @@ class _NoRulesYet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(FwSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Nothing is pinned yet.',
-              style: context.type.bodySmall.copyWith(color: colors.mut),
-            ),
-            const Gap(FwSpacing.sm),
-            Text(
-              'Name what you want to see first in tool/flutterware.dart:',
-              style: context.type.micro.copyWith(color: colors.mut2),
-            ),
-            const Gap(FwSpacing.sm),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(FwSpacing.sm),
-              decoration: BoxDecoration(
-                color: colors.panel2,
-                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-              ),
-              child: Text(
-                "fw.changes(ChangesConfig(\n  attention: ['lib/api/**'],\n));",
-                style: diffTextStyle(context).copyWith(color: colors.mut2),
-              ),
-            ),
-          ],
+    return EmptyState(
+      icon: Icons.push_pin_outlined,
+      title: 'Nothing is pinned yet',
+      message: 'Name what you want to see first in tool/flutterware.dart:',
+      minHeight: 0,
+      // **The snippet is the action.** Everything else here is a sentence
+      // about a file you have to open anyway; this is the line you paste into
+      // it. Bordered like the quote a comment carries, because it is the same
+      // thing — code sitting inside prose.
+      action: Container(
+        padding: const EdgeInsets.all(FwSpacing.md),
+        decoration: BoxDecoration(
+          color: colors.panel2,
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          border: Border.all(color: colors.line),
+        ),
+        child: SelectableText(
+          "fw.changes(ChangesConfig(\n  attention: ['lib/api/**'],\n));",
+          style: diffTextStyle(context).copyWith(color: colors.mut),
         ),
       ),
     );
@@ -2022,6 +1996,7 @@ class _FilePaneState extends State<_FilePane> {
 
     if (widget.untracked case var it?) {
       return _Empty(
+        icon: it.isDirectory ? Icons.folder_outlined : Icons.note_add_outlined,
         title: it.path,
         // Untracked means git has no other side to compare against — there is
         // no diff to render, and saying "no changes" would be a lie about a
@@ -2036,6 +2011,7 @@ class _FilePaneState extends State<_FilePane> {
 
     if (widget.missing case var it?) {
       return _Empty(
+        icon: Icons.search_off,
         title: it,
         body:
             'This file is no longer part of the delta — it may have been '
@@ -2044,6 +2020,7 @@ class _FilePaneState extends State<_FilePane> {
     }
 
     return const _Empty(
+      icon: Icons.difference_outlined,
       title: 'Pick a file',
       body:
           'All is every path in this delta, as a tree. Important is what a '
@@ -2101,37 +2078,24 @@ class _FilePaneState extends State<_FilePane> {
 }
 
 /// What the right pane says when it has nothing to draw.
+///
+/// The whole body of the screen, so it is the one empty state nobody can miss —
+/// and it was the one with no icon, left-aligned prose at two greys, resembling
+/// nothing else in the app.
 class _Empty extends StatelessWidget {
-  const _Empty({required this.title, required this.body});
+  const _Empty({required this.title, required this.body, required this.icon});
 
   final String title;
   final String body;
+  final IconData icon;
 
   @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: context.type.bodySmall.copyWith(color: colors.mut),
-              overflow: TextOverflow.ellipsis,
-            ),
-            const Gap(FwSpacing.sm),
-            Text(
-              body,
-              style: context.type.bodySmall.copyWith(color: colors.mut2),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 460),
+      child: EmptyState(icon: icon, title: title, message: body, minHeight: 0),
+    ),
+  );
 }
 
 /// The right pane's own header: which file, and what it costs.
