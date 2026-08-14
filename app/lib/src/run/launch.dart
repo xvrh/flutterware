@@ -155,7 +155,22 @@ Future<RunHandle> launchApp({
   // taken. A ledger that only listed apps that had finished starting would
   // report a busy phone as free for exactly as long as it takes two people to
   // collide on it.
-  return handle.publish(runDir);
+  var published = handle.publish(runDir);
+  // **Launching is what makes the litter, so launching is what clears it** —
+  // the same bargain `tool/catalog/compiler_daemon.dart` states, and until now
+  // that daemon was [sweepRunDir]'s only caller, so a session that ran apps and
+  // never opened Previews swept nothing at all. Measured 2026-08-13: 161MB of
+  // step captures, none of it reachable.
+  //
+  // After [RunHandle.publish], so this run is already in the ledger and its own
+  // journal cannot be swept out from under it. Unawaited: housekeeping must
+  // never delay a launch.
+  unawaited(
+    sweepRunDirOnce(runDir).then((swept) {
+      if (swept > 0) _logger.fine('swept $swept stale run files');
+    }),
+  );
+  return published;
 }
 
 /// What a launcher's log says so far.

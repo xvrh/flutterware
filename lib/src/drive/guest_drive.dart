@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import '../inspect/guest_errors.dart';
 import '../inspect/guest_inspect.dart';
 import '../inspect/guest_logs.dart';
+import '../inspect/log.dart';
 import '../scenarios/target.dart';
 import 'drive.dart';
 import 'human_actions.dart';
@@ -212,10 +213,10 @@ class GuestDrive {
     var binding = WidgetsBinding.instance;
 
     var logs = GuestLogs.instance.describe();
-    var newLines = [
+    var newLines = capStepLogs([
       for (var line in logs.lines)
         if (line.sequence > before.logCursor) line,
-    ];
+    ]);
     if (logs.lines.isNotEmpty) _logCursor = logs.lines.last.sequence;
 
     var errors = GuestErrors.instance.describe();

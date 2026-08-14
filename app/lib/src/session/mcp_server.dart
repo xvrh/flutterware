@@ -167,13 +167,23 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         'Without "plugin" it answers the index: every action of every plugin, '
         'with what it does and the names of the parameters it takes. Name a '
         'plugin to get that one in full — every parameter documented, and the '
-        'shape of what comes back.',
+        'shape of what comes back. Name an action too and it answers that one '
+        'alone, which is the cheap ask when you already know what you are '
+        'calling. In the full forms an action lists its parameters by key in '
+        '"takes"; the keys are documented once each in the top-level '
+        '"parameters", and "returns" names an entry in "types". Everything a '
+        'key names is in the reply — a lookup never misses.',
     inputSchema: Schema.object(
       properties: {
         'plugin': Schema.string(
           description:
               'One plugin, in full: its id or the last dotted segment — '
               '"flutterware.previews" or just "previews". Omitted, the index.',
+        ),
+        'action': Schema.string(
+          description:
+              'One action of that plugin, alone — "act", "launch". Needs '
+              '"plugin". Omitted, every action of the plugin.',
         ),
       },
     ),
@@ -192,6 +202,14 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
     session,
   ) async {
     var requested = request.arguments?['plugin'] as String?;
+    var wantedAction = request.arguments?['action'] as String?;
+    if (requested == null && wantedAction != null) {
+      return _error(
+        'naming an action needs the plugin it belongs to — '
+        '{"plugin": "run", "action": "$wantedAction"}. Without "plugin" this '
+        'answers the index of every plugin.',
+      );
+    }
     if (requested == null) {
       return _json({
         'plugins': [
@@ -225,26 +243,113 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
       return _error('$e');
     }
     var report = core.report;
-    return _json({
+    var actions = report.actions;
+    if (wantedAction != null) {
+      var one = actions.where((a) => a.id == wantedAction).toList();
+      if (one.isEmpty) {
+        return _error(
+          '"$wantedAction" is not an action of ${report.id}. It has: '
+          '${actions.map((a) => a.id).join(', ')}.',
+        );
+      }
+      actions = one;
+    }
+    return _json(_describeActions(report.id, report.label, actions));
+  });
+
+  /// One plugin's actions, with everything they share said once.
+  ///
+  /// **The repetition was the size.** Measured on `run` 2026-08-13: 93KB, of
+  /// which `act`, `observe` and `navigate` were 45KB between them — three
+  /// actions that take the same twenty-odd parameters and hand back the same
+  /// `RunActResult`, spelled out three times. `RunControlResult` appeared four
+  /// times. Nothing was wrong with any of it; it was just said over and over.
+  ///
+  /// So a parameter and a result shape are each documented once, in a table,
+  /// and an action names them. A parameter id that means the *same* thing
+  /// everywhere it appears is keyed by that id; one that differs between two
+  /// actions is keyed `<action>.<id>`, so a key is never a claim that two
+  /// different things are one. Every key in `takes` is in `parameters`, and
+  /// every `returns` with a known shape is in `types` — a reader never has to
+  /// guess whether a lookup will land.
+  Map<String, Object?> _describeActions(
+    String id,
+    String label,
+    List<PluginAction> actions,
+  ) {
+    // **The commonest spelling of an id wins the plain key; the odd ones out
+    // get scoped.** Not "shared only if every action agrees" — that was the
+    // first rule and it collapsed: `run` has sixteen actions taking `device`,
+    // fifteen of them word for word and only `launch` saying something else,
+    // and one disagreement scoped all sixteen. Majority-wins hoists the fifteen
+    // and leaves `launch.device` standing on its own, which is the honest
+    // reading of what is actually shared.
+    //
+    // Compared on the encoded form, because that is exactly what would have
+    // been repeated.
+    var spellings = <String, Map<String, int>>{};
+    for (var action in actions) {
+      for (var parameter in action.parameters) {
+        var counts = spellings[parameter.id] ??= <String, int>{};
+        var encoded = jsonEncode(parameter.toJson());
+        counts[encoded] = (counts[encoded] ?? 0) + 1;
+      }
+    }
+    // The winner per id, by count; ties broken by the encoding so two runs of
+    // the same session never disagree about which one is `device`.
+    var winner = {
+      for (var entry in spellings.entries)
+        entry.key:
+            (entry.value.entries.toList()..sort((a, b) {
+                  var byCount = b.value.compareTo(a.value);
+                  return byCount != 0 ? byCount : a.key.compareTo(b.key);
+                }))
+                .first
+                .key,
+    };
+
+    var parameters = <String, Object?>{};
+    var takes = <String, List<String>>{};
+    for (var action in actions) {
+      var keys = <String>[];
+      for (var parameter in action.parameters) {
+        var encoded = jsonEncode(parameter.toJson());
+        var key = encoded == winner[parameter.id]
+            ? parameter.id
+            : '${action.id}.${parameter.id}';
+        keys.add(key);
+        parameters[key] = parameter.toJson();
+      }
+      takes[action.id] = keys;
+    }
+
+    var types = <String, Object?>{};
+    for (var action in actions) {
+      if (action.returnsName case var name?) {
+        // Read from generated data — the extraction ran at build time.
+        if (resultShapes[name] case var shape?) types[name] = shape.toJson();
+      }
+    }
+
+    return {
       'plugins': [
         {
-          'id': report.id,
-          'label': report.label,
+          'id': id,
+          'label': label,
           'actions': [
-            for (var action in report.actions)
+            for (var action in actions)
               {
-                ...action.toJson(),
-                // The shape of what comes back, so an agent knows the
-                // keys before it calls rather than after. Read from
-                // generated data — the extraction ran at build time.
-                if (resultShapes[action.returnsName] case var shape?)
-                  'shape': shape.toJson(),
+                ...action.toJson()..remove('parameters'),
+                if (takes[action.id] case var ids? when ids.isNotEmpty)
+                  'takes': ids,
               },
           ],
         },
       ],
-    });
-  });
+      if (parameters.isNotEmpty) 'parameters': parameters,
+      if (types.isNotEmpty) 'types': types,
+    };
+  }
 
   static final _invokeTool = Tool(
     name: 'flutterware_invoke',

@@ -155,6 +155,69 @@ void main() {
       expect(back.at, 5);
     });
   });
+
+  /// What one drive step hands back, as opposed to what the buffer holds.
+  ///
+  /// The buffer is a scrollback and stays one. This is the reply, and a reply
+  /// that costs more context than the screen it describes is a reply nobody can
+  /// afford to ask for — measured driving the flutterware GUI, whose flutter
+  /// daemon prints 4KB of JSON per device event.
+  group('capStepLogs', () {
+    InspectLogLine line(int n, String text) =>
+        InspectLogLine(sequence: n, text: text, at: n);
+
+    test('a short step is handed back whole and unchanged', () {
+      var capped = capStepLogs([line(1, 'a'), line(2, 'b')]);
+      expect([for (var l in capped) l.text], ['a', 'b']);
+      expect([for (var l in capped) l.sequence], [1, 2]);
+    });
+
+    test('a long line keeps its head and admits its tail', () {
+      var text = 'x' * (maxStepLogLineChars + 25);
+      var capped = capStepLogs([line(1, text)]).single;
+
+      expect(capped.text, startsWith('x' * maxStepLogLineChars));
+      expect(capped.text, endsWith('… (+25 chars)'));
+      // The identity survives: a truncated line is still that line.
+      expect(capped.sequence, 1);
+      expect(capped.at, 1);
+    });
+
+    test('a line exactly at the cap is left alone', () {
+      var text = 'x' * maxStepLogLineChars;
+      expect(capStepLogs([line(1, text)]).single.text, text);
+    });
+
+    test(
+      'a flood keeps the most recent, behind a count of what it dropped',
+      () {
+        var lines = [
+          for (var i = 1; i <= maxStepLogLines + 12; i++) line(i, 'line $i'),
+        ];
+        var capped = capStepLogs(lines);
+
+        expect(capped, hasLength(maxStepLogLines + 1));
+        expect(capped.first.text, '… (+12 earlier lines)');
+        expect(capped[1].text, 'line 13');
+        expect(capped.last.text, 'line ${maxStepLogLines + 12}');
+      },
+    );
+
+    test('the marker sorts before the lines it stands in for', () {
+      var lines = [
+        for (var i = 10; i <= maxStepLogLines + 20; i++) line(i, 'line $i'),
+      ];
+      var capped = capStepLogs(lines);
+
+      // A reader merges by sequence — see [InspectLogLine.sequence] — so the
+      // marker must not collide with a real line or land after them.
+      expect(capped.first.sequence, lessThan(capped[1].sequence));
+    });
+
+    test('nothing at all is nothing, not a marker', () {
+      expect(capStepLogs(const []), isEmpty);
+    });
+  });
 }
 
 /// Runs [body] under the capture, collecting what reached the parent zone.

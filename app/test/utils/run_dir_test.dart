@@ -388,6 +388,30 @@ void main() {
       );
     });
   });
+
+  /// The launcher calls this on every launch — see `run/launch.dart` — so the
+  /// guard is what keeps a long-lived GUI from re-walking the directory to find
+  /// nothing, over and over, for the life of the session.
+  group('once per process', () {
+    setUp(debugResetRunDirSweep);
+    tearDown(debugResetRunDirSweep);
+
+    test('the first call sweeps and the second does not', () async {
+      var key = 'a' * 16;
+      aged('$key.lock', const Duration(days: 3));
+      aged('$key.log', const Duration(days: 3));
+
+      expect(await sweepRunDirOnce(runDir.path), 2);
+
+      aged('${'b' * 16}.lock', const Duration(days: 3));
+      expect(await sweepRunDirOnce(runDir.path), 0);
+      expect(runDir.listSync(), hasLength(1));
+    });
+
+    test('a directory that cannot be read is not an error', () async {
+      expect(await sweepRunDirOnce(p.join(runDir.path, 'nothing', 'here')), 0);
+    });
+  });
 }
 
 /// A pid that is certainly gone: a process started and waited for.

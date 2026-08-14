@@ -78,4 +78,65 @@ class InspectLogLine {
   );
 
   Map<String, Object?> toJson() => {'n': sequence, 'text': text, 'at': at};
+
+  InspectLogLine _withText(String replacement) =>
+      InspectLogLine(sequence: sequence, text: replacement, at: at);
+}
+
+/// The longest single line a step hands back.
+///
+/// Generous for a `print` and mean for a protocol dump, which is the line this
+/// is drawn on. Measured 2026-08-13 driving the flutterware GUI: one
+/// `device.added` blob from the flutter daemon is about 4KB, and a step that
+/// caught a few of them cost more context than the screen it was reporting.
+const maxStepLogLineChars = 2000;
+
+/// The most lines a step hands back.
+///
+/// [GuestLogs] holds five hundred, because a scrollback should; a *step* is a
+/// different question — "what did this act print" — and fifty is already more
+/// than anybody reads. What this drops is a flood, and a flood is exactly what
+/// the reader cannot use.
+const maxStepLogLines = 50;
+
+/// [lines], trimmed to what a step's reply can afford — and saying so.
+///
+/// **Nothing is dropped silently.** A reply that quietly shortened its own
+/// evidence would be worse than one that costs too much: the reader would draw
+/// conclusions from a log it believed was complete. So an over-long line keeps
+/// its head and admits its tail, and an over-long step keeps its most recent
+/// lines behind one entry saying how many came before — the same end
+/// [GuestLogs] keeps when its own buffer overflows.
+///
+/// The full scrollback is still there: `run/inspect` with `logs` reads the
+/// guest's buffer, which this does not touch. This shapes one reply, not the
+/// record.
+List<InspectLogLine> capStepLogs(
+  List<InspectLogLine> lines, {
+  int maxLines = maxStepLogLines,
+  int maxChars = maxStepLogLineChars,
+}) {
+  var kept = [
+    for (var line
+        in lines.length > maxLines
+            ? lines.sublist(lines.length - maxLines)
+            : lines)
+      if (line.text.length <= maxChars)
+        line
+      else
+        line._withText(
+          '${line.text.substring(0, maxChars)}… '
+          '(+${line.text.length - maxChars} chars)',
+        ),
+  ];
+  var dropped = lines.length - kept.length;
+  if (dropped == 0) return kept;
+  return [
+    InspectLogLine(
+      sequence: kept.isEmpty ? 0 : kept.first.sequence - 1,
+      text: '… (+$dropped earlier lines)',
+      at: kept.isEmpty ? 0 : kept.first.at,
+    ),
+    ...kept,
+  ];
 }

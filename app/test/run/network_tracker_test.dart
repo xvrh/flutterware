@@ -153,6 +153,7 @@ Map<String, Object?> _request(
   String path = '/hello',
   int? statusCode,
   int startTime = 1000,
+  String? error,
 }) => {
   'type': 'HttpProfileRequest',
   'isolateId': 'isolates/1',
@@ -162,6 +163,7 @@ Map<String, Object?> _request(
   'startTime': startTime,
   'events': <Object?>[],
   if (statusCode != null) 'endTime': startTime + 500,
+  if (error != null) 'request': {'error': error},
   if (statusCode != null)
     'response': {
       'startTime': startTime + 200,
@@ -286,5 +288,49 @@ void main() {
     await tracker.clear();
     expect(vm.clearCalls, 1);
     expect(tracker.requests, isEmpty);
+  });
+
+  group('an upgraded connection is not a failed one', () {
+    // Every WebSocket goes through HttpClient and is detached at the upgrade,
+    // which sets the same `error` field a refused connection does. Reading that
+    // as a failure painted a whole screen red for an app that was working.
+    test('a detached socket reports the upgrade, not ERR', () async {
+      vm.profiles.add(
+        _profile(10, [
+          _request('ws', path: '/ws', error: 'Socket has been detached'),
+        ]),
+      );
+      await tracker.poll();
+      var request = tracker.requests.single;
+      expect(networkIsUpgrade(request), isTrue);
+      expect(networkStatusOf(request), 101);
+      expect(networkErrorOf(request), isNull);
+    });
+
+    test('the upgrade keeps the code the server actually sent', () async {
+      vm.profiles.add(
+        _profile(10, [
+          _request(
+            'ws',
+            path: '/ws',
+            statusCode: 101,
+            error: 'Socket has been detached',
+          ),
+        ]),
+      );
+      await tracker.poll();
+      expect(networkStatusOf(tracker.requests.single), 101);
+    });
+
+    test('any other error is still a failure', () async {
+      vm.profiles.add(
+        _profile(10, [_request('r1', error: 'Connection refused')]),
+      );
+      await tracker.poll();
+      var request = tracker.requests.single;
+      expect(networkIsUpgrade(request), isFalse);
+      expect(networkStatusOf(request), 'ERR');
+      expect(networkErrorOf(request), 'Connection refused');
+    });
   });
 }

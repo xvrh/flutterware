@@ -73,11 +73,12 @@ Takes no arguments.
 
 ### `flutterware_actions`
 
-Every action that can be invoked, per plugin. Call this before flutterware_invoke when you do not already know an action id. Without "plugin" it answers the index: every action of every plugin, with what it does and the names of the parameters it takes. Name a plugin to get that one in full — every parameter documented, and the shape of what comes back.
+Every action that can be invoked, per plugin. Call this before flutterware_invoke when you do not already know an action id. Without "plugin" it answers the index: every action of every plugin, with what it does and the names of the parameters it takes. Name a plugin to get that one in full — every parameter documented, and the shape of what comes back. Name an action too and it answers that one alone, which is the cheap ask when you already know what you are calling. In the full forms an action lists its parameters by key in "takes"; the keys are documented once each in the top-level "parameters", and "returns" names an entry in "types". Everything a key names is in the reply — a lookup never misses.
 
 | argument | required | |
 |---|---|---|
 | `plugin` | no | One plugin, in full: its id or the last dotted segment — "flutterware.previews" or just "previews". Omitted, the index. |
+| `action` | no | One action of that plugin, alone — "act", "launch". Needs "plugin". Omitted, every action of the plugin. |
 
 ### `flutterware_invoke`
 
