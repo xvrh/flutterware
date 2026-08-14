@@ -24,6 +24,7 @@ import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/inventory.dart';
 import 'package:flutterware_app/src/shell/device_desk.dart';
 import 'package:flutterware_app/src/shell/shell_controller.dart';
+import 'package:flutterware_app/src/utils/fitted_app.dart';
 import 'package:flutterware_app/src/shell/shell_search.dart';
 import 'package:flutterware_app/src/shell/shell_view.dart';
 import 'package:flutterware_app/src/ui/command_palette.dart';
@@ -614,9 +615,25 @@ void main() {
   });
 
   testWidgets('the sidebar can be hidden and brought back', (tester) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
     await _pumpShell(tester);
     expect(find.text('Overview'), findsOneWidget);
 
+    var mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+
+    /// The chevron is on the rail's seam and only under the pointer, so a test
+    /// has to go and hover it like a hand would.
+    Future<void> hover(Offset where) async {
+      await mouse.moveTo(where);
+      await tester.pumpAndSettle();
+    }
+
+    await hover(const Offset(defaultSidebarWidth - 4, 400));
     await tester.tap(find.byTooltip(RegExp('Hide the sidebar')));
     await tester.pumpAndSettle();
     expect(
@@ -625,9 +642,166 @@ void main() {
       reason: 'the rail goes to nothing, not to a strip',
     );
 
+    // And the way back is where the rail was, not in the chrome.
+    expect(find.byTooltip(RegExp('Show the sidebar')), findsNothing);
+    await hover(const Offset(4, 400));
     await tester.tap(find.byTooltip(RegExp('Show the sidebar')));
     await tester.pumpAndSettle();
     expect(find.text('Overview'), findsOneWidget);
+  });
+
+  testWidgets('the rail can be dragged wider, and the minimum follows it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var shell = await _pumpShell(tester);
+    expect(tester.getSize(find.byKey(sidebarKey)).width, defaultSidebarWidth);
+
+    // From the seam itself, which is where the handle sits. The first 20 of the
+    // 80 go to the touch slop, as they would under a real finger.
+    await tester.dragFrom(
+      const Offset(defaultSidebarWidth - 4, 400),
+      const Offset(80, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(shell.sidebarWidth, defaultSidebarWidth + 60);
+    expect(
+      tester.getSize(find.byKey(sidebarKey)).width,
+      defaultSidebarWidth + 60,
+    );
+
+    // And the window it refuses to go below went with it: a wider rail is a
+    // wider window, because the pane's floor is not the rail's to spend.
+    tester.view.physicalSize = const Size(1100, 800);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byType(MaterialApp)).width,
+      moreOrLessEquals(
+        shellPaneMinimumSize.width + shell.sidebarWidth,
+        epsilon: 0.01,
+      ),
+    );
+  });
+
+  testWidgets('and it can still be dragged once the window is scaling', (
+    tester,
+  ) async {
+    // 900 is short of 848 + the rail, so the app is already scaled: by the
+    // measure that used to bound the drag there is no room here at all, and the
+    // seam would not move.
+    tester.view.physicalSize = const Size(900, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var shell = await _pumpShell(tester);
+    var scale = 900 / tester.getSize(find.byType(MaterialApp)).width;
+    expect(scale, lessThan(1), reason: 'the premise of this test');
+
+    // In window pixels, which is what a pointer moves in: the seam is at the
+    // rail's edge times the scale.
+    await tester.dragFrom(
+      Offset(defaultSidebarWidth * scale - 2, 400),
+      const Offset(80, 0),
+    );
+    await tester.pumpAndSettle();
+
+    // How much it grew depends on the scale, which the growth itself changes —
+    // that it grew at all is the whole of the claim.
+    expect(shell.sidebarWidth, greaterThan(defaultSidebarWidth));
+    expect(
+      tester.getSize(find.byType(MaterialApp)).width,
+      moreOrLessEquals(
+        shellPaneMinimumSize.width + shell.sidebarWidth,
+        epsilon: 0.01,
+      ),
+      reason: 'the minimum kept following it, so the app scaled a bit further',
+    );
+  });
+
+  testWidgets('the rail can be dragged narrower than a label needs', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var shell = await _pumpShell(tester);
+    await tester.dragFrom(
+      const Offset(defaultSidebarWidth - 4, 400),
+      const Offset(-400, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(shell.sidebarWidth, minSidebarWidth);
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'the rows ellipsise rather than overflowing',
+    );
+    expect(
+      find.text('Overview'),
+      findsOneWidget,
+      reason: 'still a rail, however little of each word is left',
+    );
+  });
+
+  testWidgets('the band clears the traffic lights at any scale', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    /// Where the band's content starts. `getTopLeft` is global, so it comes
+    /// back in the *window's* pixels with the scale already applied — which is
+    /// the space the traffic lights are drawn in, and the only one they can be
+    /// cleared in.
+    Future<double> bandStartsAt(Size window) async {
+      tester.view.physicalSize = window;
+      await _pumpShell(tester);
+      return tester.getTopLeft(find.byKey(bandContentKey)).dx;
+    }
+
+    expect(
+      await bandStartsAt(const Size(1200, 800)),
+      moreOrLessEquals(78, epsilon: 0.01),
+    );
+    expect(
+      await bandStartsAt(const Size(900, 700)),
+      moreOrLessEquals(78, epsilon: 0.01),
+      reason:
+          'the buttons are the window and keep their size, so a band at 0.83 '
+          'reserving 78 of its own pixels would be reserving 65 of theirs',
+    );
+  });
+
+  testWidgets('hiding the rail stops the window being scaled for it', (
+    tester,
+  ) async {
+    // Room for the pane's 848 and not for the rail as well: the one window
+    // where the difference is visible.
+    tester.view.physicalSize = const Size(900, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var shell = await _pumpShell(tester);
+    expect(
+      tester.getSize(find.byType(MaterialApp)).width,
+      moreOrLessEquals(1080, epsilon: 0.01),
+      reason: 'the rail is drawn, so the window is short of it and scales',
+    );
+
+    shell.toggleSidebar();
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byType(MaterialApp)).width,
+      900,
+      reason:
+          'nothing is charged for the rail that is not there — 900 clears the '
+          'pane on its own, so ⌘B gives back the room *and* the scale',
+    );
   });
 
   testWidgets('cmd+B works without clicking the window first', (tester) async {

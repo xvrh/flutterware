@@ -31,10 +31,11 @@ Widget wrapInDarkTheme(Widget child) => MaterialApp(
   home: Material(color: appDarkTheme.colorScheme.surface, child: child),
 );
 
-/// The narrowest content pane the Studio ever lays out: [shellMinimumSize]'s
-/// 1080 less the 232px rail. **The pane, not the content** — a demo adds its
-/// own `panelGutter` inside this, exactly as a panel does, which is what leaves
-/// the 800px the dependencies table's seven columns need.
+/// The narrowest content pane the Studio ever lays out: `shellPaneMinimumSize`
+/// itself, which is what every window minimum is built up from. **The pane, not
+/// the content** — a demo adds its own `panelGutter` inside this, exactly as a
+/// panel does, which is what leaves the 800px the dependencies table's seven
+/// columns need.
 ///
 /// A component that survives this survives the app, because below the minimum
 /// the whole window scales rather than getting narrower — so this is not "a

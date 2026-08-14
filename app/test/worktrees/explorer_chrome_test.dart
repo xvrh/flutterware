@@ -253,6 +253,29 @@ void main() {
     expect(find.byKey(sidebarKey), findsOneWidget);
   });
 
+  testWidgets('and the window stops being scaled for it', (tester) async {
+    tester.view.physicalSize = const Size(900, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var shell = await _pump(tester);
+    expect(
+      tester.getSize(find.byType(MaterialApp)).width,
+      moreOrLessEquals(1080, epsilon: 0.01),
+    );
+
+    await tester.tap(find.byKey(explorerTabKey));
+    await tester.pumpAndSettle();
+    expect(shell.isExplorer, isTrue);
+    expect(
+      tester.getSize(find.byType(MaterialApp)).width,
+      900,
+      reason:
+          'the explorer never draws a rail, so it was paying 232px of rent on '
+          'a strip that is not on the screen',
+    );
+  });
+
   testWidgets('a row expands rather than opening the worktree', (tester) async {
     var shell = await _pump(tester);
     await tester.tap(find.byKey(explorerTabKey));

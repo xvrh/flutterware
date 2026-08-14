@@ -1096,4 +1096,26 @@ void main() {
       ]);
     });
   });
+
+  group('the rail width', () {
+    test('is clamped to what a rail can be, and to nothing else', () {
+      var shell = _controller();
+      expect(shell.sidebarWidth, defaultSidebarWidth);
+
+      shell.resizeSidebar(300);
+      expect(shell.sidebarWidth, 300);
+
+      shell.resizeSidebar(2000);
+      expect(shell.sidebarWidth, maxSidebarWidth);
+
+      shell.resizeSidebar(10);
+      expect(shell.sidebarWidth, minSidebarWidth);
+
+      // Not against the window. It used to be, and a scaled window — where the
+      // pane is on its floor and there is no room by that measure — could not
+      // be resized at all.
+      shell.resizeSidebar(400);
+      expect(shell.sidebarWidth, maxSidebarWidth);
+    });
+  });
 }
