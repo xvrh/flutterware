@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'src/embedder/embedder_harness_screen.dart';
-import 'src/utils/flutter_sdk.dart';
 
 /// IDE dev entrypoint: runs only the embedder harness screen.
 ///
@@ -21,11 +20,9 @@ const _sdkRootDefine = String.fromEnvironment('FLUTTER_SDK_ROOT');
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // No fallback to discovery: the environment described above cannot answer,
+  // so a fallback here only delays [_MissingDefines] by a process launch.
   var flutterSdkRoot = _sdkRootDefine;
-  if (flutterSdkRoot.isEmpty) {
-    var sdks = await FlutterSdkPath.findSdks();
-    if (sdks.isNotEmpty) flutterSdkRoot = sdks.first.root;
-  }
 
   runApp(
     MaterialApp(

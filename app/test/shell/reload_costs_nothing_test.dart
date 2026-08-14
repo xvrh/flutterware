@@ -73,7 +73,7 @@ void main() {
         logger: LogClient.print(),
         appToolDirectory: Directory('.'),
       ),
-      flutterSdk: FlutterSdkPath((await FlutterSdkPath.findSdks()).first.root),
+      flutterSdk: (await FlutterSdkPath.findSdk())!,
       registry: buildNativeRegistry(),
       manifestLoader: loader,
       discovery: WorktreeDiscovery(

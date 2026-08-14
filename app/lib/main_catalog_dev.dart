@@ -6,7 +6,6 @@ import 'package:path/path.dart' as p;
 import 'src/address/address_scope.dart';
 import 'src/previews/catalog_session.dart';
 import 'src/previews/catalog_view.dart';
-import 'src/utils/flutter_sdk.dart';
 
 /// IDE dev entrypoint for the Previews loop, without the shell.
 ///
@@ -38,11 +37,9 @@ const _projectDefine = String.fromEnvironment('FLUTTERWARE_PROJECT');
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // No fallback to discovery: a `flutter run` GUI has a stripped environment
+  // and a working directory of `/`, so nothing here could answer anyway.
   var flutterSdkRoot = _sdkRootDefine;
-  if (flutterSdkRoot.isEmpty) {
-    var sdks = await FlutterSdkPath.findSdks();
-    if (sdks.isNotEmpty) flutterSdkRoot = sdks.first.root;
-  }
 
   runApp(
     MaterialApp(

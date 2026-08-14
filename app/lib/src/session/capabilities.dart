@@ -123,14 +123,16 @@ Point a client at `fw mcp`:
 ```json
 {
   "mcpServers": {
-    "flutterware": { "command": "fw", "args": ["mcp"] }
+    "flutterware": {
+      "command": "dart", "args": ["run", "flutterware", "mcp"]
+    }
   }
 }
 ```
 
-This needs `fw` on the PATH — `dart install flutterware`. The client sets the
-working directory and the project is found by walking up from it, so one entry
-serves every project on the machine.
+`fw init` writes that entry. It names no version manager on purpose: whichever
+`dart` the client provides is the SDK, resolved when the server is spawned.
+Prefix it — `fvm dart …` — if that is how the project says which SDK it wants.
 
 Inside a checkout of flutterware itself, `cd app && dart run bin/mcp.dart` is
 the same server without the launcher in front of it.

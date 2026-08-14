@@ -5,9 +5,6 @@ import 'package:path/path.dart' as p;
 
 import '../identity/face_guess.dart';
 import '../shell/repo_layout.dart';
-import '../utils/flutter_sdk.dart';
-
-const _ignoreEntry = '.flutterware/';
 
 /// Where an agent looks for the servers a project offers.
 ///
@@ -16,21 +13,22 @@ const _ignoreEntry = '.flutterware/';
 /// checkout that arrives already knowing its own tools is the entire point.
 const mcpConfigFileName = '.mcp.json';
 
-/// Writes the small amount of state a project needs, so that later invocations
-/// do not have to guess anything.
+/// Writes the two files a project needs to be usable by a human and an agent:
+/// its config, and its MCP registration.
 ///
-/// The whole reason this exists rather than a discovery heuristic: **whatever
-/// runs `init` is already running under the right SDK.** `dart run flutterware`
-/// arrives through the user's own `dart` — fvm, asdf, or whatever they use — so
-/// the answer is there to be written down rather than inferred later from
-/// conventions that may not hold.
+/// **It records nothing about this machine, and that is the change from what it
+/// used to be.** It wrote `.flutterware/sdk`, a link naming whichever SDK ran
+/// it, so that a globally installed `fw` could find a project and the SDK to
+/// run it with. There is no such binary now — flutterware is reached through
+/// `dart run flutterware`, so the SDK is whatever the caller's own `dart` is,
+/// answered fresh on every invocation rather than recorded once and left to go
+/// stale.
 ///
-/// Everything it writes is derived and disposable. Deleting `.flutterware/` and
-/// running again produces the same directory.
+/// What is left is derived and disposable: delete either file and running again
+/// writes it back.
 class ProjectInit {
   ProjectInit({
     required this.root,
-    required this.dartExecutable,
     required this.out,
     required this.err,
     Future<ProcessResult> Function(
@@ -45,9 +43,6 @@ class ProjectInit {
   /// subdirectory and `fw` from the top initialize the same place.
   final String root;
 
-  /// The `dart` that launched us, which is inside the SDK we want recorded.
-  final String dartExecutable;
-
   final StringSink out;
   final StringSink err;
   final Future<ProcessResult> Function(
@@ -57,49 +52,15 @@ class ProjectInit {
   })
   _run;
 
-  Directory get directory => Directory(p.join(root, '.flutterware'));
-  Link get sdkLink => Link(p.join(directory.path, 'sdk'));
-
-  /// True when `.flutterware/sdk` is there — what the walker tests for.
-  ///
-  /// Deliberately not what decides whether [run] happens. It names one
-  /// artifact, and standing it in for "everything init writes" is what used to
-  /// keep later additions out of any project that had run once already.
-  ///
-  /// Same question the walker asks: anything at the path counts, including a
-  /// real directory copied in on a machine without symlinks.
-  bool get isInitialized =>
-      FileSystemEntity.typeSync(sdkLink.path, followLinks: false) !=
-      FileSystemEntityType.notFound;
-
   Future<int> run({bool quiet = false}) async {
-    var sdk = await FlutterSdkPath.tryFind(dartExecutable);
-    if (sdk == null) {
-      err.writeln(
-        'fw: no Flutter SDK above $dartExecutable.\n'
-        'Run flutterware with the `dart` from a Flutter SDK.',
-      );
-      return 64;
-    }
-
-    directory.createSync(recursive: true);
-    var target = _recordSdk(sdk);
-    var ignored = await _ensureIgnored();
     var scaffolded = _scaffoldConfig();
     var registered = _registerMcpServer();
 
-    if (!quiet) {
-      out.writeln('Initialized ${p.relative(directory.path, from: root)}/');
-      out.writeln('  sdk -> $target');
-      if (ignored) out.writeln('  added .flutterware/ to .gitignore');
+    if (!quiet && (scaffolded || registered)) {
+      out.writeln('Initialized $root');
       if (scaffolded) out.writeln('  wrote $configFileName');
       if (registered) {
-        out.writeln('  registered `fw mcp` in $mcpConfigFileName');
-        // The entry names `fw`, so it resolves only if `fw` is installed. Said
-        // here because this is the moment the file starts claiming otherwise,
-        // and an agent that cannot spawn the command reports nothing useful
-        // about why.
-        out.writeln('    agents need `fw` on PATH: dart install flutterware');
+        out.writeln('  registered flutterware in $mcpConfigFileName');
         // A repo that ignores every dotfile — `.*`, which is common and is
         // what this one does — has just had the file written and hidden. It
         // still works for whoever ran this, so it is not worth refusing to
@@ -112,61 +73,14 @@ class ProjectInit {
     return 0;
   }
 
-  /// Points `.flutterware/sdk` at the SDK, preferring `.fvm/flutter_sdk` when
-  /// it names the same one.
-  ///
-  /// Preferring it keeps fvm the single source of truth: switching versions
-  /// there moves this pointer too, where an absolute path recorded once would
-  /// quietly go on naming the old SDK. A relative target for the same reason —
-  /// it survives the repo being moved.
-  String _recordSdk(FlutterSdkPath sdk) {
-    // A real directory (or file) here is an SDK someone copied in on a machine
-    // without symlinks. It is theirs to manage — replacing it with a link
-    // would delete an SDK we did not write.
-    var existing = FileSystemEntity.typeSync(sdkLink.path, followLinks: false);
-    if (existing != FileSystemEntityType.link &&
-        existing != FileSystemEntityType.notFound) {
-      return p.relative(sdkLink.path, from: root);
-    }
-
-    var fvm = Link(p.join(root, '.fvm', 'flutter_sdk'));
-    var target = fvm.existsSync() && _realPath(fvm.path) == _realPath(sdk.root)
-        ? p.join('..', '.fvm', 'flutter_sdk')
-        : sdk.root;
-
-    // Leave an unchanged link alone. This runs before every command now, and
-    // delete-then-create is a write where nothing has moved — briefly, a
-    // window with no link at all.
-    if (existing == FileSystemEntityType.link) {
-      if (sdkLink.targetSync() == target) return target;
-      sdkLink.deleteSync();
-    }
-    sdkLink.createSync(target);
-    return target;
-  }
-
-  /// Both sides of the comparison have to be symlink-resolved.
-  ///
-  /// `FlutterSdkPath.root` is canonicalized *lexically*, which does not follow
-  /// links — so comparing it against a resolved path is two different
-  /// questions. On macOS a temp directory is `/var/...` lexically and
-  /// `/private/var/...` resolved, and the two would never match.
-  static String _realPath(String path) {
-    try {
-      return p.canonicalize(Directory(path).resolveSymbolicLinksSync());
-    } on FileSystemException {
-      return p.canonicalize(path);
-    }
-  }
-
   /// Whether git already ignores [path].
   ///
   /// Asked of git rather than read off `.gitignore`, because a repo may cover a
   /// path through a broad pattern — this one ignores every dotfile with `.*` —
   /// or through a global excludes file this cannot see at all.
   ///
-  /// No git means no, for two callers that both want that answer: nothing to
-  /// protect `.flutterware/` from, and nothing hiding `.mcp.json`.
+  /// No git means no, which is the answer this caller wants: nothing is hiding
+  /// `.mcp.json`.
   Future<bool> _isIgnoredByGit(String path) async {
     try {
       var result = await _run('git', [
@@ -180,42 +94,26 @@ class ProjectInit {
     }
   }
 
-  /// Makes sure `.flutterware/` is not committed. It holds an absolute SDK
-  /// path and build output, so committing it breaks everyone else's checkout.
-  ///
-  /// Appending a redundant line to a tracked file is worse than doing nothing,
-  /// hence the question first.
-  Future<bool> _ensureIgnored() async {
-    var gitignore = File(p.join(root, '.gitignore'));
-    var existing = gitignore.existsSync() ? gitignore.readAsStringSync() : '';
-
-    // Our own line may already be there while git still says otherwise — a
-    // `!.flutterware/` later in the file, a global excludes file, or no git at
-    // all. Appending a second copy every run is the one outcome to rule out.
-    //
-    // Asked before git, not after: this runs before every command, the answer
-    // stays true once it is true, and reading a file beats spawning a process.
-    if (const LineSplitter()
-        .convert(existing)
-        .any((line) => line.trim() == _ignoreEntry)) {
-      return false;
-    }
-
-    if (await _isIgnoredByGit(p.join(directory.path, 'sdk'))) return false;
-    gitignore.writeAsStringSync(
-      '${existing.isEmpty || existing.endsWith('\n') ? existing : '$existing\n'}'
-      '\n# flutterware: recorded SDK and build output, machine-specific.\n'
-      '$_ignoreEntry\n',
-    );
-    return true;
-  }
-
   /// Adds `flutterware` to the project's `.mcp.json`, so an agent opening this
   /// repo finds the tools without anyone having wired them up.
   ///
   /// Answers the question the other two surfaces never had: the GUI is a window
   /// you can see and `fw` is a command you can type, but an MCP server nobody
   /// has configured is indistinguishable from one that does not exist.
+  ///
+  /// **The entry is the command a user would type, and it names no version
+  /// manager.** `dart run flutterware mcp` resolves through whatever `dart` the
+  /// client's environment provides, at spawn time — so upgrading an SDK keeps
+  /// it correct, and flutterware never has to know whether this project is
+  /// managed by fvm, mise, asdf or nothing at all. Guessing that from a
+  /// `.fvmrc` and writing the guess into a file would be the staleness this
+  /// design exists to avoid, one layer down.
+  ///
+  /// A user whose `dart` is not the one this project wants edits the entry to
+  /// say so — `fvm dart run flutterware mcp`, and so on. It is their file and
+  /// their choice; the one thing worth knowing before making it is that a
+  /// version manager which auto-installs an SDK may narrate that onto stdout,
+  /// which is where the protocol lives.
   ///
   /// **Merges; never rewrites.** This is the one file `init` touches that
   /// flutterware does not own — other servers live in it, it is normally
@@ -224,16 +122,18 @@ class ProjectInit {
   /// file that does not parse is left alone entirely rather than replaced with
   /// a valid one that has lost whatever it said.
   ///
+  /// The exception is [_deadEntry] — the `fw mcp` spelling this used to write,
+  /// naming a binary that no longer exists. That one is ours, it is broken, and
+  /// leaving it would mean an agent finding a server that cannot start.
+  ///
   /// And the entry is *spliced in as text*, not re-encoded from the parsed map:
   /// see [_spliceServer].
   bool _registerMcpServer() {
     var file = File(p.join(root, mcpConfigFileName));
 
-    // `fw` rather than an absolute path: the path would name this machine's
-    // pub cache, and this file is committed.
     var entry = <String, Object?>{
-      'command': 'fw',
-      'args': ['mcp'],
+      'command': 'dart',
+      'args': ['run', 'flutterware', 'mcp'],
     };
 
     if (!file.existsSync()) {
@@ -258,9 +158,12 @@ class ProjectInit {
     // it is not ours to correct.
     if (declared != null && declared is! Map<String, Object?>) return false;
     var servers = declared as Map<String, Object?>?;
-    if (servers != null && servers.containsKey('flutterware')) return false;
+    var existing = servers?['flutterware'];
+    if (existing != null && !_isDeadEntry(existing)) return false;
 
-    var spliced = _spliceServer(source, entry);
+    var spliced = existing == null
+        ? _spliceServer(source, entry)
+        : _replaceServer(source, entry);
     if (spliced != null) {
       file.writeAsStringSync(spliced);
       return true;
@@ -297,6 +200,45 @@ class ProjectInit {
     }
     if (source[servers] != '{') return null;
     return _insertMember(source, servers, 'flutterware', entry);
+  }
+
+  /// The entry `init` used to write: `fw mcp`, run through a globally installed
+  /// binary that no longer exists.
+  ///
+  /// Matched exactly, and only this shape. Anyone who edited theirs — a
+  /// different command, an `env`, an added argument — meant it, and a tool that
+  /// overwrites an edit because it recognises the key is worse than one that
+  /// leaves a broken entry behind.
+  static bool _isDeadEntry(Object? value) {
+    if (value is! Map) return false;
+    if (value.length != 2 || value['command'] != 'fw') return false;
+    var args = value['args'];
+    return args is List && args.length == 1 && args.single == 'mcp';
+  }
+
+  /// Replaces the `flutterware` entry's *value*, leaving every byte outside it
+  /// where it was — the same discipline as [_insertMember], for the one entry
+  /// this is allowed to overwrite.
+  static String? _replaceServer(String source, Map<String, Object?> entry) {
+    var root = _skipWhitespace(source, 0);
+    if (root >= source.length || source[root] != '{') return null;
+
+    var servers = _memberValue(source, root + 1, 'mcpServers');
+    if (servers == null || source[servers] != '{') return null;
+    var value = _memberValue(source, servers + 1, 'flutterware');
+    if (value == null) return null;
+
+    // The value's first line continues the line the key is on, so it carries no
+    // indent of its own; every line below it is laid out under that key.
+    var indent = _indentOfLineAt(source, value);
+    var lines = const LineSplitter().convert(
+      const JsonEncoder.withIndent('  ').convert(entry),
+    );
+    return source.replaceRange(
+      value,
+      _skipValue(source, value),
+      [lines.first, for (var line in lines.skip(1)) '$indent$line'].join('\n'),
+    );
   }
 
   /// Splices `"name": value` into the object whose `{` is at [open], after the

@@ -7,24 +7,11 @@ import 'package:path/path.dart' as p;
 
 void main() {
   late Directory root;
-  late Directory sdk;
   late StringBuffer out;
   late StringBuffer err;
 
-  /// A directory `FlutterSdkPath` will accept: it needs both binaries present.
-  Directory fakeSdk(String name) {
-    var dir = Directory.systemTemp.createTempSync(name);
-    for (var binary in ['flutter', 'dart']) {
-      File(p.join(dir.path, 'bin', binary))
-        ..createSync(recursive: true)
-        ..writeAsStringSync('#!/bin/sh');
-    }
-    return dir;
-  }
-
   ProjectInit initWith({bool alreadyIgnored = false}) => ProjectInit(
     root: root.path,
-    dartExecutable: p.join(sdk.path, 'bin', 'dart'),
     out: out,
     err: err,
     // `git check-ignore` exits 0 when the path is already covered.
@@ -32,86 +19,23 @@ void main() {
         ProcessResult(0, alreadyIgnored ? 0 : 1, '', ''),
   );
 
-  Link sdkLink() => Link(p.join(root.path, '.flutterware', 'sdk'));
-
   setUp(() {
     out = StringBuffer();
     err = StringBuffer();
     root = Directory.systemTemp.createTempSync('fw-init');
-    sdk = fakeSdk('fw-init-sdk');
     File(p.join(root.path, 'pubspec.yaml')).writeAsStringSync('name: app\n');
   });
 
-  tearDown(() {
-    root.deleteSync(recursive: true);
-    sdk.deleteSync(recursive: true);
-  });
+  tearDown(() => root.deleteSync(recursive: true));
 
-  test('records the SDK that ran it', () async {
+  test('writes nothing about this machine', () async {
+    // It used to record the SDK that ran it, in `.flutterware/sdk`, for a
+    // global `fw` to read. Nothing reads it now, and a path recorded once is a
+    // path that goes stale — so the directory is not created at all.
     expect(await initWith().run(), 0);
 
-    var link = Link(p.join(root.path, '.flutterware', 'sdk'));
-    expect(link.existsSync(), isTrue);
-    expect(
-      p.canonicalize(link.resolveSymbolicLinksSync()),
-      p.canonicalize(sdk.resolveSymbolicLinksSync()),
-    );
-  });
-
-  test('prefers .fvm/flutter_sdk when it names the same SDK', () async {
-    // So that switching fvm versions moves this pointer too, instead of
-    // leaving an absolute path naming the SDK that happened to be current.
-    Link(p.join(root.path, '.fvm', 'flutter_sdk'))
-      ..parent.createSync(recursive: true)
-      ..createSync(sdk.path);
-
-    await initWith().run();
-
-    expect(
-      Link(p.join(root.path, '.flutterware', 'sdk')).targetSync(),
-      p.join('..', '.fvm', 'flutter_sdk'),
-    );
-  });
-
-  test('records the SDK directly when fvm names a different one', () async {
-    var other = fakeSdk('fw-init-other');
-    addTearDown(() => other.deleteSync(recursive: true));
-    Link(p.join(root.path, '.fvm', 'flutter_sdk'))
-      ..parent.createSync(recursive: true)
-      ..createSync(other.path);
-
-    await initWith().run();
-
-    expect(
-      p.canonicalize(
-        Link(
-          p.join(root.path, '.flutterware', 'sdk'),
-        ).resolveSymbolicLinksSync(),
-      ),
-      p.canonicalize(sdk.resolveSymbolicLinksSync()),
-    );
-  });
-
-  test(
-    'ignores the directory, since it holds a machine-specific path',
-    () async {
-      await initWith().run();
-
-      expect(
-        File(p.join(root.path, '.gitignore')).readAsStringSync(),
-        contains('.flutterware/'),
-      );
-    },
-  );
-
-  test('leaves .gitignore alone when a pattern already covers it', () async {
-    // A repo ignoring every dotfile with `.*` needs no line, and appending a
-    // redundant one to a tracked file is worse than doing nothing.
-    File(p.join(root.path, '.gitignore')).writeAsStringSync('.*\n');
-
-    await initWith(alreadyIgnored: true).run();
-
-    expect(File(p.join(root.path, '.gitignore')).readAsStringSync(), '.*\n');
+    expect(Directory(p.join(root.path, '.flutterware')).existsSync(), isFalse);
+    expect(File(p.join(root.path, '.gitignore')).existsSync(), isFalse);
   });
 
   test('writes a starter config when the project has none', () async {
@@ -136,9 +60,9 @@ void main() {
   });
 
   group('running before every command', () {
-    // `_autoInit` no longer skips on `.flutterware/sdk` existing, so `run` is
-    // what a project meets on every invocation rather than once. These are the
-    // properties that makes safe.
+    // `run` is what a project meets on every invocation rather than once, and
+    // every step does nothing when its own thing is already there. These are
+    // the properties that makes safe.
 
     test('restores what init writes after it is removed', () async {
       // The bug the gate caused, in the shape it will keep taking: something
@@ -157,13 +81,13 @@ void main() {
       );
     });
 
-    test('stops asking git once the line is written', () async {
-      // The one part of a run that spawns a process. It has to fall out of the
-      // steady state, or every command pays for an answer that cannot change.
+    test('a quiet run never spawns git', () async {
+      // The only process a run could spawn, and it is asked solely to tell a
+      // human that `.gitignore` is hiding what was just written. Before every
+      // command there is no human, so nothing should be spawned at all.
       var gitCalls = 0;
       ProjectInit counted() => ProjectInit(
         root: root.path,
-        dartExecutable: p.join(sdk.path, 'bin', 'dart'),
         out: out,
         err: err,
         runProcess: (_, _, {workingDirectory}) async {
@@ -172,44 +96,10 @@ void main() {
         },
       );
 
-      // Quiet, because that is what runs before every command — the `.mcp.json`
-      // "is it hidden" note asks git too, and only when reporting to a human.
       await counted().run(quiet: true);
-      expect(gitCalls, 1, reason: 'the first run has to ask');
-
       await counted().run(quiet: true);
-      expect(gitCalls, 1, reason: 'the second reads .gitignore instead');
-    });
 
-    test('leaves the sdk link in place when nothing moved', () async {
-      await initWith().run();
-      var before = sdkLink().statSync().changed;
-
-      await initWith().run();
-
-      // Rewritten means deleted and recreated, which is a window with no link
-      // at all for anything reading it concurrently.
-      expect(sdkLink().statSync().changed, before);
-    });
-
-    test('still repoints the sdk link when the SDK changes', () async {
-      await initWith().run();
-      var other = fakeSdk('fw-init-moved');
-      addTearDown(() => other.deleteSync(recursive: true));
-
-      await ProjectInit(
-        root: root.path,
-        dartExecutable: p.join(other.path, 'bin', 'dart'),
-        out: out,
-        err: err,
-        runProcess: (_, _, {workingDirectory}) async =>
-            ProcessResult(0, 1, '', ''),
-      ).run();
-
-      expect(
-        p.canonicalize(sdkLink().resolveSymbolicLinksSync()),
-        p.canonicalize(other.resolveSymbolicLinksSync()),
-      );
+      expect(gitCalls, 0);
     });
   });
 
@@ -218,10 +108,7 @@ void main() {
     out.clear();
 
     expect(await initWith().run(), 0);
-    expect(out.toString(), isNot(contains('.gitignore')));
-    expect(out.toString(), isNot(contains('tool/flutterware.dart')));
-    expect(out.toString(), isNot(contains('.mcp.json')));
-    expect(Link(p.join(root.path, '.flutterware', 'sdk')).existsSync(), isTrue);
+    expect(out.toString(), isEmpty);
   });
 
   group('.mcp.json', () {
@@ -229,23 +116,66 @@ void main() {
     Map<String, Object?> readConfig() =>
         jsonDecode(mcpConfig().readAsStringSync()) as Map<String, Object?>;
 
-    test('registers `fw mcp` so an agent finds the project', () async {
+    test('registers the command a user would type', () async {
+      // No version manager is named. Whatever `dart` the client provides is the
+      // signal, resolved when the server is spawned rather than recorded here.
       await initWith().run();
 
       expect(readConfig(), {
         'mcpServers': {
           'flutterware': {
-            'command': 'fw',
-            'args': ['mcp'],
+            'command': 'dart',
+            'args': ['run', 'flutterware', 'mcp'],
           },
         },
       });
     });
 
-    test('says `fw` has to be installed for the entry to resolve', () async {
+    test('replaces the dead `fw mcp` entry it used to write', () async {
+      // The one entry this is allowed to overwrite: ours, and naming a binary
+      // that no longer exists. Left alone it is an agent finding a server that
+      // cannot start.
+      mcpConfig().writeAsStringSync('''
+{
+  "mcpServers": {
+    "other": {"command": "node"},
+    "flutterware": {
+      "command": "fw",
+      "args": ["mcp"]
+    }
+  }
+}
+''');
+
       await initWith().run();
 
-      expect(out.toString(), contains('dart install flutterware'));
+      expect(readConfig()['mcpServers'], {
+        'other': {'command': 'node'},
+        'flutterware': {
+          'command': 'dart',
+          'args': ['run', 'flutterware', 'mcp'],
+        },
+      });
+    });
+
+    test('leaves an `fw` entry someone has added to alone', () async {
+      // Same command, but edited — an added argument means they meant it, and
+      // recognising the key is not permission to overwrite the value.
+      var source = '''
+{
+  "mcpServers": {
+    "flutterware": {
+      "command": "fw",
+      "args": ["mcp", "--verbose"]
+    }
+  }
+}
+''';
+      mcpConfig().writeAsStringSync(source);
+
+      await initWith().run();
+
+      expect(mcpConfig().readAsStringSync(), source);
     });
 
     test('keeps servers it did not write', () async {
@@ -362,8 +292,10 @@ void main() {
             "args": ["--stdio"]
         },
         "flutterware": {
-            "command": "fw",
+            "command": "dart",
             "args": [
+                "run",
+                "flutterware",
                 "mcp"
             ]
         }
@@ -386,8 +318,10 @@ void main() {
   "inputs": [],
   "mcpServers": {
     "flutterware": {
-      "command": "fw",
+      "command": "dart",
       "args": [
+        "run",
+        "flutterware",
         "mcp"
       ]
     }
@@ -410,8 +344,10 @@ void main() {
 {
   "mcpServers": {
     "flutterware": {
-      "command": "fw",
+      "command": "dart",
       "args": [
+        "run",
+        "flutterware",
         "mcp"
       ]
     }
@@ -431,44 +367,8 @@ void main() {
       expect(
         mcpConfig().readAsStringSync(),
         '{"mcpServers":{"other":{"command":"other-server"}, '
-        '"flutterware": {"command":"fw","args":["mcp"]}}}',
+        '"flutterware": {"command":"dart","args":["run","flutterware","mcp"]}}}',
       );
     });
-  });
-
-  test('reports a dart that is not inside a Flutter SDK', () async {
-    var init = ProjectInit(
-      root: root.path,
-      dartExecutable: '/usr/bin/dart',
-      out: out,
-      err: err,
-      runProcess: (_, _, {workingDirectory}) async =>
-          ProcessResult(0, 1, '', ''),
-    );
-
-    expect(await init.run(), 64);
-    expect(err.toString(), contains('no Flutter SDK'));
-    expect(init.isInitialized, isFalse);
-  });
-
-  test('isInitialized is what the walker will test for', () async {
-    expect(initWith().isInitialized, isFalse);
-    await initWith().run();
-    expect(initWith().isInitialized, isTrue);
-  });
-
-  test('leaves a copied-in SDK directory alone', () async {
-    // Windows-style: the walker accepts a real directory at .flutterware/sdk,
-    // so init must survive it — Link.createSync over a directory throws.
-    var copied = Directory(sdkLink().path)..createSync(recursive: true);
-    File(p.join(copied.path, 'marker')).writeAsStringSync('');
-
-    expect(await initWith().run(), 0);
-    expect(
-      FileSystemEntity.typeSync(sdkLink().path, followLinks: false),
-      FileSystemEntityType.directory,
-    );
-    expect(File(p.join(copied.path, 'marker')).existsSync(), isTrue);
-    expect(initWith().isInitialized, isTrue);
   });
 }

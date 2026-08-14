@@ -288,11 +288,12 @@ class Session {
   }
 
   static Future<FlutterSdkPath> _defaultSdk() async {
-    var found = (await FlutterSdkPath.findSdks()).firstOrNull;
+    var found = await FlutterSdkPath.findSdk();
     if (found == null) {
       throw SessionException(
-        'No Flutter SDK found. flutterware needs one to run '
-        'tool/flutterware.dart.',
+        'No Flutter SDK above the dart running flutterware. Start it with the '
+        'dart from a Flutter SDK — `dart run flutterware`, or whatever your '
+        'version manager spells that.',
       );
     }
     return found;

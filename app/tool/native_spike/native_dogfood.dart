@@ -6,7 +6,7 @@
 // both layers in one story: the Flutter layer for what Flutter draws, the
 // native layer for what it does not, and the journal reconciling the two.
 //
-//   cd app && ../fw dart run tool/native_spike/native_dogfood.dart <device> [outDir]
+//   cd app && fvm dart run tool/native_spike/native_dogfood.dart <device> [outDir]
 import 'dart:convert';
 import 'dart:io';
 

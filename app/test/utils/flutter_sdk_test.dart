@@ -1,15 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-// ignore: implementation_imports
-import 'package:flutterware/src/walker.dart' show wrapperMarker;
+import 'package:flutterware_app/src/constants.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:path/path.dart' as p;
 
-// The fresh-worktree case: the pin (`flutter_version`, or fvm's `.fvmrc`) is
-// versioned, the SDK links are not — so before anything writes a link, the
-// pin resolved against its tool's cache is the only project-scoped answer
-// discovery can give.
+// The SDK is the one that started us, and nothing else is consulted. These
+// tests exist mostly to keep it that way: a pin file, a version manager's
+// cache or `FLUTTER_HOME` next to the process must not change the answer.
 void main() {
   late Directory tmp;
 
@@ -24,162 +22,48 @@ void main() {
     return at;
   }
 
-  Directory project(String fvmrc) {
-    var dir = Directory(p.join(tmp.path, 'project', 'inner'))
-      ..createSync(recursive: true);
-    File(p.join(tmp.path, 'project', '.fvmrc')).writeAsStringSync(fvmrc);
-    return dir;
-  }
-
-  Directory fwProject(String flutterVersion) {
-    var dir = Directory(p.join(tmp.path, 'project', 'inner'))
-      ..createSync(recursive: true);
-    File(
-      p.join(tmp.path, 'project', 'flutter_version'),
-    ).writeAsStringSync(flutterVersion);
-    return dir;
-  }
-
-  test('a fresh fvm worktree resolves its pin through the cache', () async {
-    var cached = fakeSdk(p.join(tmp.path, 'home', 'fvm', 'versions', '3.99.0'));
-    // From a subdirectory: the pin sits at the root, commands are typed
-    // anywhere.
-    var sdks = await FlutterSdkPath.findSdks(
-      from: project('{"flutter": "3.99.0"}'),
-      environment: {'HOME': p.join(tmp.path, 'home')},
+  test("the launcher's dart is the answer", () async {
+    var sdk = fakeSdk(p.join(tmp.path, 'sdk'));
+    var found = await FlutterSdkPath.findSdk(
+      environment: {dartExecutableEnvironmentKey: p.join(sdk, 'bin', 'dart')},
     );
-    expect(sdks.map((s) => s.root), contains(p.canonicalize(cached)));
+    expect(found?.root, p.canonicalize(sdk));
   });
 
-  test('FVM_CACHE_PATH wins over the home cache', () async {
+  test('a dart with no SDK above it does not answer', () async {
+    // Falls through to the executable running this test, which is inside a
+    // real SDK — so the assertion is that the *stray path* was not adopted.
+    var stray = Directory(p.join(tmp.path, 'nowhere'))..createSync();
+    var found = await FlutterSdkPath.findSdk(
+      environment: {dartExecutableEnvironmentKey: p.join(stray.path, 'dart')},
+    );
+    expect(found?.root, isNot(p.canonicalize(stray.path)));
+  });
+
+  test('nothing else on the machine is consulted', () async {
+    // Every source the ladder used to carry, all naming one SDK, all ignored:
+    // the answer is the running executable's, never this one.
+    var decoy = fakeSdk(p.join(tmp.path, 'decoy'));
+    File(p.join(tmp.path, '.fvmrc')).writeAsStringSync('{"flutter":"3.99.0"}');
+    File(p.join(tmp.path, 'flutter_version')).writeAsStringSync('3.99.0');
     fakeSdk(p.join(tmp.path, 'home', 'fvm', 'versions', '3.99.0'));
-    var custom = fakeSdk(p.join(tmp.path, 'cache', 'versions', '3.99.0'));
-    var sdks = await FlutterSdkPath.findSdks(
-      from: project('{"flutter": "3.99.0"}'),
+    Link(p.join(tmp.path, '.flutterware', 'sdk'))
+      ..parent.createSync(recursive: true)
+      ..createSync(decoy);
+
+    var found = await FlutterSdkPath.findSdk(
       environment: {
         'HOME': p.join(tmp.path, 'home'),
-        'FVM_CACHE_PATH': p.join(tmp.path, 'cache'),
+        'FLUTTER_HOME': decoy,
+        'FVM_CACHE_PATH': p.join(tmp.path, 'home', 'fvm'),
       },
     );
-    expect(sdks.map((s) => s.root), contains(p.canonicalize(custom)));
-  });
 
-  test('an uncached pin and an unreadable pin both answer nothing', () async {
-    for (var fvmrc in ['{"flutter": "3.99.0"}', 'not json', '{}']) {
-      var sdks = await FlutterSdkPath.findSdks(
-        from: project(fvmrc),
-        environment: {'HOME': p.join(tmp.path, 'home')},
-      );
-      expect(
-        sdks.where((s) => p.isWithin(tmp.path, s.root)),
-        isEmpty,
-        reason: 'for .fvmrc $fvmrc',
-      );
-    }
-  });
-
-  test(
-    'a fresh fw worktree resolves its pin through the wrapper cache',
-    () async {
-      var cached = fakeSdk(
-        p.join(tmp.path, 'home', '.flutterware', 'sdks', '3.99.0'),
-      );
-      var sdks = await FlutterSdkPath.findSdks(
-        from: fwProject('3.99.0\n'),
-        environment: {'HOME': p.join(tmp.path, 'home')},
-      );
-      expect(sdks.map((s) => s.root), contains(p.canonicalize(cached)));
-    },
-  );
-
-  test('FW_SDK_CACHE wins over the home cache', () async {
-    fakeSdk(p.join(tmp.path, 'home', '.flutterware', 'sdks', '3.99.0'));
-    var custom = fakeSdk(p.join(tmp.path, 'cache', '3.99.0'));
-    var sdks = await FlutterSdkPath.findSdks(
-      from: fwProject('3.99.0'),
-      environment: {
-        'HOME': p.join(tmp.path, 'home'),
-        'FW_SDK_CACHE': p.join(tmp.path, 'cache'),
-      },
-    );
-    expect(sdks.map((s) => s.root), contains(p.canonicalize(custom)));
-  });
-
-  test('the fw pin outranks the fvm pin when a repo carries both', () async {
-    var fw = fakeSdk(
-      p.join(tmp.path, 'home', '.flutterware', 'sdks', '3.99.0'),
-    );
-    fakeSdk(p.join(tmp.path, 'home', 'fvm', 'versions', '3.44.0'));
-    var from = fwProject('3.99.0');
-    File(
-      p.join(tmp.path, 'project', '.fvmrc'),
-    ).writeAsStringSync('{"flutter": "3.44.0"}');
-    var sdks = await FlutterSdkPath.findSdks(
-      from: from,
-      environment: {'HOME': p.join(tmp.path, 'home')},
-    );
-    expect(sdks.first.root, p.canonicalize(fw));
-  });
-
-  /// The link `init` writes, pointed wherever the caller says.
-  void recordSdk(String target) {
-    var link = Link(p.join(tmp.path, 'project', '.flutterware', 'sdk'));
-    link.parent.createSync(recursive: true);
-    link.createSync(target);
-  }
-
-  /// A committed wrapper is a file named `fw` carrying [wrapperMarker]; the
-  /// walker skips one without it, so the marker is the whole test.
-  void commitWrapper() {
-    File(
-      p.join(tmp.path, 'project', 'fw'),
-    ).writeAsStringSync('#!/bin/sh\n$wrapperMarker v1\n');
-  }
-
-  test('a committed wrapper puts its pin above the recorded link', () async {
-    var fw = fakeSdk(
-      p.join(tmp.path, 'home', '.flutterware', 'sdks', '3.99.0'),
-    );
-    // The link still names the SDK of a version manager the repo has left.
-    recordSdk(fakeSdk(p.join(tmp.path, 'home', 'fvm', 'versions', '3.44.0')));
-    var from = fwProject('3.99.0');
-    commitWrapper();
-    var sdks = await FlutterSdkPath.findSdks(
-      from: from,
-      environment: {'HOME': p.join(tmp.path, 'home')},
-    );
-    expect(sdks.first.root, p.canonicalize(fw));
-  });
-
-  test('without a committed wrapper the recorded link still wins', () async {
-    fakeSdk(p.join(tmp.path, 'home', '.flutterware', 'sdks', '3.99.0'));
-    var linked = fakeSdk(p.join(tmp.path, 'home', 'fvm', 'versions', '3.44.0'));
-    recordSdk(linked);
-    var from = fwProject('3.99.0');
-    var sdks = await FlutterSdkPath.findSdks(
-      from: from,
-      environment: {'HOME': p.join(tmp.path, 'home')},
-    );
-    // Reached through the link, so symlink-resolved: on macOS the temp
-    // directory is `/var/...` lexically and `/private/var/...` resolved, and
-    // `p.canonicalize` alone would compare the two.
+    expect(found?.root, isNot(p.canonicalize(decoy)));
     expect(
-      sdks.first.root,
-      p.canonicalize(Directory(linked).resolveSymbolicLinksSync()),
+      found?.root,
+      isNot(contains(tmp.path)),
+      reason: 'no source below the temp root may answer',
     );
-  });
-
-  test('an empty or uncached fw pin answers nothing', () async {
-    for (var pin in ['', '  \n', '3.99.0']) {
-      var sdks = await FlutterSdkPath.findSdks(
-        from: fwProject(pin),
-        environment: {'HOME': p.join(tmp.path, 'home')},
-      );
-      expect(
-        sdks.where((s) => p.isWithin(tmp.path, s.root)),
-        isEmpty,
-        reason: 'for flutter_version "$pin"',
-      );
-    }
   });
 }

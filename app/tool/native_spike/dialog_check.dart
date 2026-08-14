@@ -7,7 +7,7 @@
 // wrong about what is on screen and its taps land on a window nobody can see.
 // The native layer reads the intruder, dismisses it, and hands control back.
 //
-//   cd app && ../fw dart run tool/native_spike/dialog_check.dart <device>
+//   cd app && fvm dart run tool/native_spike/dialog_check.dart <device>
 import 'dart:io';
 
 import 'package:flutterware/plugins.dart';

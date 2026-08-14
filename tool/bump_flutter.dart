@@ -1,9 +1,9 @@
 /// Moves the two Flutter numbers this repo keeps, which are deliberately not
 /// one number.
 ///
-/// `flutter_version` is the SDK development happens on: the wrapper installs
-/// exactly it, CI runs exactly it. It moves whenever there is a newer beta
-/// worth having, which is often.
+/// `.fvmrc` is the SDK development happens on: fvm installs exactly it, CI
+/// runs exactly it. It moves whenever there is a newer beta worth having,
+/// which is often.
 ///
 /// The `environment:` floors in the shipping pubspecs are a *promise* — the
 /// oldest Flutter this package claims to work on. They move only when
@@ -17,10 +17,12 @@
 /// nobody republishing anything.
 ///
 /// ```
-/// ./fw dart tool/bump_flutter.dart beta        # or stable, or 3.48.0-0.1.pre
-/// ./fw dart tool/bump_flutter.dart --floor     # promise the pin, after a break
-/// ./fw dart tool/bump_flutter.dart --check     # what CI runs; offline
+/// fvm dart tool/bump_flutter.dart beta        # or stable, or 3.48.0-0.1.pre
+/// fvm dart tool/bump_flutter.dart --floor     # promise the pin, after a break
+/// fvm dart tool/bump_flutter.dart --check     # what CI runs; offline
 /// ```
+///
+/// A bump writes the pin only. Run `fvm install` afterwards to fetch it.
 library;
 
 import 'dart:convert';
@@ -31,7 +33,7 @@ import 'package:path/path.dart' as p;
 import 'package:pub_semver/pub_semver.dart';
 import 'package:yaml/yaml.dart';
 
-/// The same index the wrapper reads, so this cannot name a version `fw` would
+/// The same index fvm installs from, so this cannot name a version that would
 /// then fail to install.
 const _releaseIndex =
     'https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json';
@@ -84,9 +86,9 @@ Future<void> main(List<String> args) async {
     );
   } else {
     File(
-      p.join(root.path, 'flutter_version'),
-    ).writeAsStringSync('${target.flutter}\n');
-    print('pin: flutter_version -> ${target.flutter} (Dart ${target.dart})');
+      p.join(root.path, '.fvmrc'),
+    ).writeAsStringSync('{"flutter": "${target.flutter}"}\n');
+    print('pin: .fvmrc -> ${target.flutter} (Dart ${target.dart})');
     print(
       '\nThe floor did not move. Run --floor only when something below it'
       ' broke;\nuntil then it is what lets stable catch up on its own.',
@@ -96,9 +98,9 @@ Future<void> main(List<String> args) async {
 
 /// Fails loudly rather than in a resolve nobody reads.
 ///
-/// Everything here is offline: the pin's own Dart version comes from
-/// `flutter.version.json` in the wrapper's cache, which CI has populated by
-/// the time this runs.
+/// Everything here is offline: the pin's own Dart version comes from the
+/// `flutter.version.json` of the SDK running this, which is the pinned one on
+/// a laptop and in CI alike.
 int _check(Directory root) {
   var release = _Release.ofPin(root);
   var problems = <String>[];
@@ -119,7 +121,7 @@ int _check(Directory root) {
       if (!constraint.allows(entry.value)) {
         problems.add(
           '$relative: ${entry.key}: $text does not allow ${entry.value},'
-          ' which flutter_version pins',
+          ' which .fvmrc pins',
         );
       }
     }
@@ -127,7 +129,7 @@ int _check(Directory root) {
 
   if (problems.isEmpty) {
     print(
-      'flutter_version ${release.flutter} (Dart ${release.dart})'
+      '.fvmrc pins ${release.flutter} (Dart ${release.dart}), which'
       ' satisfies every floor.',
     );
     return 0;
@@ -152,31 +154,71 @@ class _Release {
 
   _Release(this.flutter, this.dart);
 
-  /// What the wrapper has already installed for the pinned version.
+  /// The pinned version, described by **the SDK running this script**.
   ///
-  /// Reading the cache rather than the index keeps [_check] offline, and reads
-  /// the SDK that will actually run rather than what the index says today.
+  /// Reading the running SDK rather than a version manager's cache keeps
+  /// [_check] offline, and means this works wherever it is invoked from: under
+  /// `fvm dart` on a laptop, and in CI where the pin was installed by a setup
+  /// action that has never heard of fvm. Looking in `~/fvm` would have been a
+  /// guess about the machine, which is the habit this repo has just finished
+  /// removing everywhere else.
+  ///
+  /// The running SDK **has to be the pinned one**, and saying so is half the
+  /// value: a check run under the wrong SDK compares the floors against a Dart
+  /// version nobody pinned and passes or fails for the wrong reason.
   factory _Release.ofPin(Directory root) {
-    var pin = File(
-      p.join(root.path, 'flutter_version'),
-    ).readAsStringSync().trim();
-    var cache =
-        Platform.environment['FW_SDK_CACHE'] ??
-        p.join(Platform.environment['HOME']!, '.flutterware', 'sdks');
-    var meta = File(p.join(cache, pin, 'bin', 'cache', 'flutter.version.json'));
-    if (!meta.existsSync()) {
+    var pin = readPin(root);
+    var sdk = _runningSdk();
+    if (sdk == null) {
       stderr.writeln(
-        'flutter_version pins $pin, which is not in the wrapper cache.'
-        '\nRun `./fw flutter --version` once to install it.',
+        'this is not running inside a Flutter SDK, so it cannot read the pin'
+        "'s\nDart version. Run it with the pinned SDK: "
+        '`fvm dart tool/bump_flutter.dart --check`.',
       );
       exit(1);
     }
-    var json = jsonDecode(meta.readAsStringSync()) as Map<String, dynamic>;
+
+    var json =
+        jsonDecode(
+              File(
+                p.join(sdk, 'bin', 'cache', 'flutter.version.json'),
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    var running = json['frameworkVersion'] as String;
+    if (running != pin) {
+      stderr.writeln(
+        '.fvmrc pins $pin but this is running under $running.'
+        '\nRun it with the pinned SDK: `fvm dart tool/bump_flutter.dart '
+        '--check`,\nafter `fvm install`.',
+      );
+      exit(1);
+    }
+
     return _Release(
       Version.parse(pin),
       // "3.13.0 (build 3.13.0-282.1.beta)" — the build is the precise one.
       _dartVersion(json['dartSdkVersion'] as String),
     );
+  }
+
+  /// The Flutter SDK above [Platform.resolvedExecutable], or null.
+  ///
+  /// `<flutter>/bin/cache/dart-sdk/bin/dart` is four levels down, but the walk
+  /// is written as a search rather than a count so it survives a layout change.
+  static String? _runningSdk() {
+    var dir = p.dirname(Platform.resolvedExecutable);
+    while (true) {
+      if (File(p.join(dir, 'bin', 'flutter')).existsSync() &&
+          File(
+            p.join(dir, 'bin', 'cache', 'flutter.version.json'),
+          ).existsSync()) {
+        return dir;
+      }
+      var parent = p.dirname(dir);
+      if (parent == dir) return null;
+      dir = parent;
+    }
   }
 
   /// `>=3.48.0-0` for a prerelease, `>=3.44.9` for a stable.
@@ -223,8 +265,8 @@ Future<_Release> _resolve(String nameOrChannel) async {
   if (matches.isEmpty) {
     stderr.writeln(
       '"$nameOrChannel" is not a version or channel in the release index.'
-      '\nThe wrapper installs from that index, so a name it does not carry'
-      '\nis one `./fw` could not fetch.',
+      '\nfvm installs from that index, so a name it does not carry'
+      '\nis one it could not fetch.',
     );
     exit(1);
   }
@@ -271,11 +313,24 @@ void _rewriteEnvironment(File pubspec, _Release release) {
 Directory _repoRoot() {
   var dir = File.fromUri(Platform.script).parent;
   while (true) {
-    if (File('${dir.path}/flutter_version').existsSync()) return dir;
+    if (File('${dir.path}/.fvmrc').existsSync()) return dir;
     var parent = dir.parent;
     if (parent.path == dir.path) {
-      throw StateError('no flutter_version above ${Platform.script}');
+      throw StateError('no .fvmrc above ${Platform.script}');
     }
     dir = parent;
   }
+}
+
+/// The version `.fvmrc` names — fvm's own format, a JSON object with a
+/// `flutter` key.
+String readPin(Directory root) {
+  var file = File(p.join(root.path, '.fvmrc'));
+  if (jsonDecode(file.readAsStringSync()) case {
+    'flutter': String pinned,
+  } when pinned.isNotEmpty) {
+    return pinned;
+  }
+  stderr.writeln('${file.path} does not name a Flutter version.');
+  exit(1);
 }

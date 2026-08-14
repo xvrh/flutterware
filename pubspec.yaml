@@ -3,13 +3,6 @@ description: 'Development tooling for Flutter projects: a desktop app, a command
 version: 0.5.2 # Keep it sync with flutterware_app
 homepage: https://github.com/xvrh/flutterware
 
-# `dart install flutterware` puts `fw` on the PATH. It installs the walker,
-# never the launcher: `bin/flutterware.dart` is reached only through
-# `dart run flutterware`, and the two are separate files so that neither has to
-# work out which role it is playing.
-executables:
-  fw: walker
-
 environment:
   sdk: ^3.13.0-0
   flutter: '>=3.47.0-0'
