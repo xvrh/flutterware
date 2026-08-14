@@ -265,12 +265,21 @@ class HunkLineView extends StatelessWidget {
     required this.hunk,
     required this.index,
     this.tokens,
+    this.onComment,
+    this.selected = false,
     super.key,
   });
 
   final HunkLineCache lines;
   final HunkSpan hunk;
   final int index;
+
+  /// Called with the line, when its `+` is pressed. Null on a screen with no
+  /// review — a widget test pumping a diff, and the CLI's renderer.
+  final ValueChanged<DiffLine>? onComment;
+
+  /// Whether this line is inside the span the composer is about.
+  final bool selected;
 
   /// Where this line's colours come from, or null for a file nothing here
   /// reads. **Asked for per row, computed per hunk** — the first row of a hunk
@@ -290,9 +299,16 @@ class HunkLineView extends StatelessWidget {
         ),
       );
     }
+    var line = decoded[index];
     return DiffLineView(
-      line: decoded[index],
+      line: line,
       tokens: tokens?.forHunk(hunk).at(index),
+      selected: selected,
+      // A meta line — `\ No newline at end of file` — is not a line of the
+      // file, so there is nothing to say about it and nothing to quote.
+      onComment: onComment == null || line.kind == DiffLineKind.meta
+          ? null
+          : () => onComment!(line),
     );
   }
 }
@@ -309,8 +325,14 @@ class HunkLineView extends StatelessWidget {
 /// which word is a keyword. So the row keeps its tint, and a token the
 /// highlighter had no opinion about keeps the row's own ink rather than being
 /// forced to a neutral.
-class DiffLineView extends StatelessWidget {
-  const DiffLineView({required this.line, this.tokens, super.key});
+class DiffLineView extends StatefulWidget {
+  const DiffLineView({
+    required this.line,
+    this.tokens,
+    this.onComment,
+    this.selected = false,
+    super.key,
+  });
 
   final DiffLine line;
 
@@ -318,8 +340,27 @@ class DiffLineView extends StatelessWidget {
   /// which case the text is drawn exactly as it was before any of this existed.
   final List<Token>? tokens;
 
+  /// Pressing the `+` in the margin. Null leaves the margin empty and the row
+  /// exactly as inert as it has always been.
+  final VoidCallback? onComment;
+
+  /// Inside the span the composer is about, so you can see what you picked
+  /// while you are writing about it.
+  final bool selected;
+
+  @override
+  State<DiffLineView> createState() => _DiffLineViewState();
+}
+
+class _DiffLineViewState extends State<DiffLineView> {
+  /// **Hover, not a tap target on the row.** The row holds selectable text and
+  /// a tap handler over all of it would eat the drag that selects a line — so
+  /// only the margin is pressable, and hover is what reveals it.
+  var _hovered = false;
+
   @override
   Widget build(BuildContext context) {
+    var line = widget.line;
     var colors = context.colors;
     var (background, marker, tone) = switch (line.kind) {
       DiffLineKind.added => (
@@ -337,53 +378,130 @@ class DiffLineView extends StatelessWidget {
     };
     var style = diffTextStyle(context);
 
-    return Container(
-      color: background,
-      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _Gutter(line.oldNumber, colors.mut3, style),
-          _Gutter(line.newNumber, colors.mut3, style),
-          const Gap(FwSpacing.sm),
-          SizedBox(
-            width: 10,
-            child: Text(marker, style: style.copyWith(color: tone)),
-          ),
-          Expanded(
-            child: switch (tokens) {
-              // **The same `Text`, given spans instead of a string.** Not a
-              // different widget for the coloured case: the row's height, its
-              // clipping and its never-wrapping are the properties that keep a
-              // virtualised list smooth, and two widgets is two places to lose
-              // one of them.
-              var it? when line.kind != DiffLineKind.meta => Text.rich(
-                TextSpan(children: spansFor(context, it, style: style)),
-                style: style,
-                softWrap: false,
-                overflow: TextOverflow.clip,
-              ),
-              _ => Text(
-                line.text,
-                style: line.kind == DiffLineKind.meta
-                    ? style.copyWith(
-                        color: colors.mut3,
-                        fontStyle: FontStyle.italic,
-                      )
-                    : style,
-                // **Never wrapped.** A wrapped line changes a row's height, and
-                // a virtualised list whose rows change height as they are built
-                // is one whose scrollbar jumps under your hand. Long lines
-                // clip; the list scrolls horizontally as a whole.
-                softWrap: false,
-                overflow: TextOverflow.clip,
-              ),
-            },
-          ),
-        ],
+    return MouseRegion(
+      onEnter: (_) {
+        if (widget.onComment != null) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: Container(
+        color: widget.selected ? colors.accentSoft : background,
+        padding: const EdgeInsets.only(right: FwSpacing.lg),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _AddComment(
+              visible: _hovered,
+              onTap: widget.onComment,
+              style: style,
+            ),
+            _Gutter(line.oldNumber, colors.mut3, style),
+            _Gutter(line.newNumber, colors.mut3, style),
+            const Gap(FwSpacing.sm),
+            SizedBox(
+              width: 10,
+              child: Text(marker, style: style.copyWith(color: tone)),
+            ),
+            Expanded(
+              child: switch (widget.tokens) {
+                // **The same `Text`, given spans instead of a string.** Not a
+                // different widget for the coloured case: the row's height, its
+                // clipping and its never-wrapping are the properties that keep a
+                // virtualised list smooth, and two widgets is two places to lose
+                // one of them.
+                var it? when line.kind != DiffLineKind.meta => Text.rich(
+                  TextSpan(children: spansFor(context, it, style: style)),
+                  style: style,
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                ),
+                _ => Text(
+                  line.text,
+                  style: line.kind == DiffLineKind.meta
+                      ? style.copyWith(
+                          color: colors.mut3,
+                          fontStyle: FontStyle.italic,
+                        )
+                      : style,
+                  // **Never wrapped.** A wrapped line changes a row's height, and
+                  // a virtualised list whose rows change height as they are built
+                  // is one whose scrollbar jumps under your hand. Long lines
+                  // clip; the list scrolls horizontally as a whole.
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                ),
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// The `+` in the left margin.
+///
+/// **Its width is always taken**, hovered or not. Revealing the affordance by
+/// making room for it would shift every line of the diff sideways as the
+/// pointer moved down the file, which is the sort of motion that makes a list
+/// feel broken even when nothing is wrong.
+///
+/// **The strip is always pressable; only the glyph waits for hover.** Gating
+/// the *target* on hover made this the one control on the screen that neither a
+/// widget test nor the drive tools could reach — neither has a hover verb — so
+/// the whole gesture could only ever be verified by a human with a mouse.
+/// Leaving the target live costs nothing: a 20 px margin to the left of the
+/// line numbers is not where a stray click lands, and the Review tab's empty
+/// state names the gesture for anyone who has not found it by moving a pointer.
+class _AddComment extends StatelessWidget {
+  const _AddComment({
+    required this.visible,
+    required this.onTap,
+    required this.style,
+  });
+
+  final bool visible;
+  final VoidCallback? onTap;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    if (onTap == null) return const SizedBox(width: _width);
+    return SizedBox(
+      width: _width,
+      child: Tooltip(
+        message: 'Comment on this line — shift-click to extend a span',
+        waitDuration: const Duration(milliseconds: 600),
+        child: Tappable.builder(
+          onTap: onTap,
+          builder: (context, hovered) => Center(
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                color: !visible && !hovered
+                    ? null
+                    : hovered
+                    ? colors.accentDark
+                    : colors.accent,
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Center(
+                child: Text(
+                  visible || hovered ? '+' : '',
+                  style: style.copyWith(color: colors.primaryOnMenu, height: 1),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static const _width = FwSpacing.lg + 8;
 }
 
 class _Gutter extends StatelessWidget {
