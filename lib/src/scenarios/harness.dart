@@ -19,6 +19,7 @@ import 'package:test_api/src/backend/test.dart';
 
 import '../devices.dart';
 import '../inspect/guest_inspect.dart';
+import 'async_watchdog.dart';
 import 'events.dart';
 import 'fonts.dart';
 import 'motion.dart';
@@ -88,6 +89,11 @@ Future<void> _runHarness(
   Map<String, Future<void> Function(FutureOr<void> Function())> configs,
 ) async {
   var binding = _HarnessBinding();
+  // Declared before anything is, because `scenario()` reads it as it declares.
+  // Without this the harness's deadline is dead letter: `testWidgets` stamps
+  // the binding's ten minutes on every test, `Timeout.apply` honours it, and
+  // a wedged scenario takes ten real minutes to be called wedged.
+  scenarioDefaultTimeout = const Timeout(_defaultScenarioTimeout);
   var fonts = await loadScenarioFonts();
   var profiles = await _probeProfiles(configs);
 
@@ -152,6 +158,13 @@ class _HarnessBinding extends AutomatedTestWidgetsFlutterBinding {
   @override
   TestDefaultBinaryMessenger createBinaryMessenger() =>
       _SpyMessenger(super.createBinaryMessenger());
+
+  // Watched at the binding rather than only at `s.runAsync`, because the whole
+  // point of `s.tester` is that a scenario may reach past us — and a
+  // `tester.runAsync` that wedges takes the run down just as quietly.
+  @override
+  Future<T?> runAsync<T>(Future<T> Function() callback) =>
+      watchRunAsync(() => super.runAsync(callback));
 }
 
 /// Every platform message, as a transition event.
@@ -934,6 +947,9 @@ Future<Map<String, Object?>> _runOne(
   var deadline = live.test.metadata.timeout.apply(_defaultScenarioTimeout);
   var watch = Stopwatch()..start();
   var timedOut = false;
+  // Anything the previous scenario's watchdog left is that scenario's, and it
+  // may not be quoted at this one.
+  scenarioAsyncStall = null;
   try {
     var running = live.run();
     await (deadline == null ? running : running.timeout(deadline));
@@ -975,19 +991,29 @@ Future<Map<String, Object?>> _runOne(
 
 /// How long one scenario may take before the run gives up on it.
 ///
-/// `flutter test`'s own default. It exists because a scenario that never
-/// returns used to take the **whole run** with it: every scenario before it
-/// had written its artifacts and none of them were ever reported, which is a
-/// worse answer than a red scenario by a wide margin.
+/// `package:test`'s own default, and reached through
+/// [scenarioDefaultTimeout] — `testWidgets` stamps the binding's ten minutes
+/// on anything that does not name a timeout, so a runner that wants a deadline
+/// of its own has to say so as the scenario is declared. It exists because a
+/// scenario that never returns used to take the **whole run** with it: every
+/// scenario before it had written its artifacts and none of them were ever
+/// reported, which is a worse answer than a red scenario by a wide margin.
+///
+/// A scenario that genuinely needs longer — a long matrix, a capture-heavy
+/// flow at 3× — says `scenario(timeout: …)`, which the message below offers.
 const _defaultScenarioTimeout = Duration(seconds: 30);
 
-String _timedOutMessage(Duration deadline) =>
-    'the scenario did not finish within ${deadline.inSeconds}s. A scenario '
-    'runs under fake time, so this is not slowness — something is waiting on '
-    'a real future no pump can complete: an `s.tester.runAsync` that never '
-    'returns, or a platform channel with nobody on the other end. The steps '
-    'it captured before it stopped are on disk. Give it longer, or opt out, '
-    'with `scenario(timeout: …)`.';
+String _timedOutMessage(Duration deadline) {
+  var why =
+      scenarioAsyncStall ??
+      'something is waiting on a real future no pump can complete: an '
+          '`s.runAsync` that never returns, or a platform channel with nobody '
+          'on the other end.';
+  return 'the scenario did not finish within ${deadline.inSeconds}s. A '
+      'scenario runs under fake time, so this is not slowness — $why The '
+      'steps it captured before it stopped are on disk. Give it longer, or '
+      'opt out, with `scenario(timeout: …)`.';
+}
 
 String _fileSafe(String name) =>
     name.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
