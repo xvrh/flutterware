@@ -1132,7 +1132,10 @@ class _TopBar extends StatelessWidget {
       child: Row(
         spacing: FwSpacing.md,
         children: [
-          _DevicePicker(device: device),
+          _DevicePicker(
+            device: device,
+            declared: _canvasOf(session)?.devices ?? const [],
+          ),
           _RotateToggle(device: device, orientation: orientation),
           if (device != null)
             Text(
@@ -1457,10 +1460,19 @@ class _RotateToggle extends StatelessWidget {
 /// scale-from-nothing entrance belongs to a floating action button rather than
 /// to a control that drops open under your cursor.
 class _DevicePicker extends StatelessWidget {
-  const _DevicePicker({required this.device});
+  const _DevicePicker({required this.device, this.declared = const []});
 
   /// What is on screen, already resolved. The picker holds nothing.
   final Device? device;
+
+  /// The devices the entry's canvas names, head first.
+  ///
+  /// Offered at the top rather than merely defaulted to, which is the other
+  /// half of "the list is the offered set": a card with a breakpoint in it is
+  /// meant to survive a small phone *and* a large one, and a project that has
+  /// written down which two should not have to find them again in a table of
+  /// every phone ever made.
+  final List<Device> declared;
 
   @override
   Widget build(BuildContext context) {
@@ -1478,6 +1490,14 @@ class _DevicePicker extends StatelessWidget {
           heading: null,
           items: [(value: null, label: 'Fit', detail: 'the panel')],
         ),
+        if (declared.isNotEmpty)
+          (
+            heading: 'Declared',
+            items: [
+              for (var d in declared)
+                (value: d, label: d.label, detail: describeDevice(d)),
+            ],
+          ),
         for (var group in {for (var d in Devices.all) d.group})
           (
             heading: group,
@@ -2300,13 +2320,26 @@ Device? _deviceOf(BuildContext context, CatalogSession session) {
     'for <namespace>.device and nobody writes that.',
   );
   var param = AddressScope.param(context, 'device');
-  // The package's declaration only when the address says nothing at all. `fit`
-  // is something the address *says* — it is how somebody asks for the plain
+  // The declaration only when the address says nothing at all. `fit` is
+  // something the address *says* — it is how somebody asks for the plain
   // rectangle back — so it must not be overridden by the default it is
   // countermanding.
-  if (param == null) return session.defaultDevice;
+  //
+  // The *entry's* declaration, which is why this reads the selection rather
+  // than a field: one package may hold a phone app and a desktop dashboard, and
+  // moving between them has to move the canvas with them.
+  if (param == null) return _canvasOf(session)?.defaultDevice;
   return resolveDevice(param);
 }
+
+/// What the entry on screen is declared to be framed as.
+///
+/// [CatalogSession.selected] rather than `active`: the canvas belongs to what
+/// was asked for, and an entry that will not compile stays selected while the
+/// guest goes on showing whatever it last managed to load. Framing the *old*
+/// entry's picture as the new one would be a canvas that lags a compile.
+PreviewCanvas? _canvasOf(CatalogSession session) =>
+    session.canvasOf(session.selected);
 
 /// Which way up the picked device is, read from the same un-namespaced level as
 /// [_deviceOf] and for the same reason.
@@ -2324,6 +2357,6 @@ ScreenOrientation? _orientationOf(
   // turns the device it was declared for, and a person who has picked a phone
   // should not inherit the landscape the project declared for its tablet.
   return AddressScope.param(context, 'device') == null
-      ? session.defaultOrientation
+      ? _canvasOf(session)?.defaultOrientation
       : null;
 }

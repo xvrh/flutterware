@@ -46,6 +46,15 @@ List<ParameterKnob> knobsFromParameters(
     var defaultValue = parameter.defaultClause?.value;
     var type = parameter.type;
 
+    // `key` is not a knob and never will be, so it is skipped in silence rather
+    // than reported as undrawable. Every demo widget written as a class has one
+    // — and annotating the constructor is what the README recommends for moving
+    // an existing catalog — so the diagnostic was right in the letter and
+    // arrived once per entry. A warning that fires on all of them is how a real
+    // one gets missed. Both spellings: `super.key` writes no type at all, and
+    // `Key? key` writes one no control fits.
+    if (name == 'key' && (type == null || _isKey(type))) continue;
+
     var kind = _kindOf(type);
     if (kind != null) {
       knobs.add(
@@ -138,6 +147,14 @@ class ParameterKnob {
 const _drawable =
     'A knob is a String, bool, int, double, num, or an enum — those are the '
     'controls a panel can draw.';
+
+/// Whether a `key` parameter's written type is Flutter's own.
+///
+/// By name rather than by resolution, like everything else here: this is a
+/// parse. The pair is what earns the silence — a parameter called `key` that is
+/// something else entirely is an undrawable knob like any other, and gets said.
+bool _isKey(TypeAnnotation type) =>
+    type is NamedType && type.name.lexeme == 'Key';
 
 /// The kind a built-in type draws as, or null for anything that is not one.
 ///

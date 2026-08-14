@@ -79,9 +79,21 @@ class Previews extends Plugin {
   final List<PreviewsPackage> packages;
 
   @override
-  Map<String, Object?> get config => {
-    'packages': [for (var p in packages) p.toJson()],
-  };
+  Map<String, Object?> get config {
+    for (var package in packages) {
+      if (package.duplicateCanvasPrefix case var prefix?) {
+        throw StateError(
+          'Package "${package.path}" declares the canvas '
+          '"${prefix.isEmpty ? '<the whole package>' : prefix}" twice. '
+          'Longest prefix wins, so two of one prefix is one rule written '
+          'twice — put its devices in a single PreviewCanvas.',
+        );
+      }
+    }
+    return {
+      'packages': [for (var p in packages) p.toJson()],
+    };
+  }
 }
 
 class PreviewsPackage extends PluginPackage {
@@ -91,7 +103,34 @@ class PreviewsPackage extends PluginPackage {
     this.previewAnnotations,
     this.device,
     this.orientation,
+    this.canvases = const [],
   });
+
+  /// What the previews under each subtree are framed as. See [PreviewCanvas].
+  ///
+  /// **[device] is one of these with no prefix**, which is the whole
+  /// relationship between the two: a project that is all phones says `device:`
+  /// and is done, and a package holding two form factors says where each of
+  /// them lives.
+  ///
+  /// ```dart
+  /// PreviewsPackage(app, directory: 'demo', canvases: [
+  ///   PreviewCanvas('demo/src/mobile', devices: [Devices.iphone16]),
+  ///   PreviewCanvas('demo/src/desktop', devices: [Devices.macbookPro]),
+  /// ])
+  /// ```
+  ///
+  /// **Here rather than one package declaration per form factor**, which is the
+  /// shape everybody reaches for first and the one thing that cannot work: a
+  /// package's path is the identity of its entry in the report, in `fw:///`
+  /// addresses and in the previews compiler's own daemon address, so a second
+  /// declaration of one package is not a second thing anything downstream could
+  /// name. `Flutterware.configure` refuses it outright for that reason.
+  ///
+  /// Longest prefix wins, and two canvases with the same prefix are refused —
+  /// they are one rule written twice, and either resolution drops an answer
+  /// somebody wrote down.
+  final List<PreviewCanvas> canvases;
 
   /// What this package's previews are framed as when a caller names no device
   /// — the panel's canvas, every `screenshot`, `inspect` and `compare`, and the
@@ -142,7 +181,22 @@ class PreviewsPackage extends PluginPackage {
     if (previewAnnotations != null) 'previewAnnotations': previewAnnotations,
     if (device != null) 'device': device!.id,
     if (orientation != null) 'orientation': orientation!.name,
+    if (canvases.isNotEmpty) 'canvases': [for (var c in canvases) c.toJson()],
   };
+
+  /// The prefix this package names twice, or null when each is named once.
+  ///
+  /// Refused rather than resolved, for the reason a duplicate package is: one
+  /// of the two answers is dropped, and nothing says which — least of all the
+  /// output, where a rule that lost quietly looks exactly like a rule that
+  /// never applied.
+  String? get duplicateCanvasPrefix {
+    var seen = <String>{};
+    for (var canvas in canvases) {
+      if (!seen.add(canvas.root)) return canvas.root;
+    }
+    return null;
+  }
 
   static List<PreviewsPackage> each(List<Pkg> packages) => [
     for (var pkg in packages) PreviewsPackage(pkg),

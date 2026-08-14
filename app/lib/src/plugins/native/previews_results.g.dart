@@ -39,6 +39,8 @@ Map<String, dynamic> _$CatalogEntrySummaryToJson(
   'name': instance.name,
   'address': instance.address,
   'group': ?instance.group,
+  'device': ?instance.device,
+  'devices': instance.devices,
 };
 
 Map<String, dynamic> _$CatalogCheckResultToJson(CatalogCheckResult instance) =>
@@ -145,6 +147,7 @@ Map<String, dynamic> _$CatalogAuditEntryToJson(CatalogAuditEntry instance) =>
       'address': instance.address,
       'compiles': instance.compiles,
       'compileError': ?instance.compileError,
+      'device': ?instance.device,
       'errors': instance.errors.map((e) => e.toJson()).toList(),
     };
 

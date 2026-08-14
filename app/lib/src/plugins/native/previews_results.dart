@@ -125,6 +125,8 @@ class CatalogEntrySummary {
     required this.name,
     required this.address,
     this.group,
+    this.device,
+    this.devices = const [],
   });
 
   /// What `screenshot --entry` and `describe --entry` take.
@@ -139,7 +141,19 @@ class CatalogEntrySummary {
   /// declares or derives one.
   final String? group;
 
-  /// `mobile`, `desktop`, `all` — what the demo says it is *for*, when it says.
+  /// What a `screenshot` of this entry that names no device will be framed as
+  /// — the head of [devices], absent when it is the plain rectangle.
+  ///
+  /// **Reported because the canvas is otherwise invisible**, and an invisible
+  /// default is how a picture ends up wrong without looking wrong. A caller
+  /// reading this list can see that one entry is a phone and its neighbour a
+  /// desktop, which is the fact the declaration exists to carry — and hand the
+  /// id straight back as `--device` to ask for the same framing on purpose.
+  final String? device;
+
+  /// Every device the entry's canvas offers, [device] first. Empty when the
+  /// package declared none for this subtree.
+  final List<String> devices;
 
   Map<String, Object?> toJson() => _$CatalogEntrySummaryToJson(this);
 }
@@ -640,6 +654,7 @@ class CatalogAuditEntry {
     required this.address,
     required this.compiles,
     this.compileError,
+    this.device,
     this.errors = const [],
   });
 
@@ -653,6 +668,16 @@ class CatalogAuditEntry {
 
   /// The compiler's diagnostics, verbatim.
   final String? compileError;
+
+  /// The screen it was rendered on — the entry's declared canvas, or whatever
+  /// the call named for the whole run. Absent for the plain rectangle, and for
+  /// an entry that never compiled and so was never framed at all.
+  ///
+  /// **An overflow is a fact about a size.** A row that does not say which one
+  /// cannot be reproduced without guessing the device back, and cannot be told
+  /// apart from a row that was framed wrong — which is the failure the canvas
+  /// declaration exists to prevent and would be invisible here.
+  final String? device;
 
   final List<CatalogRenderError> errors;
 

@@ -231,6 +231,70 @@ void main() {
     });
   });
 
+  /// Declaring one package twice is the first thing anybody tries when they
+  /// want two configurations of it — two preview directories, two canvases —
+  /// and it used to look like it had worked. The path is the identity of a
+  /// per-package entry all the way down (report children, `fw:///` addresses,
+  /// the previews daemon's own address), so the first entry won and its result
+  /// was emitted once per declaration: two blocks, byte-identical, with the
+  /// second declaration's options nowhere.
+  ///
+  /// Refused on **both doors**, like a duplicate plugin id and for the same
+  /// reason — the manifest does not have to have come from
+  /// `Flutterware.configure`.
+  group('a package may be named once per plugin', () {
+    test('the config refuses a second entry for one package', () {
+      expect(
+        () => manifestOf([
+          Previews(
+            packages: [
+              PreviewsPackage(app, directory: 'demo/mobile'),
+              PreviewsPackage(app, directory: 'demo/desktop'),
+            ],
+          ),
+        ]),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('flutterware.previews'), contains('"app"')),
+          ),
+        ),
+      );
+    });
+
+    test('the parser refuses it too', () {
+      expect(
+        () => PluginManifest.fromJson({
+          'version': 1,
+          'plugins': [
+            {
+              'id': 'flutterware.previews',
+              'label': 'Previews',
+              'config': {
+                'packages': [
+                  {'path': 'app', 'directory': 'demo/mobile'},
+                  {'path': 'app', 'directory': 'demo/desktop'},
+                ],
+              },
+            },
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('two plugins naming the same package is not that', () {
+      // The join key is (plugin, path). Previews and Assets both operating on
+      // one package is the ordinary case and always was.
+      var manifest = manifestOf([
+        Previews(packages: [PreviewsPackage(app)]),
+        Assets(packages: AssetsPackage.each([app])),
+      ]);
+      expect(manifest.packages.map((p) => p.path), ['app']);
+    });
+  });
+
   test("a plugin's own per-package options are untouched", () {
     var manifest = manifestOf([
       Previews(packages: [PreviewsPackage(app, directory: 'tool/catalog')]),

@@ -37,6 +37,30 @@ void main() {
     );
   }
 
+  /// The same, off the first constructor rather than the first function —
+  /// which is where `super.key` can appear at all.
+  List<ParameterKnob> constructorKnobsOf(
+    String source, {
+    void Function(String, String)? onSkipped,
+  }) {
+    var path = p.join(root.path, 'main.dart');
+    File(path)
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync(source);
+    var unit = parseString(content: source, throwIfDiagnostics: false).unit;
+    var constructor = unit.declarations
+        .whereType<ClassDeclaration>()
+        .expand((c) => c.body.members)
+        .whereType<ConstructorDeclaration>()
+        .first;
+    return knobsFromParameters(
+      constructor.parameters,
+      file: path,
+      lookup: EnumLookup(),
+      onSkipped: onSkipped,
+    );
+  }
+
   test('draws each built-in type as its own control', () {
     var knobs = knobsOf('''
 Widget demo({
@@ -204,5 +228,53 @@ Widget demo({String? host, Backend? backend}) => Placeholder();
 
   test('no parameters at all is no knobs, not a failure', () {
     expect(knobsOf('Widget demo() => Placeholder();'), isEmpty);
+  });
+
+  /// `key` is on every demo widget written as a class, which is the form the
+  /// README recommends for moving an existing catalog. Reported, it was one
+  /// warning per entry — a real one has nowhere to be seen in that.
+  group('`key` is not a knob, and does not say so', () {
+    test('a `super.key` is skipped in silence', () {
+      var skipped = <String, String>{};
+      var knobs = constructorKnobsOf(
+        'class Demo extends StatelessWidget {\n'
+        "  const Demo({super.key, String label = 'x'});\n"
+        '}',
+        onSkipped: (name, reason) => skipped[name] = reason,
+      );
+
+      expect(knobs.map((k) => k.name), ['label']);
+      expect(skipped, isEmpty);
+    });
+
+    test('an explicit `Key? key` too', () {
+      // The other spelling, and it took a different branch to the same useless
+      // line: `super.key` writes no type, `Key?` writes one no control fits.
+      var skipped = <String, String>{};
+      var knobs = constructorKnobsOf(
+        'class Demo extends StatelessWidget {\n'
+        '  const Demo({Key? key});\n'
+        '}',
+        onSkipped: (name, reason) => skipped[name] = reason,
+      );
+
+      expect(knobs, isEmpty);
+      expect(skipped, isEmpty);
+    });
+
+    test("a `key` of somebody else's type is still reported", () {
+      // The rule is the name *and* the type, because only the pair is Flutter's
+      // own. A parameter called `key` that is something else is an undrawable
+      // knob like any other, and staying quiet about it is what this whole
+      // group is complaining about.
+      var skipped = <String, String>{};
+      var knobs = knobsOf(
+        'Widget demo({Color key = Colors.red}) => Placeholder();',
+        onSkipped: (name, reason) => skipped[name] = reason,
+      );
+
+      expect(knobs, isEmpty);
+      expect(skipped['key'], contains('is `Color`'));
+    });
   });
 }

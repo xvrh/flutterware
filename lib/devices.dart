@@ -7,4 +7,5 @@
 /// so neither has to import this library by name.
 library;
 
+export 'src/canvases.dart';
 export 'src/devices.dart';

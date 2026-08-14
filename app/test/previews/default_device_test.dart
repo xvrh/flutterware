@@ -68,6 +68,163 @@ void main() {
     });
   });
 
+  /// One package, two form factors — a phone app and a desktop dashboard
+  /// sharing a theme and a widget library. There is one canvas per package and
+  /// no way to subdivide it, so whichever is declared frames half the catalog
+  /// on the wrong screen. Declaring the package twice is what everybody tries
+  /// and is refused a layer up: the path is the identity of the entry, so the
+  /// second declaration is not something anything downstream could name.
+  group('a canvas per subtree', () {
+    var canvases = {
+      'canvases': [
+        {
+          'prefix': 'demo/mobile',
+          'devices': ['iphone-16', 'iphone-se'],
+        },
+        {
+          'prefix': 'demo/desktop',
+          'devices': ['macbook-pro'],
+        },
+      ],
+    };
+
+    test('each subtree is framed as its own', () {
+      var core = coreWith(canvases);
+
+      expect(
+        core.defaultFramingFor('.', entry: 'demo/mobile/tile.dart').device?.id,
+        'iphone-16',
+      );
+      expect(
+        core.defaultFramingFor('.', entry: 'demo/desktop/bar.dart').device?.id,
+        'macbook-pro',
+      );
+    });
+
+    test('the head of the list is the default', () {
+      // The rest of it is the offered set — the picker's, and what a sweep
+      // would cross. `ScenarioProfile` says this in the same words one tool
+      // over, deliberately.
+      expect(
+        coreWith(canvases).canvasesFor('.').first.devices.map((d) => d.id),
+        ['iphone-16', 'iphone-se'],
+      );
+    });
+
+    test('an entry under no canvas gets the plain rectangle', () {
+      expect(
+        coreWith(canvases).defaultFramingFor('.', entry: 'demo/shared/x.dart'),
+        (device: null, orientation: null),
+      );
+    });
+
+    test('the longest prefix wins, whatever order they are declared in', () {
+      var core = coreWith({
+        'canvases': [
+          {
+            'prefix': 'demo/mobile/wide',
+            'devices': ['ipad'],
+          },
+          {
+            'prefix': 'demo/mobile',
+            'devices': ['iphone-16'],
+          },
+        ],
+      });
+
+      expect(
+        core.defaultFramingFor('.', entry: 'demo/mobile/tile.dart').device?.id,
+        'iphone-16',
+      );
+      expect(
+        core
+            .defaultFramingFor('.', entry: 'demo/mobile/wide/grid.dart')
+            .device
+            ?.id,
+        'ipad',
+      );
+    });
+
+    test('a prefix matches on segments, not on text', () {
+      // `demo/mobile` must not swallow `demo/mobile_legacy`, which is the one
+      // failure a raw `startsWith` would produce and the one nobody would
+      // suspect from the picture.
+      expect(
+        coreWith(
+          canvases,
+        ).defaultFramingFor('.', entry: 'demo/mobile_legacy/tile.dart').device,
+        isNull,
+      );
+    });
+
+    test('`device:` is the canvas with no prefix', () {
+      // One mechanism underneath, rather than a package default and a set of
+      // subtree ones with a precedence rule between them.
+      var core = coreWith({'device': 'ipad', 'orientation': 'landscape'});
+
+      expect(core.canvasesFor('.').single.root, isEmpty);
+      var framing = core.defaultFramingFor('.', entry: 'anywhere/at/all.dart');
+      expect(framing.device?.id, 'ipad');
+      expect(framing.orientation, ScreenOrientation.landscape);
+    });
+
+    test('a subtree overrides the `device:` above it', () {
+      var core = coreWith({
+        'device': 'iphone-16',
+        'canvases': [
+          {
+            'prefix': 'demo/desktop',
+            'devices': ['macbook-pro'],
+          },
+        ],
+      });
+
+      expect(
+        core.defaultFramingFor('.', entry: 'demo/mobile/tile.dart').device?.id,
+        'iphone-16',
+      );
+      expect(
+        core.defaultFramingFor('.', entry: 'demo/desktop/bar.dart').device?.id,
+        'macbook-pro',
+      );
+    });
+
+    test('an explicit whole-package canvas is the one that stands', () {
+      // Both spellings of the same rule. Merging them would be inventing a
+      // third, and the explicit one is the more specific spelling.
+      var core = coreWith({
+        'device': 'iphone-16',
+        'canvases': [
+          {
+            'prefix': '',
+            'devices': ['ipad'],
+          },
+        ],
+      });
+
+      expect(core.defaultFramingFor('.', entry: 'x.dart').device?.id, 'ipad');
+    });
+
+    test('a device this build never heard of drops out of the list', () {
+      // The config is written against the flutterware the *project* pins, which
+      // can run ahead of the GUI reading its manifest. Fewer devices, never a
+      // panel that will not open.
+      var core = coreWith({
+        'canvases': [
+          {
+            'prefix': 'demo',
+            'devices': ['iphone-99', 'iphone-16'],
+          },
+        ],
+      });
+
+      expect(
+        core.defaultFramingFor('.', entry: 'demo/tile.dart').device?.id,
+        'iphone-16',
+      );
+    });
+  });
+
   group('precedence', () {
     var phone = deviceById('iphone-16')!;
     var tablet = deviceById('ipad')!;

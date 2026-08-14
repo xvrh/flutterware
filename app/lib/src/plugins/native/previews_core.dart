@@ -338,23 +338,56 @@ class PreviewsCore extends PluginCore {
   /// drawing something, not while validating a command line, and a typo that
   /// blanked the panel would be a worse report than one that renders the
   /// rectangle it always used to.
+  ///
+  /// [entry] is the entry's package-relative path, and naming it is what makes
+  /// the answer the *entry's* rather than the package's — a package holding a
+  /// phone app and a desktop dashboard has two answers, and which one applies
+  /// is a question only a path can settle. Omitting it asks what the package
+  /// says with no subtree in mind, which is what `new` and an empty catalog
+  /// want.
   ({Device? device, ScreenOrientation? orientation}) defaultFramingFor(
-    String path,
-  ) {
+    String path, {
+    String? entry,
+  }) {
+    var canvas = canvasFor(canvasesFor(path), entry ?? '');
+    return (
+      device: canvas?.defaultDevice,
+      orientation: canvas?.defaultOrientation,
+    );
+  }
+
+  /// What [path] declares its subtrees are framed as, longest prefix last to
+  /// matter and `canvasFor` deciding between them.
+  ///
+  /// **`device:` is desugared here**, into the canvas with no prefix — so there
+  /// is one mechanism underneath rather than a per-package default *and* a set
+  /// of per-subtree ones with a precedence rule between them. A package that
+  /// declares both gets the explicit whole-package canvas: it is the more
+  /// specific spelling of the same thing, and silently merging the two would be
+  /// inventing a third rule.
+  List<PreviewCanvas> canvasesFor(String path) {
     for (var config in host.packageConfigs) {
       if (config['path'] != path) continue;
-      return (
-        device: switch (config['device']) {
-          String id => deviceById(id),
-          _ => null,
-        },
-        orientation: switch (config['orientation']) {
-          String name => orientationById(name),
-          _ => null,
-        },
-      );
+      var declared = [
+        for (var raw in (config['canvases'] as List? ?? const []))
+          ?PreviewCanvas.fromJson(raw),
+      ];
+      if (declared.any((canvas) => canvas.root.isEmpty)) return declared;
+      var device = switch (config['device']) {
+        String id => deviceById(id),
+        _ => null,
+      };
+      var orientation = switch (config['orientation']) {
+        String name => orientationById(name),
+        _ => null,
+      };
+      if (device == null && orientation == null) return declared;
+      return [
+        ...declared,
+        PreviewCanvas('', devices: [?device], orientations: [?orientation]),
+      ];
     }
-    return (device: null, orientation: null);
+    return const [];
   }
 
   /// The annotation names that mark an entry in [path], without their `@`.
@@ -993,6 +1026,30 @@ class PreviewsCore extends PluginCore {
                 'worktree-relative; both are accepted because an entry id is '
                 'the first and a shell tab-completes the second.',
           ),
+          ActionParameter(
+            'device',
+            'Device',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description:
+                'Render every entry as this device instead of the canvas each '
+                'one declares — how to ask whether the whole catalog survives a '
+                'small phone. Omitted is the right answer for CI: each entry is '
+                'framed as its own subtree declared, and an entry under no '
+                'canvas gets the plain rectangle.',
+            options: [
+              for (var id in deviceIds)
+                ActionOption(id, label: deviceById(id)?.label ?? id),
+            ],
+          ),
+          ActionParameter(
+            'orientation',
+            'Orientation',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: orientationParameterDoc,
+            options: [for (var id in orientationIds) ActionOption(id)],
+          ),
         ],
       ),
       PluginAction(
@@ -1549,6 +1606,9 @@ class PreviewsCore extends PluginCore {
       );
     }
     var scan = _scans[path];
+    // Resolved once for the package rather than per entry: `canvasesFor` walks
+    // the package configs, and a list is short where an entry list is not.
+    var canvases = canvasesFor(path);
     return CatalogPackageEntries(
       path: path,
       directory: rootFor(path),
@@ -1558,17 +1618,37 @@ class PreviewsCore extends PluginCore {
                 '${catalogAuthoringHint(rootFor(path))}',
       entries: [
         for (var entry in scan?.entries ?? const <CatalogEntry>[])
-          CatalogEntrySummary(
-            id: entry.id,
-            name: entry.name,
-            group: entry.group,
-            // What every other surface identifies this by — hand it straight
-            // back to `screenshot`, or later to `show`.
-            address: '${addressFor(path, entry.id)}',
-          ),
+          _summarise(path, entry, canvases),
       ],
       diagnostics: [
         for (var diagnostic in scan?.diagnostics ?? const []) '$diagnostic',
+      ],
+    );
+  }
+
+  /// One entry, as the `entries` action reports it.
+  ///
+  /// The canvas is resolved here rather than left out because an unreported
+  /// default is an invisible one: two entries in one package can be a phone and
+  /// a desktop now, and a caller that cannot see which is which takes the wrong
+  /// picture without anything looking wrong. [canvases] is passed in because
+  /// the list is the package's and this runs once per entry.
+  CatalogEntrySummary _summarise(
+    String path,
+    CatalogEntry entry,
+    List<PreviewCanvas> canvases,
+  ) {
+    var canvas = canvasFor(canvases, entry.path);
+    return CatalogEntrySummary(
+      id: entry.id,
+      name: entry.name,
+      group: entry.group,
+      // What every other surface identifies this by — hand it straight back to
+      // `screenshot`, or later to `show`.
+      address: '${addressFor(path, entry.id)}',
+      device: canvas?.defaultDevice?.id,
+      devices: [
+        for (var device in canvas?.devices ?? const <Device>[]) device.id,
       ],
     );
   }
@@ -1675,6 +1755,24 @@ class PreviewsCore extends PluginCore {
     );
   }
 
+  /// How one entry of [path] is framed during a whole-catalog run.
+  ///
+  /// Through the same funnel `screenshot` and `inspect` go through, and per
+  /// entry rather than per run: a `device` in [arguments] wins for the whole
+  /// catalog — that is how you ask whether everything survives a small phone —
+  /// and where it is absent each entry falls back to the canvas its own subtree
+  /// declared. An entry under none gets the plain rectangle, which is what
+  /// every entry used to get unconditionally.
+  @visibleForTesting
+  (String?, String?, CaptureViewport) auditFramingFor(
+    String path,
+    String entryPath,
+    Map<String, Object?> arguments,
+  ) => framingFor(
+    arguments,
+    fallback: defaultFramingFor(path, entry: entryPath),
+  );
+
   /// Every entry in every requested package, compiled and rendered.
   Future<CatalogAuditResult> _audit(Map<String, Object?> arguments) async {
     var paths = _requestedPackages(arguments);
@@ -1684,6 +1782,11 @@ class PreviewsCore extends PluginCore {
     if (narrowTo != null && narrowTo is! String) {
       throw ArgumentError.value(narrowTo, 'path', 'must be a path');
     }
+
+    // Checked here and discarded, before anything is compiled — a misspelt
+    // device is the same class of typo as a misspelt path below, and an audit
+    // is the longest thing in this plugin to discover one halfway through.
+    framingFor(arguments);
 
     // Resolved before anything is compiled, so a typo costs no build. An empty
     // match is refused rather than audited: `checked: 0, broken: 0` is what a
@@ -1719,6 +1822,8 @@ class PreviewsCore extends PluginCore {
           entryIds: only,
           onEntry: (done, total, entryId) =>
               _setBusy(path, Status.info('$done of $total · $entryId')),
+          viewportFor: (entry) =>
+              auditFramingFor(path, entry.path, arguments).$3,
         );
       } catch (e) {
         // Per package, exactly as `check` does it: one package that cannot
@@ -1748,6 +1853,11 @@ class PreviewsCore extends PluginCore {
             id: entry.id,
             address: '${addressFor(path, entry.id)}',
             compiles: true,
+            // Which screen the overflow was on. An audit row that does not say
+            // is unactionable twice over: a reader cannot tell whether the
+            // entry was framed as its declaration intended, and cannot
+            // reproduce the failure without guessing the device back.
+            device: auditFramingFor(path, entry.path, arguments).$1,
             errors: [for (var e in report.errors) _asRenderError(e)],
           ),
         );
@@ -1809,6 +1919,16 @@ class PreviewsCore extends PluginCore {
     options: knob.options,
   );
 
+  /// Where [entryId]'s file is, relative to its package — what a canvas prefix
+  /// is matched against. Null when the scan does not know it, which leaves
+  /// [defaultFramingFor] asking what the package says with no subtree in mind.
+  String? _entryPathOf(String packagePath, String entryId) {
+    for (var entry in _scans[packagePath]?.entries ?? const <CatalogEntry>[]) {
+      if (entry.id == entryId) return entry.path;
+    }
+    return null;
+  }
+
   /// Which declared package holds [entryId].
   String _packageHolding(String entryId) => packages.firstWhere(
     (path) => _scans[path]?.entries.any((e) => e.id == entryId) ?? false,
@@ -1859,7 +1979,10 @@ class PreviewsCore extends PluginCore {
     // twice is a few string splits against a compile and a render.
     want = _InspectRequest.of(
       arguments,
-      fallback: defaultFramingFor(packagePath),
+      fallback: defaultFramingFor(
+        packagePath,
+        entry: _entryPathOf(packagePath, want.entryId),
+      ),
     );
 
     var address = _pixelAddress(
@@ -2261,7 +2384,7 @@ class PreviewsCore extends PluginCore {
 
     var (deviceId, orientationId, viewport) = framingFor(
       arguments,
-      fallback: defaultFramingFor(packagePath),
+      fallback: defaultFramingFor(packagePath, entry: entry.path),
     );
 
     var knobs = parsePairs(arguments['knobs']);

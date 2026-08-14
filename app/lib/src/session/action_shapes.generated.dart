@@ -539,6 +539,13 @@ final resultShapes = <String, ResultShape>{
         'doc': 'The compiler\'s diagnostics, verbatim.',
       },
       <String, Object?>{
+        'name': 'device',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The screen it was rendered on — the entry\'s declared canvas, or whatever the call named for the whole run.',
+      },
+      <String, Object?>{
         'name': 'errors',
         'type': 'List<CatalogRenderError>',
         'shape': <String, Object?>{
@@ -609,6 +616,13 @@ final resultShapes = <String, ResultShape>{
               'type': 'String',
               'optional': true,
               'doc': 'The compiler\'s diagnostics, verbatim.',
+            },
+            <String, Object?>{
+              'name': 'device',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The screen it was rendered on — the entry\'s declared canvas, or whatever the call named for the whole run.',
             },
             <String, Object?>{
               'name': 'errors',
@@ -760,6 +774,19 @@ final resultShapes = <String, ResultShape>{
                     'optional': true,
                     'doc':
                         'One tree level between the directory and the leaf, when the entry declares or derives one.',
+                  },
+                  <String, Object?>{
+                    'name': 'device',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'What a `screenshot` of this entry that names no device will be framed as — the head of [devices], absent when it is the plain rectangle.',
+                  },
+                  <String, Object?>{
+                    'name': 'devices',
+                    'type': 'List<String>',
+                    'doc':
+                        'Every device the entry\'s canvas offers, [device] first.',
                   },
                 ],
               },
@@ -930,6 +957,18 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc':
             'One tree level between the directory and the leaf, when the entry declares or derives one.',
+      },
+      <String, Object?>{
+        'name': 'device',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What a `screenshot` of this entry that names no device will be framed as — the head of [devices], absent when it is the plain rectangle.',
+      },
+      <String, Object?>{
+        'name': 'devices',
+        'type': 'List<String>',
+        'doc': 'Every device the entry\'s canvas offers, [device] first.',
       },
     ],
   }),
@@ -1450,6 +1489,18 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
               'doc':
                   'One tree level between the directory and the leaf, when the entry declares or derives one.',
+            },
+            <String, Object?>{
+              'name': 'device',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'What a `screenshot` of this entry that names no device will be framed as — the head of [devices], absent when it is the plain rectangle.',
+            },
+            <String, Object?>{
+              'name': 'devices',
+              'type': 'List<String>',
+              'doc': 'Every device the entry\'s canvas offers, [device] first.',
             },
           ],
         },

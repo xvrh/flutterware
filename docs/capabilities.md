@@ -1708,6 +1708,8 @@ packages: List<CatalogPackageEntries>
     name: String
     address: String   # The `Address`, rendered — hand it back to `screenshot`, or later `show`.
     group: String?   # One tree level between the directory and the leaf, when the entry declares or derives one.
+    device: String?   # What a `screenshot` of this entry that names no device will be framed as — the head of [devices], absent when it is the plain rectangle.
+    devices: List<String>   # Every device the entry's canvas offers, [device] first.
   diagnostics: List<String>   # Discovery's complaints — a duplicate id, an uncallable target.
   error: String?   # Set when the scan failed, in which case [entries] is empty and means nothing.
   authoring: String?   # How to write the first demo.
@@ -1944,7 +1946,7 @@ next: String?   # One line naming what else can be asked of this frame.
 Render the whole catalog and report everything that does not compile or does not render — one warm guest, one answer for the repo
 
 ```sh
-fw run previews audit [--package=…] [--path=…]
+fw run previews audit [--package=…] [--path=…] [--device=…] [--orientation=…]
 ```
 
 Returns `CatalogAuditResult`:
@@ -1957,6 +1959,7 @@ entries: List<CatalogAuditEntry>   # Only the ones with something to say.
   address: String
   compiles: bool   # False when the compiler quarantined it.
   compileError: String?   # The compiler's diagnostics, verbatim.
+  device: String?   # The screen it was rendered on — the entry's declared canvas, or whatever the call named for the whole run.
   errors: List<CatalogRenderError>
     exception: String
     library: String?   # `widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.
@@ -1971,6 +1974,8 @@ unreachable: List<CatalogAuditFailure>   # Packages that could not be audited at
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 | `path` | string | no | — | A directory or one file — `demo/settings`, `demo/settings/tile.dart`. Either package-relative or worktree-relative; both are accepted because an entry id is the first and a shell tab-completes the second. |
+| `device` | choice | no | — | Render every entry as this device instead of the canvas each one declares — how to ask whether the whole catalog survives a small phone. Omitted is the right answer for CI: each entry is framed as its own subtree declared, and an entry under no canvas gets the plain rectangle. |
+| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height and the safe areas become the ones that device declares for landscape, which is not a permutation of the portrait four — a phone loses its status bar rather than moving it. Ignored by anything that cannot turn, which is every desktop size and `fit`. |
 
 #### `build-web` — Build a web page
 
