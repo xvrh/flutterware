@@ -25,6 +25,22 @@ import 'worktree_discovery.dart';
 
 final _logger = Logger('shell');
 
+/// What the rail is worth, in the app's own pixels.
+///
+/// [defaultSidebarWidth] is what it has always been. [minSidebarWidth] is where
+/// a row stops saying anything at all: the name ellipsises long before this and
+/// that is allowed — a rail dragged this narrow is a rail somebody is using as a
+/// strip of icons, and the point of the floor is only that the rows keep their
+/// geometry. [maxSidebarWidth] is where it stops being a rail.
+///
+/// Nothing here is clamped against the window. A wider rail is a wider window
+/// minimum, and a window that cannot hold the minimum scales — which is the
+/// answer this app gives to every other shortage of room, and the reason a drag
+/// keeps working when it is already scaling.
+const defaultSidebarWidth = 232.0;
+const minSidebarWidth = 100.0;
+const maxSidebarWidth = 400.0;
+
 /// Why a worktree could not be opened. Kept per worktree so a broken config in
 /// one checkout never takes down the shell.
 class WorktreeError {
@@ -552,6 +568,49 @@ class ShellController extends ChangeNotifier {
     _sidebarVisible = !_sidebarVisible;
     notifyListeners();
   }
+
+  /// How wide the rail is drawn, in the app's own pixels.
+  ///
+  /// A preference like [sidebarVisible], and held the same way: about the
+  /// window, not the worktree, and not written to disk. Dragging it wider raises
+  /// the window minimum with it, and a window already below that minimum simply
+  /// scales a little further — the drag is never refused. It used to be clamped
+  /// to the room the pane was not using, which meant a scaled window, where
+  /// there is none, could not be resized at all.
+  double get sidebarWidth => _sidebarWidth;
+  var _sidebarWidth = defaultSidebarWidth;
+
+  /// [width] clamped to what a rail can be, and nothing else.
+  void resizeSidebar(double width) {
+    var next = width.clamp(minSidebarWidth, maxSidebarWidth).toDouble();
+    if (next == _sidebarWidth) return;
+    _sidebarWidth = next;
+    notifyListeners();
+  }
+
+  /// True while a drag on the seam is in flight.
+  ///
+  /// The window minimum is animated, which is what stops ⌘B from arriving as a
+  /// 20% jump — but a drag is already continuous, and tweening towards a target
+  /// that moves every frame turns the pointer's own gesture into something that
+  /// lags behind it. So the shell says when it is dragging and the animation
+  /// stands down.
+  bool get sidebarResizing => _sidebarResizing;
+  var _sidebarResizing = false;
+
+  void setSidebarResizing(bool value) {
+    if (value == _sidebarResizing) return;
+    _sidebarResizing = value;
+    notifyListeners();
+  }
+
+  /// Whether the rail is in the layout: the window preference, *and* whether
+  /// the space being shown has a rail to give at all.
+  ///
+  /// Read by the row that lays the rail out and by the window minimum both, so
+  /// the two cannot drift — a rail that is not drawn must not be paid for in
+  /// the width the shell refuses to go below.
+  bool get railInFlow => sidebarVisible && !inWorktreesSpace;
 
   Worktree? _worktreeAt(String path) =>
       _worktrees.where((w) => w.path == path).firstOrNull;

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -44,8 +45,20 @@ const launchFallbackBannerKey = Key('launch-fallback-banner');
 /// The band button that opens the config screen.
 const configButtonKey = Key('config-button');
 
-/// Width the macOS traffic lights occupy; band content insets past them.
+/// Everything in the band that has to clear the traffic lights. Keyed so a test
+/// can measure where it starts, which is the whole of that arrangement.
+const bandContentKey = Key('shell.band-content');
+
+/// The box the macOS traffic lights occupy, **in real window pixels**; band
+/// content insets past it.
+///
+/// Real pixels, not the band's own, because the buttons belong to the window
+/// rather than to the app: they are the same size at every scale [FittedApp]
+/// applies. Divided by [AppScale.of] wherever it is used — reserving 78 of the
+/// app's pixels while the app is at 0.7 reserves 55 of the window's, and the
+/// first tab draws under the close button.
 const _trafficLightInset = 78.0;
+const _trafficLightHeight = 28.0;
 const _bandHeight = 40.0;
 
 /// How far tabs sit below the top of the band. Everything else in the band
@@ -54,7 +67,26 @@ const _tabInset = 6.0;
 
 /// How much of a tab a worktree's name may claim before it is ellipsised.
 const _tabLabelMaxWidth = 180.0;
-const _sidebarWidth = 232.0;
+
+/// How wide the strip you can grab to resize the rail is. Wider than the seam
+/// it sits on, because a 1px target is a 1px target.
+const _railHandleWidth = 8.0;
+
+/// The chevron that shows and hides the rail, and how far into the pane the
+/// strip that offers it reaches once the rail is gone.
+const _railToggleSize = 20.0;
+const _railPeekWidth = 20.0;
+
+/// The smallest window this layout lays out for: the pane's floor, plus the
+/// rail as it is currently drawn.
+///
+/// **A sum, not a constant.** The pane is what has a minimum — the dependencies
+/// table is the thing that stops fitting — and the rail is chrome that happens
+/// to sit next to it. Charging for a rail either way is what made ⌘B stop
+/// short: it gave the panel 232px of room and then went on scaling the window
+/// as if it had not.
+Size shellMinimumSize({required double railWidth}) =>
+    Size(shellPaneMinimumSize.width + railWidth, shellPaneMinimumSize.height);
 
 class ShellApp extends StatelessWidget {
   const ShellApp(
@@ -85,7 +117,23 @@ class ShellApp extends StatelessWidget {
     // introduces its own. A capture sets its size *below* this, inside
     // `builder`, which is what we want: a screenshot asked for exact pixels
     // should get them rather than the window's scale factor.
-    return FittedApp(
+    //
+    // The shell is listened to *here* rather than only inside [ShellView],
+    // because the minimum now depends on whether the rail is drawn. The app
+    // goes through as `child`, so what a ⌘B rebuilds is this one widget and its
+    // `Size` — not the `MaterialApp`, its navigator, and every route in it.
+    return ListenableBuilder(
+      listenable: shell,
+      builder: (context, child) => FittedApp(
+        minimumSize: shellMinimumSize(
+          railWidth: shell.railInFlow ? shell.sidebarWidth : 0,
+        ),
+        // A drag is its own animation; see [ShellController.sidebarResizing].
+        duration: shell.sidebarResizing
+            ? Duration.zero
+            : const Duration(milliseconds: 150),
+        child: child!,
+      ),
       child: MaterialApp(
         title: 'Flutterware',
         theme: appTheme,
@@ -213,9 +261,26 @@ class ShellView extends StatelessWidget {
                         // no session to list plugins from. Writing
                         // `sidebarVisible = false` on arrival would clobber a
                         // window preference the user set, and not give it back.
-                        if (shell.sidebarVisible && !shell.inWorktreesSpace)
-                          _Sidebar(shell),
-                        Expanded(child: _Panel(shell)),
+                        if (shell.railInFlow) _Sidebar(shell),
+                        Expanded(
+                          // The peek strip is over the panel rather than beside
+                          // it: a column in the flow would take width from
+                          // every pane for the sake of a control that is only
+                          // wanted when the rail is gone. Always mounted, so
+                          // showing and hiding the rail does not change the
+                          // shape of the tree the panel is in.
+                          child: Stack(
+                            children: [
+                              Positioned.fill(child: _Panel(shell)),
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: _RailPeek(shell),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -239,8 +304,20 @@ class _Band extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+
+    // What the traffic lights cost *this* band, at whatever the app is scaled
+    // to. Both are the identity at 1.0, so a window that is not scaling gets
+    // exactly the layout it always had.
+    var scale = AppScale.of(context);
+    var lightsInset = _trafficLightInset / scale;
+    // The band is tall enough for them on its own until about 0.7; below that
+    // it grows downwards rather than letting the tabs rise into the buttons.
+    // The extra is padding above the content, so a tab keeps the height the
+    // rest of the band is measured against.
+    var lightsDrop = max(0.0, _trafficLightHeight / scale - _bandHeight);
+
     return Container(
-      height: _bandHeight,
+      height: _bandHeight + lightsDrop,
       color: colors.panel,
       child: Stack(
         children: [
@@ -261,7 +338,7 @@ class _Band extends StatelessWidget {
           ),
           Positioned.fill(
             child: Padding(
-              padding: const EdgeInsets.only(left: _trafficLightInset),
+              padding: EdgeInsets.only(left: lightsInset, top: lightsDrop),
               child: _bandContent(context),
             ),
           ),
@@ -272,13 +349,13 @@ class _Band extends StatelessWidget {
 
   Widget _bandContent(BuildContext context) {
     return Row(
+      key: bandContentKey,
       children: [
-        // Where a desktop app puts it: in the chrome, always in the same
-        // place, so the rail can go to nothing at all rather than leaving a
-        // strip behind — a panel that hides its own list would otherwise
-        // leave two empty strips side by side.
-        _SidebarButton(shell),
-        const Gap(FwSpacing.xs),
+        // The rail's own toggle used to be here, first thing after the traffic
+        // lights. It is on the rail's seam now — see [_RailToggle] — because a
+        // control in the chrome that acts on the pane below it reads as chrome
+        // and gets scanned past. What is left here is what is genuinely about
+        // the window: which project, and which checkouts are open.
         _ProjectFaceChip(shell),
         _ExplorerTab(shell),
         Expanded(
@@ -307,26 +384,42 @@ class _Band extends StatelessWidget {
   }
 }
 
-/// Shows and hides the plugin rail.
-class _SidebarButton extends StatelessWidget {
-  const _SidebarButton(this.shell);
+/// Shows and hides the plugin rail, from the edge the rail actually has.
+///
+/// Appears on hover — of the seam while the rail is there, of the strip where
+/// the rail was once it is gone — so the resting state is a window with no
+/// controls in it that are not doing anything. ⌘B does the same thing without
+/// finding either.
+class _RailToggle extends StatelessWidget {
+  const _RailToggle(this.shell);
 
   final ShellController shell;
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      icon: Icon(
-        shell.sidebarVisible ? Icons.chevron_left : Icons.chevron_right,
-        size: FwIconSize.md,
-        color: context.colors.mut,
-      ),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-      tooltip:
-          '${shell.sidebarVisible ? 'Hide' : 'Show'} the sidebar '
+    var colors = context.colors;
+    var showing = shell.sidebarVisible;
+    return Tooltip(
+      message:
+          '${showing ? 'Hide' : 'Show'} the sidebar '
           '(${Platform.isMacOS ? '⌘B' : 'Ctrl+B'})',
-      onPressed: shell.toggleSidebar,
+      child: _Hoverable(
+        onTap: shell.toggleSidebar,
+        builder: (context, hovered) => Container(
+          width: _railToggleSize,
+          height: _railToggleSize,
+          decoration: BoxDecoration(
+            color: colors.panel,
+            border: Border.all(color: colors.line),
+            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          ),
+          child: Icon(
+            showing ? Icons.chevron_left : Icons.chevron_right,
+            size: FwIconSize.sm,
+            color: hovered ? colors.accent : colors.mut,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1271,12 +1364,30 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        _railBody(context),
+        // On the seam rather than beside it, so the rail loses no width to
+        // something you can only see by looking for it. As wide as the chevron
+        // it holds — the draggable part inside it is the seam alone.
+        Positioned(
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: _railToggleSize,
+          child: _RailHandle(shell),
+        ),
+      ],
+    );
+  }
+
+  Widget _railBody(BuildContext context) {
     var colors = context.colors;
     var worktree = shell.selected;
     var session = shell.selectedSession;
     return Container(
       key: sidebarKey,
-      width: _sidebarWidth,
+      width: shell.sidebarWidth,
       decoration: BoxDecoration(
         color: colors.panel,
         border: Border(right: BorderSide(color: colors.line)),
@@ -1350,6 +1461,116 @@ class _Sidebar extends StatelessWidget {
                   ],
               ],
             ),
+    );
+  }
+}
+
+/// The rail's own edge: pull it to resize, and it is where the toggle lives.
+///
+/// The strip is always there and always drags; the chevron only appears under
+/// the pointer. Tapping the strip itself does nothing — a divider that
+/// collapsed the pane on a stray click would be a trap.
+class _RailHandle extends StatefulWidget {
+  const _RailHandle(this.shell);
+
+  final ShellController shell;
+
+  @override
+  State<_RailHandle> createState() => _RailHandleState();
+}
+
+class _RailHandleState extends State<_RailHandle> {
+  var _hovered = false;
+
+  ShellController get shell => widget.shell;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      // Translucent, or this strip would eat the clicks of the rail rows it
+      // overlaps — it is as wide as the chevron it has to hold, not as wide as
+      // the seam.
+      hitTestBehavior: HitTestBehavior.translucent,
+      child: Stack(
+        children: [
+          // The seam itself: where the resize cursor is, and the only part that
+          // drags. The rest of this strip is the chevron's room.
+          Positioned(
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: _railHandleWidth,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragStart: (_) => shell.setSidebarResizing(true),
+                // `delta` is in this widget's own coordinates, so it is already
+                // in the app's scaled pixels — the rail follows the pointer at
+                // the same rate whatever the window is doing.
+                onHorizontalDragUpdate: (details) =>
+                    shell.resizeSidebar(shell.sidebarWidth + details.delta.dx),
+                onHorizontalDragEnd: (_) => shell.setSidebarResizing(false),
+                onHorizontalDragCancel: () => shell.setSidebarResizing(false),
+                // Straight back to 232, for a rail dragged somewhere silly.
+                onDoubleTap: () => shell.resizeSidebar(defaultSidebarWidth),
+              ),
+            ),
+          ),
+          // Near the top rather than centred: the same place every time, and
+          // the same place the peek strip puts it once the rail is gone.
+          if (_hovered)
+            Positioned(top: FwSpacing.lg, right: 0, child: _RailToggle(shell)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Where the rail was, once it is hidden: a strip along the pane's left edge
+/// that offers the way back when you go looking for it.
+///
+/// Nothing at all when there is a rail, or when the space has none to give — the
+/// worktrees explorer is about every checkout and has no plugins to list, so an
+/// affordance there would promise something that cannot happen.
+class _RailPeek extends StatefulWidget {
+  const _RailPeek(this.shell);
+
+  final ShellController shell;
+
+  @override
+  State<_RailPeek> createState() => _RailPeekState();
+}
+
+class _RailPeekState extends State<_RailPeek> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    var shell = widget.shell;
+    if (shell.sidebarVisible || shell.inWorktreesSpace) {
+      return const SizedBox.shrink();
+    }
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      // Translucent, so the panel underneath still takes every click that is
+      // not the chevron's: this strip is a place to look, not a margin.
+      hitTestBehavior: HitTestBehavior.translucent,
+      child: SizedBox(
+        width: _railPeekWidth,
+        child: _hovered
+            ? Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: FwSpacing.lg),
+                  child: _RailToggle(shell),
+                ),
+              )
+            : null,
+      ),
     );
   }
 }

@@ -48,7 +48,7 @@ const _rows = [
 
 /// The seven columns of the real dependencies table, with the same declared
 /// widths — 160 + 110 + 120 + 120 + 110 + 90 + 90 = 800, which is where
-/// `shellMinimumSize` comes from.
+/// `shellPaneMinimumSize` comes from.
 List<FwTableColumn<_Row>> _columns(BuildContext context) => [
   FwTableColumn(
     label: 'Package',
@@ -109,8 +109,8 @@ Widget tableRows() => const _Table(rows: _rows);
 
 /// **The tight case, at the one width that matters.**
 ///
-/// 800px is the whole content pane at [shellMinimumSize] — the rail and both
-/// gutters removed. Below the minimum the shell scales rather than narrowing,
+/// 800px is the whole content pane at `shellPaneMinimumSize` — both gutters
+/// removed. Below the minimum the shell scales rather than narrowing,
 /// so this is not "a small size", it is *the* small size and there is exactly
 /// one of them. Seven columns at their declared minimums come to exactly 800,
 /// so this entry sits on the knife edge deliberately: anything that widens a

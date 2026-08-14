@@ -2,19 +2,26 @@ import 'dart:math';
 
 import 'package:flutter/widgets.dart';
 
-/// The smallest window the shell lays out for.
+/// The narrowest pane the shell lays out for, and the floor every window
+/// minimum is built up from.
 ///
 /// **Derived, not chosen.** The densest thing in the app is the dependencies
 /// table, whose seven columns declare 800px of minimum width between them
-/// (160 + 110 + 120 + 120 + 110 + 90 + 90). Add the sidebar and the panel
-/// gutter either side of it — 232 + 24 + 800 + 24 — and 1080 is the width at
-/// which the widest panel still fits without scrolling inside itself. The
-/// height is what leaves the plugin rail room for its entries and their
-/// sub-entries without scrolling.
+/// (160 + 110 + 120 + 120 + 110 + 90 + 90). Add the panel's own gutter either
+/// side of it — 24 + 800 + 24 — and 848 is the width at which the widest panel
+/// still fits without scrolling inside itself. The height is what leaves the
+/// plugin rail room for its entries and their sub-entries without scrolling.
+///
+/// **A window minimum is this plus whatever chrome is in the flow beside it** —
+/// the rail's 232 when the rail is drawn, nothing when it is not. Only the
+/// shell knows which, so the sum is made there: `shellMinimumSize` in
+/// `shell_view.dart`. Counting the rail while it is hidden is what used to make
+/// ⌘B, and the whole worktrees space that never draws a rail at all, scale at a
+/// width they had the room for.
 ///
 /// Narrow the table's columns and this can narrow with it. It is one number,
 /// and it is deliberately the only one.
-const shellMinimumSize = Size(1080, 700);
+const shellPaneMinimumSize = Size(848, 700);
 
 /// Lays its [child] out at [minimumSize] and scales it down to fit whenever the
 /// window is smaller, so a shrunken window keeps working rather than
@@ -42,19 +49,47 @@ const shellMinimumSize = Size(1080, 700);
 /// `MediaQuery.sizeOf` kept reporting the real window, and anything that
 /// positions itself against the viewport — a centred overlay, a width clamped
 /// to the screen — would be measured against a box it is not in.
+///
+/// [minimumSize] may change while the app is running — the shell drops the
+/// rail's share of it whenever the rail leaves the layout — so a change is
+/// animated over [duration]. Hiding the rail at a 900px window takes the scale
+/// from 0.83 to 1.0, and 20% arriving in one frame reads as a glitch where a
+/// short zoom reads as the room you just asked for. Above the minimum both ends
+/// scale at 1.0, so the tween is invisible in the ordinary case rather than
+/// something every window pays for.
 class FittedApp extends StatelessWidget {
   const FittedApp({
     super.key,
     required this.child,
-    this.minimumSize = shellMinimumSize,
+    this.minimumSize = shellPaneMinimumSize,
+    this.duration = const Duration(milliseconds: 150),
   });
 
   final Widget child;
 
   final Size minimumSize;
 
+  /// How long a change of [minimumSize] takes to land.
+  final Duration duration;
+
   @override
   Widget build(BuildContext context) {
+    return TweenAnimationBuilder<Size?>(
+      tween: SizeTween(end: minimumSize),
+      duration: duration,
+      curve: Curves.easeOut,
+      // The app rides through as `child`: an animating minimum re-lays it out,
+      // which is the point, and must not rebuild it, which would be a fresh
+      // widget tree every frame of the zoom.
+      child: child,
+      builder: (context, minimum, child) =>
+          _fit(context, minimum ?? minimumSize, child!),
+    );
+  }
+
+  /// Lays [child] out at [minimum] and scales it to fit the window, where
+  /// [minimum] is wherever the tween has got to rather than the target.
+  Widget _fit(BuildContext context, Size minimum, Widget child) {
     var media = MediaQuery.of(context);
     var size = media.size;
 
@@ -64,10 +99,7 @@ class FittedApp extends StatelessWidget {
         ? 1.0
         : min(
             1.0,
-            min(
-              size.width / minimumSize.width,
-              size.height / minimumSize.height,
-            ),
+            min(size.width / minimum.width, size.height / minimum.height),
           );
 
     // Keeps the window's aspect ratio, so `BoxFit.contain` resolves to exactly
@@ -76,9 +108,36 @@ class FittedApp extends StatelessWidget {
     var laidOut = size / scale;
     return MediaQuery(
       data: media.copyWith(size: laidOut),
-      child: FittedBox(
-        child: SizedBox.fromSize(size: laidOut, child: child),
+      child: AppScale(
+        scale: scale,
+        child: FittedBox(
+          child: SizedBox.fromSize(size: laidOut, child: child),
+        ),
       ),
     );
   }
+}
+
+/// What [FittedApp] is currently scaling the app by, for the few things that
+/// must *not* scale with it.
+///
+/// The platform's own chrome is drawn on the real window at a real size: the
+/// macOS traffic lights are the same 78 logical pixels wide whether the app
+/// beneath them is at 1.0 or at 0.7. Anything reserving room for them has to
+/// state the measurement in real pixels and divide it by [of], or the band
+/// reserving 78 of its own shrunken pixels ends up drawing its tabs underneath
+/// buttons it thought it had cleared.
+///
+/// 1.0 wherever there is no [FittedApp] above — a preview, a test, a panel
+/// mounted on its own — so a caller never has to ask whether it is in the app.
+class AppScale extends InheritedWidget {
+  const AppScale({super.key, required this.scale, required super.child});
+
+  final double scale;
+
+  static double of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppScale>()?.scale ?? 1.0;
+
+  @override
+  bool updateShouldNotify(AppScale oldWidget) => oldWidget.scale != scale;
 }

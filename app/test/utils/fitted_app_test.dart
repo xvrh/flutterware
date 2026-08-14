@@ -87,6 +87,64 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a change of minimum lands as a zoom, not a jump', (
+    tester,
+  ) async {
+    // The shell drops the rail's share of the minimum when the rail leaves the
+    // layout, which at this window is the difference between scaling and not.
+    tester.view.physicalSize = const Size(900, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var probeKey = GlobalKey();
+    Future<void> pumpMinimum(Size value) => tester.pumpWidget(
+      FittedApp(
+        minimumSize: value,
+        child: SizedBox.expand(
+          child: ColoredBox(key: probeKey, color: const Color(0xFF000000)),
+        ),
+      ),
+    );
+
+    await pumpMinimum(const Size(1080, 700));
+    expect(
+      tester.getSize(find.byKey(probeKey)).width,
+      moreOrLessEquals(1080, epsilon: 0.01),
+    );
+
+    await pumpMinimum(const Size(848, 700));
+    await tester.pump(const Duration(milliseconds: 50));
+    var midway = tester.getSize(find.byKey(probeKey)).width;
+    expect(midway, lessThan(1080));
+    expect(midway, greaterThan(900), reason: 'still on its way, not arrived');
+
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byKey(probeKey)).width, 900);
+  });
+
+  testWidgets('publishes the scale, for whatever must not take it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(500, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    late double published;
+    await tester.pumpWidget(
+      FittedApp(
+        minimumSize: minimum,
+        child: Builder(
+          builder: (context) {
+            published = AppScale.of(context);
+            return const SizedBox.expand();
+          },
+        ),
+      ),
+    );
+
+    expect(published, 0.5, reason: 'width binds: 500 of the 1000 asked for');
+  });
+
   testWidgets('crossing the minimum keeps the child mounted', (tester) async {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
