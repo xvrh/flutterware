@@ -46,6 +46,38 @@ List<String> pixelInputsOf({
   return paths.toList()..sort();
 }
 
+/// What [pixelInputsOf] listed, hashed **once per checkout**.
+///
+/// **A constant of the plan, exactly as the SDK key is.** The same lockfiles,
+/// the same asset tree and the same `.arb` bundles decide every entry, so
+/// there is one answer per checkout and not one per entry.
+///
+/// It used to be passed around as the path list and re-hashed by each entry's
+/// [SkipDecision] and by both of its shot keys. Measured on a catalog of 90
+/// previews and 46 scenarios: 452 passes over the same 254 files — 18.5 MB,
+/// a 9.9 MB emoji font among them — for an answer that was identical every
+/// time. It ran on the UI isolate, so the window was dead for four minutes
+/// whenever the Changes panel was opened.
+class PixelInputs {
+  PixelInputs(this.paths);
+
+  /// Lists what decides pixels for [packagePath] across [roots], then holds it.
+  factory PixelInputs.of({
+    required String packagePath,
+    required List<String> roots,
+  }) => PixelInputs(pixelInputsOf(packagePath: packagePath, roots: roots));
+
+  /// Root-relative, and the same list for every checkout: a path only one side
+  /// has still has to be looked for on the other, where it reads as missing.
+  final List<String> paths;
+
+  final _byRoot = <String, SourceClosure>{};
+
+  /// [paths] as they are in [root] — hashed on the first ask, kept after.
+  SourceClosure inRoot(String root) =>
+      _byRoot.putIfAbsent(root, () => SourceClosure.of(paths, root: root));
+}
+
 Iterable<String> _declaredAssets(String root, String packagePath) sync* {
   var flutter = _yamlMap(p.join(root, packagePath, 'pubspec.yaml'))?['flutter'];
   if (flutter is! Map) return;
@@ -146,18 +178,21 @@ class SkipDecision {
 
   /// Decides for one entry, given the paths it was last compiled from.
   ///
-  /// [extraPaths] are the inputs the compiler's own list does not name and
-  /// that still decide pixels: `pubspec.lock`, the asset manifest and every
-  /// asset it points at, the l10n bundles. **The bias is deliberate.** A path
+  /// [pixels] are the inputs the compiler's own list does not name and that
+  /// still decide pixels: `pubspec.lock`, the asset manifest and every asset
+  /// it points at, the l10n bundles. **The bias is deliberate.** A path
   /// wrongly included costs one render; a path wrongly left out reports a
   /// regression as clean, and nothing downstream can detect it. When in
   /// doubt, include.
+  ///
+  /// It arrives already hashed because it is the same answer for every entry —
+  /// see [PixelInputs].
   static SkipDecision of({
     required String entryId,
     required ClosureMemo memo,
     required String baseRoot,
     required String headRoot,
-    Iterable<String> extraPaths = const [],
+    PixelInputs? pixels,
   }) {
     var remembered = memo.recall(entryId);
     if (remembered == null) {
@@ -172,9 +207,14 @@ class SkipDecision {
             'unknown',
       );
     }
-    var paths = [...remembered, ...extraPaths];
-    var base = SourceClosure.of(paths, root: baseRoot);
-    var head = SourceClosure.of(paths, root: headRoot);
+    var base = SourceClosure.of(
+      remembered,
+      root: baseRoot,
+    ).merge(pixels?.inRoot(baseRoot));
+    var head = SourceClosure.of(
+      remembered,
+      root: headRoot,
+    ).merge(pixels?.inRoot(headRoot));
     if (base.fingerprint == head.fingerprint) {
       return const SkipDecision(skip: true, changed: [], reason: null);
     }

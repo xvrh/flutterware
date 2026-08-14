@@ -15,7 +15,6 @@ import 'comparison_controller.dart';
 import 'previews_side.dart';
 import 'runner.dart';
 import 'scenario_comparison.dart';
-import 'scenarios_estimate.dart';
 import 'scenarios_runner.dart';
 import 'scenarios_side.dart';
 import 'shot_cache.dart';
@@ -141,28 +140,6 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
   }
 
   @override
-  Future<String?> previewsEstimate(String baseRoot) async {
-    var runner = _previewsRunner(baseRoot);
-    if (runner == null) return null;
-    return (await runner.plan()).estimate;
-  }
-
-  /// Parsed, never compiled — see [ScenariosEstimate]. The live listing costs a
-  /// harness build and a guest on each side, which is the bulk of what running
-  /// them costs, so an estimate that used it would be the work.
-  @override
-  Future<String?> scenariosEstimate(String baseRoot) async {
-    var side = _scenariosSide();
-    if (side == null) return null;
-    return ScenariosEstimate.of(
-      headRoot: topLevel,
-      baseRoot: baseRoot,
-      side: side,
-      memo: _cache.memo,
-    ).label;
-  }
-
-  @override
   Future<ComparisonResult> runPreviews(
     String baseRoot, {
     required void Function(ComparedItem row) onRow,
@@ -192,7 +169,7 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
         baseRoot: baseRoot,
         source: source,
         cache: _cache,
-        extraPaths: pixelInputsOf(
+        pixels: PixelInputs.of(
           packagePath: side.packagePath,
           roots: [topLevel, baseRoot],
         ),

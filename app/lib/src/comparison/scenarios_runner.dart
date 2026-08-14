@@ -96,9 +96,6 @@ class ScenariosPlan {
   final List<String> toRun;
 
   final int total;
-
-  /// *5 of 43* — what a tab says before it costs anything.
-  String get estimate => '${toRun.length} of $total';
 }
 
 /// Runs the scenario half: decide, replay what is left, align, report.
@@ -114,7 +111,7 @@ class ScenariosRunner {
     required this.baseRoot,
     required this.source,
     required this.cache,
-    this.extraPaths = const [],
+    this.pixels,
     this.only,
     this.onScenario,
   });
@@ -124,10 +121,10 @@ class ScenariosRunner {
   final ScenarioSource source;
   final ShotCache cache;
 
-  /// The pixel inputs the closure does not name — see [pixelInputsOf]. A
+  /// The pixel inputs the closure does not name — see [PixelInputs]. A
   /// parameter rather than derived here because [source] deliberately hides
   /// where the package lives.
-  final List<String> extraPaths;
+  final PixelInputs? pixels;
 
   /// Compare only these scenario ids.
   final List<String>? only;
@@ -172,7 +169,7 @@ class ScenariosRunner {
         memo: cache.memo,
         baseRoot: baseRoot,
         headRoot: headRoot,
-        extraPaths: extraPaths,
+        pixels: pixels,
       ).skip) {
         settled.add(
           ScenarioComparison.notRun(scenario: id, state: ComparedState.skipped),

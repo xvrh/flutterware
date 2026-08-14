@@ -25,7 +25,7 @@ enum HalfStage {
   /// Waiting on the base checkout, which both halves share.
   preparing,
 
-  /// The base is ready and the estimate is known. Nothing has run.
+  /// The base is ready. Nothing has run.
   ready,
 
   /// Rendering or replaying. Rows arrive as they are decided.
@@ -48,10 +48,6 @@ class ComparisonHalf extends ChangeNotifier {
 
   HalfStage _stage;
   HalfStage get stage => _stage;
-
-  /// *14 of 213*, once known. Null while the base is still being prepared —
-  /// and never faked, because a tab that guesses is a tab you stop reading.
-  String? estimate;
 
   /// Why it cannot run: an SDK mismatch, a base whose harness will not build.
   String? refusal;
@@ -139,13 +135,6 @@ abstract interface class ComparisonEnvironment {
   /// keys, and something has to be able to open them.
   ShotCache get shots;
 
-  /// *14 of 213* for the previews half, or null when it cannot be worked out.
-  Future<String?> previewsEstimate(String baseRoot);
-
-  /// The same for scenarios, worked out by parsing rather than by compiling —
-  /// see `ScenariosEstimate`.
-  Future<String?> scenariosEstimate(String baseRoot);
-
   Future<ComparisonResult> runPreviews(
     String baseRoot, {
     required void Function(ComparedItem row) onRow,
@@ -157,16 +146,21 @@ abstract interface class ComparisonEnvironment {
   });
 }
 
-/// Owns one worktree's comparison: prepares the base once, and runs a half
-/// when its tab is opened.
+/// Owns one worktree's comparison: nothing happens until a tab is opened, and
+/// then that tab prepares the base and runs its half.
 ///
-/// **The base is prepared on the panel, the halves run on their tabs.** Both
-/// halves need the base checkout before they can say anything at all — even
-/// how much they would cost — so preparing it on arrival is what lets a tab
-/// carry its estimate. Rendering and replaying stay behind the tab, because
-/// opening a panel must not spawn two compilers and a `flutter_tester` for a
-/// half nobody asked for. That is §13.11 narrowed, not reversed: there is
-/// still no Run button.
+/// **Everything is behind the tab, the base checkout included.** It used to be
+/// prepared on arrival, so that each tab could carry an estimate of what
+/// clicking it would cost. Both are gone, and the estimate is why: pricing a
+/// click nobody had made meant that merely opening the Changes panel did a
+/// `git worktree add`, a `flutter pub get`, and a sha1 of every file every
+/// entry reads. Measured on a real catalog of 90 previews and 46 scenarios,
+/// that was **four minutes** of it — to put two numbers on two tabs.
+///
+/// So a tab nobody has opened now says nothing about itself, which is the
+/// honest version of what the estimate was approximating anyway. §13.11
+/// narrowed to its limit: there is still no Run button, and opening the pane
+/// *is* the ask.
 class ComparisonController extends ChangeNotifier {
   ComparisonController(this.environment)
     : previews = ComparisonHalf(
@@ -209,8 +203,10 @@ class ComparisonController extends ChangeNotifier {
       if (half.stage != HalfStage.undeclared) half,
   ];
 
-  /// Prepares the base and works out both estimates. Idempotent: arriving a
-  /// second time joins the first.
+  /// Materialises the base checkout. Idempotent: two tabs opened one after the
+  /// other share one checkout, and the second waits out the first.
+  ///
+  /// Called by [open], never by the panel — see the class doc.
   Future<void> prepare() => _preparing ??= _prepare();
 
   Future<void> _prepare() async {
@@ -228,28 +224,10 @@ class ComparisonController extends ChangeNotifier {
     }
     if (_disposed) return;
     baseRoot = root;
-
-    // Each estimate answers for its own half: an SDK mismatch refuses at plan
-    // time, and it should stop that tab rather than the panel.
-    await Future.wait([
-      _estimate(previews, () => environment.previewsEstimate(root)),
-      _estimate(scenarios, () => environment.scenariosEstimate(root)),
-    ]);
-  }
-
-  Future<void> _estimate(
-    ComparisonHalf half,
-    Future<String?> Function() compute,
-  ) async {
-    if (half.stage == HalfStage.undeclared) return;
-    try {
-      var estimate = await compute();
-      if (_disposed) return;
-      half.estimate = estimate;
+    // Both halves, not only the one being opened: the checkout they were
+    // waiting on is the same one, so the other stops saying it is preparing.
+    for (var half in declared) {
       half.moveTo(HalfStage.ready);
-    } on Object catch (error) {
-      if (_disposed) return;
-      half.refuse(_firstLine(error));
     }
   }
 
@@ -300,10 +278,6 @@ class ComparisonController extends ChangeNotifier {
   }
 
   /// Throws away what a half concluded so the next [open] runs it again.
-  ///
-  /// The estimate is recomputed with it: the reason you are refreshing is that
-  /// the worktree moved, and a stale *14 of 213* beside fresh rows is the one
-  /// number nobody would question.
   Future<void> refresh(ComparisonHalfKind kind) async {
     var half = halfFor(kind);
     if (half.stage == HalfStage.undeclared || half.isRunning) return;
@@ -313,18 +287,7 @@ class ComparisonController extends ChangeNotifier {
       ..refusal = null
       ..rows.clear()
       ..scenarios.clear()
-      ..estimate = null
       ..moveTo(HalfStage.preparing);
-    var root = baseRoot;
-    if (root != null) {
-      await _estimate(
-        half,
-        () => switch (kind) {
-          ComparisonHalfKind.previews => environment.previewsEstimate(root),
-          ComparisonHalfKind.scenarios => environment.scenariosEstimate(root),
-        },
-      );
-    }
     await open(kind);
   }
 
