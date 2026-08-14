@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import 'daemon_address.dart';
@@ -110,6 +111,50 @@ class CompilerDaemonClient {
       appPackageRoot: config.appPackageRoot,
       onLog: onLog,
     );
+    try {
+      return await _launch(
+        launch,
+        config: config,
+        onLog: onLog,
+        readyTimeout: readyTimeout,
+      );
+    } on _RejectedKernel catch (rejection) {
+      // The snapshot on disk is not loadable by this Dart. Recompiling is the
+      // whole remedy — see [_RejectedKernel] for why that is a cache decision
+      // rather than something to report — and the second attempt goes through
+      // [_ensureCompiled] rather than reusing the first launch so that the
+      // address is re-derived from whatever the recompile actually produced.
+      onLog?.call(rejection.rebuilding);
+      var rebuilt = await _ensureCompiled(
+        dartExecutable: dartExecutable,
+        appPackageRoot: config.appPackageRoot,
+        onLog: onLog,
+        force: true,
+      );
+      try {
+        return await _launch(
+          rebuilt,
+          config: config,
+          onLog: onLog,
+          readyTimeout: readyTimeout,
+        );
+      } on _RejectedKernel catch (again) {
+        throw StateError(again.fatal(previously: rejection.compiledBy));
+      }
+    }
+  }
+
+  /// Derives the address for [launch] and gets a client onto it.
+  ///
+  /// Split out of [connect] because the retry above re-runs all of it: a
+  /// recompile can move [_DaemonLaunch.revision], and a revision that moved is a
+  /// different daemon at a different socket.
+  static Future<(CompilerDaemonClient, DaemonReady)> _launch(
+    _DaemonLaunch launch, {
+    required DaemonConfig config,
+    required Duration readyTimeout,
+    void Function(String)? onLog,
+  }) async {
     config = config.withDaemonRevision(launch.revision);
     var address = DaemonAddress(config);
     address.ensureRunDir();
@@ -429,6 +474,11 @@ class CompilerDaemonClient {
       configFile.parent.createSync(recursive: true);
       configFile.writeAsStringSync(jsonEncode(config.toJson()));
 
+      // Opened before the spawn: a VM that refuses the kernel says so in the
+      // log and nowhere else, and this is what reads only what *this* daemon
+      // writes. See [_DaemonLog].
+      var log = DaemonLog(address.logPath);
+
       // Detached, so the daemon outlives whoever happened to start it — that is
       // the whole point of sharing it. Its output goes to a log file rather
       // than to our pipes, which would break the moment we exit; the shell is
@@ -462,6 +512,21 @@ class CompilerDaemonClient {
         if (socket != null) return socket;
         if (_recordedFailure(address) case var failure?) {
           throw StateError('the compiler daemon failed: $failure');
+        }
+        // Before the daemon has run a line of its own code, so it leaves no
+        // failure marker and never binds: the VM rejects the kernel and exits.
+        // Watched for here for the same reason the marker is — otherwise the
+        // fastest failure in the system produces the slowest feedback.
+        if (log.lineContaining(_kernelRejected) case var complaint?) {
+          throw _RejectedKernel(
+            complaint: complaint,
+            snapshot: launch.snapshot?.path,
+            runBy: launch.sdk,
+            compiledBy: launch.snapshot == null
+                ? null
+                : _snapshotSdk(launch.snapshot!),
+            logPath: address.logPath,
+          );
         }
         await Future<void>.delayed(const Duration(milliseconds: 25));
       }
@@ -516,6 +581,372 @@ class CompilerDaemonClient {
   }
 }
 
+/// What the Dart VM prints when it will not load a kernel it was handed.
+///
+/// The prefix rather than `Invalid SDK hash`, which is only the commonest of a
+/// family: a snapshot from a Dart far enough away fails the *format version*
+/// check first (verified across 3.13.0-282.1.beta and 3.12.2 — `Invalid kernel
+/// binary format version (expected 130, found 138)`), and one truncated by a
+/// killed compile fails on its indicated size. All of them mean the same thing
+/// here and take the same remedy.
+const _kernelRejected = "Can't load Kernel binary";
+
+/// Reads the daemon log forward, from wherever the last read stopped.
+///
+/// **A cursor rather than a function of the whole tail**, because the poll loop
+/// that uses this runs every 25ms for up to 30 seconds: re-reading, re-decoding
+/// and re-splitting everything the daemon has written so far, on every one of
+/// up to 1200 iterations, is quadratic in how much it writes while starting.
+/// Reading only what is new makes it linear, and the log is append-only, so
+/// there is nothing behind the cursor that can change.
+///
+/// Constructed *before* the spawn, so it opens at the end of whatever previous
+/// daemons left behind. The file is appended to across runs, and a refusal that
+/// bricked the last start read as this one's would tear down a working daemon
+/// to fix a problem somebody has already fixed.
+///
+/// Public for the same reason [readDaemonDepfile] is: what can go wrong here is
+/// the bookkeeping — a cursor measured in the wrong units, a line split across
+/// two reads — and none of it is visible from the outcome, which is a daemon
+/// that starts either way and a self-heal that quietly stops happening.
+class DaemonLog {
+  DaemonLog(this.path) : _at = _lengthOf(path);
+
+  final String path;
+
+  /// How far this has consumed. Advanced only past complete lines: the daemon
+  /// is writing as this reads, and half of the line that matters matches
+  /// nothing.
+  int _at;
+
+  /// The byte this will read from next.
+  ///
+  /// Exposed because it is the only way to see the bug it exists to prevent.
+  /// Advancing by character count instead of byte count leaves the cursor
+  /// *behind* where it should be, and behind is harmless to every outcome —
+  /// the re-read text still contains the line, so a match is still found and
+  /// every assertion about matching still passes. What it costs is the reason
+  /// this class was written: the lag grows with every non-ASCII line, and the
+  /// scan slides back toward re-reading the whole log on each of up to 1200
+  /// polls.
+  int get position => _at;
+
+  static int _lengthOf(String path) {
+    try {
+      return File(path).lengthSync();
+    } on FileSystemException {
+      return 0;
+    }
+  }
+
+  /// The first line since the last call containing [needle], if any.
+  ///
+  /// A trailing partial line is searched, so a process that dies without a
+  /// final newline is still heard — but consumed only if it matched, so an
+  /// unmatched fragment is re-examined once the rest of it lands and a matched
+  /// one is never reported twice.
+  String? lineContaining(String needle) {
+    RandomAccessFile handle;
+    try {
+      handle = File(path).openSync();
+    } on FileSystemException {
+      return null;
+    }
+    try {
+      var length = handle.lengthSync();
+      if (length <= _at) return null;
+      handle.setPositionSync(_at);
+      var text = utf8.decode(
+        handle.readSync(length - _at),
+        allowMalformed: true,
+      );
+
+      String? found;
+      for (var line in const LineSplitter().convert(text)) {
+        if (line.contains(needle)) {
+          found = line.trim();
+          break;
+        }
+      }
+      if (found != null) {
+        // Everything read is spent. The caller acts on a match and does not
+        // come back, and consuming is what keeps that from being load-bearing.
+        _at = length;
+      } else if (text.lastIndexOf('\n') case var end when end >= 0) {
+        // Bytes, not characters: the cursor is a file position, and the two
+        // part company the moment anything in the log is not ASCII.
+        _at += utf8.encode(text.substring(0, end + 1)).length;
+      }
+      return found;
+    } on FileSystemException {
+      return null;
+    } finally {
+      handle.closeSync();
+    }
+  }
+}
+
+/// The VM refused to load the daemon's kernel snapshot.
+///
+/// **A cache to invalidate, not a failure to report**, and the distinction is
+/// the whole reason this has a type of its own. A kernel carries the identity
+/// of the SDK that produced it and the VM checks it on the way in, so "refused"
+/// says nothing about the daemon or the project — it says the bytes on disk are
+/// not bytes this Dart can run, whether because another Dart wrote them or
+/// because nothing wrote all of them. Either way the remedy is to compile them
+/// again, which [CompilerDaemonClient.connect] does once before it gives up.
+///
+/// That it can happen at all is [DartSdkIdentity]'s subject: the snapshot
+/// outlives the project that compiled it, and for a hosted install it outlives
+/// that project's Flutter version too.
+class _RejectedKernel implements Exception {
+  _RejectedKernel({
+    required this.complaint,
+    required this.snapshot,
+    required this.runBy,
+    required this.compiledBy,
+    required this.logPath,
+  });
+
+  /// The VM's own line — `Can't load Kernel binary: Invalid SDK hash.`
+  final String complaint;
+
+  /// The snapshot it was given, or null when the launch ran from source and the
+  /// refusal is therefore about something else.
+  final String? snapshot;
+
+  /// The SDK asked to run it.
+  final DartSdkIdentity runBy;
+
+  /// The SDK that produced it, as recorded beside it when it was compiled.
+  final DartSdkIdentity? compiledBy;
+
+  final String logPath;
+
+  /// Logged on the way into the retry, because a 3-second recompile that
+  /// happens silently reads as a hang.
+  String get rebuilding =>
+      'the Dart VM would not load the daemon snapshot, so it is being '
+      'recompiled.\n${_both()}';
+
+  /// The message when recompiling did not help either.
+  ///
+  /// Both SDKs are named because neither one alone identifies the problem: a
+  /// version is only wrong relative to another version, and the report this
+  /// replaces — 30 seconds of polling, then "the compiler daemon never started
+  /// listening on" a socket path — named neither, nor the snapshot, nor the
+  /// fact that a cache was involved at all.
+  String fatal({DartSdkIdentity? previously}) {
+    var was =
+        previously != null &&
+            previously.key != runBy.key &&
+            previously.key != compiledBy?.key
+        ? '\n  before this rebuilt it  ${previously.description}'
+        : '';
+    return 'the compiler daemon could not start: the Dart VM would not load '
+        'its kernel snapshot, and recompiling it did not help.\n'
+        '${_both()}$was\n\nSee $logPath';
+  }
+
+  String _both() =>
+      '\n  $complaint\n\n'
+      '  snapshot                ${snapshot ?? '(none — running from source)'}\n'
+      '  compiled by             ${compiledBy?.description ?? '(unrecorded)'}\n'
+      '  run by                  ${runBy.description}';
+}
+
+/// Which Dart SDK compiled a kernel snapshot — the half of a snapshot's
+/// identity that its path used to leave out.
+///
+/// A kernel is loadable only by the SDK that produced it. For a path
+/// dependency that is invisible, because `appPackageRoot` is one checkout used
+/// by one project. For a hosted or git-pinned install it is not: the copy lives
+/// at `~/.flutterware/<sha1(packageRoot)>/app/`, which is keyed on the
+/// *flutterware* revision and is therefore the same directory for every project
+/// on the machine pinning that revision — while each of those projects brings
+/// its own Flutter, and so its own Dart.
+///
+/// Keyed only by mtime, one snapshot then had to serve all of them, and two
+/// projects on two Flutter betas took turns bricking each other: whichever
+/// compiled last owned the file, and the other one got a daemon that died
+/// before it could bind, 30 seconds of polling a socket that would never
+/// appear, and `Can't load Kernel binary: Invalid SDK hash.` in a log nothing
+/// pointed at. Permanently, because the snapshot stayed newer than the sources
+/// that were never the problem. Deleting it fixed one project and broke the
+/// other.
+///
+/// [key] is what keeps them apart. It is the SDK's own version and revision
+/// rather than its path, because two checkouts of one SDK produce
+/// interchangeable kernels and splitting on the path would compile the same
+/// bytes twice.
+class DartSdkIdentity {
+  DartSdkIdentity({required this.dartExecutable, this.version, this.revision});
+
+  /// Reads the identity of the SDK [dartExecutable] belongs to.
+  ///
+  /// Off the SDK's own files rather than `dart --version`, because this sits on
+  /// the path whose entire purpose is to be cheap: the snapshot exists to turn
+  /// a 3214ms start into a 121ms one, and a process spawn to ask the SDK its
+  /// name would hand a third of that back on every connect.
+  factory DartSdkIdentity.of(String dartExecutable) {
+    for (var dir in _dartSdkDirs(dartExecutable)) {
+      if (_readTrimmed(p.join(dir, 'version')) case var version?) {
+        return DartSdkIdentity(
+          dartExecutable: dartExecutable,
+          version: version,
+          revision: _readTrimmed(p.join(dir, 'revision')),
+        );
+      }
+    }
+    return DartSdkIdentity(dartExecutable: dartExecutable);
+  }
+
+  factory DartSdkIdentity.fromJson(Map<String, Object?> json) =>
+      DartSdkIdentity(
+        dartExecutable: json['dartExecutable'] as String? ?? '(unrecorded)',
+        version: json['version'] as String?,
+        revision: json['revision'] as String?,
+      );
+
+  final String dartExecutable;
+
+  /// The `version` file's contents — `3.13.0-282.1.beta`.
+  final String? version;
+
+  /// The `revision` file's contents: the SDK's git commit.
+  ///
+  /// Read alongside [version] rather than instead of it because a version
+  /// string is not unique on its own — `.dev` builds and local engines share
+  /// one — and it is the build, not the number, that has to match.
+  final String? revision;
+
+  /// A short digest of whatever was legible: the version and revision when they
+  /// were, the executable's path when they were not.
+  ///
+  /// The fallback splits per path rather than per SDK, which over-compiles
+  /// instead of under-compiling. That is the right way round — an extra 3.2s
+  /// once is not the failure this exists to prevent.
+  late final String key = sha1
+      .convert(
+        utf8.encode(
+          version == null ? 'dart $dartExecutable' : 'sdk $version $revision',
+        ),
+      )
+      .toString()
+      .substring(0, 16);
+
+  /// How this SDK is named in a message — which is why [version] is kept around
+  /// after [key] has hashed it away.
+  String get description {
+    if (version == null) return dartExecutable;
+    var short = switch (revision) {
+      String r when r.length >= 8 => ' (${r.substring(0, 8)})',
+      String r => ' ($r)',
+      _ => '',
+    };
+    return '$version$short at $dartExecutable';
+  }
+
+  Map<String, Object?> toJson() => {
+    'dartExecutable': dartExecutable,
+    if (version != null) 'version': version,
+    if (revision != null) 'revision': revision,
+  };
+}
+
+/// Where the Dart SDK's version files might be, given [dartExecutable].
+///
+/// Two layouts are in use here and only the second is `<sdk>/bin/dart`: callers
+/// hand over `<flutter>/bin/dart` — the wrapper — as readily as
+/// `<flutter>/bin/cache/dart-sdk/bin/dart`, which is what [FlutterCache] points
+/// at. Both are tried rather than either being required, so a caller passing
+/// the wrapper gets a real identity instead of quietly falling back to the path.
+///
+/// **The bundled SDK is offered first, and the order is the whole correctness
+/// of this.** `bin/cache/dart-sdk` exists only where it means what it says,
+/// whereas the other candidate is `<flutter>` itself for a wrapper path — and a
+/// Flutter checkout shipped a `version` file of its own until recently. Asking
+/// the vaguer question first read that file on any older checkout and returned
+/// the *Flutter* version with no revision: still a discriminator, but a coarser
+/// one than the build hash the VM actually checks, arrived at silently.
+Iterable<String> _dartSdkDirs(String dartExecutable) sync* {
+  var bin = p.dirname(dartExecutable);
+  yield p.join(bin, 'cache', 'dart-sdk');
+  yield p.dirname(bin);
+}
+
+String? _readTrimmed(String path) {
+  try {
+    var text = File(path).readAsStringSync().trim();
+    return text.isEmpty ? null : text;
+  } on FileSystemException {
+    return null;
+  }
+}
+
+/// Where the daemon's kernel snapshot for [sdk] lives.
+///
+/// The key is a directory rather than part of the filename so that the snapshot
+/// and the depfile describing it cannot come from different SDKs — the depfile
+/// decides the daemon's revision, and one written by somebody else's compile is
+/// a wrong answer to a question this file asks on every connect.
+String daemonSnapshotPath(String appPackageRoot, DartSdkIdentity sdk) => p.join(
+  appPackageRoot,
+  'build',
+  'catalog',
+  'daemon',
+  sdk.key,
+  'daemon.dill',
+);
+
+/// Beside the snapshot, naming the SDK that produced it.
+///
+/// Redundant with the path's [DartSdkIdentity.key] right up to the moment it is
+/// needed, which is when a VM refuses the kernel: the key is a hash, and a hash
+/// cannot say "3.47.0-0.4.pre compiled this and you are 3.47.0-0.1.pre" — which
+/// is the only sentence that makes the failure actionable, because the project
+/// that has to move is the *other* one.
+File _snapshotSdkFile(File snapshot) => File('${snapshot.path}.sdk');
+
+/// Removes the snapshot from before the path was keyed, which nothing can reach
+/// any more.
+///
+/// 32MB, and for a hosted install it sits in a directory shared by every
+/// project on the machine — so it is one file per *install* rather than per
+/// checkout, and nothing else would ever come back for it. Delete once the
+/// installs that predate the keying are gone.
+void _discardUnkeyedSnapshot(String appPackageRoot) => _discard([
+  for (var name in ['daemon.dill', 'daemon.dill.d'])
+    File(p.join(appPackageRoot, 'build', 'catalog', name)),
+]);
+
+/// Deletes what is there and says nothing about what is not.
+///
+/// Every caller is cleaning up after itself on a path that already has a real
+/// outcome — a compile that failed, a layout that moved — and none of them has
+/// anything to gain from a second failure raised on the way out.
+void _discard(Iterable<File> files) {
+  for (var file in files) {
+    try {
+      if (file.existsSync()) file.deleteSync();
+    } on FileSystemException {
+      // Reclaiming disk is not worth failing a compile over.
+    }
+  }
+}
+
+DartSdkIdentity? _snapshotSdk(File snapshot) {
+  var recorded = _readTrimmed(_snapshotSdkFile(snapshot).path);
+  if (recorded == null) return null;
+  try {
+    return DartSdkIdentity.fromJson(
+      jsonDecode(recorded) as Map<String, Object?>,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
 /// A **guess** at the daemon's closure, used only until a depfile exists.
 ///
 /// Kept deliberately coarse: it is the first run's answer, and the compile it
@@ -527,8 +958,8 @@ const _daemonSources = [
   'lib/src/embedder',
 ];
 
-/// Returns how to launch the daemon: a **kernel snapshot** when one is present
-/// and fresh, else `dart run` on the source.
+/// Returns how to launch the daemon: a **kernel snapshot** when one is present,
+/// fresh, and this SDK's, else `dart run` on the source.
 ///
 /// `dart run` re-compiles the daemon and everything it imports — analyzer,
 /// image, vm_service — on **every** start. Measured at 3214ms against 121ms
@@ -541,21 +972,47 @@ const _daemonSources = [
 /// `FrontendServer` is handed its executable.
 /// How to launch the daemon, and which build of it that is.
 class _DaemonLaunch {
-  _DaemonLaunch(this.executable, this.arguments, this.revision);
+  _DaemonLaunch(
+    this.executable,
+    this.arguments,
+    this.revision, {
+    required this.sdk,
+    this.snapshot,
+  });
 
   final String executable;
   final List<String> arguments;
 
-  /// Changes whenever the daemon's own sources change. Part of the daemon's
-  /// address, so a newer client starts a newer daemon rather than attaching to
-  /// one running yesterday's code.
+  /// Changes whenever the daemon's own sources change, or the SDK does. Part of
+  /// the daemon's address, so a newer client starts a newer daemon rather than
+  /// attaching to one running yesterday's code.
   final String revision;
+
+  /// The SDK this runs on — and, when [snapshot] is set, the one that compiled
+  /// it.
+  final DartSdkIdentity sdk;
+
+  /// The kernel snapshot being run, or null when the snapshot could not be
+  /// built and the daemon is running from source instead.
+  final File? snapshot;
 }
+
+/// The daemon build's identity: its sources *and* its SDK.
+///
+/// The SDK belongs here for the reason the rest of [DaemonConfig] does — a
+/// daemon that outlives the thing it was built against has to be replaced, and
+/// nothing else notices an SDK upgraded in place, which keeps its path and so
+/// keeps `flutterSdkRoot` and the whole address unchanged. Two projects on
+/// SDKs at *different* paths already forked here; this covers the one project
+/// that moved.
+String _revision(DartSdkIdentity sdk, DateTime newest) =>
+    '${sdk.key}-${newest.millisecondsSinceEpoch}';
 
 Future<_DaemonLaunch> _ensureCompiled({
   required String dartExecutable,
   required String appPackageRoot,
   void Function(String)? onLog,
+  bool force = false,
 }) async {
   var script = p.join(
     appPackageRoot,
@@ -580,38 +1037,105 @@ Future<_DaemonLaunch> _ensureCompiled({
       'embedder framework and the native host live.',
     );
   }
-  var snapshot = File(
-    p.join(appPackageRoot, 'build', 'catalog', 'daemon.dill'),
-  );
+  var sdk = DartSdkIdentity.of(dartExecutable);
+  var snapshot = File(daemonSnapshotPath(appPackageRoot, sdk));
   var depfile = File('${snapshot.path}.d');
 
   var newest = _newestSource(appPackageRoot, depfile);
-  if (snapshot.existsSync() && snapshot.statSync().modified.isAfter(newest)) {
-    return _DaemonLaunch(dartExecutable, [
-      snapshot.path,
-    ], '${newest.millisecondsSinceEpoch}');
+  // [force] is the retry after a VM refused this file. Nothing about it looks
+  // stale — a snapshot the VM will not load has a perfectly good mtime — so the
+  // check below would answer "fresh" forever, which is exactly how one project
+  // used to stay broken until somebody deleted the file by hand.
+  //
+  // A *file*, specifically. `FileSystemEntityType.notFound` is the tempting
+  // test and it is the wrong one: `statSync` reports a directory at this path
+  // as `directory` with a non-zero size, so anything but an equality check on
+  // `file` hands the launcher a directory to run — whose error is not one the
+  // VM phrases as a rejected kernel, so it is missed and waited out for the
+  // full 30 seconds. `File.existsSync`, which this replaced, was false there.
+  //
+  // Empty counts as absent, and has to be checked separately from the refusal
+  // above: a file with no kernel magic is not a kernel the VM rejects, it is
+  // *Dart source* the VM compiles, so a compile killed before it wrote a byte
+  // comes back as a syntax error rather than as anything this could recognise.
+  var stat = snapshot.statSync();
+  if (!force &&
+      stat.type == FileSystemEntityType.file &&
+      stat.size > 0 &&
+      stat.modified.isAfter(newest)) {
+    return _DaemonLaunch(
+      dartExecutable,
+      [snapshot.path],
+      _revision(sdk, newest),
+      sdk: sdk,
+      snapshot: snapshot,
+    );
   }
 
   snapshot.parent.createSync(recursive: true);
+  _discardUnkeyedSnapshot(appPackageRoot);
   var watch = Stopwatch()..start();
-  var result = await Process.run(dartExecutable, [
-    'compile',
-    'kernel',
-    script,
-    '-o',
-    snapshot.path,
-    // The compiler's own account of what it read. See [_newestSource].
-    '--depfile',
-    depfile.path,
-  ], workingDirectory: appPackageRoot);
+  // Compiled to this process's own paths and moved into place at the end,
+  // because nothing serialises two clients arriving here at once — the spawn
+  // lock is taken further down, inside `_spawnAndConnect`, and by then the
+  // damage would be written. `dart compile kernel` writes its output in place
+  // and not atomically, so two overlapping compiles interleave into one file
+  // that neither of them would recognise.
+  //
+  // Overlapping is not the exotic case either, now that a refused snapshot is
+  // recompiled: the projects that share an install hit the same bad file and
+  // all rebuild it at once, which is exactly the situation this whole change is
+  // about. A rename is atomic, so the loser wastes 3.2s and nobody reads a
+  // half-written kernel.
+  var staged = File('${snapshot.path}.$pid.tmp');
+  var stagedDepfile = File('${staged.path}.d');
+  ProcessResult result;
+  try {
+    result = await Process.run(dartExecutable, [
+      'compile',
+      'kernel',
+      script,
+      '-o',
+      staged.path,
+      // The compiler's own account of what it read. See [_newestSource].
+      '--depfile',
+      stagedDepfile.path,
+    ], workingDirectory: appPackageRoot);
+  } on Object {
+    _discard([staged, stagedDepfile]);
+    rethrow;
+  }
   if (result.exitCode != 0) {
     // Not fatal: the daemon still runs from source, just slower.
+    _discard([staged, stagedDepfile]);
     onLog?.call('could not snapshot the daemon: ${result.stderr}');
-    return _DaemonLaunch(dartExecutable, [
-      'run',
-      script,
-    ], '${newest.millisecondsSinceEpoch}');
+    return _DaemonLaunch(
+      dartExecutable,
+      ['run', script],
+      _revision(sdk, newest),
+      sdk: sdk,
+    );
   }
+  // The depfile first, so that the instant the snapshot appears the list of
+  // sources it was built from is already the matching one. The reverse order
+  // leaves a window where a second client reads this compile's kernel against
+  // the previous compile's dependencies, and so computes a revision for it that
+  // nothing else will agree with.
+  stagedDepfile.renameSync(depfile.path);
+  // Written before the snapshot lands rather than after, for the same reason:
+  // the sidecar is what names the producer when a VM refuses these bytes, and a
+  // snapshot that is readable for even a moment without one is a snapshot that
+  // can be refused without one.
+  //
+  // Best-effort, like [_discardUnkeyedSnapshot]. It carries nothing the daemon
+  // needs — only a name for a message — and a read-only build directory or a
+  // full disk must not fail a connect whose kernel compiled perfectly well.
+  try {
+    _snapshotSdkFile(snapshot).writeAsStringSync(jsonEncode(sdk.toJson()));
+  } on FileSystemException {
+    // The refusal message says "(unrecorded)" instead. See [_RejectedKernel].
+  }
+  staged.renameSync(snapshot.path);
   onLog?.call('snapshotted the daemon in ${watch.elapsedMilliseconds}ms');
   // Read again, against the depfile this compile just wrote. The reading above
   // may have been the guessed list, which is what a new import is missing from —
@@ -619,7 +1143,9 @@ Future<_DaemonLaunch> _ensureCompiled({
   return _DaemonLaunch(
     dartExecutable,
     [snapshot.path],
-    '${_newestSource(appPackageRoot, depfile).millisecondsSinceEpoch}',
+    _revision(sdk, _newestSource(appPackageRoot, depfile)),
+    sdk: sdk,
+    snapshot: snapshot,
   );
 }
 
