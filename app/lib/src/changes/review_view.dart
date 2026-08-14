@@ -288,10 +288,18 @@ class _Action extends StatelessWidget {
 
 /// The box you write a comment in.
 ///
-/// **It states its anchor and what it captured**, in that order, above the
-/// text. That one line is the entire staleness contract, put where you accept
+/// **It shows its anchor and the code it is about to capture**, in that order,
+/// above the text. That is the entire staleness contract, put where you accept
 /// it rather than in a doc nobody opens: *these three lines, as they are now,
-/// travel with what you are about to write.*
+/// travel with what you are about to write.* It said `3 lines captured`, which
+/// is the claim without the evidence — and the lines it means are the ones the
+/// diff has just tinted behind the box, so naming them and not showing them
+/// made the reader count rows to check.
+///
+/// **One border, not two.** The box had an accent outline and the field inside
+/// it had another, so writing a note happened inside two concentric blue
+/// rectangles four pixels apart. The box *is* the field: the outline is the
+/// focus, and the input draws none of its own.
 ///
 /// The text itself is held by the caller — see [controller] — because this
 /// lives inside a virtualised list and a composer scrolled past its cache
@@ -303,7 +311,7 @@ class ReviewComposer extends StatefulWidget {
     required this.controller,
     required this.onSubmit,
     required this.onCancel,
-    this.quotedLines = 0,
+    this.quote = const [],
     this.editing = false,
     this.inset = FwSpacing.xxl,
     super.key,
@@ -312,9 +320,13 @@ class ReviewComposer extends StatefulWidget {
   final ReviewAnchor anchor;
   final TextEditingController controller;
 
-  /// How many lines of code travel with this comment. Zero for a file or
-  /// review anchor, which quote nothing.
-  final int quotedLines;
+  /// The code that will travel with this comment. Empty for a file or review
+  /// anchor, which quote nothing.
+  ///
+  /// While **editing**, this is the quote the comment already carries rather
+  /// than a fresh read of the patch — the whole point of storing it is that it
+  /// does not change under you, and rewriting the body is not re-capturing.
+  final List<String> quote;
 
   /// Whether this is rewriting an existing comment rather than adding one.
   final bool editing;
@@ -353,11 +365,6 @@ class _ReviewComposerState extends State<ReviewComposer> {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var lines = widget.quotedLines;
-    var notes = [
-      widget.anchor.label,
-      if (lines > 0) '$lines ${lines == 1 ? 'line' : 'lines'} captured',
-    ];
 
     return Container(
       margin: EdgeInsets.fromLTRB(
@@ -369,17 +376,46 @@ class _ReviewComposerState extends State<ReviewComposer> {
       decoration: BoxDecoration(
         color: colors.panel2,
         border: Border.all(color: colors.accent),
-        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        borderRadius: BorderRadius.circular(context.radii.radius),
       ),
-      padding: const EdgeInsets.all(FwSpacing.md),
+      padding: const EdgeInsets.all(FwSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            notes.join(' · '),
-            style: context.type.micro.copyWith(color: colors.mut2),
-            overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              Icon(
+                _iconFor(widget.anchor),
+                size: FwIconSize.xs,
+                color: colors.mut3,
+              ),
+              const Gap(FwSpacing.sm),
+              // The same two-part path the index row uses: the name and its
+              // line are what identify the anchor, and the six directories in
+              // front of them are what an ellipsis should eat.
+              if (widget.anchor.directory case var it?)
+                Flexible(
+                  child: Text(
+                    it,
+                    style: context.type.micro.copyWith(color: colors.mut3),
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                  ),
+                ),
+              Flexible(
+                child: Text(
+                  widget.anchor.shortLabel,
+                  style: context.type.micro.copyWith(color: colors.mut2),
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+              ),
+            ],
           ),
+          if (widget.quote.isNotEmpty) ...[
+            const Gap(FwSpacing.sm),
+            ReviewQuote(widget.quote),
+          ],
           const Gap(FwSpacing.sm),
           // **Both shortcuts are bound here rather than on the screen**, so
           // they cannot fire while the focus is somewhere else — Esc in
@@ -398,17 +434,24 @@ class _ReviewComposerState extends State<ReviewComposer> {
               focusNode: _focus,
               style: context.type.bodySmall,
               maxLines: null,
-              minLines: 3,
+              // Two, not three. The box carries a header and often a quote now,
+              // and an empty field taller than the code it is about makes the
+              // composer the biggest thing in the diff. It grows as you type.
+              minLines: 2,
+              cursorColor: colors.accent,
               decoration: InputDecoration(
                 isDense: true,
                 hintText: 'What should the agent change here?',
                 hintStyle: context.type.bodySmall.copyWith(color: colors.mut3),
-                border: const OutlineInputBorder(),
-                contentPadding: const EdgeInsets.all(FwSpacing.sm),
+                // The container above is the field's edge — see the class doc.
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
           ),
-          const Gap(FwSpacing.sm),
+          const Gap(FwSpacing.md),
           Row(
             children: [
               // **The hint gives way, the buttons never do.** At 480 px — the
@@ -440,24 +483,26 @@ class _ReviewComposerState extends State<ReviewComposer> {
               ),
               _Action(label: 'Cancel', onTap: widget.onCancel),
               const Gap(FwSpacing.lg),
+              // The house primary — an accent border over [FwPalette
+              // .accentSoft], the same one the Review tab's *Hand off* wears.
+              // A solid fill was the loudest thing in a panel of greys, and it
+              // no longer matched the only other primary in the feature.
               Tappable.builder(
                 onTap: widget.onSubmit,
-                builder: (context, hovered) => Container(
+                builder: (context, hovered) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
                   padding: const EdgeInsets.symmetric(
                     horizontal: FwSpacing.lg,
                     vertical: FwSpacing.sm,
                   ),
                   decoration: BoxDecoration(
-                    color: hovered ? colors.accentDark : colors.accent,
-                    borderRadius: BorderRadius.circular(
-                      context.radii.radiusSmall,
-                    ),
+                    color: hovered ? colors.accentSoft2 : colors.accentSoft,
+                    borderRadius: BorderRadius.circular(context.radii.radius),
+                    border: Border.all(color: colors.accent),
                   ),
                   child: Text(
                     widget.editing ? 'Save' : 'Add comment',
-                    style: context.type.micro.copyWith(
-                      color: colors.primaryOnMenu,
-                    ),
+                    style: context.type.caption.copyWith(color: colors.accent),
                   ),
                 ),
               ),

@@ -233,6 +233,19 @@ class _ChangesScreenState extends State<ChangesScreen> {
       if (comment.id != _pendingDelete) comment,
   ];
 
+  /// The quote an *edit* shows: the one the comment already carries.
+  ///
+  /// Null when the composer is writing a new comment, which reads the patch
+  /// instead. Re-reading it here would show the code as it is **now** under a
+  /// note whose whole promise is that it kept what was there then — and the
+  /// moment that differs is the moment the note matters.
+  List<String>? get _editingQuote {
+    if (_editing case var id?) {
+      return _review.open.where((c) => c.id == id).firstOrNull?.quote;
+    }
+    return null;
+  }
+
   /// The draft, owned here rather than by the composer: the composer lives
   /// inside the virtualised body, and scrolling it past the cache extent
   /// disposes it. Holding the text a level up makes that a redraw instead of a
@@ -727,6 +740,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         flash: _flash,
                         reveal: _reveal,
                         revealSeq: _revealSeq,
+                        editingQuote: _editingQuote,
                         onUndoDelete: _undoDelete,
                         onCommentLine: _composeLine,
                         onCommentFile: _composeFile,
@@ -1160,6 +1174,8 @@ class _IndexPane extends StatelessWidget {
 
   /// What you have written, and what you have already sent.
   Widget _review(BuildContext context) {
+    // A whole-review note is about no file, so it quotes nothing — the one
+    // composer on this screen with only its header above the text.
     var wide = composing is ReviewWide
         ? ReviewComposer(
             anchor: const ReviewWide(),
@@ -1773,6 +1789,7 @@ class _FilePane extends StatefulWidget {
     required this.flash,
     required this.reveal,
     required this.revealSeq,
+    required this.editingQuote,
     required this.onUndoDelete,
     required this.onCommentLine,
     required this.onCommentFile,
@@ -1818,6 +1835,10 @@ class _FilePane extends StatefulWidget {
   /// The note to scroll to, and the nth time it has been asked for.
   final String? reveal;
   final int revealSeq;
+
+  /// The quote the open composer shows while rewriting an existing comment.
+  /// Null when it is writing a new one, which reads the patch.
+  final List<String>? editingQuote;
 
   final void Function(FileChange, DiffLine) onCommentLine;
   final ValueChanged<String> onCommentFile;
@@ -1960,9 +1981,20 @@ class _FilePaneState extends State<_FilePane> {
                   anchor: anchor,
                   controller: widget.draft,
                   editing: widget.editing,
-                  quotedLines: anchor is LineAnchor
-                      ? anchor.to - anchor.from + 1
-                      : 0,
+                  // Read here rather than counted: the composer shows the same
+                  // lines the diff has just tinted behind it, and the submit
+                  // reads them again for keeps — see `_submitComment`.
+                  quote:
+                      widget.editingQuote ??
+                      (anchor is LineAnchor
+                          ? quoteFor(
+                              it,
+                              anchor.from,
+                              anchor.to,
+                              anchor.side,
+                              lines.linesFor,
+                            )
+                          : const []),
                   onSubmit: widget.onSubmit,
                   onCancel: widget.onCancel,
                 ),

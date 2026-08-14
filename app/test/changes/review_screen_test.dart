@@ -134,8 +134,15 @@ void main() {
 
     await plus(tester, 0);
     expect(find.byType(ReviewComposer), findsOneWidget);
-    // The staleness contract, stated where it is accepted.
-    expect(find.textContaining('1 line captured'), findsOneWidget);
+    // The staleness contract, shown where it is accepted: the composer draws
+    // the code it is about to capture, rather than counting it.
+    expect(
+      find.descendant(
+        of: find.byType(ReviewComposer),
+        matching: find.text('first'),
+      ),
+      findsOneWidget,
+    );
 
     await write(tester, 'This should be a constant.');
 
@@ -171,8 +178,19 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
 
     // **Extended, not restarted.** A modifier that quietly began a new comment
-    // would take the sentence you had already written with it.
-    expect(find.textContaining('3 lines captured'), findsOneWidget);
+    // would take the sentence you had already written with it — and the
+    // composer's quote grows to the three lines the span now covers.
+    var quote = find.descendant(
+      of: find.byType(ReviewComposer),
+      matching: find.byType(ReviewQuote),
+    );
+    expect(quote, findsOneWidget);
+    for (var line in ['first', 'second is', 'second and a half']) {
+      expect(
+        find.descendant(of: quote, matching: find.text(line)),
+        findsOneWidget,
+      );
+    }
     expect(find.text('half written'), findsOneWidget);
 
     await tester.tap(find.text('Add comment'));
