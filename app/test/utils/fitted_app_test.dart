@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/utils/fitted_app.dart';
 
-/// The responsive policy in four assertions: above the minimum nothing happens,
+/// The responsive policy in five assertions: above the minimum nothing happens,
 /// below it the child still lays out at the minimum, the MediaQuery it reads
-/// agrees with the box it is in, and it scales rather than overflowing.
+/// agrees with the box it is in, it scales rather than overflowing, and the
+/// tree keeps its shape across the minimum so nothing below it is remounted.
 void main() {
   const minimum = Size(1000, 800);
 
@@ -40,18 +41,12 @@ void main() {
     var r = await mount(tester, minimum);
     expect(r.box, minimum);
     expect(r.media, minimum);
-    expect(
-      find.byType(FittedBox),
-      findsNothing,
-      reason: 'no wrapper to pay for',
-    );
   });
 
   testWidgets('a window above the minimum is left alone', (tester) async {
     var r = await mount(tester, const Size(1600, 1200));
     expect(r.box, const Size(1600, 1200));
     expect(r.media, const Size(1600, 1200));
-    expect(find.byType(FittedBox), findsNothing);
   });
 
   testWidgets('a narrow window still lays out at the minimum width', (
@@ -91,4 +86,45 @@ void main() {
     await mount(tester, const Size(320, 240));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('crossing the minimum keeps the child mounted', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    const child = _Probe();
+    Future<void> resizeTo(Size window) async {
+      tester.view.physicalSize = window;
+      await tester.pumpWidget(
+        const FittedApp(minimumSize: minimum, child: child),
+      );
+    }
+
+    await resizeTo(const Size(1600, 1200));
+    var state = tester.state<_ProbeState>(find.byType(_Probe));
+
+    await resizeTo(const Size(500, 600));
+    expect(
+      tester.state<_ProbeState>(find.byType(_Probe)),
+      same(state),
+      reason:
+          'the same element, scaled — a window dragged across the minimum '
+          'would otherwise rebuild everything below it from nothing',
+    );
+
+    await resizeTo(const Size(1600, 1200));
+    expect(tester.state<_ProbeState>(find.byType(_Probe)), same(state));
+  });
+}
+
+/// Something below [FittedApp] with state to lose.
+class _Probe extends StatefulWidget {
+  const _Probe();
+
+  @override
+  State<_Probe> createState() => _ProbeState();
+}
+
+class _ProbeState extends State<_Probe> {
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
 }

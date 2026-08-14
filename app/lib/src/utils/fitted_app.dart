@@ -30,6 +30,13 @@ const shellMinimumSize = Size(1080, 700);
 /// re-rendered at the smaller size rather than resampled from a bitmap: the UI
 /// gets smaller, not blurrier.
 ///
+/// The wrappers are always there, at scale 1.0 when there is nothing to scale.
+/// Eliding them above the minimum would be cheaper by one render object and
+/// wrong: the tree's *shape* would change as a resize crossed the minimum, so
+/// every element below would be discarded and rebuilt from nothing — scroll
+/// offsets, text fields, controllers, whichever panel was open. A window
+/// dragged across 1080px is exactly when that must not happen.
+///
 /// It overrides the ambient [MediaQuery] with the size the child is *actually*
 /// laid out at. Without that, layout would use the pretend size while
 /// `MediaQuery.sizeOf` kept reporting the real window, and anything that
@@ -50,18 +57,22 @@ class FittedApp extends StatelessWidget {
   Widget build(BuildContext context) {
     var media = MediaQuery.of(context);
     var size = media.size;
-    if (size.isEmpty) return child;
 
-    var scale = min(
-      1.0,
-      min(size.width / minimumSize.width, size.height / minimumSize.height),
-    );
-    // At or above the minimum there is nothing to scale, and no wrapper to pay
-    // for — the common case costs one MediaQuery read.
-    if (scale >= 1.0) return child;
+    // A window with no area has no ratio to take; 1.0 keeps the arithmetic off
+    // zero and the tree the same shape as every other frame.
+    var scale = size.isEmpty
+        ? 1.0
+        : min(
+            1.0,
+            min(
+              size.width / minimumSize.width,
+              size.height / minimumSize.height,
+            ),
+          );
 
     // Keeps the window's aspect ratio, so `BoxFit.contain` resolves to exactly
-    // [scale] and the child fills the window with nothing letterboxed.
+    // [scale] and the child fills the window with nothing letterboxed — and at
+    // scale 1.0 it is the window, so the transform is the identity.
     var laidOut = size / scale;
     return MediaQuery(
       data: media.copyWith(size: laidOut),
