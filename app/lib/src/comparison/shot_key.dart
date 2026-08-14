@@ -33,8 +33,8 @@ class ShotKey {
   /// could be serving a picture of the wrong asset.
   static const revision = 'v4';
 
-  /// [closure] is a [SourceClosure.fingerprint]; [sdk] identifies the engine
-  /// (see `SdkIdentity`); [axes] and [knobs] are whatever was applied.
+  /// [closure] is a [SourceClosure.fingerprint]; [sdk] identifies the SDK both
+  /// sides are rendered with; [axes] and [knobs] are whatever was applied.
   ///
   /// [extra] is for the inputs one caller has and another does not — a
   /// scenario's device and language, a preview's viewport — rather than a

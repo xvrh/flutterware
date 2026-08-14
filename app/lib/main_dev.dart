@@ -36,17 +36,30 @@ final _logger = Logger('main_dev');
 /// rather than derived: a macOS app launched by `flutter run` has a working
 /// directory of `/`, so `Directory.current` finds nothing. Only the catalog
 /// needs it, and only when its panel is opened.
+///
+/// [flutterSdkRoot] is passed in for the same reason and a stronger one. That
+/// same environment is stripped, so nothing in this process can see which
+/// `flutter` launched it — and flutterware does not guess: the SDK is whichever
+/// one the invocation names, and here the invocation is `flutter run`, which
+/// this side cannot read. So it is said out loud, as a knob or a define.
 void main({
   String appRoot = const String.fromEnvironment('FLUTTERWARE_APP_ROOT'),
   String project = '..',
+  String flutterSdkRoot = const String.fromEnvironment('FLUTTER_SDK_ROOT'),
 }) async {
   setupDebugLogger();
   var appContext = AppContext(
     logger: LogClient.print(),
     appToolDirectory: appRoot.isEmpty ? null : Directory(appRoot),
   );
-  var flutterSdks = await FlutterSdkPath.findSdks();
-  var flutterSdk = flutterSdks.first;
+  if (flutterSdkRoot.isEmpty) {
+    throw StateError(
+      'main_dev needs the Flutter SDK it should use. Set the flutterSdkRoot '
+      'knob on the run Knobs tab, or pass it when launching by hand:\n\n'
+      r'    --dart-define=FLUTTER_SDK_ROOT="$(cd "$(dirname "$(which flutter)")/.." && pwd)"',
+    );
+  }
+  var flutterSdk = FlutterSdkPath(flutterSdkRoot);
   _logger.info('Use SDK: ${flutterSdk.root}');
 
   var shell = ShellController(

@@ -11,11 +11,32 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
-      # The committed wrapper downloads the SDK flutter_version pins — CI runs
-      # the exact toolchain the repo records, not whatever a setup action
-      # resolves the channel to today.
-      - run: ./fw flutter --version
-      - run: ./fw flutter pub get
+      # CI runs the exact version `.fvmrc` records, not whatever a channel
+      # resolves to today. fvm itself is not installed here — it is one way to
+      # put the pinned SDK on PATH and a runner has cheaper ones. What has to
+      # match is the *version*, and that is read from the same committed file
+      # a laptop reads.
+      #
+      # The channel is derived rather than pinned separately: a prerelease
+      # carries a `-`, and hard-coding `beta` would break the day the pin moves
+      # to a stable.
+      - name: Read the pinned Flutter version
+        id: pin
+        run: |
+          version="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc)"
+          if [ -z "$version" ]; then echo "::error::.fvmrc names no Flutter version"; exit 1; fi
+          case "$version" in *-*) channel=beta ;; *) channel=stable ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.pin.outputs.version }}
+          channel: ${{ steps.pin.outputs.channel }}
+      # From here `flutter` and `dart` are the pinned SDK, put on PATH by the
+      # step above. That is an invocation, deliberately made — not the ambient
+      # toolchain `test/ambient_sdk_test.dart` keeps out of the source.
+      - run: flutter --version
+      - run: flutter pub get
       # The pin and the published floors are two numbers on purpose, and
       # nothing used to notice when they drifted into each other. They did:
       # `flutter: '>=3.47.0-0'` reached a package whose last published floor
@@ -24,20 +45,20 @@ jobs:
       # so the repo no longer builds on the SDK it says it develops on. The
       # other half, a floor lower than what the code needs, is a claim only
       # running an older SDK could disprove, and nothing here does.
-      - run: ./fw dart tool/bump_flutter.dart --check
-      - run: ./fw flutter analyze
-      - run: ../fw flutter test
+      - run: dart tool/bump_flutter.dart --check
+      - run: flutter analyze
+      - run: flutter test
         working-directory: app
       # The root package's own tests. Separate because a pub workspace does not
       # run its members' suites — without this line `test/` here is analyzed
       # and never executed, which is how the inspection wire format sat
       # unguarded while looking covered.
-      - run: ./fw flutter test
-      - run: ./fw dart tool/prepare_submit.dart
+      - run: flutter test
+      - run: dart tool/prepare_submit.dart
       - name: "check for uncommitted changes"
         run: |
           git diff --exit-code --stat -- . ':(exclude)*pubspec.lock' \
-          || (echo "##[error] found changed files after build. please run './fw dart tool/prepare_submit.dart'" \
+          || (echo "##[error] found changed files after build. please run 'fvm dart tool/prepare_submit.dart'" \
                    "and check in all changes" \
               && exit 1)
         shell: bash
@@ -64,7 +85,7 @@ jobs:
         # `check` and not `screenshot` so this can *block*: it stops at the
         # daemon handshake, launching no guest, so it needs no GPU — which is
         # exactly why the step below cannot block.
-        run: ../../fw dart run ../../app/bin/fw.dart run previews check
+        run: dart run ../../app/bin/fw.dart run previews check
         working-directory: examples/example
 
       - name: "and finds it when started by package name"
@@ -79,7 +100,7 @@ jobs:
         # session down the same daemon handshake and can say so with an exit
         # code; talking MCP from a workflow step would test the transport, not
         # the resolution.
-        run: ../../fw dart run flutterware_app:fw run previews check
+        run: dart run flutterware_app:fw run previews check
         working-directory: examples/example
 
       - name: "the compiler daemon, as a process"
@@ -98,5 +119,5 @@ jobs:
         # is what lets this step block: a check nobody can fail is not a check,
         # and the step it replaces was `continue-on-error` from the day it was
         # written to the day it was deleted.
-        run: ../fw dart test integration_test --exclude-tags gpu
+        run: dart test integration_test --exclude-tags gpu
         working-directory: app

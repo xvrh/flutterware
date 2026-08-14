@@ -187,22 +187,22 @@ void main() {
     expect(out.toString(), spelled);
   });
 
-  test('it names both versions when they can differ', () {
-    // The question the command exists for: the global `fw` is installed once
-    // and the package comes from the project, so one number cannot answer it.
+  test('a checkout says it is one, and names where it is', () {
     var report = FwVersion.of(const {
       appPathEnvironmentKey: '/checkout/app',
       editableSourcesEnvironmentKey: 'true',
-      walkerVersionEnvironmentKey: '0.4.9',
     });
-    expect(report.lines, [
-      'flutterware $flutterwareVersion · path dependency · /checkout',
-      'fw 0.4.9 · the global walker, which ran it',
-    ]);
-    expect(report.toJson()['walker'], '0.4.9');
+    expect(
+      report.lines.single,
+      [
+        'flutterware $flutterwareVersion',
+        'path dependency',
+        '/checkout',
+      ].join(' · '),
+    );
   });
 
-  test('a hosted install says so, and one line is enough alone', () {
+  test('a hosted install says so', () {
     var report = FwVersion.of(const {
       appPathEnvironmentKey: '/home/.flutterware/abc123/app',
     });
@@ -211,9 +211,6 @@ void main() {
       'flutterware $flutterwareVersion · unpacked from the pub cache · '
       '/home/.flutterware/abc123',
     );
-    // Nothing ran this through the global `fw`, so there is no second number
-    // to invent.
-    expect(report.toJson(), isNot(contains('walker')));
   });
 
   test('the document and the CLI render the same commands', () async {

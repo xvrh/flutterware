@@ -128,21 +128,19 @@ const fwCommands = [
   FwCommand(
     'init',
     usage: 'init',
-    summary: 'record what this project needs, once',
+    summary: 'write the two files this project needs',
     details:
-        'Writes `.flutterware/`: which Flutter SDK to use, taken from the one\n'
-        'that ran this command rather than guessed at later. Adds the '
-        'directory\nto .gitignore if nothing already covers it, and writes a '
-        'starter\ntool/flutterware.dart if the project has none.\n'
+        'A starter tool/flutterware.dart if the project has none, and a\n'
+        'flutterware entry in .mcp.json so an agent opening the repo finds '
+        'the\ntools without being told.\n'
         '\n'
-        'Registers `fw mcp` in .mcp.json too, so an agent opening the repo '
-        'finds\nthe tools without being told. That file is shared and '
-        'committed, so it\nis merged rather than written: another server stays, '
-        'and a flutterware\nentry someone has edited is left as it is.\n'
+        'Both are committed, and both describe the project rather than this\n'
+        'machine — nothing about your SDK is recorded anywhere. .mcp.json is\n'
+        'shared, so it is merged rather than written: another server stays, '
+        'and\na flutterware entry someone has edited is left as it is.\n'
         '\n'
         'It runs by itself the first time you use flutterware in a project, '
-        'so\nthis is here for scripts, for CI, and for running it again after '
-        'a\nchange of SDK.',
+        'so\nthis is here for scripts and for CI.',
   ),
   FwCommand(
     'app',
@@ -179,14 +177,16 @@ const fwCommands = [
         '\n'
         '    {\n'
         '      "mcpServers": {\n'
-        '        "flutterware": { "command": "fw", "args": ["mcp"] }\n'
+        '        "flutterware": {\n'
+        '          "command": "dart", "args": ["run", "flutterware", "mcp"]\n'
+        '        }\n'
         '      }\n'
         '    }\n'
         '\n'
-        '`fw` has to be on your PATH for that to resolve — see\n'
-        '`dart install flutterware`. The client sets the working directory,\n'
-        'and the project is found by walking up from it, so one entry works\n'
-        'for every project on the machine.\n'
+        '`fw init` writes that entry for you. It names no version manager on\n'
+        'purpose: whichever `dart` your client provides is the SDK, resolved\n'
+        'when the server is spawned. Prefix it — `fvm dart …` — if that is\n'
+        'how your project says which SDK it wants.\n'
         '\n'
         'stdout is the wire. Everything a human might want to read — logs, and\n'
         'whatever this has to build before it can answer — goes to stderr.',
@@ -300,11 +300,10 @@ const fwCommands = [
         'works in a directory flutterware has never been set up in — which is\n'
         'where the question is usually asked.\n'
         '\n'
-        'It reports **two** numbers when there are two. The global `fw` is\n'
-        'installed once by `dart install flutterware` and nothing refreshes\n'
-        'it, while the package it runs is the one your project resolved, so\n'
-        'the two drift apart by design. Only the line naming the package\n'
-        'describes the code that actually answers your commands.',
+        'One number: the package your project resolved, which is the code\n'
+        'that answers your commands. It used to report two, because a\n'
+        'globally installed `fw` drifted from the package it ran. Nothing\n'
+        'sits in front of the package now.',
   ),
   FwCommand(
     'help',
@@ -330,12 +329,12 @@ const fwExitCodes = {
 
 /// Which flutterware is answering, and where its code is.
 ///
-/// **Two numbers, because there are two.** `fw` on the PATH is installed once
-/// by `dart install flutterware` and nothing refreshes it; the package it runs
-/// is whatever the project resolved. Reporting one of them answers the question
-/// with the wrong half as often as the right one, and a version that might be
-/// either is worse than none — which is how a consumer came to read the version
-/// out of an MCP handshake to find out what they were talking to.
+/// **One number, because there is one.** The package the project resolved is
+/// the only flutterware in play: it is reached through `dart run flutterware`,
+/// so nothing sits in front of it that could carry a version of its own. This
+/// used to report two — a globally installed `fw` was installed once and never
+/// refreshed, so it drifted from the package it ran, and the pair had to be
+/// printed to say which was which. There is no such binary now.
 ///
 /// Where the package is, spelled as the launcher decided it: a path dependency
 /// runs in the checkout, a hosted one from a copy under `~/.flutterware`. That
@@ -346,12 +345,7 @@ const fwExitCodes = {
 /// the interesting case — the two versions disagreeing — is one only the
 /// environment can produce.
 class FwVersion {
-  const FwVersion({
-    required this.version,
-    this.source,
-    this.packageRoot,
-    this.walker,
-  });
+  const FwVersion({required this.version, this.source, this.packageRoot});
 
   factory FwVersion.of(Map<String, String> environment) {
     var appToolPath = environment[appPathEnvironmentKey];
@@ -365,10 +359,6 @@ class FwVersion {
           ? 'path dependency'
           : 'unpacked from the pub cache',
       packageRoot: appToolPath == null ? null : p.dirname(appToolPath),
-      // Absent when this was not started by the global `fw` — `dart run
-      // flutterware`, or the built CLI run directly. One number is the honest
-      // answer then, rather than a guess at the other.
-      walker: environment[walkerVersionEnvironmentKey],
     );
   }
 
@@ -381,19 +371,14 @@ class FwVersion {
 
   final String? packageRoot;
 
-  /// The global `fw` that ran this, when one did.
-  final String? walker;
-
   Map<String, Object?> toJson() => {
     'version': version,
     'source': ?source,
     'packageRoot': ?packageRoot,
-    'walker': ?walker,
   };
 
   List<String> get lines => [
     ['flutterware $version', ?source, ?packageRoot].join(' · '),
-    if (walker case var walker?) 'fw $walker · the global walker, which ran it',
   ];
 }
 
@@ -732,16 +717,14 @@ class FwCli {
   }
 
   ProjectInit? _projectInit() {
-    var dartExecutable = Platform.environment[dartExecutableEnvironmentKey];
-    if (dartExecutable == null) return null;
+    // Still gated on the launcher having run, though nothing here needs the
+    // path any more: it is the one signal that says a real invocation is
+    // happening rather than a test driving [FwCli] in a directory it would not
+    // want written to.
+    if (Platform.environment[dartExecutableEnvironmentKey] == null) return null;
     var root = findRepoRoot(Directory.current.path);
     if (root == null) return null;
-    return ProjectInit(
-      root: root,
-      dartExecutable: dartExecutable,
-      out: out,
-      err: err,
-    );
+    return ProjectInit(root: root, out: out, err: err);
   }
 
   /// Builds the GUI if it is missing, then runs it.
@@ -749,8 +732,8 @@ class FwCli {
   /// The context comes from the environment because this process is an AOT
   /// binary: `Platform.resolvedExecutable` is this executable, so the SDK
   /// cannot be found by walking up from it. The launcher ran under `dart run`
-  /// and therefore knew — which is the same "record, do not discover" rule the
-  /// adoption story applies to `.flutterware/sdk`.
+  /// and therefore knew — it is the invocation, passed on rather than guessed
+  /// at from this side.
   Future<int> _app({
     required bool forceBuild,
     required bool release,

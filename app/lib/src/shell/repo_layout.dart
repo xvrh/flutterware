@@ -10,8 +10,7 @@ const configFileName = 'tool/flutterware.dart';
 ///
 /// A root is a directory holding `tool/flutterware.dart`, or failing that a
 /// `.git`. Launching from `packages/admin/lib` therefore opens the one window
-/// for the whole repo — the same idiom the distribution design uses to find
-/// `flutter_version`.
+/// for the whole repo.
 ///
 /// **The walk stops at the repository.** A `tool/flutterware.dart` in some
 /// ancestor of the checkout belongs to a different project — a sibling app

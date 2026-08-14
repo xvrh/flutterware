@@ -13,15 +13,6 @@ const forceCompileOption = 'force-compile';
 /// `test/version_test.dart` fails if this and the two pubspecs disagree.
 const flutterwareVersion = '0.5.2';
 
-/// Set by the global `fw` when it forwards to a project, carrying its own
-/// version across the exec.
-///
-/// The walker is installed once and never refreshed while the package it runs
-/// comes from the project, so the two can be far apart — which is exactly the
-/// question `fw --version` exists to answer. Nothing else needs it, and a `fw`
-/// too old to set it simply reports one version instead of two.
-const walkerVersionEnvironmentKey = 'FW_WALKER_VERSION';
-
 /// Set by the launcher when `app/` is the checkout being edited rather than a
 /// copy under `~/.flutterware`.
 ///

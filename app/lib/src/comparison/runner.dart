@@ -8,8 +8,8 @@ import 'package:flutterware/src/inspect/node.dart';
 import 'channels.dart';
 import 'closure.dart';
 import 'import_graph.dart';
+import '../utils/flutter_sdk.dart';
 import 'pixel_diff.dart';
-import 'sdk_match.dart';
 import 'shot_cache.dart';
 import 'shot_key.dart';
 import 'skip.dart';
@@ -232,12 +232,21 @@ class ComparisonRunner {
   /// slow screen but a dead window — `plan` is one uninterruptible microtask,
   /// since nothing in the loop awaits.
   Future<ComparisonPlan> plan() async {
-    // Before anything: two checkouts on different Flutter versions differ in
-    // every pixel for reasons that are not the branch's, and there is no
-    // threshold that separates that from a real change.
-    var sdk = await SdkMatch.of(baseRoot: baseRoot, headRoot: headRoot);
-    if (!sdk.same) throw ComparisonRefused(sdk.reason!);
-    var sdkKey = sdk.head!.engineHash ?? sdk.head!.root;
+    // Keyed on the SDK this session runs under, which is the one both sides
+    // are rendered with — so switching SDKs invalidates the cache rather than
+    // handing back pictures the current engine would not draw.
+    //
+    // **It is not checked against what the base commit wanted, and that is a
+    // known gap.** Two checkouts that pinned different Flutter versions differ
+    // in every pixel for reasons that are not the branch's, and this used to
+    // refuse the comparison over it. Detecting that meant resolving an SDK
+    // from a pointer inside the base checkout — discovery, which flutterware
+    // no longer does anywhere: the SDK is whichever one the invocation names.
+    // Teaching a comparison how to *invoke* an older SDK (a `comparison`
+    // entry in `tool/flutterware.dart` naming `fvm flutter`, say) is the real
+    // fix, and it is not built. Until it is, a cross-version comparison runs
+    // and reports SDK churn as change, unwarned.
+    var sdkKey = (await FlutterSdkPath.findSdk())?.root ?? 'unknown';
 
     var headEntries = await side.entries(headRoot);
     var baseEntries = await side.entries(baseRoot);

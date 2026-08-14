@@ -5,7 +5,7 @@
 // bring it back and drives it again — the recovery an agent could not perform
 // before this layer existed.
 //
-//   cd app && ../fw dart run tool/native_spike/foreground_check.dart <udid>
+//   cd app && fvm dart run tool/native_spike/foreground_check.dart <udid>
 import 'dart:io';
 
 import 'package:flutterware/plugins.dart';

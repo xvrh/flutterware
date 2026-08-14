@@ -4,7 +4,7 @@
 /// Run it from the app package:
 ///
 /// ```sh
-/// cd app && ../fw dart run tool/icon/generate.dart
+/// cd app && fvm dart run tool/icon/generate.dart
 /// ```
 ///
 /// **Why this exists rather than `flutter_launcher_icons`.** That package

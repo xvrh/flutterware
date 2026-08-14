@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -27,8 +26,10 @@ void main() {
   });
   tearDown(() => root.deleteSync(recursive: true));
 
-  /// A checkout holding [files], and an SDK for it to pin so the runner's
-  /// first check passes.
+  /// A checkout holding [files].
+  ///
+  /// No SDK is seeded: the runner reads none from a checkout. It keys its cache
+  /// on the SDK the session runs under, and both sides render with that one.
   String checkout(String name, Map<String, String> files) {
     var dir = Directory(p.join(root.path, name))..createSync(recursive: true);
     files.forEach((relative, content) {
@@ -36,21 +37,6 @@ void main() {
         ..parent.createSync(recursive: true)
         ..writeAsStringSync(content);
     });
-    var sdk = Directory(p.join(root.path, 'sdk', 'bin'))
-      ..createSync(recursive: true);
-    File(p.join(sdk.path, 'flutter')).writeAsStringSync('');
-    File(p.join(sdk.path, 'dart')).writeAsStringSync('');
-    var cacheDir = Directory(p.join(sdk.path, 'cache'))
-      ..createSync(recursive: true);
-    File(p.join(cacheDir.path, 'flutter.version.json')).writeAsStringSync(
-      jsonEncode({
-        'frameworkVersion': '3.47.0',
-        'frameworkRevision': 'rev',
-        'engineContentHash': 'engine',
-      }),
-    );
-    var fvm = Directory(p.join(dir.path, '.fvm'))..createSync();
-    Link(p.join(fvm.path, 'flutter_sdk')).createSync(p.dirname(sdk.path));
     return dir.path;
   }
 
@@ -131,28 +117,6 @@ void main() {
 
       expect(result.rendered, 2);
       expect(itemFor(result, 'demo/card.dart#card').state, isNot(isNull));
-    });
-
-    // The estimate is the first thing a tab asks for, so it is the first place
-    // an SDK mismatch can be caught — before a base checkout is even built.
-    test('a mismatched SDK refuses at plan time', () async {
-      side.declared['*'] = ['demo/card.dart#card'];
-      var base = checkout('base', {'demo/card.dart': '1'});
-      var head = checkout('head', {'demo/card.dart': '2'});
-      var other = Directory(p.join(root.path, 'other-sdk', 'bin'))
-        ..createSync(recursive: true);
-      Directory(p.join(other.path, 'cache')).createSync();
-      File(
-        p.join(other.path, 'cache', 'flutter.version.json'),
-      ).writeAsStringSync(jsonEncode({'frameworkVersion': '3.40.0'}));
-      Link(
-        p.join(head, '.fvm', 'flutter_sdk'),
-      ).updateSync(p.dirname(other.path));
-
-      await expectLater(
-        runnerFor(base: base, head: head).plan(),
-        throwsA(isA<ComparisonRefused>()),
-      );
     });
   });
 
@@ -394,33 +358,6 @@ void main() {
       expect(result.items.single.state, ComparedState.wasBroken);
     });
   });
-
-  test(
-    'two checkouts on different SDKs are refused before any render',
-    () async {
-      side.declared['*'] = ['demo/a.dart#a'];
-      var base = checkout('base', {'demo/a.dart': '1'});
-      var head = checkout('head', {'demo/a.dart': '2'});
-      // Repoint head at an SDK of its own.
-      var other = Directory(p.join(root.path, 'other-sdk', 'bin'))
-        ..createSync(recursive: true);
-      File(p.join(other.path, 'flutter')).writeAsStringSync('');
-      File(p.join(other.path, 'dart')).writeAsStringSync('');
-      Directory(p.join(other.path, 'cache')).createSync();
-      File(
-        p.join(other.path, 'cache', 'flutter.version.json'),
-      ).writeAsStringSync(jsonEncode({'frameworkVersion': '3.40.0'}));
-      Link(
-        p.join(head, '.fvm', 'flutter_sdk'),
-      ).updateSync(p.dirname(other.path));
-
-      await expectLater(
-        compare(base: base, head: head),
-        throwsA(isA<ComparisonRefused>()),
-      );
-      expect(side.renderedFor, isEmpty);
-    },
-  );
 
   test('a second run against the same base renders only the head', () async {
     side.declared['*'] = ['demo/card.dart#card'];

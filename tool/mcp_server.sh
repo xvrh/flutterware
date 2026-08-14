@@ -1,33 +1,45 @@
 #!/bin/sh
 # Boots the flutterware MCP server for THIS checkout, healing the worktree
-# first. User projects never run this — `fw init` registers the AOT `fw mcp`
-# there, which opens its session per tool call and so survives an unresolved
-# worktree on its own. This checkout runs the server from source instead
-# (a stale global `fw` cannot represent the branch being worked on), and a
-# source run cannot even resolve itself until the one-time setup has run:
-# the SDK cache starts cold and the workspace starts unresolved. An MCP client
-# that fails to connect at session start never retries, so without this the
-# whole session runs toolless over a setup race. Pay the setup on first
+# first. User projects never run this — `fw init` registers `dart run
+# flutterware mcp` there, which opens its session per tool call and so survives
+# an unresolved worktree on its own. This checkout runs the server from source
+# instead, and a source run cannot even resolve itself until the one-time setup
+# has run: the SDK cache starts cold and the workspace starts unresolved. An MCP
+# client that fails to connect at session start never retries, so without this
+# the whole session runs toolless over a setup race. Pay the setup on first
 # connect instead: slow once, connected always.
 #
 # stdio discipline: stdout belongs to the MCP protocol, so every word said
 # here goes to stderr — and stdin *is* the protocol stream, so no bootstrap
 # command may inherit it. A would-be prompt under </dev/null fails fast
 # instead of eating protocol bytes.
+#
+# That discipline is why the SDK is installed *before* anything is run under
+# it. fvm auto-installs a missing version on first use and narrates the
+# download onto **stdout** — measured: a banner, a spinner and a curl progress
+# meter — which would arrive in the middle of the JSON-RPC handshake. There is
+# no flag that quiets it, so the install is done here, redirected, and by the
+# time the server starts fvm has nothing left to say.
 set -e
 cd "$(dirname "$0")/.."
 
 say() { echo "[mcp bootstrap] $*" >&2; }
 
-# The version pinned in flutter_version, empty when unreadable. The ./fw
-# wrapper owns installing it; this only asks whether that already happened —
-# a per-version cache dir means a pin bump on this branch reads as "not
-# installed" all by itself.
-pin="$(tr -d ' \t\r\n' < flutter_version 2>/dev/null || true)"
+# The version pinned in .fvmrc, empty when unreadable. fvm owns installing it;
+# this only asks whether that already happened — a per-version cache dir means
+# a pin bump on this branch reads as "not installed" all by itself.
+pin="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc 2>/dev/null || true)"
 
+# fvm's cache roots, in the order fvm itself reads them. Asked passively: no
+# fvm command is run to answer this, so a cold pin costs a few stats rather
+# than a download nobody asked for yet.
 sdk_current() {
   [ -n "$pin" ] || return 1
-  [ -x "${FW_SDK_CACHE:-$HOME/.flutterware/sdks}/$pin/bin/dart" ]
+  for base in "${FVM_CACHE_PATH:-}" "${FVM_HOME:-}" "$HOME/fvm"; do
+    [ -n "$base" ] || continue
+    if [ -x "$base/versions/$pin/bin/dart" ]; then return 0; fi
+  done
+  return 1
 }
 
 # Resolved is not enough: it has to be *current*. `dart run` re-resolves when a
@@ -35,8 +47,8 @@ sdk_current() {
 # inside the client's 30s connect budget, over a network nobody here controls.
 # Six sessions died in it on 2026-08-11 alone, each with a pub stack trace
 # ("Attempting to send request on closed client") that names no cause and no
-# fix. A rebase touching any pubspec is all it takes. So the wrapper resolves
-# first, from the cache, and `dart run` finds nothing left to do.
+# fix. A rebase touching any pubspec is all it takes. So the workspace is
+# resolved first, from the cache, and `dart run` finds nothing left to do.
 resolution_current() {
   [ -f .dart_tool/package_config.json ] || return 1
   # -maxdepth 3 covers the workspace members and skips build output and the
@@ -47,6 +59,11 @@ resolution_current() {
       -newer .dart_tool/package_config.json 2>/dev/null | head -n1
   )" ]
 }
+
+if [ -z "$pin" ]; then
+  say 'no Flutter version pinned in .fvmrc — cannot boot.'
+  exit 1
+fi
 
 if ! sdk_current || ! resolution_current; then
   # Parallel sessions on one worktree each spawn this script; two concurrent
@@ -90,11 +107,12 @@ if ! sdk_current || ! resolution_current; then
 
   # Re-check under the lock: whoever held it probably did the work.
   if ! sdk_current; then
-    # The wrapper verifies the checksum and moves the SDK into place
-    # atomically, so a download killed partway leaves no broken SDK — and its
-    # own lock has owner-liveness, so it leaves no wedge either.
+    # The version is named explicitly rather than left to the project config:
+    # bare `fvm install` also runs `use`, which writes `.fvm/` into the
+    # checkout and appends to `.gitignore`. Booting a server is not a reason
+    # to edit the repo.
     say 'installing the pinned Flutter SDK (a cold download takes minutes)…'
-    ./fw dart --version </dev/null >&2
+    fvm install "$pin" </dev/null >&2
   fi
   if ! resolution_current; then
     # Offline first, and usually last: a rebase moves a pubspec's mtime far
@@ -102,8 +120,8 @@ if ! sdk_current || ! resolution_current; then
     # lockfile pins. Only a genuinely new dependency needs the network, and
     # then the failure is about that package rather than about a socket.
     say 'resolution is stale — running pub get (offline first)…'
-    ./fw flutter pub get --offline </dev/null >&2 ||
-      ./fw flutter pub get </dev/null >&2
+    fvm flutter pub get --offline </dev/null >&2 ||
+      fvm flutter pub get </dev/null >&2
   fi
 
   rm -rf "$lock" 2>/dev/null || true
@@ -117,4 +135,4 @@ fi
 # it was found: the server ran for weeks resolving null, and every previews
 # screenshot refused with a message about `appPackageRoot` that named the
 # symptom rather than the invocation.
-exec env APP_TOOL_PATH="$PWD/app" ./fw dart run flutterware_app:mcp
+exec env APP_TOOL_PATH="$PWD/app" fvm dart run flutterware_app:mcp

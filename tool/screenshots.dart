@@ -178,7 +178,10 @@ Future<Map<String, Object?>> _capture(
   required int height,
   bool rebuild = false,
 }) async {
-  var result = await Process.run('dart', [
+  // The dart running this script, never the one on PATH: the SDK is whichever
+  // one the invocation named, and a shot rendered by a different engine is a
+  // diff nobody asked for.
+  var result = await Process.run(Platform.resolvedExecutable, [
     'run',
     'flutterware',
     'capture',

@@ -17,21 +17,23 @@ dart pub add flutterware          # or: fvm dart pub add flutterware
 
 ```shell
 # Run this in your Flutter project directory
-dart run flutterware              # or: fvm dart run flutterware, ./fw dart run flutterware…
+dart run flutterware              # or: fvm dart run flutterware
 ```
 
 That opens the GUI. The first launch is slow — it builds the CLI and the
-desktop app — and it also initializes the project: it writes `.flutterware/`
-(a pointer to the Flutter SDK you just ran it with), adds that directory to
-`.gitignore`, scaffolds a `tool/flutterware.dart` if you have none, and
-registers `fw mcp` in `.mcp.json` so an agent opening the repo finds the tools
-without being told.
+desktop app — and it also initializes the project: it scaffolds a
+`tool/flutterware.dart` if you have none, and registers flutterware in
+`.mcp.json` so an agent opening the repo finds the tools without being told.
 
-**The SDK you ran it with is the one it records**, and everything afterwards
-re-execs with that — so the choice is made once, by you, with the command you
-already type. Point it at a different SDK by running it with a different
-`dart`. If your project pins with fvm, run it with `fvm dart` and the pin is
-what gets recorded; nothing here competes with your version manager.
+**The SDK you run it with is the SDK it uses**, every time, and nothing is
+recorded anywhere. If your project pins with fvm, run `fvm dart run
+flutterware` and that is the pin honoured — there is no second place for the
+answer to be written down and go stale, and nothing here competes with your
+version manager. An alias is worth having:
+
+```shell
+alias fw='fvm dart run flutterware'   # or 'dart run flutterware'
+```
 
 Anything after `dart run flutterware` is passed to the CLI instead:
 
@@ -41,35 +43,22 @@ dart run flutterware actions    # what can be invoked, and with what
 dart run flutterware help
 ```
 
-### Put `fw` on your PATH
+### Agents
 
-Once per machine, not per project:
+An MCP client spawns a command, so `fw init` writes one into `.mcp.json`:
 
-```shell
-dart install flutterware
+```json
+{ "mcpServers": { "flutterware": {
+  "command": "dart", "args": ["run", "flutterware", "mcp"]
+} } }
 ```
 
-`fw <command>` is then `dart run flutterware <command>` from anywhere inside a
-project, and the rest of this file is written that way.
-
-It is worth doing even if you like typing. `dart run` has to be started from a
-package root and uses whichever `dart` is on your PATH; `fw` walks up to the
-project itself and re-execs with the SDK that project recorded in
-`.flutterware/`, so it is right in a monorepo, right under fvm, and right when
-the `dart` you happen to have is not the one the project resolves against.
-
-`fw` itself is a redirect and nothing else — it holds no logic, so it never
-needs upgrading in step with anything. Whichever SDK installs it, every
-version-sensitive decision happens on the far side of the exec, in the
-project's own resolved sources. One install per machine, then forget it.
-
-> The SDK that runs `dart install` still has to satisfy this package's own
-> `environment:` constraint, so today `fw` cannot be installed from an SDK
-> older than that floor even though the binary itself would run fine on one.
-
-**Agents need it.** An MCP client spawns a command; `fw mcp` is a single entry
-that works for every project on the machine, where `dart run` would need the
-client to already be standing in the right package with the right SDK. See
+It names no version manager on purpose — whichever `dart` your client provides
+is the SDK, resolved when the server is spawned rather than recorded when the
+entry was written. Prefix it (`fvm dart …`) if that is how your project says
+which SDK it wants. One caution if you do: a version manager asked for a
+version it has not cached may install it and narrate the download onto stdout,
+which is where the protocol lives — install it once by hand first. See
 [The three surfaces](#the-three-surfaces) below.
 
 ## Configure the project
@@ -121,19 +110,22 @@ there is usually nothing to do:
 ```json
 {
   "mcpServers": {
-    "flutterware": { "command": "fw", "args": ["mcp"] }
+    "flutterware": {
+      "command": "dart", "args": ["run", "flutterware", "mcp"]
+    }
   }
 }
 ```
 
 It is merged rather than written, so another server in that file stays and an
-entry you have edited is left alone. Put the same three lines in your client's
-own config if you would rather not commit it.
+entry you have edited is left alone. Put the same lines in your client's own
+config if you would rather not commit it.
 
-The entry names `fw`, so it resolves only if `fw` is installed — see
-[Put `fw` on your PATH](#put-fw-on-your-path). Nothing else is per project: the
-client sets the working directory, and `fw` finds the project by walking up
-from it.
+The command is the one you would type, and it names no version manager: your
+client's `dart` is the SDK, resolved when the server is spawned. Change it to
+`fvm dart …` — or whatever your project uses — if that `dart` is not the right
+one. The client sets the working directory, so it has to be the package the
+`flutterware` dependency is in.
 
 Start with `flutterware_status`. `flutterware_actions` lists what can be
 invoked, with each action's parameters and the shape of what it returns, and

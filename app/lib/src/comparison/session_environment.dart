@@ -117,11 +117,12 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
       cacheRoot: BaseCheckout.defaultRoot,
       resolve: (path) async {
         // SDK links are machine-made and `.gitignore` hides them, so a fresh
-        // checkout has none and would resolve to whatever SDK happens to be
-        // running this. The base is given the head's, and what makes that
-        // legitimate rather than a fudge is that the pin (`flutter_version`,
-        // or `.fvmrc`) *is* versioned — `SdkIdentity.pinned` compares the two
-        // commits' own claims before it looks at any link.
+        // checkout has none. The base is given the SDK this session runs
+        // under, which is the only SDK flutterware has: the one the invocation
+        // named.
+        //
+        // Nothing checks whether the base commit wanted a different one — see
+        // the note on the cache key in `ComparisonRunner.plan`.
         var link = Link(p.join(path, '.fvm', 'flutter_sdk'));
         if (!link.existsSync()) {
           Directory(p.dirname(link.path)).createSync(recursive: true);
