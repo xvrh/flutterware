@@ -399,7 +399,7 @@ Future<ScenarioResults?> _compareScenarios({
         baseRoot: baseRoot,
         source: source,
         cache: cache,
-        extraPaths: pixelInputsOf(
+        pixels: PixelInputs.of(
           packagePath: side.packagePath,
           roots: [top, baseRoot],
         ),

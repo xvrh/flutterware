@@ -44,6 +44,38 @@ void main() {
       expect(head.changedAgainst(base), isEmpty);
     });
 
+    // The property the whole pixel-input hoist rests on. Hashing the entry's
+    // sources per entry and the pixel inputs once per checkout has to reach
+    // the same fingerprint as hashing the union did, or every cached picture
+    // in every worktree stops being found and the comparison re-renders the
+    // world to arrive at the same answer.
+    test('merging two closures equals hashing their union', () {
+      var checkoutPath = checkout('merged', {
+        'lib/a.dart': 'const a = 1;',
+        'assets/logo.png': 'red',
+        'pubspec.lock': 'locked',
+      });
+      var sources = ['lib/a.dart'];
+      var pixels = ['assets/logo.png', 'pubspec.lock'];
+
+      var union = SourceClosure.of([...sources, ...pixels], root: checkoutPath);
+      var merged = SourceClosure.of(
+        sources,
+        root: checkoutPath,
+      ).merge(SourceClosure.of(pixels, root: checkoutPath));
+
+      expect(merged.digests, union.digests);
+      expect(merged.fingerprint, union.fingerprint);
+    });
+
+    test('merging nothing is the closure itself', () {
+      var closure = SourceClosure.of([
+        'lib/a.dart',
+      ], root: checkout('alone', {'lib/a.dart': 'const a = 1;'}));
+
+      expect(closure.merge(null).fingerprint, closure.fingerprint);
+    });
+
     test('a changed byte moves the fingerprint and is named', () {
       var paths = ['lib/a.dart', 'lib/b.dart'];
       var base = SourceClosure.of(
@@ -152,7 +184,7 @@ void main() {
           'demo/card.dart': 'card',
           'assets/logo.png': 'new pixels',
         }),
-        extraPaths: ['assets/logo.png'],
+        pixels: PixelInputs(['assets/logo.png']),
       );
 
       expect(decision.skip, isFalse);
@@ -257,7 +289,7 @@ void main() {
         memo: memoWith('e', ['pkg/lib/a.dart']),
         baseRoot: base,
         headRoot: head,
-        extraPaths: pixelInputsOf(packagePath: 'pkg', roots: [head, base]),
+        pixels: PixelInputs.of(packagePath: 'pkg', roots: [head, base]),
       );
 
       expect(decision.skip, isFalse);

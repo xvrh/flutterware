@@ -131,9 +131,9 @@ class _ComparisonTabsState extends State<ComparisonTabs>
   ///
   /// Answered from the same state the screen draws from, as [SettleSource]
   /// requires. **Busy includes [HalfStage.ready]**, which is the state between
-  /// the estimate landing and the tab's run starting: it is a microtask wide
-  /// and it is idle, so a settle check that fell in it would photograph a list
-  /// that has not begun filling.
+  /// the base landing and the tab's run starting: it is a microtask wide and it
+  /// is idle, so a settle check that fell in it would photograph a list that
+  /// has not begun filling.
   @override
   String? get busyWith {
     if (_loading) return 'opening the comparison';
@@ -146,11 +146,16 @@ class _ComparisonTabsState extends State<ComparisonTabs>
       return _unavailable == null ? 'opening the comparison' : null;
     }
     if (controller.refusal != null) return null;
-    if (controller.baseRoot == null) return 'preparing the base checkout';
     var half = _tabs.firstWhere((tab) => tab.id == _tab).half;
-    return switch (half?.stage) {
-      null || HalfStage.done || HalfStage.refused => null,
-      _ => 'comparing ${half!.kind.label}',
+    // **The files tab waits on nothing.** With the halves lazy, an unopened
+    // comparison has no base checkout and never will until somebody asks for
+    // one — so reading a null `baseRoot` as *preparing* would leave this screen
+    // permanently busy on the one tab that prepares nothing.
+    if (half == null) return null;
+    if (controller.baseRoot == null) return 'preparing the base checkout';
+    return switch (half.stage) {
+      HalfStage.done || HalfStage.refused => null,
+      _ => 'comparing ${half.kind.label}',
     };
   }
 
@@ -191,9 +196,11 @@ class _ComparisonTabsState extends State<ComparisonTabs>
       }
       _controller = ComparisonController(environment)..addListener(_onChange);
     });
-    // Preparing the base is what lets a tab carry its estimate. Rendering and
-    // replaying stay behind the tab.
-    unawaited(_controller!.prepare().then((_) => _openSelectedTab()));
+    // **Nothing is prepared here.** Building the environment is two git calls
+    // and answers what the strip needs — which halves this project declares,
+    // and what they would be against. Everything past that, the base checkout
+    // included, waits for a tab.
+    _openSelectedTab();
   }
 
   void _onChange() {
@@ -312,12 +319,14 @@ class _Tab {
   final ComparisonHalf? half;
 }
 
-/// `[ files ][ previews · 14 of 213 ][ scenarios · 5 of 43 ]`
+/// `[ files ][ previews ][ scenarios ]`
 ///
-/// The estimate rides on the tab because that is where it has to arrive
-/// *before* the click: opening a tab runs its half, so the cost has to be
-/// readable from outside it. A tab whose estimate is not known yet says
-/// nothing rather than guessing.
+/// **A tab says what it is, and nothing about what it would cost.** It used to
+/// carry an estimate — *previews · 14 of 213* — on the reasoning that opening a
+/// tab runs its half, so the price should be readable from outside it. Working
+/// the price out turned out to cost about what the work costs, and it was paid
+/// on arrival by everyone who opened Changes to read a diff. See
+/// [ComparisonController].
 class _TabStrip extends StatelessWidget {
   const _TabStrip({
     required this.tabs,
@@ -390,12 +399,9 @@ class _TabButton extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var half = tab.half;
-    var note = switch (half?.stage) {
-      null => null,
-      HalfStage.refused => null,
-      HalfStage.running => 'running…',
-      _ => half?.estimate,
-    };
+    // The one thing a tab still says about its half, and it only says it once
+    // you have opened the thing that is running.
+    var note = half?.stage == HalfStage.running ? 'running…' : null;
 
     return Tappable.builder(
       key: comparisonTabKey(tab.id),

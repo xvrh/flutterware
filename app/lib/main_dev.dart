@@ -38,6 +38,7 @@ final _logger = Logger('main_dev');
 /// needs it, and only when its panel is opened.
 void main({
   String appRoot = const String.fromEnvironment('FLUTTERWARE_APP_ROOT'),
+  String project = '..',
 }) async {
   setupDebugLogger();
   var appContext = AppContext(
@@ -59,7 +60,7 @@ void main({
   );
   runApp(AppDevbar(flags: const [], child: ShellApp(shell)));
 
-  await WindowTitle.setForProject('..');
+  await WindowTitle.setForProject(project);
 
   // And the tile, which is what a user actually scans.
   DockIcon.follow(shell);
@@ -67,5 +68,5 @@ void main({
   // Discovery runs a subprocess; the shell renders its empty state until it
   // resolves rather than blocking the first frame. The path is walked up to the
   // repo root, so this opens flutterware's own workspace.
-  await shell.start('..');
+  await shell.start(project);
 }

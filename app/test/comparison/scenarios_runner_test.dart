@@ -56,7 +56,7 @@ void main() {
       ).plan();
 
       expect(plan.toRun, isEmpty);
-      expect(plan.estimate, '0 of 1');
+      expect(plan.total, 1);
       expect(plan.settled.single.state, ComparedState.skipped);
       expect(source.replayed, isEmpty);
     });
@@ -76,7 +76,7 @@ void main() {
       ).plan();
 
       expect(plan.toRun, ['test/shop.dart#Checkout']);
-      expect(plan.estimate, '1 of 2');
+      expect(plan.total, 2);
     });
 
     test('a scenario one side has is settled without a replay', () async {

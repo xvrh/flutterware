@@ -96,8 +96,8 @@ void main() {
         }),
       ).plan();
 
-      expect(plan.estimate, '1 of 2');
       expect(plan.toRender, ['demo/card.dart#card']);
+      expect(plan.total, 2);
       expect(side.renderedFor, isEmpty);
     });
 

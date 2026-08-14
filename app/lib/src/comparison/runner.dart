@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
@@ -137,9 +138,6 @@ class ComparisonPlan {
 
   /// Every entry either side declares, settled and unsettled together.
   final int total;
-
-  /// *14 of 213* — what a tab says before it costs anything.
-  String get estimate => '${toRender.length} of $total';
 }
 
 /// One side could not render *anything* — it did not compile.
@@ -217,15 +215,22 @@ class ComparisonRunner {
 
   /// Everything that can be decided without rendering anything.
   ///
-  /// **The whole skip rule, and none of the cost.** Split out of [run] so a tab
-  /// can say *14 of 213* before you click it: the estimate has to arrive before
-  /// the work does, and an estimate that had to render to know would be the
-  /// work. Measured at 142ms on a real branch — one parse of each package and
-  /// a sha1 per file in the touched closures.
+  /// **The whole skip rule, and none of the rendering.** Split out of [run]
+  /// because it is what makes a screen honest while it fills: every row that is
+  /// added, removed or skipped is already settled here, so the list draws its
+  /// full shape immediately and only the pictures arrive late.
   ///
-  /// Also what makes a screen honest while it fills: every row that is added,
-  /// removed or skipped is already settled here, so the list draws its full
-  /// shape immediately and only the pictures arrive late.
+  /// It is no longer split out so that a *tab* can be priced before it is
+  /// opened. It was, and the price was the problem — see
+  /// [ComparisonController].
+  ///
+  /// **The deciding runs on an isolate**, because its size is the *project's*
+  /// and not ours: one sha1 per file in every entry's closure, plus the asset
+  /// tree. This was once measured at 142ms, on this repository, which has a
+  /// handful of previews and no assets to speak of; a real catalog of 90
+  /// previews put the same loop at minutes, and on the UI isolate that is not a
+  /// slow screen but a dead window — `plan` is one uninterruptible microtask,
+  /// since nothing in the loop awaits.
   Future<ComparisonPlan> plan() async {
     // Before anything: two checkouts on different Flutter versions differ in
     // every pixel for reasons that are not the branch's, and there is no
@@ -263,60 +268,37 @@ class ComparisonRunner {
       }
     }
 
-    // The graphs are built once per side and reused across every entry: their
-    // closures overlap almost entirely, so this is one parse of each package
-    // rather than one per entry.
-    var headGraph = _graphFor(headRoot);
-    var baseGraph = _graphFor(baseRoot);
-
-    // Computed once for the whole plan: the same lockfiles and assets decide
-    // every entry's pixels, and they go into the skip rule and the shot key
-    // together — a key that ignored what the skip rule watches would serve a
-    // stale picture for exactly the change the skip rule re-rendered for.
-    var pixelInputs = pixelInputsOf(
-      packagePath: side.packagePath,
-      roots: [headRoot, baseRoot],
+    // `side` and `cache` are live objects and stay here; what crosses is the
+    // ids, the paths and the one file each entry starts from. A tear-off of
+    // `decide` sends its receiver, which is why the receiver is plain data.
+    var decided = await Isolate.run(
+      _PlanInputs(
+        ids: common,
+        files: {for (var id in common) id: side.fileOf(id)},
+        headRoot: headRoot,
+        baseRoot: baseRoot,
+        packagePath: side.packagePath,
+        packageConfig: packageConfig,
+        memoDirectory: cache.memo.directory,
+        sdkKey: sdkKey,
+      ).decide,
     );
 
-    var toRender = <String>[];
-    var keys = <String, ({String base, String head})>{};
-    for (var id in common) {
-      var file = side.fileOf(id);
-      var closure = headGraph.closureOf(file);
-      cache.memo.remember(id, closure);
-
-      var decision = SkipDecision.of(
-        entryId: id,
-        memo: cache.memo,
-        baseRoot: baseRoot,
-        headRoot: headRoot,
-        extraPaths: pixelInputs,
-      );
-      keys[id] = (
-        base: _keyFor(id, baseGraph, baseRoot, file, sdkKey, pixelInputs),
-        head: _keyFor(id, headGraph, headRoot, file, sdkKey, pixelInputs),
-      );
-
-      if (decision.skip) {
-        settled.add(ComparedItem(id: id, state: ComparedState.skipped));
-        continue;
-      }
-      toRender.add(id);
+    for (var id in decided.skipped) {
+      settled.add(ComparedItem(id: id, state: ComparedState.skipped));
     }
-
     return ComparisonPlan(
       settled: settled,
-      toRender: toRender,
-      keys: keys,
-      total: settled.length + toRender.length,
+      toRender: decided.toRender,
+      keys: decided.keys,
+      total: settled.length + decided.toRender.length,
     );
   }
 
   /// Renders what [plan] left and diffs it.
   ///
-  /// Takes a plan when one was already made — the tab that showed the estimate
-  /// made one, and remaking it would hash every closure a second time to reach
-  /// the same answer.
+  /// Takes a plan when the caller already made one, since remaking it would
+  /// hash every closure a second time to reach the same answer.
   Future<ComparisonResult> run({ComparisonPlan? from}) async {
     var watch = Stopwatch()..start();
     var plan = from ?? await this.plan();
@@ -477,6 +459,92 @@ class ComparisonRunner {
       },
     );
   }
+}
+
+/// [ComparisonRunner.plan]'s deciding half, as the plain data it needs.
+///
+/// A class rather than a closure because [Isolate.run] copies whatever the
+/// closure captures, and a closure over the runner would capture `side` and
+/// `cache` — a compiler, a guest and a cache handle, none of which can cross
+/// and none of which the deciding wants.
+///
+/// The memo is opened here from its directory rather than sent: it is a file
+/// on disk, and the isolate is the one writing it.
+class _PlanInputs {
+  _PlanInputs({
+    required this.ids,
+    required this.files,
+    required this.headRoot,
+    required this.baseRoot,
+    required this.packagePath,
+    required this.packageConfig,
+    required this.memoDirectory,
+    required this.sdkKey,
+  });
+
+  /// The entries both sides declare — the only ones a skip rule applies to.
+  final List<String> ids;
+
+  /// Entry id → its source file, relative to a checkout root. Resolved by the
+  /// side before the hop, since only the side knows how.
+  final Map<String, String> files;
+
+  final String headRoot;
+  final String baseRoot;
+  final String packagePath;
+  final String? packageConfig;
+  final String memoDirectory;
+  final String sdkKey;
+
+  ({
+    List<String> skipped,
+    List<String> toRender,
+    Map<String, ({String base, String head})> keys,
+  })
+  decide() {
+    var memo = ClosureMemo(memoDirectory);
+    // The graphs are built once per side and reused across every entry: their
+    // closures overlap almost entirely, so this is one parse of each package
+    // rather than one per entry.
+    var headGraph = _graphFor(headRoot);
+    var baseGraph = _graphFor(baseRoot);
+
+    // Listed and hashed once for the whole plan: the same lockfiles and assets
+    // decide every entry's pixels, and they go into the skip rule and the shot
+    // key together — a key that ignored what the skip rule watches would serve
+    // a stale picture for exactly the change the skip rule re-rendered for.
+    var pixels = PixelInputs.of(
+      packagePath: packagePath,
+      roots: [headRoot, baseRoot],
+    );
+
+    var skipped = <String>[];
+    var toRender = <String>[];
+    var keys = <String, ({String base, String head})>{};
+    for (var id in ids) {
+      var file = files[id]!;
+      memo.remember(id, headGraph.closureOf(file));
+
+      var decision = SkipDecision.of(
+        entryId: id,
+        memo: memo,
+        baseRoot: baseRoot,
+        headRoot: headRoot,
+        pixels: pixels,
+      );
+      keys[id] = (
+        base: _keyFor(id, baseGraph, baseRoot, file, pixels),
+        head: _keyFor(id, headGraph, headRoot, file, pixels),
+      );
+
+      if (decision.skip) {
+        skipped.add(id);
+        continue;
+      }
+      toRender.add(id);
+    }
+    return (skipped: skipped, toRender: toRender, keys: keys);
+  }
 
   ImportGraph _graphFor(String checkout) => ImportGraph.read(
     root: checkout,
@@ -486,20 +554,22 @@ class ComparisonRunner {
     ),
   );
 
+  /// The entry's own sources hashed here, the pixel inputs folded in from the
+  /// per-checkout closure. [SourceClosure.merge] makes that the same
+  /// fingerprint hashing the union produced, so no key moves.
   String _keyFor(
     String id,
     ImportGraph graph,
     String root,
     String file,
-    String sdkKey,
-    List<String> pixelInputs,
+    PixelInputs pixels,
   ) => ShotKey.of(
     kind: 'preview',
     entryId: id,
-    closure: SourceClosure.of([
-      ...graph.closureOf(file),
-      ...pixelInputs,
-    ], root: root).fingerprint,
+    closure: SourceClosure.of(
+      graph.closureOf(file),
+      root: root,
+    ).merge(pixels.inRoot(root)).fingerprint,
     sdk: sdkKey,
   );
 }

@@ -23,14 +23,27 @@ void main() {
   tearDown(() => controller.dispose());
 
   group('preparing', () {
-    // The estimate is the whole reason the base is prepared on arrival: a tab
-    // cannot say what it would cost until there is something to compare to.
-    test('the estimates arrive without anything running', () async {
+    // **The panel builds this and then leaves it alone.** Opening the Changes
+    // screen used to prepare the base and price both tabs; on a real catalog
+    // that was minutes of git, `pub get` and sha1 charged to somebody who came
+    // to read a diff. Nothing is owed until a tab is opened.
+    test('building it touches nothing', () async {
+      await pumpEventQueue();
+
+      expect(environment.prepared, 0);
+      expect(environment.ranPreviews, 0);
+      expect(environment.ranScenarios, 0);
+      expect(controller.baseRoot, isNull);
+    });
+
+    // The panel does not call this any more — `open` does, on its way to
+    // running one half. What it still has to guarantee is that materialising
+    // the base runs neither.
+    test('preparing readies both halves and runs neither', () async {
       await controller.prepare();
 
-      expect(controller.previews.estimate, '14 of 213');
-      expect(controller.scenarios.estimate, '5 of 43');
       expect(controller.previews.stage, HalfStage.ready);
+      expect(controller.scenarios.stage, HalfStage.ready);
       expect(environment.ranPreviews, 0);
       expect(environment.ranScenarios, 0);
     });
@@ -55,9 +68,9 @@ void main() {
     // An SDK mismatch refuses at plan time, and the plan is per half — so it
     // should stop that tab rather than the panel.
     test('one half refusing leaves the other alone', () async {
-      environment.previewsEstimateError = 'two checkouts on different SDKs';
+      environment.previewsRunError = 'two checkouts on different SDKs';
 
-      await controller.prepare();
+      await controller.open(ComparisonHalfKind.previews);
 
       expect(controller.previews.stage, HalfStage.refused);
       expect(controller.previews.refusal, contains('different SDKs'));
@@ -111,12 +124,14 @@ void main() {
       expect(environment.ranPreviews, 1);
     });
 
-    test('a refused half never runs', () async {
-      environment.previewsEstimateError = 'two checkouts on different SDKs';
+    test('a half that refused is not attempted again', () async {
+      environment.previewsRunError = 'two checkouts on different SDKs';
+      await controller.open(ComparisonHalfKind.previews);
+      environment.previewsRunError = null;
 
       await controller.open(ComparisonHalfKind.previews);
 
-      expect(environment.ranPreviews, 0);
+      expect(environment.ranPreviews, 1);
       expect(controller.previews.stage, HalfStage.refused);
     });
 
@@ -175,16 +190,14 @@ void main() {
   });
 
   group('refresh', () {
-    // The reason you are refreshing is that the worktree moved, and a stale
-    // "14 of 213" beside fresh rows is the one number nobody would question.
-    test('it runs again, and the estimate is recomputed with it', () async {
+    // The reason you are refreshing is that the worktree moved, so whatever
+    // the half concluded last time is thrown away and the run happens again.
+    test('it runs again', () async {
       await controller.open(ComparisonHalfKind.previews);
-      environment.previewsEstimateValue = '2 of 213';
 
       await controller.refresh(ComparisonHalfKind.previews);
 
       expect(environment.ranPreviews, 2);
-      expect(controller.previews.estimate, '2 of 213');
       expect(controller.previews.stage, HalfStage.done);
     });
 
@@ -229,9 +242,8 @@ class _FakeEnvironment implements ComparisonEnvironment {
   final shots = ShotCache('/unused');
 
   String? baseError;
-  String? previewsEstimateError;
+  String? previewsRunError;
   String? scenariosRunError;
-  var previewsEstimateValue = '14 of 213';
 
   /// Held open so a test can look at a half mid-run.
   Completer<void>? previewsGate;
@@ -251,20 +263,12 @@ class _FakeEnvironment implements ComparisonEnvironment {
   }
 
   @override
-  Future<String?> previewsEstimate(String baseRoot) async {
-    if (previewsEstimateError case var error?) throw StateError(error);
-    return previewsEstimateValue;
-  }
-
-  @override
-  Future<String?> scenariosEstimate(String baseRoot) async => '5 of 43';
-
-  @override
   Future<ComparisonResult> runPreviews(
     String baseRoot, {
     required void Function(ComparedItem row) onRow,
   }) async {
     ranPreviews++;
+    if (previewsRunError case var error?) throw StateError(error);
     for (var row in streamRows) {
       onRow(row);
     }
