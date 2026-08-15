@@ -41,9 +41,9 @@ Future<void> main(List<String> args) async {
     ),
   );
 
-  var audit = await catalog.auditAll();
+  var checked = await catalog.check();
   var entries = [
-    for (var entry in audit.entries)
+    for (var entry in checked.servable)
       if (entry.id.contains(wanted)) entry.id,
   ]..sort();
   if (entries.isEmpty) {

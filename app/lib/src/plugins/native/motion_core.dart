@@ -438,8 +438,11 @@ class MotionCore extends PluginCore {
     var catalog = _headless(packagePath);
     // The entry whose source file is the one the motion was scanned from —
     // the same join the panel makes, so a picture and the panel agree.
-    var audit = await catalog.auditAll();
-    var entry = audit.entries.firstWhereOrNull((e) => e.path == motion.file);
+    // `check`, not a render: this wants the entry *list*, and asking for one
+    // by rendering the whole catalog was paying for every frame in it to look
+    // up a single id.
+    var checked = await catalog.check();
+    var entry = checked.servable.firstWhereOrNull((e) => e.path == motion.file);
     if (entry == null) {
       throw StateError(
         '`${motion.values}` lives in ${motion.file}, which is not a catalog '

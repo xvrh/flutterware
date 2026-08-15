@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
-import 'package:flutterware/src/scenarios/fonts.dart';
 
 /// The profile lane end to end: no runner, no daemon — the folder's
 /// `flutter_test_config.dart` is the only thing that said anything, and the app

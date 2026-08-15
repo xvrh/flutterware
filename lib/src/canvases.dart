@@ -133,6 +133,18 @@ class PreviewCanvas {
   String toString() => 'PreviewCanvas(${root.isEmpty ? '<package>' : root})';
 }
 
+/// The rectangle an entry under no canvas is framed as, in logical pixels at a
+/// ratio of 1.
+///
+/// **Both backends have to agree about it**, which is why it is one constant
+/// and not two. The embedder guest reads it as `CaptureViewport.panel` and the
+/// tester harness stages it when [canvasFor] finds nothing; a harness that
+/// simply left the test surface alone would judge the same entry on
+/// `flutter_test`'s 800×600 instead — measured, and it invented two overflows
+/// the guest did not report.
+const previewPanelWidth = 900;
+const previewPanelHeight = 700;
+
 /// The canvas that applies to [path], or null when none of them does.
 ///
 /// **Longest prefix wins**, which is what makes the list ordered data rather

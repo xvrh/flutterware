@@ -56,7 +56,7 @@ class HeadlessCatalog {
   ///
   /// Starts a daemon, compiles the entry, renders one frame, and shuts
   /// everything down. Fine for one entry; a batch wants a session that stays
-  /// warm, which is how [auditAll] works.
+  /// warm, which is how [captureAll] works.
   ///
   /// [knobs] are raw strings — a flag and a JSON object both arrive as text —
   /// and are coerced to whatever kind the demo declared. A name the entry does
@@ -192,6 +192,35 @@ class HeadlessCatalog {
     }
   }
 
+  /// Shows [entry] on a guest that is already running, and reports what went
+  /// wrong rather than throwing.
+  ///
+  /// The fast path is [_GuestSession.showEntry]: the guest's program holds the
+  /// whole catalog, so nothing has to be compiled to move between entries.
+  /// A guest that cannot — one from before the extension, or one whose program
+  /// predates this entry — falls back to the compile and the reload that used
+  /// to be the only path.
+  ///
+  /// The reload is followed by a switch, and belt-and-braces on purpose: a
+  /// reload does not re-run `main`, so the guest's idea of the current entry
+  /// survives it. A current guest rebases on the regenerated file by itself —
+  /// see [CatalogEntries] — which makes this a no-op there, and the one line
+  /// that would have caught it going wrong.
+  ///
+  /// Returns null on success, or the compiler's complaint.
+  Future<String?> _show(
+    _GuestSession guest,
+    CompilerDaemonClient daemon,
+    CatalogEntry entry,
+  ) async {
+    if (await guest.showEntry(entry.id)) return null;
+    var compiled = await daemon.select(entry.id);
+    if (!compiled.ok) return compiled.error ?? 'did not compile';
+    await guest.reload(compiled.dill!);
+    await guest.showEntry(entry.id);
+    return null;
+  }
+
   /// Which entries the compiler can actually build, and why the rest cannot.
   ///
   /// Needs no guest: the daemon compiles every wrapper into one program while
@@ -248,114 +277,16 @@ class HeadlessCatalog {
     (guest) => guest.settledAxes(entryId),
   );
 
-  /// Renders **every** entry against one warm guest and reports what each said.
-  ///
-  /// The economics that make it affordable: the first entry pays a cold
-  /// compile and a guest launch, and every one after it is a hot reload and a
-  /// frame — the same mechanism as browsing. Measured on this repo at ~120ms
-  /// per entry after the first.
-  ///
-  /// Entries the compiler refused never get a guest — they are in the
-  /// handshake, and an entry that does not build cannot be rendered to find out
-  /// what it would have said.
-  ///
-  /// [viewportFor] frames each entry — the package's canvas for the subtree it
-  /// lives in, when the caller has one. **Without it every entry rendered at
-  /// 900 × 700**, which is the audit that cannot find the bug it exists to find:
-  /// a phone layout laid out in a desktop rectangle does not overflow, so a
-  /// catalog of phone screens came back green whatever the project had
-  /// declared. The warm guest is resized where the answer changes, which costs
-  /// a message and a frame against a compile.
-  Future<CatalogAudit> auditAll({
-    List<String>? entryIds,
-    void Function(int done, int total, String entryId)? onEntry,
-    CaptureViewport Function(CatalogEntry entry)? viewportFor,
-  }) async {
-    var (daemon, ready) = await CompilerDaemonClient.connect(
-      dartExecutable: dartExecutable,
-      config: config,
-    );
-    _GuestSession? guest;
-    try {
-      // Both halves filtered. Leaving the quarantine unfiltered would report a
-      // compile failure from a file nobody asked about, under a flag whose
-      // whole purpose is to narrow what is looked at.
-      var quarantined = [
-        for (var broken in ready.quarantined)
-          if (entryIds == null || entryIds.contains(broken.entry.id)) broken,
-      ];
-      var servable = [
-        for (var entry in ready.entries)
-          if (entryIds == null || entryIds.contains(entry.id)) entry,
-      ];
-
-      var rendered = <String, InspectErrors>{};
-      // What the guest is currently sized as, so a run of entries sharing a
-      // canvas — which is what a catalog organised by directory looks like —
-      // resizes once rather than per entry.
-      CaptureViewport? staged;
-      for (var (index, entry) in servable.indexed) {
-        // Before the work rather than after it: a name that appears when an
-        // entry *finishes* is the name of something already done, and the one
-        // worth reading during a two-minute audit is the one being compiled
-        // right now.
-        onEntry?.call(index + 1, servable.length, entry.id);
-        var viewport = viewportFor?.call(entry) ?? CaptureViewport.panel;
-        if (guest == null) {
-          var compiled = await daemon.select(entry.id, full: true);
-          if (!compiled.ok) continue;
-          guest = await _GuestSession.start(
-            hostPath: ready.hostPath,
-            assetsDir: ready.assetsDir,
-            icuData: ready.icuData,
-            name: ready.sessionId,
-            viewport: viewport,
-          );
-          staged = viewport;
-        } else {
-          // **Before the reload, and measured to matter.** The guest paints as
-          // soon as it has the new dill, and an entry's errors are whatever its
-          // frames reported — so a resize queued behind the reload lands after
-          // the frame this entry is judged on, and the entry is judged at the
-          // previous one's size. Audited that way, a demo declared 1800 wide
-          // was still reported overflowing at 900: the row named the right
-          // device and the picture had been taken at the wrong one.
-          //
-          // Resizing here repaints whatever is still mounted — the *previous*
-          // entry, whose answer was read and recorded an iteration ago.
-          if (viewport != staged) {
-            guest._resize(viewport);
-            staged = viewport;
-          }
-          var compiled = await daemon.select(entry.id);
-          if (!compiled.ok) continue;
-          await guest.reload(compiled.dill!);
-        }
-        rendered[entry.id] = await guest.settledErrors(entry.id);
-      }
-      return CatalogAudit(
-        entries: servable,
-        quarantined: quarantined,
-        rendered: rendered,
-      );
-    } finally {
-      await guest?.close();
-      await daemon.close();
-    }
-  }
-
   /// Photographs **every** entry against one warm guest, handing each frame to
   /// [onFrame] as it lands.
   ///
-  /// The same economics as [auditAll] — the first entry pays a cold compile and
-  /// a guest launch, every one after it is a hot reload and a frame — with the
-  /// picture and the tree taken off that frame instead of only the errors.
+  /// The first entry pays a cold compile and a guest launch; every one after it
+  /// is a hot reload and a frame, with the picture and the tree taken off that
+  /// frame.
   ///
   /// Measured on `examples/example`: six entries in **5.6s**, of which 4.3s is
   /// the first entry's cold compile and guest launch; the rest cost
-  /// **197–329ms** each. That is above [auditAll]'s ~120ms because this
-  /// photographs and reads a tree where that only asks what the build
-  /// reported, and it is the number a comparison's per-entry budget is drawn
+  /// **197–329ms** each — the number a comparison's per-entry budget is drawn
   /// against.
   ///
   /// **Streamed, and it has to be.** A phone-sized frame is ~2.5MB of rgba8888,
@@ -414,12 +345,10 @@ class HeadlessCatalog {
             viewport: viewport,
           );
         } else {
-          var compiled = await daemon.select(entry.id);
-          if (!compiled.ok) {
-            failed[entry.id] = compiled.error ?? 'did not compile';
+          if (await _show(guest, daemon, entry) case var error?) {
+            failed[entry.id] = error;
             continue;
           }
-          await guest.reload(compiled.dill!);
         }
 
         // The picture *is* the settling frame, as in [observe]: nothing here
@@ -717,25 +646,6 @@ class CatalogCapture {
   final List<KnobDescriptor> knobs;
 }
 
-/// Every entry, and what each one said when it was rendered.
-class CatalogAudit {
-  CatalogAudit({
-    required this.entries,
-    required this.quarantined,
-    required this.rendered,
-  });
-
-  /// The entries the compiler accepted, in scan order.
-  final List<CatalogEntry> entries;
-
-  /// The ones it refused, with the compiler's own diagnostics.
-  final List<QuarantinedEntry> quarantined;
-
-  /// What each rendered entry reported, keyed by id. An entry missing from
-  /// here is one that failed to compile on its own after the handshake.
-  final Map<String, InspectErrors> rendered;
-}
-
 /// One entry's frame, as [HeadlessCatalog.captureAll] hands it over.
 ///
 /// Lives exactly as long as the `onFrame` call that receives it: the batch
@@ -815,6 +725,70 @@ class CatalogCheck {
   final List<QuarantinedEntry> quarantined;
 
   bool get ok => quarantined.isEmpty;
+}
+
+/// What a settle counts as quiet, across every entry one guest renders.
+///
+/// **`pendingImageCount` is the whole cache's, and the guest outlives every
+/// entry rendered against it.** One demo asking for an image that never
+/// resolves — a missing asset, a provider that neither completes nor errors —
+/// leaves the count above zero for the life of the process. A rule that waits
+/// for zero then waits the *full deadline on every entry after it*, including
+/// the static ones, and reports each of them as never having settled.
+///
+/// Measured on this repo's own catalog before this existed: entries 1–4
+/// settled in 61–142ms, entry 5 left one load pending, and all 94 after it
+/// cost ~3045ms each — **282 seconds of a 324-second audit**, spent waiting on
+/// an image no later entry had asked for.
+///
+/// So the bar is learned rather than assumed. It only rises after a deadline
+/// has actually expired with the count stuck above it — never on a guess — and
+/// it drops back the moment a settle sees a clean cache, so a stuck completer
+/// that is later evicted does not leave it raised behind it.
+///
+/// **Images only.** `transientCallbackCount` is tied to mounted tickers and an
+/// entry switch remounts, so it returns to zero on its own; giving an
+/// animation the same allowance would report a demo that genuinely never stops
+/// moving as a settled picture, which is the one thing the count is read for.
+class SettleFloor {
+  /// How many loads this guest has been shown not to finish.
+  int get stuck => _stuck;
+  var _stuck = 0;
+
+  /// The bar this pass is judged against, frozen at [begin] so that what the
+  /// pass learns cannot move it while it runs.
+  var _bar = 0;
+
+  /// The fewest pending loads seen this pass, or -1 before the first poll.
+  var _lowest = -1;
+
+  /// Opens one settle.
+  void begin() {
+    _bar = _stuck;
+    _lowest = -1;
+  }
+
+  /// Whether this poll looks like a finished frame.
+  bool quiet(int pending, int transient) {
+    if (_lowest < 0 || pending < _lowest) _lowest = pending;
+    return pending <= _bar && transient == 0;
+  }
+
+  /// The pass settled, with [pending] loads outstanding.
+  void settled(int pending) {
+    if (pending == 0) _stuck = 0;
+  }
+
+  /// The pass ran out of time.
+  ///
+  /// When the count never came back down past [_lowest], that many loads are
+  /// not coming — remember it, so the next entry waits for its own images
+  /// rather than for this one's. A pass that timed out on an *animation*
+  /// instead arrives here with [_lowest] at or under the bar and moves it
+  /// nowhere.
+  void gaveUp() {
+    if (_lowest > _bar) _stuck = _lowest;
+  }
 }
 
 /// One embedder guest, kept alive across captures.
@@ -964,6 +938,28 @@ class _GuestSession {
   }
 
   Future<void> reload(String dill) => _vmService.reload(dill);
+
+  /// Puts [entryId] on screen without recompiling or reloading anything.
+  ///
+  /// The generated entrypoint imports every entry's wrapper, so the program
+  /// this guest is already running holds the whole catalog — see
+  /// [CatalogEntries]. Switching is therefore a message and a frame rather
+  /// than a compile and a reload, which is the difference between ~350ms and
+  /// ~15ms per entry on a catalog-wide render.
+  ///
+  /// Returns false when this guest cannot do it: one built before the
+  /// extension existed, or one whose program does not hold [entryId] — a
+  /// reload has changed the catalog since it started. Both recover the same
+  /// way and the caller does it: compile and reload, which always works. The
+  /// guest answers with what it is *actually* showing rather than raising, so
+  /// telling the two apart costs a comparison instead of an exception path.
+  Future<bool> showEntry(String entryId) async {
+    var reply = await _vmService.callExtension(
+      'ext.flutterware.showEntry',
+      args: {'id': entryId},
+    );
+    return reply?['entry'] == entryId;
+  }
 
   /// What [entryId] declares, once the guest has actually built it.
   ///
@@ -1274,6 +1270,8 @@ class _GuestSession {
     return file;
   }
 
+  final _floor = SettleFloor();
+
   /// Waits until the guest has no image loads in flight, bounded.
   ///
   /// A demo's images arrive after its layout: `Image.asset` registers the load
@@ -1299,6 +1297,7 @@ class _GuestSession {
   /// "not registered yet" as "no answer needed" skips the wait on exactly the
   /// capture most likely to race the decode — intermittently, which is how the
   /// missing images stayed invisible in the first place.
+  ///
   /// Draws frames until nothing is still moving, or until the deadline.
   ///
   /// Returns false when it gave up — a looping animation never drains, and a
@@ -1308,10 +1307,15 @@ class _GuestSession {
   /// is the old behaviour: images only. That is the graceful half of a version
   /// skew — the base side of a comparison against a checkout that predates the
   /// field settles for images alone rather than failing to answer at all.
+  ///
+  /// What counts as quiet is [SettleFloor]'s, because one guest renders every
+  /// entry of a catalog-wide run and a stuck load is not that run's to wait
+  /// for twice.
   Future<({bool settled, bool seesAnimations})> _settle() async {
     var deadline = Stopwatch()..start();
     var zeros = 0;
     var seesAnimations = true;
+    _floor.begin();
     while (deadline.elapsed < const Duration(seconds: 3)) {
       var report = await _vmService.requireExtension(
         'ext.flutterware.imagesSettled',
@@ -1323,18 +1327,20 @@ class _GuestSession {
       // sides settle by different rules differs for a reason that is not the
       // branch's.
       seesAnimations = report.containsKey('transient');
-      var pending = report['pending'] as num? ?? 0;
-      var transient = report['transient'] as num? ?? 0;
-      if (pending == 0 && transient == 0) {
+      var pending = (report['pending'] as num? ?? 0).toInt();
+      var transient = (report['transient'] as num? ?? 0).toInt();
+      if (_floor.quiet(pending, transient)) {
         // Twice, because one quiet frame is what the frame *before* an
         // animation starts also looks like.
         if (++zeros >= 2) {
+          _floor.settled(pending);
           return (settled: true, seesAnimations: seesAnimations);
         }
       } else {
         zeros = 0;
       }
     }
+    _floor.gaveUp();
     return (settled: false, seesAnimations: seesAnimations);
   }
 

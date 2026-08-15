@@ -139,11 +139,19 @@ class EntrypointGenerator {
 
   String _entrypoint(CatalogEntry active) {
     var imports = StringBuffer();
+    var cases = StringBuffer();
+    var ids = StringBuffer();
     for (var entry in _visited) {
       var index = _wrapperIndex[entry.id]!;
       imports.writeln("import 'entry_$index.dart' as fw$index;");
+      cases.writeln(
+        "  r'${entry.id}' => (\n"
+        '    preview: fw$index.fwPreview.transform(),\n'
+        '    builder: fw$index.fwBuilder,\n'
+        '  ),',
+      );
+      ids.writeln("  r'${entry.id}',");
     }
-    var activeIndex = _wrapperIndex[active.id]!;
     var origin = previewClockOrigin;
     var clockLiteral =
         'DateTime(${origin.year}, ${origin.month}, ${origin.day}, '
@@ -157,11 +165,30 @@ import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/previews_guest.dart';
 
 $imports
-// Getters, never top-level finals: a final is initialised once and hot reload
-// does not re-run its initialiser, which would freeze the entry.
-Preview get _preview => fw$activeIndex.fwPreview.transform();
-Widget Function() get _builder => fw$activeIndex.fwBuilder;
-String get _entryId => r'${active.id}';
+// **Every entry, reachable by id.** The imports above already put the whole
+// catalog in this program — that is what makes one compiler safe to share —
+// and this is what lets the guest *use* it: the host switches demos with
+// `ext.flutterware.showEntry` and a frame, instead of rewriting this file,
+// recompiling it and hot-reloading a delta to move one integer.
+//
+// A switch expression rather than a map, so resolving an entry allocates one
+// record instead of building the whole table on every build.
+//
+// Functions and getters, never top-level finals: a final is initialised once
+// and hot reload does not re-run its initialiser, which would freeze the
+// catalog at whatever it held when the guest started.
+({Preview preview, Widget Function() builder})? _entry(String id) =>
+    switch (id) {
+$cases  _ => null,
+};
+
+List<String> get _entryIds => const [
+$ids];
+
+// Which entry *this* generation of the file means. A reload is how the panel
+// says "show that one", so the file outranks a runtime switch whenever it
+// moves — see [CatalogEntries].
+const _fileEntryId = r'${active.id}';
 
 // **The whole of main runs inside the log-capturing zone, binding and all.**
 //
@@ -184,6 +211,11 @@ void main() => withClock(Clock.fixed($clockLiteral), () => GuestLogs.instance.in
   // guest does not have, and both must be up before the first frame.
   GuestKeyboard.instance.install();
   GuestTextInput.instance.install();
+  // Before runApp, and once, like every extension below: the host may ask for
+  // another entry before the first frame, and switching must outlive the entry
+  // it switches away from.
+  CatalogEntries.instance.install(() => _entryIds);
+  CatalogEntries.instance.registerExtensions();
   // Before runApp, and once: the panel may ask what knobs exist before the
   // first frame, and the extensions have to outlive every entry switch.
   CatalogKnobs.instance.registerExtensions();
@@ -230,20 +262,30 @@ class _CatalogHost extends StatelessWidget {
   const _CatalogHost();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => CatalogEntries.instance.build(
+    fromFile: _fileEntryId,
+    builder: _buildEntry,
+  );
+
+  Widget _buildEntry(BuildContext context, String entryId) {
+    // The file's entry when a switch named something this program does not
+    // hold. It cannot normally: the host only ever asks for an id the compiler
+    // handshake reported, and a switch to anything else is refused in the
+    // guest rather than answered. This is the reload that changed the catalog
+    // under a switch already made.
+    var entry = _entry(entryId) ?? _entry(_fileEntryId)!;
     // One wrapper, called the one way. A shell used to be called by name from
     // here, because its axes lived in named parameters that
     // `Widget Function(Widget)` erases; they are declared inside the shell now,
     // so there is nothing left for this file to know about it.
-    var preview = _preview;
-    var wrapper = preview.wrapper ?? (Widget child) => child;
+    var wrapper = entry.preview.wrapper ?? (Widget child) => child;
     Widget child = CatalogGuest(
-      entryId: _entryId,
+      entryId: entryId,
       child: KeyedSubtree(
         // A fresh key per entry so switching remounts rather than reusing the
         // previous entry's State.
-        key: ValueKey<String>(_entryId),
-        child: wrapper(_builder()),
+        key: ValueKey<String>(entryId),
+        child: wrapper(entry.builder()),
       ),
     );
     // No `preview.size` here. The host sizes the guest's *window* to whatever
@@ -275,6 +317,7 @@ class _CatalogHost extends StatelessWidget {
 
   static const _probe = r'''
   Timer.periodic(const Duration(milliseconds: 200), (_) {
+    var showing = CatalogEntries.instance.showing ?? _fileEntryId;
     var texts = <String>[];
     void visit(Element e) {
       var widget = e.widget;
@@ -290,7 +333,8 @@ class _CatalogHost extends StatelessWidget {
     var padding = view?.padding;
     var insets = view?.viewInsets;
     print(
-      'FW-PROBE: $_entryId | ${_preview.name} | ${texts.join(' / ')} '
+      'FW-PROBE: $showing | ${_entry(showing)?.preview.name} '
+      '| ${texts.join(' / ')} '
       '| padding ${padding?.top},${padding?.bottom} '
       'insets ${insets?.top},${insets?.bottom}',
     );

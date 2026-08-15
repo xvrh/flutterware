@@ -143,25 +143,64 @@ Widget avatarTileEmpty() => const Placeholder();
     expect(wrapper(1), contains('as fw1;'));
   });
 
-  test('the entrypoint accumulates and selects the active entry', () {
+  test('the entrypoint accumulates, and names the entry the file means', () {
     generator.select(members);
-    expect(entrypoint(), contains('fw0.fwPreview.transform()'));
+    expect(entrypoint(), contains("_fileEntryId = r'${members.id}'"));
 
     generator.select(empty);
     expect(entrypoint(), contains("import 'entry_0.dart' as fw0;"));
-    expect(entrypoint(), contains('fw1.fwPreview.transform()'));
-    expect(entrypoint(), isNot(contains('fw0.fwPreview.transform()')));
+    expect(entrypoint(), contains("_fileEntryId = r'${empty.id}'"));
+    expect(entrypoint(), isNot(contains("_fileEntryId = r'${members.id}'")));
 
     generator.select(members);
-    expect(entrypoint(), contains('fw0.fwPreview.transform()'));
+    expect(entrypoint(), contains("_fileEntryId = r'${members.id}'"));
     expect(generator.visited, hasLength(2), reason: 'revisits reuse a wrapper');
   });
 
-  test('selects through getters, never top-level finals', () {
+  test('every entry stays reachable, whichever one is selected', () {
+    // The point of the whole thing: the program holds the catalog, so the host
+    // can switch between entries with a message instead of a compile and a
+    // reload. A selection that dropped the others from the file would put that
+    // back — and it would do it silently, as a slow audit rather than a broken
+    // one.
+    generator.registerAll([members, empty]);
+    generator.select(empty);
+
+    expect(entrypoint(), contains("r'${members.id}' => ("));
+    expect(entrypoint(), contains("r'${empty.id}' => ("));
+    expect(entrypoint(), contains('preview: fw0.fwPreview.transform()'));
+    expect(entrypoint(), contains('preview: fw1.fwPreview.transform()'));
+    // And declared, because the guest refuses a switch to an id it does not
+    // hold rather than rendering the wrong demo under the right name.
+    expect(entrypoint(), contains("r'${members.id}',"));
+    expect(entrypoint(), contains("r'${empty.id}',"));
+  });
+
+  test('resolves through functions and getters, never top-level finals', () {
+    // A final is initialised once and a hot reload does not re-run its
+    // initialiser, so a table held in one would freeze at whatever the catalog
+    // was when the guest started.
     generator.select(members);
-    expect(entrypoint(), contains('Preview get _preview'));
-    expect(entrypoint(), contains('Widget Function() get _builder'));
-    expect(entrypoint(), isNot(contains('final _preview')));
+    expect(entrypoint(), contains('_entry(String id) =>'));
+    expect(entrypoint(), contains('List<String> get _entryIds'));
+    expect(entrypoint(), isNot(contains('final _entry')));
+    expect(entrypoint(), isNot(contains('final _entryIds')));
+  });
+
+  test('installs the switch before runApp, like every other extension', () {
+    generator.select(members);
+    var source = entrypoint();
+    expect(
+      source,
+      contains('CatalogEntries.instance.install(() => _entryIds)'),
+    );
+    expect(source, contains('CatalogEntries.instance.registerExtensions()'));
+    // The host may ask for another entry before the first frame, so the
+    // extension has to be up before anything renders.
+    expect(
+      source.indexOf('CatalogEntries.instance.registerExtensions'),
+      lessThan(source.indexOf('runApp(')),
+    );
   });
 
   test('reports what to invalidate: the wrapper only on first visit', () {
@@ -222,13 +261,21 @@ Widget avatarTileEmpty() => const Placeholder();
 
   test('keys the rendered subtree by entry, so switching remounts state', () {
     generator.select(members);
-    expect(entrypoint(), contains('ValueKey<String>(_entryId)'));
+    // The id the *switch* resolved, not the file's: a runtime switch remounts
+    // for the same reason a reload does, and keying on the file would leave
+    // one entry's State under the next entry's widgets.
+    expect(entrypoint(), contains('ValueKey<String>(entryId)'));
+    expect(entrypoint(), contains('CatalogGuest(\n      entryId: entryId,'));
+  });
+
+  test('the file outranks a runtime switch, and only when it moves', () {
+    // A reload does not re-run `main`, so the guest's current entry survives
+    // one. The regenerated file is the panel saying "show that one", so the
+    // build rebases on it — see CatalogEntries.
+    generator.select(members);
     expect(
       entrypoint(),
-      contains(
-        "String get _entryId => r'demo/team/avatar_tile.dart"
-        "#avatarTileMembers';",
-      ),
+      contains('CatalogEntries.instance.build(\n    fromFile: _fileEntryId,'),
     );
   });
 
@@ -317,7 +364,7 @@ Widget avatarTileMembers() => const Placeholder();
       // be named here; they are declared inside the shell now, so this file has
       // no reason to know one exists.
       generator.select(wrapped);
-      expect(entrypoint(), contains('var wrapper = preview.wrapper ??'));
+      expect(entrypoint(), contains('var wrapper = entry.preview.wrapper ??'));
       expect(entrypoint(), isNot(contains('fwShellWrap')));
       expect(entrypoint(), isNot(contains('CatalogAxesScope')));
       expect(wrapper(0), isNot(contains('CatalogAxes')));

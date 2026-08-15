@@ -101,7 +101,10 @@ class CaptureViewport {
   );
 
   /// What a capture that names no device gets.
-  static const panel = CaptureViewport(width: 900, height: 700);
+  static const panel = CaptureViewport(
+    width: previewPanelWidth,
+    height: previewPanelHeight,
+  );
 
   /// Physical pixels — the size of the image that comes out.
   final int width;
