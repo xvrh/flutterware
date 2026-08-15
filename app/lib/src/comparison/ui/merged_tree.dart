@@ -243,6 +243,10 @@ class _StepNode extends StatelessWidget {
       child: Tappable.builder(
         key: stepNodeKey(item.id),
         onTap: onTap,
+        // **A wash over this one would land on the picture.** The node is
+        // mostly thumbnail, and the primitive paints over its child — which is
+        // the frame a reader is here to judge. The tint goes behind it instead,
+        // which is what the ring note below is about.
         builder: (context, hovered) => SizedBox(
           width: _nodeWidth,
           child: Column(

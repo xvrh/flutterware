@@ -245,16 +245,13 @@ class _Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Tappable.builder(
+    return Tappable(
       onTap: onTap,
-      builder: (context, hovered) => Container(
+      borderRadius: BorderRadius.circular(context.radii.pill),
+      child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: selected
-              ? colors.accentSoft
-              : hovered
-              ? colors.hoverOverlay
-              : null,
+          color: selected ? colors.accentSoft : null,
           borderRadius: BorderRadius.circular(context.radii.pill),
           border: Border.all(
             color: selected ? colors.accentSoft2 : colors.line,
@@ -1371,18 +1368,14 @@ class _StepRow extends StatelessWidget {
       if ((entry.attempts ?? 1) > 1) '${entry.attempts} tries',
       if (entry.settled == false) 'did not settle',
     ].join(' · ');
-    return Tappable.builder(
+    return Tappable(
       onTap: onTap,
-      builder: (context, hovered) => Container(
+      child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: FwSpacing.md,
           vertical: FwSpacing.xs,
         ),
-        color: selected
-            ? colors.accentSoft
-            : hovered
-            ? colors.hoverOverlay
-            : null,
+        color: selected ? colors.accentSoft : null,
         child: Row(
           children: [
             _thumbnail(context),
@@ -2478,15 +2471,16 @@ class _Action extends StatelessWidget {
         : colors.accent;
     return Padding(
       padding: const EdgeInsets.only(left: FwSpacing.xs),
-      child: Tappable.builder(
+      child: Tappable(
         onTap: enabled ? onPressed : null,
-        builder: (context, hovered) => Container(
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        child: Container(
           padding: const EdgeInsets.symmetric(
             horizontal: FwSpacing.sm,
             vertical: 5,
           ),
           decoration: BoxDecoration(
-            color: hovered && enabled ? colors.hoverOverlay : colors.bg,
+            color: colors.bg,
             borderRadius: BorderRadius.circular(context.radii.radiusSmall),
             border: Border.all(color: colors.line),
           ),
@@ -2686,19 +2680,16 @@ class _PickerRow<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Tappable.builder(
+    return Tappable(
       onTap: choice.enabled ? onTap : null,
-      builder: (context, hovered) => Container(
+      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+      child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: FwSpacing.sm,
           vertical: 6,
         ),
         decoration: BoxDecoration(
-          color: selected
-              ? colors.accentSoft
-              : hovered
-              ? colors.hoverOverlay
-              : null,
+          color: selected ? colors.accentSoft : null,
           borderRadius: BorderRadius.circular(context.radii.radiusSmall),
         ),
         child: Row(

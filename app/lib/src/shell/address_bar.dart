@@ -4,6 +4,7 @@ import 'package:flutterware/plugins.dart';
 
 import '../address/address_scope.dart';
 import '../ui/design/design.dart';
+import '../ui/tappable.dart';
 import 'shell_controller.dart';
 import 'worktree_filter.dart';
 
@@ -143,33 +144,29 @@ class _AddressBarState extends State<AddressBar> {
           ),
         ),
         menuChildren: [_Editor(this, address)],
-        builder: (context, controller, child) => MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            onTap: () =>
-                controller.isOpen ? controller.close() : _open(address),
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
-              child: AddressReadout(
-                address: address,
-                worktrees: [
-                  for (var worktree in shell.worktrees)
-                    WorktreeChoice(
-                      name: worktree.name,
-                      displayName: worktree.displayName,
-                      isOpen: shell.isOpen(worktree),
-                    ),
-                ],
-                onGo: (destination) => shell.go(destination),
-                onPickWorktree: (choice) {
-                  var worktree = shell.worktreeNamed(choice.name);
-                  if (worktree != null) shell.goToWorktree(worktree);
-                },
-                onEdit: () =>
-                    controller.isOpen ? controller.close() : _open(address),
-                editing: controller.isOpen,
-              ),
+        builder: (context, controller, child) => Tappable(
+          onTap: () => controller.isOpen ? controller.close() : _open(address),
+          feedback: TapFeedback.none,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
+            child: AddressReadout(
+              address: address,
+              worktrees: [
+                for (var worktree in shell.worktrees)
+                  WorktreeChoice(
+                    name: worktree.name,
+                    displayName: worktree.displayName,
+                    isOpen: shell.isOpen(worktree),
+                  ),
+              ],
+              onGo: (destination) => shell.go(destination),
+              onPickWorktree: (choice) {
+                var worktree = shell.worktreeNamed(choice.name);
+                if (worktree != null) shell.goToWorktree(worktree);
+              },
+              onEdit: () =>
+                  controller.isOpen ? controller.close() : _open(address),
+              editing: controller.isOpen,
             ),
           ),
         ),
@@ -416,23 +413,15 @@ class _Part extends StatefulWidget {
 }
 
 class _PartState extends State<_Part> {
-  var _hovered = false;
-
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    onEnter: (_) => setState(() => _hovered = true),
-    onExit: (_) => setState(() => _hovered = false),
-    // Its own detector, so a tap here is this part rather than the editor the
-    // whole bar sits under: the inner one wins the arena.
-    child: GestureDetector(
-      onTap: widget.onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        // Most of the target, and none of the weight.
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
-        child: widget.child(_hovered || widget.lit),
-      ),
+  // Its own target, so a tap here is this part rather than the editor the whole
+  // bar sits under: the inner one wins the arena.
+  Widget build(BuildContext context) => Tappable.builder(
+    onTap: widget.onTap,
+    builder: (context, hovered) => Padding(
+      // Most of the target, and none of the weight.
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+      child: widget.child(hovered || widget.lit),
     ),
   );
 }

@@ -667,15 +667,11 @@ class _JsonRowView extends StatelessWidget {
       );
     }
 
-    return Tappable.builder(
+    return Tappable(
       onTap: () => onToggle(node.path),
-      builder: (context, hovered) => Container(
+      child: Container(
         height: _rowH,
-        color: matched
-            ? context.colors.amber.withValues(alpha: 0.12)
-            : hovered
-            ? context.colors.hoverOverlay
-            : null,
+        color: matched ? context.colors.amber.withValues(alpha: 0.12) : null,
         child: content,
       ),
     );

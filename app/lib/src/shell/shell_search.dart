@@ -6,6 +6,7 @@ import 'package:flutterware/plugins.dart';
 import '../plugins/plugin_core.dart';
 import '../ui/command_palette.dart';
 import '../ui/design/design.dart';
+import '../ui/tappable.dart';
 import 'shell_controller.dart';
 
 /// Opens the palette over the shell.
@@ -133,46 +134,35 @@ class SearchTrigger extends StatefulWidget {
 }
 
 class _SearchTriggerState extends State<SearchTrigger> {
-  var _hovered = false;
-
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          height: 26,
-          width: 220,
-          padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
-          decoration: BoxDecoration(
-            color: _hovered ? colors.panel2 : colors.bg,
-            borderRadius: BorderRadius.circular(context.radii.radius),
-            border: Border.all(color: colors.line),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.search_rounded,
-                size: FwIconSize.sm,
-                color: colors.mut2,
+    return Tappable.builder(
+      onTap: widget.onTap,
+      builder: (context, hovered) => Container(
+        height: 26,
+        width: 220,
+        padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
+        decoration: BoxDecoration(
+          color: hovered ? colors.panel2 : colors.bg,
+          borderRadius: BorderRadius.circular(context.radii.radius),
+          border: Border.all(color: colors.line),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.search_rounded, size: FwIconSize.sm, color: colors.mut2),
+            const Gap(FwSpacing.sm),
+            Expanded(
+              child: Text(
+                'Search',
+                style: context.type.caption.copyWith(color: colors.mut2),
               ),
-              const Gap(FwSpacing.sm),
-              Expanded(
-                child: Text(
-                  'Search',
-                  style: context.type.caption.copyWith(color: colors.mut2),
-                ),
-              ),
-              Text(
-                _shortcutLabel(context),
-                style: context.type.micro.copyWith(color: colors.mut2),
-              ),
-            ],
-          ),
+            ),
+            Text(
+              _shortcutLabel(context),
+              style: context.type.micro.copyWith(color: colors.mut2),
+            ),
+          ],
         ),
       ),
     );

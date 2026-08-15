@@ -70,15 +70,11 @@ class IndexFileRow extends StatelessWidget {
     var name = slash < 0 ? file.path : file.path.substring(slash + 1);
     var directory = slash < 0 ? '' : file.path.substring(0, slash);
 
-    return Tappable.builder(
+    return Tappable(
       onTap: onTap,
-      builder: (context, hovered) => Container(
+      child: Container(
         decoration: BoxDecoration(
-          color: selected
-              ? colors.accentSoft
-              : hovered
-              ? colors.hoverOverlay
-              : Colors.transparent,
+          color: selected ? colors.accentSoft : Colors.transparent,
           // A 2 px edge rather than a badge: it is scannable down a column of
           // forty rows and costs the text no width at all.
           border: pinned
@@ -563,6 +559,10 @@ class _AddComment extends StatelessWidget {
         waitDuration: const Duration(milliseconds: 600),
         child: Tappable.builder(
           onTap: onTap,
+          // One of these sits in the margin of every line of every hunk, so
+          // taking focus would put a few hundred tab stops between the top of
+          // a file and anything else on the screen.
+          focusable: false,
           builder: (context, hovered) => Center(
             child: Container(
               width: 14,
@@ -703,15 +703,11 @@ class IndexUntrackedRow extends StatelessWidget {
       if (slash > 0 && !entry.isDirectory) entry.path.substring(0, slash),
     ];
 
-    return Tappable.builder(
+    return Tappable(
       onTap: onTap,
-      builder: (context, hovered) => Container(
+      child: Container(
         decoration: BoxDecoration(
-          color: selected
-              ? colors.accentSoft
-              : hovered && onTap != null
-              ? colors.hoverOverlay
-              : Colors.transparent,
+          color: selected ? colors.accentSoft : Colors.transparent,
         ),
         padding: const EdgeInsets.symmetric(
           horizontal: FwSpacing.md,

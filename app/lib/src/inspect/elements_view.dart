@@ -207,16 +207,13 @@ class _WrapperToggle extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        Tappable.builder(
+        Tappable(
           onTap: onToggle,
-          builder: (context, hovered) => Container(
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: FwSpacing.sm,
               vertical: FwSpacing.xxs,
-            ),
-            decoration: BoxDecoration(
-              color: hovered ? context.colors.hoverOverlay : null,
-              borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
               showAll ? 'Hide' : 'Show all',

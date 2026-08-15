@@ -403,16 +403,15 @@ class _TabButton extends StatelessWidget {
     // you have opened the thing that is running.
     var note = half?.stage == HalfStage.running ? 'running…' : null;
 
-    return Tappable.builder(
+    return Tappable(
       key: comparisonTabKey(tab.id),
       onTap: onTap,
-      builder: (context, hovered) => Container(
+      child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: FwSpacing.lg,
           vertical: FwSpacing.md,
         ),
         decoration: BoxDecoration(
-          color: hovered && !selected ? colors.hoverOverlay : null,
           border: Border(
             bottom: BorderSide(
               color: selected ? colors.accent : Colors.transparent,

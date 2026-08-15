@@ -94,14 +94,14 @@ class FwSplitButton extends StatelessWidget {
       required VoidCallback? onTap,
       required Widget child,
     }) {
-      return Tappable.builder(
+      return Tappable(
         onTap: enabled ? onTap : null,
-        builder: (context, hovered) => Container(
+        child: Container(
           padding: const EdgeInsets.symmetric(
             horizontal: FwSpacing.sm,
             vertical: 5,
           ),
-          color: hovered && enabled ? colors.hoverOverlay : colors.bg,
+          color: colors.bg,
           child: child,
         ),
       );
@@ -172,16 +172,13 @@ class FwSplitButton extends StatelessWidget {
       required double size,
       required double width,
     }) {
-      return Tappable.builder(
+      return Tappable(
         onTap: enabled ? onTap : null,
-        builder: (context, hovered) => Container(
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        child: Container(
           width: width,
           height: 24,
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: hovered && enabled ? colors.hoverOverlay : null,
-            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-          ),
           child: Icon(
             icon,
             size: size,

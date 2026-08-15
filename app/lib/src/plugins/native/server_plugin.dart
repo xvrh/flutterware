@@ -264,53 +264,49 @@ class _ServerBar extends StatelessWidget {
       runSpacing: FwSpacing.xs,
       children: [
         for (var server in servers)
-          Tappable.builder(
+          Tappable(
             onTap: () => AddressScope.write(
               context,
             ).setSegments(serverSegments(server.handle.name)),
-            builder: (context, hovered) {
-              var selected = identical(server, shown);
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: FwSpacing.lg,
-                  vertical: FwSpacing.xs,
+            borderRadius: BorderRadius.circular(context.radii.pill),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: FwSpacing.lg,
+                vertical: FwSpacing.xs,
+              ),
+              decoration: BoxDecoration(
+                color: identical(server, shown) ? colors.accentSoft : null,
+                borderRadius: BorderRadius.circular(context.radii.pill),
+                border: Border.all(
+                  color: identical(server, shown)
+                      ? colors.accentSoft2
+                      : colors.line,
                 ),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? colors.accentSoft
-                      : hovered
-                      ? colors.hoverOverlay
-                      : null,
-                  borderRadius: BorderRadius.circular(context.radii.pill),
-                  border: Border.all(
-                    color: selected ? colors.accentSoft2 : colors.line,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.circle,
+                    size: FwIconSize.xs - 4,
+                    color: server.stopped
+                        ? colors.mut3
+                        : server.connected
+                        ? colors.grn
+                        : colors.amber,
                   ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.circle,
-                      size: FwIconSize.xs - 4,
-                      color: server.stopped
-                          ? colors.mut3
-                          : server.connected
-                          ? colors.grn
-                          : colors.amber,
-                    ),
-                    const Gap(FwSpacing.sm),
-                    Text(
-                      server.stopped
-                          ? '${server.handle.name} (stopped)'
-                          : server.connected
-                          ? '${server.handle.name} · pid ${server.handle.pid}'
-                          : '${server.handle.name} · reconnecting',
-                      style: context.type.bodySmall,
-                    ),
-                  ],
-                ),
-              );
-            },
+                  const Gap(FwSpacing.sm),
+                  Text(
+                    server.stopped
+                        ? '${server.handle.name} (stopped)'
+                        : server.connected
+                        ? '${server.handle.name} · pid ${server.handle.pid}'
+                        : '${server.handle.name} · reconnecting',
+                    style: context.type.bodySmall,
+                  ),
+                ],
+              ),
+            ),
           ),
       ],
     );
@@ -529,12 +525,11 @@ class _SqlView extends StatelessWidget {
         ),
         Divider(height: 1, color: context.colors.line),
         for (var shape in stats)
-          Tappable.builder(
+          Tappable(
             onTap: () => AddressScope.write(
               context,
             ).setSegments(sqlSegments(server.handle.name, queryKey: shape.key)),
-            builder: (context, hovered) => Container(
-              color: hovered ? context.colors.hoverOverlay : null,
+            child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: panelGutter,
                 vertical: FwSpacing.sm,
@@ -842,16 +837,12 @@ class _RequestRow extends StatelessWidget {
     var mono = context.type.mono;
     var p = request.payload;
     var failed = _failed(request);
-    return Tappable.builder(
+    return Tappable(
       onTap: () => AddressScope.write(
         context,
       ).setSegments(serverSegments(server.handle.name, requestId: request.id)),
-      builder: (context, hovered) => Container(
-        color: selected
-            ? colors.accentSoft
-            : hovered
-            ? colors.hoverOverlay
-            : null,
+      child: Container(
+        color: selected ? colors.accentSoft : null,
         padding: EdgeInsets.symmetric(
           // The full-width list sits on the panel gutter like everything else;
           // the 380 px column beside a detail cannot afford it.
@@ -1210,14 +1201,13 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
       padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
       children: [
         for (var event in widget.queries) ...[
-          Tappable.builder(
+          Tappable(
             onTap: () => setState(() {
               _expanded.contains(event.id)
                   ? _expanded.remove(event.id)
                   : _expanded.add(event.id);
             }),
-            builder: (context, hovered) => Container(
-              color: hovered ? colors.hoverOverlay : null,
+            child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: FwSpacing.xl,
                 vertical: FwSpacing.sm,
@@ -1552,7 +1542,7 @@ class _Waterfall extends StatelessWidget {
         for (var span in spans)
           // A sql span is a door into its shape's detail — same query, seen
           // from the aggregate side.
-          Tappable.builder(
+          Tappable(
             onTap: span.channel != 'sql' || span.payload['query'] is! String
                 ? null
                 : () => AddressScope.write(context).setSegments(
@@ -1563,17 +1553,14 @@ class _Waterfall extends StatelessWidget {
                       ),
                     ),
                   ),
-            builder: (context, hovered) => Container(
-              color: hovered ? colors.hoverOverlay : null,
-              child: row(
-                _summary(span),
-                ((span.time.millisecondsSinceEpoch -
-                            (span.payload['ms']! as num)) -
-                        start)
-                    .toDouble(),
-                (span.payload['ms']! as num).toDouble(),
-                span.channel == 'sql' ? colors.grn : colors.info,
-              ),
+            child: row(
+              _summary(span),
+              ((span.time.millisecondsSinceEpoch -
+                          (span.payload['ms']! as num)) -
+                      start)
+                  .toDouble(),
+              (span.payload['ms']! as num).toDouble(),
+              span.channel == 'sql' ? colors.grn : colors.info,
             ),
           ),
       ],

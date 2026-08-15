@@ -373,9 +373,17 @@ class _FwTableState<T> extends State<FwTable<T>> {
 
           if (widget.onRowTap == null) return TableViewCell(child: cell);
           // Wired per cell rather than as one row-wide recognizer, because a
-          // TableView has no row widget to attach it to.
+          // TableView has no row widget to attach it to. Which is also why it
+          // paints nothing and takes no focus: the row above already tints the
+          // whole span, and a cell that washed or ringed itself would say the
+          // cell is the target when the row is.
           return TableViewCell(
-            child: Tappable(onTap: () => widget.onRowTap!(row), child: cell),
+            child: Tappable(
+              onTap: () => widget.onRowTap!(row),
+              feedback: TapFeedback.none,
+              focusable: false,
+              child: cell,
+            ),
           );
         },
       ),

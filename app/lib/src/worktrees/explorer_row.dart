@@ -7,6 +7,7 @@ import '../plugins/native/dev_stack_results.dart';
 import '../shell/worktree_filter.dart';
 import '../ui/menu.dart';
 import '../ui/popover.dart';
+import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import 'explorer_detail.dart';
 import 'facts.dart';
@@ -226,123 +227,105 @@ const _nameMinWidth = 220.0;
 }
 
 class WorktreeRowState extends State<WorktreeRow> {
-  var _hovered = false;
-
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
     var facts = widget.facts;
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onToggleExpand,
-        child: Container(
-          decoration: BoxDecoration(
-            // `accentSoft` for the keyboard and `hoverOverlay` for the pointer —
-            // the same two tones, in the same order, that the command palette
-            // uses. Not a left edge: that slot is 2px of accent meaning "open",
-            // and a border would inset the row out of line with the header.
-            color: widget.cursor
-                ? colors.accentSoft
-                : _hovered
-                ? colors.hoverOverlay
-                : Colors.transparent,
-            border: Border(bottom: BorderSide(color: colors.line)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                height: _rowHeight,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    var afford = _affordable(
-                      constraints.maxWidth,
-                      agent: widget.showAgent,
-                      forge: widget.showForge,
-                      stack: widget.showStack,
-                    );
-                    return Row(
-                      children: [
-                        _Gutter(isOpen: widget.isOpen, tone: facts.tone),
-                        Expanded(
-                          child: _NameCell(
-                            label: widget.label,
-                            branch: widget.branch,
-                            isMain: widget.isMain,
-                            isCurrent: widget.isCurrent,
-                            match: widget.match,
-                          ),
+    return Tappable.builder(
+      onTap: widget.onToggleExpand,
+      // The wash is the primitive's; the flag still reveals the row's actions.
+      feedback: TapFeedback.overlay,
+      builder: (context, hovered) => Container(
+        decoration: BoxDecoration(
+          // `accentSoft` for the keyboard; the pointer's wash is the
+          // primitive's. Not a left edge: that slot is 2px of accent meaning
+          // "open", and a border would inset the row out of line with the
+          // header.
+          color: widget.cursor ? colors.accentSoft : Colors.transparent,
+          border: Border(bottom: BorderSide(color: colors.line)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: _rowHeight,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  var afford = _affordable(
+                    constraints.maxWidth,
+                    agent: widget.showAgent,
+                    forge: widget.showForge,
+                    stack: widget.showStack,
+                  );
+                  return Row(
+                    children: [
+                      _Gutter(isOpen: widget.isOpen, tone: facts.tone),
+                      Expanded(
+                        child: _NameCell(
+                          label: widget.label,
+                          branch: widget.branch,
+                          isMain: widget.isMain,
+                          isCurrent: widget.isCurrent,
+                          match: widget.match,
                         ),
-                        if (afford.changes)
-                          SizedBox(
-                            key: changesCellKey,
-                            width: _changesWidth,
-                            child: _ChangesCell(
-                              fact: facts.git,
-                              scale: widget.scale,
-                            ),
-                          ),
-                        if (afford.stack)
-                          SizedBox(
-                            key: stackCellKey,
-                            width: _stackWidth,
-                            child: _StackCell(
-                              fact: facts.stack,
-                              now: widget.now,
-                            ),
-                          ),
-                        if (afford.agent)
-                          SizedBox(
-                            width: _agentWidth,
-                            child: _AgentCell(
-                              fact: facts.agent,
-                              now: widget.now,
-                            ),
-                          ),
-                        if (afford.forge)
-                          SizedBox(
-                            width: _prWidth,
-                            child: _PrCell(fact: facts.forge),
-                          ),
+                      ),
+                      if (afford.changes)
                         SizedBox(
-                          width: _whenWidth,
-                          child: _WhenCell(
-                            fact: facts.activity,
-                            now: widget.now,
+                          key: changesCellKey,
+                          width: _changesWidth,
+                          child: _ChangesCell(
+                            fact: facts.git,
+                            scale: widget.scale,
                           ),
                         ),
+                      if (afford.stack)
                         SizedBox(
-                          width: _actionsWidth,
-                          child: _Actions(
-                            hovered: _hovered,
-                            isOpen: widget.isOpen,
-                            expanded: widget.expanded,
-                            onOpen: widget.onOpen,
-                            onToggleExpand: widget.onToggleExpand,
-                            onRemove: widget.onRemove,
-                          ),
+                          key: stackCellKey,
+                          width: _stackWidth,
+                          child: _StackCell(fact: facts.stack, now: widget.now),
                         ),
-                        const Gap(_scrollGutter),
-                      ],
-                    );
-                  },
-                ),
+                      if (afford.agent)
+                        SizedBox(
+                          width: _agentWidth,
+                          child: _AgentCell(fact: facts.agent, now: widget.now),
+                        ),
+                      if (afford.forge)
+                        SizedBox(
+                          width: _prWidth,
+                          child: _PrCell(fact: facts.forge),
+                        ),
+                      SizedBox(
+                        width: _whenWidth,
+                        child: _WhenCell(fact: facts.activity, now: widget.now),
+                      ),
+                      SizedBox(
+                        width: _actionsWidth,
+                        child: _Actions(
+                          hovered: hovered,
+                          isOpen: widget.isOpen,
+                          expanded: widget.expanded,
+                          onOpen: widget.onOpen,
+                          onToggleExpand: widget.onToggleExpand,
+                          onRemove: widget.onRemove,
+                        ),
+                      ),
+                      const Gap(_scrollGutter),
+                    ],
+                  );
+                },
               ),
-              if (widget.expanded)
-                WorktreeDetail(
-                  facts: facts,
-                  path: widget.path,
-                  branch: widget.branch,
-                  now: widget.now,
-                  insetLeft: explorerInsetLeft,
-                  insetRight: explorerInsetRight,
-                ),
-            ],
-          ),
+            ),
+            if (widget.expanded)
+              WorktreeDetail(
+                facts: facts,
+                path: widget.path,
+                branch: widget.branch,
+                now: widget.now,
+                insetLeft: explorerInsetLeft,
+                insetRight: explorerInsetRight,
+              ),
+          ],
         ),
       ),
     );

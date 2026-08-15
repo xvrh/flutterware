@@ -43,16 +43,16 @@ class SidebarChildRow extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
 
-    return _Hoverable(
+    return Tappable.builder(
       onTap: onTap,
+      // The wash is the primitive's; the rail is this row's own, which is why
+      // the flag is still read here.
+      feedback: TapFeedback.overlay,
       builder: (context, hovered) => Container(
         // The rail is always drawn — only its colour changes — so the row keeps
         // its geometry and nothing below it moves on selection.
         margin: const EdgeInsets.only(left: FwSpacing.xxl),
         decoration: BoxDecoration(
-          color: hovered && !selected
-              ? colors.hoverOverlay
-              : Colors.transparent,
           border: Border(
             left: BorderSide(
               color: selected
@@ -187,30 +187,4 @@ class _ChildCommandsButton extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Hover tracking for a whole row, handed to the builder.
-class _Hoverable extends StatefulWidget {
-  const _Hoverable({required this.onTap, required this.builder});
-
-  final VoidCallback onTap;
-  final Widget Function(BuildContext context, bool hovered) builder;
-
-  @override
-  State<_Hoverable> createState() => _HoverableState();
-}
-
-class _HoverableState extends State<_Hoverable> {
-  var _hovered = false;
-
-  @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    onEnter: (_) => setState(() => _hovered = true),
-    onExit: (_) => setState(() => _hovered = false),
-    child: GestureDetector(
-      onTap: widget.onTap,
-      child: widget.builder(context, _hovered),
-    ),
-  );
 }

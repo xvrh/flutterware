@@ -212,24 +212,21 @@ class _DevStackBlockState extends State<DevStackBlock> {
   Widget _strip(BuildContext context, StackState state) {
     var colors = context.colors;
     var tone = _tone(colors, state);
-    var openable = widget.onOpenPanel != null;
     return Align(
       alignment: Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: _maxWidth),
-        child: Tappable.builder(
+        child: Tappable(
           onTap: widget.onOpenPanel,
-          builder: (context, hovered) => AnimatedContainer(
+          borderRadius: BorderRadius.circular(context.radii.radius),
+          child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             padding: const EdgeInsets.symmetric(
               horizontal: FwSpacing.lg,
               vertical: FwSpacing.md,
             ),
             decoration: BoxDecoration(
-              color: Color.alphaBlend(
-                hovered && openable ? colors.hoverOverlay : Colors.transparent,
-                tone == null ? colors.panel : colors.statusFill(tone),
-              ),
+              color: tone == null ? colors.panel : colors.statusFill(tone),
               border: Border.all(
                 color: tone == null ? colors.line : colors.statusBorder(tone),
               ),

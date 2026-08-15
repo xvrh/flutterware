@@ -309,16 +309,13 @@ class _Channel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Tappable.builder(
+    return Tappable(
       onTap: onTap,
-      builder: (context, hovered) => AnimatedContainer(
+      borderRadius: BorderRadius.circular(context.radii.radius),
+      child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         decoration: BoxDecoration(
-          color: on
-              ? colors.accentSoft
-              : hovered
-              ? colors.hoverOverlay
-              : null,
+          color: on ? colors.accentSoft : null,
           borderRadius: BorderRadius.circular(context.radii.radius),
           border: Border.all(color: on ? colors.accent : colors.line),
         ),
