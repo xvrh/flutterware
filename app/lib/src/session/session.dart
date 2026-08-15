@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 
 // Only the equality: this file has its own `firstOrNull`.
 import 'package:collection/collection.dart' show DeepCollectionEquality;
@@ -422,22 +423,26 @@ class Session {
   /// which is the point of having one.
   ///
   /// So the declared `ActionParameterKind` is applied here, once, at the single
-  /// door — rather than in each renderer, or by hand in every core. Parameters
-  /// the action does not declare are passed through untouched: the framework
-  /// parses up to the plugin and no further, and an action is free to accept
-  /// more than it advertises.
+  /// door — rather than in each renderer, or by hand in every core. A parameter
+  /// the action does not declare is **refused** here for the same reason and in
+  /// the same place; see [_undeclared].
   Map<String, Object?> _coerce(
     PluginCore core,
     String action,
     Map<String, Object?> arguments,
   ) {
     if (arguments.isEmpty) return arguments;
+    var declaredAction = core.report.actions
+        .where((candidate) => candidate.id == action)
+        .firstOrNull;
+    // Not refused here, and deliberately: the action does not exist, and
+    // `PluginCore.invoke` says exactly that and lists the ones that do.
+    // Complaining about a parameter first would answer a question about the
+    // arguments of nothing.
+    if (declaredAction == null) return arguments;
     var declared = {
-      for (var candidate in core.report.actions)
-        if (candidate.id == action)
-          for (var parameter in candidate.parameters) parameter.id: parameter,
+      for (var parameter in declaredAction.parameters) parameter.id: parameter,
     };
-    if (declared.isEmpty) return arguments;
 
     return {
       for (var entry in arguments.entries)
@@ -459,13 +464,83 @@ class Session {
               '`--${entry.key} <value>`',
               entry.key,
             ),
-          null ||
+          // `kind` has a default and is never null, so this is the undeclared
+          // key and nothing else.
+          null => throw _undeclared(core, declaredAction, entry.key),
           ActionParameterKind.string ||
           ActionParameterKind.choice => entry.value,
           ActionParameterKind.boolean => _asBoolean(entry.key, entry.value),
           ActionParameterKind.integer => _asInteger(entry.key, entry.value),
         },
     };
+  }
+
+  /// The refusal for an argument naming a parameter the action does not have.
+  ///
+  /// **Silence was the expensive failure here.** `describe --entry=… --axes=true`
+  /// is a call somebody really made; the parameter is `with-axes`. The argument
+  /// was dropped and the answer came back well-formed with no `axes` field —
+  /// which is precisely what a *correct* call returns for an entry that has no
+  /// shell. A person spots the typo in seconds. An agent gets a wrong fact
+  /// wearing the shape of a right one, and nothing downstream can catch it.
+  ///
+  /// Safe to refuse because nothing accepts what it does not advertise: every
+  /// `arguments['…']` read across every core names a declared id, and the one
+  /// dynamically-named argument — a dev-stack command's — is declared alongside
+  /// the command that reads it.
+  static ArgumentError _undeclared(
+    PluginCore core,
+    PluginAction action,
+    String key,
+  ) {
+    var ids = [for (var parameter in action.parameters) parameter.id];
+    var nearest = _nearest(key, ids);
+    return ArgumentError(
+      'no such parameter on ${core.id} ${action.id}'
+      '${nearest == null ? '.' : ' — did you mean `$nearest`?'} '
+      '${ids.isEmpty ? 'It takes none.' : 'It takes: ${ids.join(', ')}'}',
+      key,
+    );
+  }
+
+  /// The declared id a mistyped one most likely meant, or null rather than a
+  /// reach.
+  ///
+  /// Two rules, in order. A declared id that has the typed one as one of its
+  /// hyphenated words — `axes` finding `with-axes`, which is the shape of the
+  /// mistake this exists for, and the shape no edit-distance rule catches
+  /// because a prefix is five characters away. Then a single typo's worth of
+  /// distance, for `entrie` and `pacakge`.
+  static String? _nearest(String key, List<String> declared) {
+    for (var id in declared) {
+      if (id.split('-').contains(key)) return id;
+    }
+    String? best;
+    var distance = 2;
+    for (var id in declared) {
+      var d = _distance(key, id);
+      if (d < distance) {
+        distance = d;
+        best = id;
+      }
+    }
+    return best;
+  }
+
+  /// Levenshtein, one row at a time — the ids are short and this runs once, on
+  /// the way to failing.
+  static int _distance(String a, String b) {
+    var row = [for (var i = 0; i <= b.length; i++) i];
+    for (var i = 1; i <= a.length; i++) {
+      var previous = row[0];
+      row[0] = i;
+      for (var j = 1; j <= b.length; j++) {
+        var replace = previous + (a[i - 1] == b[j - 1] ? 0 : 1);
+        previous = row[j];
+        row[j] = math.min(math.min(row[j] + 1, row[j - 1] + 1), replace);
+      }
+    }
+    return row[b.length];
   }
 
   static Object? _asBoolean(String name, Object? value) => switch (value) {

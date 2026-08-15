@@ -285,6 +285,24 @@ Widget empty() => const Placeholder();
     );
   });
 
+  test('deriving a group keeps the knobs the signature declared', () {
+    // Filing an entry under a group rebuilds it, and the rebuild used to drop
+    // `knobs` — so a preview lost its controls for the sole reason that it had
+    // a sibling in the same file, which is the ordinary way variants are
+    // spelled. Nothing reported it: the panel simply had nothing to draw.
+    write('team/member_list_view.dart', '''
+@Preview(name: 'Few')
+Widget few({int count = 2}) => const Placeholder();
+
+@Preview(name: 'Empty')
+Widget empty() => const Placeholder();
+''');
+
+    var few = scan().entries.singleWhere((e) => e.name == 'Few');
+    expect(few.group, 'Member list view');
+    expect(few.knobs.map((k) => k.name), ['count']);
+  });
+
   test('a file with one entry derives no group', () {
     write('team/avatar_tile.dart', '''
 @Preview(name: 'Avatar tile')

@@ -43,7 +43,12 @@ class _FakeCore extends PluginCore {
     label: host.label,
     status: status,
     teardown: teardown,
-    actions: const [PluginAction('go', 'Go')],
+    // `k` is declared because the session refuses an argument no action
+    // declares, and the test below is about which door an invocation goes
+    // through — not about arguments.
+    actions: const [
+      PluginAction('go', 'Go', parameters: [ActionParameter('k', 'K')]),
+    ],
   );
 
   @override

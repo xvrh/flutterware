@@ -18,10 +18,18 @@ Map<String, dynamic> _$CatalogPackageEntriesToJson(
   'path': instance.path,
   'directory': instance.directory,
   'entries': instance.entries.map((e) => e.toJson()).toList(),
+  'tree': instance.tree.map((e) => e.toJson()).toList(),
   'diagnostics': instance.diagnostics,
   'error': ?instance.error,
   'authoring': ?instance.authoring,
 };
+
+Map<String, dynamic> _$CatalogEntryNodeToJson(CatalogEntryNode instance) =>
+    <String, dynamic>{
+      'label': instance.label,
+      'entry': ?instance.entry,
+      'children': instance.children.map((e) => e.toJson()).toList(),
+    };
 
 Map<String, dynamic> _$CatalogNewResultToJson(CatalogNewResult instance) =>
     <String, dynamic>{

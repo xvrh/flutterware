@@ -38,15 +38,23 @@ class PreviewCanvas {
     this.orientations = const [],
   });
 
-  /// Which entries this covers: a directory relative to the **package**, in the
-  /// same coordinates as `PreviewsPackage.directory` and the paths the tool
-  /// reports entries under.
+  /// Which entries this covers: a path relative to the **package**, in the same
+  /// coordinates as `PreviewsPackage.directory` and the paths the tool reports
+  /// entries under.
   ///
   /// The empty string covers the whole package, which is what a project with
   /// one form factor writes and what a bare `device:` on the package means.
   ///
   /// Matched on segment boundaries, never as raw text — `src/mobile` covers
   /// `src/mobile/tile.dart` and pointedly not `src/mobile_legacy/tile.dart`.
+  ///
+  /// **A file is a legal prefix**, and supported rather than incidental: the
+  /// last segment of a path is a file, so `src/mobile/tile.dart` covers exactly
+  /// the entries in that one file. It is how a single preview differs from its
+  /// neighbours without giving it a directory of its own. This said "a
+  /// directory" for a while, and a consumer who tried a file, watched it work
+  /// and could not tell whether they were allowed to depend on it is the reason
+  /// it does not any more.
   final String prefix;
 
   /// The devices these entries are worth looking at on.

@@ -9,6 +9,7 @@ import '../shell/workspace.dart';
 import '../shell/worktree.dart';
 import '../utils/flutter_sdk.dart';
 import 'action_shapes.generated.dart';
+import 'authoring_guides.dart';
 import 'cli.dart';
 import 'mcp_server.dart';
 import 'session.dart';
@@ -179,6 +180,10 @@ String _actionsSection(
     if (report.actions.isEmpty) {
       buffer.writeln('No actions.');
       continue;
+    }
+    if (authoringGuides[report.id] case var guide?) {
+      buffer.writeln(guide.trim());
+      buffer.writeln();
     }
     var short = report.id.split('.').last;
     for (var action in report.actions) {

@@ -5,6 +5,7 @@ import 'package:flutterware/plugins.dart' show SearchReason, searchReport;
 import 'package:flutterware_app/src/plugins/native/dependencies_core.dart';
 import 'package:flutterware_app/src/plugins/native/dependencies_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
+import 'package:flutterware_app/src/session/job.dart';
 import 'package:flutterware_app/src/session/session.dart';
 import 'package:flutterware_app/src/shell/repo_layout.dart';
 import 'package:path/path.dart' as p;
@@ -114,6 +115,53 @@ void main() {
       () => dependencies.invoke('not-an-action'),
       throwsA(isA<ArgumentError>()),
     );
+  });
+
+  group('a parameter the action does not declare', () {
+    /// Whatever the refusal said, from the surface both renderers read.
+    Future<String> refusal(
+      String plugin,
+      String action,
+      Map<String, Object?> arguments,
+    ) async {
+      var result = await session
+          .invoke(plugin, action, arguments: arguments)
+          .done;
+      expect(result.ok, isFalse, reason: 'the call was meant to be refused');
+      return describeJobError(result.error!);
+    }
+
+    test('is refused rather than dropped', () async {
+      // The call that prompted this: the parameter is `with-axes`, and an
+      // ignored `--axes` came back as a description with no `axes` field —
+      // indistinguishable from the right answer for an entry that has no
+      // shell.
+      var message = await refusal('previews', 'describe', {
+        'entry': 'demo/buttons.dart#buttons',
+        'axes': 'true',
+      });
+      expect(message, contains('no such parameter'));
+      expect(message, contains('(axes)'));
+    });
+
+    test('names the one it was probably meant to be', () async {
+      var message = await refusal('previews', 'describe', {'axes': 'true'});
+      expect(message, contains('did you mean `with-axes`'));
+    });
+
+    test('lists the ones the action does have', () async {
+      var message = await refusal('previews', 'describe', {'nonsense': '1'});
+      expect(message, contains('It takes: entry, with-knobs, with-axes'));
+    });
+
+    test('does not speak for an action that does not exist', () async {
+      // The plugin owns everything past its own name, and it already refuses
+      // an unknown action by listing the real ones. Answering "no such
+      // parameter" first would describe the arguments of nothing.
+      var message = await refusal('previews', 'not-an-action', {'axes': '1'});
+      expect(message, contains('unknown action'));
+      expect(message, isNot(contains('no such parameter')));
+    });
   });
 
   test('an action asked for by name loads what it needs', () async {

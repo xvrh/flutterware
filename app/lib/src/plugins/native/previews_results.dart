@@ -47,6 +47,7 @@ class CatalogPackageEntries {
     required this.path,
     required this.directory,
     this.entries = const [],
+    this.tree = const [],
     this.diagnostics = const [],
     this.error,
     this.authoring,
@@ -65,6 +66,20 @@ class CatalogPackageEntries {
 
   final List<CatalogEntrySummary> entries;
 
+  /// [entries] arranged the way the catalog is meant to be read: folders, then
+  /// a level per file that holds several entries, then the entries.
+  ///
+  /// **Reported rather than left to be rebuilt, because a rebuilt one is wrong
+  /// quietly.** Everything needed to derive this was already in [entries] and
+  /// the arrangement rules were not — the shared leading directories are
+  /// dropped, folders sort before entries, both alphabetically, and a folder's
+  /// label is the directory segment as written while a derived group's is
+  /// humanised. A consumer who reconstructed it from ids got a plausible tree
+  /// in an order the panel never shows, twice, having read the source both
+  /// times. This is the same `buildCatalogTree` the panel and the web export
+  /// draw, so there is one arrangement and not three.
+  final List<CatalogEntryNode> tree;
+
   /// Discovery's complaints — a duplicate id, an uncallable target.
   final List<String> diagnostics;
 
@@ -77,6 +92,42 @@ class CatalogPackageEntries {
   final String? authoring;
 
   Map<String, Object?> toJson() => _$CatalogPackageEntriesToJson(this);
+}
+
+/// One row of the entry tree: a folder, a file's group of variants, or an
+/// entry.
+///
+/// A branch has [children] and a leaf has an [entry]; never both, and the
+/// distinction is what the field's presence means rather than a `kind` string
+/// to compare against. The leaf carries only the id, because the entry itself is
+/// already in the flat list under that id — a tree that repeated the payload
+/// would be a second answer to keep in agreement with the first.
+///
+/// **Not `CatalogTreeNode`**, which this plugin already uses for a node of the
+/// *widget* tree an entry renders. Two trees, and the shape names are published
+/// in `docs/capabilities.md`, where one of them would have quietly become the
+/// other.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogEntryNode {
+  CatalogEntryNode({required this.label, this.entry, this.children = const []});
+
+  /// What the panel shows on this row: a directory segment as it is written on
+  /// disk, a group as it was declared or humanised from the file name, or an
+  /// entry's name.
+  final String label;
+
+  /// The entry this leaf renders, as `screenshot --entry` takes it. Absent on a
+  /// branch.
+  final String? entry;
+
+  /// What is under this branch, in the order it is shown. Empty on a leaf.
+  final List<CatalogEntryNode> children;
+
+  Map<String, Object?> toJson() => _$CatalogEntryNodeToJson(this);
 }
 
 /// `new` — the first demo, written for somebody who has none.

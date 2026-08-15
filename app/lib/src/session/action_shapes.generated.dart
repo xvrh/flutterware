@@ -792,6 +792,36 @@ final resultShapes = <String, ResultShape>{
               },
             },
             <String, Object?>{
+              'name': 'tree',
+              'type': 'List<CatalogEntryNode>',
+              'doc':
+                  '[entries] arranged the way the catalog is meant to be read: folders, then a level per file that holds several entries, then the entries.',
+              'shape': <String, Object?>{
+                'type': 'CatalogEntryNode',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'label',
+                    'type': 'String',
+                    'doc':
+                        'What the panel shows on this row: a directory segment as it is written on disk, a group as it was declared or humanised from the file name, or an entry\'s name.',
+                  },
+                  <String, Object?>{
+                    'name': 'entry',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The entry this leaf renders, as `screenshot --entry` takes it.',
+                  },
+                  <String, Object?>{
+                    'name': 'children',
+                    'type': 'List<CatalogEntryNode>',
+                    'doc':
+                        'What is under this branch, in the order it is shown.',
+                  },
+                ],
+              },
+            },
+            <String, Object?>{
               'name': 'diagnostics',
               'type': 'List<String>',
               'doc':
@@ -933,6 +963,28 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc': 'Which shell declared [axes].',
+      },
+    ],
+  }),
+  'CatalogEntryNode': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogEntryNode',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'label',
+        'type': 'String',
+        'doc':
+            'What the panel shows on this row: a directory segment as it is written on disk, a group as it was declared or humanised from the file name, or an entry\'s name.',
+      },
+      <String, Object?>{
+        'name': 'entry',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The entry this leaf renders, as `screenshot --entry` takes it.',
+      },
+      <String, Object?>{
+        'name': 'children',
+        'type': 'List<CatalogEntryNode>',
+        'doc': 'What is under this branch, in the order it is shown.',
       },
     ],
   }),
@@ -1501,6 +1553,35 @@ final resultShapes = <String, ResultShape>{
               'name': 'devices',
               'type': 'List<String>',
               'doc': 'Every device the entry\'s canvas offers, [device] first.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'tree',
+        'type': 'List<CatalogEntryNode>',
+        'doc':
+            '[entries] arranged the way the catalog is meant to be read: folders, then a level per file that holds several entries, then the entries.',
+        'shape': <String, Object?>{
+          'type': 'CatalogEntryNode',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'label',
+              'type': 'String',
+              'doc':
+                  'What the panel shows on this row: a directory segment as it is written on disk, a group as it was declared or humanised from the file name, or an entry\'s name.',
+            },
+            <String, Object?>{
+              'name': 'entry',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The entry this leaf renders, as `screenshot --entry` takes it.',
+            },
+            <String, Object?>{
+              'name': 'children',
+              'type': 'List<CatalogEntryNode>',
+              'doc': 'What is under this branch, in the order it is shown.',
             },
           ],
         },

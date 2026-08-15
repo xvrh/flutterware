@@ -23,6 +23,7 @@ import 'package:path/path.dart' as p;
 
 import '../../previews/authoring.dart';
 import '../../previews/catalog_entry.dart';
+import '../../previews/catalog_tree.dart';
 import '../../previews/debug_flags.dart';
 import '../../previews/devices.dart';
 import '../../previews/discovery.dart';
@@ -527,7 +528,9 @@ class PreviewsCore extends PluginCore {
         returns: CatalogEntriesResult,
         description:
             'Every catalog entry, with its id and address — the whole list, '
-            'not the projection the report carries',
+            'not the projection the report carries — and `tree`, the same '
+            'entries arranged into the folders and groups the panel shows, so '
+            'nobody has to work the arrangement out from the ids',
         parameters: [
           ActionParameter(
             'package',
@@ -1657,11 +1660,34 @@ class PreviewsCore extends PluginCore {
         for (var entry in scan?.entries ?? const <CatalogEntry>[])
           _summarise(path, entry, canvases),
       ],
+      tree: _treeNodes(
+        buildCatalogTree(scan?.entries ?? const <CatalogEntry>[]),
+      ),
       diagnostics: [
         for (var diagnostic in scan?.diagnostics ?? const []) '$diagnostic',
       ],
     );
   }
+
+  /// The panel's own tree, on the wire.
+  ///
+  /// A translation and nothing more: [buildCatalogTree] decides the shape, and
+  /// this turns its nodes into the serialisable ones. Arranging entries a
+  /// second time here — even correctly, today — is how the answer and the panel
+  /// come to disagree about a catalog neither of them changed.
+  static List<CatalogEntryNode> _treeNodes(List<CatalogNode> nodes) => [
+    for (var node in nodes)
+      switch (node) {
+        CatalogLeaf(:var entry) => CatalogEntryNode(
+          label: node.label,
+          entry: entry.id,
+        ),
+        CatalogBranch(:var children) => CatalogEntryNode(
+          label: node.label,
+          children: _treeNodes(children),
+        ),
+      },
+  ];
 
   /// One entry, as the `entries` action reports it.
   ///
