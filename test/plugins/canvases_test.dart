@@ -31,11 +31,28 @@ void main() {
       var canvas = const PreviewCanvas('src/mobile');
 
       expect(canvas.covers('src/mobile/tile.dart'), isTrue);
-      // Named as a file rather than a directory, which is a fine way to say
-      // "this one entry".
       expect(canvas.covers('src/mobile'), isTrue);
       expect(canvas.covers('src/mobile_legacy/tile.dart'), isFalse);
       expect(canvas.covers('src/desktop/bar.dart'), isFalse);
+    });
+
+    test('a prefix may name a file, which is how one entry differs', () {
+      // Supported, not incidental. It falls out of matching on segments — the
+      // last one is a file — and the documentation used to say "a directory",
+      // which left somebody who tried it unable to tell whether it was
+      // something they could depend on.
+      var canvas = const PreviewCanvas('src/mobile/tile.dart');
+
+      expect(canvas.covers('src/mobile/tile.dart'), isTrue);
+      expect(canvas.covers('src/mobile/other.dart'), isFalse);
+      // And it beats the directory it sits in, by the longest-prefix rule.
+      expect(
+        canvasFor(const [
+          PreviewCanvas('src/mobile', devices: [Devices.iphone16]),
+          PreviewCanvas('src/mobile/tile.dart', devices: [Devices.iPad]),
+        ], 'src/mobile/tile.dart')?.defaultDevice,
+        Devices.iPad,
+      );
     });
   });
 

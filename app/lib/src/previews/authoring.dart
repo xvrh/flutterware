@@ -65,9 +65,11 @@ register it in — $scanned.
   derives a group from its own name.
 - Two `@Preview`s on one declaration are two entries, which is how variants are
   spelled.
-- `context.knobs.string('label', 'Hello')` inside the preview
-  declares a knob you can turn from the panel, the CLI and an agent. That one
-  needs `package:flutterware/previews.dart`; nothing above it does.
+- An optional parameter is a knob you can turn from the panel, the CLI and an
+  agent — `Widget buttons({String label = 'Hello'})`. So is
+  `context.knobs.string('label', 'Hello')` read from a `BuildContext` inside the
+  preview, which needs `package:flutterware/previews.dart`; nothing above it
+  does.
 
 `fw run previews new --name='Buttons'` writes that file for you.''';
 }
@@ -179,14 +181,23 @@ Widget $symbol() => Center(
     );
 
 // A knob is whatever the preview asks for while it builds — no registration,
-// and the panel, the CLI and an agent all get the same control. This one needs
-// `package:flutterware/previews.dart` for `context.previews`:
+// and the panel, the CLI and an agent all get the same control. An optional
+// parameter is one, read straight off the signature:
 //
 // @Preview(name: '$name, parameterised')
-// Widget ${symbol}Knobs(BuildContext context) {
-//   var label = context.knobs.string('label', 'A button');
-//   return Center(child: FilledButton(onPressed: () {}, child: Text(label)));
-// }
+// Widget ${symbol}Knobs({String label = 'A button'}) =>
+//     Center(child: FilledButton(onPressed: () {}, child: Text(label)));
+//
+// So is anything asked for deeper down, which reads a BuildContext and needs
+// `package:flutterware/previews.dart` for `context.knobs`:
+//
+// @Preview(name: '$name, from a context')
+// Widget ${symbol}Inner() => Builder(
+//       builder: (context) => Text(context.knobs.string('label', 'A button')),
+//     );
+//
+// A *required* parameter is neither, so a preview cannot take the BuildContext
+// itself: the target has to be callable with no arguments.
 ''';
 }
 

@@ -5,6 +5,7 @@ import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/previews/authoring.dart';
+import 'package:flutterware_app/src/previews/catalog_tree.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/previews_core.dart';
 import 'package:flutterware_app/src/plugins/native/previews_results.dart';
@@ -265,6 +266,52 @@ Widget counter() => const Placeholder();
     expect(subject.entries, hasLength(1));
   });
 
+  test('the knob examples in the scaffold are previews too', () async {
+    // The test above only checks that the examples stay *commented*. They were
+    // also wrong: one of them took a `BuildContext` parameter, which the scan
+    // refuses outright — a required parameter makes a target ineligible — so
+    // the file handed to somebody writing their first preview taught a form
+    // that cannot work, to exactly the people least able to tell.
+    //
+    // So they are lifted out of the comment and scanned. Every `// @Preview`
+    // in the scaffold starts an example and runs to the next blank comment
+    // line, which is a shape the scaffold has to keep for this to keep
+    // meaning anything — an example that stops being lifted fails the count
+    // below rather than passing quietly.
+    var examples = <String>[];
+    var lines = catalogScaffold('Buttons').split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      if (!lines[i].startsWith('// @Preview')) continue;
+      var block = <String>[];
+      for (var j = i; j < lines.length && lines[j].startsWith('// '); j++) {
+        block.add(lines[j].substring(3));
+      }
+      examples.add(block.join('\n'));
+    }
+    expect(examples, hasLength(2), reason: 'both knob spellings are examples');
+
+    write('demo/knobs.dart', '''
+import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
+
+${examples.join('\n\n')}
+''');
+    var subject = catalog()..track('.');
+    await scanned(subject);
+
+    expect(
+      subject.entries.map((e) => e.name),
+      containsAll(['Buttons, parameterised', 'Buttons, from a context']),
+    );
+    // A knob read off the signature is one the panel can offer without running
+    // anything, which is the half of the pair the comment claims is free.
+    var parameterised = subject.entries.singleWhere(
+      (e) => e.name == 'Buttons, parameterised',
+    );
+    expect(parameterised.knobs.map((k) => k.name), ['label']);
+    expect(subject.report.status.tone, isNot(Tone.error));
+  });
+
   test('the scaffold names a legal Dart identifier, whatever it is called', () {
     // `Switch` is the most likely name in a catalog of previews, and it is a
     // reserved word — `Widget switch()` does not parse. A leading digit is the
@@ -454,6 +501,87 @@ Widget b() => const Placeholder();
     // The wire form is generated from those fields, so it cannot disagree
     // with them — but every surface reads it, so it is worth one look.
     expect(result.toJson()['packages'], isA<List<Object?>>());
+  });
+
+  group('the tree entries reports', () {
+    /// The shape, as `label` and `label/child` lines.
+    List<String> outline(List<CatalogEntryNode> nodes, [String prefix = '']) =>
+        [
+          for (var node in nodes) ...[
+            '$prefix${node.label}',
+            ...outline(node.children, '$prefix${node.label}/'),
+          ],
+        ];
+
+    test('is the arrangement, not the ids re-sorted', () async {
+      var subject = catalog();
+      var result = (await subject.invoke('entries'))! as CatalogEntriesResult;
+
+      // Every rule at once, and every one of them is a rule a reader
+      // reconstructing this from the ids has to guess: `demo` is dropped
+      // because every entry shares it, `team` stays as written rather than
+      // humanised, `Avatar tile` *is* humanised because it is derived from a
+      // file holding two entries, folders come before entries, and both are
+      // alphabetical by name.
+      expect(outline(result.packages.single.tree), [
+        'team',
+        'team/Avatar tile',
+        'team/Avatar tile/Empty',
+        'team/Avatar tile/Members',
+        'Counter',
+      ]);
+    });
+
+    test('names the entry on a leaf and nothing on a branch', () async {
+      var subject = catalog();
+      var result = (await subject.invoke('entries'))! as CatalogEntriesResult;
+      var tree = result.packages.single.tree;
+
+      var counter = tree.singleWhere((node) => node.label == 'Counter');
+      expect(counter.entry, 'demo/counter.dart#counter');
+      expect(counter.children, isEmpty);
+
+      var team = tree.singleWhere((node) => node.label == 'team');
+      expect(team.entry, isNull);
+      expect(team.children, isNotEmpty);
+    });
+
+    test('is what the panel draws, not a second arrangement', () async {
+      var subject = catalog()..track('.');
+      await scanned(subject);
+      var result = (await subject.invoke('entries'))! as CatalogEntriesResult;
+
+      // The claim the wire form makes is that it *is* `buildCatalogTree` — so
+      // it is asserted against that function rather than against a literal,
+      // which would pass just as well if the two drifted apart.
+      String flatten(List<CatalogNode> nodes) => [
+        for (var node in nodes)
+          switch (node) {
+            CatalogLeaf() => node.label,
+            CatalogBranch(:var children) =>
+              '${node.label}(${flatten(children)})',
+          },
+      ].join(',');
+      String flattenWire(List<CatalogEntryNode> nodes) => [
+        for (var node in nodes)
+          node.entry != null
+              ? node.label
+              : '${node.label}(${flattenWire(node.children)})',
+      ].join(',');
+
+      expect(
+        flattenWire(result.packages.single.tree),
+        flatten(buildCatalogTree(subject.entries)),
+      );
+    });
+
+    test('a package that could not be scanned has none', () async {
+      var subject = catalog(directory: 'nonexistent');
+      var result = (await subject.invoke('entries'))! as CatalogEntriesResult;
+
+      expect(result.packages.single.entries, isEmpty);
+      expect(result.packages.single.tree, isEmpty);
+    });
   });
 
   test('entries picks up a file added after an earlier scan', () async {

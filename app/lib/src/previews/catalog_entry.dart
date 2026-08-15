@@ -73,6 +73,13 @@ class CatalogEntry {
   /// Which annotation on the declaration this is, in source order.
   final int ordinal;
 
+  /// The same entry, filed under [group].
+  ///
+  /// Every field is carried, and [knobs] is why this comment exists: it used to
+  /// be omitted, and the only entries that go through here are the ones in a
+  /// file holding more than one — so a preview lost the controls its signature
+  /// declared for the sole reason that it had a sibling. Nothing said so; the
+  /// panel simply had no knobs to draw.
   CatalogEntry withGroup(String group) => CatalogEntry(
     path: path,
     symbol: symbol,
@@ -81,6 +88,7 @@ class CatalogEntry {
     group: group,
     declaredId: declaredId,
     ordinal: ordinal,
+    knobs: knobs,
   );
 
   Map<String, dynamic> toJson() => _$CatalogEntryToJson(this);
