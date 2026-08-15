@@ -5,6 +5,7 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import '../utils/source_code/escape_dart_string.dart';
 import 'catalog_entry.dart';
 
 /// Writes the one file that stands between a demo and whoever renders it: the
@@ -67,8 +68,8 @@ import 'package:flutterware/ui_catalog.dart';
 // Together these reproduce the demo's own scope, which is the one the
 // annotation was written in. The gap that remains is privacy: a `_kName` in the
 // annotation is visible where it was written and not here.
-import '${uriFor(demo)}';
-import '${uriFor(demo)}' as fw$index;
+import ${escapeDartString(uriFor(demo))};
+import ${escapeDartString(uriFor(demo))} as fw$index;
 
 // The annotation, evaluated as Dart rather than interpreted statically.
 // Kept whole rather than reduced: the entrypoint calls Flutter's own
@@ -130,7 +131,10 @@ Widget Function() get fwBuilder => fw$index.${entry.symbol};
         // A `package:`/`dart:` URI means the same thing from anywhere.
         if (written == null || written.contains(':')) continue;
         var target = p.normalize(p.join(p.dirname(source), written));
-        text = text.replaceFirst(literal.toSource(), "'${uriFor(target)}'");
+        text = text.replaceFirst(
+          literal.toSource(),
+          escapeDartString(uriFor(target)),
+        );
       }
       carried.add(text);
     }

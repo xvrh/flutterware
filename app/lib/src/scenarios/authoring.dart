@@ -15,6 +15,8 @@
 /// does the file go" is the half of the answer that is per-project.
 library;
 
+import '../utils/source_code/escape_dart_string.dart';
+
 String scenarioAuthoringIntro(String directory) =>
     'A scenario is an ordinary widget test with a screenshot per step — '
     '`flutter test $directory` runs it with no daemon and no GUI.';
@@ -150,7 +152,7 @@ import 'package:flutterware/flutter_test.dart';
 /// is the shape. Every action screenshots itself — `Shot('Name')` names one,
 /// `Shot.skip` drops one, `s.screen('Name')` captures without acting.
 void main() {
-  scenario('${_escape(name)}', (s) async {
+  scenario(${escapeDartString(name)}, (s) async {
     await s.pumpWidget(const _Stub());
     await s.tap('Continue', shot: Shot('Tapped continue'));
     expect(find.text('Tapped'), findsOneWidget);
@@ -184,8 +186,3 @@ class _StubState extends State<_Stub> {
   }
 }
 ''';
-
-/// A name arrives from a command line and lands inside a single-quoted Dart
-/// literal, so an apostrophe in it would write a file that does not parse.
-String _escape(String name) =>
-    name.replaceAll(r'\', r'\\').replaceAll("'", r"\'").replaceAll(r'$', r'\$');

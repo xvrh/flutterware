@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../utils/source_code/escape_dart_string.dart';
 import 'catalog_entry.dart';
 import 'catalog_tree.dart';
 import 'catalog_wrapper.dart';
@@ -198,17 +199,12 @@ Widget _entry(Preview demo, Widget Function() builder) {
     }
   }
 
-  /// A single-quoted Dart string literal.
+  /// A quoted Dart string literal.
   ///
   /// Escaped rather than raw: an entry's display name is written by a human in
   /// an annotation and may hold a quote or a `$`, and a raw string cannot
-  /// escape its own delimiter.
-  static String _literal(String value) {
-    var escaped = value
-        .replaceAll(r'\', r'\\')
-        .replaceAll("'", r"\'")
-        .replaceAll(r'$', r'\$')
-        .replaceAll('\n', r'\n');
-    return "'$escaped'";
-  }
+  /// escape its own delimiter. Shared with the harness and the guest entrypoint
+  /// rather than hand-rolled here — a private copy of this rule is how the
+  /// harness came to be the one emitter that had never learned it.
+  static String _literal(String value) => escapeDartString(value);
 }

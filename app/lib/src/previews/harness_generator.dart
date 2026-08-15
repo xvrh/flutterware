@@ -2,6 +2,10 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+// The leaf, not the `source_code.dart` barrel: `entrypoint_generator.dart`
+// escapes the same way and sits on the compiler daemon's import closure, where
+// every library pulled in is one more thing that can reach Flutter.
+import '../utils/source_code/escape_dart_string.dart';
 import 'catalog_entry.dart';
 import 'catalog_wrapper.dart';
 import 'devices.dart';
@@ -57,12 +61,19 @@ String generatePreviewHarness(
     ..writeln()
     ..writeln('void main() => runPreviewHarness(')
     ..writeln('  [');
+  // Every field escaped, none of them raw. A raw string cannot escape the quote
+  // that delimits it, so one `@Preview(name: "What's new")` emitted a file that
+  // does not parse — and the harness is one file for the whole package, so that
+  // one name took every entry with it. `id` is derived from `path` and `symbol`
+  // unless the annotation pins one, and `path` is a directory a human named;
+  // the only reason those had not broken yet is that nobody had put an
+  // apostrophe in one.
   for (var (index, entry) in sorted.indexed) {
     buffer
       ..writeln('    PreviewEntry(')
-      ..writeln("      id: r'${entry.id}',")
-      ..writeln("      path: r'${entry.path}',")
-      ..writeln("      name: r'${entry.name}',")
+      ..writeln('      id: ${escapeDartString(entry.id)},')
+      ..writeln('      path: ${escapeDartString(entry.path)},')
+      ..writeln('      name: ${escapeDartString(entry.name)},')
       ..writeln(
         '      build: () => _build(fw$index.fwPreview, fw$index.fwBuilder),',
       )
@@ -154,12 +165,15 @@ void _writeIfDifferent(String path, String source) {
 /// this build knows and that one does not, which is a canvas with fewer
 /// devices — never a harness that will not compile.
 String _canvasSource(PreviewCanvas canvas) {
-  var devices = [for (var d in canvas.devices) "?deviceById(r'${d.id}')"];
+  var devices = [
+    for (var d in canvas.devices) '?deviceById(${escapeDartString(d.id)})',
+  ];
   var orientations = [
-    for (var o in canvas.orientations) "?orientationById(r'${o.name}')",
+    for (var o in canvas.orientations)
+      '?orientationById(${escapeDartString(o.name)})',
   ];
   var parts = [
-    "r'${canvas.root}'",
+    escapeDartString(canvas.root),
     if (devices.isNotEmpty) 'devices: [${devices.join(', ')}]',
     if (orientations.isNotEmpty) 'orientations: [${orientations.join(', ')}]',
   ];
