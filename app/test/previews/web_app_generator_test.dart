@@ -5,6 +5,8 @@ import 'package:flutterware_app/src/previews/web_app_generator.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/generated_source.dart';
+
 /// The generated app is only ever read by `flutter build web`, which means a
 /// mistake here surfaces as a compile error inside generated code — a long way
 /// from the entry that caused it. These assert the shape directly.
@@ -111,7 +113,12 @@ Widget settingsWide() => const Placeholder();
       var main = generate([members, empty, settings]);
       // A display name is written by a human in an annotation. Unescaped, this
       // one closes the literal and the generated file does not parse.
-      expect(main, contains(r"'Empty — nobody\'s here'"));
+      //
+      // Asserted as the value rather than the quoting: which delimiter the
+      // escaper picks is its business, and pinning the test to one of them is
+      // how a legitimate change to escaping would read as a regression.
+      expect(() => parseGenerated(main), returnsNormally);
+      expect(generatedStrings(main), contains("Empty — nobody's here"));
     },
   );
 

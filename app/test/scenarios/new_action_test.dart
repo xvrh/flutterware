@@ -13,6 +13,8 @@ import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:path/path.dart' as p;
 
+import '../support/generated_source.dart';
+
 /// The `new` action — the authoring door.
 ///
 /// Where it writes and what it refuses. That the scaffold it writes actually
@@ -143,6 +145,7 @@ void main() {
     var source = File(p.join(root.path, result.file)).readAsStringSync();
 
     expect(result.file, 'test/scenarios/the_barista_s_day_test.dart');
-    expect(source, contains(r"scenario('The barista\'s day'"));
+    expect(() => parseGenerated(source), returnsNormally);
+    expect(generatedStrings(source), contains("The barista's day"));
   });
 }

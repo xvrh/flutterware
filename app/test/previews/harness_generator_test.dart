@@ -6,6 +6,8 @@ import 'package:flutterware_app/src/previews/harness_generator.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/generated_source.dart';
+
 void main() {
   late Directory root;
 
@@ -21,10 +23,19 @@ void main() {
     name: 'Wide',
     annotation: "Preview(name: 'Wide')",
   );
+  // Everything a display name is allowed to carry and a raw string cannot: the
+  // delimiter itself, the other delimiter, and a `$` that an escaped literal
+  // would otherwise read as interpolation.
+  const awkward = CatalogEntry(
+    path: 'demo/shop/whats_new.dart',
+    symbol: 'whatsNewSheet',
+    name: 'What\'s "new" — \$5',
+    annotation: 'Preview(name: \'What\\\'s "new" — \\\$5\')',
+  );
 
   setUp(() {
     root = Directory.systemTemp.createTempSync('fw_preview_harness_test');
-    for (var entry in [members, wide]) {
+    for (var entry in [members, wide, awkward]) {
       var file = File(p.join(root.path, entry.path))
         ..parent.createSync(recursive: true);
       file.writeAsStringSync('''
@@ -45,11 +56,16 @@ Widget ${entry.symbol}() => const Placeholder();
   test('declares every entry, with the path a canvas is matched on', () {
     writePreviewHarness(root.path, [members, wide], canvases: const []);
 
-    expect(harness(), contains("id: r'demo/desktop/table.dart#tableWide'"));
-    expect(harness(), contains("path: r'demo/desktop/table.dart'"));
     expect(
-      harness(),
-      contains("id: r'demo/team/avatar_tile.dart#avatarTileMembers'"),
+      generatedArguments(harness(), 'id'),
+      containsAll([
+        'demo/desktop/table.dart#tableWide',
+        'demo/team/avatar_tile.dart#avatarTileMembers',
+      ]),
+    );
+    expect(
+      generatedArguments(harness(), 'path'),
+      contains('demo/desktop/table.dart'),
     );
     // The wrapper is applied inside the thunk, so it runs in the test body
     // under the entry's own canvas rather than at table construction.
@@ -73,9 +89,9 @@ Widget ${entry.symbol}() => const Placeholder();
       ],
     );
 
-    expect(harness(), contains("PreviewCanvas(r'demo', devices: ["));
-    expect(harness(), contains("?deviceById(r'iphone-se')"));
-    expect(harness(), contains("?orientationById(r'landscape')"));
+    expect(harness(), contains("PreviewCanvas('demo', devices: ["));
+    expect(harness(), contains("?deviceById('iphone-se')"));
+    expect(harness(), contains("?orientationById('landscape')"));
     expect(
       harness(),
       isNot(contains('${Devices.iphoneSe.width}')),
@@ -127,6 +143,39 @@ Widget ${entry.symbol}() => const Placeholder();
       isFalse,
       reason: 'an unimported wrapper is still a file the invalidator watches',
     );
+  });
+
+  test('one apostrophe in one name does not take the catalog down', () {
+    // The harness is one file for the whole package, so a name that closes its
+    // own literal is not one broken entry — it is a catalog that does not
+    // compile, reported as nine errors in a file under `build/` naming an
+    // undefined `s`. `previews audit` is the surface that claims to have
+    // checked everything, so it is the worst one to lose to punctuation.
+    writePreviewHarness(root.path, [
+      members,
+      wide,
+      awkward,
+    ], canvases: const []);
+
+    expect(() => parseGenerated(harness()), returnsNormally);
+    expect(
+      generatedArguments(harness(), 'name'),
+      containsAll(['Members', 'Wide', awkward.name]),
+      reason: 'the name reaches the program as the human wrote it',
+    );
+  });
+
+  test('a canvas root a human typed is escaped too', () {
+    // A canvas is rooted at a directory, and a directory is named by whoever
+    // made it. Same literal, same one-character failure.
+    writePreviewHarness(
+      root.path,
+      [members],
+      canvases: [const PreviewCanvas("demo/xavier's")],
+    );
+
+    expect(() => parseGenerated(harness()), returnsNormally);
+    expect(generatedStrings(harness()), contains("demo/xavier's"));
   });
 
   test('says how to run it without flutterware, and what that costs', () {

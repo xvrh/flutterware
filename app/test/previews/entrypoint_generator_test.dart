@@ -5,6 +5,8 @@ import 'package:flutterware_app/src/previews/entrypoint_generator.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/generated_source.dart';
+
 void main() {
   late Directory root;
   late EntrypointGenerator generator;
@@ -145,15 +147,15 @@ Widget avatarTileEmpty() => const Placeholder();
 
   test('the entrypoint accumulates, and names the entry the file means', () {
     generator.select(members);
-    expect(entrypoint(), contains("_fileEntryId = r'${members.id}'"));
+    expect(entrypoint(), contains("_fileEntryId = '${members.id}'"));
 
     generator.select(empty);
     expect(entrypoint(), contains("import 'entry_0.dart' as fw0;"));
-    expect(entrypoint(), contains("_fileEntryId = r'${empty.id}'"));
-    expect(entrypoint(), isNot(contains("_fileEntryId = r'${members.id}'")));
+    expect(entrypoint(), contains("_fileEntryId = '${empty.id}'"));
+    expect(entrypoint(), isNot(contains("_fileEntryId = '${members.id}'")));
 
     generator.select(members);
-    expect(entrypoint(), contains("_fileEntryId = r'${members.id}'"));
+    expect(entrypoint(), contains("_fileEntryId = '${members.id}'"));
     expect(generator.visited, hasLength(2), reason: 'revisits reuse a wrapper');
   });
 
@@ -166,14 +168,31 @@ Widget avatarTileEmpty() => const Placeholder();
     generator.registerAll([members, empty]);
     generator.select(empty);
 
-    expect(entrypoint(), contains("r'${members.id}' => ("));
-    expect(entrypoint(), contains("r'${empty.id}' => ("));
+    expect(entrypoint(), contains("'${members.id}' => ("));
+    expect(entrypoint(), contains("'${empty.id}' => ("));
     expect(entrypoint(), contains('preview: fw0.fwPreview.transform()'));
     expect(entrypoint(), contains('preview: fw1.fwPreview.transform()'));
     // And declared, because the guest refuses a switch to an id it does not
     // hold rather than rendering the wrong demo under the right name.
-    expect(entrypoint(), contains("r'${members.id}',"));
-    expect(entrypoint(), contains("r'${empty.id}',"));
+    expect(entrypoint(), contains("'${members.id}',"));
+    expect(entrypoint(), contains("'${empty.id}',"));
+  });
+
+  test('an id the annotation pinned is escaped, not emitted raw', () {
+    // `id:` is read off whatever annotation the project registered, so it is
+    // free text a human typed — the same hazard as a display name, in the file
+    // the panel compiles rather than the one the audit does.
+    const pinned = CatalogEntry(
+      path: 'demo/team/avatar_tile.dart',
+      symbol: 'avatarTileMembers',
+      name: 'Members',
+      annotation: "Demo(id: 'team/avatar')",
+      declaredId: "team/what's-new",
+    );
+    generator.select(pinned);
+
+    expect(() => parseGenerated(entrypoint()), returnsNormally);
+    expect(generatedStrings(entrypoint()), contains("team/what's-new"));
   });
 
   test('resolves through functions and getters, never top-level finals', () {

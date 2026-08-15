@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:flutterware/src/ui_catalog/clock.dart' show previewClockOrigin;
 import 'package:path/path.dart' as p;
 
+import '../utils/source_code/escape_dart_string.dart';
 import 'catalog_entry.dart';
 import 'catalog_wrapper.dart';
 
@@ -144,13 +145,15 @@ class EntrypointGenerator {
     for (var entry in _visited) {
       var index = _wrapperIndex[entry.id]!;
       imports.writeln("import 'entry_$index.dart' as fw$index;");
+      // Escaped, never raw: an id is `path#symbol` unless the annotation pins
+      // one with `id:`, and that one is free text a human typed.
       cases.writeln(
-        "  r'${entry.id}' => (\n"
+        '  ${escapeDartString(entry.id)} => (\n'
         '    preview: fw$index.fwPreview.transform(),\n'
         '    builder: fw$index.fwBuilder,\n'
         '  ),',
       );
-      ids.writeln("  r'${entry.id}',");
+      ids.writeln('  ${escapeDartString(entry.id)},');
     }
     var origin = previewClockOrigin;
     var clockLiteral =
@@ -188,7 +191,7 @@ $ids];
 // Which entry *this* generation of the file means. A reload is how the panel
 // says "show that one", so the file outranks a runtime switch whenever it
 // moves — see [CatalogEntries].
-const _fileEntryId = r'${active.id}';
+const _fileEntryId = ${escapeDartString(active.id)};
 
 // **The whole of main runs inside the log-capturing zone, binding and all.**
 //
