@@ -91,6 +91,41 @@ class CatalogBrowsing extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Opens [branchIds], for a selection that has arrived somewhere folded away.
+  ///
+  /// **An action taken once, not a rule applied on every build.** The panel
+  /// used to OR the path to the selected entry into "open" as it laid the rows
+  /// out, which meant the folder holding your selection could not be closed at
+  /// all: the click landed in [_closed], the row did not move, and the only
+  /// visible effect anywhere was the collapse-all button quietly changing its
+  /// mind. Opened when the selection lands and left alone afterwards, a folder
+  /// is yours again — and a selection you can no longer see is exactly what any
+  /// other file tree does with the file you have open.
+  void reveal(Iterable<String> branchIds) {
+    var opened = false;
+    for (var id in branchIds) {
+      if (_closed.remove(id)) opened = true;
+    }
+    if (opened) notifyListeners();
+  }
+
+  /// Whether [entryId] is a selection the tree has not been opened for yet.
+  bool needsReveal(String? entryId) => entryId != _revealedFor;
+
+  /// Opens [branchIds] for a selection that has just arrived, once.
+  ///
+  /// The mark is here rather than in the panel because the panel is rebuilt
+  /// from scratch every time you come back to it: kept there, every return
+  /// would re-open the folder you closed after arriving, which is the same bug
+  /// as the render-time override in a slower form.
+  void revealSelection(String? entryId, Iterable<String> branchIds) {
+    if (entryId == _revealedFor) return;
+    _revealedFor = entryId;
+    reveal(branchIds);
+  }
+
+  String? _revealedFor;
+
   /// Whether anything is folded away at all, which is what makes one button
   /// enough for both directions.
   bool get anyClosed => _closed.isNotEmpty;
@@ -135,7 +170,20 @@ class SwitchReport {
     required this.editedCount,
     this.reloaded = false,
     this.error,
-  });
+  }) : direct = false;
+
+  /// A switch the guest made by itself — see [InspectClient.showEntry]. Nothing
+  /// was compiled and nothing was reloaded, so the compiler's numbers would all
+  /// be zero and reporting them as such would read as a compile that did
+  /// nothing rather than as one that never happened.
+  SwitchReport.shown({required this.entry, required Duration elapsed})
+    : compile = Duration.zero,
+      reload = elapsed,
+      newSourceCount = 0,
+      editedCount = 0,
+      reloaded = false,
+      error = null,
+      direct = true;
 
   final CatalogEntry entry;
   final Duration compile;
@@ -149,6 +197,9 @@ class SwitchReport {
 
   /// This was a reload of the entry already showing, not a switch to another.
   final bool reloaded;
+
+  /// The guest switched itself, with no compile and no reload behind it.
+  final bool direct;
 
   /// Compiler diagnostics when the entry did not build. The guest keeps
   /// rendering whatever it had.
@@ -386,6 +437,19 @@ class CatalogSession extends ChangeNotifier {
   /// Which pane of the panel is showing. See [InspectTab] for why it is here
   /// and not on the address.
   InspectTab inspectTab = InspectTab.controls;
+
+  /// Whether the panel is folded away.
+  ///
+  /// **Closed to start with.** Most entries declare no knobs, so opening on
+  /// Controls spent 260px of every catalog on a sentence explaining what a knob
+  /// is. What says there is something to open is the count on the tab, the way
+  /// Problems already says it — see [InspectPanel].
+  ///
+  /// Here rather than in the panel's own state, for the reason [inspectTab] is:
+  /// the shell rebuilds the panel from scratch every time you come back to it,
+  /// so a collapse kept there was forgotten on every trip to another plugin and
+  /// the panel came back open however you had left it.
+  var panelCollapsed = true;
 
   /// Whether the tree is **on screen** — the Elements tab showing, and the
   /// panel not collapsed.
@@ -1413,9 +1477,26 @@ class CatalogSession extends ChangeNotifier {
       // Whatever it decided, the answer is in [quarantined] now — the daemon
       // re-files a failure before the request it came from returns.
       if (_retrying?.$1 == entry.id) _retrying = null;
+      compilingSwitch = null;
       _idle();
     }
   }
+
+  /// The entry a *switch* is compiling and reloading for, or null.
+  ///
+  /// What the canvas draws a loader over the stale picture for, and deliberately
+  /// narrower than [busyWith]. Two things it is not:
+  ///
+  /// - **Not the fast path.** A switch the guest makes by itself is one frame,
+  ///   and a loader that appeared and left inside it would be a flash on every
+  ///   click. This is set at the moment the guest refuses, which is the moment
+  ///   we know we are on the slow path — no delay to tune, and nothing to
+  ///   flash.
+  /// - **Not an edit reload.** Saving a file reloads the entry already on
+  ///   screen, and what is on screen is still the answer to what you asked
+  ///   for. Only a switch away from what the guest holds obscures its own
+  ///   picture.
+  CatalogEntry? compilingSwitch;
 
   Future<void> _switchOnce(
     CompilerDaemonClient daemon,
@@ -1424,6 +1505,71 @@ class CatalogSession extends ChangeNotifier {
     required bool reloaded,
     required bool ifChanged,
   }) async {
+    // **The program the guest is running already holds every entry.** The
+    // generated entrypoint imports them all, so moving between two of them is a
+    // message and a frame — [InspectClient.showEntry] — rather than a compile,
+    // a hot reload and a full reassemble to change which entry one getter
+    // names. Measured on this repo's catalog: 347ms became 33ms. The headless
+    // path has switched this way since the audit; the panel, which is where a
+    // person actually feels it, had never been taught to.
+    //
+    // Only for a genuine switch. A [reloaded] call is ⌘R or the entry already
+    // on screen, and an [ifChanged] one is the poll asking the compiler whether
+    // a file moved — both want the compiler, and the guest would happily answer
+    // "already showing it" and reload nothing.
+    var inspect = _inspect;
+    if (inspect != null &&
+        !reloaded &&
+        !ifChanged &&
+        // A quarantined entry is not in the program at all, so the guest can
+        // only refuse. Asking anyway would be a round trip to learn what the
+        // daemon has already told us.
+        compileErrorFor(entry) == null) {
+      var watch = Stopwatch()..start();
+      // Before the switch rather than after, for the reason the reload path
+      // gives below: the shell reads its axes as it builds.
+      await _pushAxes();
+      if (await inspect.showEntry(entry.id)) {
+        watch.stop();
+        _afterSwitch(entry);
+        lastSwitch = SwitchReport.shown(entry: entry, elapsed: watch.elapsed);
+        notifyListeners();
+        // **Said out loud, or the ask below is not cheap.** What the daemon
+        // records per session is which entry this guest is rendering, and it
+        // has no other way to learn that the guest moved on its own — so
+        // without this the `ifChanged` below sees a mismatch, compiles, and
+        // reassembles the guest to arrive where it already is. Measured
+        // exactly that way: every fast switch was still followed by a 20ms
+        // compile and a 98ms reload reporting `0 edited`.
+        daemon.shown(entry.id);
+        // **The click asked the compiler nothing, so ask it now.** Without this
+        // an entry edited since the last look would show its previous build
+        // until something else thought to check. Cheap by construction: the
+        // daemon answers `unchanged` when nothing on disk moved, which is the
+        // ordinary case, and when something did move this is the reload it
+        // would have done anyway — behind a picture that is already right.
+        await _switchOnce(
+          daemon,
+          vmService,
+          entry,
+          reloaded: true,
+          ifChanged: true,
+        );
+        return;
+      }
+      // The guest refused: an entry it does not hold, or one from before the
+      // extension. It says so with what it is actually showing rather than
+      // raising, and the recovery is the compile and reload below.
+    }
+
+    // And now it is worth saying so on screen — see [compilingSwitch]. Said
+    // here rather than at the top because everything above is a frame, and a
+    // loader that came and went inside one is a flash on every click.
+    if (!reloaded) {
+      compilingSwitch = entry;
+      notifyListeners();
+    }
+
     var compiled = await daemon.select(entry.id, ifChanged: ifChanged);
     // Nothing on disk moved. Leave everything alone — including [lastSwitch],
     // which still describes the last thing that actually happened.
@@ -1471,6 +1617,26 @@ class CatalogSession extends ChangeNotifier {
     }
     watch.stop();
 
+    _afterSwitch(entry);
+    lastSwitch = SwitchReport(
+      entry: entry,
+      compile: compiled.compile,
+      reload: watch.elapsed,
+      newSourceCount: compiled.newSourceCount,
+      editedCount: compiled.editedCount,
+      reloaded: reloaded,
+    );
+    notifyListeners();
+  }
+
+  /// What this side has to do once the guest is showing [entry], however it got
+  /// there — a hot reload, or the guest switching itself.
+  ///
+  /// Everything here describes the *entry on screen*, so it belongs to the
+  /// arrival rather than to the mechanism. Split out when the second mechanism
+  /// arrived: a copy of it that forgot one of these reads would be a panel
+  /// describing the previous demo, and only sometimes.
+  void _afterSwitch(CatalogEntry entry) {
     active = entry;
     unawaited(_readKnobs());
     unawaited(_readAxes());
@@ -1490,15 +1656,6 @@ class CatalogSession extends ChangeNotifier {
     // is live, but the lines the demo wrote while starting are already in the
     // buffer and nowhere else.
     if (_panelOpen) unawaited(readLogs());
-    lastSwitch = SwitchReport(
-      entry: entry,
-      compile: compiled.compile,
-      reload: watch.elapsed,
-      newSourceCount: compiled.newSourceCount,
-      editedCount: compiled.editedCount,
-      reloaded: reloaded,
-    );
-    notifyListeners();
   }
 
   /// The daemon serves several clients, so the set of buildable entries can

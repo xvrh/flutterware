@@ -84,7 +84,14 @@ void main() {
     // you back to another tab would be testing the opposite of what is true.
     InspectTab? tab,
   }) {
-    if (tab != null) session.inspectTab = tab;
+    // Opening the tab also opens the panel, which now starts closed: a test
+    // that wants a tab has to be looking at it, which is the same thing a
+    // person has to do.
+    if (tab != null) {
+      session
+        ..inspectTab = tab
+        ..panelCollapsed = false;
+    }
     address = ValueNotifier(
       Address(
         worktree: 'test',
@@ -220,6 +227,115 @@ void main() {
     expect(find.text('One'), findsNothing);
     expect(find.text('team'), findsOneWidget, reason: 'the folder remains');
     expect(find.text('Two'), findsOneWidget, reason: 'its neighbour is intact');
+  });
+
+  group('the folder around the selection', () {
+    const inside = CatalogEntry(
+      path: 'demo/team/one.dart',
+      symbol: 'one',
+      annotation: 'Demo()',
+      name: 'One',
+    );
+    const outside = CatalogEntry(
+      path: 'demo/billing/two.dart',
+      symbol: 'two',
+      annotation: 'Demo()',
+      name: 'Two',
+    );
+
+    testWidgets('folds, like every other folder', (tester) async {
+      // It used to be held open for as long as it held the selection: the
+      // click landed in the closed set, the row did not move, and the only
+      // visible effect anywhere was the collapse-all button changing its mind.
+      var session = sessionOf([inside, outside], inside, 'boom');
+      await pump(tester, session);
+      expect(find.text('One'), findsOneWidget);
+
+      await tester.tap(find.text('team'));
+      await tester.pump();
+
+      expect(find.text('One'), findsNothing);
+      expect(session.selected?.id, inside.id, reason: 'and it is still yours');
+    });
+
+    testWidgets('and stays folded when you come back to the panel', (
+      tester,
+    ) async {
+      // The mark lives on the session for this: kept in the panel, every
+      // return would re-reveal the selection and undo the fold.
+      var session = sessionOf([inside, outside], inside, 'boom');
+      await pump(tester, session);
+      await tester.tap(find.text('team'));
+      await tester.pump();
+
+      await pump(tester, session);
+      expect(find.text('One'), findsNothing);
+    });
+
+    testWidgets('opens once for a selection that arrives folded away', (
+      tester,
+    ) async {
+      // A selection is not always made in the tree — an address names one, and
+      // the daemon can move you off an entry it can no longer build.
+      //
+      // Both broken, and for the reason every case in this file keeps one
+      // broken: a selection that compiles sends the canvas to the texture,
+      // which a widget test has no guest for.
+      var session =
+          CatalogSession(
+              appPackageRoot: '/app',
+              flutterSdkRoot: '/sdk',
+              projectRoot: '/project',
+            )
+            ..phase = CatalogSessionPhase.ready
+            ..quarantined = const [
+              QuarantinedEntry(entry: inside, error: 'boom'),
+              QuarantinedEntry(entry: outside, error: 'boom'),
+            ]
+            ..selected = inside;
+      await pump(tester, session);
+      await tester.tap(find.text('team'));
+      await tester.pump();
+      expect(find.text('One'), findsNothing);
+
+      session
+        ..selected = outside
+        ..notifyListeners();
+      await tester.pump();
+      session
+        ..selected = inside
+        ..notifyListeners();
+      // Twice: the reveal runs after the frame that noticed the selection, and
+      // opening a folder is a notify of its own.
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('One'), findsOneWidget);
+    });
+  });
+
+  testWidgets('a switch that has to compile says so over the old picture', (
+    tester,
+  ) async {
+    // Only the slow path ever gets here: the guest switches most entries by
+    // itself in a frame, and a loader that came and went inside one would be a
+    // flash on every click.
+    var session = sessionWithBroken(beta, 'boom');
+    await pump(tester, session);
+    expect(find.text('Beta doesn’t compile'), findsOneWidget);
+
+    session
+      ..compilingSwitch = gamma
+      ..notifyListeners();
+    await tester.pump();
+
+    expect(find.text('Gamma'), findsAtLeastNWidgets(1));
+    expect(find.text('Compiling…'), findsOneWidget);
+    expect(
+      find.byType(CircularProgressIndicator),
+      findsOneWidget,
+      reason: 'a spinner, because this is the case that takes seconds',
+    );
   });
 
   testWidgets('hiding the list leaves the way back', (tester) async {
@@ -361,27 +477,6 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('a folded folder still shows what is selected', (tester) async {
-    const inFolder = CatalogEntry(
-      path: 'demo/team/one.dart',
-      symbol: 'one',
-      annotation: 'Demo()',
-      name: 'One',
-    );
-    var session = sessionOf([inFolder, alpha], inFolder, 'boom');
-    await pump(tester, session);
-
-    await tester.tap(find.text('team'));
-    await tester.pump();
-    expect(
-      find.text('One'),
-      findsOneWidget,
-      reason: 'folding away the selection would hide where you are',
-    );
-    // The fold is remembered, not refused: its neighbours are still folded.
-    expect(session.browsing.isOpen('/team'), isFalse);
-  });
-
   testWidgets('one button folds everything, then unfolds it', (tester) async {
     const one = CatalogEntry(
       path: 'demo/team/one.dart',
@@ -512,9 +607,17 @@ void main() {
     testWidgets('is what the panel opens on', (tester) async {
       // Not Elements: the everyday loop is turning a knob and watching the
       // demo, and a panel that opens onto a wall of widget rows has an opinion
-      // about what you came here to do.
-      await pump(tester, sessionWithBroken(beta, 'boom'));
+      // about what you came here to do. The panel itself starts folded away —
+      // see `the panel` in inspect_panel_test — so this is about which tab is
+      // there when you open it, not about what is on screen at rest.
+      var session = sessionWithBroken(beta, 'boom');
+      await pump(tester, session);
       expect(find.text('Controls'), findsOneWidget);
+      expect(find.textContaining('declares no knobs'), findsNothing);
+
+      await tester.tap(find.byTooltip('Show the panel'));
+      await tester.pump();
+      expect(session.inspectTab, InspectTab.controls);
       expect(find.textContaining('declares no knobs'), findsOneWidget);
     });
 

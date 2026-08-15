@@ -23,6 +23,6 @@ const phones = ScenarioProfile(
 /// English only should not be told to screenshot French.
 const desktop = ScenarioProfile(
   'desktop',
-  devices: [Devices.macbookPro, Devices.windowsLaptop],
+  devices: [Devices.wideWindow, Devices.windowsWindow],
   languages: ['en'],
 );

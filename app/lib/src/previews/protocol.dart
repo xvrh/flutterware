@@ -49,6 +49,7 @@ sealed class DaemonRequest implements ProtocolMessage {
   static DaemonRequest decode(Map<String, dynamic> json) =>
       switch (json['type']) {
         SelectRequest.wireName => SelectRequest.fromJson(json),
+        ShownRequest.wireName => ShownRequest.fromJson(json),
         RefreshRequest.wireName => const RefreshRequest(),
         StopDaemonRequest.wireName => const StopDaemonRequest(),
         var unknown => throw FormatException('unknown request "$unknown"'),
@@ -98,6 +99,40 @@ class SelectRequest extends DaemonRequest {
 
   @override
   Map<String, dynamic> toJson() => _$SelectRequestToJson(this);
+}
+
+/// This client's guest is showing [id] now, having switched to it by itself.
+/// Compiles nothing, reloads nothing and answers nothing.
+///
+/// The guest's program holds every entry, so a panel moves between two of them
+/// with a message and a frame rather than a kernel — see
+/// `InspectClient.showEntry`. The daemon has no way to know that happened, and
+/// what it records per session is precisely *what that guest is rendering*: it
+/// is how `ifChanged` decides whether a reflex has anything to do. Left
+/// unsaid, the next `ifChanged` sees an entry that does not match, compiles and
+/// reloads — which reassembles the guest and resets the demo, for a switch it
+/// had already made.
+///
+/// The change generation is deliberately **not** touched. A runtime switch says
+/// nothing about the files, so an edit made before it must still be found by
+/// the next sweep.
+@JsonSerializable()
+class ShownRequest extends DaemonRequest {
+  const ShownRequest(this.id);
+
+  factory ShownRequest.fromJson(Map<String, dynamic> json) =>
+      _$ShownRequestFromJson(json);
+
+  static const wireName = 'shown';
+
+  /// A [CatalogEntry.id].
+  final String id;
+
+  @override
+  String get type => wireName;
+
+  @override
+  Map<String, dynamic> toJson() => _$ShownRequestToJson(this);
 }
 
 /// Look for entries that appeared or disappeared, and tell everyone if any

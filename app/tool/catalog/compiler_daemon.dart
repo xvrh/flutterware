@@ -1316,6 +1316,17 @@ class _Session {
             ),
           );
         }
+      case ShownRequest(id: var shown):
+        // **Not through the queue, and nothing sent back.** It touches no file
+        // and starts no compile; it corrects one fact about this session — see
+        // [ShownRequest]. The guest's program holds every entry, so this
+        // client's panel can move between them with a message and a frame, and
+        // without hearing about it the next `ifChanged` would recompile and
+        // reassemble to arrive where the guest already is.
+        //
+        // The generation is left alone on purpose: a runtime switch says
+        // nothing about the files.
+        lastSelected = shown;
       case RefreshRequest():
         // Through the queue like any other work: a rescan rewrites the
         // generated wrappers and the entrypoint, which a compile in flight is

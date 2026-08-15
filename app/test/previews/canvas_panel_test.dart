@@ -36,7 +36,7 @@ void main() {
 
   const canvases = [
     PreviewCanvas('demo/mobile', devices: [Devices.iphone16, Devices.iphoneSe]),
-    PreviewCanvas('demo/desktop', devices: [Devices.macbookPro]),
+    PreviewCanvas('demo/desktop', devices: [Devices.wideWindow]),
   ];
 
   CatalogSession sessionOn(CatalogEntry selected) =>
@@ -78,9 +78,24 @@ void main() {
   testWidgets('the bar opens on the canvas the entry is under', (tester) async {
     await pump(tester, sessionOn(phone));
     expect(find.text('iPhone 16'), findsOneWidget);
+  });
 
+  testWidgets('a declared window is offered, not staged', (tester) async {
+    // A phone's screen is the constraint the layout has to survive; a desktop
+    // window has no true size, because the person using it drags the corner.
+    // So a desktop subtree opens on the resizable rectangle — and staging a
+    // 1600-wide window in a pane a third that wide would show it at 30%, which
+    // is a thumbnail rather than a preview.
     await pump(tester, sessionOn(desktop));
-    expect(find.text('MacBook Pro'), findsOneWidget);
+
+    expect(find.text('Fit'), findsOneWidget);
+    expect(find.text('Wide window'), findsNothing);
+
+    // Offered, though: it is one tap away, in the declared group.
+    await tester.tap(find.text('Fit'));
+    await tester.pumpAndSettle();
+    expect(find.text('DECLARED'), findsOneWidget);
+    expect(find.text('Wide window'), findsAtLeastNWidgets(1));
   });
 
   testWidgets('an entry under no canvas opens on the plain rectangle', (

@@ -939,27 +939,9 @@ class _GuestSession {
 
   Future<void> reload(String dill) => _vmService.reload(dill);
 
-  /// Puts [entryId] on screen without recompiling or reloading anything.
-  ///
-  /// The generated entrypoint imports every entry's wrapper, so the program
-  /// this guest is already running holds the whole catalog — see
-  /// [CatalogEntries]. Switching is therefore a message and a frame rather
-  /// than a compile and a reload, which is the difference between ~350ms and
-  /// ~15ms per entry on a catalog-wide render.
-  ///
-  /// Returns false when this guest cannot do it: one built before the
-  /// extension existed, or one whose program does not hold [entryId] — a
-  /// reload has changed the catalog since it started. Both recover the same
-  /// way and the caller does it: compile and reload, which always works. The
-  /// guest answers with what it is *actually* showing rather than raising, so
-  /// telling the two apart costs a comparison instead of an exception path.
-  Future<bool> showEntry(String entryId) async {
-    var reply = await _vmService.callExtension(
-      'ext.flutterware.showEntry',
-      args: {'id': entryId},
-    );
-    return reply?['entry'] == entryId;
-  }
+  /// Puts [entryId] on screen without recompiling or reloading anything — see
+  /// [InspectClient.showEntry], which the panel switches through as well.
+  Future<bool> showEntry(String entryId) => _inspect.showEntry(entryId);
 
   /// What [entryId] declares, once the guest has actually built it.
   ///

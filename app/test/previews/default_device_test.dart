@@ -83,7 +83,7 @@ void main() {
         },
         {
           'prefix': 'demo/desktop',
-          'devices': ['macbook-pro'],
+          'devices': ['window-wide'],
         },
       ],
     };
@@ -95,9 +95,10 @@ void main() {
         core.defaultFramingFor('.', entry: 'demo/mobile/tile.dart').device?.id,
         'iphone-16',
       );
+      // Fit, not the declared window — see the group below.
       expect(
-        core.defaultFramingFor('.', entry: 'demo/desktop/bar.dart').device?.id,
-        'macbook-pro',
+        core.defaultFramingFor('.', entry: 'demo/desktop/bar.dart').device,
+        isNull,
       );
     });
 
@@ -116,6 +117,51 @@ void main() {
         coreWith(canvases).defaultFramingFor('.', entry: 'demo/shared/x.dart'),
         (device: null, orientation: null),
       );
+    });
+
+    group('a window size', () {
+      // **Offered, never staged.** A phone's screen is the constraint the
+      // layout has to survive, so staging it is the point; a desktop window has
+      // no true size, because the person using it drags the corner — and the
+      // stage that behaves that way is the plain rectangle, which is also the
+      // only one shown at 1:1. A 1600-wide window in a 490-wide pane is drawn
+      // at 30%, where nothing about type or spacing can be judged.
+      test('is not what the subtree opens on', () {
+        expect(
+          coreWith(
+            canvases,
+          ).defaultFramingFor('.', entry: 'demo/desktop/bar.dart').device,
+          isNull,
+        );
+      });
+
+      test('is still declared, so the picker can offer it', () {
+        // The declaration is not ignored — only the staging is. Losing the list
+        // as well would leave a desktop subtree with no way to say which widths
+        // it cares about.
+        var canvas = coreWith(
+          canvases,
+        ).canvasesFor('.').firstWhere((c) => c.root == 'demo/desktop');
+        expect(canvas.devices.map((d) => d.id), ['window-wide']);
+      });
+
+      test('does not suppress a phone declared beside it', () {
+        // The rule is about the head being a desktop size, not about the list
+        // holding one.
+        var core = coreWith({
+          'canvases': [
+            {
+              'prefix': 'demo/both',
+              'devices': ['iphone-16', 'window-wide'],
+            },
+          ],
+        });
+
+        expect(
+          core.defaultFramingFor('.', entry: 'demo/both/x.dart').device?.id,
+          'iphone-16',
+        );
+      });
     });
 
     test('the longest prefix wins, whatever order they are declared in', () {
@@ -173,8 +219,8 @@ void main() {
         'device': 'iphone-16',
         'canvases': [
           {
-            'prefix': 'demo/desktop',
-            'devices': ['macbook-pro'],
+            'prefix': 'demo/tablet',
+            'devices': ['ipad'],
           },
         ],
       });
@@ -184,8 +230,27 @@ void main() {
         'iphone-16',
       );
       expect(
-        core.defaultFramingFor('.', entry: 'demo/desktop/bar.dart').device?.id,
-        'macbook-pro',
+        core.defaultFramingFor('.', entry: 'demo/tablet/bar.dart').device?.id,
+        'ipad',
+      );
+    });
+
+    test('and a desktop subtree overrides it by opening on nothing', () {
+      // The same rule, with the answer the window rule gives: the package says
+      // phone, this subtree says window, and a window opens on the rectangle.
+      var core = coreWith({
+        'device': 'iphone-16',
+        'canvases': [
+          {
+            'prefix': 'demo/desktop',
+            'devices': ['window-wide'],
+          },
+        ],
+      });
+
+      expect(
+        core.defaultFramingFor('.', entry: 'demo/desktop/bar.dart').device,
+        isNull,
       );
     });
 

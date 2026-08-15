@@ -54,7 +54,7 @@ void main() {
     ],
     canvases: const [
       PreviewCanvas('demo', devices: [Devices.iphoneSe]),
-      PreviewCanvas('demo/desktop', devices: [Devices.macbookPro]),
+      PreviewCanvas('demo/desktop', devices: [Devices.wideWindow]),
     ],
   );
 
@@ -64,7 +64,13 @@ void main() {
     // Longest prefix wins, which is the whole reason `canvasFor` is shared
     // rather than re-implemented per caller.
     expect(size['phone']!.width, Devices.iphoneSe.width);
-    expect(size['wide']!.width, Devices.macbookPro.width);
+    expect(
+      size['wide']!.width,
+      previewPanelWidth.toDouble(),
+      reason:
+          'a declared window is offered rather than staged, here as well as '
+          'in the panel — see PreviewCanvas.defaultDevice',
+    );
     expect(
       size['plain']!.width,
       Devices.iphoneSe.width,

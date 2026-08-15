@@ -107,9 +107,10 @@ void main() {
         ..quarantined = [const QuarantinedEntry(entry: beta, error: 'boom')]
         ..selected = beta
         ..active = beta
-        // These are the Elements tab's tests; the panel itself opens on
-        // Controls, which `the panel` group below asserts.
+        // These are the Elements tab's tests; the panel itself opens closed and
+        // on Controls, which `the panel` group below asserts.
         ..inspectTab = InspectTab.elements
+        ..panelCollapsed = false
         ..tree = withTree;
 
   Future<void> pump(
@@ -555,6 +556,8 @@ void main() {
             ..selected = beta
             ..active = beta
             ..inspectTab = tab
+            // These are the tab's own tests, and the panel opens closed.
+            ..panelCollapsed = false
             ..renderErrors = report;
       await tester.pumpWidget(
         MaterialApp(
@@ -851,7 +854,7 @@ void main() {
   });
 
   group('the panel', () {
-    testWidgets('opens on Controls, and reads no tree until you ask', (
+    testWidgets('opens closed, on Controls, and reads no tree until you ask', (
       tester,
     ) async {
       var session =
@@ -867,11 +870,19 @@ void main() {
             ..tree = tree;
       await pump(tester, session);
 
-      // The everyday loop is turning a knob and watching the demo. Opening
-      // onto a wall of widget rows reads as the panel having an opinion about
+      // Most entries declare no knobs, so an open panel is 260px of every
+      // catalog spent explaining what a knob is. And the everyday loop is
+      // turning one and watching the demo, so when it does open it opens there
+      // — onto a wall of widget rows reads as the panel having an opinion about
       // what you came here to do.
+      expect(session.panelCollapsed, isTrue);
       expect(session.inspectTab, InspectTab.controls);
       expect(find.text('Column'), findsNothing);
+      expect(
+        find.text('Controls'),
+        findsOneWidget,
+        reason: 'the strip stays, or there is nothing to open',
+      );
       expect(
         session.inspecting,
         isFalse,
@@ -882,6 +893,49 @@ void main() {
       await tester.pump();
       expect(find.text('Column'), findsOneWidget);
       expect(session.inspecting, isTrue);
+    });
+
+    testWidgets('says how many knobs the entry has, without opening', (
+      tester,
+    ) async {
+      // The other half of opening closed: a demo with knobs has to be able to
+      // say so from the strip, or the feature is behind a panel nobody has a
+      // reason to open. Zero draws nothing at all.
+      var session = sessionOf()
+        ..knobs = KnobReport(
+          entryId: beta.id,
+          knobs: const [
+            KnobDescriptor(
+              name: 'label',
+              kind: KnobKind.string,
+              value: 'Hello',
+              defaultValue: 'Hello',
+            ),
+            KnobDescriptor(
+              name: 'dense',
+              kind: KnobKind.boolean,
+              value: false,
+              defaultValue: false,
+            ),
+          ],
+        );
+      await pump(tester, session);
+
+      expect(find.text('2'), findsOneWidget);
+    });
+
+    testWidgets('a collapse survives leaving the plugin', (tester) async {
+      // The shell rebuilds the panel from scratch every time you come back to
+      // it, which is why the tab lives on the session — and the collapse did
+      // not, so the panel came back open however you had left it.
+      var session = sessionOf(withTree: tree);
+      await pump(tester, session);
+      await tester.tap(find.byTooltip('Hide the panel'));
+      await tester.pump();
+
+      await pump(tester, session);
+      expect(find.text('Column'), findsNothing);
+      expect(find.byTooltip('Show the panel'), findsOneWidget);
     });
 
     testWidgets('stops reading the tree when it is folded away', (

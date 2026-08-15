@@ -122,7 +122,7 @@ factors cannot otherwise express.
 // demo/canvases.dart — no Flutter import, so tool/flutterware.dart can read it
 const canvases = [
   PreviewCanvas('demo/mobile', devices: [Devices.iphone16, Devices.iphoneSe]),
-  PreviewCanvas('demo/desktop', devices: [Devices.macbookPro]),
+  PreviewCanvas('demo/desktop', devices: [Devices.wideWindow]),
 ];
 ```
 

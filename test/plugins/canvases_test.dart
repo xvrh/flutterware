@@ -59,7 +59,7 @@ void main() {
   group('canvasFor', () {
     const mobile = PreviewCanvas('src/mobile', devices: [Devices.iphone16]);
     const wide = PreviewCanvas('src/mobile/wide', devices: [Devices.iPad]);
-    const whole = PreviewCanvas('', devices: [Devices.macbookPro]);
+    const whole = PreviewCanvas('', devices: [Devices.wideWindow]);
 
     test('the longest prefix wins, in either declaration order', () {
       for (var canvases in [
@@ -149,7 +149,7 @@ void main() {
                 directory: 'demo',
                 canvases: const [
                   PreviewCanvas('demo/mobile', devices: [Devices.iphone16]),
-                  PreviewCanvas('demo/desktop', devices: [Devices.macbookPro]),
+                  PreviewCanvas('demo/desktop', devices: [Devices.wideWindow]),
                 ],
               ),
             ],
@@ -168,7 +168,7 @@ void main() {
             },
             {
               'prefix': 'demo/desktop',
-              'devices': ['macbook-pro'],
+              'devices': ['window-wide'],
             },
           ],
         },

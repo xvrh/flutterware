@@ -22,6 +22,12 @@ Map<String, dynamic> _$SelectRequestToJson(SelectRequest instance) =>
       'ifChanged': instance.ifChanged,
     };
 
+ShownRequest _$ShownRequestFromJson(Map<String, dynamic> json) =>
+    ShownRequest(json['id'] as String);
+
+Map<String, dynamic> _$ShownRequestToJson(ShownRequest instance) =>
+    <String, dynamic>{'id': instance.id};
+
 DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
   sessionId: json['sessionId'] as String,
   hostPath: json['hostPath'] as String,
