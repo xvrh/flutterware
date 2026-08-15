@@ -39,23 +39,38 @@ class GuestErrors {
   void install() {
     var previous = FlutterError.onError;
     FlutterError.onError = (details) {
-      var first = _record(details);
-      // Kept, and kept first, for a human watching the terminal — still the
-      // fastest reader there is. Nothing greps for it any more: the check that
-      // did needed a rendering guest, and went when `headless_check` did.
-      //
-      // **Only the first of each**, which the buffer has always known and the
-      // print did not. An error thrown from `paint` fires once per frame, so
-      // against a host that draws continuously this printed sixty lines a
-      // second, for ever — through the embedder's log handler and out to the
-      // GUI's own console. One overflowing demo was enough to drown the
-      // process it was being inspected from.
-      if (first) {
-        // ignore: avoid_print
-        print('FW-ERROR: ${details.exceptionAsString()}');
-      }
+      report(details);
       (previous ?? FlutterError.presentError)(details);
     };
+  }
+
+  /// Records [details] without owning `FlutterError.onError`.
+  ///
+  /// [install] is for a guest that owns the handler for the life of the
+  /// process. A **test binding does not allow that**: it installs its own
+  /// handler per test, which is what makes a reported error fail the test, and
+  /// replacing that would trade a red test for a queryable one. The preview
+  /// harness chains onto it for the length of a single entry and calls this.
+  ///
+  /// Same buffer either way, which is the point: the embedder guest and the
+  /// tester harness report the same errors, deduplicated by the same key and
+  /// counted the same way, so their audits are comparable row for row.
+  void report(FlutterErrorDetails details) {
+    var first = _record(details);
+    // Kept, and kept first, for a human watching the terminal — still the
+    // fastest reader there is. Nothing greps for it any more: the check that
+    // did needed a rendering guest, and went when `headless_check` did.
+    //
+    // **Only the first of each**, which the buffer has always known and the
+    // print did not. An error thrown from `paint` fires once per frame, so
+    // against a host that draws continuously this printed sixty lines a
+    // second, for ever — through the embedder's log handler and out to the
+    // GUI's own console. One overflowing demo was enough to drown the
+    // process it was being inspected from.
+    if (first) {
+      // ignore: avoid_print
+      print('FW-ERROR: ${details.exceptionAsString()}');
+    }
   }
 
   /// Whether this is the first time this exact error has been seen.

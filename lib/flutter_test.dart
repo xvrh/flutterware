@@ -8,7 +8,9 @@ export 'package:flutter_test/flutter_test.dart';
 export 'src/canvases.dart';
 export 'src/devices.dart';
 export 'src/motion/testing.dart';
+export 'src/previews/harness.dart' show PreviewEntry, runPreviewHarness;
 export 'src/scenarios/asset_bundle.dart' show ScenarioAssetBundle;
+export 'src/scenarios/fonts.dart' show loadScenarioFonts, loadedScenarioFonts;
 export 'src/scenarios/events.dart'
     show ScenarioChannel, ScenarioEvent, recordScenarioEvent;
 export 'src/scenarios/profile.dart'

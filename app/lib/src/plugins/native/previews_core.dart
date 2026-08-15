@@ -30,6 +30,7 @@ import '../../previews/inspect_client.dart';
 import '../../previews/live_session.dart';
 import '../../previews/protocol.dart';
 import '../../previews/headless_catalog.dart';
+import '../../previews/test_runner.dart';
 import '../../previews/web_build.dart';
 import '../../inspect/lens.dart';
 import '../../inspect/screen_read.dart';
@@ -174,6 +175,15 @@ class PreviewsCore extends PluginCore {
   final _failures = <String, String>{};
   final _scanning = <String>{};
 
+  /// The tester the audit renders in, kept per package and kept **warm**.
+  ///
+  /// That warmth is the whole point of holding it here rather than building one
+  /// per call: the first audit pays a compile and a tester launch, and every
+  /// one after it pays an incremental compile of what was edited. Disposed with
+  /// the plugin — see [dispose] — because a `flutter_tester` is a child process
+  /// and nothing else reaps it.
+  final _testRunners = <String, PreviewTestRunner>{};
+
   /// What the GUI's compile loop is doing for a package, when there is one.
   ///
   /// A hook rather than a dependency: the core cannot import the session
@@ -231,8 +241,35 @@ class PreviewsCore extends PluginCore {
       unawaited(builder.cancel());
     }
     _builds.clear();
+    for (var runner in _testRunners.values) {
+      unawaited(runner.dispose());
+    }
+    _testRunners.clear();
     super.dispose();
   }
+
+  /// The warm tester for [packagePath], started on first use.
+  ///
+  /// [PreviewProgram.read] is a callback rather than a snapshot so that the
+  /// harness is regenerated from whatever the scan says *now* — a preview
+  /// written since the last audit is picked up by the next one, without the
+  /// caller having to know a tester is being reused.
+  PreviewTestRunner _testRunnerFor(String packagePath) =>
+      _testRunners.putIfAbsent(
+        packagePath,
+        () => PreviewTestRunner(
+          packageRoot: p.join(host.worktree.path, packagePath),
+          flutterSdkRoot: host.workspace.flutterSdk.root,
+          read: () => (
+            entries: _scans[packagePath]?.entries ?? const [],
+            canvases: canvasesFor(packagePath),
+          ),
+          // Straight onto the panel's busy line. The cold compile is the long
+          // pole and the only thing worth reading during one, and the audit
+          // clears the line when it finishes either way.
+          onLog: (line) => _setBusy(packagePath, Status.info(line)),
+        ),
+      );
 
   /// Scans [path], unless it already has been. Idempotent.
   ///
@@ -1808,57 +1845,63 @@ class PreviewsCore extends PluginCore {
     var checked = 0;
     var rows = <CatalogAuditEntry>[];
     var unreachable = <CatalogAuditFailure>[];
-    // One package at a time: each may build a host binary, and two cold builds
-    // racing helps nobody. The same reason `check` gives.
+    // One package at a time: each brings up a tester of its own, and two cold
+    // compiles racing helps nobody. The same reason `check` gives.
     for (var path in paths) {
       var only = selected?[path];
       // Nothing under this package matched, and another package's did — so
       // there is nothing to do here rather than everything.
       if (only != null && only.isEmpty) continue;
-      CatalogAudit audit;
+      List<PreviewAuditRow> audited;
       try {
-        _setBusy(path, const Status.info('starting the compiler…'));
-        audit = await _headlessFor(path).auditAll(
+        _setBusy(path, const Status.info('rendering the catalog…'));
+        audited = await _testRunnerFor(path).audit(
           entryIds: only,
-          onEntry: (done, total, entryId) =>
-              _setBusy(path, Status.info('$done of $total · $entryId')),
-          viewportFor: (entry) =>
-              auditFramingFor(path, entry.path, arguments).$3,
+          // Validated above; passed on by id, because the harness resolves it
+          // against the device table the *project* pins rather than this one.
+          device: arguments['device'] as String?,
+          orientation: arguments['orientation'] as String?,
         );
       } catch (e) {
-        // Per package, exactly as `check` does it: one package that cannot
-        // host a daemon must not decide the answer for the others.
+        // Per package, exactly as `check` does it: one package that cannot host
+        // a tester must not decide the answer for the others.
         unreachable.add(CatalogAuditFailure(package: path, error: '$e'));
         continue;
       } finally {
         _setBusy(path, null);
       }
-      checked += audit.entries.length + audit.quarantined.length;
+      checked += audited.length;
 
-      for (var broken in audit.quarantined) {
+      var byId = {
+        for (var entry in _scans[path]?.entries ?? const <CatalogEntry>[])
+          entry.id: entry,
+      };
+      for (var row in audited) {
+        if (row.ok) continue;
         rows.add(
           CatalogAuditEntry(
-            id: broken.entry.id,
-            address: '${addressFor(path, broken.entry.id)}',
-            compiles: false,
-            compileError: broken.error,
-          ),
-        );
-      }
-      for (var entry in audit.entries) {
-        var report = audit.rendered[entry.id];
-        if (report == null || report.isEmpty) continue;
-        rows.add(
-          CatalogAuditEntry(
-            id: entry.id,
-            address: '${addressFor(path, entry.id)}',
-            compiles: true,
+            id: row.id,
+            address: '${addressFor(path, row.id)}',
+            compiles: row.compileError == null,
+            compileError: row.compileError,
             // Which screen the overflow was on. An audit row that does not say
             // is unactionable twice over: a reader cannot tell whether the
             // entry was framed as its declaration intended, and cannot
             // reproduce the failure without guessing the device back.
-            device: auditFramingFor(path, entry.path, arguments).$1,
-            errors: [for (var e in report.errors) _asRenderError(e)],
+            device: row.compileError != null
+                ? null
+                : auditFramingFor(path, byId[row.id]?.path ?? '', arguments).$1,
+            errors: [
+              // Only when the build reported nothing of its own. A failing
+              // entry usually has both — the framework's error, and the test
+              // runner's restatement of it — and listing the pair reports one
+              // overflow twice under two spellings.
+              if (row.errors.isEmpty)
+                if (row.failure case var failure?)
+                  CatalogRenderError(exception: failure, count: 1),
+              for (var error in row.errors)
+                _asRenderError(InspectError.fromJson(error)),
+            ],
           ),
         );
       }
