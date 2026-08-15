@@ -30,6 +30,26 @@ import '../scenarios/run_args.dart';
 import '../scenarios/staging.dart';
 import '../ui_catalog/guest.dart';
 
+/// How much fake clock an entry is given before it is judged.
+const auditBudget = Duration(seconds: 5);
+
+/// [Settle.elapse] rather than [Settle.standard], because the audit is the one
+/// caller with nothing to photograph.
+///
+/// A frame-driven settle returns at the first frame the entry does not ask for,
+/// and an entry waiting on a timer asks for none while it waits — an image
+/// provider that sleeps before it decodes, a demo holding its placeholder long
+/// enough to be seen. The tree is then disposed with that timer still on the
+/// clock, and `flutter_test` reports that as the entry leaking a timer, which
+/// reads as the entry's bug and is the harness's. Spending the clock instead
+/// costs close to nothing here — a pump with nothing due builds no frame — and
+/// widens what the error buffer sees, since every frame in between is still
+/// built and still reported.
+///
+/// What this policy gives up, a capture would mind and an audit does not: the
+/// screen at `budget` rather than the screen as it settled.
+const auditSettle = Settle.elapse(auditBudget);
+
 /// One preview, as the generated harness hands it over.
 ///
 /// [build] is a thunk rather than a widget because a preview is built *inside*
@@ -203,14 +223,14 @@ Future<Map<String, Object?>> _audit(
     // own bootstrap uses.
     var priorReporter = reportTestException;
     reportTestException = (details, _) =>
-        failures[entry.id] ??= details.exceptionAsString();
+        failures[entry.id] ??= auditFailureMessage(details.exceptionAsString());
     try {
       await live.run();
     } finally {
       reportTestException = priorReporter;
     }
     for (var error in live.errors) {
-      failures[entry.id] ??= '${error.error}';
+      failures[entry.id] ??= auditFailureMessage('${error.error}');
     }
   }
 
@@ -228,6 +248,24 @@ Future<Map<String, Object?>> _audit(
         },
     },
   };
+}
+
+/// A row says what happened, not what `flutter_test` calls it.
+///
+/// The pending-timer assertion is the one failure whose wording sends the
+/// reader to the wrong place. `flutter_test` says a timer is still pending
+/// *after the widget tree was disposed* and quotes a line of `binding.dart` to
+/// say it, which reads as the entry leaking a timer — but the disposal is
+/// [auditSettle] reaching the end of [auditBudget], and how long the audit
+/// waits is the fact that makes the row actionable. It separates a demo that
+/// sleeps longer than the audit does from one whose timer never stops; the
+/// framework's spelling separates neither.
+String auditFailureMessage(String failure) {
+  if (!failure.contains('A Timer is still pending')) return failure;
+  return 'A Timer this entry started had not fired after ${auditBudget.inSeconds}s '
+      'of the audit clock, so the harness disposed the tree with it '
+      'outstanding. Either the entry waits longer than the audit does, or its '
+      'timer never stops.';
 }
 
 /// Declares one `testWidgets` per entry into whichever declarer is current.
@@ -304,7 +342,7 @@ void _declare(
             await Future<void>.delayed(const Duration(milliseconds: 1));
           }
         });
-        await Settle.standard.apply(tester);
+        await auditSettle.apply(tester);
       } finally {
         FlutterError.onError = previous;
         // Inside the body, never a tearDown: the binding verifies its debug

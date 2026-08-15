@@ -30,14 +30,41 @@ const _frameInterval = Duration(milliseconds: 100);
 sealed class Settle {
   const Settle();
 
-  /// The default: pump until nothing more is scheduled or five seconds of the
-  /// fake clock are spent, whichever comes first. Fifty frames, instant in
-  /// wall time.
+  /// The default: pump while the app keeps asking for frames, up to five
+  /// seconds of the fake clock. Fifty frames at the ceiling, instant in wall
+  /// time.
   static const standard = Settle.upTo(Duration(seconds: 5));
 
-  /// Pump until nothing more is scheduled or [budget] of the fake clock is
-  /// spent. Running out is not a failure — it is recorded on the step.
+  /// Pump while the app keeps asking for frames, stopping at the first frame
+  /// it does not — or when [budget] of the fake clock is spent, whichever
+  /// comes first. Running out is not a failure — it is recorded on the step.
+  ///
+  /// **The budget is a ceiling, not a wait.** Frames are the only thing this
+  /// loop follows, and work waiting on a timer schedules none: a screen whose
+  /// `Future.delayed(Duration(seconds: 1))` has not completed looks exactly
+  /// like a screen that is finished, so the loop returns at the first quiet
+  /// frame — 100ms in — with the second still on the clock, and the tree is
+  /// disposed under it. That is `pumpAndSettle`'s contract too, and a caller
+  /// that means to wait for a timer has to say so: [Settle.elapse], or a
+  /// [Settle.frames] count that covers it.
   const factory Settle.upTo(Duration budget) = _Budgeted;
+
+  /// Spend the whole of [budget] on the fake clock, whatever the frame loop is
+  /// doing — the policy for work that waits on a timer rather than on frames.
+  ///
+  /// Where [Settle.upTo] asks the app whether to keep going, this one does not
+  /// ask: it advances the clock, so a timer due inside [budget] fires and
+  /// whatever it wakes gets its frames. Pumping past a quiet screen is close to
+  /// free — a pump with nothing due builds nothing — so the cost is not the
+  /// frames.
+  ///
+  /// The cost is that the clock really does move. A snackbar that
+  /// auto-dismisses at four seconds is gone by the end of a five-second
+  /// budget, and a screen captured after this policy is the screen as it stands
+  /// at `budget`, not as it stood when it stopped changing. Which is why it is
+  /// not the default: reach for it where the question is *does this work at
+  /// all* rather than *what does it look like now*.
+  const factory Settle.elapse(Duration budget) = _Elapsed;
 
   /// One frame, no clock advance — for a capture that must show the app
   /// mid-transition, or after work the scenario already pumped itself.
@@ -57,6 +84,10 @@ sealed class Settle {
 
   /// Applies the policy. False when the app was still scheduling frames when
   /// the policy gave up — the step is captured either way.
+  ///
+  /// True says that and only that: no frame was scheduled. It is not a claim
+  /// that the app has nothing left to do, because a pending timer is invisible
+  /// from here — as it is to `pumpAndSettle`.
   ///
   /// [record], when a run is recording, receives the frame after every pump —
   /// and, where the policy chooses its own interval, dictates it.
@@ -88,6 +119,30 @@ class _Budgeted extends Settle {
       elapsed += interval;
       record?.capture(tester);
     } while (tester.binding.hasScheduledFrame && elapsed < budget);
+    return !tester.binding.hasScheduledFrame;
+  }
+}
+
+class _Elapsed extends Settle {
+  const _Elapsed(this.budget);
+
+  final Duration budget;
+
+  @override
+  Future<bool> apply(
+    WidgetTester tester, {
+    ScenarioMotionRecorder? record,
+  }) async {
+    // [_Budgeted]'s loop kept in the same shape on purpose — same interval,
+    // same recorder cadence, same one guaranteed pump — so the only thing that
+    // differs between the two policies is when they are allowed to stop.
+    var interval = record?.interval ?? _frameInterval;
+    var elapsed = Duration.zero;
+    do {
+      await tester.pump(interval);
+      elapsed += interval;
+      record?.capture(tester);
+    } while (elapsed < budget);
     return !tester.binding.hasScheduledFrame;
   }
 }
