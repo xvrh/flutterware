@@ -237,19 +237,15 @@ class _IndexRow extends StatelessWidget {
     var name = hash < 0 ? item.id : item.id.substring(hash + 1);
     var file = hash < 0 ? '' : item.id.substring(0, hash);
 
-    return Tappable.builder(
+    return Tappable(
       key: previewRowKey(item.id),
       onTap: onTap,
-      builder: (context, hovered) => Container(
+      child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: FwSpacing.xl,
           vertical: FwSpacing.sm,
         ),
-        color: selected
-            ? colors.accent.withValues(alpha: 0.10)
-            : hovered
-            ? colors.hoverOverlay
-            : null,
+        color: selected ? colors.accent.withValues(alpha: 0.10) : null,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

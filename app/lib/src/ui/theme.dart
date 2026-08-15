@@ -48,9 +48,38 @@ ThemeData buildAppTheme(FwTokens tokens) {
     borderSide: BorderSide(color: palette.line),
   );
 
+  // Material's own tap targets, taught the house state.
+  //
+  // The app's primitive is [Tappable], but a few dozen `InkWell`s, `IconButton`s
+  // and Material buttons remain, and they were the one family on the screen
+  // that answered a pointer with a ripple. Teaching the theme is what makes
+  // them read as the same control as everything beside them without editing
+  // every call site — and the tokens are the same ones [Tappable] paints, so
+  // the two can sit in one row.
+  var overlay = WidgetStateProperty.resolveWith<Color?>((states) {
+    if (states.contains(WidgetState.pressed)) return palette.pressedOverlay;
+    if (states.contains(WidgetState.hovered)) return palette.hoverOverlay;
+    if (states.contains(WidgetState.focused)) return palette.focusRing;
+    return null;
+  });
+  var buttonStyle = ButtonStyle(
+    overlayColor: overlay,
+    splashFactory: NoSplash.splashFactory,
+  );
+
   return base.copyWith(
     primaryColor: palette.primary,
     extensions: [tokens],
+    // For the `InkWell`s, which read these off the theme rather than a style.
+    splashFactory: NoSplash.splashFactory,
+    splashColor: const Color(0x00000000),
+    hoverColor: palette.hoverOverlay,
+    highlightColor: palette.pressedOverlay,
+    focusColor: palette.focusRing,
+    iconButtonTheme: IconButtonThemeData(style: buttonStyle),
+    textButtonTheme: TextButtonThemeData(style: buttonStyle),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: buttonStyle),
+    filledButtonTheme: FilledButtonThemeData(style: buttonStyle),
     textTheme: textTheme.copyWith(
       displayLarge: textTheme.displayLarge!.copyWith(
         fontSize: type.sizeDisplayLarge,
@@ -121,13 +150,27 @@ ThemeData buildAppTheme(FwTokens tokens) {
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        foregroundColor: palette.onPrimary,
-        backgroundColor: palette.primary,
-        elevation: 0,
-        minimumSize: const Size(10, 42),
-        textStyle: type.button,
-      ),
+      style:
+          ElevatedButton.styleFrom(
+            foregroundColor: palette.onPrimary,
+            backgroundColor: palette.primary,
+            elevation: 0,
+            minimumSize: const Size(10, 42),
+            textStyle: type.button,
+            splashFactory: NoSplash.splashFactory,
+            // Laid over the primary fill, so the neutral ink of [overlay] would
+            // disappear into it.
+          ).copyWith(
+            overlayColor: WidgetStateProperty.resolveWith<Color?>((states) {
+              if (states.contains(WidgetState.pressed)) {
+                return palette.pressedOverlayOnFill;
+              }
+              if (states.contains(WidgetState.hovered)) {
+                return palette.hoverOverlayOnFill;
+              }
+              return null;
+            }),
+          ),
     ),
     cardColor: palette.bg,
     cardTheme: base.cardTheme.copyWith(

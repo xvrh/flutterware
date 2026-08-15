@@ -562,15 +562,11 @@ class ReviewIndexRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Tappable.builder(
+    return Tappable(
       onTap: onTap,
-      builder: (context, hovered) => Container(
+      child: Container(
         decoration: BoxDecoration(
-          color: selected
-              ? colors.accentSoft
-              : hovered
-              ? colors.hoverOverlay
-              : null,
+          color: selected ? colors.accentSoft : null,
           border: Border(bottom: BorderSide(color: colors.line)),
         ),
         padding: const EdgeInsets.symmetric(

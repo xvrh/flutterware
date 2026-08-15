@@ -12,6 +12,7 @@ import '../comparison/ui/comparison_tabs.dart';
 import '../capture/capture_mode.dart';
 import '../capture/capture_request.dart';
 import '../plugins/native_plugin.dart';
+import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import '../worktrees/explorer_screen.dart';
 import '../plugins/plugin_core.dart';
@@ -403,7 +404,7 @@ class _RailToggle extends StatelessWidget {
       message:
           '${showing ? 'Hide' : 'Show'} the sidebar '
           '(${Platform.isMacOS ? '⌘B' : 'Ctrl+B'})',
-      child: _Hoverable(
+      child: Tappable.builder(
         onTap: shell.toggleSidebar,
         builder: (context, hovered) => Container(
           width: _railToggleSize,
@@ -822,19 +823,16 @@ class _ExplorerTab extends StatelessWidget {
       message: needsYou == 0
           ? 'Worktrees — every checkout of this repo'
           : '$needsYou worktree${needsYou == 1 ? '' : 's'} waiting on you',
-      child: _Hoverable(
+      child: Tappable(
         onTap: shell.selectExplorer,
-        builder: (context, hovered) => Container(
+        borderRadius: BorderRadius.only(topLeft: radius, topRight: radius),
+        child: Container(
           key: explorerTabKey,
           height: _bandHeight - _tabInset,
           margin: const EdgeInsets.only(top: _tabInset, right: FwSpacing.xs),
           padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
           decoration: BoxDecoration(
-            color: selected
-                ? colors.bg
-                : hovered
-                ? colors.hoverOverlay
-                : Colors.transparent,
+            color: selected ? colors.bg : Colors.transparent,
             borderRadius: BorderRadius.only(topLeft: radius, topRight: radius),
             border: Border(top: edge, left: edge, right: edge),
           ),
@@ -946,18 +944,15 @@ class _WorktreeTab extends StatelessWidget {
     // selection changes the tab's size and shifts everything beside it.
     var edge = BorderSide(color: selected ? colors.line : Colors.transparent);
 
-    return _Hoverable(
+    return Tappable(
       onTap: () => shell.select(worktree),
-      builder: (context, hovered) => Container(
+      borderRadius: BorderRadius.only(topLeft: radius, topRight: radius),
+      child: Container(
         height: _bandHeight - _tabInset,
         margin: const EdgeInsets.only(top: _tabInset, right: FwSpacing.xs),
         padding: const EdgeInsets.only(left: FwSpacing.lg, right: FwSpacing.sm),
         decoration: BoxDecoration(
-          color: selected
-              ? colors.bg
-              : hovered
-              ? colors.hoverOverlay
-              : Colors.transparent,
+          color: selected ? colors.bg : Colors.transparent,
           borderRadius: BorderRadius.only(topLeft: radius, topRight: radius),
           border: Border(top: edge, left: edge, right: edge),
         ),
@@ -1004,37 +999,6 @@ class _WorktreeTab extends StatelessWidget {
   }
 }
 
-/// Gives a target a pointer cursor and a hover state.
-///
-/// The shell is a desktop app: a row that does not answer the mouse reads as
-/// decoration rather than as something you can click. [builder] receives the
-/// hover state so each row decides what hovering means for it — a wash, a
-/// brighter rail — instead of every one growing its own [MouseRegion].
-class _Hoverable extends StatefulWidget {
-  const _Hoverable({required this.onTap, required this.builder});
-
-  final VoidCallback onTap;
-  final Widget Function(BuildContext context, bool hovered) builder;
-
-  @override
-  State<_Hoverable> createState() => _HoverableState();
-}
-
-class _HoverableState extends State<_Hoverable> {
-  var _hovered = false;
-
-  @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    onEnter: (_) => setState(() => _hovered = true),
-    onExit: (_) => setState(() => _hovered = false),
-    child: GestureDetector(
-      onTap: widget.onTap,
-      child: widget.builder(context, _hovered),
-    ),
-  );
-}
-
 /// Closing releases the worktree's plugins. A plugin that hard-blocks teardown
 /// refuses, and the reasons are shown rather than the click doing nothing.
 class _CloseButton extends StatelessWidget {
@@ -1054,7 +1018,7 @@ class _CloseButton extends StatelessWidget {
     var colors = context.colors;
     return Tooltip(
       message: blockers.isEmpty ? 'Close worktree' : blockers.join('\n'),
-      child: _Hoverable(
+      child: Tappable.builder(
         onTap: () {
           if (!shell.close(worktree)) _showBlocked(context, blockers);
         },
@@ -1629,8 +1593,10 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return _Hoverable(
+    return Tappable.builder(
       onTap: onTap,
+      // The wash is the primitive's; the flag still reveals the row's actions.
+      feedback: TapFeedback.overlay,
       builder: (context, hovered) => Container(
         margin: const EdgeInsets.symmetric(
           horizontal: FwSpacing.md,
@@ -1641,11 +1607,7 @@ class _Row extends StatelessWidget {
           vertical: FwSpacing.md,
         ),
         decoration: BoxDecoration(
-          color: selected
-              ? colors.accentSoft
-              : hovered
-              ? colors.hoverOverlay
-              : Colors.transparent,
+          color: selected ? colors.accentSoft : Colors.transparent,
           borderRadius: BorderRadius.circular(context.radii.radiusSmall),
         ),
         child: Row(
@@ -1675,7 +1637,7 @@ class _Row extends StatelessWidget {
               for (var action in actions)
                 Tooltip(
                   message: action.label,
-                  child: _Hoverable(
+                  child: Tappable.builder(
                     onTap: action.onTap,
                     builder: (context, over) => Padding(
                       padding: const EdgeInsets.only(left: FwSpacing.xs),

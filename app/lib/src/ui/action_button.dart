@@ -135,6 +135,7 @@ class _FwActionButtonState extends State<FwActionButton> {
 
     var button = Tappable(
       onTap: enabled ? () => unawaited(_run()) : null,
+      borderRadius: BorderRadius.circular(context.radii.radius),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         padding: const EdgeInsets.symmetric(

@@ -967,14 +967,11 @@ class _Refresh extends StatelessWidget {
     var colors = context.colors;
     return Tooltip(
       message: 'Read this checkout again',
-      child: Tappable.builder(
+      child: Tappable(
         onTap: onTap,
-        builder: (context, hovered) => Container(
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        child: Padding(
           padding: const EdgeInsets.all(FwSpacing.xs),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-            color: hovered && onTap != null ? colors.hoverOverlay : null,
-          ),
           child: Icon(
             Icons.refresh,
             size: FwIconSize.md,
@@ -1414,15 +1411,14 @@ class _Tab extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     return Expanded(
-      child: Tappable.builder(
+      child: Tappable(
         onTap: onTap,
-        builder: (context, hovered) => Container(
+        child: Container(
           padding: const EdgeInsets.symmetric(
             horizontal: FwSpacing.sm,
             vertical: FwSpacing.md,
           ),
           decoration: BoxDecoration(
-            color: hovered && !on ? colors.hoverOverlay : null,
             border: Border(
               // Two pixels, drawn where the divider is, so the selected tab
               // sits on the list it is naming.
@@ -1675,10 +1671,9 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (!isRoot)
-          Tappable.builder(
+          Tappable(
             onTap: () => setState(() => _open = !_open),
-            builder: (context, hovered) => Container(
-              color: hovered ? colors.hoverOverlay : null,
+            child: Padding(
               // **A row you can hit.** Two pixels above and below a 14 px line
               // is a 18 px target between two other targets, and the folder is
               // the row you click most: it is the only one that folds.
@@ -2228,15 +2223,15 @@ class _FileHeader extends StatelessWidget {
                 ),
               ],
               const Spacer(),
-              Tappable.builder(
+              Tappable(
                 onTap: onComment,
-                builder: (context, hovered) => Container(
+                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+                child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: FwSpacing.md,
                     vertical: FwSpacing.xs,
                   ),
                   decoration: BoxDecoration(
-                    color: hovered ? colors.hoverOverlay : null,
                     borderRadius: BorderRadius.circular(
                       context.radii.radiusSmall,
                     ),

@@ -509,10 +509,11 @@ class _ModeBar extends StatelessWidget {
           for (var option in StageMode.values)
             Padding(
               padding: const EdgeInsets.only(right: FwSpacing.xs),
-              child: Tappable.builder(
+              child: Tappable(
                 key: stageModeKey(option),
                 onTap: enabled && option != mode ? () => onMode(option) : null,
-                builder: (context, hovered) => Container(
+                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+                child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: FwSpacing.md,
                     vertical: 3,
@@ -520,8 +521,6 @@ class _ModeBar extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: option == mode
                         ? colors.accent.withValues(alpha: 0.12)
-                        : hovered && enabled
-                        ? colors.hoverOverlay
                         : null,
                     borderRadius: BorderRadius.circular(
                       context.radii.radiusSmall,

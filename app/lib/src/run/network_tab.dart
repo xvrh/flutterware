@@ -242,13 +242,11 @@ class _RequestRow extends StatelessWidget {
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
     var status = networkStatusOf(request);
-    return Tappable.builder(
+    return Tappable(
       onTap: () => onSelect(request.id),
-      builder: (context, hovered) => Container(
+      child: Container(
         color: selected
             ? theme.colorScheme.primary.withValues(alpha: 0.08)
-            : hovered
-            ? context.colors.hoverOverlay
             : null,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
