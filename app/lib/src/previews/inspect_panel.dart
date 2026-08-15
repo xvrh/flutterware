@@ -64,7 +64,11 @@ class InspectPanel extends StatefulWidget {
 }
 
 class _InspectPanelState extends State<InspectPanel> {
-  var _collapsed = false;
+  /// On the session, like the open tab and for the same reason: the shell
+  /// rebuilds this panel from scratch whenever you come back to it, and a
+  /// collapse kept here was forgotten on every trip to another plugin.
+  bool get _collapsed => widget.session.panelCollapsed;
+  set _collapsed(bool value) => widget.session.panelCollapsed = value;
 
   /// The last semantics read, parsed once and held by identity.
   ///
@@ -172,6 +176,16 @@ class _InspectPanelState extends State<InspectPanel> {
         InspectDockTab(
           id: InspectTab.controls.name,
           label: InspectTab.controls.label,
+          // **What says the panel is worth opening.** It opens closed, because
+          // most entries declare nothing and a permanent empty drawer is a
+          // permanent reminder of a feature you are not using — so the count is
+          // how a demo with three knobs says so without taking 260px from every
+          // demo that has none. Zero draws nothing at all, as on Problems.
+          //
+          // Only after the entry has built: a knob is declared while the demo
+          // builds and reported afterwards, so on a first visit this arrives a
+          // beat after the picture does.
+          badge: session.knobs.knobs.length,
           body: widget.controls,
         ),
         InspectDockTab(

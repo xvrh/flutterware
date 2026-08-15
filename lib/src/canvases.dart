@@ -22,9 +22,14 @@ import 'devices.dart';
 /// // can read it under a plain `dart run` and a test can read it too.
 /// const canvases = [
 ///   PreviewCanvas('src/mobile', devices: [Devices.iphone16, Devices.iphoneSe]),
-///   PreviewCanvas('src/desktop', devices: [Devices.macbookPro]),
+///   PreviewCanvas('src/desktop', devices: [Devices.window, Devices.wideWindow]),
 /// ];
 /// ```
+///
+/// The two lines read differently on purpose, and [defaultDevice] is where the
+/// difference lives: the mobile entries **open on** an iPhone 16, and the
+/// desktop ones open on the plain resizable rectangle with those two window
+/// sizes offered beside it.
 ///
 /// **Named `PreviewCanvas` rather than `Canvas` because of `dart:ui`.** A test
 /// importing `package:flutterware/flutter_test.dart` has Flutter's `Canvas` in
@@ -91,7 +96,29 @@ class PreviewCanvas {
   }
 
   /// What one picture of an entry under this canvas is framed as.
-  Device? get defaultDevice => devices.isEmpty ? null : devices.first;
+  ///
+  /// **A desktop size is offered, never staged.** A phone's screen is the
+  /// constraint the layout has to survive, so staging it is the whole point; a
+  /// desktop window has no true size, because the person using it drags the
+  /// corner. The honest default stage for a desktop subtree is therefore the
+  /// resizable one — the plain rectangle, at 1:1 — and the declared window sizes
+  /// stay in the picker, one click away, for when the question is "does this
+  /// hold together at 1600 wide".
+  ///
+  /// It is also what you can actually look at. A declared window staged in a
+  /// panel narrower than itself is scaled down to fit: measured on this GUI, a
+  /// 1600-wide window in a 490-wide pane is shown at 30%, where type, hairlines
+  /// and hit targets are all unjudgeable. A preview nobody can read is not a
+  /// preview.
+  ///
+  /// The rule costs the case of an app that genuinely wants its big stage on
+  /// arrival — a kiosk, a wall dashboard. That is one click and it sticks: the
+  /// picked device rides the address and survives moving between entries.
+  Device? get defaultDevice {
+    if (devices.isEmpty) return null;
+    var head = devices.first;
+    return head.kind == DeviceKind.desktop ? null : head;
+  }
 
   /// Which way up that picture is.
   ScreenOrientation? get defaultOrientation =>

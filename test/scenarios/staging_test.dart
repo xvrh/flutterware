@@ -18,7 +18,7 @@ import 'package:flutterware/flutter_test.dart';
 void main() {
   const canvases = [
     PreviewCanvas('demo/mobile', devices: [Devices.iphone16]),
-    PreviewCanvas('demo/desktop', devices: [Devices.macbookPro]),
+    PreviewCanvas('demo/desktop', devices: [Devices.wideWindow]),
     PreviewCanvas(
       'demo/tablet',
       devices: [Devices.iPad],
@@ -42,17 +42,20 @@ void main() {
     reset();
   });
 
-  testWidgets('a desktop entry gets a desktop, in the same walk', (
+  testWidgets('a desktop entry gets the rectangle its panel opens on', (
     tester,
   ) async {
-    // The case a single package-wide device cannot express, and the reason the
-    // list is addressed by prefix.
+    // **A declared window is offered, not staged** — see
+    // [PreviewCanvas.defaultDevice] — and this surface follows the panel
+    // because that is the whole point of the canvas list: a test, a screenshot
+    // and the panel must agree about what a directory is for. A desktop window
+    // has no size of its own; the person using it drags the corner.
     var reset = tester.applyCanvas(
       canvasFor(canvases, 'demo/desktop/dashboard.dart'),
     );
     await tester.pumpWidget(const _Probe());
 
-    expect(laidOutAt(tester).width, greaterThan(1000));
+    expect(laidOutAt(tester).width, previewPanelWidth.toDouble());
     reset();
   });
 

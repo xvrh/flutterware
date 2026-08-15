@@ -84,7 +84,7 @@ void main() {
   });
 
   test('a desktop gets no silhouette to turn', () {
-    expect(deviceFrameFor(Devices.macbookPro), isNull);
+    expect(deviceFrameFor(Devices.wideWindow), isNull);
   });
 
   test('no named frame for an id outside the table', () {

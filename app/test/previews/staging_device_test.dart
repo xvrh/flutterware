@@ -43,9 +43,26 @@ void main() {
       expect(chrome.name, device.label);
     });
 
-    test('a desktop size gets none, because the panel already is one', () {
-      expect(deviceFrameFor(deviceById('macbook-pro')!), isNull);
-      expect(deviceFrameFor(deviceById('wide-monitor')!), isNull);
+    test('a window size gets none, because the panel already is one', () {
+      expect(deviceFrameFor(deviceById('window')!), isNull);
+      expect(deviceFrameFor(deviceById('window-wide')!), isNull);
+    });
+
+    test('the screens the windows replaced still resolve', () {
+      // A stored address is the case that matters: `?device=macbook-pro` was
+      // written down by somebody who wanted a desktop stage, and a rename that
+      // answered "no such device" would read as a broken link rather than as a
+      // better name.
+      expect(deviceById('macbook-pro')?.id, 'window-wide');
+      expect(deviceById('wide-monitor')?.id, 'window-wide');
+      expect(deviceById('windows-laptop')?.id, 'windows-window');
+      expect(deviceById('linux-laptop')?.id, 'linux-window');
+      expect(isDeviceId('macbook-pro'), isTrue);
+
+      // And they are gone from the picker, which is where the rename is meant
+      // to be visible: one way to ask for a stage, not two.
+      expect(deviceIds, isNot(contains('macbook-pro')));
+      expect(deviceById('no-such-machine'), isNull);
     });
 
     test('every phone and tablet can be drawn', () {

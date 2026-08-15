@@ -48,7 +48,11 @@ void main() {
       },
       {
         'prefix': 'demo/desktop',
-        'devices': ['macbook-pro'],
+        'devices': ['window-wide'],
+      },
+      {
+        'prefix': 'demo/tablet',
+        'devices': ['ipad'],
       },
     ],
   });
@@ -59,18 +63,34 @@ void main() {
       'demo/mobile/tile.dart',
       const {},
     );
-    var (desk, _, deskViewport) = core.auditFramingFor(
+    var (tablet, _, tabletViewport) = core.auditFramingFor(
+      '.',
+      'demo/tablet/bar.dart',
+      const {},
+    );
+
+    expect(phone, 'iphone-16');
+    expect(tablet, 'ipad');
+    // The two that used to be one number. A guest holding the second size
+    // cannot report the first one's overflow.
+    expect(phoneViewport, isNot(tabletViewport));
+    expect(phoneViewport, CaptureViewport.of(deviceById('iphone-16')!));
+  });
+
+  test('a desktop subtree is audited on the rectangle it opens on', () {
+    // The window rule reaches here too, and deliberately: the audit judges an
+    // entry at the size it is shown at, and a declared window is offered rather
+    // than staged — see [PreviewCanvas.defaultDevice]. Sweeping the wide one is
+    // `--device window-wide`, which is the same sentence in the same
+    // vocabulary.
+    var (device, _, viewport) = core.auditFramingFor(
       '.',
       'demo/desktop/bar.dart',
       const {},
     );
 
-    expect(phone, 'iphone-16');
-    expect(desk, 'macbook-pro');
-    // The two that used to be one number. A guest holding the second size
-    // cannot report the first one's overflow.
-    expect(phoneViewport, isNot(deskViewport));
-    expect(phoneViewport, CaptureViewport.of(deviceById('iphone-16')!));
+    expect(device, isNull);
+    expect(viewport, CaptureViewport.panel);
   });
 
   test('an entry under no canvas keeps the plain rectangle', () {

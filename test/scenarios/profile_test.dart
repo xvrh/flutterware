@@ -133,15 +133,15 @@ void main() {
   test('a device that cannot turn contributes one point, not two', () {
     var assignments = scenarioAssignments(
       phones,
-      devicesOverride: 'ipad,macbook-pro',
+      devicesOverride: 'ipad,window-wide',
       orientationsOverride: 'portrait,landscape',
     );
 
-    // Three, not four: the MacBook would have produced the same pixels twice.
+    // Three, not four: the window would have produced the same pixels twice.
     expect(assignments.map((a) => a.slug), [
       'ipad-en',
       'ipad-landscape-en',
-      'macbook-pro-en',
+      'window-wide-en',
     ]);
   });
 

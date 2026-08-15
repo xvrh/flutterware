@@ -232,6 +232,29 @@ class InspectClient {
     return json == null ? null : AxisReport.fromJson(json);
   }
 
+  /// Puts [entryId] on screen without recompiling or reloading anything.
+  ///
+  /// The generated entrypoint imports every entry's wrapper, so the program the
+  /// guest is already running holds the whole catalog — see [CatalogEntries].
+  /// Switching is therefore a message and a frame rather than a compile and a
+  /// reload, which on this repo's catalog is the difference between ~350ms and
+  /// ~33ms.
+  ///
+  /// Returns false when this guest cannot do it: one built before the extension
+  /// existed, or one whose program does not hold [entryId] — a demo the
+  /// compiler quarantined is not in the program, and neither is one that
+  /// appeared on disk after the guest started. Both recover the same way and
+  /// the caller does it: compile and reload, which always works. The guest
+  /// answers with what it is *actually* showing rather than raising, so telling
+  /// the two apart costs a comparison instead of an exception path.
+  Future<bool> showEntry(String entryId) async {
+    var json = await vmService.callExtension(
+      'ext.flutterware.showEntry',
+      args: {'id': entryId},
+    );
+    return json?['entry'] == entryId;
+  }
+
   /// Asks the guest to say when what is on screen has moved.
   ///
   /// [nodeId] is the node whose box should be reported; null watches structure

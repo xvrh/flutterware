@@ -402,50 +402,114 @@ abstract final class Devices {
   );
 
   // ------------------------------------------------------------ Desktop
+  //
+  // **Windows, not machines.** A phone entry is a screen, because a phone app
+  // gets the whole of one and the layout has to survive exactly that. A desktop
+  // app gets a *window*, which the user drags to whatever size they like — so
+  // the sizes worth checking are the ones a window is opened at, and the
+  // machine's screen is not one of them. These used to be screens: `MacBook
+  // Pro` was 1800×970, a size no application has ever opened at, and staging it
+  // in a panel a third that wide made every preview a thumbnail of itself.
+  //
+  // Two axes, both worth having. The **size** is what the layout meets, and
+  // three of them cover what a desktop layout actually has to do: hold together
+  // small, sit at the size most people leave a window, and not fall apart wide.
+  // The **platform** is what the widgets meet — scrollbars, fonts, adaptive
+  // Cupertino/Material choices, `Theme.of(context).platform` — so Windows and
+  // Linux are here as themselves rather than as sizes that happen to differ.
 
-  static const macbookPro = Device(
-    'macbook-pro',
-    'MacBook Pro',
+  static const smallWindow = Device(
+    'window-small',
+    'Small window',
     kind: DeviceKind.desktop,
     platform: DevicePlatform.macos,
     group: 'Desktop',
-    width: 1800,
-    height: 970,
+    width: 1024,
+    height: 700,
     pixelRatio: 2,
   );
 
-  static const wideMonitor = Device(
-    'wide-monitor',
-    'Wide monitor',
+  static const window = Device(
+    'window',
+    'Standard window',
     kind: DeviceKind.desktop,
     platform: DevicePlatform.macos,
     group: 'Desktop',
-    width: 1620,
-    height: 750,
+    width: 1280,
+    height: 800,
     pixelRatio: 2,
   );
 
-  static const windowsLaptop = Device(
-    'windows-laptop',
-    'Windows laptop',
+  static const wideWindow = Device(
+    'window-wide',
+    'Wide window',
+    kind: DeviceKind.desktop,
+    platform: DevicePlatform.macos,
+    group: 'Desktop',
+    width: 1600,
+    height: 900,
+    pixelRatio: 2,
+  );
+
+  /// A Windows window, at the scale Windows actually ships at.
+  ///
+  /// 1.5 rather than the 2 this entry used to carry: 200% is a 4K laptop, and
+  /// 150% is what a mainstream Windows machine is set to. The ratio is not
+  /// decoration — it picks which asset resolution loads and how big the texture
+  /// behind the preview is.
+  static const windowsWindow = Device(
+    'windows-window',
+    'Windows window',
     kind: DeviceKind.desktop,
     platform: DevicePlatform.windows,
     group: 'Desktop',
-    width: 1620,
-    height: 740,
-    pixelRatio: 2,
+    width: 1280,
+    height: 800,
+    pixelRatio: 1.5,
   );
 
-  static const linuxLaptop = Device(
-    'linux-laptop',
-    'Linux laptop',
+  /// A Linux window, unscaled — which is still the common case there.
+  static const linuxWindow = Device(
+    'linux-window',
+    'Linux window',
     kind: DeviceKind.desktop,
     platform: DevicePlatform.linux,
     group: 'Desktop',
-    width: 1620,
-    height: 740,
-    pixelRatio: 2,
+    width: 1280,
+    height: 800,
+    pixelRatio: 1,
   );
+
+  /// The screens these window sizes replaced.
+  ///
+  /// Kept because they are published: a project's `tool/flutterware.dart` names
+  /// them, and a package that renames a constant out from under a consumer for
+  /// a better name has spent their afternoon to save its own. [deviceById]
+  /// resolves the old ids too, so an address or a config that names one goes on
+  /// working — see [_renamed].
+  @Deprecated(
+    'Renamed: a desktop preview is a window, not a screen. Use '
+    'Devices.wideWindow.',
+  )
+  static const macbookPro = wideWindow;
+
+  @Deprecated(
+    'Renamed: a desktop preview is a window, not a screen. Use '
+    'Devices.wideWindow.',
+  )
+  static const wideMonitor = wideWindow;
+
+  @Deprecated(
+    'Renamed: a desktop preview is a window, not a screen. Use '
+    'Devices.windowsWindow.',
+  )
+  static const windowsLaptop = windowsWindow;
+
+  @Deprecated(
+    'Renamed: a desktop preview is a window, not a screen. Use '
+    'Devices.linuxWindow.',
+  )
+  static const linuxLaptop = linuxWindow;
 
   /// Every offered device, in picker order.
   static const all = <Device>[
@@ -463,10 +527,11 @@ abstract final class Devices {
     androidBig,
     androidSmallTablet,
     androidMediumTablet,
-    macbookPro,
-    wideMonitor,
-    windowsLaptop,
-    linuxLaptop,
+    smallWindow,
+    window,
+    wideWindow,
+    windowsWindow,
+    linuxWindow,
   ];
 }
 
@@ -479,8 +544,29 @@ List<String> get deviceIds => [fitDeviceId, for (var d in Devices.all) d.id];
 /// The device [id] names, or null for [fitDeviceId] and for anything unknown —
 /// which the caller must tell apart, because one is a choice and the other is a
 /// mistake. See [isDeviceId].
-Device? deviceById(String id) =>
-    Devices.all.where((d) => d.id == id).firstOrNull;
+///
+/// Old ids resolve to what replaced them — see [_renamed]. A stored address is
+/// the case that matters: `?device=macbook-pro` was written down by somebody
+/// who wanted a desktop stage, and answering "no such device" to it would make
+/// a rename look like a broken link.
+Device? deviceById(String id) {
+  var wanted = _renamed[id] ?? id;
+  return Devices.all.where((d) => d.id == wanted).firstOrNull;
+}
+
+/// What the desktop entries were called when they were screens rather than
+/// windows.
+///
+/// Deliberately a **map to the current ids** rather than four more rows in
+/// [Devices.all]: an alias that appeared in the picker would be a second way to
+/// ask for the same stage, and the picker is the one place this rename is meant
+/// to be visible.
+const _renamed = {
+  'macbook-pro': 'window-wide',
+  'wide-monitor': 'window-wide',
+  'windows-laptop': 'windows-window',
+  'linux-laptop': 'linux-window',
+};
 
 /// Whether [id] is a value this build accepts at all.
 bool isDeviceId(String id) => id == fitDeviceId || deviceById(id) != null;

@@ -27,6 +27,8 @@
 /// ```
 library;
 
+import 'dart:ui' show Size;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -62,10 +64,30 @@ extension DeviceStaging on WidgetTester {
   /// [applyDevice] with the head of [canvas] — what that list means everywhere
   /// else, so a test written against it agrees with the panel and with
   /// `previews screenshot` by construction rather than by care.
-  VoidCallback applyCanvas(PreviewCanvas? canvas) => applyDevice(
-    canvas?.defaultDevice,
-    orientation: canvas?.defaultOrientation,
-  );
+  ///
+  /// **No canvas and a canvas that stages nothing are different answers.** No
+  /// canvas leaves the surface exactly as the test had it, which is the whole
+  /// of the old behaviour and stays the rule. A canvas that resolves to no
+  /// device has *said something* — it is a subtree of windows, and a declared
+  /// window is offered rather than staged (see [PreviewCanvas.defaultDevice]) —
+  /// so it gets the same rectangle the panel opens it on rather than
+  /// `flutter_test`'s 800×600, which is the arbitrary surface
+  /// [previewPanelWidth] exists to keep entries off.
+  VoidCallback applyCanvas(PreviewCanvas? canvas) {
+    if (canvas == null) return () {};
+    if (canvas.defaultDevice case var device?) {
+      return applyDevice(device, orientation: canvas.defaultOrientation);
+    }
+    return applyScenarioRunArgs(
+      this,
+      ScenarioRunArgs(
+        size: Size(previewPanelWidth.toDouble(), previewPanelHeight.toDouble()),
+        // At 1, like the rectangle everywhere else: it is a size the layout
+        // meets, not a screen with a scale of its own.
+        pixelRatio: 1,
+      ),
+    );
+  }
 }
 
 /// Applies [args] through the binding's own test values, exactly as a

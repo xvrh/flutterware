@@ -49,13 +49,13 @@ void main() {
   });
 
   test('a device that cannot turn ignores the axis, everywhere', () {
-    const axes = ScenarioAxes(device: 'macbook-pro', orientation: 'landscape');
+    const axes = ScenarioAxes(device: 'window-wide', orientation: 'landscape');
 
     expect(axes.isLandscape, isFalse);
     expect(axes.toParams().containsKey('orientation'), isFalse);
     expect(axes.harnessArgs().containsKey('orientation'), isFalse);
-    expect(axisSlug(axes), 'macbook-pro');
-    expect(axes.harnessArgs()['width'], '1800');
+    expect(axisSlug(axes), 'window-wide');
+    expect(axes.harnessArgs()['width'], '1600');
   });
 
   test('portrait writes nothing an address or a path would carry', () {

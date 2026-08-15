@@ -408,14 +408,19 @@ class _CatalogViewState extends State<CatalogView> {
         // rendering the last entry that loaded, and showing that under a
         // selection it does not belong to is how you end up wondering why your
         // edit did nothing.
-        if (_session.selectedError case var error?) {
-          return _CompileError(
-            entry: _session.selected!,
-            error: error,
-            onRetry: _session.busyWith == null ? _reload : null,
-          );
+        var canvas = _session.selectedError == null
+            ? _buildTexture(context, _session.engine!, device, orientation)
+            : _CompileError(
+                entry: _session.selected!,
+                error: _session.selectedError!,
+                onRetry: _session.busyWith == null ? _reload : null,
+              );
+        // Over whichever of the two it is: both are a picture of where you
+        // were, and a switch that has to compile obscures both the same way.
+        if (_session.compilingSwitch case var entry?) {
+          return _SwitchingOverlay(entry: entry, child: canvas);
         }
-        return _buildTexture(context, _session.engine!, device, orientation);
+        return canvas;
     }
   }
 
@@ -1669,13 +1674,21 @@ class _EntryList extends StatelessWidget {
     var browsing = session.browsing;
     // Built from everything discovered, broken included: an entry you are
     // midway through fixing keeps its place, and selecting it is the retry.
-    var tree = filterCatalogTree(
-      buildCatalogTree(session.allEntries),
-      browsing.filter,
-    );
+    var whole = buildCatalogTree(session.allEntries);
+    var tree = filterCatalogTree(whole, browsing.filter);
     var filtering = browsing.filter.trim().isNotEmpty;
-    // Whatever is selected is visible, whatever was folded away before it was.
-    var reveal = branchesTo(tree, session.selected?.id);
+    // Whatever is selected is *made* visible, once, when it arrives — rather
+    // than held open for as long as it is selected, which is what made the
+    // folder around it refuse to close. See [CatalogBrowsing.revealSelection].
+    // After the frame, because opening a folder notifies and this is a build.
+    var selectedId = session.selected?.id;
+    if (browsing.needsReveal(selectedId)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          browsing.revealSelection(selectedId, branchesTo(whole, selectedId));
+        }
+      });
+    }
     var rows = <Widget>[];
     void walk(List<CatalogNode> nodes, int depth) {
       for (var node in nodes) {
@@ -1696,10 +1709,7 @@ class _EntryList extends StatelessWidget {
           case CatalogBranch(:var children):
             // A filtered tree is already the answer to a question; folding
             // part of it away would only hide what was asked for.
-            var open =
-                filtering ||
-                reveal.contains(node.id) ||
-                browsing.isOpen(node.id);
+            var open = filtering || browsing.isOpen(node.id);
             rows.add(
               _BranchRow(
                 branch: node,
@@ -2115,6 +2125,45 @@ class _ShowListStrip extends StatelessWidget {
   }
 }
 
+/// The entry you asked for, on its way, over the one you were looking at.
+///
+/// **Only ever the slow path** — see [CatalogSession.compilingSwitch]. The
+/// guest switches most entries by itself in a frame and this never appears for
+/// those; what is left is a first compile, a demo whose sources have moved, and
+/// a quarantined entry being retried, none of them quick enough to leave the
+/// previous demo standing there looking like the answer. That is also why it
+/// needs no appearance delay: by the time this is built we already know.
+///
+/// What is underneath stays there rather than being blanked — the demo you
+/// were looking at, or the error the entry you are retrying last gave. It is
+/// the right size and in the right place, so the eye stays where the new
+/// picture will appear; a canvas that emptied itself on every switch would
+/// flash a hole in the middle of the window. Withdrawn, not gone — and opaque
+/// to the pointer, because a click meant for the demo you asked for must not
+/// land on the one being replaced.
+class _SwitchingOverlay extends StatelessWidget {
+  const _SwitchingOverlay({required this.entry, required this.child});
+
+  final CatalogEntry entry;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        child,
+        Positioned.fill(
+          child: ColoredBox(
+            color: context.colors.bg.withValues(alpha: 0.82),
+            child: LoadingState(title: entry.name, message: 'Compiling…'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Why the selected entry is not on screen, where it would have been.
 ///
 /// Deliberately not a red page. The compiler's own words are the content, and
@@ -2244,10 +2293,16 @@ class _StatusBar extends StatelessWidget {
       if (!photographed) parts.add('cold ${_ms(cold)}');
     }
     if (session.lastSwitch case var report?) {
-      parts.add(switch ((report.ok, photographed)) {
-        (false, _) => '${report.entry.name}: did not compile',
-        (true, true) => report.entry.name,
-        (true, false) =>
+      parts.add(switch ((report.ok, photographed, report.direct)) {
+        (false, _, _) => '${report.entry.name}: did not compile',
+        (true, true, _) => report.entry.name,
+        // One number, because there was only one thing: the guest already held
+        // the entry and moved to it. Naming a compile of 0ms and a reload that
+        // was not one would read as a suspiciously fast build rather than as
+        // the build that never happened.
+        (true, false, true) =>
+          '${report.entry.name}: switch ${_ms(report.reload)}',
+        (true, false, false) =>
           '${report.entry.name}: compile ${_ms(report.compile)} '
               '· reload ${_ms(report.reload)} '
               // What the reload was *made of*: edited files on a reload,

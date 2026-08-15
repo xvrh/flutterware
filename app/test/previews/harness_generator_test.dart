@@ -83,7 +83,7 @@ Widget ${entry.symbol}() => const Placeholder();
         const PreviewCanvas('demo', devices: [Devices.iphoneSe]),
         const PreviewCanvas(
           'demo/desktop',
-          devices: [Devices.macbookPro],
+          devices: [Devices.wideWindow],
           orientations: [ScreenOrientation.landscape],
         ),
       ],

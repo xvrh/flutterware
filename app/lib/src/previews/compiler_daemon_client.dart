@@ -367,6 +367,21 @@ class CompilerDaemonClient {
     }
   }
 
+  /// Tells the daemon this client's guest is showing [id] now, having switched
+  /// to it by itself — see [ShownRequest].
+  ///
+  /// Fire and forget, like [refresh], and tolerant of a daemon that has never
+  /// heard of it: an older one logs the line as unreadable and carries on, and
+  /// all that costs is the compile and reload this exists to avoid.
+  void shown(String id) {
+    try {
+      _socket.writeln(encodeLine(ShownRequest(id)));
+    } catch (_) {
+      // Same as [refresh]: nothing here is worth reporting over a socket that
+      // is going away.
+    }
+  }
+
   /// Leaves the daemon running for whoever else wants it.
   Future<void> close() async {
     _onGone();
