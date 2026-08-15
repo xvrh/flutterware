@@ -44,6 +44,17 @@ errors-only audit never photographs. Both are worth perhaps a second or two
 between them, against a loop that is already fast enough — noted here so the
 next person measures rather than rediscovers.
 
+**The settle went the other way, and the paragraph above is why it had to.**
+Following frames stops at the first frame the entry does not ask for, and an
+entry waiting on a timer asks for none — so a demo that sleeps before it decodes
+was disposed 100ms in with its timer pending, which `flutter_test` reports as
+the entry leaking one. The audit now spends its whole budget
+(`Settle.elapse(5s)`, `lib/src/previews/harness.dart`) rather than following
+frames. Measured on a quiet tree: 42µs a settle following frames against 990µs
+spending five fake seconds, so ~0.95ms an entry — 0.13s across a 133-entry
+catalog, against the ~10s bring-up. The cost of *not* photographing is what pays
+for this: an audit may hold the clock, a capture may not.
+
 ## Why not `flutter test`
 
 Because it cannot measure text. `flutter test` passes `--use-test-fonts` and

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
 
@@ -41,6 +43,48 @@ void main() {
     expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, lessThan(1.0));
   });
 
+  testWidgets('a bounded settle returns with a timer still pending', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const _SlowLoad(Duration(milliseconds: 200)));
+
+    // True, and the load has not happened: a pending `Future.delayed` schedules
+    // no frame, so 100ms is as far as the five-second budget gets.
+    // `pumpAndSettle` measures identically — the SDK's contract, pinned here so
+    // a change to it is a failing test rather than a surprise.
+    expect(await Settle.standard.apply(tester), isTrue);
+    expect(find.text('placeholder'), findsOneWidget);
+
+    // Drained before the body returns, or the binding fails this test for the
+    // very thing it is asserting.
+    await tester.pump(const Duration(milliseconds: 200));
+  });
+
+  testWidgets('Settle.elapse waits for work that schedules no frame', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const _SlowLoad(Duration(milliseconds: 200)));
+
+    expect(
+      await const Settle.elapse(Duration(seconds: 5)).apply(tester),
+      isTrue,
+    );
+    expect(find.text('loaded'), findsOneWidget);
+  });
+
+  testWidgets('Settle.elapse spends the budget and no more', (tester) async {
+    await tester.pumpWidget(const _SlowLoad(Duration(seconds: 10)));
+
+    // Past the budget is past what any policy here waits for.
+    expect(
+      await const Settle.elapse(Duration(seconds: 5)).apply(tester),
+      isTrue,
+    );
+    expect(find.text('placeholder'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 5));
+  });
+
   // `Settle.full` is `pumpAndSettle` itself, throw included — untested here
   // because the SDK's throw escapes its own `TestAsyncUtils.guard` after the
   // body returns and fails the test whatever the body does with it. That
@@ -81,6 +125,36 @@ class _Spinner extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const MaterialApp(home: Scaffold(body: CircularProgressIndicator()));
+}
+
+/// The shape a preview takes when it demonstrates a placeholder: a load that
+/// finishes on a timer, and nothing scheduling frames until it does.
+class _SlowLoad extends StatefulWidget {
+  const _SlowLoad(this.delay);
+
+  final Duration delay;
+
+  @override
+  State<_SlowLoad> createState() => _SlowLoadState();
+}
+
+class _SlowLoadState extends State<_SlowLoad> {
+  var _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(
+      Future<void>.delayed(widget.delay).then((_) {
+        if (mounted) setState(() => _loaded = true);
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: Scaffold(body: Text(_loaded ? 'loaded' : 'placeholder')),
+  );
 }
 
 /// A one-second fade that starts on its own — a finite animation, so a bounded
