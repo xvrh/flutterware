@@ -104,7 +104,7 @@ cd app && dart run bin/fw.dart <command>
 |---|---|
 ''');
   for (var command in fwCommands) {
-    buffer.writeln('| `${command.usage}` | ${command.summary} |');
+    buffer.writeln('| `${mdCell(command.usage)}` | ${command.summary} |');
   }
   buffer.writeln();
   buffer.writeln('$fwHelpFooter\n');
@@ -242,4 +242,14 @@ String _kind(ActionParameter parameter) {
 }
 
 String _cell(String? value) =>
-    value == null || value.isEmpty ? '—' : value.replaceAll('|', r'\|');
+    value == null || value.isEmpty ? '—' : mdCell(value);
+
+/// One cell of a markdown table, with the pipes that would end it escaped.
+///
+/// The rule was already here for parameter descriptions; the usage column was
+/// the one place it was not applied, and `capture` had been rendering as three
+/// columns since it grew a `--theme=light|dark`.
+///
+/// Public so the test that the document and `fw help` agree can compare against
+/// what the renderer actually writes, rather than restating this rule.
+String mdCell(String text) => text.replaceAll('|', r'\|');

@@ -1,15 +1,23 @@
-/// Handing the batch over, and closing it.
+/// Taking the outstanding notes somewhere else.
 ///
 /// **The markdown is the artefact; the routes are two ways of moving it.** The
 /// clipboard and a file render the identical text — see [reviewMarkdown] — so
 /// there is one format to keep readable, one to test, and no way for the thing
 /// you previewed to differ from the thing that left.
 ///
-/// **Handing off is what closes a batch, and it is the only thing that does.**
-/// There is no *Clear*: a button that empties the list asks *are you sure*
-/// about work whose only copy is on this screen, and it makes *I already sent
-/// these* and *I gave up on these* the same gesture. Accumulate, hand off,
-/// history.
+/// **Exporting changes nothing on its own.** It used to be the gesture that
+/// closed a batch, back when the recipient was a colleague in another window
+/// and *it left* was the only fact we could honestly record. The recipient is
+/// now usually an agent inside this checkout, which reads the log itself and
+/// resolves what it deals with — so what leaves here goes to the reader
+/// flutterware cannot reach, and whether that reader acted on it is not
+/// something a clipboard write knows.
+///
+/// Hence [ExportResult.resolve], offered afterwards rather than assumed. It is
+/// not the *Clear* button this feature has always refused: that one stood on
+/// the screen as a way to empty a list, making *I dealt with these* and *I gave
+/// up on these* one gesture. This one is bounded to the notes you just
+/// exported, at the moment you exported them.
 library;
 
 import 'dart:async';
@@ -23,32 +31,32 @@ import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import 'review_comment.dart';
 
-/// How a batch left.
-enum HandoffRoute {
-  /// Onto the clipboard, to be pasted into the agent's chat.
+/// How the notes left.
+enum ExportRoute {
+  /// Onto the clipboard, to be pasted into a chat.
   copy,
 
-  /// Written to a file the agent can be pointed at.
+  /// Written to a file the reader can be pointed at.
   file,
 }
 
-/// What the sheet decided, or null if it was cancelled.
-typedef HandoffResult = ({HandoffRoute route, String? savedTo});
+/// What the sheet did, or null if it was cancelled.
+typedef ExportResult = ({ExportRoute route, bool resolve});
 
-/// Asks how the batch should go, shows what will leave, and does it.
+/// Asks how the notes should go, shows what will leave, and does it.
 ///
 /// Returns null when nothing left — cancelled, or a save the user backed out
-/// of. The caller closes the batch only on a non-null answer, so an abandoned
-/// save cannot silently file six comments away as sent.
-Future<HandoffResult?> showHandoffSheet(
+/// of. The caller acts only on a non-null answer, so an abandoned save cannot
+/// silently resolve six notes that never went anywhere.
+Future<ExportResult?> showExportSheet(
   BuildContext context, {
   required String markdown,
   required int count,
   required String worktree,
   String? base,
-}) => showDialog<HandoffResult>(
+}) => showDialog<ExportResult>(
   context: context,
-  builder: (context) => _HandoffSheet(
+  builder: (context) => _ExportSheet(
     markdown: markdown,
     count: count,
     worktree: worktree,
@@ -56,8 +64,8 @@ Future<HandoffResult?> showHandoffSheet(
   ),
 );
 
-class _HandoffSheet extends StatefulWidget {
-  const _HandoffSheet({
+class _ExportSheet extends StatefulWidget {
+  const _ExportSheet({
     required this.markdown,
     required this.count,
     required this.worktree,
@@ -70,16 +78,24 @@ class _HandoffSheet extends StatefulWidget {
   final String? base;
 
   @override
-  State<_HandoffSheet> createState() => _HandoffSheetState();
+  State<_ExportSheet> createState() => _ExportSheetState();
 }
 
-class _HandoffSheetState extends State<_HandoffSheet> {
-  var _route = HandoffRoute.copy;
+class _ExportSheetState extends State<_ExportSheet> {
+  var _route = ExportRoute.copy;
   var _busy = false;
+
+  /// Whether to tick the exported notes off on the way out.
+  ///
+  /// **Off by default**, because the common reader is the agent in this
+  /// checkout, which resolves what it deals with and says what it did — and
+  /// pre-resolving would throw that answer away before it was written. You turn
+  /// it on for the case it is for: a reader that will never report back.
+  var _resolve = false;
 
   /// What went wrong, shown in place.
   ///
-  /// A handoff that fails silently is the worst outcome here: the sheet would
+  /// An export that fails silently is the worst outcome here: the sheet would
   /// simply sit there, and the obvious reading of that is *the button does not
   /// work*. A disk that is full and a clipboard channel that is not answering
   /// are both things the person in front of it can act on.
@@ -93,22 +109,22 @@ class _HandoffSheetState extends State<_HandoffSheet> {
     });
     try {
       switch (_route) {
-        case HandoffRoute.copy:
+        case ExportRoute.copy:
           await Clipboard.setData(ClipboardData(text: widget.markdown));
           if (mounted) {
             Navigator.of(
               context,
-            ).pop((route: HandoffRoute.copy, savedTo: null));
+            ).pop((route: ExportRoute.copy, resolve: _resolve));
           }
-        case HandoffRoute.file:
+        case ExportRoute.file:
           var location = await getSaveLocation(
             suggestedName: _suggestedName(widget.worktree),
             acceptedTypeGroups: const [
               XTypeGroup(label: 'Markdown', extensions: ['md']),
             ],
           );
-          // Backing out of the picker is backing out of the handoff. Closing
-          // the batch here would file the comments as sent to nowhere.
+          // Backing out of the picker is backing out of the export. Resolving
+          // here would tick off notes that went nowhere.
           if (location == null) {
             if (mounted) setState(() => _busy = false);
             return;
@@ -117,7 +133,7 @@ class _HandoffSheetState extends State<_HandoffSheet> {
           if (mounted) {
             Navigator.of(
               context,
-            ).pop((route: HandoffRoute.file, savedTo: location.path));
+            ).pop((route: ExportRoute.file, resolve: _resolve));
           }
       }
     } on Object catch (error) {
@@ -143,7 +159,7 @@ class _HandoffSheetState extends State<_HandoffSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Hand off ${widget.count} '
+            'Export ${widget.count} '
             '${widget.count == 1 ? 'comment' : 'comments'}',
             style: context.type.heading,
           ),
@@ -164,20 +180,20 @@ class _HandoffSheetState extends State<_HandoffSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Channel(
-              on: _route == HandoffRoute.copy,
+              on: _route == ExportRoute.copy,
               title: 'Copy as markdown',
-              body: 'Paste it straight into the agent’s chat.',
-              onTap: () => setState(() => _route = HandoffRoute.copy),
+              body: 'Paste it straight into a chat.',
+              onTap: () => setState(() => _route = ExportRoute.copy),
             ),
             const Gap(FwSpacing.md),
             _Channel(
-              on: _route == HandoffRoute.file,
+              on: _route == ExportRoute.file,
               title: 'Save to a file…',
               body:
-                  'Point the agent at the path. Save it outside the checkout '
+                  'Point a reader at the path. Save it outside the checkout '
                   'unless you want it showing up as an untracked row on this '
                   'very screen.',
-              onTap: () => setState(() => _route = HandoffRoute.file),
+              onTap: () => setState(() => _route = ExportRoute.file),
             ),
             const Gap(FwSpacing.xl),
             const _Label('What leaves'),
@@ -215,13 +231,43 @@ class _HandoffSheetState extends State<_HandoffSheet> {
               ),
             ),
             const Gap(FwSpacing.lg),
-            Text(
-              _failure ??
-                  'Moves these to history. You can copy a past batch again.',
-              style: context.type.caption.copyWith(
-                color: _failure == null ? colors.mut3 : colors.red,
+            // **A choice, not a promise.** The line here used to say what the
+            // handoff was about to do to the list; there is nothing to say now,
+            // because exporting does nothing to it unless you ask.
+            Tappable.builder(
+              onTap: () => setState(() => _resolve = !_resolve),
+              builder: (context, hovered) => Row(
+                children: [
+                  Icon(
+                    _resolve
+                        ? Icons.check_box_outlined
+                        : Icons.check_box_outline_blank,
+                    size: FwIconSize.md,
+                    color: _resolve
+                        ? colors.accent
+                        : hovered
+                        ? colors.mut
+                        : colors.mut3,
+                  ),
+                  const Gap(FwSpacing.sm),
+                  Flexible(
+                    child: Text(
+                      'Resolve them too — nobody is going to report back',
+                      style: context.type.caption.copyWith(
+                        color: _resolve ? colors.ink : colors.mut2,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
+            if (_failure case var failure?) ...[
+              const Gap(FwSpacing.sm),
+              Text(
+                failure,
+                style: context.type.caption.copyWith(color: colors.red),
+              ),
+            ],
           ],
         ),
       ),
@@ -261,7 +307,7 @@ class _HandoffSheetState extends State<_HandoffSheet> {
               border: Border.all(color: _busy ? colors.line : colors.accent),
             ),
             child: Text(
-              _busy ? 'Handing off…' : 'Hand off',
+              _busy ? 'Exporting…' : 'Export',
               style: context.type.caption.copyWith(
                 color: _busy ? colors.mut3 : colors.accent,
               ),
@@ -286,7 +332,7 @@ class _Label extends StatelessWidget {
   );
 }
 
-/// One of the two ways a batch can leave.
+/// One of the two ways the notes can leave.
 ///
 /// **A card, not a band.** The chosen one was a full-bleed accent stripe across
 /// the dialog and the other was bare text on the background, so the two options

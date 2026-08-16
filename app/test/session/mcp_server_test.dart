@@ -88,6 +88,9 @@ void main() {
       'flutterware_actions',
       'flutterware_invoke',
       'flutterware_act',
+      // The one tool that reaches no plugin: notes are a feature of the shell,
+      // so there is no core to hang them off and no action to invoke.
+      'flutterware_review',
     ]);
   });
 

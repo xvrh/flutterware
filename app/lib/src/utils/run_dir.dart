@@ -21,12 +21,22 @@ String flutterwareRunDir() {
 /// The `~/.flutterware` directory: per-user state that outlives any one run
 /// or checkout, such as compiled-shader caches keyed by engine revision.
 String flutterwareDir() {
+  if (flutterwareDirOverride case var it?) return it;
   var home =
       Platform.environment['HOME'] ??
       Platform.environment['USERPROFILE'] ??
       Directory.systemTemp.path;
   return p.join(home, '.flutterware');
 }
+
+/// Somewhere else to put it, for a test that writes here.
+///
+/// The environment cannot be set from inside a Dart process, so a test that
+/// exercises real path resolution — *the* thing that failed in the review-log
+/// report — would otherwise write into the developer's own `~/.flutterware`,
+/// which is the one directory a test may not touch.
+@visibleForTesting
+String? flutterwareDirOverride;
 
 /// Deletes what previous runs left behind in [flutterwareRunDir].
 ///

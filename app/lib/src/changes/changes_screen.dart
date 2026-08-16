@@ -22,7 +22,8 @@ import 'hunk_syntax.dart';
 import 'patch_index.dart';
 import 'ranking.dart';
 import 'review_comment.dart';
-import 'review_handoff.dart';
+import 'review_export.dart';
+import 'review_controller.dart';
 import 'review_store.dart';
 import 'review_view.dart';
 
@@ -203,7 +204,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
   ///
   /// **The undo window is the delete.** The log is append-only and a tombstone
   /// cannot be unwritten, so an undo that re-added the comment would give it a
-  /// new place at the end of the batch — the third note becoming the sixth is
+  /// new place at the end of the list — the third note becoming the sixth is
   /// not the note you took back. Holding the delete instead costs a few
   /// seconds of a row saying so, and restores the note exactly, in place.
   ///
@@ -229,11 +230,28 @@ class _ChangesScreenState extends State<ChangesScreen> {
   /// not to read as a selection that will stay.
   static const _flashFor = Duration(milliseconds: 1600);
 
-  /// The open batch, without the note whose delete is still being held.
+  /// What is outstanding, without the note whose delete is still being held.
   List<ReviewComment> get _live => [
-    for (var comment in _review.open)
+    for (var comment in _review.unresolved)
       if (comment.id != _pendingDelete) comment,
   ];
+
+  /// Every note the two panes may draw, under one rule so that the list and the
+  /// diff cannot disagree about whether a note is on this screen.
+  List<ReviewComment> get _visibleComments => [
+    for (var comment in _review.comments)
+      if (!comment.isResolved ||
+          _showResolved ||
+          _unseenNow.contains(comment.id))
+        comment,
+  ];
+
+  /// Whether the resolved notes are being shown as well.
+  ///
+  /// **Off, and not remembered.** The list is what is still to do; a filter
+  /// that persisted across launches would make a screen that opens on nine
+  /// answered notes and two live ones, which is the pile the resolve was for.
+  var _showResolved = false;
 
   /// The quote an *edit* shows: the one the comment already carries.
   ///
@@ -243,7 +261,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
   /// moment that differs is the moment the note matters.
   List<String>? get _editingQuote {
     if (_editing case var id?) {
-      return _review.open.where((c) => c.id == id).firstOrNull?.quote;
+      return _review.comments.where((c) => c.id == id).firstOrNull?.quote;
     }
     return null;
   }
@@ -347,6 +365,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
     _review = ReviewController(
       worktreePath: widget.worktree.path,
       store: widget.reviewStore,
+      watch: widget.live,
     )..addListener(_onChanged);
     _changes = ChangesController(
       worktreePath: widget.worktree.path,
@@ -579,6 +598,41 @@ class _ChangesScreenState extends State<ChangesScreen> {
     setState(() => _pendingDelete = null);
   }
 
+  /// The agent resolutions that were new when you arrived at the Review tab.
+  ///
+  /// **Held here rather than read from the log**, because arriving is also what
+  /// marks them seen: a screen that read the log directly would clear the
+  /// accent in the same frame that drew it, and the one thing this marker
+  /// exists for is that you notice.
+  var _unseen = <String>{};
+
+  /// Marked on arrival, once. See [ReviewController.markSeen].
+  ///
+  /// **Re-reads first.** The watch on the log is what usually brings the
+  /// agent's answers in, and a watch can be refused — a platform without them,
+  /// a home that will not take one. Arriving at the tab is the moment the
+  /// answer matters, so it is the moment not to rely on that.
+  void _enterReview() {
+    _review.reload();
+    _unseen = {for (var c in _review.state.unseenResolutions) c.id};
+    _review.markSeen();
+  }
+
+  /// What the list draws as new: what was new when you got here, plus anything
+  /// the agent has resolved since — the file watch means those arrive under
+  /// you, and they keep their accent until you next come back to the tab.
+  Set<String> get _unseenNow => {
+    ..._unseen,
+    for (var c in _review.state.unseenResolutions) c.id,
+  };
+
+  /// Ticks a note off. [ReviewActor.human] by construction: this is the button
+  /// on your screen.
+  void _resolveComment(String id) {
+    if (_editing == id) setState(_cancelComposing);
+    _review.resolve(id);
+  }
+
   /// Opens what a review row is about, and goes to it.
   ///
   /// **Opening the file is not arriving at the note.** This selected the path
@@ -599,7 +653,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
     });
   }
 
-  /// The batch, as it would be handed off.
+  /// These notes, as the markdown every reader of them gets.
   String _markdownFor(
     List<ReviewComment> comments,
     ChangeSet? set, {
@@ -617,30 +671,32 @@ class _ChangesScreenState extends State<ChangesScreen> {
           },
   );
 
-  Future<void> _handOff(ChangeSet? set) async {
-    // The live batch: a note whose delete is still being held is not part of
-    // what leaves, and handing off is a decision that closes the window on it.
+  /// Takes the outstanding notes somewhere else.
+  ///
+  /// **It changes nothing by itself.** Exporting is a read: the agent that
+  /// works in this checkout reads the log through its own surface and resolves
+  /// what it deals with, and a paste into some other window tells us nothing
+  /// about whether anybody acted on it. What the sheet offers afterwards is
+  /// *resolve these too*, for exactly the case where nobody is going to report
+  /// back — and it is offered, not assumed.
+  Future<void> _export(ChangeSet? set) async {
     var comments = _live;
     _commitPendingDelete();
     if (comments.isEmpty) return;
     var at = DateTime.now();
-    var result = await showHandoffSheet(
+    var result = await showExportSheet(
       context,
       markdown: _markdownFor(comments, set, at: at),
       count: comments.length,
       worktree: widget.worktree.displayName,
       base: set?.base,
     );
-    if (result == null) return;
-    // The ids the sheet was showing, not "everything open" — a comment written
-    // in another window while the sheet was up belongs to the next batch.
-    _review.handOff(
-      id: newReviewId(),
-      ids: [for (var comment in comments) comment.id],
-      at: at,
-      route: result.route.name,
-      savedTo: result.savedTo,
-    );
+    if (result == null || !result.resolve) return;
+    // The ids the sheet was showing, not "everything outstanding" — a comment
+    // written in another window while the sheet was up is not one you exported.
+    for (var comment in comments) {
+      _review.resolve(comment.id, at: at);
+    }
     setState(_cancelComposing);
   }
 
@@ -690,7 +746,12 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         query: _query,
                         selected: _selected,
                         visible: _visible(set),
-                        onTab: (tab) => setState(() => _tab = tab),
+                        onTab: (tab) {
+                          if (tab == IndexTab.review && _tab != tab) {
+                            _enterReview();
+                          }
+                          setState(() => _tab = tab);
+                        },
                         onQuery: (q) => setState(() => _query = q),
                         onSelect: _show,
                         review: _review.state,
@@ -706,23 +767,16 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         onOpenComment: _openComment,
                         onDeleteComment: _deleteComment,
                         onCommentReview: _composeReview,
-                        onHandOff: () => unawaited(_handOff(set)),
+                        onExport: () => unawaited(_export(set)),
                         composing: _composing,
                         editing: _editing != null,
                         draft: _draft,
                         onSubmit: () => _submitComment(set),
                         onCancel: () => setState(_cancelComposing),
-                        onCopyBatch: (batch) => unawaited(
-                          Clipboard.setData(
-                            ClipboardData(
-                              text: _markdownFor(
-                                batch.comments,
-                                set,
-                                at: batch.handedOffAt,
-                              ),
-                            ),
-                          ),
-                        ),
+                        unseen: _unseenNow,
+                        showResolved: _showResolved,
+                        onShowResolved: (on) =>
+                            setState(() => _showResolved = on),
                       ),
                     ),
                     VerticalDivider(width: 1, color: context.colors.line),
@@ -738,7 +792,9 @@ class _ChangesScreenState extends State<ChangesScreen> {
                           null => null,
                         },
                         controller: _body,
-                        comments: _review.open,
+                        comments: _visibleComments,
+                        onResolveComment: _resolveComment,
+                        onUnresolveComment: _review.unresolve,
                         composing: _composing,
                         editing: _editing != null,
                         draft: _draft,
@@ -1069,13 +1125,15 @@ class _IndexPane extends StatelessWidget {
     required this.onOpenComment,
     required this.onDeleteComment,
     required this.onCommentReview,
-    required this.onHandOff,
-    required this.onCopyBatch,
+    required this.onExport,
     required this.composing,
     required this.editing,
     required this.draft,
     required this.onSubmit,
     required this.onCancel,
+    required this.unseen,
+    required this.showResolved,
+    required this.onShowResolved,
   });
 
   final ChangeSet set;
@@ -1102,8 +1160,14 @@ class _IndexPane extends StatelessWidget {
   final ValueChanged<ReviewComment> onOpenComment;
   final ValueChanged<String> onDeleteComment;
   final VoidCallback onCommentReview;
-  final VoidCallback onHandOff;
-  final ValueChanged<ReviewBatch> onCopyBatch;
+  final VoidCallback onExport;
+
+  /// Notes the agent resolved since you last looked at this tab. Drawn whatever
+  /// [showResolved] says.
+  final Set<String> unseen;
+
+  final bool showResolved;
+  final ValueChanged<bool> onShowResolved;
 
   /// A [ReviewWide] anchor is written here rather than in the body, because it
   /// is about no file and the body is one file's diff. Any other anchor is the
@@ -1153,6 +1217,7 @@ class _IndexPane extends StatelessWidget {
           all: set.changed.length + set.untracked.length,
           important: pinned,
           review: _liveCount,
+          answered: unseen.isNotEmpty,
           onTab: onTab,
         ),
         Expanded(
@@ -1165,18 +1230,27 @@ class _IndexPane extends StatelessWidget {
         if (tab == IndexTab.review)
           _ReviewFooter(
             count: _liveCount,
-            onHandOff: onHandOff,
+            onExport: onExport,
             onCommentReview: onCommentReview,
           ),
       ],
     );
   }
 
-  /// Notes still waiting, which is what the tab's count and the footer mean.
+  /// Notes still outstanding, which is what the tab's count and the footer
+  /// mean.
   int get _liveCount =>
-      review.open.where((comment) => comment.id != deleted).length;
+      review.unresolved.where((comment) => comment.id != deleted).length;
 
-  /// What you have written, and what you have already sent.
+  /// The resolved notes this tab is drawing: the ones the agent answered while
+  /// you were away, always — and the rest when you ask for them.
+  List<ReviewComment> get _resolvedShown => [
+    for (var comment in review.resolved)
+      if (showResolved || unseen.contains(comment.id)) comment,
+  ];
+
+  /// What is outstanding, what was answered while you were away, and — on
+  /// request — everything else that has been answered.
   Widget _review(BuildContext context) {
     // A whole-review note is about no file, so it quotes nothing — the one
     // composer on this screen with only its header above the text.
@@ -1192,14 +1266,17 @@ class _IndexPane extends StatelessWidget {
         : null;
     if (review.isEmpty && wide == null) return const _NoComments();
     // Numbered over the live ones only — the number is what you say out loud
-    // to the agent, so a held delete must not leave a gap in it.
+    // to the agent, so a held delete must not leave a gap in it, and neither
+    // may a note that has been answered.
     var number = 0;
+    var resolved = _resolvedShown;
+    var answeredCount = review.resolved.length;
     return ListView(
       key: changesListKey,
       controller: controller,
       children: [
         ?wide,
-        for (var comment in review.open)
+        for (var comment in review.unresolved)
           if (comment.id == deleted)
             ReviewUndoStrip(inset: FwSpacing.md, onUndo: onUndoDelete)
           else
@@ -1210,7 +1287,7 @@ class _IndexPane extends StatelessWidget {
               drifted: drifted(comment),
               onTap: () => onOpenComment(comment),
             ),
-        if (review.history.isNotEmpty) ...[
+        if (resolved.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(
               FwSpacing.md,
@@ -1218,11 +1295,25 @@ class _IndexPane extends StatelessWidget {
               FwSpacing.md,
               FwSpacing.xs,
             ),
-            child: Text('Handed off', style: context.type.caption),
+            child: Text('Resolved', style: context.type.caption),
           ),
-          for (var batch in review.history)
-            ReviewBatchRow(batch: batch, onCopy: () => onCopyBatch(batch)),
+          for (var comment in resolved)
+            ReviewIndexRow(
+              comment: comment,
+              selected: comment.id == selectedComment,
+              unseen: unseen.contains(comment.id),
+              onTap: () => onOpenComment(comment),
+            ),
         ],
+        // **The disclosure, where the handed-off list used to be.** It is the
+        // same question in the same place — *what has already been dealt with*
+        // — and the only one on this tab that is about the past.
+        if (answeredCount > resolved.length || showResolved)
+          _ResolvedToggle(
+            count: answeredCount,
+            on: showResolved,
+            onTap: () => onShowResolved(!showResolved),
+          ),
       ],
     );
   }
@@ -1340,6 +1431,7 @@ class _Tabs extends StatelessWidget {
     required this.all,
     required this.important,
     required this.review,
+    required this.answered,
     required this.onTab,
   });
 
@@ -1347,6 +1439,10 @@ class _Tabs extends StatelessWidget {
   final int all;
   final int important;
   final int review;
+
+  /// The agent has resolved something you have not looked at.
+  final bool answered;
+
   final ValueChanged<IndexTab> onTab;
 
   @override
@@ -1380,9 +1476,13 @@ class _Tabs extends StatelessWidget {
             onTap: () => onTab(IndexTab.review),
             // The one count on this strip that is about you rather than about
             // the checkout, so it keeps the accent whichever tab is open: it is
-            // how many notes are waiting to be handed off, and that is worth
-            // seeing from the *All* tab.
+            // how many notes are outstanding, and that is worth seeing from the
+            // *All* tab.
             live: review > 0,
+            // **The agent has answered something.** Not folded into the count,
+            // which means *still to do* — an answered note is the opposite of
+            // that, and adding the two would make a number that says neither.
+            alert: answered,
           ),
         ],
       ),
@@ -1397,6 +1497,7 @@ class _Tab extends StatelessWidget {
     required this.on,
     required this.onTap,
     this.live = false,
+    this.alert = false,
   });
 
   final String label;
@@ -1406,6 +1507,10 @@ class _Tab extends StatelessWidget {
 
   /// Keeps the count in the accent even when the tab is not the open one.
   final bool live;
+
+  /// Something arrived here that you have not seen. A dot after the count —
+  /// deliberately not a second number, which would read as more work.
+  final bool alert;
 
   @override
   Widget build(BuildContext context) {
@@ -1451,6 +1556,10 @@ class _Tab extends StatelessWidget {
                   color: on || live ? colors.accent : colors.mut3,
                 ),
               ),
+              if (alert) ...[
+                const Gap(FwSpacing.xs),
+                Icon(Icons.circle, size: 6, color: colors.accent),
+              ],
             ],
           ),
         ),
@@ -1484,11 +1593,11 @@ class _NoComments extends StatelessWidget {
   );
 }
 
-/// The Review tab's foot: the one action the whole tab is for.
+/// The Review tab's foot.
 ///
-/// **Pinned below the list rather than at the end of it.** A batch of twelve
-/// comments would put *Hand off* below the fold, which is the one place a
-/// primary action may not be.
+/// **Pinned below the list rather than at the end of it.** Twelve comments
+/// would put the action below the fold, which is the one place a primary action
+/// may not be.
 ///
 /// **Primary, not loud.** It was a solid full-bleed accent slab with the
 /// second action as a 10.5 px link under it — between them the heaviest and
@@ -1496,15 +1605,20 @@ class _NoComments extends StatelessWidget {
 /// alternates between. The house primary is [FwActionButton]'s: an accent
 /// border over [FwPalette.accentSoft], which is emphatic in a panel of greys
 /// without being the loudest object in the app.
+///
+/// **It is Export, and it is no longer what the tab is for.** The gesture that
+/// used to close a batch here has been replaced by an agent that reads the log
+/// itself and resolves what it deals with, so this button now serves the case
+/// where the reader is somewhere flutterware cannot reach.
 class _ReviewFooter extends StatelessWidget {
   const _ReviewFooter({
     required this.count,
-    required this.onHandOff,
+    required this.onExport,
     required this.onCommentReview,
   });
 
   final int count;
-  final VoidCallback onHandOff;
+  final VoidCallback onExport;
   final VoidCallback onCommentReview;
 
   @override
@@ -1519,7 +1633,7 @@ class _ReviewFooter extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Tappable.builder(
-            onTap: count == 0 ? null : onHandOff,
+            onTap: count == 0 ? null : onExport,
             builder: (context, hovered) => AnimatedContainer(
               duration: const Duration(milliseconds: 120),
               padding: const EdgeInsets.symmetric(vertical: FwSpacing.md),
@@ -1536,8 +1650,8 @@ class _ReviewFooter extends StatelessWidget {
               ),
               child: Text(
                 count == 0
-                    ? 'Nothing to hand off'
-                    : 'Hand off $count '
+                    ? 'Nothing outstanding'
+                    : 'Export $count '
                           '${count == 1 ? 'comment' : 'comments'}',
                 textAlign: TextAlign.center,
                 style: context.type.caption.copyWith(
@@ -1566,6 +1680,55 @@ class _ReviewFooter extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// *Resolved (12)*, opening and closing the answered notes.
+///
+/// **A row in the list, not a control in the chrome.** It sits where the
+/// handed-off section used to start, which is where the eye already goes for
+/// *what is already dealt with* — and it costs nothing on the tab of somebody
+/// who has never resolved anything, because it is not drawn at all.
+class _ResolvedToggle extends StatelessWidget {
+  const _ResolvedToggle({
+    required this.count,
+    required this.on,
+    required this.onTap,
+  });
+
+  final int count;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tappable.builder(
+      onTap: onTap,
+      builder: (context, hovered) => Container(
+        color: hovered ? colors.hoverOverlay : null,
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.md,
+          vertical: FwSpacing.md,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              on ? Icons.expand_less : Icons.expand_more,
+              size: FwIconSize.md,
+              color: colors.mut3,
+            ),
+            const Gap(FwSpacing.sm),
+            Text(
+              on ? 'Hide resolved' : 'Resolved ($count)',
+              style: context.type.caption.copyWith(
+                color: hovered ? colors.ink : colors.mut2,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1772,6 +1935,8 @@ class _FilePane extends StatefulWidget {
     required this.onCancel,
     required this.onEditComment,
     required this.onDeleteComment,
+    required this.onResolveComment,
+    required this.onUnresolveComment,
   });
 
   final FileChange? file;
@@ -1821,6 +1986,8 @@ class _FilePane extends StatefulWidget {
   final VoidCallback onCancel;
   final ValueChanged<ReviewComment> onEditComment;
   final ValueChanged<String> onDeleteComment;
+  final ValueChanged<String> onResolveComment;
+  final ValueChanged<String> onUnresolveComment;
 
   @override
   State<_FilePane> createState() => _FilePaneState();
@@ -2056,6 +2223,8 @@ class _FilePaneState extends State<_FilePane> {
                       highlighted: comment.id == widget.flash,
                       onEdit: () => widget.onEditComment(comment),
                       onDelete: () => widget.onDeleteComment(comment.id),
+                      onResolve: () => widget.onResolveComment(comment.id),
+                      onUnresolve: () => widget.onUnresolveComment(comment.id),
                     ),
             ComposerRow(:var anchor) => ReviewComposer(
               anchor: anchor,

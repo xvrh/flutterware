@@ -219,7 +219,7 @@ void main() {
     var document = renderCapabilities();
     await cli().run(['help']);
     for (var command in fwCommands) {
-      expect(document, contains(command.usage));
+      expect(document, contains(mdCell(command.usage)));
       expect(document, contains(command.summary));
     }
     for (var code in fwExitCodes.entries) {

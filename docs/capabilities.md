@@ -23,13 +23,14 @@ cd app && dart run bin/fw.dart <command>
 | `status [--json]` | what every plugin says about itself |
 | `worktrees [--refresh] [--json]` | every checkout of this repo, and what is going on in each |
 | `changes [<worktree>] [--file=<path>] [--json]` | what a checkout has changed, ranked |
+| `review [--all] [--json] \| review resolve <id> [--message=<text>] \| review unresolve <id>` | the notes a human left on this checkout, and answering them |
 | `actions [--json]` | what can be invoked, and with what |
 | `run <plugin> <action> [--k=v]` | invoke one action |
 | `init` | write the two files this project needs |
 | `app [--release] [--json]` | open the flutterware GUI |
 | `mcp` | serve this project to an agent, over stdio |
 | `compare [--base=<ref>] [--package=<path>] [--entry=<id>] [--export[=<dir>]] [--report=<dir>] [--json]` | what this worktree did to the pictures, against its base |
-| `capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI window itself, at an address |
+| `capture [<address>] -o <file> [--size=WxH] [--theme=light\|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI window itself, at an address |
 | `version [--json]` | which flutterware this is, and where it came from |
 | `help [<command>]` | this, or one command in detail |
 
@@ -123,6 +124,17 @@ One transaction against the running app — the loop tool for live work: edit co
 | `entrypoint` | no | Which entry point, when a device runs more than one. |
 | `worktree` | no | Worktree name or path, to drive a run another checkout launched. Only runs from this worktree match when omitted — the refusals name the worktrees that have one. |
 | `run` | no | The run key, when nothing else separates two runs — two Studios on one device from one worktree. The ambiguity refusal lists the keys; `apps` reports them too. |
+
+### `flutterware_review`
+
+Notes a human left on this checkout, and how you answer them. They are written on lines of the diff in the GUI while you keep working, so a note carries the code it was about rather than a line number that has since moved. Called with nothing, it hands back what is outstanding as markdown, each note headed by the id you answer it by; "all" includes what has already been dealt with. Resolve one when you have done what it asks — or when you disagree, and then the message is the whole point, because it is what the human sees beside their note. "unresolve" puts one back. Resolving is recorded as you, the agent, which is what makes it different from the human ticking it off. flutterware_status carries the outstanding count, so you can tell whether calling this is worth it.
+
+| argument | required | |
+|---|---|---|
+| `resolve` | no | The id of a note you have dealt with. Omitted, this call reads rather than writes. |
+| `unresolve` | no | The id of a note to put back on the outstanding list. |
+| `message` | no | What to say beside the note — what you did, or why you did not. Goes with "resolve". Leave it out only for a note that needs no answer. |
+| `all` | no | Include the notes already resolved. Off by default: the outstanding ones are the work. |
 
 ## Plugins
 

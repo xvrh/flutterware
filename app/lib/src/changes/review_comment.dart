@@ -36,7 +36,7 @@ enum ReviewSide {
 /// **Three anchors, and no more.** A line-only tool forces *this whole file is
 /// untested* into a lie about line 1, and forces *three of these are the same
 /// problem* into a lie about a file. Each of the three is a thing people
-/// actually write, and each reads differently in the handoff.
+/// actually write, and each reads differently in the markdown.
 sealed class ReviewAnchor {
   const ReviewAnchor();
 
@@ -145,6 +145,51 @@ final class ReviewWide extends ReviewAnchor {
   Map<String, Object?> toJson() => const {'kind': 'review'};
 }
 
+/// Who wrote something into the log.
+///
+/// Recorded on every resolution because *the agent says it did this* and *I
+/// decided this is dealt with* are different claims, and a list that mixes them
+/// silently is a list where you cannot tell which rows you are taking on faith.
+enum ReviewActor {
+  human,
+  agent;
+
+  static ReviewActor parse(Object? name) =>
+      name == 'agent' ? ReviewActor.agent : ReviewActor.human;
+}
+
+/// A note is dealt with, and this is who says so.
+///
+/// **A message, not a status.** There is no `done` / `declined` / `wontfix`
+/// enum: the sentence carries the nuance, and a taxonomy is a field nobody
+/// fills in honestly. If a shape emerges from a year of real messages it can be
+/// added over the data instead of over a guess.
+class ReviewResolution {
+  const ReviewResolution({required this.by, required this.at, this.message});
+
+  final ReviewActor by;
+  final DateTime at;
+
+  /// What the resolver had to say — *did it*, or *I disagree, and here is why*.
+  /// Optional, because a note you tick off yourself needs no words.
+  final String? message;
+
+  Map<String, Object?> toJson() => {
+    'by': by.name,
+    'at': at.toIso8601String(),
+    if (message != null) 'message': message,
+  };
+
+  static ReviewResolution fromJson(Map<String, Object?> json) =>
+      ReviewResolution(
+        by: ReviewActor.parse(json['by']),
+        at:
+            DateTime.tryParse('${json['at']}') ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        message: json['message'] as String?,
+      );
+}
+
 /// One note.
 class ReviewComment {
   const ReviewComment({
@@ -154,6 +199,7 @@ class ReviewComment {
     required this.createdAt,
     this.quote = const [],
     this.fileDigest,
+    this.resolution,
   });
 
   /// Unique within a worktree's log, and stable across a rewrite of the body —
@@ -183,13 +229,34 @@ class ReviewComment {
   /// [ReviewWide], which is about no file.
   final String? fileDigest;
 
-  ReviewComment withBody(String body) => ReviewComment(
+  /// Who dealt with this and what they said, or null while it is outstanding.
+  ///
+  /// **Not written by the author of the comment**, and not part of what a
+  /// comment is: it arrives as its own event, from either side, minutes or days
+  /// later. It lives on the comment because every reader wants the two
+  /// together.
+  final ReviewResolution? resolution;
+
+  bool get isResolved => resolution != null;
+
+  ReviewComment withBody(String body) => _copy(body: body);
+
+  /// The same note, dealt with — or outstanding again when [resolution] is null.
+  ReviewComment withResolution(ReviewResolution? resolution) =>
+      _copy(resolution: resolution, keepResolution: false);
+
+  ReviewComment _copy({
+    String? body,
+    ReviewResolution? resolution,
+    bool keepResolution = true,
+  }) => ReviewComment(
     id: id,
     anchor: anchor,
-    body: body,
+    body: body ?? this.body,
     createdAt: createdAt,
     quote: quote,
     fileDigest: fileDigest,
+    resolution: keepResolution ? this.resolution : resolution,
   );
 
   Map<String, Object?> toJson() => {
@@ -215,55 +282,32 @@ class ReviewComment {
   );
 }
 
-/// A batch that has been handed off, and is therefore closed.
-///
-/// **There is no *Clear* button**, and this is why. You accumulate, you hand
-/// off, the batch moves here; the next comment opens the next batch. A clear
-/// button asks *are you sure* about work whose only copy is on this screen,
-/// and it makes "I already sent these" and "I gave up on these" the same
-/// gesture.
-class ReviewBatch {
-  const ReviewBatch({
-    required this.id,
-    required this.comments,
-    required this.handedOffAt,
-    required this.route,
-    this.savedTo,
-  });
-
-  final String id;
-  final List<ReviewComment> comments;
-  final DateTime handedOffAt;
-
-  /// How it left: `copy` or `file`. Shown in history, because *I copied it* and
-  /// *I wrote it to disk* have different next steps when the agent says it saw
-  /// nothing.
-  final String route;
-
-  /// Where it was written, for the file route.
-  final String? savedTo;
-}
-
 /// The fingerprint [ReviewComment.fileDigest] holds.
 ///
 /// Over the file's own bytes of the patch rather than over the whole patch, so
 /// an edit somewhere else in the branch does not mark every comment stale.
 String digestOfPatchSlice(List<int> bytes) => sha1.convert(bytes).toString();
 
-/// The handoff, as markdown.
+/// The notes, as markdown.
 ///
-/// **This is the artefact, not a preview of one.** Both routes render it — the
-/// clipboard and the file are two ways of moving the same text — so there is
-/// one format to keep readable and one to test.
+/// **One format, every reader.** The clipboard, the file and the reply the
+/// agent's own tool hands back all render this — so there is one thing to keep
+/// readable, one to test, and no way for what you previewed to differ from what
+/// the agent got.
 ///
 /// Fenced with the language guessed from the extension, because an agent that
 /// gets ` ```dart ` reads the snippet as code on the first pass.
+///
+/// A resolved note carries its resolution under the body: who dealt with it and
+/// what they said. In a list of unresolved notes there are none, and it costs
+/// nothing; in the filter-off view it is the whole point.
 String reviewMarkdown(
   List<ReviewComment> comments, {
   required String worktree,
   String? base,
   DateTime? at,
   Set<String> drifted = const {},
+  bool withIds = false,
 }) {
   var buffer = StringBuffer()..writeln('# Review — $worktree');
   var meta = [
@@ -276,7 +320,12 @@ String reviewMarkdown(
     ..writeln();
 
   for (var comment in comments) {
-    buffer.writeln('## ${comment.anchor.label}');
+    // The id rides in the heading for the reader that can act on a note — it is
+    // what `resolve` is addressed by. Off for the export, where it is a serial
+    // number in the middle of a sentence nobody can use.
+    buffer.writeln(
+      '## ${comment.anchor.label}${withIds ? ' · `${comment.id}`' : ''}',
+    );
     if (comment.anchor.path case var path? when drifted.contains(path)) {
       buffer.writeln(
         '> ⚠ this file has changed since the comment was written — the quote '
@@ -290,9 +339,15 @@ String reviewMarkdown(
         ..writeln()
         ..writeln('```');
     }
-    buffer
-      ..writeln(comment.body.trim())
-      ..writeln();
+    buffer.writeln(comment.body.trim());
+    if (comment.resolution case var it?) {
+      buffer.writeln(
+        '\n— resolved by ${it.by == ReviewActor.agent ? 'the agent' : 'you'} '
+        'at ${_clock(it.at)}'
+        '${it.message == null ? '' : ': ${it.message!.trim()}'}',
+      );
+    }
+    buffer.writeln();
   }
 
   return '${buffer.toString().trimRight()}\n';
@@ -359,14 +414,15 @@ sealed class ReviewEvent {
           body: map['body']! as String,
         ),
         'delete' => CommentDeleted(map['id']! as String),
+        'resolve' => CommentResolved(
+          id: map['id']! as String,
+          resolution: ReviewResolution.fromJson(map),
+        ),
+        'unresolve' => CommentUnresolved(map['id']! as String),
+        'seen' => ReviewSeen(_at(map['at'])),
         'handoff' => BatchHandedOff(
-          id: map['batch']! as String,
           ids: [for (var id in map['ids'] as List? ?? const []) '$id'],
-          at:
-              DateTime.tryParse('${map['at']}') ??
-              DateTime.fromMillisecondsSinceEpoch(0),
-          route: '${map['route'] ?? 'copy'}',
-          savedTo: map['savedTo'] as String?,
+          at: _at(map['at']),
         ),
         _ => null,
       };
@@ -376,6 +432,9 @@ sealed class ReviewEvent {
       return null;
     }
   }
+
+  static DateTime _at(Object? value) =>
+      DateTime.tryParse('$value') ?? DateTime.fromMillisecondsSinceEpoch(0);
 }
 
 final class CommentAdded extends ReviewEvent {
@@ -411,55 +470,145 @@ final class CommentDeleted extends ReviewEvent {
   Map<String, Object?> toJson() => {'event': 'delete', 'id': id};
 }
 
-final class BatchHandedOff extends ReviewEvent {
-  const BatchHandedOff({
-    required this.id,
-    required this.ids,
-    required this.at,
-    required this.route,
-    this.savedTo,
-  });
+/// A note somebody dealt with.
+///
+/// **Either side writes this**, which is the whole shape of the feature: you
+/// tick off what you no longer need, and the agent reports what it did. Which
+/// of the two it was is [ReviewResolution.by], and it is never inferred.
+final class CommentResolved extends ReviewEvent {
+  const CommentResolved({required this.id, required this.resolution});
 
   final String id;
-  final List<String> ids;
-  final DateTime at;
-  final String route;
-  final String? savedTo;
+  final ReviewResolution resolution;
 
   @override
   Map<String, Object?> toJson() => {
-    'event': 'handoff',
-    'batch': id,
-    'ids': ids,
-    'at': at.toIso8601String(),
-    'route': route,
-    if (savedTo != null) 'savedTo': savedTo,
+    'event': 'resolve',
+    'id': id,
+    ...resolution.toJson(),
   };
 }
 
-/// What a log folds down to: the batch you are writing, and the ones you sent.
+/// A resolution taken back.
+///
+/// **Not symmetry for its own sake.** It is how you recover a note the agent
+/// closed by disagreeing with it, and how an agent backs out of a resolution it
+/// wrote before its session was cut short. Without it the only repair for a
+/// wrong resolve is writing the note again, which loses the quote it was about.
+final class CommentUnresolved extends ReviewEvent {
+  const CommentUnresolved(this.id);
+  final String id;
+
+  @override
+  Map<String, Object?> toJson() => {'event': 'unresolve', 'id': id};
+}
+
+/// You have looked at the Review tab, as of this moment.
+///
+/// **A marker, not per-note acknowledgement.** What it protects against is an
+/// agent resolving a note by disagreeing with it and the note vanishing into a
+/// filter: a resolution the agent wrote after this marker is drawn whatever the
+/// filter says. Per-note acknowledgement would do the same job and cost a click
+/// per note forever, which is the hand-ticking this design exists to avoid.
+///
+/// Written at most once per visit to the tab — a write on draw is a smell, and
+/// an unbounded one would be a bug.
+final class ReviewSeen extends ReviewEvent {
+  const ReviewSeen(this.at);
+  final DateTime at;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'event': 'seen',
+    'at': at.toIso8601String(),
+  };
+}
+
+/// **Read, never written.** The batch handoff was how the previous version
+/// closed notes, and a log that has been in use since then is full of these.
+///
+/// Ignoring them would resurface every note ever handed off as outstanding —
+/// for a log of any age, that is all of them. So a handoff folds to what it
+/// always meant in practice: you dealt with these, at that moment. `route` and
+/// `savedTo` are dropped, because the question they answered — *why did the
+/// agent not see this* — is one the agent no longer has to ask.
+final class BatchHandedOff extends ReviewEvent {
+  const BatchHandedOff({required this.ids, required this.at});
+
+  final List<String> ids;
+  final DateTime at;
+
+  @override
+  Map<String, Object?> toJson() =>
+      throw UnsupportedError('handoff events are read, never written');
+}
+
+/// What a log folds down to: every note that still exists, and when you last
+/// looked at them.
+///
+/// **One list, not two.** Resolved and outstanding are a property of a note
+/// rather than two places a note can be — which is what makes *show the
+/// resolved ones too* a filter instead of a second screen, and what makes
+/// taking a resolution back a possibility rather than a migration.
 class ReviewState {
-  const ReviewState({this.open = const [], this.history = const []});
+  const ReviewState({this.comments = const [], this.seenAt});
 
-  /// The batch being accumulated, oldest comment first — the order they are
-  /// numbered in, and the order they are handed off in.
-  final List<ReviewComment> open;
+  /// Every note, oldest first — the order they were written, which is the order
+  /// they are numbered in.
+  final List<ReviewComment> comments;
 
-  /// Handed-off batches, **newest first**.
-  final List<ReviewBatch> history;
+  /// When you last opened the Review tab, or null if this log has never been
+  /// looked at. See [unseenResolutions].
+  final DateTime? seenAt;
 
-  bool get isEmpty => open.isEmpty && history.isEmpty;
+  /// What is still outstanding. The default view.
+  List<ReviewComment> get unresolved => [
+    for (var comment in comments)
+      if (!comment.isResolved) comment,
+  ];
 
-  /// Folds a log into the two lists.
+  /// What has been dealt with, **newest resolution first** — the order you want
+  /// when you turn the filter off, because the interesting one is the last
+  /// thing that happened.
+  List<ReviewComment> get resolved => [
+    for (var comment in comments)
+      if (comment.isResolved) comment,
+  ]..sort((a, b) => b.resolution!.at.compareTo(a.resolution!.at));
+
+  /// Notes the **agent** resolved since you last looked.
+  ///
+  /// These are drawn whatever the filter says, and counted on the tab. An agent
+  /// that closes a note by disagreeing with it must not be able to do so
+  /// silently: the filtered list would look exactly like the one where it did
+  /// the work, and the pushback would be gone precisely where it mattered.
+  ///
+  /// Your own resolutions are never in here. You do not need telling about a
+  /// note you ticked off yourself.
+  List<ReviewComment> get unseenResolutions => [
+    for (var comment in comments)
+      if (comment.resolution case var it?)
+        if (it.by == ReviewActor.agent &&
+            (seenAt == null || it.at.isAfter(seenAt!)))
+          comment,
+  ];
+
+  bool get isEmpty => comments.isEmpty;
+
+  /// Folds a log.
   ///
   /// Order of events is the order of the file, which is the order they
   /// happened — that is the one guarantee appending gives, and everything here
   /// leans on it rather than on timestamps, which two clocks can disagree
-  /// about.
+  /// about. The one exception is [seenAt], which is compared against
+  /// resolution timestamps and so has to be one.
   static ReviewState fold(Iterable<ReviewEvent> events) {
     var byId = <String, ReviewComment>{};
     var order = <String>[];
-    var history = <ReviewBatch>[];
+    DateTime? seenAt;
+
+    void resolve(String id, ReviewResolution resolution) {
+      if (byId[id] case var it?) byId[id] = it.withResolution(resolution);
+    }
 
     for (var event in events) {
       switch (event) {
@@ -471,34 +620,24 @@ class ReviewState {
         case CommentDeleted(:var id):
           byId.remove(id);
           order.remove(id);
-        case BatchHandedOff(
-          :var id,
-          :var ids,
-          :var at,
-          :var route,
-          :var savedTo,
-        ):
-          var taken = [for (var commentId in ids) ?byId.remove(commentId)];
-          order.removeWhere(ids.contains);
-          // A batch whose comments were all deleted before it was folded is
-          // not history, it is nothing — and a row saying *0 comments* is a
-          // row nobody can act on.
-          if (taken.isEmpty) continue;
-          history.add(
-            ReviewBatch(
-              id: id,
-              comments: taken,
-              handedOffAt: at,
-              route: route,
-              savedTo: savedTo,
-            ),
-          );
+        case CommentResolved(:var id, :var resolution):
+          resolve(id, resolution);
+        case CommentUnresolved(:var id):
+          if (byId[id] case var it?) byId[id] = it.withResolution(null);
+        case ReviewSeen(:var at):
+          seenAt = at;
+        // The legacy handoff, folded to what it meant: you dealt with these.
+        // Written by no version of this code — see [BatchHandedOff].
+        case BatchHandedOff(:var ids, :var at):
+          for (var id in ids) {
+            resolve(id, ReviewResolution(by: ReviewActor.human, at: at));
+          }
       }
     }
 
     return ReviewState(
-      open: [for (var id in order) byId[id]!],
-      history: history.reversed.toList(),
+      comments: [for (var id in order) byId[id]!],
+      seenAt: seenAt,
     );
   }
 }

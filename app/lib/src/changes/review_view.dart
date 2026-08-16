@@ -25,8 +25,8 @@ const reviewComposerKey = Key('review-composer');
 ///
 /// A span is whatever you shift-clicked, and forty lines of quote would push
 /// the note itself off the screen — the quote is the note's evidence, not its
-/// subject. Beyond this the rest is counted rather than drawn; the handoff
-/// still carries every line.
+/// subject. Beyond this the rest is counted rather than drawn; the markdown
+/// every reader gets still carries every line.
 const _quoteLimit = 6;
 
 /// What the amber dot means, said once.
@@ -47,7 +47,7 @@ const driftMessage =
 /// **It shows what it captured.** The quote is the whole design — a note
 /// carries the code it was written about so the agent may keep editing while
 /// you type — and for one release it was the one thing on this screen you could
-/// not see: written into the comment, rendered only in the handoff markdown.
+/// not see: written into the comment, rendered only in the markdown.
 /// A note about a line the agent has since deleted looked exactly like a note
 /// about whatever now sits there, which is the failure mode carrying the quote
 /// exists to prevent.
@@ -55,6 +55,8 @@ class ReviewThread extends StatelessWidget {
   const ReviewThread({
     required this.comment,
     required this.onDelete,
+    required this.onResolve,
+    required this.onUnresolve,
     this.drifted = false,
     this.highlighted = false,
     this.onEdit,
@@ -65,7 +67,16 @@ class ReviewThread extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback? onEdit;
 
+  /// Ticking it off yourself, and taking that back. The agent writes the same
+  /// two events through its own surface; this is the human end of them.
+  final VoidCallback onResolve;
+  final VoidCallback onUnresolve;
+
   /// Whether the file moved after this was written.
+  ///
+  /// **Ignored once the note is resolved.** On a note the agent dealt with, the
+  /// file changing is the work landing — the warning would be on every one of
+  /// them, and a warning that is always on is not a warning. See [_drifting].
   final bool drifted;
 
   /// Just arrived here from the index. Held for a moment and then dropped —
@@ -121,9 +132,20 @@ class ReviewThread extends StatelessWidget {
                 style: context.type.micro.copyWith(color: colors.mut3),
               ),
               const Spacer(),
-              if (onEdit case var edit?) _Action(label: 'Edit', onTap: edit),
-              const Gap(FwSpacing.md),
-              _Action(label: 'Delete', onTap: onDelete),
+              // A resolved note offers one thing: taking it back. *Edit* and
+              // *Delete* on a note the agent has already answered are two ways
+              // of making its answer about something else.
+              if (comment.isResolved)
+                _Action(label: 'Reopen', onTap: onUnresolve)
+              else ...[
+                if (onEdit case var edit?) ...[
+                  _Action(label: 'Edit', onTap: edit),
+                  const Gap(FwSpacing.md),
+                ],
+                _Action(label: 'Delete', onTap: onDelete),
+                const Gap(FwSpacing.md),
+                _Action(label: 'Resolve', onTap: onResolve),
+              ],
             ],
           ),
           if (comment.quote.isNotEmpty) ...[
@@ -141,7 +163,11 @@ class ReviewThread extends StatelessWidget {
             comment.body,
             style: context.type.bodySmall.copyWith(color: colors.ink),
           ),
-          if (drifted) ...[
+          if (comment.resolution case var it?) ...[
+            const Gap(FwSpacing.md),
+            ReviewResolutionNote(it),
+          ],
+          if (_drifting) ...[
             const Gap(FwSpacing.sm),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,6 +184,59 @@ class ReviewThread extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  bool get _drifting => drifted && !comment.isResolved;
+}
+
+/// The answer, under the note it answers.
+///
+/// **Who, then what they said.** *The agent says it did this* and *I ticked
+/// this off* are different claims, and the actor is the only thing that tells
+/// them apart — a message alone reads as authoritative whoever wrote it.
+///
+/// The agent's is drawn in the accent. Yours is not: you already know what you
+/// decided, and colouring both makes the colour mean *resolved* rather than
+/// *somebody answered you*.
+class ReviewResolutionNote extends StatelessWidget {
+  const ReviewResolutionNote(this.resolution, {super.key});
+
+  final ReviewResolution resolution;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var byAgent = resolution.by == ReviewActor.agent;
+    var tint = byAgent ? colors.accent : colors.mut2;
+    return Container(
+      padding: const EdgeInsets.only(left: FwSpacing.sm),
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: tint, width: 2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check, size: FwIconSize.xs, color: tint),
+              const Gap(FwSpacing.sm),
+              Text(
+                '${byAgent ? 'The agent' : 'You'} resolved this · '
+                '${clockOf(resolution.at)}',
+                style: context.type.micro.copyWith(color: tint),
+              ),
+            ],
+          ),
+          if (resolution.message case var message?) ...[
+            const Gap(FwSpacing.xs),
+            Text(
+              message,
+              style: context.type.bodySmall.copyWith(color: colors.mut),
             ),
           ],
         ],
@@ -496,7 +575,7 @@ class _ReviewComposerState extends State<ReviewComposer> {
               _Action(label: 'Cancel', onTap: widget.onCancel),
               const Gap(FwSpacing.lg),
               // The house primary — an accent border over [FwPalette
-              // .accentSoft], the same one the Review tab's *Hand off* wears.
+              // .accentSoft], the same one the Review tab's *Export* wears.
               // A solid fill was the loudest thing in a panel of greys, and it
               // no longer matched the only other primary in the feature.
               Tappable.builder(
@@ -528,9 +607,11 @@ class _ReviewComposerState extends State<ReviewComposer> {
 
 /// A comment's row in the index.
 ///
-/// **Numbered.** The list is what you hand off, in this order, and a number is
-/// what lets you say *the third one* to the agent afterwards — the one thing
-/// the anchor cannot do when three comments sit on one file.
+/// **Numbered, while it is outstanding.** A number is what lets you say *the
+/// third one* to the agent — the one thing the anchor cannot do when three
+/// comments sit on one file. A resolved note leaves the numbering rather than
+/// renumbering the rest, so *the third one* means one note for a whole session;
+/// [number] is null there and the slot carries a tick instead.
 ///
 /// **A row, not a paragraph.** Three notes with a two-line body and a line of
 /// code each ran together into one block of text: nothing said where one ended
@@ -540,16 +621,26 @@ class _ReviewComposerState extends State<ReviewComposer> {
 /// code it is about — and a rule underneath so the eye can find the seam.
 class ReviewIndexRow extends StatelessWidget {
   const ReviewIndexRow({
-    required this.number,
     required this.comment,
     required this.selected,
     required this.onTap,
+    this.number,
     this.drifted = false,
+    this.unseen = false,
     super.key,
   });
 
-  final int number;
+  /// Null on a resolved note, which is not in the numbering: the number is what
+  /// you say out loud about work still to do, and shifting it as notes are
+  /// answered would make *the third one* mean two things in one session.
+  final int? number;
+
   final ReviewComment comment;
+
+  /// The agent resolved this after you last looked.
+  ///
+  /// Drawn whatever the filter says — see [ReviewState.unseenResolutions].
+  final bool unseen;
 
   /// The note the screen is currently on — the one you last opened, or the one
   /// being rewritten. Marking it is what makes the list and the diff feel like
@@ -578,12 +669,20 @@ class ReviewIndexRow extends StatelessWidget {
           children: [
             SizedBox(
               width: 16,
-              child: Text(
-                '$number',
-                style: context.type.micro.copyWith(
-                  color: selected ? colors.accent : colors.mut3,
-                ),
-              ),
+              // The number's slot, and on a resolved note the tick that says
+              // why there is no number in it.
+              child: number == null
+                  ? Icon(
+                      Icons.check,
+                      size: FwIconSize.xs,
+                      color: unseen ? colors.accent : colors.mut3,
+                    )
+                  : Text(
+                      '$number',
+                      style: context.type.micro.copyWith(
+                        color: selected ? colors.accent : colors.mut3,
+                      ),
+                    ),
             ),
             Expanded(
               child: Column(
@@ -628,7 +727,7 @@ class ReviewIndexRow extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (drifted) ...[
+                            if (drifted && !comment.isResolved) ...[
                               const Gap(FwSpacing.xs),
                               // The dot said nothing on its own. The thread has
                               // room for the sentence; a 320 px row has room
@@ -661,21 +760,32 @@ class ReviewIndexRow extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  // **On a resolved note, the answer takes the slot the quote
+                  // had.** Both at once is four lines of grey in a 320 px
+                  // column, and once a note is answered the thing you are
+                  // scanning for is what the answer said — the code it was
+                  // about is one click away, in the diff, where it always was.
+                  if (comment.resolution case var it? when it.message != null)
+                    _Ruled(
+                      color: it.by == ReviewActor.agent
+                          ? colors.accent
+                          : colors.line2,
+                      child: Text(
+                        it.message!,
+                        style: context.type.micro.copyWith(color: colors.mut2),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )
                   // **One line of what it is about.** Three notes on one file
                   // read as three copies of that filename otherwise; the line
                   // of code under each is what tells them apart without
                   // opening any of them. Ruled rather than merely dimmed —
                   // under two lines of prose, a third line of grey text reads
                   // as more prose.
-                  if (_firstCode(comment.quote) case var line?) ...[
-                    const Gap(FwSpacing.sm),
-                    Container(
-                      padding: const EdgeInsets.only(left: FwSpacing.sm),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          left: BorderSide(color: colors.line2, width: 2),
-                        ),
-                      ),
+                  else if (_firstCode(comment.quote) case var line?)
+                    _Ruled(
+                      color: colors.line2,
                       child: Text(
                         line,
                         style: diffTextStyle(
@@ -686,7 +796,6 @@ class ReviewIndexRow extends StatelessWidget {
                         softWrap: false,
                       ),
                     ),
-                  ],
                 ],
               ),
             ),
@@ -707,66 +816,24 @@ class ReviewIndexRow extends StatelessWidget {
   }
 }
 
-/// A handed-off batch, collapsed to one row.
-///
-/// **How it left is the useful half.** *Copied* and *written to a file* have
-/// different next steps when the agent says it saw nothing, so the route gets
-/// an icon of its own rather than sharing a middot-joined line with the clock
-/// — and for the file route the path is what you need to hand over again.
-class ReviewBatchRow extends StatelessWidget {
-  const ReviewBatchRow({required this.batch, required this.onCopy, super.key});
+/// The third line of an index row — a quote, or an answer — under its rule.
+class _Ruled extends StatelessWidget {
+  const _Ruled({required this.color, required this.child});
 
-  final ReviewBatch batch;
-  final VoidCallback onCopy;
+  final Color color;
+  final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var count = batch.comments.length;
-    var saved = batch.savedTo;
-    return Container(
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: FwSpacing.sm),
+    child: Container(
+      padding: const EdgeInsets.only(left: FwSpacing.sm),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: colors.line)),
+        border: Border(left: BorderSide(color: color, width: 2)),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: FwSpacing.md,
-        vertical: FwSpacing.md,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            saved == null ? Icons.content_copy : Icons.description_outlined,
-            size: FwIconSize.xs,
-            color: colors.mut3,
-          ),
-          const Gap(FwSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$count ${count == 1 ? 'comment' : 'comments'} · '
-                  '${clockOf(batch.handedOffAt)}',
-                  style: context.type.micro.copyWith(color: colors.mut2),
-                ),
-                const Gap(FwSpacing.xxs),
-                Text(
-                  saved ?? 'Copied to the clipboard',
-                  style: saved == null
-                      ? context.type.micro.copyWith(color: colors.mut3)
-                      : diffTextStyle(context).copyWith(color: colors.mut3),
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: false,
-                ),
-              ],
-            ),
-          ),
-          const Gap(FwSpacing.sm),
-          _Action(label: 'Copy', onTap: onCopy),
-        ],
-      ),
-    );
-  }
+      child: child,
+    ),
+  );
 }
 
 /// Wall-clock, to the minute. A note's own time — not a duration and not a
