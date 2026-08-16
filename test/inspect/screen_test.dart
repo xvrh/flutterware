@@ -406,6 +406,56 @@ void main() {
       expect(tab.children.single.words, 'Close');
     });
 
+    test('a fork at a node with no box is a region over what it covers', () {
+      // Every sliver is such a node — its render object is a `RenderSliver`,
+      // so nothing hands it a rect — and a fork there used to throw
+      // `Bad state: Too many elements`, taking the whole observation with it.
+      var screen = Screen.of(
+        treeOf(
+          node(
+            '',
+            'CustomScrollView',
+            source: 'home.dart',
+            box: [0, 0, 400, 800],
+            children: [
+              node(
+                '0',
+                'SliverList',
+                source: 'section.dart',
+                children: [
+                  node('0/0', 'InkWell', label: 'A', box: [0, 100, 400, 40]),
+                  node('0/1', 'InkWell', label: 'B', box: [0, 140, 400, 40]),
+                  node(
+                    '0/2',
+                    'InkWell',
+                    label: 'View more',
+                    box: [0, 180, 400, 40],
+                  ),
+                ],
+              ),
+              node('1', 'InkWell', label: 'C', box: [0, 300, 400, 40]),
+              node('2', 'InkWell', label: 'D', box: [0, 340, 400, 40]),
+            ],
+          ),
+        ),
+      );
+
+      expect(screen.items.map((i) => i.words), [
+        'A',
+        'B',
+        'View more',
+        'C',
+        'D',
+      ]);
+      var section = screen.root!.children.whereType<ScreenRegion>().single;
+      expect(section.label, 'SliverList @ section.dart:12');
+      expect(
+        section.box,
+        [0, 100, 400, 120],
+        reason: 'the box of what it holds, since it has none of its own',
+      );
+    });
+
     test('a screen survives the round trip', () {
       var before = Screen.of(treeOf(twoPanes()));
       var after = Screen.fromJson(before.toJson());

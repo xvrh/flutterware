@@ -9,6 +9,8 @@
 /// Design and measurements: `2026-08-13-screen-handback-design.md`.
 library;
 
+import 'package:meta/meta.dart';
+
 import 'node.dart';
 
 /// Widget types that mean "a person can do something here".
@@ -255,6 +257,51 @@ class Screen {
     if (anonymousControls > 0) 'anonymous': anonymousControls,
   };
 
+  /// [of], for a caller whose answer is worth more than its screen.
+  ///
+  /// **A projection is a decoration on an observation, and a decoration may
+  /// not take the observation down.** Measured the hard way: one `.single`
+  /// over a fork that had two children turned every `act` on a perfectly
+  /// ordinary screen into `Bad state: Too many elements` — no verb result, no
+  /// picture, no journal entry, and a message naming neither the screen nor
+  /// the projection it came out of. The verb had landed; the reply said
+  /// nothing at all.
+  ///
+  /// So every surface projects through here, and a screen that cannot be
+  /// built rides a note beside the rest of the frame — the same way a refused
+  /// `treeRoot` always did.
+  static ({Screen? screen, String? note}) tryOf(
+    InspectTree tree, {
+    int minRegionItems = 3,
+  }) {
+    try {
+      if (debugFailProjection case var failure?) {
+        return (screen: null, note: projectionFailed(failure));
+      }
+      return (screen: of(tree, minRegionItems: minRegionItems), note: null);
+    } on Object catch (error) {
+      return (screen: null, note: projectionFailed(error));
+    }
+  }
+
+  /// Makes [tryOf] fail, for the tests of what the surfaces do when it does.
+  ///
+  /// A seam rather than a poisoned tree, because the projection is meant to
+  /// have no input that breaks it — that is what the bug behind [tryOf] was.
+  /// The degradation still has to be exercised: it is what a *future* one
+  /// will cost.
+  @visibleForTesting
+  static Object? debugFailProjection;
+
+  /// What a caller is told when [tryOf] could not build a screen.
+  static String projectionFailed(Object error) =>
+      'the screen could not be projected from this frame — $error. That is a '
+      'bug in flutterware rather than in the app, and worth reporting. The '
+      'rest of this reply is the same frame and unaffected: the texts, the '
+      'picture, `find "…"`, `at "x,y"` and `tree: true` all answer. What is '
+      'gone is the numbering, so `item:` has nothing to point at — target by '
+      'text, or by `at` with a point read off the picture.';
+
   /// The screen [tree] describes.
   ///
   /// **Built from the unfiltered tree**, which is not an oversight: the noise
@@ -276,6 +323,9 @@ class Screen {
   ///    and is the difference between listing a screen and describing one.
   /// 3. **Thinning**: a region holding fewer than [minRegionItems] things is a
   ///    grouping nobody needed — except a scrollable, which is never thinned.
+  ///
+  /// Throws nothing an input can cause; [tryOf] is the total spelling for the
+  /// surfaces, whose reply must survive a projection that fails anyway.
   static Screen of(InspectTree tree, {int minRegionItems = 3}) {
     var root = tree.root;
     if (root == null) return const Screen();
@@ -447,8 +497,45 @@ class Screen {
     }
     if (children.isEmpty) return null;
     if (children.length == 1) return children.single;
-    if (_boxOf(node) == null) return children.single;
-    return _Region(node, children);
+    // A region is a box — it is how a reader locates the fork against the
+    // picture — and a fork can happen at a node that has none: every sliver
+    // is one, since its render object is a `RenderSliver` rather than a laid
+    // out `RenderBox`. So a screen written as `CustomScrollView` + `SliverList`
+    // forks where nothing carries a rect, and the pruner used to assert that
+    // could not happen (`.single` over two children, which is a `StateError`
+    // that took the whole observation down with it).
+    //
+    // What the children cover is the truthful answer to where the fork is:
+    // the sliver's own extent is in a different space, and the region exists
+    // to say "these things are grouped, here".
+    return _Region(node, children, box: _boxOf(node) ?? _cover(children));
+  }
+
+  /// The box holding every one of [nodes] — items and regions both.
+  static List<int> _cover(List<Object> nodes) {
+    var left = 0, top = 0, right = 0, bottom = 0;
+    var first = true;
+    for (var node in nodes) {
+      var box = switch (node) {
+        _Candidate(:var box) => box,
+        _Region(:var box) => box,
+        _ => null,
+      };
+      if (box == null) continue;
+      if (first) {
+        left = box[0];
+        top = box[1];
+        right = box[0] + box[2];
+        bottom = box[1] + box[3];
+        first = false;
+        continue;
+      }
+      left = left < box[0] ? left : box[0];
+      top = top < box[1] ? top : box[1];
+      right = right > box[0] + box[2] ? right : box[0] + box[2];
+      bottom = bottom > box[1] + box[3] ? bottom : box[1] + box[3];
+    }
+    return [left, top, right - left, bottom - top];
   }
 
   static Iterable<_Candidate> _itemsIn(List<Object> nodes) sync* {
@@ -478,7 +565,10 @@ class Screen {
         children.add(thinned);
       }
     }
-    return _Region(region.node, children);
+    // The box a region was built with, not one recomputed from what survived:
+    // thinning splices a grouping away and keeps everything it held, so the
+    // area covered has not changed.
+    return _Region(region.node, children, box: region.box);
   }
 }
 
@@ -525,10 +615,14 @@ class _Candidate {
 }
 
 class _Region {
-  _Region(this.node, this.children);
+  _Region(this.node, this.children, {required this.box});
 
   final InspectNode node;
   final List<Object> children;
+
+  /// The node's own rect, or what its children cover when it has none — see
+  /// [Screen._prune].
+  final List<int> box;
 
   bool get scrolls => _scrolls(_bare(node.type));
 
@@ -540,7 +634,7 @@ class _Region {
 
   ScreenRegion toRegion() => ScreenRegion(
     label: Screen._label(node),
-    box: Screen._boxOf(node) ?? const [0, 0, 0, 0],
+    box: box,
     scrolls: scrolls,
     children: [
       for (var child in children)

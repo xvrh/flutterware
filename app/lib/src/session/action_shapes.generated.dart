@@ -1399,6 +1399,13 @@ final resultShapes = <String, ResultShape>{
         },
       },
       <String, Object?>{
+        'name': 'note',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Something this reading could not answer, said in a way a caller can act on — the render happened, so it is not an error.',
+      },
+      <String, Object?>{
         'name': 'next',
         'type': 'String',
         'optional': true,

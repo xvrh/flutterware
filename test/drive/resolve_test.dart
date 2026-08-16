@@ -68,12 +68,16 @@ void main() {
     expect('$error', isNot(contains('Nothing has rendered.')));
   });
 
-  testWidgets('several matches are refused with the multiple kind', (
-    tester,
-  ) async {
+  testWidgets('several matches are refused with the multiple kind, and the '
+      'refusal says where each one is', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Row(children: [for (var i = 0; i < 2; i++) const Text('Buy')]),
+        home: Row(
+          children: [
+            for (var i = 0; i < 2; i++)
+              SizedBox(width: 100, height: 40, child: const Text('Buy')),
+          ],
+        ),
       ),
     );
     var resolver = TargetResolver(tester);
@@ -82,6 +86,33 @@ void main() {
 
     expect(error.failure, TargetFailure.multiple);
     expect('$error', contains('2 widgets match "Buy"'));
+    // Numbered as `nth` indexes them, so the caller picks one from this
+    // refusal rather than going back for another look.
+    expect('$error', contains('  0 at 0,280 100×40'));
+    expect('$error', contains('  1 at 100,280 100×40'));
+  });
+
+  testWidgets('a target matching everything lists ten and counts the rest', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Wrap(
+          children: [
+            for (var i = 0; i < 14; i++)
+              const SizedBox(width: 100, height: 40, child: Text('Buy')),
+          ],
+        ),
+      ),
+    );
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(() => resolver.resolve('Buy', 'tap'));
+
+    expect('$error', contains('14 widgets match'));
+    expect('$error', contains('  9 at'));
+    expect('$error', isNot(contains('  10 at')));
+    expect('$error', contains('… and 4 more'));
   });
 
   testWidgets('an essay-length text is capped with an ellipsis, and still '

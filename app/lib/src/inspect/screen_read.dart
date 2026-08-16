@@ -118,7 +118,10 @@ class ScreenRead {
     var wantsScreen = arguments['screen'] == null
         ? true
         : boolArgument(arguments['screen']);
-    var screen = wantsScreen ? Screen.of(full) : null;
+    var projected = wantsScreen
+        ? Screen.tryOf(full)
+        : (screen: null, note: null);
+    var screen = projected.screen;
 
     // `find`, `at` and `styles` run over the *filtered* tree — the wrappers
     // are never the answer to any of the three, and an unfiltered `at` chain
@@ -134,15 +137,16 @@ class ScreenRead {
     }
 
     List<Map<String, Object?>>? at;
-    String? note;
+    var note = projected.note;
     if (arguments['at'] case var point? when '$point'.isNotEmpty) {
       var parts = '$point'.split(',');
       var x = parts.length == 2 ? double.tryParse(parts[0].trim()) : null;
       var y = parts.length == 2 ? double.tryParse(parts[1].trim()) : null;
       if (x == null || y == null) {
-        note =
+        var refused =
             'at: "$point" is not a point — give it as "x,y" in logical '
             'pixels, the same space every box in this reply is in.';
+        note = [?note, refused].join(' ');
       } else {
         var chain = narrowed.chainAt(x, y);
         var innermost = chain.length <= chainDepth
