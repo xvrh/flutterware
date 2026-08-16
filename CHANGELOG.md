@@ -52,6 +52,25 @@ Flutter's own annotation. Breaking, with no deprecation path.
   matches — or, when nothing the caller passes could, says to give two
   same-named declarations distinct names. Resolution already accepted a name, so
   a call that passes a path is unaffected.
+- **An audit that finds something now exits 1.** `previews audit`,
+  `previews check` and `assets audit` reported their findings and exited 0
+  either way, so the obvious CI line — `fw run previews audit` — was green
+  whatever the audit found, which is worse than not running it: the job reports
+  a check that cannot fail, and a green pipeline is not something anyone goes
+  and reads. Each of those results now carries its own verdict as an `ok` field
+  and `fw` exits 1 when it is false, which is the rule `scenarios run` already
+  followed. An unreachable package counts as a failure, for the reason it is
+  reported separately at all. The report still prints in full, so anything
+  parsing the JSON keeps working — and which actions gate is now written in
+  `fw run <plugin> <action> --help` and in `docs/capabilities.md`, rather than
+  being discoverable only by breaking something on purpose and reading `$?`.
+- **A captured stdout gets the result and nothing else.** An action prints its
+  result as JSON whether or not `--json` was asked for, and on a cold run the
+  launcher's own progress narration went to stdout above it — so the first run
+  on a fresh machine, which is every run CI makes, put `build the CLI… (~10s)`
+  in front of the object something was about to parse. Narration now moves to
+  stderr whenever stdout is not a person watching: piped, redirected, or a CI
+  log. A terminal is unchanged.
 
 ### Motion — new
 

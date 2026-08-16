@@ -92,6 +92,7 @@ Map<String, dynamic> _$AssetAuditResultToJson(AssetAuditResult instance) =>
       'bytes': instance.bytes,
       'findings': instance.findings.map((e) => e.toJson()).toList(),
       'unreadable': instance.unreadable,
+      'ok': instance.ok,
     };
 
 Map<String, dynamic> _$AssetFindingToJson(AssetFinding instance) =>

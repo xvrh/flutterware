@@ -153,7 +153,9 @@ final resultShapes = <String, ResultShape>{
         'doc':
             'Packages that could not be scanned at all, which is not the same as a package with nothing wrong.',
       },
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
     ],
+    'gates': true,
   }),
   'AssetDensity': ResultShape.fromJson(<String, Object?>{
     'type': 'AssetDensity',
@@ -669,7 +671,9 @@ final resultShapes = <String, ResultShape>{
           ],
         },
       },
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
     ],
+    'gates': true,
   }),
   'CatalogBrokenEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'CatalogBrokenEntry',
@@ -727,7 +731,9 @@ final resultShapes = <String, ResultShape>{
           ],
         },
       },
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
     ],
+    'gates': true,
   }),
   'CatalogEntriesResult': ResultShape.fromJson(<String, Object?>{
     'type': 'CatalogEntriesResult',
@@ -5378,6 +5384,7 @@ final resultShapes = <String, ResultShape>{
             'The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.',
       },
     ],
+    'gates': true,
   }),
   'ScenarioRunStep': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioRunStep',
@@ -5777,6 +5784,7 @@ final resultShapes = <String, ResultShape>{
       },
       <String, Object?>{'name': 'ok', 'type': 'bool'},
     ],
+    'gates': true,
   }),
   'SplashArtifactEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'SplashArtifactEntry',

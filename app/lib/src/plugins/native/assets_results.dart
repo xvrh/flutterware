@@ -257,7 +257,7 @@ class FontFactsResult {
   includeIfNull: false,
   createFactory: false,
 )
-class AssetAuditResult implements PluginResult {
+class AssetAuditResult implements PluginResult, ReportsFailure {
   AssetAuditResult({
     required this.checked,
     required this.bytes,
@@ -281,6 +281,12 @@ class AssetAuditResult implements PluginResult {
   /// that counted an unreachable package as clean would report green on the
   /// strength of not having looked.
   final List<String> unreadable;
+
+  /// False when the bundle has anything wrong with it — what makes
+  /// `fw run assets audit` exit 1. [unreadable] counts for the same reason it
+  /// is a separate list from [findings].
+  @override
+  bool get ok => findings.isEmpty && unreadable.isEmpty;
 
   @override
   Map<String, Object?> toJson() => _$AssetAuditResultToJson(this);

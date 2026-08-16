@@ -9,12 +9,22 @@
 /// optional. "This package has no error" and "this package cannot have one"
 /// look identical in a response and are different promises.
 class ResultShape {
-  const ResultShape(this.type, this.fields);
+  const ResultShape(this.type, this.fields, {this.gates = false});
 
   /// The class name, which is also what `PluginAction.returnsName` reports.
   final String type;
 
   final List<ResultField> fields;
+
+  /// Whether this result decides the exit code — true for a class implementing
+  /// `ReportsFailure`, whose `ok` field is what `fw` exits 1 on.
+  ///
+  /// Read from the class rather than written down, because the alternative was
+  /// discovered to be worse than undocumented: an audit that reports broken
+  /// entries and exits 0 puts a check in a pipeline that cannot fail, and the
+  /// only way to find out which actions gate was to break something on purpose
+  /// and read `$?`.
+  final bool gates;
 
   /// The shape as an indented tree.
   ///
@@ -40,13 +50,14 @@ class ResultShape {
   Map<String, Object?> toJson() => {
     'type': type,
     'fields': [for (var field in fields) field.toJson()],
+    if (gates) 'gates': true,
   };
 
   static ResultShape fromJson(Map<String, Object?> json) =>
       ResultShape(json['type']! as String, [
         for (var field in (json['fields'] as List? ?? const []))
           ResultField.fromJson((field as Map).cast<String, Object?>()),
-      ]);
+      ], gates: json['gates'] as bool? ?? false);
 }
 
 class ResultField {

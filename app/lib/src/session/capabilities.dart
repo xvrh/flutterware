@@ -202,6 +202,10 @@ String _actionsSection(
           buffer.writeln('```');
           buffer.write(shape.toText());
           buffer.writeln('```');
+          if (shape.gates) {
+            buffer.writeln();
+            buffer.writeln(gatingNote);
+          }
         } else {
           // Its `toJson` is hand-written, so its fields are not its keys and
           // nothing here can honestly claim to know them.

@@ -604,8 +604,11 @@ class AssetsCore extends PluginCore {
   /// knowing, so the byte total counts everything.
   ///
   /// Returns findings rather than throwing, which is the convention the
-  /// catalog's own `audit` set — so `fw` exits 0 with a report. A CI gate is
-  /// `--json` and a check on `findings`.
+  /// catalog's own `audit` set: the report is the answer, and every one of them
+  /// is in it rather than the first one being raised as an error. The verdict
+  /// rides along — [AssetAuditResult.ok] is false when there is anything to
+  /// report, and `fw` exits 1 on it — so gating a job on this is the command
+  /// and no wrapper.
   Future<AssetAuditResult> _audit(Map<String, Object?> arguments) async {
     var paths = await _requested(arguments);
     var maxEdge = _integer(arguments, 'maxEdge') ?? 2048;

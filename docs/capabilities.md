@@ -243,7 +243,10 @@ findings: List<AssetFinding>   # Only what is wrong.
   address: String?   # Where to look, where there is somewhere.
   path: String?   # A path relative to the package, for findings about a file rather than a key.
 unreadable: List<String>   # Packages that could not be scanned at all, which is not the same as a package with nothing wrong.
+ok: bool
 ```
+
+Exits 1 when `ok` is false, so a job can gate on this action.
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
@@ -1333,6 +1336,8 @@ ok: bool
 axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
 ```
 
+Exits 1 when `ok` is false, so a job can gate on this action.
+
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
@@ -1424,6 +1429,8 @@ failed: int   # Scenarios that came back red.
 serve: String   # How to look at it.
 ok: bool
 ```
+
+Exits 1 when `ok` is false, so a job can gate on this action.
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
@@ -1957,7 +1964,10 @@ packages: List<CatalogPackageCheck>
     id: String
     error: String   # The compiler's diagnostics, verbatim.
   error: String?   # Set when the daemon could not be reached at all, which is not the same as "everything failed to compile".
+ok: bool
 ```
+
+Exits 1 when `ok` is false, so a job can gate on this action.
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
@@ -2164,7 +2174,10 @@ entries: List<CatalogAuditEntry>   # Only the ones with something to say.
 unreachable: List<CatalogAuditFailure>   # Packages that could not be audited at all, which is not the same as a package whose entries are fine.
   package: String
   error: String
+ok: bool
 ```
+
+Exits 1 when `ok` is false, so a job can gate on this action.
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
