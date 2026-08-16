@@ -79,6 +79,32 @@ void main() {
     });
   });
 
+  group('narrationOwnsStderr', () {
+    test('a person at a terminal watches the plan on stdout', () {
+      expect(
+        narrationOwnsStderr(speaksProtocol: false, interactive: true),
+        isFalse,
+      );
+    });
+
+    test('a protocol on stdout moves the plan off it', () {
+      expect(
+        narrationOwnsStderr(speaksProtocol: true, interactive: true),
+        isTrue,
+      );
+    });
+
+    test('anything capturing stdout gets only what it asked for', () {
+      // A pipe, a redirect or a CI log — all of them arrive here as
+      // `interactive: false`, and all of them are about to read a result as
+      // JSON. `build the CLI… (~10s)` above it is a parse error.
+      expect(
+        narrationOwnsStderr(speaksProtocol: false, interactive: false),
+        isTrue,
+      );
+    });
+  });
+
   group('Step', () {
     test('off a terminal it says what started, and nothing else', () async {
       var out = StringBuffer();

@@ -162,9 +162,13 @@ Future<ProcessLog?> _work(
   // progress panel in front of the handshake, so the narration moves rather
   // than being suppressed — a 40s silent start is the other way to look broken.
   var protocolOwnsStdout = _ownsStdout(arguments);
+  var narrateToStderr = narrationOwnsStderr(
+    speaksProtocol: protocolOwnsStdout,
+    interactive: outputIsInteractive,
+  );
   var plan = LaunchPlan(
     stages,
-    out: protocolOwnsStdout ? stderr : stdout,
+    out: narrateToStderr ? stderr : stdout,
     // A live panel and a firehose cannot both own the bottom of the terminal,
     // so `-v` gets the plain rendering: one line per stage saying what is about
     // to make all the noise below it. So does a redirected stderr, which no
@@ -258,6 +262,7 @@ Future<ProcessLog?> _work(
 /// direction: narrating to stderr for a command that did not need it costs a
 /// human nothing, where narrating to stdout for one that did costs it the
 /// connection.
+///
 bool _ownsStdout(List<String> arguments) =>
     arguments.firstWhere((a) => !a.startsWith('-'), orElse: () => '') == 'mcp';
 

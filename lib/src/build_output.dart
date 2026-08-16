@@ -30,6 +30,23 @@ bool isInteractiveOutput({
   return true;
 }
 
+/// Whether progress narration has to keep off stdout.
+///
+/// Two ways to lose stdout and they are the same answer. A command that speaks
+/// a protocol on it — `mcp` — loses the connection to a progress panel. A
+/// command whose stdout is not a person loses something quieter and worse: an
+/// action prints its result as JSON whether or not `--json` was typed, so a
+/// cold run put `build the CLI… (~10s)` on the line above the object something
+/// was about to parse, and only on the first run of a fresh machine — which is
+/// every run CI makes.
+///
+/// [interactive] is [isInteractiveOutput], which already answers "is stdout a
+/// person": false when it is piped, redirected, or a CI log.
+bool narrationOwnsStderr({
+  required bool speaksProtocol,
+  required bool interactive,
+}) => speaksProtocol || !interactive;
+
 /// A step long enough that someone will wonder whether it is stuck.
 ///
 /// The answer to that is not a spinner. It is the elapsed time next to the

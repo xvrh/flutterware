@@ -345,6 +345,15 @@ const fwHelpFooter =
     'Run `fw help <command>` for detail, or `fw actions` for what this '
     'project can do.';
 
+/// What an action whose result carries a verdict means for a caller.
+///
+/// One sentence, printed by `--help` and by the capability document both.
+/// Which actions gate used to be answerable only by breaking something on
+/// purpose and reading `$?`, which is a poor way to find out that the check a
+/// pipeline runs cannot fail.
+const gatingNote =
+    'Exits 1 when `ok` is false, so a job can gate on this action.';
+
 /// What `fw` exits with — here because the document lists them too.
 const fwExitCodes = {
   0: 'success',
@@ -1561,6 +1570,10 @@ class FwCli {
       if (resultShapes[returns] case var shape?) {
         out.writeln('Returns $returns:');
         out.write(shape.toText(indent: '  '));
+        if (shape.gates) {
+          out.writeln();
+          out.writeln(gatingNote);
+        }
       } else {
         out.writeln('Returns $returns.');
       }

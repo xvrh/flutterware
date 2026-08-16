@@ -54,6 +54,7 @@ Map<String, dynamic> _$CatalogEntrySummaryToJson(
 Map<String, dynamic> _$CatalogCheckResultToJson(CatalogCheckResult instance) =>
     <String, dynamic>{
       'packages': instance.packages.map((e) => e.toJson()).toList(),
+      'ok': instance.ok,
     };
 
 Map<String, dynamic> _$CatalogPackageCheckToJson(
@@ -148,6 +149,7 @@ Map<String, dynamic> _$CatalogAuditResultToJson(CatalogAuditResult instance) =>
       'broken': instance.broken,
       'entries': instance.entries.map((e) => e.toJson()).toList(),
       'unreachable': instance.unreachable.map((e) => e.toJson()).toList(),
+      'ok': instance.ok,
     };
 
 Map<String, dynamic> _$CatalogAuditEntryToJson(CatalogAuditEntry instance) =>

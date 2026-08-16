@@ -141,7 +141,7 @@ class ShapeExtractor {
           ),
       ];
       seen.remove(name);
-      return shapes[name] = ResultShape(name, entries);
+      return shapes[name] = ResultShape(name, entries, gates: _gates(type));
     }
 
     if (!_isJsonSerializable(type)) {
@@ -172,8 +172,17 @@ class ShapeExtractor {
     }
 
     seen.remove(name);
-    return shapes[name] = ResultShape(name, fields);
+    return shapes[name] = ResultShape(name, fields, gates: _gates(type));
   }
+
+  /// Whether the class implements `ReportsFailure`, and so decides an exit
+  /// code.
+  ///
+  /// By name, like the `JsonSerializable` test above: the extractor resolves
+  /// the plugin packages, not `package:flutterware`'s own element model, and a
+  /// name is what both have.
+  static bool _gates(ClassElement type) =>
+      type.allSupertypes.any((s) => s.element.name == 'ReportsFailure');
 
   /// The class behind a field's type, when we can honestly claim to know its
   /// wire shape — following `List<T>` into `T`.

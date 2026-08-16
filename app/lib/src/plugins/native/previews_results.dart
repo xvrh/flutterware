@@ -215,10 +215,19 @@ class CatalogEntrySummary {
   includeIfNull: false,
   createFactory: false,
 )
-class CatalogCheckResult implements PluginResult {
+class CatalogCheckResult implements PluginResult, ReportsFailure {
   CatalogCheckResult({required this.packages});
 
   final List<CatalogPackageCheck> packages;
+
+  /// False when any package has a quarantined entry or could not be compiled
+  /// at all — the same rule [CatalogAuditResult.ok] follows, one lane cheaper.
+  ///
+  /// A package that failed outright reports `ok: false` already: the error
+  /// path leaves the flag at its default, so nothing here has to test for it
+  /// twice.
+  @override
+  bool get ok => packages.every((package) => package.ok);
 
   @override
   Map<String, Object?> toJson() => _$CatalogCheckResultToJson(this);
@@ -669,7 +678,7 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
   includeIfNull: false,
   createFactory: false,
 )
-class CatalogAuditResult implements PluginResult {
+class CatalogAuditResult implements PluginResult, ReportsFailure {
   CatalogAuditResult({
     required this.checked,
     required this.broken,
@@ -697,6 +706,15 @@ class CatalogAuditResult implements PluginResult {
   /// that quietly counted an unreachable package as clean would report a green
   /// repo on the strength of not having looked.
   final List<CatalogAuditFailure> unreachable;
+
+  /// False when anything at all is wrong — what makes `fw run previews audit`
+  /// exit 1, and what makes it a line a CI job can be gated on.
+  ///
+  /// [unreachable] counts, for the reason it is a separate list: a package the
+  /// audit could not reach is a result nobody has checked, and exiting 0 on it
+  /// would report a green repo on the strength of not having looked.
+  @override
+  bool get ok => entries.isEmpty && unreachable.isEmpty;
 
   @override
   Map<String, Object?> toJson() => _$CatalogAuditResultToJson(this);
