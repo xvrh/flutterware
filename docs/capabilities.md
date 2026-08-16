@@ -2096,6 +2096,7 @@ screenshot: Artifact?   # The picture, when `--screenshot` asked for one.
   path: String?   # Where it was written, when it was written.
   text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
   meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+note: String?   # Something this reading could not answer, said in a way a caller can act on — the render happened, so it is not an error.
 next: String?   # One line naming what else can be asked of this frame.
 ```
 

@@ -1,7 +1,17 @@
 import 'dart:async';
 
+import 'package:meta/meta.dart';
+import 'package:vm_service/vm_service.dart' show RPCError;
+
 import 'handle.dart';
 import 'connection.dart';
+
+/// The drive transaction, as the guest registers it.
+const driveExtension = 'ext.flutterware.act';
+
+/// JSON-RPC's "Method not found" — what the VM answers for an extension the
+/// isolate in the request does not have.
+const _methodNotFound = -32601;
 
 /// The app was there and said nothing in time.
 ///
@@ -15,6 +25,39 @@ class DriveTimeout implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// The app answers, and what it answers is that it carries no drive guest.
+///
+/// **A conclusion, and it has to be earned.** The wire says only `Unknown
+/// method "ext.flutterware.act"`, which is what an uninstrumented app returns
+/// *and* what any correctly instrumented app returns when the question was put
+/// to the wrong isolate (measured: a live app's worker isolate answers exactly
+/// that, as does a call with no isolate at all). Saying "launch it through
+/// flutterware" on the strength of that alone sends somebody who did launch it
+/// through flutterware into a two-minute relaunch. So this is thrown only
+/// after the VM has been asked which isolate holds the extension, and it
+/// carries the answer.
+class DriveNoGuest implements Exception {
+  DriveNoGuest({this.census});
+
+  /// The isolates that were asked, `✓` on any that had the extension — null
+  /// when the VM could not be asked at all.
+  final String? census;
+
+  static const _sentence =
+      'This app is running without the drive guest, so it can be inspected '
+      'but not driven. Launch it through flutterware (the GUI, `fw run '
+      'launch`, or MCP) to get a driveable run.';
+
+  /// The refusal as every surface renders it: by stringifying.
+  static String describe({String? census}) => census == null
+      ? _sentence
+      : '$_sentence\nAsked the VM which isolate has `ext.flutterware.act` and '
+            'none does — isolates: $census.';
+
+  @override
+  String toString() => describe(census: census);
 }
 
 /// A held connection for the drive loop.
@@ -31,6 +74,12 @@ class DriveTimeout implements Exception {
 /// interleave as two actors in one story.
 class DriveSession {
   DriveSession(this.handle);
+
+  /// A session over a connection somebody else stood up, for a test — there
+  /// is no uri to dial, so the handle is only the label in its refusals.
+  @visibleForTesting
+  factory DriveSession.forTesting(RunHandle handle, RunConnection connection) =>
+      DriveSession(handle).._connection = Future.value(connection);
 
   RunHandle handle;
 
@@ -85,14 +134,30 @@ class DriveSession {
     }
     var deadline = _deadlineFor(args);
     try {
-      var response = await connection.service
-          .callServiceExtension(
-            'ext.flutterware.act',
-            isolateId: connection.isolateId,
-            args: args,
-          )
-          .timeout(deadline);
-      return response.json ?? const {};
+      return await _call(connection, args, deadline);
+    } on RPCError catch (error) {
+      if (error.code != _methodNotFound) {
+        await _drop();
+        rethrow;
+      }
+      // The isolate this connection picked does not have the extension. That
+      // is two different facts — a wrong isolate, or no guest at all — and
+      // only the VM can tell them apart, so it is asked before anything is
+      // said. A wrong pick is repaired here rather than reported: the next
+      // connect would guess the same way and be wrong the same way, which is
+      // how one bad guess becomes a run that is permanently undriveable.
+      var found = await connection.findIsolateWith(driveExtension);
+      if (found.id case var id? when id != connection.isolateId) {
+        connection.useIsolate(id);
+        try {
+          return await _call(connection, args, deadline);
+        } on Object {
+          await _drop();
+          rethrow;
+        }
+      }
+      await _drop();
+      throw DriveNoGuest(census: found.census);
     } on TimeoutException {
       var why = await _whyNoAnswer(connection);
       await _drop();
@@ -103,6 +168,21 @@ class DriveSession {
       await _drop();
       rethrow;
     }
+  }
+
+  Future<Map<String, dynamic>> _call(
+    RunConnection connection,
+    Map<String, String> args,
+    Duration deadline,
+  ) async {
+    var response = await connection.service
+        .callServiceExtension(
+          driveExtension,
+          isolateId: connection.isolateId,
+          args: args,
+        )
+        .timeout(deadline);
+    return response.json ?? const {};
   }
 
   /// How long to wait for a bundle before calling the app unresponsive.

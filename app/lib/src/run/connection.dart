@@ -16,12 +16,15 @@ import 'package:vm_service/vm_service_io.dart';
 /// `app/lib/src/utils/hot_reload.dart`, which does the same thing for this GUI
 /// against its own process.
 class RunConnection {
-  RunConnection._(this.service, this.isolateId);
+  RunConnection._(this.service, this._isolateId);
 
   final VmService service;
 
-  /// The app's main isolate, or null when it has none yet.
-  final String? isolateId;
+  String? _isolateId;
+
+  /// The app's main isolate — the one every `ext.` call here is addressed to
+  /// — or null when it has none yet.
+  String? get isolateId => _isolateId;
 
   /// A connection over a [service] somebody else stood up, for a test — no
   /// `getVM`, no registration wait, because a fake VM has nothing to discover.
@@ -47,7 +50,7 @@ class RunConnection {
     var service = await vmServiceConnectUri(wsUri).timeout(timeout);
     try {
       var vm = await service.getVM().timeout(timeout);
-      var connection = RunConnection._(service, vm.isolates?.firstOrNull?.id);
+      var connection = RunConnection._(service, rootIsolateOf(vm.isolates));
       await connection._watchRegistrations(waitFor, settle);
       return connection;
     } on Object {
@@ -55,6 +58,71 @@ class RunConnection {
       rethrow;
     }
   }
+
+  /// The app's own isolate among [isolates].
+  ///
+  /// **A list, not a single thing.** An app is one isolate until something
+  /// spawns another — a sync engine, a database worker, a plugin that runs
+  /// Dart on a second engine — and the first entry then stops being a safe
+  /// guess. Everything this class calls (`ext.flutter.exit`, the drive
+  /// transaction, the http profile) lives in the root isolate and nowhere
+  /// else, so a wrong pick answers `Unknown method` for all of them:
+  /// measured against a live app's worker isolate, `ext.flutterware.act`
+  /// comes back as `RPCError -32601`, exactly what a genuinely guest-less app
+  /// returns.
+  ///
+  /// Free in the ordinary case: with one isolate there is nothing to choose,
+  /// and the name settles the rest without a round trip — Flutter's root
+  /// isolate is `main`. [findIsolateWith] is the version that asks what is
+  /// registered, for when this guess turns out wrong.
+  static String? rootIsolateOf(List<IsolateRef>? isolates) {
+    if (isolates == null || isolates.isEmpty) return null;
+    if (isolates.length == 1) return isolates.single.id;
+    for (var isolate in isolates) {
+      if (isolate.name == 'main') return isolate.id;
+    }
+    return isolates.first.id;
+  }
+
+  /// Which isolate has [extension] registered, re-read from the VM, with a
+  /// census of what was asked for the caller's message.
+  ///
+  /// The expensive, certain answer — one `getIsolate` per isolate — so it is
+  /// only paid when the cheap guess has already failed. Both halves are
+  /// returned because both are needed: the id to retry against, and the
+  /// census so a refusal that says "this app has no guest" can say what it
+  /// looked at rather than assert it.
+  Future<({String? id, String census})> findIsolateWith(
+    String extension,
+  ) async {
+    List<IsolateRef> isolates;
+    try {
+      isolates = (await service.getVM()).isolates ?? const [];
+    } on Object {
+      return (id: null, census: 'the VM would not say which isolates it has');
+    }
+    String? found;
+    var seen = <String>[];
+    for (var isolate in isolates) {
+      var registered = false;
+      try {
+        registered =
+            (await service.getIsolate(
+              isolate.id!,
+            )).extensionRPCs?.contains(extension) ??
+            false;
+      } on Object {
+        // An isolate that exited between the two calls is not an answer, and
+        // not a failure either: the census says what it could see.
+      }
+      seen.add('${isolate.name ?? isolate.id}${registered ? ' ✓' : ''}');
+      if (registered) found ??= isolate.id;
+    }
+    return (id: found, census: seen.join(', '));
+  }
+
+  /// Points this connection at [id] — what [findIsolateWith] found.
+  void useIsolate(String id) => _isolateId = id;
 
   /// The VM publishes what is already registered when the stream is subscribed
   /// to, so listening covers both what exists now and what arrives later — but

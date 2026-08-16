@@ -138,6 +138,7 @@ Map<String, dynamic> _$CatalogInspectResultToJson(
   'logs': ?instance.logs,
   'logsDropped': ?instance.logsDropped,
   'screenshot': ?instance.screenshot?.toJson(),
+  'note': ?instance.note,
   'next': ?instance.next,
 };
 

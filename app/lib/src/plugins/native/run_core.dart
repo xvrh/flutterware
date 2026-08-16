@@ -3549,12 +3549,13 @@ class RunCore extends PluginCore {
           await (debugAct?.call(handle, wire) ??
               _driveSessionFor(handle).act(wire));
     } on Object catch (e) {
-      // -32601: the extension does not exist — the app runs without the
-      // guest, which is a fact about how it was launched, not a fault.
+      // A guest-less app is a fact about how it was launched, not a fault —
+      // and it is [DriveSession]'s to establish, since only it can ask the VM
+      // which isolate the extension is in. A bare -32601 reaching here comes
+      // from something that bypassed the session, and gets the same sentence
+      // without the census the session would have added.
       var error = e is RPCError && e.code == -32601
-          ? 'This app is running without the drive guest, so it can be '
-                'inspected but not driven. Launch it through flutterware '
-                '(the GUI, `fw run launch`, or MCP) to get a driveable run.'
+          ? DriveNoGuest.describe()
           : '$e';
       // The timeout says "bring the app to the front" — which used to be a
       // request only a human could carry out. On a device with a native
@@ -4529,7 +4530,9 @@ _ItemLookup _pointForItem(RunHandle handle, Object wanted) {
     );
   }
 
-  var screen = Screen.of(tree);
+  var projected = Screen.tryOf(tree);
+  var screen = projected.screen;
+  if (screen == null) return _ItemMiss(projected.note!);
   var item = screen.items.where((item) => item.n == n).firstOrNull;
   if (item == null) {
     return _ItemMiss(

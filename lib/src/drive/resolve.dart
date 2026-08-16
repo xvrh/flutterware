@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -80,8 +81,21 @@ class TargetMessages {
   /// thing it could not do. It has `nth` and `item`; the message says so.
   final String narrowHint;
 
-  String multiple(int count, String verb, String described) =>
-      '$count widgets match $described, and `$prefix$verb` needs one. '
+  /// The refusal that has to be usable in one step.
+  ///
+  /// **It names the matches.** A caller told only that two things matched has
+  /// to go and look before it can choose, and the look is another round trip
+  /// against a screen that may have moved. [where] is one line per match, in
+  /// the order `nth` indexes them, so the number in front of a box is the
+  /// `index` that picks it.
+  String multiple(
+    int count,
+    String verb,
+    String described, [
+    List<String> where = const [],
+  ]) =>
+      '$count widgets match $described, and `$prefix$verb` needs one'
+      '${where.isEmpty ? '. ' : ':\n${where.join('\n')}\n'}'
       '$narrowHint';
 
   String covered(String verb, String described) =>
@@ -161,11 +175,42 @@ class TargetResolver {
     if (count > 1) {
       throw TargetError(
         TargetFailure.multiple,
-        messages.multiple(count, verb, described),
+        messages.multiple(count, verb, described, _whereEachIs(finder)),
       );
     }
     await _ensureReachable(finder, described, verb);
     return finder;
+  }
+
+  /// How many matches a refusal lists before it stops.
+  ///
+  /// A target matching thirty things is a question about the target rather
+  /// than about the thirty, and the count in front of the list already says
+  /// so.
+  static const listedMatches = 10;
+
+  /// Where each match is, numbered as `nth` indexes them.
+  ///
+  /// The box rather than the widget: a text target matches the `RichText`
+  /// under every `Text`, so the types are identical and say nothing, where
+  /// the rects are what tell an app bar title from the button below it — and
+  /// a centre computed off one is itself a target, `{"at": {"x": …, "y": …}}`.
+  List<String> _whereEachIs(Finder finder) {
+    var elements = finder.evaluate().toList();
+    return [
+      for (var (index, element) in elements.take(listedMatches).indexed)
+        '  $index ${_where(element)}',
+      if (elements.length > listedMatches)
+        '  … and ${elements.length - listedMatches} more',
+    ];
+  }
+
+  static String _where(Element element) {
+    var render = element.renderObject;
+    if (render is! RenderBox || !render.hasSize) return 'nothing laid out';
+    var box = render.localToGlobal(Offset.zero) & render.size;
+    return 'at ${box.left.round()},${box.top.round()} '
+        '${box.width.round()}×${box.height.round()}';
   }
 
   /// Whether the screen the target was refused on carries any text.
@@ -204,7 +249,8 @@ class TargetResolver {
     if (_reaches(finder)) return;
     var render = finder.evaluate().single.renderObject! as RenderBox;
     var center = render.localToGlobal(render.size.center(Offset.zero));
-    var bounds = Offset.zero & controller.binding.renderViews.single.size;
+    var view = _viewOf(render);
+    var bounds = Offset.zero & (view?.size ?? Size.zero);
     if (bounds.contains(center)) {
       throw TargetError(
         TargetFailure.covered,
@@ -217,6 +263,20 @@ class TargetResolver {
     );
   }
 
+  /// The view [render] paints into, walked up the render tree.
+  ///
+  /// **Not `binding.renderViews.single`**, which is a `Bad state: Too many
+  /// elements` waiting for the first app that opens a second window — and
+  /// `.first` in its place would be a guess that silently hit-tests one view
+  /// against another's coordinates. The target itself knows which view it is
+  /// in; this asks it.
+  static RenderView? _viewOf(RenderObject render) {
+    for (RenderObject? node = render; node != null; node = node.parent) {
+      if (node is RenderView) return node;
+    }
+    return null;
+  }
+
   /// Whether a pointer event at the target's center would reach it — the
   /// check `flutter_test`'s `warnIfMissed` makes, as a boolean.
   bool _reaches(Finder finder) {
@@ -224,12 +284,17 @@ class TargetResolver {
     // No box to aim at: leave it to the underlying verb, whose own errors
     // name the shape problem better than a reachability check can.
     if (render is! RenderBox || !render.hasSize) return true;
+    // Nor is an unattached target something a hit test can answer about.
+    var view = _viewOf(render);
+    if (view == null) return true;
     var center = render.localToGlobal(render.size.center(Offset.zero));
     // The viewId is passed explicitly: `hitTestOnBinding`'s default comes
     // from the controller's test-typed `view` getter, which throws on a live
     // binding (measured — see 2026-08-11-run-drive-spike-findings.md).
-    var viewId = controller.binding.renderViews.single.flutterView.viewId;
-    var result = controller.hitTestOnBinding(center, viewId: viewId);
+    var result = controller.hitTestOnBinding(
+      center,
+      viewId: view.flutterView.viewId,
+    );
     return result.path.any(
       (entry) => isRenderObjectAncestorOfTarget(render, entry.target),
     );

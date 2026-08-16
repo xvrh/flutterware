@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 // ignore: implementation_imports
+import 'package:flutterware/src/inspect/screen.dart';
+// ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/run_plugin.dart';
@@ -323,6 +325,81 @@ void main() {
 
       expect(result.ok, isFalse);
       expect(result.error, contains('nothing has observed this app yet'));
+    });
+  });
+
+  group('a screen that cannot be projected', () {
+    /// The refusal the guest sends when a target matched twice, on a frame
+    /// whose screen the host then fails to build.
+    void refuses() {
+      core.debugAct = (handle, args) async => {
+        'error': '2 widgets match "Log In", and `tap` needs one.',
+        'failure': 'multiple',
+        'lifecycle': 'resumed',
+        'texts': ['Log In', 'Log in'],
+        'tree': {
+          'root': {
+            'id': '',
+            'type': 'Column',
+            'layout': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+            'children': [
+              {
+                'id': '0',
+                'type': 'Text',
+                'description': 'Text("Log In")',
+                'layout': {'x': 0, 'y': 0, 'width': 40, 'height': 20},
+              },
+            ],
+          },
+        },
+        'screenshot': {'base64': base64Encode(_tinyPng), 'width': 1},
+      };
+    }
+
+    setUp(() => Screen.debugFailProjection = StateError('Too many elements'));
+    tearDown(() => Screen.debugFailProjection = null);
+
+    test('costs the screen and nothing else', () async {
+      refuses();
+
+      var result =
+          (await core.invoke(
+                'act',
+                arguments: {'verb': 'tap', 'target': 'Log In'},
+              ))!
+              as RunActResult;
+
+      // The refusal survives the projection that failed around it — which it
+      // did not before: the `StateError` came out of the action instead, and
+      // an agent was told `Bad state: Too many elements` about a target that
+      // had been refused for a reason it could have acted on.
+      expect(result.failure, 'multiple');
+      expect(result.error, contains('2 widgets match'));
+      expect(result.screen, isNull);
+      expect(result.note, contains('the screen could not be projected'));
+      expect(result.note, contains('Too many elements'));
+      // Everything else came off the same frame and is unharmed.
+      expect(result.texts, ['Log In', 'Log in']);
+      expect(result.screenshotArtifact, isNotNull);
+
+      // And the step is in the journal, which is where it was missing
+      // entirely: an exception took the record with it.
+      var entry = readJournal(handle).single;
+      expect(entry.failure, 'multiple');
+      expect(entry.screenshot, isNotNull);
+    });
+
+    test('`item:` says so rather than throwing', () async {
+      refuses();
+      await core.invoke('act', arguments: {'verb': 'observe'});
+
+      var result =
+          (await core.invoke('act', arguments: {'verb': 'tap', 'item': 1}))!
+              as RunActResult;
+
+      expect(result.ok, isFalse);
+      expect(result.failure, 'notFound');
+      expect(result.error, contains('the screen could not be projected'));
     });
   });
 

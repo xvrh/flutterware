@@ -2164,6 +2164,9 @@ class PreviewsCore extends PluginCore {
     var elided = hits == null || hits.length <= ScreenRead.chainDepth
         ? 0
         : hits.length - ScreenRead.chainDepth;
+    var projected = want.screen && tree != null
+        ? Screen.tryOf(tree)
+        : (screen: null, note: null);
     return CatalogInspectResult(
       entry: want.entryId,
       address: '$address',
@@ -2182,7 +2185,8 @@ class PreviewsCore extends PluginCore {
       // The screen, which with no other flag is now the answer: what
       // rendered, as a nested list of the things carrying words or responding
       // to touch, rather than only the news that something did.
-      screen: want.screen && tree != null ? Screen.of(tree) : null,
+      screen: projected.screen,
+      note: projected.note,
       styles: want.styles ? narrowed?.styles() : null,
       nodes: narrowed?.length,
       next: ScreenRead.offer,

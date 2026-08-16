@@ -518,6 +518,7 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
     this.logs,
     this.logsDropped,
     this.screenshot,
+    this.note,
     this.next,
   });
 
@@ -625,6 +626,14 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
   /// would have made this the one place in the surface where a picture is less
   /// than an artifact.
   final Artifact? screenshot;
+
+  /// Something this reading could not answer, said in a way a caller can act
+  /// on — the render happened, so it is not an error.
+  ///
+  /// The same field the run and scenario surfaces carry, for the same reason:
+  /// a projection is a decoration on an observation, and a decoration that
+  /// fails may cost its own field and nothing else.
+  final String? note;
 
   /// One line naming what else can be asked of this frame.
   ///

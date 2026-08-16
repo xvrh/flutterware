@@ -53,7 +53,10 @@ class RunNetworkTracker {
   /// starts a fresh session — rows cleared, cursor dropped, capture re-armed.
   Future<int> poll() async {
     var vm = await connection.service.getVM();
-    var isolateId = vm.isolates?.firstOrNull?.id;
+    // The same rule the connection dials with, and for the same reason: the
+    // profile belongs to the app's own isolate, and a worker some plugin
+    // spawned is not it.
+    var isolateId = RunConnection.rootIsolateOf(vm.isolates);
     if (isolateId == null) return 0;
     if (isolateId != _isolateId) {
       var restarted = _isolateId != null;
