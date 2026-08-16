@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:crypto/crypto.dart';
+import 'package:flutterware/src/build_lock.dart';
 import 'package:flutterware/src/build_output.dart';
 import 'package:flutterware/src/constants.dart';
 import 'package:flutterware/src/desktop_gui.dart';
@@ -100,15 +101,11 @@ void main(List<String> arguments) async {
   exit(await process.exitCode);
 }
 
-/// Everything that has to exist before `fw` can run, narrated as a plan.
+/// Everything that has to exist before `fw` can run — with the tree to itself
+/// while it comes to exist.
 ///
 /// Returns the GUI build's result, or null when there was no GUI build — which
 /// is the whole contract with [guiBuildResultEnvironmentKey].
-///
-/// **The stages are decided before any of them runs.** That is the reason this
-/// function exists rather than each `_ensure…` narrating itself: listing what
-/// is going to happen is the only thing that answers "how much is left", and
-/// nothing can list what it has not yet decided.
 Future<ProcessLog?> _work(
   List<String> arguments, {
   required String packageRoot,
@@ -119,6 +116,81 @@ Future<ProcessLog?> _work(
   required bool editable,
   required bool force,
   required bool verbose,
+}) async {
+  // `mcp` is about to speak JSON-RPC on stdout, and a cold first run is exactly
+  // when there is something to narrate. Writing the plan there would put a
+  // progress panel in front of the handshake, so the narration moves rather
+  // than being suppressed — a 40s silent start is the other way to look broken.
+  //
+  // Decided before the lock because the wait is itself narration: a process
+  // that blocks for the length of somebody else's build has to be able to say
+  // so, and it has nothing else to say it with.
+  var protocolOwnsStdout = _ownsStdout(arguments);
+  var narrateToStderr = narrationOwnsStderr(
+    speaksProtocol: protocolOwnsStdout,
+    interactive: outputIsInteractive,
+  );
+  // Typed rather than inferred: what this is used for is writing text, and an
+  // inferred `IOSink` reads as something with a lifetime — one nothing here
+  // owns, since both branches are the process's own streams.
+  StringSink out = narrateToStderr ? stderr : stdout;
+
+  // The lock covers the decision as well as the work. Every question below is
+  // about files another process may be in the middle of writing — whether the
+  // copy is current, whether the binary is newer than its sources — so an
+  // answer reached outside the lock is an answer about a tree that no longer
+  // exists by the time it is acted on.
+  return withBuildLock(
+    _buildLockPath(root),
+    onWait: () => out.writeln(
+      'flutterware: another process is building the same tools; waiting for it.',
+    ),
+    () => _prepare(
+      arguments,
+      packageRoot: packageRoot,
+      root: root,
+      appPath: appPath,
+      cliExecutable: cliExecutable,
+      gui: gui,
+      editable: editable,
+      force: force,
+      verbose: verbose,
+      out: out,
+      protocolOwnsStdout: protocolOwnsStdout,
+    ),
+  );
+}
+
+/// Where the lock for a build tree lives.
+///
+/// Keyed on [root], because [root] is precisely what the collision is about:
+/// two projects share a working copy exactly when they resolve the same
+/// flutterware version, and a checkout is its own root and so collides only
+/// with itself.
+///
+/// Beside the trees rather than inside one. Unpacking rewrites the tree it is
+/// guarding, and a lock a copy can remove is not a lock.
+String _buildLockPath(String root) =>
+    p.join(_userHomePath(), '.flutterware', 'locks', '${_hash(root)}.lock');
+
+/// The plan itself, narrated, with nobody else writing into the tree.
+///
+/// **The stages are decided before any of them runs.** That is the reason this
+/// function exists rather than each `_ensure…` narrating itself: listing what
+/// is going to happen is the only thing that answers "how much is left", and
+/// nothing can list what it has not yet decided.
+Future<ProcessLog?> _prepare(
+  List<String> arguments, {
+  required String packageRoot,
+  required String root,
+  required String appPath,
+  required String cliExecutable,
+  required DesktopGui? gui,
+  required bool editable,
+  required bool force,
+  required bool verbose,
+  required StringSink out,
+  required bool protocolOwnsStdout,
 }) async {
   var stamp = editable ? null : _sourceStamp(packageRoot);
   var stampFile = File(p.join(root, '.source_stamp'));
@@ -157,18 +229,9 @@ Future<ProcessLog?> _work(
   if (stages.isEmpty) return null;
 
   var log = File(p.join(appPath, 'build', 'cli-build.log'));
-  // `mcp` is about to speak JSON-RPC on stdout, and a cold first run is exactly
-  // when there is something to narrate. Writing the plan there would put a
-  // progress panel in front of the handshake, so the narration moves rather
-  // than being suppressed — a 40s silent start is the other way to look broken.
-  var protocolOwnsStdout = _ownsStdout(arguments);
-  var narrateToStderr = narrationOwnsStderr(
-    speaksProtocol: protocolOwnsStdout,
-    interactive: outputIsInteractive,
-  );
   var plan = LaunchPlan(
     stages,
-    out: narrateToStderr ? stderr : stdout,
+    out: out,
     // A live panel and a firehose cannot both own the bottom of the terminal,
     // so `-v` gets the plain rendering: one line per stage saying what is about
     // to make all the noise below it. So does a redirected stderr, which no
