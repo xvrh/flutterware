@@ -71,6 +71,19 @@ Flutter's own annotation. Breaking, with no deprecation path.
   in front of the object something was about to parse. Narration now moves to
   stderr whenever stdout is not a person watching: piped, redirected, or a CI
   log. A terminal is unchanged.
+- **Two cold `fw` runs on one machine no longer build over each other.** The
+  tree under `~/.flutterware/<hash>` is one copy per flutterware version per
+  *machine*, shared by every project that resolves that version — so two
+  invocations starting cold at the same time unpacked into the same directory
+  and then ran `dart build cli -o` against the same output path. Reproduced:
+  two of three such pairs fail, either with `install_name_tool` refusing to add
+  `@executable_path/..` to a binary that already has it or with a raw
+  `writeFrom failed … Input/output error` from appending a snapshot to a file
+  being replaced. A machine that only ever runs one cold build at a time never
+  sees it; a CI runner with parallel jobs sees nothing else. Preparing the tree
+  now takes a cross-process lock beside it, and the loser waits out the winner
+  and finds the artifacts built — saying so on the same stream the rest of the
+  narration uses, rather than blocking in silence.
 
 ### Motion — new
 
