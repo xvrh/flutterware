@@ -14,7 +14,8 @@ import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
 /// The loop the whole feature is: drop a note on a line, watch it accumulate,
-/// hand the batch off, and find it in history.
+/// and see it answered — by you here, or by the agent through its own surface,
+/// which writes into the same log this screen is reading.
 ///
 /// Every one of these goes through the real store — an append-only file in a
 /// temporary directory — because the interesting failures are in the folding,
@@ -159,7 +160,7 @@ void main() {
 
     // Row 0 of this hunk is ` first`, and the marker is not part of it: what
     // travels to the agent is the code, not the diff.
-    expect(store.read().open.single.quote, ['first']);
+    expect(store.read().unresolved.single.quote, ['first']);
   });
 
   testWidgets('shift-click extends the span and keeps what you typed', (
@@ -196,7 +197,7 @@ void main() {
     await tester.tap(find.text('Add comment'));
     await tester.pumpAndSettle();
 
-    var comment = store.read().open.single;
+    var comment = store.read().unresolved.single;
     expect(comment.anchor.label, 'lib/a.dart:1–3');
     expect(comment.quote, ['first', 'second is', 'second and a half']);
   });
@@ -210,7 +211,7 @@ void main() {
     await tester.pumpAndSettle();
     await write(tester, 'Three of these are the same problem.');
 
-    var comment = store.read().open.single;
+    var comment = store.read().unresolved.single;
     expect(comment.anchor, isA<ReviewWide>());
     expect(comment.anchor.path, isNull);
     expect(comment.quote, isEmpty);
@@ -224,14 +225,12 @@ void main() {
     await tester.pumpAndSettle();
     await write(tester, 'No test covers this.');
 
-    var comment = store.read().open.single;
+    var comment = store.read().unresolved.single;
     expect(comment.anchor, isA<FileAnchor>());
     expect(comment.anchor.label, 'lib/a.dart');
   });
 
-  testWidgets('the tab count is what is waiting to be handed off', (
-    tester,
-  ) async {
+  testWidgets('the tab count is what is still outstanding', (tester) async {
     await pump(tester);
     await openFile(tester, 'a.dart');
     await plus(tester, 0);
@@ -245,7 +244,7 @@ void main() {
     // Numbered, so "the second one" means something when you tell the agent.
     expect(find.text('1'), findsWidgets);
     expect(find.text('2'), findsWidgets);
-    expect(find.text('Hand off 2 comments'), findsOneWidget);
+    expect(find.text('Export 2 comments'), findsOneWidget);
   });
 
   testWidgets('a comment opens the file it is about', (tester) async {
@@ -305,13 +304,13 @@ void main() {
     // while the log still has it, which is what makes the undo lossless.
     expect(find.byType(ReviewThread), findsNothing);
     expect(find.byType(ReviewUndoStrip), findsOneWidget);
-    expect(store.read().open, hasLength(1));
+    expect(store.read().unresolved, hasLength(1));
 
     await tester.tap(find.text('Undo'));
     await tester.pumpAndSettle();
 
     expect(find.byType(ReviewThread), findsOneWidget);
-    expect(store.read().open.single.body, 'oops');
+    expect(store.read().unresolved.single.body, 'oops');
   });
 
   testWidgets('the delete lands when the window closes', (tester) async {
@@ -327,12 +326,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ReviewUndoStrip), findsNothing);
-    expect(store.read().open, isEmpty);
+    expect(store.read().unresolved, isEmpty);
   });
 
-  testWidgets('a deleted comment does not travel with the batch', (
-    tester,
-  ) async {
+  testWidgets('a deleted comment is not part of what leaves', (tester) async {
     await pump(tester);
     await openFile(tester, 'a.dart');
     await plus(tester, 0);
@@ -345,17 +342,16 @@ void main() {
 
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
-    // The count is what is waiting, not what the log happens to hold.
-    expect(find.text('Hand off 1 comment'), findsOneWidget);
+    // The count is what is outstanding, not what the log happens to hold.
+    expect(find.text('Export 1 comment'), findsOneWidget);
 
-    await tester.tap(find.text('Hand off 1 comment'));
+    await tester.tap(find.text('Export 1 comment'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Hand off'));
+    await tester.tap(find.text('Export'));
     await tester.pumpAndSettle();
 
     expect(copied, contains('keep this'));
     expect(copied, isNot(contains('oops')));
-    expect(store.read().open, isEmpty);
   });
 
   testWidgets('a comment shows the code it captured', (tester) async {
@@ -389,15 +385,13 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    var comments = store.read().open;
+    var comments = store.read().unresolved;
     expect(comments, hasLength(1));
     expect(comments.single.body, 'second go');
     expect(comments.single.anchor, isA<LineAnchor>());
   });
 
-  testWidgets('handing off closes the batch and history remembers it', (
-    tester,
-  ) async {
+  testWidgets('exporting takes a copy and changes nothing', (tester) async {
     await pump(tester);
     await openFile(tester, 'a.dart');
     await plus(tester, 0);
@@ -405,29 +399,27 @@ void main() {
 
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Hand off 1 comment'));
+    await tester.tap(find.text('Export 1 comment'));
     await tester.pumpAndSettle();
 
     // What leaves is shown before it leaves.
     expect(find.textContaining('# Review — claude/feature'), findsOneWidget);
     expect(find.textContaining('## lib/a.dart:1'), findsOneWidget);
 
-    await tester.tap(find.text('Hand off'));
+    await tester.tap(find.text('Export'));
     await tester.pumpAndSettle();
 
-    var state = store.read();
-    expect(state.open, isEmpty, reason: 'the batch is closed');
-    expect(state.history.single.comments.single.body, 'a note');
     // The preview and the clipboard are the same string, by construction.
     expect(copied, contains('## lib/a.dart:1'));
     expect(copied, contains('a note'));
-    expect(find.text('Handed off'), findsOneWidget);
-    expect(find.text('Nothing to hand off'), findsOneWidget);
-    // And the diff no longer draws it: it has been sent.
-    expect(find.byType(ReviewThread), findsNothing);
+    // **And the note is exactly where it was.** A clipboard write says nothing
+    // about whether anybody read it, let alone acted on it.
+    expect(store.read().unresolved, hasLength(1));
+    expect(find.text('Export 1 comment'), findsOneWidget);
+    expect(find.byType(ReviewThread), findsOneWidget);
   });
 
-  testWidgets('cancelling the sheet leaves the batch open', (tester) async {
+  testWidgets('unless you say nobody is going to report back', (tester) async {
     await pump(tester);
     await openFile(tester, 'a.dart');
     await plus(tester, 0);
@@ -435,14 +427,105 @@ void main() {
 
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Hand off 1 comment'));
+    await tester.tap(find.text('Export 1 comment'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Resolve them too'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Export'));
+    await tester.pumpAndSettle();
+
+    var state = store.read();
+    expect(state.unresolved, isEmpty);
+    expect(state.resolved.single.body, 'a note');
+    // Yours, not the agent's — the tab must not claim you have an answer to
+    // read when what happened is that you ticked them off yourself.
+    expect(state.resolved.single.resolution!.by, ReviewActor.human);
+    expect(state.unseenResolutions, isEmpty);
+    expect(find.text('Nothing outstanding'), findsOneWidget);
+  });
+
+  testWidgets('cancelling the sheet leaves everything alone', (tester) async {
+    await pump(tester);
+    await openFile(tester, 'a.dart');
+    await plus(tester, 0);
+    await write(tester, 'a note');
+
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Export 1 comment'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
-    expect(store.read().open, hasLength(1));
-    expect(store.read().history, isEmpty);
-    expect(find.text('Hand off 1 comment'), findsOneWidget);
+    expect(store.read().unresolved, hasLength(1));
+    expect(store.read().resolved, isEmpty);
+    expect(find.text('Export 1 comment'), findsOneWidget);
+  });
+
+  testWidgets('resolving takes a note off the list, and reopening brings it '
+      'back', (tester) async {
+    await pump(tester);
+    await openFile(tester, 'a.dart');
+    await plus(tester, 0);
+    await write(tester, 'a note');
+
+    await tester.tap(find.text('Resolve'));
+    await tester.pumpAndSettle();
+
+    expect(store.read().unresolved, isEmpty);
+    expect(store.read().resolved.single.resolution!.by, ReviewActor.human);
+
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+    // Not on the list, and not gone: the disclosure says how many are behind
+    // it, which is where the handed-off section used to be.
+    expect(find.text('Nothing outstanding'), findsOneWidget);
+    expect(find.text('Resolved (1)'), findsOneWidget);
+
+    await tester.tap(find.text('Resolved (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('a note'), findsWidgets);
+
+    await tester.tap(find.text('a note').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reopen'));
+    await tester.pumpAndSettle();
+
+    expect(store.read().unresolved.single.body, 'a note');
+  });
+
+  testWidgets('what the agent answered while you were away is not filtered', (
+    tester,
+  ) async {
+    await pump(tester);
+    await openFile(tester, 'a.dart');
+    await plus(tester, 0);
+    await write(tester, 'no test covers this');
+
+    // The agent's own surface writes the same log this screen is reading —
+    // here, straight into the file, which is what `fw review resolve` does.
+    var id = store.read().unresolved.single.id;
+    store.append([
+      CommentResolved(
+        id: id,
+        resolution: ReviewResolution(
+          by: ReviewActor.agent,
+          at: DateTime.now(),
+          message: 'it does, at foo_test.dart:88',
+        ),
+      ),
+    ]);
+
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+
+    // **The one thing this design may not do is hide a disagreement.** The
+    // note is resolved and the filter is off, and it is on the screen anyway,
+    // with what the agent said about it.
+    expect(find.text('Resolved'), findsWidgets);
+    expect(find.textContaining('it does, at foo_test.dart:88'), findsWidgets);
+    // And looking is what marks it read, so the next visit is quiet.
+    expect(store.read().unseenResolutions, isEmpty);
   });
 
   testWidgets('Esc discards the draft, and takes nothing else with it', (
@@ -458,7 +541,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ReviewComposer), findsNothing);
-    expect(store.read().open, isEmpty);
+    expect(store.read().unresolved, isEmpty);
   });
 
   testWidgets('what was written before this launch is still there', (

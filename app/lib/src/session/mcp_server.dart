@@ -10,6 +10,7 @@ import 'package:flutterware/plugins.dart';
 import 'package:flutterware/src/log_client.dart';
 import 'package:path/path.dart' as p;
 
+import '../changes/review_agent.dart';
 import '../constants.dart';
 import '../plugins/plugin_core.dart';
 import 'action_shapes.generated.dart';
@@ -61,12 +62,16 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
              'questions: `find` for where something is, `at` for what is '
              'under a point, `styles` for the type ramp, `tree` for all of it '
              '(expensive), and `lens: act|look|design|raw` for how much to '
-             'hand back at once. Learn it once; it is the same everywhere.',
+             'hand back at once. Learn it once; it is the same everywhere. '
+             'One thing here is not a plugin: the human can leave notes on '
+             'lines of the diff while you work. flutterware_status counts them '
+             'and flutterware_review hands them over and takes your answers.',
        ) {
     registerTool(_statusTool, _status);
     registerTool(_actionsTool, _actions);
     registerTool(_invokeTool, _invoke);
     registerTool(_actTool, _act);
+    registerTool(_reviewTool, _review);
   }
 
   /// Every tool this server exposes, in the order it registers them.
@@ -80,6 +85,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
     _actionsTool,
     _invokeTool,
     _actTool,
+    _reviewTool,
   ];
 
   /// Where to resolve the project from. A session walks up to the repo root,
@@ -142,6 +148,12 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         return _json({
           'root': session.root,
           'worktree': session.worktree.branch ?? session.worktree.path,
+          // **Notes are not a plugin, so nothing else here would mention
+          // them.** A human can leave one on a line of the diff while the agent
+          // works — that is what the feature is for — and before this line the
+          // only way to find out was to be told. Three keys, on the call the
+          // instructions say to start with.
+          'review': reviewStatusJson(session.worktree.path),
           'plugins': [
             // Without the declarations, which is what the other tool is for.
             // Carrying them here made this call three quarters a duplicate of
@@ -157,6 +169,84 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               report.toJson(includeActions: false, viewRows: _statusViewRows),
           ],
         });
+      });
+
+  /// The one tool here that is not about a plugin.
+  ///
+  /// **A tool, because there is nowhere else to put it.** Everything else on
+  /// this server reaches a plugin core, and cores are resolved from the
+  /// worktree's declared manifest — so a feature of the shell, available to
+  /// every project whether or not it declares anything, has no action to be.
+  /// Inventing an always-on pseudo-plugin for one feature is a larger change
+  /// than the feature justifies.
+  ///
+  /// And a tool rather than a line in the docs, because the report this answers
+  /// was an agent that *could* read the log — after deriving a sha1 of the
+  /// worktree path from a commit message. A note written for a reader who has
+  /// to reverse-engineer the storage to find it is a note that sits unread,
+  /// which is exactly what happened.
+  static final _reviewTool = Tool(
+    name: 'flutterware_review',
+    description:
+        'Notes a human left on this checkout, and how you answer them. They '
+        'are written on lines of the diff in the GUI while you keep working, '
+        'so a note carries the code it was about rather than a line number '
+        'that has since moved. Called with nothing, it hands back what is '
+        'outstanding as markdown, each note headed by the id you answer it by; '
+        '"all" includes what has already been dealt with. Resolve one when you '
+        'have done what it asks — or when you disagree, and then the message '
+        'is the whole point, because it is what the human sees beside their '
+        'note. "unresolve" puts one back. Resolving is recorded as you, the '
+        'agent, which is what makes it different from the human ticking it '
+        'off. flutterware_status carries the outstanding count, so you can '
+        'tell whether calling this is worth it.',
+    inputSchema: Schema.object(
+      properties: {
+        'resolve': Schema.string(
+          description:
+              'The id of a note you have dealt with. Omitted, this call '
+              'reads rather than writes.',
+        ),
+        'unresolve': Schema.string(
+          description: 'The id of a note to put back on the outstanding list.',
+        ),
+        'message': Schema.string(
+          description:
+              'What to say beside the note — what you did, or why you did '
+              'not. Goes with "resolve". Leave it out only for a note that '
+              'needs no answer.',
+        ),
+        'all': Schema.bool(
+          description:
+              'Include the notes already resolved. Off by default: the '
+              'outstanding ones are the work.',
+        ),
+      },
+    ),
+  );
+
+  Future<CallToolResult> _review(CallToolRequest request) =>
+      _withSession((session) async {
+        var path = session.worktree.path;
+        if (request.arguments?['resolve'] case String id) {
+          return _json(
+            reviewResolveJson(
+              path,
+              id,
+              message: request.arguments?['message'] as String?,
+            ),
+          );
+        }
+        if (request.arguments?['unresolve'] case String id) {
+          return _json(reviewResolveJson(path, id, resolve: false));
+        }
+        return _json(
+          reviewListJson(
+            path,
+            worktree: session.worktree.branch ?? session.worktree.name,
+            all: request.arguments?['all'] == true,
+          ),
+        );
       });
 
   static final _actionsTool = Tool(

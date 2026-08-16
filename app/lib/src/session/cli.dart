@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../changes/changes_config_cache.dart';
 import '../changes/changes_probe.dart';
 import '../changes/changes_text.dart';
+import '../changes/review_agent.dart';
 import '../comparison/artifact.dart';
 import '../comparison/channels.dart';
 import '../comparison/compare_command.dart';
@@ -101,6 +102,30 @@ const fwCommands = [
         'The base is inferred from origin/HEAD, then main, then master. When '
         'none\nof them resolve it says so rather than diffing against a '
         'guess.',
+  ),
+  FwCommand(
+    'review',
+    usage:
+        'review [--all] [--json] | review resolve <id> [--message=<text>] '
+        '| review unresolve <id>',
+    summary: 'the notes a human left on this checkout, and answering them',
+    details:
+        'A note is written on a line of the diff in the GUI, while you keep\n'
+        'working — it carries the code it was written about, so nothing here\n'
+        'addresses a line that can move.\n'
+        '\n'
+        'With no arguments: what is still outstanding, as markdown, each note\n'
+        'headed by the id you answer it by. `--all` includes what has already\n'
+        'been dealt with.\n'
+        '\n'
+        '  fw review resolve <id> --message="did it, see foo_test.dart"\n'
+        '\n'
+        'Resolving is recorded as the agent — that is what the human sees\n'
+        'beside the note, and it is the difference between *it says it did\n'
+        'this* and *I ticked this off*. `unresolve` puts one back.\n'
+        '\n'
+        'Reads git and a log under ~/.flutterware, so it opens no session and\n'
+        'runs no project code. Name a worktree to read that one instead.',
   ),
   FwCommand(
     'actions',
@@ -477,6 +502,7 @@ class FwCli {
           refresh: rest.remove('--refresh'),
         ),
         'changes' => await _changes(rest, json: json),
+        'review' => await _review(rest, json: json),
         'actions' => await _actions(json: json),
         'run' => await _run(rest, json: json),
         'app' => await _app(
@@ -954,9 +980,22 @@ class FwCli {
         _printJson({
           'root': session.root,
           'worktree': session.worktree.branch ?? session.worktree.path,
+          // See the same line in the MCP server: notes are a shell feature, so
+          // no plugin report would ever mention them.
+          'review': reviewStatusJson(session.worktree.path),
           'plugins': [for (var report in session.reports) report.toJson()],
         });
         return 0;
+      }
+
+      var waiting =
+          reviewStatusJson(session.worktree.path)['unresolved']! as int;
+      if (waiting > 0) {
+        out.writeln(
+          '$waiting review ${waiting == 1 ? 'note' : 'notes'} outstanding — '
+          '`fw review`',
+        );
+        out.writeln();
       }
 
       if (session.cores.isEmpty) {
@@ -1107,6 +1146,83 @@ class FwCli {
     }
     for (var line in changesReport(changes)) {
       out.writeln(line);
+    }
+    return 0;
+  }
+
+  /// The notes left on a checkout, and answering them.
+  ///
+  /// **Opens no session**, for the same reason `changes` does not: the log is
+  /// keyed by the worktree path and nothing in it needs the project's config
+  /// run. A checkout whose plugins will not load still reports its notes, which
+  /// matters — a note about a broken config is exactly the note you would leave.
+  Future<int> _review(List<String> rest, {required bool json}) async {
+    var words = rest.where((a) => !a.startsWith('--')).toList();
+    var verb = switch (words.firstOrNull) {
+      'resolve' => true,
+      'unresolve' => false,
+      _ => null,
+    };
+
+    var directory = Directory.current.path;
+    var root = await ChangesProbe().worktreeRoot(directory);
+    if (root == null) {
+      return fail('not inside a git repository: $directory');
+    }
+
+    if (verb != null) {
+      var id = words.elementAtOrNull(1);
+      if (id == null) {
+        return fail('which note? `fw review` lists them with their ids.');
+      }
+      var result = reviewResolveJson(
+        root,
+        id,
+        message: _optionValue(rest, '--message'),
+        resolve: verb,
+      );
+      if (result['error'] case String error) {
+        if (json) {
+          _printJson(result);
+          return 1;
+        }
+        return fail(error);
+      }
+      if (json) {
+        _printJson(result);
+        return 0;
+      }
+      var left = result['unresolved']! as int;
+      out.writeln(
+        '${verb ? 'Resolved' : 'Reopened'} ${result['note']} — '
+        '$left outstanding',
+      );
+      return 0;
+    }
+
+    var worktrees = await WorktreeDiscovery().discover(
+      findRepoRoot(directory) ?? root,
+    );
+    var name =
+        worktrees.where((w) => w.path == root).firstOrNull?.name ??
+        p.basename(root);
+    var result = reviewListJson(
+      root,
+      worktree: name,
+      base: (await _changesConfigFor(root, directory)).config?.base,
+      all: rest.contains('--all'),
+    );
+    if (json) {
+      _printJson(result);
+      return 0;
+    }
+    if (result['notes'] case String notes) {
+      out.writeln(notes);
+    } else {
+      // Not a failure: an empty review is the normal state of a checkout, and
+      // an exit code would make "nothing to do" indistinguishable from a log
+      // that could not be read.
+      out.writeln('No notes on this checkout.');
     }
     return 0;
   }

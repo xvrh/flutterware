@@ -23,7 +23,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/run_dir.dart';
@@ -87,67 +86,6 @@ class ReviewStore {
       // log could not be written would be the worst possible response.
     }
     return read();
-  }
-}
-
-/// The screen's handle on the log.
-///
-/// Deliberately thin: it holds the folded state, and every mutation is an
-/// append followed by the re-read the append already does. There is no
-/// in-memory list that the file is a backup of, because two such lists on one
-/// machine is exactly the divergence the append-only format exists to avoid.
-class ReviewController extends ChangeNotifier {
-  ReviewController({required String worktreePath, ReviewStore? store})
-    : _store = store ?? ReviewStore.forWorktree(worktreePath) {
-    _state = _store.read();
-  }
-
-  final ReviewStore _store;
-  late ReviewState _state;
-
-  ReviewState get state => _state;
-  List<ReviewComment> get open => _state.open;
-  List<ReviewBatch> get history => _state.history;
-
-  /// Comments on [path], in the order they were written.
-  List<ReviewComment> forFile(String path) => [
-    for (var comment in _state.open)
-      if (comment.anchor.path == path) comment,
-  ];
-
-  void add(ReviewComment comment) => _apply([CommentAdded(comment)]);
-
-  void edit(String id, String body) =>
-      _apply([CommentEdited(id: id, body: body)]);
-
-  void delete(String id) => _apply([CommentDeleted(id)]);
-
-  /// Closes the open batch.
-  ///
-  /// Takes the ids explicitly rather than "everything open" so that the batch
-  /// handed off is the batch the sheet was showing — a comment added in
-  /// another window while the sheet was up belongs to the next batch, not to
-  /// the one you already copied.
-  void handOff({
-    required String id,
-    required List<String> ids,
-    required DateTime at,
-    required String route,
-    String? savedTo,
-  }) => _apply([
-    BatchHandedOff(id: id, ids: ids, at: at, route: route, savedTo: savedTo),
-  ]);
-
-  /// Re-reads without writing — for a window that has been sitting open while
-  /// another one was used.
-  void reload() {
-    _state = _store.read();
-    notifyListeners();
-  }
-
-  void _apply(List<ReviewEvent> events) {
-    _state = _store.append(events);
-    notifyListeners();
   }
 }
 
