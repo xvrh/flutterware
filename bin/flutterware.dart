@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'package:crypto/crypto.dart';
 import 'package:flutterware/src/build_lock.dart';
 import 'package:flutterware/src/build_output.dart';
 import 'package:flutterware/src/constants.dart';
@@ -9,6 +7,7 @@ import 'package:flutterware/src/desktop_gui.dart';
 import 'package:flutterware/src/launch_plan.dart';
 import 'package:flutterware/src/live_region.dart';
 import 'package:flutterware/src/utils/list_files.dart';
+import 'package:flutterware/src/working_copy.dart';
 import 'package:path/path.dart' as p;
 
 /// The launcher: make sure the artifacts are current, then get out of the way.
@@ -62,7 +61,7 @@ void main(List<String> arguments) async {
       // remembering a flag, and why its own CLI was developed by a loop that
       // never ran it.
       ? packageRoot
-      : _workingCopyPath(packageRoot);
+      : workingCopyPath(packageRoot);
 
   var appPath = p.join(root, 'app');
   var cliExecutable = p.join(appPath, 'build', 'cli', 'bundle', 'bin', 'fw');
@@ -171,7 +170,7 @@ Future<ProcessLog?> _work(
 /// Beside the trees rather than inside one. Unpacking rewrites the tree it is
 /// guarding, and a lock a copy can remove is not a lock.
 String _buildLockPath(String root) =>
-    p.join(_userHomePath(), '.flutterware', 'locks', '${_hash(root)}.lock');
+    p.join(userHomePath(), '.flutterware', 'locks', '${hashOf(root)}.lock');
 
 /// The plan itself, narrated, with nobody else writing into the tree.
 ///
@@ -192,24 +191,31 @@ Future<ProcessLog?> _prepare(
   required StringSink out,
   required bool protocolOwnsStdout,
 }) async {
-  var stamp = editable ? null : _sourceStamp(packageRoot);
-  var stampFile = File(p.join(root, '.source_stamp'));
+  var stamp = editable ? null : workingCopyStamp(packageRoot);
+  var stampFile = workingCopyStampFile(root);
   var unpacks =
       stamp != null &&
       (force ||
           !stampFile.existsSync() ||
           stampFile.readAsStringSync() != stamp);
 
-  // A fresh copy has never been resolved. Everything else reached `main`
-  // through `dart run flutterware`, which resolved the whole workspace — and
-  // `app/` is a member of it, so getting it again resolves the same thing
-  // twice for nothing.
+  // Resolve exactly when the tree was just replaced, which is the only time the
+  // copy holds a resolution it did not make itself: [workingCopyStamp] unpacks
+  // when the sources change and when the SDK does, and [copyPackageInto] leaves
+  // no lock behind for `pub get` to honour. A checkout never unpacks and never
+  // needs to — it reached `main` through `dart run flutterware`, which resolved
+  // the whole workspace, and `app/` is a member of it, so getting it again
+  // resolves the same thing twice for nothing.
   var resolves = unpacks;
-  var buildsCli = force || !_isFresh(cliExecutable, appPath);
+  // An unpack replaces the sources *and* the resolution both binaries were
+  // compiled from, and neither test would notice on its own: the GUI's is only
+  // that a binary exists at all, and [_isFresh] happens to say no because the
+  // copy just rewrote every mtime — which is luck, not a decision.
+  var buildsCli = force || unpacks || !_isFresh(cliExecutable, appPath);
   var buildsGui =
       gui != null &&
       _willBuildGui(arguments, editable: editable) &&
-      (force || !gui.binary.existsSync());
+      (force || unpacks || !gui.binary.existsSync());
 
   var unpack = unpacks
       ? LaunchStage('unpack flutterware', budget: const Duration(seconds: 3))
@@ -244,7 +250,10 @@ Future<ProcessLog?> _prepare(
   )..start();
 
   if (unpack != null) {
-    await plan.run(unpack, () async => _copyInto(packageRoot, root, stamp!));
+    await plan.run(
+      unpack,
+      () async => copyPackageInto(packageRoot, root, stamp!),
+    );
   }
 
   if (resolve != null) {
@@ -367,40 +376,13 @@ bool _willBuildGui(List<String> arguments, {required bool editable}) {
 bool _inPubCache(String packageRoot) {
   var cache =
       Platform.environment['PUB_CACHE'] ??
-      p.join(_userHomePath(), Platform.isWindows ? 'Pub/Cache' : '.pub-cache');
+      p.join(userHomePath(), Platform.isWindows ? 'Pub/Cache' : '.pub-cache');
   return p.isWithin(p.canonicalize(cache), p.canonicalize(packageRoot));
-}
-
-/// Where a pub-cache package is mirrored so there is a writable tree to resolve
-/// and build in.
-///
-/// The hash is of the *flutterware package root*, which for a hosted dependency
-/// already contains the version — so this is one copy per flutterware version
-/// per machine, shared across every project that uses it, not one per project.
-///
-/// Split from the copy itself because the plan has to be decided before
-/// anything runs, and deciding it means knowing this path first: whether the
-/// CLI and the GUI need building are questions about files inside it.
-String _workingCopyPath(String packageRoot) =>
-    p.join(_userHomePath(), '.flutterware', _hash(packageRoot));
-
-/// [packageRoot] is its own ignore root, here and in [_sourceStamp] and
-/// [_isFresh]: this package sits in the pub cache, and a rule from some
-/// unrelated repository above it — `$HOME` kept as a dotfiles repo is the way
-/// that happens — would drop files the copy has to carry.
-void _copyInto(String packageRoot, String destination, String stamp) {
-  for (var file in listFilesInDirectory(packageRoot, ignoreRoot: packageRoot)) {
-    var target = p.join(destination, p.relative(file.path, from: packageRoot));
-    File(target).createSync(recursive: true);
-    file.copySync(target);
-  }
-  // Last, so an interrupted copy is not recorded as a complete one.
-  File(p.join(destination, '.source_stamp')).writeAsStringSync(stamp);
 }
 
 /// Whether the built CLI is newer than every source that goes into it.
 ///
-/// Modification times rather than the content hash [_sourceStamp] computes:
+/// Modification times rather than the content hash [workingCopyStamp] computes:
 /// this runs on every invocation, and stat-ing is cheap where hashing 1280
 /// files is ~100ms — about what the whole command should cost.
 bool _isFresh(String executable, String appPath) {
@@ -422,32 +404,3 @@ bool _isFresh(String executable, String appPath) {
   }
   return true;
 }
-
-/// Identifies the source tree, so a changed checkout is noticed without being
-/// declared.
-///
-/// The same walk the copy uses, so what is fingerprinted is exactly what is
-/// copied — a file the copy would skip must not be able to invalidate it.
-String _sourceStamp(String root) {
-  var digest = <String>[];
-  for (var file in listFilesInDirectory(root, ignoreRoot: root)) {
-    var stat = file.statSync();
-    digest.add(
-      '${p.relative(file.path, from: root)}'
-      '|${stat.size}|${stat.modified.millisecondsSinceEpoch}',
-    );
-  }
-  digest.sort();
-  return sha1.convert(utf8.encode(digest.join('\n'))).toString();
-}
-
-String _userHomePath() {
-  var envKey = Platform.isWindows ? 'APPDATA' : 'HOME';
-  return Platform.environment[envKey] ?? '.';
-}
-
-String _hash(String input) => sha1
-    .convert(utf8.encode(input))
-    .bytes
-    .map((b) => b.toRadixString(16).padLeft(2, '0'))
-    .join();

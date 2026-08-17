@@ -84,6 +84,21 @@ Flutter's own annotation. Breaking, with no deprecation path.
   now takes a cross-process lock beside it, and the loser waits out the winner
   and finds the artifacts built — saying so on the same stream the rest of the
   narration uses, rather than blocking in silence.
+- **Upgrading your Flutter no longer breaks `fw`.** The tools under
+  `~/.flutterware/<hash>` were a function of flutterware's sources alone, and
+  the copy carried flutterware's own `pubspec.lock` — so every project built
+  the GUI from the package versions this repository resolved against *its*
+  pinned SDK, and `pub get`, which preserves a lock by design, kept it that way
+  forever. A project that moved to a newer Flutter got a resolution predating
+  its SDK, and what that looks like is not a stale copy: it is a syntax error a
+  minute into the GUI build, in a transitive package nobody chose — reported as
+  `jni-1.0.0/lib/src/core_bindings.dart: The representation field can't have a
+  trailing comma`, where `jni 1.0.3` had been available and parses. The copy is
+  now resolved where it is built: the lock does not travel with it, and one
+  left behind by an older flutterware is removed. The SDK also joins the source
+  fingerprint, so changing it re-unpacks, re-resolves and rebuilds both
+  binaries instead of leaving a resolution nothing would ever revisit. The
+  first `fw` after this lands rebuilds the tools once.
 
 ### Motion — new
 
