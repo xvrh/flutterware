@@ -8,16 +8,23 @@ import 'dart:typed_data';
 /// function. What matters to the tests that use it is the pixel count, which is
 /// what the engine's decode is paid by; the bytes are gently patterned so the
 /// file is neither a solid colour nor incompressible noise.
-Uint8List rasterFixture(int width, int height) {
+Uint8List rasterFixture(int width, int height) => _png(
+  width,
+  height,
+  (x, y) => [(x * 7) & 0xff, (y * 11) & 0xff, (x + y) & 0xff],
+);
+
+Uint8List _png(int width, int height, List<int> Function(int, int) pixel) {
   var stride = width * 3 + 1;
   var raw = Uint8List(stride * height);
   for (var y = 0; y < height; y++) {
     var row = y * stride + 1;
     for (var x = 0; x < width; x++) {
       var i = row + x * 3;
-      raw[i] = (x * 7) & 0xff;
-      raw[i + 1] = (y * 11) & 0xff;
-      raw[i + 2] = (x + y) & 0xff;
+      var rgb = pixel(x, y);
+      raw[i] = rgb[0];
+      raw[i + 1] = rgb[1];
+      raw[i + 2] = rgb[2];
     }
   }
   var png = BytesBuilder();
@@ -55,3 +62,9 @@ int _crc32(List<int> data) {
   }
   return c ^ 0xFFFFFFFF;
 }
+
+/// A solid pure-red PNG — a fixture whose pixels are trivially countable, for
+/// asking whether a capture contains the image at all rather than whether two
+/// captures agree.
+Uint8List solidRed(int width, int height) =>
+    _png(width, height, (_, _) => const [255, 0, 0]);

@@ -346,18 +346,24 @@ void _declare(
             await Future<void>.delayed(const Duration(milliseconds: 1));
           }
         });
-        var settled = await auditSettle.apply(tester);
         // The boot turn above lands what the *first* frame asked for, and
         // nothing after that: a demo that holds a placeholder for half a second
         // starts its load inside the settle, on fake time the real loop never
         // sees, and is judged with the load still in flight. Measured on
         // `demo/vector_smoke.dart` — the entry pointing at an asset that does
         // not exist was reported clean, because the read that would have thrown
-        // never completed.
+        // never completed. So the settle lands announced work as it goes, out
+        // of the same purse as the landing after it.
+        var budget = RealWorkBudget();
+        var settled = await auditSettle.apply(
+          tester,
+          land: () => budget.land(tester, assets),
+        );
         await landRealWork(
           tester,
           auditSettle,
           settled: settled,
+          budget: budget,
           assets: assets,
         );
       } finally {

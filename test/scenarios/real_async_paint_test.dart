@@ -99,17 +99,22 @@ void main() {
     });
   }
 
-  // The movie is drawn by the same pump loop as the still, so it is on the same
-  // cliff — a recording ends on whatever the last pump drew, and a landing that
-  // gave up early leaves the transition playing through to a screen with a hole
-  // in it, then the next step's movie opening on the filled-in version.
+  // **A still that is right does not make the movie behind it right**, and the
+  // difference is what a reader actually looks at: the recording is what the
+  // GUI plays when you hover a step.
   //
-  // Its cliff is further out, which is why it needs saying rather than
-  // assuming: a recording pumps at 33ms instead of 100 and photographs every
-  // frame, so a decode gets several times the wall clock it would otherwise
-  // and lands inside the settle. Under the old bound the sizes here landed and
-  // 5000×4000 did not. The assertion is the invariant, at the size the stills
-  // above use.
+  // A landing that happens *after* the settle loop puts the artwork in the last
+  // frame and no earlier one. Measured before this: a tap whose ripple runs 21
+  // recorded frames produced `[0, 0, 0, …, 0, present]` — one frame of artwork
+  // at the very end of a movie that is otherwise a hole, which plays as never
+  // having decoded at all. Fake time is why the app never catches up: a
+  // transition of several hundred fake milliseconds is spent in a few real
+  // ones, so a decode a device would have finished inside the first frame
+  // cannot finish inside any of them.
+  //
+  // So the frames are counted, not compared. Two captures that are both missing
+  // the artwork are equal, and the equality assertion this replaces was passing
+  // on exactly that.
   group('the transition, recorded', () {
     setUp(() {
       scenarioRunArgs = const ScenarioRunArgs(
@@ -122,16 +127,20 @@ void main() {
     });
     tearDown(() => scenarioRunArgs = null);
 
-    scenario('ends on the frame the step was photographed on', (s) async {
-      await s.pumpWidget(_ImageApp(rasterFixture(2400, 1800)));
+    scenario('carries the image, not just the frame it ends on', (s) async {
+      await s.pumpWidget(_ImageApp(solidRed(400, 400)));
       await s.tap('Show');
       await s.screen('one step later');
 
-      // The last frame of the tap's movie against the last frame of the step
-      // after it, which cannot be missing the image — so equality says the
-      // movie played to the end rather than stopping one decode short.
-      expect(captures[1].motion.hasMotion, isTrue);
-      expect(captures[1].motion.bytes.last, captures[2].motion.bytes.last);
+      var motion = captures[1].motion;
+      var blank = motion.bytes.where((frame) => _redPixels(frame) == 0);
+      expect(motion.bytes, hasLength(greaterThan(10)));
+      // Two frames legitimately have no artwork and no more: the screen as it
+      // stood before the tap, banked so the movie opens on where it came from,
+      // and the pump that mounts the widget — which is where the decode starts,
+      // so no frame drawn at that instant could show it.
+      expect(blank, hasLength(2));
+      expect(_redPixels(motion.bytes.last), greaterThan(0));
     });
   });
 
@@ -147,6 +156,21 @@ void main() {
     expect(captures.last.landed, isFalse);
     expect(captures.last.settled, isTrue);
   });
+}
+
+/// Pixels close to pure red in an rgba8888 frame — "is the artwork in this
+/// picture", asked of a fixture chosen so that counting answers it.
+int _redPixels(Uint8List raw) {
+  var found = 0;
+  for (var i = 0; i + 3 < raw.length; i += 4) {
+    if (raw[i] > 200 &&
+        raw[i + 1] < 60 &&
+        raw[i + 2] < 60 &&
+        raw[i + 3] > 200) {
+      found++;
+    }
+  }
+  return found;
 }
 
 /// An `ImageProvider` whose codec never arrives — `pendingImageCount` stays at
