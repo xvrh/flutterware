@@ -1031,6 +1031,27 @@ class CatalogSession extends ChangeNotifier {
   String? get busyWith => _busyWith;
   String? _busyWith;
 
+  /// What a *status surface* may say the session is doing.
+  ///
+  /// [busyWith] with a floor under it: null until the work has lasted
+  /// [busyAppearsAfter], the same word afterwards. The two answer different
+  /// questions and the difference is not cosmetic. [busyWith] is the truth, and
+  /// the things that must not race the compiler read it the instant it changes
+  /// — the capture path refuses to photograph a session that is working, and
+  /// the reload button disables itself. A row in the rail is not one of those.
+  ///
+  /// Measured on this repo's catalog, which is where the floor comes from: a
+  /// warm switch is 64ms, and a second click on the entry already on screen is
+  /// `compile 17ms · reload 104ms · 0 edited` — 121ms of announcement for a
+  /// frame that did not change. A word that arrives and leaves inside either is
+  /// a flash rather than news, so neither says anything anywhere now, and the
+  /// canvas arriving is the feedback.
+  String? get visiblyBusyWith => _busyShown ? _busyWith : null;
+  var _busyShown = false;
+
+  /// Longer than a warm switch, shorter than a wait you would question.
+  static const busyAppearsAfter = Duration(milliseconds: 250);
+
   /// How long the current [busyWith] has been running.
   ///
   /// Only counts up on screen where a counter is the point — the cold-start
@@ -1038,13 +1059,28 @@ class CatalogSession extends ChangeNotifier {
   Duration get busyFor => _busySince.elapsed;
   final _busySince = Stopwatch();
   Timer? _ticker;
+  Timer? _busyFloor;
 
   /// [tick] rebuilds listeners each second so an elapsed readout advances. Off
   /// by default: everywhere but a dedicated loading screen, the label alone
   /// says what is happening and its disappearance says when it stopped.
   void _busy(String what, {bool tick = false}) {
     if (_disposed) return;
+    // A word that changes without an [_idle] between — `compiling` becoming
+    // `reloading` — is one stretch of work continuing, so the floor keeps
+    // running rather than restarting. Otherwise a surface that had earned its
+    // way on screen would blink off at the moment the work got longer.
+    var continuing = _busyWith != null;
     _busyWith = what;
+    if (!continuing) {
+      _busyShown = false;
+      _busyFloor?.cancel();
+      _busyFloor = Timer(busyAppearsAfter, () {
+        if (_disposed || _busyWith == null) return;
+        _busyShown = true;
+        notifyListeners();
+      });
+    }
     _busySince
       ..reset()
       ..start();
@@ -1059,9 +1095,12 @@ class CatalogSession extends ChangeNotifier {
 
   void _idle() {
     _busyWith = null;
+    _busyShown = false;
     _busySince.stop();
     _ticker?.cancel();
     _ticker = null;
+    _busyFloor?.cancel();
+    _busyFloor = null;
     if (!_disposed) notifyListeners();
   }
 
@@ -1761,6 +1800,7 @@ class CatalogSession extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _ticker?.cancel();
+    _busyFloor?.cancel();
     _watchSettle?.cancel();
     _resizeSettle?.cancel();
     _scrollSettle?.cancel();

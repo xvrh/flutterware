@@ -145,8 +145,17 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   /// here that takes seconds, and a word that stays put until it goes away is
   /// what lets you look elsewhere and notice when it lands. No elapsed count —
   /// a figure ticking in the corner of the eye is movement, not information.
+  ///
+  /// [CatalogSession.visiblyBusyWith] rather than `busyWith`, and that is the
+  /// whole difference between a rail that reports and a rail that flickers: a
+  /// switch the guest makes by itself is 64ms, and this row is not worth
+  /// 64ms of anybody's attention. The unfloored [busyWith] is still what
+  /// [PreviewsPlugin.busyWith] above answers with, because a capture must know
+  /// the instant the session starts working, not a quarter-second later.
   Status? _busyStatusFor(String path) {
-    if (_sessions[path]?.busyWith case var busy?) return Status.info(busy);
+    if (_sessions[path]?.visiblyBusyWith case var busy?) {
+      return Status.info(busy);
+    }
     if (_sessions[path]?.phase == CatalogSessionPhase.error) {
       return const Status.error('failed to start');
     }

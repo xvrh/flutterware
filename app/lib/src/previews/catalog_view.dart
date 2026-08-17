@@ -1675,7 +1675,10 @@ class BusyDot extends StatefulWidget {
   final String? busy;
 
   /// Longer than a warm switch, shorter than a wait you would question.
-  static const appearsAfter = Duration(milliseconds: 250);
+  ///
+  /// The session's own floor, not a second one that happens to agree with it:
+  /// two clocks over the same event drift the moment somebody tunes one.
+  static const appearsAfter = CatalogSession.busyAppearsAfter;
 
   @override
   State<BusyDot> createState() => _BusyDotState();

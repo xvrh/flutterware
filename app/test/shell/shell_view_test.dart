@@ -47,8 +47,16 @@ const _manifestJson =
 class _FakeCore extends PluginCore {
   _FakeCore(super.host, {this.status = Status.none, this.children = const []});
 
-  final Status status;
+  Status status;
   final List<PluginChild> children;
+
+  /// Moves a plugin from quiet to loud, which is the only way to watch what a
+  /// row or a tab does when a status *arrives* rather than what it looks like
+  /// once one is there.
+  void say(Status value) {
+    status = value;
+    notifyChanged();
+  }
 
   @override
   PluginReport get report => PluginReport(
@@ -513,6 +521,73 @@ void main() {
       expect(find.text('panel:a.deps/app'), findsOneWidget);
     });
 
+    testWidgets('a row does not repeat what the row under it is saying', (
+      tester,
+    ) async {
+      // Previews reduces to whatever its busy package reports, so a compile
+      // used to write `compiling` twice, one line directly above the other.
+      var shell = ShellController(
+        appContext: AppContext(logger: LogClient.print()),
+        flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        registry: _panels(const ['a.deps', 'a.tests']),
+        coreRegistry: PluginCoreRegistry({
+          'a.deps': (h) => _FakeCore(
+            h,
+            status: const Status.info('compiling'),
+            children: const [
+              PluginChild(
+                id: 'app',
+                label: 'app',
+                status: Status.info('compiling'),
+              ),
+            ],
+          ),
+          'a.tests': _FakeCore.new,
+        }),
+        manifestLoader: _StubLoader(),
+        discovery: WorktreeDiscovery(
+          runProcess: (_, _, {workingDirectory}) async =>
+              ProcessResult(0, 0, _listing, ''),
+        ),
+      );
+      await shell.start('/repo');
+      await tester.pumpWidget(ShellApp(shell));
+      await tester.pumpAndSettle();
+
+      var word = find.descendant(
+        of: find.byKey(sidebarKey),
+        matching: find.text('compiling'),
+      );
+      // Collapsed, the plugin row is the only thing that can say it.
+      expect(word, findsOneWidget);
+
+      // Expanded, the child says it and the row above goes quiet — still once.
+      await tester.tap(find.text('Dependencies'));
+      await tester.pumpAndSettle();
+      expect(word, findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(sidebarKey), matching: find.text('app')),
+        findsOneWidget,
+        reason: 'the child is the one still saying it',
+      );
+    });
+
+    testWidgets('but a summary no child makes survives the expansion', (
+      tester,
+    ) async {
+      // The other half of the rule, and what keeps it from hiding anything: a
+      // parent status is suppressed on an exact match, not on having children.
+      var shell = childShell();
+      await shell.start('/repo');
+      await tester.pumpWidget(ShellApp(shell));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Dependencies'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 packages'), findsOneWidget);
+    });
+
     testWidgets('selecting a child switches the panel', (tester) async {
       var shell = childShell();
       await shell.start('/repo');
@@ -594,6 +669,50 @@ void main() {
       matching: find.byType(Text),
     );
     expect(tester.getSize(label.first).width, lessThanOrEqualTo(180));
+  });
+
+  testWidgets('a status arriving on a tab moves nothing', (tester) async {
+    // The dot used to be inserted into the tab's row, so it arrived by
+    // *widening* the tab: the branch name shifted along and re-ellipsised to
+    // announce something that is often over in a tenth of a second. Measured
+    // on the real studio before the fix — a 121ms reload took the tab from
+    // 224px to 237px and back.
+    late _FakeCore deps;
+    var shell = ShellController(
+      appContext: AppContext(logger: LogClient.print()),
+      flutterSdk: FlutterSdkPath('/tmp/flutter'),
+      registry: _panels(const ['a.deps', 'a.tests']),
+      coreRegistry: PluginCoreRegistry({
+        'a.deps': (h) => deps = _FakeCore(h),
+        'a.tests': _FakeCore.new,
+      }),
+      manifestLoader: _StubLoader(),
+      discovery: WorktreeDiscovery(
+        runProcess: (_, _, {workingDirectory}) async =>
+            ProcessResult(0, 0, _listing, ''),
+      ),
+    );
+    await shell.start('/repo');
+    await tester.pumpWidget(ShellApp(shell));
+    await tester.pumpAndSettle();
+
+    var worktree = shell.worktrees.first;
+    var tab = find.byKey(worktreeTabKey(worktree));
+    var label = find.descendant(of: tab, matching: find.byType(Text)).first;
+    var quietTab = tester.getRect(tab);
+    var quietLabel = tester.getRect(label);
+    expect(shell.sessionFor(worktree)!.status.tone, Tone.neutral);
+
+    deps.say(const Status.error('3 failing'));
+    await tester.pumpAndSettle();
+
+    expect(
+      shell.sessionFor(worktree)!.status.tone,
+      Tone.error,
+      reason: 'the tab has something to show now, or this proves nothing',
+    );
+    expect(tester.getRect(tab), quietTab);
+    expect(tester.getRect(label), quietLabel);
   });
 
   testWidgets('clickable rows take the pointer cursor', (tester) async {
