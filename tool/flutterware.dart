@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutterware/plugins.dart';
 
 /// flutterware's own repo — a three-member pub workspace, and the monorepo
@@ -14,9 +12,6 @@ import 'package:flutterware/plugins.dart';
 const root = Pkg('.');
 const app = Pkg('app');
 const example = Pkg('examples/example');
-
-/// The dart this config is running under — see the [DevStack] note below.
-final dart = Platform.resolvedExecutable;
 
 void main() => Flutterware.configure((fw) {
   // **What to surface first on the changes screen, for this repository.**
@@ -98,23 +93,26 @@ void main() => Flutterware.configure((fw) {
   // and run where it runs them, so one script serves both configs and neither
   // has to know where the other opened.
   //
-  // `Platform.resolvedExecutable` rather than the string `dart`: a config runs
-  // under the SDK the project is pinned to, and that is the one that can run
-  // the project's scripts. The `dart` on PATH is a different question with a
-  // frequently different answer — in this repo, a two-versions-old one.
+  // `StackRun.script` rather than a command naming an interpreter: flutterware
+  // supplies the SDK it is running under, which is the one the project pinned.
+  // The `dart` on PATH is a different question with a frequently different
+  // answer — in this repo, a two-versions-old one. This used to be
+  // `Platform.resolvedExecutable` prepended to all six commands.
   fw.use(
     DevStack.background(
       label: 'Example server',
       workingDirectory: 'examples/example',
-      probe: Probe.json([dart, 'tool/stack.dart', 'status', '--json']),
-      start: [dart, 'tool/stack.dart', 'up'],
-      stop: [dart, 'tool/stack.dart', 'down'],
+      probe: Probe.json(
+        StackRun.script('tool/stack.dart', args: ['status', '--json']),
+      ),
+      start: StackRun.script('tool/stack.dart', args: ['up']),
+      stop: StackRun.script('tool/stack.dart', args: ['down']),
       poll: const Duration(seconds: 15),
       commands: [
         StackCommand(
           'logs',
           'Logs',
-          [dart, 'tool/stack.dart', 'logs'],
+          StackRun.script('tool/stack.dart', args: ['logs']),
           description:
               'The last 40 lines the server logged. A background process has '
               'no terminal, so it appends to a file instead.',
@@ -122,7 +120,7 @@ void main() => Flutterware.configure((fw) {
         StackCommand(
           'hit',
           'Send a request',
-          [dart, 'tool/stack.dart', 'hit'],
+          StackRun.script('tool/stack.dart', args: ['hit']),
           argument: 'path',
           description:
               'Requests a path — /users, /slow, /error — so the Server panel '
@@ -194,6 +192,22 @@ void main() => Flutterware.configure((fw) {
               description:
                   'Self-contained http traffic generator for the '
                   'ext.dart.io http-profile spike',
+            ),
+            // Outside `lib/`, which is the reason it is declared: the wrapper
+            // that installs the run guest names this file by path and the enum
+            // beside it by path, so a launch of it is the live check that a
+            // dev-only entry point kept out of what ships is still driveable.
+            Entrypoint(
+              'demo/main_dev.dart',
+              name: 'Dev entry point',
+              description:
+                  'A dev-only entry point in demo/ — the non-package: case '
+                  'for the run guest wrapper',
+              platforms: [RunPlatform.desktop],
+              knobs: [
+                Knob('seed', description: 'What to put in the app at startup'),
+                Knob('marker', label: 'Marker'),
+              ],
             ),
             Entrypoint(
               'lib/ui_book.dart',

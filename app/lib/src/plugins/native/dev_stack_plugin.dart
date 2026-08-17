@@ -323,7 +323,7 @@ class _CommandsState extends State<_Commands> {
                         // does for `fw` and for an agent.
                         Text(
                           command.description ??
-                              _Console.shorten(command.command.join(' ')),
+                              _Console.shorten(describeRun(command.run)),
                           style: command.description == null
                               ? type.caption.copyWith(
                                   fontFamily: 'monospace',

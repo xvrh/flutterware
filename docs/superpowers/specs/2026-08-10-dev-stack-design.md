@@ -864,3 +864,108 @@ evidence recorded here**: if a second and third consumer arrive writing the same
 wrapper, the thing to build is not `Probe.dockerCompose()` but a way for a
 project to *declare* the mapping from a lister's output to a state — which does
 not name a vendor and does not go stale when compose changes a flag.
+
+---
+
+## What runs it, and how often (2026-08-17)
+
+Two changes from a first integration report, plus one bug the second one exposed.
+
+### `StackRun` — the four declaration sites stop naming an interpreter
+
+`Probe`, `start`, `stop` and `StackCommand` each took a `List<String>` spawned
+directly, which asks the config file to name an executable. `DefineSource.script`
+refuses to do that, in writing, two hundred lines earlier in the same file:
+*"a command would have to name an executable and no config file can know which
+one."* Both halves of one package, opposite policies.
+
+The evidence that this is not a style question is in this repository. Both
+configs opened by computing `Platform.resolvedExecutable` into a `dart` variable
+and prepending it to six commands, under ten lines of comment explaining why.
+The consumer who reported it reached instead for `['fvm', 'dart', 'run', …]` — a
+committed file naming a version manager, and worse than the workaround here in a
+specific way: `fvm` has to be *found*. It lives at `~/.pub-cache/bin/fvm` on this
+machine, which is in none of `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin` — so a GUI
+started from the Dock rather than a terminal cannot spawn it, and the panel
+reports `unavailable` every poll on a healthy stack.
+
+So all four take a `StackRun`, which is either a `.command` naming an executable
+the machine is expected to have, or a `.script` naming a Dart file in the project
+and letting flutterware supply the SDK it is running under.
+
+**A script's path is relative to `workingDirectory`, and it runs there.** This
+diverges from `DefineSource.script`, which is worktree-root-relative, and the
+divergence is deliberate: this plugin *has* a declared working directory, and the
+natural reading of `tool/local_env.dart` is the one you get having cd'd into the
+directory every other command of the stack already runs in.
+
+**Spawned as `dart <path>`, not `dart run <path>`.** Measured here, from a
+package with native-asset build hooks: 0.33s for `dart run` of
+`void main(){print('hi');}` against 0.28s direct, and the gap is the hooks —
+`dart run` re-resolves the graph and executes every hook in it, every time, while
+the direct form runs none. That is why the gap grows with the project instead of
+staying a rounding error: the reporting consumer measured **4.4s** for a
+`dart run` of the same trivial script in a 16-package workspace, and their own
+report shows `Running build hooks...Running build hooks...` on the tail of every
+command. The example project's config had already found this and written
+`dart tool/stack.dart` by hand.
+
+The price is real and worth stating: build hooks do not run, so a script whose
+imports need native assets built will not find them, and a stale
+`package_config.json` is an error where `run` would have fixed it. Both are loud.
+A script that genuinely needs hooks is a `.command`.
+
+**Not adopted: `dart run --resident`.** It exists on the pinned SDK (undocumented
+in `--help`) and is a real win on compile — 0.59s to 0.25s on a script with
+dependencies — and, importantly, the resident compiler does its own incremental
+staleness tracking, so it does not cost the caller the invalidation logic that
+pre-compiling a binary would. But it **does not skip build hooks**: measured with
+hooks present, `--resident` still prints them and still pays them. So it cannot
+address the 4.4s case, which is the one that prompted this, while `dart <path>`
+can. It also spawns a long-lived compiler daemon on a port, which a plugin whose
+whole posture is *it owns nothing* should not do implicitly.
+
+### The interval a slow probe earns
+
+`poll:` is now a floor rather than a promise: the effective interval is at least
+four times the last probe's duration, so a probe never occupies more than a
+quarter of it. A fast probe never reaches the multiplier, so the common case is
+unchanged and free.
+
+Only the last probe knows what a probe costs. The reporting consumer's honest
+number for a 4.6s probe was 30s, which they had to write into `poll:` and then
+justify in a comment — a fact about the tool's cost model, in a file where every
+other line is a fact about the project. The declaration should say the timescale
+the *subject* changes on, which is what the field's doc comment already claims it
+is for.
+
+Implemented as a one-shot timer re-armed after each probe rather than a
+`Timer.periodic`, because the interval is not known until the probe it follows
+has been timed — and because with a periodic timer the gap *between* probes
+shrinks by however long each one took, which is backwards for a slow probe.
+
+### Two probes could race, and a hung one was forever
+
+`refresh()` guarded on `_busy` — a user-started transition — but not on whether a
+probe was already out. At the shipped default a 4.6s probe on a 10s interval
+never showed it; anything slower than its interval left two subprocesses both
+writing `_reading`, and the panel showed whichever finished last.
+
+A second caller now joins the probe in flight rather than starting one. Joining
+rather than skipping is what keeps the `status` action honest: asked to go and
+look while a poll is out, it returns *that* look rather than the cache it was
+trying to refresh.
+
+That guard makes a timeout necessary rather than merely tidy. Before it, a probe
+that never returned leaked a process per interval; with it, the guard would hand
+every later caller the same dead future and the panel would sit on one reading
+for the rest of the session. So a probe that outlives three intervals (floored at
+30s, because a project declaring a two-minute interval is describing something
+slow) is adopted as `unavailable` naming the command.
+
+**Still not done, from the same report:** a streaming command kind, so
+`logs --follow` is declarable (§the `logs` gap); `stderr` separated from `stdout`
+on `DevStackRunResult`, so a renderer can put `Running build hooks...` somewhere
+other than under the reader's eye; options on `StackCommand.argument`, which
+`ActionParameter` already models; and a timeout on commands, which have the same
+hang the probe just got protected from.

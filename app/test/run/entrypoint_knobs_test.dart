@@ -180,12 +180,42 @@ void main() {}
       ]);
     });
 
-    test('an import climbing out of lib/ is dropped rather than guessed', () {
-      // There is no `package:` spelling for it, so there is nothing honest to
-      // write. The wrapper only misses it if a knob's type needed it, and then
-      // the compiler names the type.
+    test('an import climbing out of lib/ is spelled from the wrapper', () {
+      // It used to be dropped, on the grounds that it has no `package:`
+      // spelling. It does not need one: the wrapper sits in the package, so a
+      // path reaches `tool/`, and having no `package:` spelling is exactly
+      // what makes the path safe — nothing else can name the file either.
       write('lib/main.dart', '''
 import '../tool/helpers.dart';
+void main() {}
+''');
+
+      expect(scan().imports, ["import '../../../tool/helpers.dart';"]);
+    });
+
+    test('an entry point outside lib/ keeps its neighbours', () {
+      // The whole point of allowing one: `demo/` holds the dev-only entry
+      // points and the things only they use.
+      write('demo/src/seed.dart', 'enum Seed { empty }');
+      write('demo/main_dev.dart', '''
+import 'src/seed.dart';
+import 'package:myapp/models.dart';
+void main({Seed seed = Seed.empty}) {}
+''');
+
+      expect(scan('demo/main_dev.dart').imports, [
+        "import '../../../demo/src/seed.dart';",
+        "import 'package:myapp/models.dart';",
+      ]);
+    });
+
+    test('an import reaching another package is dropped', () {
+      // A path would spell it, and must not: a sibling package is reached by
+      // `package:` URI from everywhere else in the checkout, and one library
+      // under two URIs is two libraries. The wrapper only misses it if a
+      // knob's type needed it, and then the compiler names the type.
+      write('lib/main.dart', '''
+import '../../shared/lib/config.dart';
 void main() {}
 ''');
 

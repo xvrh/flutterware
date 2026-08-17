@@ -749,13 +749,27 @@ class LauncherIconPackage extends PluginPackage {
 ///   workingDirectory: 'packages/server',
 ///   // Not `docker compose ps --quiet` on its own: that exits 0 whether or
 ///   // not anything is up. See [Probe.exitCode].
-///   probe: Probe.exitCode([
+///   probe: Probe.exitCode(StackRun.command([
 ///     'sh',
 ///     '-c',
 ///     'test -n "$(docker compose ps --quiet --status running)"',
-///   ]),
-///   start: ['docker', 'compose', 'up', '--wait'],
-///   stop:  ['docker', 'compose', 'down', '--volumes'],
+///   ])),
+///   start: StackRun.command(['docker', 'compose', 'up', '--wait']),
+///   stop:  StackRun.command(['docker', 'compose', 'down', '--volumes']),
+///   stopIsDestructive: true,
+/// ));
+/// ```
+///
+/// A project whose stack is behind its own CLI declares the same thing as
+/// scripts, and then nothing here names an executable at all:
+///
+/// ```dart
+/// fw.use(DevStack.background(
+///   workingDirectory: 'packages/server',
+///   probe: Probe.json(StackRun.script('tool/local_env.dart',
+///       args: ['status', '--json'])),
+///   start: StackRun.script('tool/local_env.dart', args: ['up']),
+///   stop:  StackRun.script('tool/local_env.dart', args: ['down']),
 ///   stopIsDestructive: true,
 /// ));
 /// ```
@@ -789,10 +803,10 @@ class DevStack extends Plugin {
   /// Brings it up. Null for a stack this machine only observes — a shared
   /// server, a system postgres — which is a complete declaration and gets a
   /// panel with a status and no controls.
-  final List<String>? start;
+  final StackRun? start;
 
   /// Takes it down. Null has the same meaning as a null [start].
-  final List<String>? stop;
+  final StackRun? stop;
 
   /// Where the commands run, relative to the worktree root. The worktree root
   /// itself when null.
@@ -822,12 +836,114 @@ class DevStack extends Plugin {
   @override
   Map<String, Object?> get config => {
     'probe': probe.toJson(),
-    if (start != null) 'start': start,
-    if (stop != null) 'stop': stop,
+    if (start != null) 'start': start!.toJson(),
+    if (stop != null) 'stop': stop!.toJson(),
     if (workingDirectory != null) 'workingDirectory': workingDirectory,
     'poll': poll.inMilliseconds,
     if (stopIsDestructive) 'stopIsDestructive': true,
     if (commands.isNotEmpty) 'commands': [for (var c in commands) c.toJson()],
+  };
+}
+
+/// Something a [DevStack] runs: the probe, `start`, `stop`, a [StackCommand].
+///
+/// **Two kinds, because "which executable" is a question a config file cannot
+/// answer and does not have to.** A [StackRun.command] names an executable and
+/// is right for one the machine is expected to have — `docker`, `kubectl`, `sh`.
+/// A [StackRun.script] names a Dart file in this project and lets flutterware
+/// supply the interpreter, which is the only way to be sure it is the SDK the
+/// project pins.
+///
+/// This is the same argument [DefineSource.script] makes, and it is here
+/// because the sibling API making it was not enough: both configs in this
+/// repository open by computing `Platform.resolvedExecutable` into a `dart`
+/// variable and prepending it to six commands, under ten lines of comment
+/// explaining why. A consumer reached for `['fvm', 'dart', 'run', …]` instead —
+/// a committed file naming a version manager, which is worse in a way worth
+/// spelling out: `fvm` has to be *found*, and a GUI started from the Dock does
+/// not have the PATH your shell does.
+sealed class StackRun {
+  const StackRun();
+
+  /// An executable and its arguments, spawned directly — so `$(…)`, pipes and
+  /// `&&` exist only if `sh -c` is part of what you declared.
+  const factory StackRun.command(List<String> command) = CommandRun;
+
+  /// A Dart script in this project, run with the SDK flutterware is running
+  /// under.
+  ///
+  /// ```dart
+  /// StackRun.script('tool/local_env.dart', args: ['status', '--json'])
+  /// ```
+  ///
+  /// **[path] is relative to the stack's `workingDirectory`, and the script runs
+  /// there** — so it is written exactly as you would type it, having cd'd to the
+  /// directory the stack's other commands already run in. That differs from
+  /// [DefineSource.script], which is relative to the worktree root, and the
+  /// difference is the `workingDirectory` this plugin has and that one does not.
+  ///
+  /// **Run as `dart <path>`, not `dart run <path>`.** `run` re-resolves the
+  /// package graph and executes every build hook in it, every time — a cost a
+  /// probe would pay on every poll, and one that grows with the project rather
+  /// than staying a rounding error. The price is that build hooks do not run, so
+  /// a script whose imports need native assets built will not find them. Declare
+  /// that one as a [StackRun.command] naming its own interpreter, and accept
+  /// what that means.
+  const factory StackRun.script(String path, {List<String> args}) = ScriptRun;
+
+  Map<String, Object?> toJson();
+
+  /// Reads back what [toJson] wrote, or null for a shape this build cannot read.
+  ///
+  /// A bare list is accepted too: that is what `start`, `stop` and a command
+  /// were before this class existed, and a project pinning an older
+  /// `flutterware` still writes one.
+  static StackRun? fromJson(Object? raw) {
+    if (raw is List) {
+      var command = [for (var arg in raw) '$arg'];
+      return command.isEmpty ? null : CommandRun(command);
+    }
+    if (raw is! Map) return null;
+    if (raw['script'] case String path) {
+      return ScriptRun(
+        path,
+        args: [
+          for (var arg in (raw['args'] as List? ?? const []))
+            if (arg is String) arg,
+        ],
+      );
+    }
+    if (raw['command'] case List raw) {
+      var command = [for (var arg in raw) '$arg'];
+      return command.isEmpty ? null : CommandRun(command);
+    }
+    return null;
+  }
+}
+
+/// See [StackRun.command].
+final class CommandRun extends StackRun {
+  const CommandRun(this.command);
+
+  final List<String> command;
+
+  @override
+  Map<String, Object?> toJson() => {'command': command};
+}
+
+/// See [StackRun.script].
+final class ScriptRun extends StackRun {
+  const ScriptRun(this.path, {this.args = const []});
+
+  /// Relative to the stack's `workingDirectory`, `/`-separated.
+  final String path;
+
+  final List<String> args;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'script': path,
+    if (args.isNotEmpty) 'args': args,
   };
 }
 
@@ -855,28 +971,28 @@ class Probe {
   /// there".
   ///
   /// Where the answer is only in the output, the emptiness has to be turned
-  /// into an exit code, and that needs a shell — [command] is spawned
-  /// directly, so `$(…)`, pipes and `&&` exist only if `sh -c` is part of what
-  /// you declared:
+  /// into an exit code, and that needs a shell — a [StackRun.command] is
+  /// spawned directly, so `$(…)`, pipes and `&&` exist only if `sh -c` is part
+  /// of what you declared:
   ///
   /// ```dart
-  /// Probe.exitCode([
+  /// Probe.exitCode(StackRun.command([
   ///   'sh',
   ///   '-c',
   ///   'test -n "$(docker compose ps --quiet --status running)"',
-  /// ])
+  /// ]))
   /// ```
   ///
   /// That names a Unix shell and is as portable as one. A project that needs
-  /// more than one platform is better off putting the check in a script of its
-  /// own — which is most of the work of earning a [Probe.json], and gets the
-  /// service list and the *broken* state with it.
+  /// more than one platform is better off putting the check in a
+  /// [StackRun.script] of its own — which is most of the work of earning a
+  /// [Probe.json], and gets the service list and the *broken* state with it.
   ///
   /// What it cannot do is tell *down* from *broken*: a health check that fails
   /// because Docker Desktop is asleep exits non-zero exactly like one that
   /// fails because nothing is up, and reporting "down" there offers a Bring-up
   /// button that cannot work. Use [Probe.json] where that distinction matters.
-  const Probe.exitCode(this.command) : shape = ProbeShape.exitCode;
+  const Probe.exitCode(this.run) : shape = ProbeShape.exitCode;
 
   /// The command prints one JSON object on stdout:
   ///
@@ -903,21 +1019,22 @@ class Probe {
   /// Output that does not parse is reported as `unavailable` quoting whatever
   /// the command did say, because a probe that cannot be read is a probe that
   /// failed — not a stack that is down.
-  const Probe.json(this.command) : shape = ProbeShape.json;
+  const Probe.json(this.run) : shape = ProbeShape.json;
 
-  final List<String> command;
+  final StackRun run;
   final ProbeShape shape;
 
-  Map<String, Object?> toJson() => {'command': command, 'shape': shape.name};
+  Map<String, Object?> toJson() => {'run': run.toJson(), 'shape': shape.name};
 
   static Probe? fromJson(Map<String, Object?> json) {
-    var command = [
-      for (var arg in (json['command'] as List? ?? const [])) '$arg',
-    ];
-    if (command.isEmpty) return null;
+    // `command` as the fallback key: that is where a config pinning an older
+    // `flutterware` puts its argv, and a probe that stops being read is a panel
+    // that stops knowing anything.
+    var run = StackRun.fromJson(json['run'] ?? json['command']);
+    if (run == null) return null;
     return ProbeShape.byName(json['shape'] as String?) == ProbeShape.json
-        ? Probe.json(command)
-        : Probe.exitCode(command);
+        ? Probe.json(run)
+        : Probe.exitCode(run);
   }
 }
 
@@ -935,7 +1052,7 @@ class StackCommand {
   const StackCommand(
     this.id,
     this.label,
-    this.command, {
+    this.run, {
     this.description,
     this.danger = false,
     this.argument,
@@ -948,7 +1065,7 @@ class StackCommand {
   final String? description;
 
   /// Run as declared, with [argument]'s value appended when one is given.
-  final List<String> command;
+  final StackRun run;
 
   /// Destroys data. Renderers make it distinct and ask first.
   final bool danger;
@@ -961,7 +1078,7 @@ class StackCommand {
   Map<String, Object?> toJson() => {
     'id': id,
     'label': label,
-    'command': command,
+    'run': run.toJson(),
     if (description != null) 'description': description,
     if (danger) 'danger': true,
     if (argument != null) 'argument': argument,
@@ -970,14 +1087,12 @@ class StackCommand {
   static StackCommand? fromJson(Map<String, Object?> json) {
     var id = json['id'];
     var label = json['label'];
-    var command = [
-      for (var arg in (json['command'] as List? ?? const [])) '$arg',
-    ];
-    if (id is! String || label is! String || command.isEmpty) return null;
+    var run = StackRun.fromJson(json['run'] ?? json['command']);
+    if (id is! String || label is! String || run == null) return null;
     return StackCommand(
       id,
       label,
-      command,
+      run,
       description: json['description'] as String?,
       danger: json['danger'] == true,
       argument: json['argument'] as String?,

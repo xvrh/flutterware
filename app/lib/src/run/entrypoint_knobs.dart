@@ -7,6 +7,7 @@ import 'package:pubspec_parse/pubspec_parse.dart';
 
 import '../utils/enum_lookup.dart';
 import '../utils/parameter_knobs.dart';
+import 'wrapper_import.dart';
 
 /// What an entry point's `main` declares it can be launched with.
 class EntrypointKnobs {
@@ -21,8 +22,8 @@ class EntrypointKnobs {
   /// form renders, and the order somebody chose when they wrote it.
   final List<ParameterKnob> knobs;
 
-  /// The entry point's own imports, as the generated wrapper must write them:
-  /// `package:` URIs, prefixes kept.
+  /// The entry point's own imports, as the generated wrapper must write them —
+  /// spelled from the wrapper's directory, prefixes kept.
   ///
   /// Here rather than in the generator because both come from the same parse,
   /// and because a wrapper that names a value must import whatever declares it
@@ -118,17 +119,23 @@ EntrypointKnobs scanEntrypointKnobs({
   );
 }
 
-/// [unit]'s imports, rewritten so they mean the same thing from anywhere.
+/// [unit]'s imports, rewritten so they mean the same thing from the wrapper.
 ///
 /// A relative import is relative to the file holding it, and the wrapper does
 /// not sit beside that file — it sits in `.dart_tool/flutterware/run/`, where
 /// `import 'src/config.dart'` resolves against the wrong directory and fails to
 /// compile. Measured, and it is the real layout rather than a hypothetical.
 ///
-/// Every entry point is under `lib/` (the wrapper already requires it), so each
-/// relative import has a `package:` spelling that means the same thing from
-/// everywhere. `dart:` and `package:` imports are already absolute and pass
+/// So each one is resolved against the entry point's own directory and then
+/// re-spelled from the wrapper's by [wrapperImportOf] — the same function that
+/// spells the import of the entry point itself, because a wrapper whose two
+/// halves disagreed about how to name a file in `demo/` would compile one and
+/// fail the other. `dart:` and `package:` imports are already absolute and pass
 /// through untouched.
+///
+/// What [wrapperImportOf] declines — a file in another package, reached
+/// relatively — is dropped rather than guessed at: the wrapper only fails to
+/// compile if a knob's type needed it, and then the error names the type.
 List<String> _importsOf(
   CompilationUnit unit, {
   required String packageRoot,
@@ -143,17 +150,12 @@ List<String> _importsOf(
     String? resolved;
     if (uri.startsWith('dart:') || uri.startsWith('package:')) {
       resolved = uri;
-    } else if (package != null) {
-      var absolute = p.posix.normalize(p.posix.join(directory, uri));
-      if (p.posix.isWithin('lib', absolute)) {
-        resolved =
-            'package:$package/${p.posix.relative(absolute, from: 'lib')}';
-      }
+    } else {
+      resolved = wrapperImportOf(
+        p.posix.normalize(p.posix.join(directory, uri)),
+        package: package,
+      );
     }
-    // A relative import that climbs out of `lib/` has no `package:` spelling,
-    // so there is nothing honest to write. Dropped rather than guessed: the
-    // wrapper only fails to compile if a knob's type needed it, and then the
-    // error names the type.
     if (resolved == null) continue;
     var prefix = directive.prefix?.name;
     imports.add("import '$resolved'${prefix == null ? '' : ' as $prefix'};");

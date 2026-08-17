@@ -1,3 +1,54 @@
+## Unreleased
+
+- **A `DevStack` says what to run with `StackRun`, and can name a script instead
+  of an executable.** Breaking: `Probe.exitCode` / `Probe.json`, `start:`,
+  `stop:` and `StackCommand`'s third argument all took a `List<String>` and now
+  take a `StackRun` — `StackRun.command([...])` for what you wrote before, or
+  `StackRun.script('tool/local_env.dart', args: [...])` to name a Dart file in
+  the project and let flutterware supply the interpreter. That is the one thing
+  a config file cannot know: the `dart` on PATH is routinely not the SDK the
+  project pins, and `fvm` has to be *found* — a GUI started from the Dock does
+  not have your shell's PATH. `DefineSource.script` has made this argument since
+  0.5.0; both configs in this repository were working around its absence by
+  computing `Platform.resolvedExecutable` and prepending it to six commands.
+  - A script's path is relative to the stack's `workingDirectory` and runs
+    there, so it is written the way you would type it having cd'd in. (That
+    differs from `DefineSource.script`, which is relative to the worktree root —
+    the difference is the `workingDirectory` this plugin has.)
+  - Spawned as `dart <path>`, not `dart run <path>`: `run` re-resolves the
+    package graph and executes every build hook in it on every invocation, which
+    a probe would pay on every poll. The cost of that is that build hooks do not
+    run, so a script needing native assets built must be a `StackRun.command`.
+  - Older configs still read. A bare `List` where a `StackRun` now goes is taken
+    as a command, so a project pinning an older `flutterware` keeps working.
+- **A slow probe now widens its own interval instead of saturating the core.**
+  `poll:` is a floor rather than a promise: the interval becomes at least four
+  times the last probe's duration, so a probe never occupies more than a quarter
+  of it. A fast probe never reaches the multiplier and nothing changes. Only the
+  last probe knows what a probe costs — a `dart run` of `void main(){}` was
+  measured at 4.4s in a workspace with native-asset build hooks, against a
+  default 10s interval, and the project's only recourse was to write a bigger
+  number into `poll:` and explain the tool's cost model in a comment.
+- **Two probes can no longer race.** The poll timer used to fire whether or not
+  the last probe had come back, so a probe slower than the interval left two
+  subprocesses both writing the reading and the panel showed whichever finished
+  last. A second caller now joins the probe in flight — which is also what makes
+  the `status` action honest, since asked to go and look while a poll is out it
+  returns that look rather than the cache. And a probe that never answers is
+  reported as `unavailable` rather than blocking every later one.
+- **A `Run` entry point no longer has to be under `lib/`.** An entry point in
+  `demo/` or `tool/` is wrapped in the run guest like any other, so it gets
+  knobs, `inspect` and `act` — it used to launch uninstrumented, with the reason
+  logged. The wrapper needs no `package:` URI for its target: it is written
+  inside the package, so a path reaches anything the package holds, and a file
+  outside `lib/` has no `package:` spelling for a path to conflict with. A `lib/`
+  entry point is still named by its `package:` URI, and only that — a library
+  reached under two URIs is two libraries. An entry point *outside* its package
+  is still refused, for that same reason.
+- Relatedly, an entry point's own import that climbs out of `lib/` but stays in
+  the package — `import '../tool/helpers.dart'` — is now copied into the wrapper
+  rather than dropped, so a knob whose type is declared there works.
+
 ## 0.5.2
 
 The UI catalog tool is now **Previews**, and entries are declared with

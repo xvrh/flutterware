@@ -7,6 +7,7 @@ import 'package:flutterware/channels.dart';
 
 import '../utils/parameter_knobs.dart';
 import 'entrypoint_knobs.dart';
+import 'wrapper_import.dart';
 
 /// What a launch should pass to `--target`: the generated guest wrapper when
 /// one could be written, the plain [entrypoint] otherwise, with the reason.
@@ -32,10 +33,20 @@ class GuestEntrypoint {
 /// project's ever meets it. Regenerated on every launch: it is derived state,
 /// and the entrypoint it wraps may have moved since last time.
 ///
-/// Wrapping needs a `package:` URI for the entrypoint (so `lib/` only) and
-/// the package's name. When either is missing the launch proceeds
-/// uninstrumented rather than failing — stated in [GuestEntrypoint.reason],
-/// which the caller logs.
+/// **Wrapping needs the entrypoint to be inside the package, and nothing
+/// more.** It used to require `lib/`, on the grounds that the wrapper needs a
+/// `package:` URI to import — but the wrapper sits inside the package, so a
+/// path reaches anything the package holds, and a file outside `lib/` has no
+/// `package:` spelling for a path to conflict with. [wrapperImportOf] draws
+/// that line. This matters because `demo/` and `tool/` are where dev-only entry
+/// points belong in a project that keeps them out of what it ships — the same
+/// `demo/` the previews plugin already scans, so refusing it here made one
+/// config file disagree with itself.
+///
+/// A `lib/` entrypoint still needs the package's name, because there a
+/// `package:` URI is the *only* spelling allowed. When it or the entrypoint is
+/// out of reach the launch proceeds uninstrumented rather than failing —
+/// stated in [GuestEntrypoint.reason], which the caller logs.
 ///
 /// [knobs] are the values to pass `main` as named arguments, keyed by parameter
 /// name — `2026-08-12-run-knobs-design.md` § K3. Rewriting this file and hot
@@ -47,32 +58,33 @@ GuestEntrypoint writeGuestEntrypoint({
   required String entrypoint,
   Map<String, Object?> knobs = const {},
 }) {
-  if (!entrypoint.startsWith('lib/')) {
-    return GuestEntrypoint._(
-      entrypoint,
-      guest: false,
-      reason:
-          '$entrypoint is not under lib/, so it has no package: URI the '
-          'wrapper could import',
-    );
-  }
-  String package;
+  String? package;
+  Object? packageProblem;
   try {
     package = Pubspec.parse(
       File(p.join(packageRoot, 'pubspec.yaml')).readAsStringSync(),
     ).name;
   } catch (e) {
+    // Only fatal for a `lib/` entrypoint, which has no other spelling. Held
+    // rather than reported here so an entrypoint that does not need the name is
+    // not refused for missing it.
+    packageProblem = e;
+  }
+  var importUri = wrapperImportOf(entrypoint, package: package);
+  if (importUri == null) {
     return GuestEntrypoint._(
       entrypoint,
       guest: false,
-      reason: 'could not read the package name from pubspec.yaml: $e',
+      reason: p.posix.isWithin('lib', entrypoint)
+          ? 'could not read the package name from pubspec.yaml, and a lib/ '
+                'entrypoint has to be imported by its package: URI: '
+                '$packageProblem'
+          : '$entrypoint is outside $packageRoot, so the wrapper written inside '
+                'it has no import that reaches the entrypoint',
     );
   }
-  var importUri = 'package:$package/${entrypoint.substring('lib/'.length)}';
   var target = p.posix.join(
-    '.dart_tool',
-    'flutterware',
-    'run',
+    wrapperDirectory,
     '${p.basenameWithoutExtension(entrypoint)}_guest.dart',
   );
   var scan = knobs.isEmpty
