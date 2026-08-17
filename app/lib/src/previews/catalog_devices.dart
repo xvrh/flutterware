@@ -7,21 +7,24 @@ import 'package:device_frame/device_frame.dart' as artwork show Devices;
 import 'package:flutter/widgets.dart';
 
 import 'devices.dart';
+import 'island_phone_frame.dart';
 
 export 'devices.dart';
 
 /// The silhouette to draw around a device — the one answer, wherever a frame
 /// is drawn: the preview canvas, a scenario's captured step, the flow.
 ///
-/// Two sources, in this order. A handful of ids have a **hand-drawn body** in
+/// Three sources, in this order. A handful of ids have a **hand-drawn body** in
 /// `device_frame` — an SE with its home button, a 13 with its notch — and
 /// [namedFrameFor] borrows it, because a wall of identical lozenges reads
-/// alike and the outline is half of what says *iPhone*. Everything else is
-/// **built from our own measurements**: [Devices.all] handed to
-/// `device_frame`'s generic builders, which take exactly what a [Device]
-/// already holds — screen size, safe areas, pixel ratio, a name and a
-/// platform. Which is why a modern model can be added to the table without
-/// artwork.
+/// alike and the outline is half of what says *iPhone*. Every other iOS phone
+/// gets [islandPhoneFrame], **ours**: the vendored artwork stops at the 13
+/// generation, and an iPhone 16 falling through to the generic builder came out
+/// as a big-forehead Android reference phone. Everything else is **built from
+/// our own measurements**: [Devices.all] handed to `device_frame`'s generic
+/// builders, which take exactly what a [Device] already holds — screen size,
+/// safe areas, pixel ratio, a name and a platform. Which is why a modern model
+/// can be added to the table without artwork.
 ///
 /// The borrowed half is a second set of measurements, and the price of it is
 /// `app/test/scenarios/frames_test.dart`: it holds the two together, because a
@@ -40,7 +43,9 @@ export 'devices.dart';
 /// about it — the artwork is portrait, and handing it landscape screen numbers
 /// would draw a phone lying on its side inside an upright one.
 DeviceInfo? deviceFrameFor(Device device) =>
-    namedFrameFor(device.id) ?? _genericFrameFor(device);
+    namedFrameFor(device.id) ??
+    _islandFrameFor(device) ??
+    _genericFrameFor(device);
 
 /// `device_frame`'s hand-drawn body for [id], or null when it has none.
 ///
@@ -55,6 +60,26 @@ DeviceInfo? namedFrameFor(String id) => switch (id) {
   'ipad' => artwork.Devices.ios.iPad,
   _ => null,
 };
+
+/// Whether [device] is drawn inside a body at all.
+///
+/// [deviceFrameFor] answering null is what "no" means, and `frames_test.dart`
+/// pins the two together. Separate because the frame toggle in the top bar asks
+/// it on every build, to know whether it has anything to switch — and building
+/// a whole [DeviceInfo], path and all, to throw it away is a strange way to ask
+/// a question about a [DeviceKind].
+bool canBeFramed(Device device) => device.kind != DeviceKind.desktop;
+
+/// Our own iPhone body, for an iOS phone [namedFrameFor] has no artwork for.
+///
+/// A rule about the platform rather than a second list of ids, so the next
+/// iPhone added to the table looks like an iPhone without anyone remembering to
+/// come back here — which is the property the generic fallback was supposed to
+/// have and did not.
+DeviceInfo? _islandFrameFor(Device device) =>
+    device.kind == DeviceKind.phone && device.platform == DevicePlatform.ios
+    ? islandPhoneFrame(device)
+    : null;
 
 DeviceInfo? _genericFrameFor(Device device) {
   var screen = Size(device.width, device.height);

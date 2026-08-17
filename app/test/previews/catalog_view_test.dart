@@ -498,7 +498,9 @@ void main() {
   });
 
   group('the top bar', () {
-    testWidgets('starts on Fit, and says nothing else', (tester) async {
+    testWidgets('starts on Fit, with nothing to turn or to frame', (
+      tester,
+    ) async {
       await pump(tester, sessionWithBroken(beta, 'boom'));
 
       expect(find.text('Fit'), findsOneWidget);
@@ -507,6 +509,11 @@ void main() {
         findsNothing,
         reason: 'there is no frame to hide until there is a device',
       );
+      // Dim rather than gone, both of them: the capsule keeps its width, so
+      // picking a phone does not reflow the bar under the pointer that picked
+      // it — and a control that says why it cannot act beats one that vanished.
+      expect(find.byTooltip('Fit is drawn without a body'), findsOneWidget);
+      expect(find.byTooltip('The panel does not rotate'), findsOneWidget);
     });
 
     testWidgets('picking a device sizes the guest to its screen', (
@@ -538,6 +545,20 @@ void main() {
 
       expect(session.staging.frameVisible, isFalse);
       expect(find.byTooltip('Show the frame'), findsOneWidget);
+    });
+
+    testWidgets('a window has no body, so the switch does not offer one', (
+      tester,
+    ) async {
+      // It used to be live here and change nothing: a desktop size gets no
+      // silhouette, so the toggle was switching a picture that is never drawn.
+      var session = sessionWithBroken(beta, 'boom');
+      await pump(tester, session, device: 'window-wide');
+
+      expect(find.byTooltip('Wide window is drawn without a body'), findsOne);
+      await tester.tap(find.byTooltip('Wide window is drawn without a body'));
+      await tester.pump();
+      expect(session.staging.frameVisible, isTrue, reason: 'untouched');
     });
   });
 
