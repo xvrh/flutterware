@@ -983,9 +983,26 @@ for the rest of the session. So a probe that outlives three intervals (floored a
 30s, because a project declaring a two-minute interval is describing something
 slow) is adopted as `unavailable` naming the command.
 
-**Still not done, from the same report:** a streaming command kind, so
-`logs --follow` is declarable (§the `logs` gap); `stderr` separated from `stdout`
-on `DevStackRunResult`, so a renderer can put `Running build hooks...` somewhere
-other than under the reader's eye; options on `StackCommand.argument`, which
-`ActionParameter` already models; and a timeout on commands, which have the same
-hang the probe just got protected from.
+**Done since, from the same report:** `stderr` is separated from `stdout` on
+`DevStackRunResult` — both tailed, with the merged `output` kept because it is
+what the panel draws and what a terminal wants — and commands have a timeout,
+`DevStack.commandTimeout` defaulting to ten minutes with a per-`StackCommand`
+override.
+
+The timeout turned out to matter more than "the same hang the probe got
+protected from" suggested. A transition in flight is what refuses the next one,
+so a command that never returned did not fail by itself: it held `_busy` for the
+rest of the session and every later `start`, `stop` and command was refused
+against it. `logs --follow` declared as an ordinary command is exactly that, and
+the reporting consumer had added `--no-follow --tail` to their own CLI to avoid
+it — which a project whose `logs` is someone else's binary cannot do. **The
+timeout bounds the wait, not the process**: nothing is killed, because a
+`docker compose up` interrupted half way leaves a stack in a state nobody chose
+and this plugin owns nothing. What ends is flutterware's claim.
+
+**Still not done:** a streaming command kind, so `logs --follow` is *declarable*
+rather than merely survivable (§the `logs` gap) — the timeout stops it wedging
+the panel, but the output still only arrives when the wait gives up; and options
+on `StackCommand.argument`, which `ActionParameter` already models. The variadic
+case the same report raises — `recreate <svc> [<svc>…]` — is a third shape again
+and not expressible at all.

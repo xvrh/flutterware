@@ -56,6 +56,22 @@
 - Relatedly, an entry point's own import that climbs out of `lib/` but stays in
   the package — `import '../tool/helpers.dart'` — is now copied into the wrapper
   rather than dropped, so a knob whose type is declared there works.
+- **A `DevStack` command that never returns no longer takes the stack with it.**
+  A transition in flight is what refuses the next one, so a command that hung
+  held the stack for the rest of the session and every later `start`, `stop` and
+  command was refused against it — `logs --follow` declared as an ordinary
+  command is exactly that shape. `DevStack(commandTimeout:)` bounds the wait,
+  defaulting to ten minutes, and `StackCommand(timeout:)` overrides it for the
+  command that is not meant to finish. **Nothing is killed**: a `docker compose
+  up` interrupted half way leaves a stack in a state nobody chose, so the
+  process is left running and reported as running, and only flutterware's claim
+  on it ends. A timed-out result has `timedOut: true` and no `exitCode`, because
+  zero would say it worked.
+- **`DevStackRunResult` reports `stdout` and `stderr` apart**, each trimmed to
+  its own tail, so a renderer can put `Running build hooks...` somewhere other
+  than under the reader's eye. The merged `output` stays — it is what the panel
+  draws and what a terminal wants — and the split is omitted when a command said
+  everything on one stream, rather than carrying the same text twice.
 - **Correction to 0.5.2: a `Run` entry point declares `knobs`, not `defines`.**
   That entry announced a rename to `Entrypoint(defines:)` / `DartDefine` /
   `--defines=`; it was undone before release, because a value a run supplies is
