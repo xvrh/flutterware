@@ -70,9 +70,12 @@ Stdout belongs to the protocol — logs and build narration go to stderr.
 
 ### `flutterware_status`
 
-What every declared flutterware plugin says about itself: status, sub-entries per package, and a text projection of the panel. Loads what has not been loaded yet, so the answer describes the project rather than what a previous call happened to warm. Loading is parsing — pubspecs, demo files — and never compiles, spawns a daemon or touches the network; that work lives behind flutterware_invoke. What each plugin can be *told to do* is flutterware_actions, not this.
+What every declared flutterware plugin says about itself: status, sub-entries per package, and a text projection of the panel. Loads what has not been loaded yet, so the answer describes the project rather than what a previous call happened to warm. Loading is parsing — pubspecs, demo files — and never compiles, spawns a daemon or touches the network; that work lives behind flutterware_invoke. What each plugin can be *told to do* is flutterware_actions, not this. Two ways to ask for less: "brief" answers the status line per plugin without the panel — a fifth of the reply, and enough to see which plugin the question is about — and "plugin" answers that one in full.
 
-Takes no arguments.
+| argument | required | |
+|---|---|---|
+| `plugin` | no | One plugin, in full: its id or the last dotted segment — "flutterware.previews" or just "previews". Omitted, all of them. |
+| `brief` | no | Drop the panel projection, keeping the status line, the badge and the per-package entries. The projection is the inventory, and the inventory is what each plugin's own actions serve in full — measured at 90% of this reply. |
 
 ### `flutterware_actions`
 
@@ -1097,29 +1100,36 @@ note: String?
 
 #### `requests` — Recent requests
 
-The latest HTTP requests a running server reported, each with the SQL queries and log lines it caused.
+The latest HTTP requests a running server reported, each with the SQL queries and log lines it caused. Narrow with path, minStatus and since rather than reading everything and filtering — a server up for an hour holds far more than the question usually wants.
 
 ```sh
-fw run server requests [--name=…] [--last=…]
+fw run server requests [--name=…] [--last=…] [--path=…] [--minStatus=…] [--since=…] [--details=…]
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `name` | string | no | — | Which server, when several are running. |
-| `last` | integer | no | 20 | — |
+| `last` | integer | no | 20 | How many to return, newest first. Applied after the filters. |
+| `path` | string | no | — | Only requests whose path contains this — "/api/cases". Matched case-insensitively on the path alone, without the query string. |
+| `minStatus` | integer | no | — | Only requests whose status is at least this — 400 for everything that failed, 500 for the server's own faults. On `errors`, this replaces the default rule rather than adding to it: it asks about the status and nothing else. |
+| `since` | string | no | — | Only what happened within this window, as a duration back from now — "30s", "10m", "2h" — or an ISO-8601 instant. Anything else is refused rather than ignored. |
+| `details` | boolean | no | — | Attach each event's captured headers and bodies — the half a 500 is usually opened for, and the expensive half. Held server-side and fetched per event, so narrow the answer with the filters first; the reply says so when a byte budget cut the rest short. |
 
 #### `errors` — Recent errors
 
-Failed requests (5xx or thrown), severe log lines, and any event carrying an error — each with the request it happened under.
+Failed requests (5xx or thrown), severe log lines, and any event carrying an error — each with the request it happened under. What counts as an error is deliberately broader than the status: pass minStatus to ask the status question alone.
 
 ```sh
-fw run server errors [--name=…] [--last=…]
+fw run server errors [--name=…] [--last=…] [--minStatus=…] [--since=…] [--details=…]
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `name` | string | no | — | Which server, when several are running. |
-| `last` | integer | no | 20 | — |
+| `last` | integer | no | 20 | How many to return, newest first. Applied after the filters. |
+| `minStatus` | integer | no | — | Only requests whose status is at least this — 400 for everything that failed, 500 for the server's own faults. On `errors`, this replaces the default rule rather than adding to it: it asks about the status and nothing else. |
+| `since` | string | no | — | Only what happened within this window, as a duration back from now — "30s", "10m", "2h" — or an ISO-8601 instant. Anything else is refused rather than ignored. |
+| `details` | boolean | no | — | Attach each event's captured headers and bodies — the half a 500 is usually opened for, and the expensive half. Held server-side and fetched per event, so narrow the answer with the filters first; the reply says so when a byte budget cut the rest short. |
 
 #### `info` — Server info
 

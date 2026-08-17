@@ -743,4 +743,127 @@ void main() {
       core.dispose();
     });
   });
+
+  group('a command that does not come back', () {
+    /// **The wedge, which is the bug and not the hang.** `_busy` is what makes
+    /// the next transition refuse, so a command that never returns did not fail
+    /// on its own — it took every later `start`, `stop` and command with it for
+    /// the rest of the session. `logs --follow` declared as an ordinary command
+    /// is exactly this shape.
+    test('releases the stack instead of holding it forever', () async {
+      var core =
+          coreWith(
+              DevStack.background(
+                probe: Probe.exitCode(StackRun.command(['check'])),
+                start: StackRun.command(['up']),
+                commandTimeout: const Duration(milliseconds: 20),
+                commands: [
+                  StackCommand('logs', 'Logs', StackRun.command(['logs'])),
+                ],
+              ).config,
+            )
+            ..runProcess = (command, {workingDirectory}) =>
+                command.first == 'logs'
+                ? Completer<ProcessResult>().future
+                : Future.value(ProcessResult(0, 0, 'ok', ''));
+
+      var result = await core.runCommand('logs');
+
+      expect(result.timedOut, isTrue);
+      expect(result.exitCode, isNull, reason: '0 would say it worked');
+      expect(result.ok, isFalse);
+      expect(result.stderr, contains('not stopped'));
+      expect(
+        core.busy,
+        isNull,
+        reason: 'the claim on the stack is what has to end',
+      );
+
+      // The whole point: the next command is not refused by the dead one.
+      var after = await core.start();
+      expect(after.ok, isTrue);
+      core.dispose();
+    });
+
+    test('a StackCommand timeout beats the stack default', () async {
+      var core =
+          coreWith(
+              DevStack.background(
+                probe: Probe.exitCode(StackRun.command(['check'])),
+                commandTimeout: const Duration(seconds: 30),
+                commands: [
+                  StackCommand(
+                    'logs',
+                    'Logs',
+                    StackRun.command(['logs']),
+                    timeout: const Duration(milliseconds: 20),
+                  ),
+                ],
+              ).config,
+            )
+            ..runProcess = (command, {workingDirectory}) =>
+                Completer<ProcessResult>().future;
+
+      // Resolves at all, rather than waiting the stack's 30s.
+      var result = await core.runCommand('logs');
+      expect(result.timedOut, isTrue);
+      expect(result.stderr, contains('0s'));
+      core.dispose();
+    });
+  });
+
+  group('stdout and stderr', () {
+    test('are reported apart as well as combined', () async {
+      var core =
+          coreWith(
+              DevStack.background(
+                probe: Probe.exitCode(StackRun.command(['check'])),
+                start: StackRun.command(['up']),
+              ).config,
+            )
+            ..runProcess = (command, {workingDirectory}) => Future.value(
+              ProcessResult(
+                0,
+                0,
+                'started 4 containers',
+                'Running build '
+                    'hooks...',
+              ),
+            );
+
+      var result = await core.start();
+
+      expect(result.stdout, 'started 4 containers');
+      expect(
+        result.stderr,
+        'Running build hooks...',
+        reason: 'the half a renderer wants to put somewhere else',
+      );
+      expect(
+        result.output,
+        'started 4 containers\nRunning build hooks...',
+        reason: 'and the merged order is still what the panel draws',
+      );
+      expect(result.toJson()['stdout'], 'started 4 containers');
+      core.dispose();
+    });
+
+    test('a one-stream command does not carry its output twice', () async {
+      var core =
+          coreWith(
+              DevStack.background(
+                probe: Probe.exitCode(StackRun.command(['check'])),
+                start: StackRun.command(['up']),
+              ).config,
+            )
+            ..runProcess = (command, {workingDirectory}) =>
+                Future.value(ProcessResult(0, 0, 'quiet success', ''));
+
+      var json = (await core.start()).toJson();
+      expect(json['output'], 'quiet success');
+      expect(json.containsKey('stdout'), isFalse);
+      expect(json.containsKey('stderr'), isFalse);
+      core.dispose();
+    });
+  });
 }

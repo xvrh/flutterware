@@ -494,53 +494,13 @@ class Session {
     String key,
   ) {
     var ids = [for (var parameter in action.parameters) parameter.id];
-    var nearest = _nearest(key, ids);
+    var nearest = nearestName(key, ids);
     return ArgumentError(
       'no such parameter on ${core.id} ${action.id}'
       '${nearest == null ? '.' : ' — did you mean `$nearest`?'} '
       '${ids.isEmpty ? 'It takes none.' : 'It takes: ${ids.join(', ')}'}',
       key,
     );
-  }
-
-  /// The declared id a mistyped one most likely meant, or null rather than a
-  /// reach.
-  ///
-  /// Two rules, in order. A declared id that has the typed one as one of its
-  /// hyphenated words — `axes` finding `with-axes`, which is the shape of the
-  /// mistake this exists for, and the shape no edit-distance rule catches
-  /// because a prefix is five characters away. Then a single typo's worth of
-  /// distance, for `entrie` and `pacakge`.
-  static String? _nearest(String key, List<String> declared) {
-    for (var id in declared) {
-      if (id.split('-').contains(key)) return id;
-    }
-    String? best;
-    var distance = 2;
-    for (var id in declared) {
-      var d = _distance(key, id);
-      if (d < distance) {
-        distance = d;
-        best = id;
-      }
-    }
-    return best;
-  }
-
-  /// Levenshtein, one row at a time — the ids are short and this runs once, on
-  /// the way to failing.
-  static int _distance(String a, String b) {
-    var row = [for (var i = 0; i <= b.length; i++) i];
-    for (var i = 1; i <= a.length; i++) {
-      var previous = row[0];
-      row[0] = i;
-      for (var j = 1; j <= b.length; j++) {
-        var replace = previous + (a[i - 1] == b[j - 1] ? 0 : 1);
-        previous = row[j];
-        row[j] = math.min(math.min(row[j] + 1, row[j - 1] + 1), replace);
-      }
-    }
-    return row[b.length];
   }
 
   static Object? _asBoolean(String name, Object? value) => switch (value) {
@@ -641,4 +601,44 @@ extension<T> on Iterable<T> {
     var it = iterator;
     return it.moveNext() ? it.current : null;
   }
+}
+
+/// The declared id a mistyped one most likely meant, or null rather than a
+/// reach.
+///
+/// Two rules, in order. A declared id that has the typed one as one of its
+/// hyphenated words — `axes` finding `with-axes`, which is the shape of the
+/// mistake this exists for, and the shape no edit-distance rule catches
+/// because a prefix is five characters away. Then a single typo's worth of
+/// distance, for `entrie` and `pacakge`.
+String? nearestName(String key, List<String> declared) {
+  for (var id in declared) {
+    if (id.split('-').contains(key)) return id;
+  }
+  String? best;
+  var distance = 2;
+  for (var id in declared) {
+    var d = _editDistance(key, id);
+    if (d < distance) {
+      distance = d;
+      best = id;
+    }
+  }
+  return best;
+}
+
+/// Levenshtein, one row at a time — the ids are short and this runs once, on
+/// the way to failing.
+int _editDistance(String a, String b) {
+  var row = [for (var i = 0; i <= b.length; i++) i];
+  for (var i = 1; i <= a.length; i++) {
+    var previous = row[0];
+    row[0] = i;
+    for (var j = 1; j <= b.length; j++) {
+      var replace = previous + (a[i - 1] == b[j - 1] ? 0 : 1);
+      previous = row[j];
+      row[j] = math.min(math.min(row[j] + 1, row[j - 1] + 1), replace);
+    }
+  }
+  return row[b.length];
 }

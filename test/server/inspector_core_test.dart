@@ -7,6 +7,12 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 /// A peer that keeps what it was sent, and can be told to start failing.
+///
+/// **It encodes, because the real ones do.** `_SocketPeer.send` is
+/// `socket.write(encodeFrame(frame))`, so a frame the encoder refuses throws
+/// out of `send` — which the core reads as a dead peer. A fake that merely
+/// stored the map could not fail that way, and that is why an unencodable
+/// payload reached a release.
 class FakePeer implements InspectorPeer {
   final frames = <Map<String, Object?>>[];
   var closed = false;
@@ -15,6 +21,7 @@ class FakePeer implements InspectorPeer {
   @override
   void send(Map<String, Object?> frame) {
     if (broken) throw StateError('peer is gone');
+    encodeFrame(frame);
     frames.add(frame);
   }
 
@@ -216,6 +223,81 @@ void main() {
       });
     });
 
+    test('an unencodable payload value costs the value, not the peer', () {
+      var peer = FakePeer();
+      attach(peer);
+      var before = peer.frames.length;
+
+      core.addEvent('sql', {
+        'query': 'select * from t where at > @1',
+        'params': [DateTime.utc(2026), 'ok'],
+      });
+
+      expect(peer.closed, isFalse);
+      expect(peer.frames, hasLength(before + 1));
+      expect(peer.frames.last[framePayload], {
+        'query': 'select * from t where at > @1',
+        'params': ['2026-01-01 00:00:00.000Z', 'ok'],
+      });
+    });
+
+    test('and it does not poison the attaches that come after', () {
+      core.addEvent('sql', {
+        'params': {'when': DateTime.utc(2026)},
+      });
+
+      var later = FakePeer();
+      attach(later);
+
+      expect(later.closed, isFalse);
+      expect(later.ofType(typeEvent).first[framePayload], {
+        'params': {'when': '2026-01-01 00:00:00.000Z'},
+      });
+    });
+
+    test('a value with a toJson stays structured; a cycle stops', () {
+      var peer = FakePeer();
+      attach(peer);
+      var cyclic = <Object?>[1];
+      cyclic.add(cyclic);
+
+      core.addEvent('log', {
+        'point': _Point(3, 4),
+        'nan': double.nan,
+        'cyclic': cyclic,
+      });
+
+      expect(peer.closed, isFalse);
+      var payload = peer.frames.last[framePayload]! as Map<String, Object?>;
+      expect(payload['point'], isA<_Point>());
+      expect(payload['nan'], 'NaN');
+      expect(jsonEncode(payload), contains('"x":3'));
+    });
+
+    test('details a peer could not have taken are kept, minus the value', () {
+      core.addEvent(
+        'http',
+        {'path': '/one'},
+        details: {
+          'requestHeaders': {'x-when': DateTime.utc(2026)},
+        },
+      );
+      var peer = FakePeer();
+      attach(peer);
+      core.handleFrame(peer, {
+        frameChannel: metaChannel,
+        frameType: typeRequest,
+        frameRequestId: 9,
+        frameMethod: metaDetail,
+        framePayload: {'event': 1},
+      });
+
+      var answer = peer.frames.last[framePayload]! as Map<String, Object?>;
+      expect(answer['details'], {
+        'requestHeaders': {'x-when': '2026-01-01 00:00:00.000Z'},
+      });
+    });
+
     test('frames survive a JSON round trip', () {
       var peer = FakePeer();
       core.addEvent('http', {'path': '/one'});
@@ -227,4 +309,15 @@ void main() {
       expect(jsonDecode(jsonEncode(peer.frames.first)), isA<Map>());
     });
   });
+}
+
+/// A reporter's own type that knows how to encode itself — `jsonEncode` calls
+/// `toJson()`, so the sanitizer must leave it alone rather than flatten it.
+class _Point {
+  _Point(this.x, this.y);
+
+  final int x;
+  final int y;
+
+  Map<String, Object?> toJson() => {'x': x, 'y': y};
 }

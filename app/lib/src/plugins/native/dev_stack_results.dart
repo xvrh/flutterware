@@ -170,7 +170,10 @@ class DevStackRunResult implements PluginResult {
   const DevStackRunResult({
     required this.command,
     required this.exitCode,
+    this.stdout = '',
+    this.stderr = '',
     this.output = '',
+    this.timedOut = false,
     this.reading,
   });
 
@@ -178,13 +181,32 @@ class DevStackRunResult implements PluginResult {
   /// next time can, which is the point of delegating rather than supervising.
   final String command;
 
-  final int exitCode;
+  /// Null when the command has not exited — see [timedOut]. Zero would be a
+  /// claim that it worked, and any other number a claim that it failed.
+  final int? exitCode;
 
   bool get ok => exitCode == 0;
 
+  /// The wait ended before the command did, and the process was left running.
+  /// [exitCode] is null and [stderr] says so.
+  final bool timedOut;
+
   /// Combined stdout and stderr, trimmed to the tail. The full text is on
   /// screen and in the process' own log; this is what fits in a result.
+  ///
+  /// Kept beside [stdout] and [stderr] because it is what the panel draws and
+  /// what a terminal wants: one stream in the order things were said.
   final String output;
+
+  /// The two streams apart, each trimmed to its own tail.
+  ///
+  /// **Because almost nothing writing structured output has stderr to itself.**
+  /// `dart` announces `Running build hooks...` there, docker writes deprecation
+  /// warnings, a wrapper's `set -x` writes every line it runs — so a renderer
+  /// that wants to put that somewhere other than under the reader's eye needs
+  /// to know which half it is, and [output] has already merged them.
+  final String stdout;
+  final String stderr;
 
   /// The probe run immediately afterwards, when the command was one that
   /// changes the state. A caller asking to bring the stack up wants to be told
@@ -194,9 +216,16 @@ class DevStackRunResult implements PluginResult {
   @override
   Map<String, Object?> toJson() => {
     'command': command,
-    'exitCode': exitCode,
+    if (exitCode != null) 'exitCode': exitCode,
     'ok': ok,
+    if (timedOut) 'timedOut': true,
     if (output.isNotEmpty) 'output': output,
+    // Only when they add something. A command that said everything on one
+    // stream would otherwise carry its whole output twice.
+    if (stdout.isNotEmpty && stderr.isNotEmpty) ...{
+      'stdout': stdout,
+      'stderr': stderr,
+    },
     if (reading != null) 'reading': reading!.toJson(),
   };
 }

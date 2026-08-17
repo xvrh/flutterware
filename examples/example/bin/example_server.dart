@@ -52,8 +52,16 @@ Future<void> main() async {
 
   // Command handlers run *inside* this process, against its own "database" —
   // which is why the GUI can explain and re-run queries with no DB config.
+  // A command is invoked with the chosen occurrence's `params` beside its
+  // `query`, because the query is reported with its placeholders intact and so
+  // will not run on its own. A real adapter binds them; this toy database has
+  // no placeholders to bind, so it shows what it was handed.
   FlutterwareServer.handle('sql', 'explain', (params) {
-    return {'plan': 'SCAN ${params['query']} (toy database, toy plan)'};
+    var bound = params['params'];
+    return {
+      'plan': 'SCAN ${params['query']} (toy database, toy plan)',
+      'boundTo': ?bound,
+    };
   });
   FlutterwareServer.handle('sql', 'requery', (params) {
     return {'rows': _database.execute(params['query']?.toString() ?? '')};
@@ -125,6 +133,12 @@ Middleware _inspect() {
           },
         );
         return response2;
+      } on HijackException {
+        // Shelf signals a hijack — a websocket upgrade, an SSE stream taking
+        // the socket — by *throwing* past the middleware. It is the success
+        // path, and caught below it would post a phantom 500 for every
+        // websocket connection that worked.
+        rethrow;
       } catch (e) {
         FlutterwareServer.event(
           'http',
@@ -178,7 +192,15 @@ Future<(Response, String?)> _captureResponseBody(Response response) async {
   return (response.change(body: body), body);
 }
 
-/// What must not leave the process, dropped before reporting — edit to taste.
+/// What must not leave the process, dropped before reporting.
+///
+/// **This list is a starting point and is wrong for your server.** The way to
+/// get it right is not to lengthen it from memory but to grep your handlers
+/// for the headers they actually read: a project accepting `x-authorization`
+/// as a fallback for `authorization` is a line nobody outside it would guess,
+/// and a `x-publishable-key` is *publishable* — redacting it costs you the
+/// answer to which integrator a request came from, which is half of why the
+/// panel gets opened.
 Map<String, String> _redact(Map<String, String> headers) => {
   for (var entry in headers.entries)
     entry.key:

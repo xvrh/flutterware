@@ -67,11 +67,72 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
              'lines of the diff while you work. flutterware_status counts them '
              'and flutterware_review hands them over and takes your answers.',
        ) {
-    registerTool(_statusTool, _status);
-    registerTool(_actionsTool, _actions);
-    registerTool(_invokeTool, _invoke);
-    registerTool(_actTool, _act);
-    registerTool(_reviewTool, _review);
+    _registerChecked(_statusTool, _status);
+    _registerChecked(_actionsTool, _actions);
+    _registerChecked(_invokeTool, _invoke);
+    _registerChecked(_actTool, _act);
+    _registerChecked(_reviewTool, _review);
+  }
+
+  /// [registerTool], with the tool's own schema enforced on the way in.
+  ///
+  /// **Because one level in already refuses, and the level above it did not.**
+  /// `Session` rejects an argument naming a parameter an action does not have,
+  /// for the reason written at `_undeclared`: a dropped argument comes back as
+  /// a well-formed answer to a question nobody asked, and nothing downstream
+  /// can catch it. The wrapper keys — `plugin`, `action`, `arguments` — had no
+  /// such rule, so `{"parameters": {...}}` instead of `{"arguments": {...}}`
+  /// ran the action with its defaults and answered as if it had been asked.
+  /// That is the same failure one level out, and it is worse there, because
+  /// the strictness inside teaches a caller to expect to be told.
+  ///
+  /// `additionalProperties: false` on the schema is what does the refusing —
+  /// `registerTool` validates against it, and so does any client holding the
+  /// schema. This adds the sentence that flag cannot: which declared key was
+  /// probably meant, and what the tool takes. "Additional property
+  /// "parameters" is not allowed" says the call was wrong; `did you mean
+  /// "arguments"?` says what to send instead, which is the difference between
+  /// a retry and a round-trip through `listTools`.
+  ///
+  /// So the unknown-key check runs first and everything else — types, required
+  /// keys — stays [Schema.validate]'s, unchanged and in its own words.
+  void _registerChecked(
+    Tool tool,
+    FutureOr<CallToolResult> Function(CallToolRequest) handler,
+  ) {
+    registerTool(tool, validateArguments: false, (request) {
+      var arguments = request.arguments ?? const <String, Object?>{};
+      var refusal = _undeclaredArgument(tool, arguments);
+      if (refusal != null) return _error(refusal);
+      var errors = tool.inputSchema.validate(arguments);
+      if (errors.isNotEmpty) {
+        return CallToolResult(
+          content: [
+            for (var error in errors) Content.text(text: error.toErrorString()),
+          ],
+          isError: true,
+        );
+      }
+      return handler(request);
+    });
+  }
+
+  /// The refusal for a top-level key the tool does not declare, or null.
+  ///
+  /// Only the outermost layer. `arguments` on `flutterware_invoke` is an open
+  /// map by design — its keys are a plugin action's parameter ids, which this
+  /// server cannot know and `Session` already checks.
+  static String? _undeclaredArgument(Tool tool, Map<String, Object?>? given) {
+    if (given == null || given.isEmpty) return null;
+    var declared = (tool.inputSchema.properties ?? const {}).keys.toList();
+    for (var key in given.keys) {
+      if (declared.contains(key)) continue;
+      var nearest = nearestName(key, declared);
+      return '"$key" is not an argument of ${tool.name}'
+          '${nearest == null ? '.' : ' — did you mean "$nearest"?'} '
+          '${declared.isEmpty ? 'It takes none.' : 'It takes: ${declared.join(', ')}.'}';
+    }
+    return null;
   }
 
   /// Every tool this server exposes, in the order it registers them.
@@ -136,12 +197,56 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         'rather than what a previous call happened to warm. Loading is parsing '
         '— pubspecs, demo files — and never compiles, spawns a daemon or '
         'touches the network; that work lives behind flutterware_invoke. What '
-        'each plugin can be *told to do* is flutterware_actions, not this.',
-    inputSchema: Schema.object(properties: {}),
+        'each plugin can be *told to do* is flutterware_actions, not this. '
+        'Two ways to ask for less: "brief" answers the status line per plugin '
+        'without the panel — a fifth of the reply, and enough to see which '
+        'plugin the question is about — and "plugin" answers that one in full.',
+    inputSchema: Schema.object(
+      properties: {
+        'plugin': Schema.string(
+          description:
+              'One plugin, in full: its id or the last dotted segment — '
+              '"flutterware.previews" or just "previews". Omitted, all of them.',
+        ),
+        'brief': Schema.bool(
+          description:
+              'Drop the panel projection, keeping the status line, the badge '
+              'and the per-package entries. The projection is the inventory, '
+              "and the inventory is what each plugin's own actions serve in "
+              'full — measured at 90% of this reply.',
+        ),
+      },
+      additionalProperties: false,
+    ),
   );
 
   Future<CallToolResult> _status(CallToolRequest request) =>
       _withSession((session) async {
+        var brief = request.arguments?['brief'] == true;
+        var only = request.arguments?['plugin'] as String?;
+        // Named, so only that core is loaded — the rest is the work this call
+        // was asked to skip.
+        if (only != null) {
+          PluginCore core;
+          try {
+            core = session.requireCore(only);
+          } on SessionException catch (e) {
+            return _error('$e');
+          }
+          await core.computeAll();
+          return _json({
+            'root': session.root,
+            'worktree': session.worktree.branch ?? session.worktree.path,
+            'review': reviewStatusJson(session.worktree.path),
+            'plugins': [
+              core.report.toJson(
+                includeActions: false,
+                includeView: !brief,
+                viewRows: _statusViewRows,
+              ),
+            ],
+          });
+        }
         for (var core in session.cores) {
           await core.computeAll();
         }
@@ -166,7 +271,11 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
             // action for. The count of what was left out rides along, so a
             // reader that wants the rest knows there is a rest.
             for (var report in session.reports)
-              report.toJson(includeActions: false, viewRows: _statusViewRows),
+              report.toJson(
+                includeActions: false,
+                includeView: !brief,
+                viewRows: _statusViewRows,
+              ),
           ],
         });
       });
@@ -222,6 +331,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               'outstanding ones are the work.',
         ),
       },
+      additionalProperties: false,
     ),
   );
 
@@ -276,6 +386,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               '"plugin". Omitted, every action of the plugin.',
         ),
       },
+      additionalProperties: false,
     ),
   );
 
@@ -462,6 +573,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         ),
       },
       required: ['plugin', 'action'],
+      additionalProperties: false,
     ),
   );
 
@@ -802,6 +914,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         ),
       },
       required: ['verb'],
+      additionalProperties: false,
     ),
   );
 

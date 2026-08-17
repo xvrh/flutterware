@@ -44,6 +44,12 @@ class DevStackCore extends PluginCore {
     _stopIsDestructive = config['stopIsDestructive'] == true;
     var poll = config['poll'];
     _poll = Duration(milliseconds: poll is int && poll > 0 ? poll : 10000);
+    var commandTimeout = config['commandTimeout'];
+    _commandTimeout = Duration(
+      milliseconds: commandTimeout is int && commandTimeout > 0
+          ? commandTimeout
+          : const Duration(minutes: 10).inMilliseconds,
+    );
     _commands = [
       for (var entry in (config['commands'] as List? ?? const []))
         if (entry is Map) ?StackCommand.fromJson(entry.cast<String, Object?>()),
@@ -76,6 +82,7 @@ class DevStackCore extends PluginCore {
   String? _relativeDirectory;
   late final bool _stopIsDestructive;
   late final Duration _poll;
+  late final Duration _commandTimeout;
   late final List<StackCommand> _commands;
 
   StackReading _reading = const StackReading.unknown();
@@ -231,12 +238,18 @@ class DevStackCore extends PluginCore {
   ///
   /// **`dart <path>`, not `dart run <path>`, which is what a person would type.**
   /// `run` re-resolves the package graph and executes every build hook in it on
-  /// every invocation — measured here at 0.33s against 0.28s for the direct form,
-  /// and the gap is the hooks, so it grows with the project rather than staying a
-  /// rounding error: a consumer measured 4.4s for a `dart run` of
-  /// `void main(){}` in a workspace with native assets. A probe pays this on
-  /// every poll, which makes it the difference between a plugin that costs
-  /// nothing to leave open and one that does not.
+  /// every invocation — measured here at 0.33s against 0.28s for the direct
+  /// form, and the gap is the hooks, so it grows with the project rather than
+  /// staying constant. A probe pays it on every poll.
+  ///
+  /// It is the smaller half of the win, though, and worth not overstating: a
+  /// consumer re-measured their own probe idle and got 0.70s for `dart run`
+  /// against 0.58s direct. The 4.4s this line used to quote was `fvm dart` on a
+  /// loaded machine — `fvm dart --version`, doing nothing at all, was 4.3–7.7s
+  /// there. What took their probe from ~5s to 0.58s was resolving the SDK here
+  /// and spawning it directly instead of going through a version manager, which
+  /// is the same decision as [ScriptSource]'s and the reason a config file
+  /// cannot name an interpreter.
   ///
   /// The price is that build hooks do *not* run, so a script whose imports need
   /// native assets built will not find them, and a stale `package_config.json`
@@ -518,16 +531,36 @@ class DevStackCore extends PluginCore {
       );
     }
     if (_problemWith(command.run) case var problem?) throw StateError(problem);
-    return _run([
-      ..._argvFor(command.run),
-      if (command.argument != null && argument != null && argument.isNotEmpty)
-        argument,
-    ], busy: command.label);
+    return _run(
+      [
+        ..._argvFor(command.run),
+        if (command.argument != null && argument != null && argument.isNotEmpty)
+          argument,
+      ],
+      busy: command.label,
+      timeout: command.timeout,
+    );
   }
 
+  /// Runs [command], holding the stack while it does.
+  ///
+  /// **The timeout is on the wait, and it exists because the wait is a claim.**
+  /// `_busy` is what makes the next `start` refuse, so a command that never
+  /// returns did not merely fail — it took every later command with it, for the
+  /// rest of the session, and the panel's controls with them. `logs --follow`
+  /// declared as an ordinary command is exactly that, and it is the shape a
+  /// consumer reported: they added `--no-follow` to their own CLI to avoid it,
+  /// which a project whose `logs` is someone else's binary cannot.
+  ///
+  /// Nothing is killed when it expires. A `docker compose up` interrupted half
+  /// way leaves a stack in a state nobody chose, and this plugin owns nothing —
+  /// so the process is left running and said to be running, the claim is
+  /// released, and the probe afterwards reports whatever it finds. That is also
+  /// what [Probe]'s own timeout already does.
   Future<DevStackRunResult> _run(
     List<String> command, {
     required String busy,
+    Duration? timeout,
     bool thenProbe = false,
   }) async {
     if (_busy != null) {
@@ -540,9 +573,34 @@ class DevStackCore extends PluginCore {
     _lastExitCode = null;
     _lastRunFor = null;
     notifyChanged();
+    var waited = timeout ?? _commandTimeout;
     ProcessResult result;
     try {
-      result = await runProcess(command, workingDirectory: workingDirectory);
+      result = await runProcess(
+        command,
+        workingDirectory: workingDirectory,
+      ).timeout(waited);
+    } on TimeoutException {
+      _lastRunFor = busyFor;
+      _busy = null;
+      _busySince = null;
+      _lastExitCode = null;
+      _lastOutput =
+          'Still running after ${waited.inSeconds}s, and no longer waited on. '
+          'It was not stopped — check on it yourself if it should have '
+          'finished. A command that is meant to keep running wants a shorter '
+          '`timeout:` on its StackCommand.';
+      notifyChanged();
+      var reading = thenProbe ? await refresh() : null;
+      return DevStackRunResult(
+        command: _lastCommand!,
+        // No exit code, because it has not exited. Zero would say it worked.
+        exitCode: null,
+        timedOut: true,
+        stderr: _lastOutput,
+        output: _lastOutput,
+        reading: reading,
+      );
     } on Object catch (e) {
       _lastRunFor = busyFor;
       _busy = null;
@@ -563,6 +621,8 @@ class DevStackCore extends PluginCore {
     return DevStackRunResult(
       command: _lastCommand!,
       exitCode: result.exitCode,
+      stdout: _tail('${result.stdout}'),
+      stderr: _tail('${result.stderr}'),
       output: _lastOutput,
       reading: reading,
     );

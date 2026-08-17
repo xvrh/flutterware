@@ -748,7 +748,10 @@ class LauncherIconPackage extends PluginPackage {
 /// fw.use(DevStack.background(
 ///   workingDirectory: 'packages/server',
 ///   // Not `docker compose ps --quiet` on its own: that exits 0 whether or
-///   // not anything is up. See [Probe.exitCode].
+///   // not anything is up. And in a worktree, even this answers about
+///   // whichever compose project the working directory resolves to — which
+///   // is the checkout next door if this one has never come up. See
+///   // [Probe.exitCode], and prefer a [Probe.json] script in a monorepo.
 ///   probe: Probe.exitCode(StackRun.command([
 ///     'sh',
 ///     '-c',
@@ -792,6 +795,7 @@ class DevStack extends Plugin {
     this.stop,
     this.workingDirectory,
     this.poll = const Duration(seconds: 10),
+    this.commandTimeout = const Duration(minutes: 10),
     this.stopIsDestructive = false,
     this.commands = const [],
     String? label,
@@ -821,6 +825,24 @@ class DevStack extends Plugin {
   /// than replacing it, and a stack that is nowhere on screen is not polled.
   final Duration poll;
 
+  /// How long to wait for `start`, `stop` or a [StackCommand] before giving up
+  /// on it. [StackCommand.timeout] overrides this per command.
+  ///
+  /// **It bounds the wait, not the process.** Nothing is killed when this
+  /// expires: a `docker compose up` interrupted half way through leaves a
+  /// stack in a state nobody asked for, and flutterware does not own the
+  /// command well enough to make that call. What it does end is flutterware's
+  /// *claim* on the stack — without which one command that never returns takes
+  /// every later one with it, because a transition in flight is what refuses
+  /// the next.
+  ///
+  /// So the default is generous rather than tight: ten minutes is longer than
+  /// any bring-up that is actually working and short enough that a session
+  /// recovers on its own. A command that is *meant* to run forever — `logs
+  /// --follow` — wants a [StackCommand.timeout] of a few seconds instead, and
+  /// really wants a streaming kind, which does not exist yet.
+  final Duration commandTimeout;
+
   /// [stop] destroys data — `down --volumes` drops the database. Renderers make
   /// the control distinct and ask first.
   final bool stopIsDestructive;
@@ -840,6 +862,7 @@ class DevStack extends Plugin {
     if (stop != null) 'stop': stop!.toJson(),
     if (workingDirectory != null) 'workingDirectory': workingDirectory,
     'poll': poll.inMilliseconds,
+    'commandTimeout': commandTimeout.inMilliseconds,
     if (stopIsDestructive) 'stopIsDestructive': true,
     if (commands.isNotEmpty) 'commands': [for (var c in commands) c.toJson()],
   };
@@ -988,6 +1011,20 @@ class Probe {
   /// [StackRun.script] of its own — which is most of the work of earning a
   /// [Probe.json], and gets the service list and the *broken* state with it.
   ///
+  /// **And a lister exits 0 over someone else's stack, too.** The example above
+  /// is right about zero containers and still wrong in a worktree: `docker
+  /// compose` resolves its project from the working directory, so a checkout
+  /// that has never brought its own stack up reports `up` — describing the
+  /// containers of the *main* checkout next door. Measured in exactly that
+  /// shape: exit 0, eight containers, none of them the worktree's. This is the
+  /// monorepo the plugin is aimed at, and the failure is silent and confident.
+  ///
+  /// The reliable order is to answer from what identifies *this* checkout
+  /// before asking the tool anything — no `.env`, no compose project name, no
+  /// stack, answer `down` without spawning docker at all. That is a
+  /// [StackRun.script] again, and one more reason the useful ceiling is
+  /// [Probe.json].
+  ///
   /// What it cannot do is tell *down* from *broken*: a health check that fails
   /// because Docker Desktop is asleep exits non-zero exactly like one that
   /// fails because nothing is up, and reporting "down" there offers a Bring-up
@@ -1056,6 +1093,7 @@ class StackCommand {
     this.description,
     this.danger = false,
     this.argument,
+    this.timeout,
   });
 
   /// Stable within the plugin — what `fw run dev_stack <id>` names.
@@ -1075,6 +1113,14 @@ class StackCommand {
   /// nothing.
   final String? argument;
 
+  /// How long to wait for this one, overriding [DevStack.commandTimeout].
+  ///
+  /// The command that needs it is the one that does not intend to finish:
+  /// a `logs` that tails, a `watch`. Give it a few seconds — the wait ends,
+  /// the output collected so far is what comes back, and the process is left
+  /// alone. See [DevStack.commandTimeout] for why nothing is killed.
+  final Duration? timeout;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'label': label,
@@ -1082,6 +1128,7 @@ class StackCommand {
     if (description != null) 'description': description,
     if (danger) 'danger': true,
     if (argument != null) 'argument': argument,
+    if (timeout != null) 'timeout': timeout!.inMilliseconds,
   };
 
   static StackCommand? fromJson(Map<String, Object?> json) {
@@ -1096,6 +1143,9 @@ class StackCommand {
       description: json['description'] as String?,
       danger: json['danger'] == true,
       argument: json['argument'] as String?,
+      timeout: json['timeout'] is int
+          ? Duration(milliseconds: json['timeout']! as int)
+          : null,
     );
   }
 }
