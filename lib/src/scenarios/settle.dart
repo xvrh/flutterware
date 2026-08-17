@@ -23,6 +23,16 @@ const _frameInterval = Duration(milliseconds: 100);
 /// the step. Use [Settle.full] where a screen that never settles should be an
 /// error.
 ///
+/// **Frames are all a policy can follow, and a scenario needs one more thing.**
+/// Work that resolves on the *real* event loop — an asset read from the engine,
+/// and the `vector_graphics`, Lottie or `ImageProvider` decode on the other end
+/// of it — schedules no frame while it is in flight, so no policy here can wait
+/// for it: `upTo` and `frames` see a quiet tree and `elapse` advances a clock
+/// that real work does not read. Landing that work is a separate step a verb
+/// takes after this one, deliberately not a policy: it is not a choice an
+/// author makes, and a policy applied by hand through [apply] — as a plain
+/// widget test does — should keep meaning exactly what it says.
+///
 /// This is also the one place a run records **motion**: a policy that owns its
 /// pump loop hands every frame to the [ScenarioMotionRecorder] a run passes,
 /// and pumps at that recorder's finer interval while it does. One seam, and

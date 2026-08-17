@@ -322,14 +322,14 @@ From dev_studio: the flow-graph collapse model, translation-capture *hooks*
 (overridable, no vendor links), network-image mocking, the status bar,
 device presets, split-path replay.
 
-## Known gaps in the flutter_test superset (review 2026-07-31, consumer 2026-08-14)
+## Known gaps in the flutter_test superset (review 2026-07-31, consumers 2026-08-14 and 2026-08-17)
 
 The API promises a strict superset: an existing widget-test file compiles and
-runs with only its import changed. Three things broke that promise, and every
+runs with only its import changed. Four things broke that promise, and every
 one of them failed **silently** — which is what makes them worth writing down
 rather than leaving to be rediscovered. The first two are constructs the
-superset re-exports that the harness's own walk did not honour; the third is
-fake time meeting a cache the SDK ships.
+superset re-exports that the harness's own walk did not honour; the last two
+are fake time meeting work that does not run on it.
 
 1. ~~**`scenario()` inside a `group()` cannot be run individually.**~~ **Fixed
    2026-07-31.** The scan and the harness's `list` report the *leaf* name,
@@ -393,6 +393,43 @@ fake time meeting a cache the SDK ships.
    declares its default (`scenarioDefaultTimeout`) as the scenario is declared,
    rather than trying to read one back it cannot tell from an author's. Same
    probe after: 30s, with the diagnosis.
+
+4. ~~**The step that mounts a screen photographs the frame before its
+   artwork.**~~ **Fixed 2026-08-17.** Reported by a consumer whose every
+   `vector_graphics` illustration was missing from the capture of the step that
+   mounted it and present in the next one — so every flow that photographs each
+   screen as it arrives, which is every flow anyone writes, lost its artwork on
+   every screen.
+
+   A `Settle` policy follows frames, and that is all any of them can do. Work
+   that resolves on the **real** event loop — the engine's answer to an asset
+   read, and the decode on the other end of it — schedules no frame while it is
+   in flight, so `upTo` and `frames` see a tree that looks finished and `elapse`
+   advances a clock the work does not read. All three produced a byte-identical
+   broken capture. Then the capture itself opened `tester.runAsync` to
+   rasterise, the read completed *inside* that turn, and the picture had already
+   been taken: hence one more step always fixing it and more pumping inside the
+   step never doing so. `pumpWidget` was the one verb immune, because it already
+   took a real turn for boot.
+
+   `landRealWork` (`lib/src/scenarios/real_work.dart`) is the fix, applied by
+   every verb after its policy and before its capture. Nothing exposes "is real
+   work pending", so a turn of the real loop is the detector: a frame scheduled
+   on a tree that was quiet before it was scheduled by work that just landed,
+   and the policy is then re-applied to draw it. Bounded at twelve turns —
+   counted event-loop turns rather than a wall-clock budget, so the number is
+   the same on a slow machine — and skipped where the policy already gave up,
+   since a screen holding a spinner has a frame scheduled for its own reasons.
+   Measured on the example suite: 41 of 48 steps had nothing pending and paid
+   678µs each, the deepest of the other seven needed seven turns, and the whole
+   suite paid 57ms of 2.29s.
+
+   `previews audit` had the same blind spot in a milder form — it turns the real
+   loop once at boot, so an entry whose load starts *during* the settle was
+   judged with it in flight. Measured: an entry pointing at an asset that does
+   not exist was reported clean. It now calls the same helper. `previews
+   screenshot` does not, and needs nothing: it renders on a real engine in real
+   time.
 
 The remaining divergence is not a gap but a rule worth knowing: a `split`
 replays the body, and `setUp` runs once per *test*, so state built in `setUp`

@@ -54,6 +54,7 @@ dependencies:
   # For lib/src/database/app_database.dart — the db-panel dogfood.
   sqlite3_flutter_libs:
   sqlite_async:
+  vector_graphics: ^1.2.3
 
 dev_dependencies:
   flutter_lints:
@@ -62,6 +63,7 @@ dev_dependencies:
     sdk: flutter
   lints:
   test:
+  vector_graphics_compiler: ^1.3.0
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
@@ -79,6 +81,12 @@ flutter:
     - assets/images/
     - assets/icons/check.svg
     - path: assets/icons/heart.svg
+    # Compiled by an asset transformer, so what a build ships — and what the
+    # test lane serves — is the binary `vector_graphics` format rather than the
+    # XML on disk. The fixture for `test/scenarios/vector_graphics_test.dart`.
+    - path: assets/icons/illustration.svg
+      transformers:
+        - package: vector_graphics_compiler
     - assets/animations/
 
   # An image asset can refer to one or more resolution-specific "variants", see

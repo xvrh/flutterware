@@ -13,6 +13,7 @@ void main() {
   var size = <String, Size>{};
   var knob = <String, String>{};
   var loaded = false;
+  var decoded = false;
 
   Widget probe(String id) => Builder(
     builder: (context) {
@@ -50,6 +51,12 @@ void main() {
         path: 'demo/slow.dart',
         name: 'Slow',
         build: () => _SlowLoad(onLoaded: () => loaded = true),
+      ),
+      PreviewEntry(
+        id: 'demo/decoding.dart#decoding',
+        path: 'demo/decoding.dart',
+        name: 'Decoding',
+        build: () => _LateDecode(onDecoded: () => decoded = true),
       ),
     ],
     canvases: const [
@@ -94,6 +101,23 @@ void main() {
     // — the load finished, rather than the timer having been merely drained.
     expect(loaded, isTrue);
   });
+
+  test(
+    'a decode that starts mid-settle is landed before the entry is judged',
+    () {
+      // The blind spot the audit shared with a scenario's capture: the harness
+      // turns the real event loop once, at boot, and a demo that holds a
+      // placeholder for half a second starts its load *after* that — on fake
+      // time, which the real loop never sees. Anything the load then reported —
+      // the whole point of an audit — arrived after the errors were read.
+      //
+      // Measured on `examples/example/demo/vector_smoke.dart`: with this entry
+      // shaped as a `VectorGraphic` pointing at an asset no build ships, the
+      // audit reported it clean, because the read that would have thrown never
+      // completed.
+      expect(decoded, isTrue);
+    },
+  );
 
   test('a row says the harness ran out of clock, not that the entry leaks', () {
     expect(
@@ -155,4 +179,43 @@ class _SlowLoadState extends State<_SlowLoad> {
     _loaded ? 'loaded' : 'placeholder',
     textDirection: TextDirection.ltr,
   );
+}
+
+/// A preview whose decode both *starts* on the fake clock and *finishes* on the
+/// real event loop — `vector_graphics`, Lottie or an `ImageProvider` behind a
+/// placeholder, which is where the two waits meet.
+///
+/// `Zone.root` rather than an asset read, for the reason
+/// `test/scenarios/real_async_paint_test.dart` gives: under `flutter test` an
+/// asset read is answered from a `readAsBytesSync` and completes under
+/// FakeAsync, so it would prove nothing here and everything in the lane that
+/// spawns its own tester.
+class _LateDecode extends StatefulWidget {
+  const _LateDecode({required this.onDecoded});
+
+  final VoidCallback onDecoded;
+
+  @override
+  State<_LateDecode> createState() => _LateDecodeState();
+}
+
+class _LateDecodeState extends State<_LateDecode> {
+  var _decoded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
+      await Zone.root.run(() => Future<void>.delayed(Duration.zero));
+      if (!mounted) return;
+      widget.onDecoded();
+      setState(() => _decoded = true);
+    }());
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(_decoded ? 'decoded' : 'decoding', textDirection: TextDirection.ltr);
 }
