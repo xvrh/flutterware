@@ -4627,6 +4627,12 @@ final resultShapes = <String, ResultShape>{
                   'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
             },
             <String, Object?>{
+              'name': 'landed',
+              'type': 'bool',
+              'doc':
+                  'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
+            },
+            <String, Object?>{
               'name': 'strayFrames',
               'type': 'int',
               'doc':
@@ -4947,6 +4953,12 @@ final resultShapes = <String, ResultShape>{
                     'type': 'bool',
                     'doc':
                         'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+                  },
+                  <String, Object?>{
+                    'name': 'landed',
+                    'type': 'bool',
+                    'doc':
+                        'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
                   },
                   <String, Object?>{
                     'name': 'strayFrames',
@@ -5295,6 +5307,12 @@ final resultShapes = <String, ResultShape>{
                               'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
                         },
                         <String, Object?>{
+                          'name': 'landed',
+                          'type': 'bool',
+                          'doc':
+                              'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
+                        },
+                        <String, Object?>{
                           'name': 'strayFrames',
                           'type': 'int',
                           'doc':
@@ -5573,6 +5591,12 @@ final resultShapes = <String, ResultShape>{
         'type': 'bool',
         'doc':
             'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+      },
+      <String, Object?>{
+        'name': 'landed',
+        'type': 'bool',
+        'doc':
+            'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
       },
       <String, Object?>{
         'name': 'strayFrames',

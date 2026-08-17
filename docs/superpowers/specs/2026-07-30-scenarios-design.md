@@ -413,16 +413,48 @@ are fake time meeting work that does not run on it.
    took a real turn for boot.
 
    `landRealWork` (`lib/src/scenarios/real_work.dart`) is the fix, applied by
-   every verb after its policy and before its capture. Nothing exposes "is real
-   work pending", so a turn of the real loop is the detector: a frame scheduled
-   on a tree that was quiet before it was scheduled by work that just landed,
-   and the policy is then re-applied to draw it. Bounded at twelve turns —
-   counted event-loop turns rather than a wall-clock budget, so the number is
-   the same on a slow machine — and skipped where the policy already gave up,
-   since a screen holding a spinner has a frame scheduled for its own reasons.
-   Measured on the example suite: 41 of 48 steps had nothing pending and paid
-   678µs each, the deepest of the other seven needed seven turns, and the whole
-   suite paid 57ms of 2.29s.
+   every verb after its policy and before its capture. A turn of the real loop
+   is the detector: a frame scheduled on a tree that was quiet before it was
+   scheduled by work that just landed, and the policy is then re-applied to draw
+   it. Skipped where the policy already gave up, since a screen holding a
+   spinner has a frame scheduled for its own reasons. Measured on the example
+   suite: 41 of 48 steps had nothing pending and paid 678µs each, the deepest of
+   the other seven needed seven turns, and the whole suite paid 57ms of 2.29s.
+
+   ~~**A twelve-turn bound is a wall-clock budget in disguise, so a big enough
+   decode falls off it.**~~ **Fixed 2026-08-17.** The same consumer, with
+   `Image.asset` where the SVG had been: the mounting step missing its
+   illustration again, and — the useful half of the report — passing for a small
+   asset and failing for a large one. Reproduced here with `Image.memory`: under
+   the twelve-turn bound 8×8 and 780×609 landed and 1500×1200 did not, and a
+   recorded run (which pumps at 33ms and photographs every frame, so a decode
+   gets several times the wall clock) held out to 5000×4000. The bound was never
+   counting the work: a turn is a yield, not a wait, and the engine decodes on
+   another thread, so twelve turns buy however much wall time twelve yields
+   happen to cost on the machine. Raising the number moves the cliff and nothing
+   else.
+
+   So the loop now asks rather than guesses, wherever anything answers.
+   `ImageCache.pendingImageCount` is non-zero for the whole of an
+   `ImageProvider`'s decode — measured at 1 from the moment the tree mounted to
+   the turn the frame appeared — and `ScenarioAssetBundle.readsInFlight` counts
+   what the app is reading through the scenario's own bundle, which is where
+   `SvgPicture.asset` and `Lottie.asset` go. While either is non-zero the loop
+   **waits**, in real milliseconds, until it is not: the wait ends when the work
+   ends, so a 780×609 PNG and a 2400×1800 one need the same condition rather
+   than a bigger number, on a fast machine and a slow one alike. Twelve turns
+   remain for work that announces nothing — a `FutureBuilder` on a real future —
+   and are now spent again from zero after any turn that produces a frame, since
+   a decode arrives in links. Idle cost is unchanged (the example scenario suite
+   measured 3.8–4.0s either way), because a step with nothing pending takes the
+   same twelve free turns it always did.
+
+   The announced half also made a missed landing visible, which is what cost two
+   reports a day each: a wait that runs out against `realWorkWait` (one second,
+   a deadlock ceiling rather than a budget) records `landed: false` on the step,
+   and the GUI says so above the picture. There is no such flag for the guessed
+   half and there cannot be — not knowing whether anything is coming is why
+   those turns are spent.
 
    `previews audit` had the same blind spot in a milder form — it turns the real
    loop once at boot, so an entry whose load starts *during* the settle was

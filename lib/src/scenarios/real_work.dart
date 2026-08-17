@@ -1,10 +1,12 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'asset_bundle.dart';
 import 'motion.dart';
 import 'settle.dart';
 
-/// How many turns of the real event loop a caller gives work that is still
-/// landing — see [landRealWork].
+/// How many turns of the real event loop a caller spends **guessing** — see
+/// [landRealWork].
 ///
 /// Every turn nothing needs is paid for in full, because "nothing has landed
 /// yet" and "nothing is coming" are the same observation. That is what sets the
@@ -16,9 +18,23 @@ import 'settle.dart';
 /// The other seven steps are what the ceiling is for. The deepest of them
 /// needed **seven** turns before its frame appeared — an engine asset read is
 /// the slow link, and `vector_graphics` then decodes, lays out and paints on
-/// top of it — and none of the 48 left the loop with a frame still scheduled.
-/// Twelve is that measured seven with room, at a cost of 280µs over eight.
+/// top of it. Twelve is that measured seven with room, and it is spent again
+/// from zero every time a turn actually produces a frame, because a decode
+/// arrives in links and a chain three links long is not three times the guess.
 const realWorkTurns = 12;
+
+/// How long a caller waits for work it has been **told** is in flight.
+///
+/// Only ever reached by work that never completes at all — a read against an
+/// endpoint nothing answers. A decode that finishes takes as long as it takes
+/// and is waited for exactly that long, so this is a deadlock ceiling rather
+/// than a budget, and hitting it is reported on the step rather than swallowed.
+const realWorkWait = Duration(seconds: 1);
+
+/// What one waiting turn covers. Real milliseconds, because the thing being
+/// waited for is a decode on an engine thread and the only thing that advances
+/// it is the wall clock.
+const _waitingTurn = Duration(milliseconds: 1);
 
 /// Lets work that resolves on the **real** event loop land, and be drawn,
 /// before a tree under fake time is judged or photographed.
@@ -33,44 +49,85 @@ const realWorkTurns = 12;
 /// step late in every flow that photographs each screen as it arrives — but
 /// nothing about it is specific to SVG. Lottie, a PDF or thumbnail renderer, an
 /// `ImageProvider` decoding off the fake clock and a `FutureBuilder` on a real
-/// future are the same shape, and none of them is in `ImageCache` for the
-/// framework's own bookkeeping to notice.
+/// future are the same shape.
 ///
-/// **A turn of the real loop is the only detector there is.** Nothing exposes
-/// "is real work pending", so this takes the turn and reads what it did: a
-/// frame scheduled on a tree that was quiet before it can only have been
-/// scheduled by work that just landed. Then it draws that frame with the
-/// caller's own policy and looks again, because a decode arrives in links — a
-/// read completes, the app builds, the build starts the next read — and only a
-/// pump between turns lets the chain walk. `tester.runAsync` flushes the fake
-/// microtask queue as it closes, which is why the continuation has run by the
-/// time `hasScheduledFrame` is read here and has *not* run when it is read from
+/// **Some of that work announces itself, and the announced half is not
+/// guesswork.** Two counters say a decode is in flight without anyone taking a
+/// turn to find out: `ImageCache.pendingImageCount`, which every
+/// `ImageProvider` passes through — `Image.asset`, `Image.memory`,
+/// `Image.network`, an `AssetImage` — and [ScenarioAssetBundle.readsInFlight],
+/// which is every asset the app reads through the scenario's own bundle, so
+/// `SvgPicture.asset` and `Lottie.asset` are in it too. While either is
+/// non-zero this **waits**, in real milliseconds, until it is not. That is the
+/// deterministic half: the wait ends when the work ends, on a fast machine and
+/// a slow one alike, and a 780×609 PNG does not need a bigger number than an
+/// 8×8 one — it needs the same condition, held for longer.
+///
+/// **What is left over is guessed at, and a turn is the only detector there
+/// is.** A `FutureBuilder` on a real future announces nothing, so this takes a
+/// turn of the real loop and reads what it did: a frame scheduled on a tree
+/// that was quiet before it can only have been scheduled by work that just
+/// landed. Then it draws that frame with the caller's own policy and looks
+/// again — and gives the next link a full [realWorkTurns] again, because a
+/// decode arrives in links: a read completes, the app builds, the build starts
+/// the next read. `tester.runAsync` flushes the fake microtask queue as it
+/// closes, which is why the continuation has run by the time
+/// `hasScheduledFrame` is read here and has *not* run when it is read from
 /// inside the turn.
 ///
-/// Bounded by turns rather than by wall time on purpose: a count of event-loop
-/// turns is the same number on a slow machine and a fast one, where a
-/// millisecond budget is not. What it does not buy is work that needs real
-/// *time* — an http call, a `Future.delayed` on the real clock — which no
-/// number of turns reaches and which `s.runAsync` is the verb for.
+/// Returns what the step should say about itself: `settled` as the caller's
+/// policy left it, and `landed` — false only when [realWorkWait] ran out with a
+/// counter still saying work was in flight. There is no such flag for the
+/// guessed half, and there cannot be: not knowing whether anything is coming is
+/// the whole reason those turns are spent.
+///
+/// What none of it buys is work that needs real *time* — an http call, a
+/// `Future.delayed` on the real clock — which no counter names and which
+/// `s.runAsync` is the verb for.
 ///
 /// Does nothing when [settled] is false: a screen holding an indefinite
-/// animation has a frame scheduled for its own reasons, the detector cannot
-/// tell that apart from work arriving, and settling it again per turn would
-/// multiply the cost of exactly the screens that already cost the most. Such a
-/// step is already marked `settled: false` — the same flag that says the
-/// capture is of a moving picture now also says it may be of an unfinished one.
-Future<bool> landRealWork(
+/// animation has a frame scheduled for its own reasons, drawing one more per
+/// turn would multiply the cost of exactly the screens that already cost the
+/// most, and such a step is already marked `settled: false` — the same flag
+/// that says the capture is of a moving picture also says it may be of an
+/// unfinished one.
+Future<({bool settled, bool landed})> landRealWork(
   WidgetTester tester,
   Settle policy, {
   required bool settled,
+  ScenarioAssetBundle? assets,
   ScenarioMotionRecorder? record,
 }) async {
-  if (!settled) return false;
-  for (var turn = 0; turn < realWorkTurns; turn++) {
-    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+  if (!settled) return (settled: false, landed: true);
+  var guesses = 0;
+  var waited = Duration.zero;
+  while (true) {
+    var pending = _announced(assets);
+    if (pending && waited >= realWorkWait) {
+      return (settled: true, landed: false);
+    }
+    if (!pending && guesses >= realWorkTurns) {
+      return (settled: true, landed: true);
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(pending ? _waitingTurn : Duration.zero),
+    );
+    if (pending) {
+      waited += _waitingTurn;
+    } else {
+      guesses++;
+    }
     if (!tester.binding.hasScheduledFrame) continue;
+    // A frame is progress, so the next link starts from a full budget rather
+    // than from whatever this one had left.
+    guesses = 0;
     settled = await policy.apply(tester, record: record);
-    if (!settled) return false;
+    if (!settled) return (settled: false, landed: true);
   }
-  return settled;
 }
+
+/// Work the framework or the scenario's own bundle has already said is in
+/// flight — the half of real-loop work that does not have to be guessed at.
+bool _announced(ScenarioAssetBundle? assets) =>
+    PaintingBinding.instance.imageCache.pendingImageCount > 0 ||
+    (assets?.readsInFlight ?? 0) > 0;

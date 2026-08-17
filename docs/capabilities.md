@@ -1332,6 +1332,7 @@ packages: List<ScenarioRunPackage>
       statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
       navBrightness: String?
       settled: bool   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
+      landed: bool   # False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.
       strayFrames: int   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
       failure: String?   # The error, when this is the step a scenario broke on.
       attachments: List<ScenarioRunAttachment>   # What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.

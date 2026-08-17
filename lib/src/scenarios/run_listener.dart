@@ -78,6 +78,7 @@ class ScenarioStepCapture {
     this.motion = ScenarioMotionFrames.empty,
     this.motionInterval,
     this.settled = true,
+    this.landed = true,
     this.strayFrames = 0,
     this.failure,
     this.attachments = const [],
@@ -166,6 +167,17 @@ class ScenarioStepCapture {
   /// — an indefinite animation on screen, which is worth seeing rather than
   /// failing on.
   final bool settled;
+
+  /// False when the shutter fell with work still in flight that the step was
+  /// waiting for — an image decode or an asset read that had not finished
+  /// after `realWorkWait`. The picture is of a screen that was still filling
+  /// in, and the artwork it is missing is on the next step.
+  ///
+  /// Only ever false for work that *announced* itself. A decode nothing counts
+  /// — a `FutureBuilder` on a real future — is still landed as far as this
+  /// flag knows, because nothing here can tell "it has not arrived" from
+  /// "there was never anything coming".
+  final bool landed;
 
   /// Frames drawn between the previous step and this one that no verb drew —
   /// so they came from the raw `tester`, and whatever they showed is missing

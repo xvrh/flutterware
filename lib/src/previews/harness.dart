@@ -318,6 +318,9 @@ void _declare(
           ),
         ),
       };
+      // Held rather than built inline: `landRealWork` reads its in-flight count
+      // to know an asset the entry asked for is genuinely still on the way.
+      var assets = ScenarioAssetBundle();
       try {
         // The harness read the app's fonts through `rootBundle` at startup, and
         // that cached a future belonging to a zone this test is not in.
@@ -327,7 +330,7 @@ void _declare(
           // an asset the app has already read safe to read again from inside
           // `runAsync`. An app installing its own still wins — it is nearer.
           DefaultAssetBundle(
-            bundle: ScenarioAssetBundle(),
+            bundle: assets,
             // The same two wrappers the embedder guest's entrypoint mounts, in
             // the same order, so what differs between the backends is the
             // engine and not the tree. `CatalogGuest` is what makes knobs
@@ -351,7 +354,12 @@ void _declare(
         // `demo/vector_smoke.dart` — the entry pointing at an asset that does
         // not exist was reported clean, because the read that would have thrown
         // never completed.
-        await landRealWork(tester, auditSettle, settled: settled);
+        await landRealWork(
+          tester,
+          auditSettle,
+          settled: settled,
+          assets: assets,
+        );
       } finally {
         FlutterError.onError = previous;
         // Inside the body, never a tearDown: the binding verifies its debug
