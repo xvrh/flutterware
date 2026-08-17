@@ -13,6 +13,7 @@ import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
+import 'package:path/path.dart' as p;
 
 /// The core against a scripted `runProcess`, which is the seam that keeps this
 /// from needing docker. What is asserted is what `fw`, an agent and the sidebar
@@ -58,16 +59,18 @@ void main() {
   /// emits it.
   Map<String, Object?> localEnvConfig() => DevStack.background(
     workingDirectory: 'packages/server',
-    probe: Probe.exitCode(['stack', 'doctor']),
-    start: ['stack', 'up'],
-    stop: ['stack', 'down'],
+    probe: Probe.exitCode(StackRun.command(['stack', 'doctor'])),
+    start: StackRun.command(['stack', 'up']),
+    stop: StackRun.command(['stack', 'down']),
     stopIsDestructive: true,
     commands: [
-      StackCommand('logs', 'Logs', ['stack', 'logs']),
-      StackCommand('restart', 'Restart', [
-        'stack',
+      StackCommand('logs', 'Logs', StackRun.command(['stack', 'logs'])),
+      StackCommand(
         'restart',
-      ], argument: 'service'),
+        'Restart',
+        StackRun.command(['stack', 'restart']),
+        argument: 'service',
+      ),
     ],
   ).config;
 
@@ -186,9 +189,9 @@ void main() {
 
   group('the JSON probe', () {
     Map<String, Object?> jsonConfig() => DevStack.background(
-      probe: Probe.json(['stack', 'doctor']),
-      start: ['stack', 'up'],
-      stop: ['stack', 'down'],
+      probe: Probe.json(StackRun.command(['stack', 'doctor'])),
+      start: StackRun.command(['stack', 'up']),
+      stop: StackRun.command(['stack', 'down']),
     ).config;
 
     test('carries services and their ports through', () async {
@@ -392,7 +395,9 @@ void main() {
       'a stack with no start declared says so rather than doing nothing',
       () async {
         var core = coreWith(
-          DevStack.background(probe: Probe.exitCode(['check'])).config,
+          DevStack.background(
+            probe: Probe.exitCode(StackRun.command(['check'])),
+          ).config,
         );
         expect(core.canControl, isFalse);
         await expectLater(core.start(), throwsStateError);
@@ -463,7 +468,9 @@ void main() {
 
     test('a stack with no stop never offers one', () async {
       var core = coreWith(
-        DevStack.background(probe: Probe.exitCode(['check'])).config,
+        DevStack.background(
+          probe: Probe.exitCode(StackRun.command(['check'])),
+        ).config,
       );
       await core.refresh();
       expect(core.report.teardown, isEmpty);
@@ -475,7 +482,7 @@ void main() {
     test('polls only while something is watching', () async {
       var core = coreWith(
         DevStack.background(
-          probe: Probe.exitCode(['check']),
+          probe: Probe.exitCode(StackRun.command(['check'])),
           poll: const Duration(milliseconds: 30),
         ).config,
       );
@@ -499,7 +506,7 @@ void main() {
       () async {
         var core = coreWith(
           DevStack.background(
-            probe: Probe.exitCode(['check']),
+            probe: Probe.exitCode(StackRun.command(['check'])),
             poll: const Duration(milliseconds: 30),
           ).config,
         );
@@ -514,5 +521,226 @@ void main() {
         core.dispose();
       },
     );
+  });
+
+  group('a script, rather than a command naming an interpreter', () {
+    /// The stack behind a project's own Dart CLI — the shape a config used to
+    /// have to write as `[Platform.resolvedExecutable, 'tool/local_env.dart', …]`,
+    /// or worse as `['fvm', 'dart', 'run', …]`.
+    Map<String, Object?> scriptConfig({Duration? poll}) => DevStack.background(
+      workingDirectory: 'packages/server',
+      probe: Probe.json(
+        StackRun.script('tool/local_env.dart', args: ['status', '--json']),
+      ),
+      start: StackRun.script('tool/local_env.dart', args: ['up']),
+      poll: poll ?? const Duration(seconds: 10),
+      commands: [
+        StackCommand(
+          'logs',
+          'Logs',
+          StackRun.script('tool/local_env.dart', args: ['logs']),
+        ),
+      ],
+    ).config;
+
+    void writeScript() =>
+        File(
+            p.join(
+              project.path,
+              'packages',
+              'server',
+              'tool',
+              'local_env.dart',
+            ),
+          )
+          ..parent.createSync(recursive: true)
+          ..writeAsStringSync('void main() {}');
+
+    test('is spawned with the SDK flutterware is running under', () async {
+      // The whole point: the config named a file, and the interpreter came from
+      // the tool. `/tmp/flutter` is what this harness declares as the SDK.
+      writeScript();
+      var core = coreWith(scriptConfig());
+      responses['/tmp/flutter/bin/dart tool/local_env.dart'] = ProcessResult(
+        0,
+        0,
+        '{"state": "up"}',
+        '',
+      );
+
+      await core.refresh();
+
+      expect(ran.single, [
+        '/tmp/flutter/bin/dart',
+        'tool/local_env.dart',
+        'status',
+        '--json',
+        // Spawned in the declared directory, which is what makes the relative
+        // script path mean what a person typing it would mean.
+        '@${p.join(project.path, 'packages/server')}',
+      ]);
+      expect(core.reading.state, StackState.up);
+      core.dispose();
+    });
+
+    test('is spawned without `run`, so no build hook fires', () async {
+      // `dart run` re-resolves the graph and runs every build hook in it, on
+      // every poll — 4.4s of it in a workspace with native assets. The direct
+      // form is the whole reason a probe can be left polling.
+      writeScript();
+      var core = coreWith(scriptConfig());
+
+      await core.refresh();
+
+      expect(ran.single, isNot(contains('run')));
+      core.dispose();
+    });
+
+    test('is described without the interpreter path', () {
+      // 80 characters of `~/fvm/versions/…` answer a question nobody reading a
+      // panel is asking.
+      var core = coreWith(scriptConfig());
+      expect(
+        core.declaredProbeCommand,
+        'dart tool/local_env.dart status --json',
+      );
+      core.dispose();
+    });
+
+    test('one that is not there is reported, and nothing is spawned', () async {
+      // A missing file comes back from the VM as a page of compiler output with
+      // the useful sentence buried in it. This is the sentence.
+      var core = coreWith(scriptConfig());
+
+      var reading = await core.refresh();
+
+      expect(reading.state, StackState.unavailable);
+      expect(reading.failure, contains('tool/local_env.dart does not exist'));
+      expect(ran, isEmpty);
+      core.dispose();
+    });
+  });
+
+  group('a config written against an older flutterware', () {
+    test('still reads, because a bare list is still a command', () {
+      // `start`, `stop` and a command were bare argv before `StackRun` existed,
+      // and the config imports the version the *project* pins — which can sit
+      // behind the GUI reading its manifest. A probe that stops being read is a
+      // panel that stops knowing anything.
+      var core = coreWith({
+        'probe': {
+          'command': ['stack', 'doctor'],
+          'shape': 'exitCode',
+        },
+        'start': ['stack', 'up'],
+        'stop': ['stack', 'down'],
+        'commands': [
+          {
+            'id': 'logs',
+            'label': 'Logs',
+            'command': ['stack', 'logs'],
+          },
+        ],
+      });
+
+      expect(core.declaredProbeCommand, 'stack doctor');
+      expect(core.canStart, isTrue);
+      expect(core.canStop, isTrue);
+      expect([for (var c in core.commands) c.id], ['logs']);
+      core.dispose();
+    });
+  });
+
+  group('the interval a slow probe earns', () {
+    test('a fast probe leaves the declaration alone', () async {
+      // The common case, and it must stay free of any adjustment.
+      var core = coreWith(
+        DevStack.background(
+          probe: Probe.exitCode(StackRun.command(['check'])),
+        ).config,
+      );
+
+      await core.refresh();
+
+      expect(core.effectivePoll, const Duration(seconds: 10));
+      core.dispose();
+    });
+
+    test('a slow one pushes the interval to four times its duration', () async {
+      // A 4.6s probe on a 10s poll is a permanently busy core, and the project's
+      // only recourse was to write a bigger number into `poll:` and explain the
+      // tool's cost model in a comment.
+      var core =
+          coreWith(
+              DevStack.background(
+                probe: Probe.exitCode(StackRun.command(['check'])),
+                poll: const Duration(milliseconds: 10),
+              ).config,
+            )
+            ..runProcess = (command, {workingDirectory}) async {
+              await Future<void>.delayed(const Duration(milliseconds: 100));
+              return ProcessResult(0, 0, '', '');
+            };
+
+      await core.refresh();
+
+      expect(
+        core.effectivePoll.inMilliseconds,
+        greaterThanOrEqualTo(400),
+        reason: 'a probe may not occupy more than a quarter of its interval',
+      );
+      core.dispose();
+    });
+
+    test('a second caller joins the probe in flight', () async {
+      // The poll timer used to fire regardless, so two subprocesses raced to
+      // write the reading and the panel showed whichever finished last.
+      var completer = Completer<ProcessResult>();
+      var spawns = 0;
+      var core =
+          coreWith(
+              DevStack.background(
+                probe: Probe.exitCode(StackRun.command(['check'])),
+              ).config,
+            )
+            ..runProcess = (command, {workingDirectory}) {
+              spawns++;
+              return completer.future;
+            };
+
+      var first = core.refresh();
+      var second = core.refresh();
+      expect(spawns, 1);
+
+      completer.complete(ProcessResult(0, 0, '', ''));
+      expect((await first).state, StackState.up);
+      // The joined caller gets that same look, not the cache it was refreshing.
+      expect((await second).state, StackState.up);
+      core.dispose();
+    });
+
+    test('a probe that never answers becomes an answer', () async {
+      // With the in-flight guard, a hung probe would otherwise hand every later
+      // caller the same dead future and the panel would sit on one reading for
+      // the rest of the session.
+      var core =
+          coreWith(
+              DevStack.background(
+                probe: Probe.exitCode(StackRun.command(['check'])),
+              ).config,
+            )
+            ..runProcess = (command, {workingDirectory}) {
+              return Completer<ProcessResult>().future;
+            }
+            ..probeTimeout = const Duration(milliseconds: 20);
+
+      var reading = await core.refresh();
+
+      expect(reading.state, StackState.unavailable);
+      expect(reading.failure, contains('did not answer'));
+      // And the guard is clear, so the next poll is not blocked by the dead one.
+      expect(core.isProbing, isFalse);
+      core.dispose();
+    });
   });
 }

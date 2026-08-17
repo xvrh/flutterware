@@ -38,8 +38,8 @@ class DevStackCore extends PluginCore {
     _probe = config['probe'] is Map
         ? Probe.fromJson((config['probe']! as Map).cast<String, Object?>())
         : null;
-    _start = _commandFrom(config['start']);
-    _stop = _commandFrom(config['stop']);
+    _start = StackRun.fromJson(config['start']);
+    _stop = StackRun.fromJson(config['stop']);
     _relativeDirectory = config['workingDirectory'] as String?;
     _stopIsDestructive = config['stopIsDestructive'] == true;
     var poll = config['poll'];
@@ -71,8 +71,8 @@ class DevStackCore extends PluginCore {
   runProcess = defaultRunProcess;
 
   Probe? _probe;
-  List<String>? _start;
-  List<String>? _stop;
+  StackRun? _start;
+  StackRun? _stop;
   String? _relativeDirectory;
   late final bool _stopIsDestructive;
   late final Duration _poll;
@@ -107,6 +107,12 @@ class DevStackCore extends PluginCore {
   /// success, which is the mid-resolve screenshot `SettleSource` was written
   /// about.
   var _probing = false;
+
+  /// The probe in flight, so a second caller joins it rather than starting one.
+  Future<StackReading>? _inFlight;
+
+  /// How long the last probe took, or null before the first one.
+  Duration? _probeFor;
 
   /// The tail of the last command's output, for the panel.
   String _lastOutput = '';
@@ -151,7 +157,7 @@ class DevStackCore extends PluginCore {
   bool get isStale {
     var at = _reading.at;
     if (at == null || !_reading.isKnown) return false;
-    return DateTime.now().difference(at) > _poll * 2;
+    return DateTime.now().difference(at) > effectivePoll * 2;
   }
 
   /// What this is still working on, or null. Read by the capture settler.
@@ -165,11 +171,102 @@ class DevStackCore extends PluginCore {
   String? get lastCommand => _lastCommand;
   int? get lastExitCode => _lastExitCode;
   Duration? get lastRunFor => _lastRunFor;
+
+  /// The interval as declared. [effectivePoll] is what actually runs.
   Duration get pollInterval => _poll;
+
+  /// Overrides the derived probe ceiling. A seam for tests, which cannot wait
+  /// out a 30-second floor to prove that a hung probe becomes an answer.
+  @visibleForTesting
+  Duration? probeTimeout;
+
+  /// How long a probe may take before it is reported as failing.
+  ///
+  /// Derived from the declared interval rather than a constant: a project that
+  /// says "check every two minutes" is describing something slow, and a fixed
+  /// 30s ceiling would call its probe broken. Floored so a fast declaration
+  /// cannot make the ceiling absurdly tight.
+  Duration get _probeTimeout {
+    if (probeTimeout case var override?) return override;
+    var derived = _poll * 3;
+    return derived < const Duration(seconds: 30)
+        ? const Duration(seconds: 30)
+        : derived;
+  }
+
+  /// How often the probe actually runs — the declaration, or slower when the
+  /// probe has proven expensive.
+  ///
+  /// **The declaration is a floor, not a promise, because only the last probe
+  /// knows what a probe costs.** A `Probe.script` pays a `dart run` every time:
+  /// 0.3s on a small workspace, 4.6s measured on a large one with native-asset
+  /// build hooks. At the default 10s that second case is a permanently busy
+  /// core, and the project's only recourse was to write a bigger number into
+  /// `poll:` and explain it in a comment — a fact about the tool's cost model,
+  /// in a file where every other line is a fact about the project.
+  ///
+  /// Four times the last duration, so a probe never occupies more than a
+  /// quarter of its own interval. A fast probe never reaches the multiplier and
+  /// the declaration stands unchanged, which is the common case and must stay
+  /// free.
+  Duration get effectivePoll {
+    var probeFor = _probeFor;
+    if (probeFor == null) return _poll;
+    var floor = probeFor * 4;
+    return floor > _poll ? floor : _poll;
+  }
 
   /// The probe as declared, joined — what the panel names when it explains
   /// where the state on screen came from.
-  String? get declaredProbeCommand => _probe?.command.join(' ');
+  String? get declaredProbeCommand =>
+      _probe == null ? null : describeRun(_probe!.run);
+
+  /// What to actually spawn for [run].
+  ///
+  /// A [CommandRun] is its own answer. A [ScriptRun] becomes `<dart> <path>`
+  /// with **the SDK flutterware is running under** — the one thing a config file
+  /// cannot name, which is the whole reason the kind exists. Same resolution
+  /// `RunCore` uses for a [ScriptSource], because two answers to "which dart"
+  /// would be two behaviours for one word.
+  ///
+  /// **`dart <path>`, not `dart run <path>`, which is what a person would type.**
+  /// `run` re-resolves the package graph and executes every build hook in it on
+  /// every invocation — measured here at 0.33s against 0.28s for the direct form,
+  /// and the gap is the hooks, so it grows with the project rather than staying a
+  /// rounding error: a consumer measured 4.4s for a `dart run` of
+  /// `void main(){}` in a workspace with native assets. A probe pays this on
+  /// every poll, which makes it the difference between a plugin that costs
+  /// nothing to leave open and one that does not.
+  ///
+  /// The price is that build hooks do *not* run, so a script whose imports need
+  /// native assets built will not find them, and a stale `package_config.json`
+  /// is an error here where `run` would have fixed it. Both are loud, and
+  /// neither is a shape a stack-control script tends to have.
+  ///
+  /// The path is passed as declared, unresolved: it is relative to
+  /// [workingDirectory], which is the directory the process is spawned in.
+  List<String> _argvFor(StackRun run) => switch (run) {
+    CommandRun(:var command) => command,
+    ScriptRun(:var path, :var args) => [
+      p.join(host.workspace.flutterSdk.root, 'bin', 'dart'),
+      path,
+      ...args,
+    ],
+  };
+
+  /// Why [run] cannot be run, or null when it can.
+  ///
+  /// Only a script can be checked in advance, and it is worth checking: a
+  /// missing file comes back from `dart run` as a page of compiler output, and
+  /// the useful sentence — *there is no such file* — is one line of it. A
+  /// command names an executable resolved by the OS, and guessing at that here
+  /// would only be a second, worse PATH lookup.
+  String? _problemWith(StackRun run) {
+    if (run is! ScriptRun) return null;
+    var file = File(p.join(workingDirectory, run.path));
+    if (file.existsSync()) return null;
+    return '${run.path} does not exist in $workingDirectory';
+  }
 
   /// The `workingDirectory:` as declared, or null when commands run at the
   /// worktree root. Shown rather than the absolute path where the point is
@@ -198,7 +295,22 @@ class DevStackCore extends PluginCore {
     if (_watchers > 1 || isDisposed) return;
     _loadCache();
     unawaited(refresh());
-    _timer = Timer.periodic(_poll, (_) => unawaited(refresh()));
+    _rescheduleIfWatching();
+  }
+
+  /// Arms the next poll at [effectivePoll], replacing any timer already set.
+  ///
+  /// A one-shot re-armed after every probe rather than a `Timer.periodic`,
+  /// because the interval is not known until the probe it follows has been
+  /// timed. Called from [refresh]'s completion, so the clock starts when a probe
+  /// *finishes* — with a periodic timer the gap between probes shrinks by
+  /// however long each one took, which is the opposite of what a slow probe
+  /// needs.
+  void _rescheduleIfWatching() {
+    _timer?.cancel();
+    _timer = null;
+    if (_watchers == 0 || isDisposed) return;
+    _timer = Timer(effectivePoll, () => unawaited(refresh()));
   }
 
   /// The inverse of [watch]. Idempotent past zero, because a widget disposing
@@ -215,27 +327,74 @@ class DevStackCore extends PluginCore {
 
   /// Runs the probe and adopts what it says. Does nothing while a transition is
   /// in flight — see [_busy].
-  Future<StackReading> refresh() async {
-    if (isDisposed || _busy != null) return _reading;
+  ///
+  /// **One probe at a time, and a second caller joins the first.** The poll
+  /// timer used to fire regardless of whether the last probe had come back, so
+  /// a probe slower than the interval — which a `dart run` on a big workspace
+  /// can be, measured at 4.6s where the default interval is 10s — left two
+  /// subprocesses racing to write [_reading], and the panel showed whichever
+  /// finished last. Joining rather than skipping is what keeps the `status`
+  /// action honest: asked to go and look while a poll is out, it returns *that*
+  /// look rather than the cache it was trying to refresh.
+  Future<StackReading> refresh() {
+    if (isDisposed || _busy != null) return Future.value(_reading);
+    if (_inFlight case var inFlight?) return inFlight;
     var probe = _probe;
     if (probe == null) {
+      return Future.value(
+        _adopt(
+          StackReading(
+            state: StackState.unavailable,
+            at: DateTime.now(),
+            failure:
+                'No probe is declared, so nothing can say what state this '
+                'stack is in.',
+          ),
+        ),
+      );
+    }
+    _probing = true;
+    var started = DateTime.now();
+    var future = _probeOnce(probe).whenComplete(() {
+      _probeFor = DateTime.now().difference(started);
+      _probing = false;
+      _inFlight = null;
+      _rescheduleIfWatching();
+    });
+    return _inFlight = future;
+  }
+
+  Future<StackReading> _probeOnce(Probe probe) async {
+    if (_problemWith(probe.run) case var problem?) {
+      return _adopt(
+        StackReading(
+          state: StackState.unavailable,
+          at: DateTime.now(),
+          failure: problem,
+        ),
+      );
+    }
+    var argv = _argvFor(probe.run);
+    try {
+      var result = await runProcess(
+        argv,
+        workingDirectory: workingDirectory,
+      ).timeout(_probeTimeout);
+      return _adopt(_read(probe, result));
+    } on TimeoutException {
+      // **A probe that never returns has to become an answer.** Before the
+      // in-flight guard a hung one merely leaked a process per interval; with
+      // it, the guard would hand every later caller the same dead future and
+      // the panel would sit on one reading forever.
       return _adopt(
         StackReading(
           state: StackState.unavailable,
           at: DateTime.now(),
           failure:
-              'No probe is declared, so nothing can say what state this '
-              'stack is in.',
+              'The probe did not answer within ${_probeTimeout.inSeconds}s: '
+              '${describeRun(probe.run)}',
         ),
       );
-    }
-    _probing = true;
-    try {
-      var result = await runProcess(
-        probe.command,
-        workingDirectory: workingDirectory,
-      );
-      return _adopt(_read(probe, result));
     } on Object catch (e) {
       // A command that could not be spawned at all — a missing binary, a
       // working directory that is not there. That is the probe failing, not
@@ -244,11 +403,9 @@ class DevStackCore extends PluginCore {
         StackReading(
           state: StackState.unavailable,
           at: DateTime.now(),
-          failure: '${probe.command.first}: $e',
+          failure: '${argv.first}: $e',
         ),
       );
-    } finally {
-      _probing = false;
     }
   }
 
@@ -336,17 +493,15 @@ class DevStackCore extends PluginCore {
   /// call. A method whose type says `Future` and which throws synchronously is
   /// one a caller can only guard by wrapping the call site as well as awaiting
   /// it.
-  Future<DevStackRunResult> _transition(
-    List<String>? command,
-    String what,
-  ) async {
-    if (command == null) {
+  Future<DevStackRunResult> _transition(StackRun? run, String what) async {
+    if (run == null) {
       throw StateError(
         'No `$what` is declared for this stack, so flutterware can only watch '
         'it. Add one to tool/flutterware.dart, or run it yourself.',
       );
     }
-    return _run(command, busy: what, thenProbe: true);
+    if (_problemWith(run) case var problem?) throw StateError(problem);
+    return _run(_argvFor(run), busy: what, thenProbe: true);
   }
 
   /// Runs one of the declared [commands].
@@ -362,8 +517,9 @@ class DevStackCore extends PluginCore {
             : 'no such command. Declared: ${declared.join(', ')}',
       );
     }
+    if (_problemWith(command.run) case var problem?) throw StateError(problem);
     return _run([
-      ...command.command,
+      ..._argvFor(command.run),
       if (command.argument != null && argument != null && argument.isNotEmpty)
         argument,
     ], busy: command.label);
@@ -558,7 +714,7 @@ class DevStackCore extends PluginCore {
         danger: command.danger,
         confirm: command.danger,
         description:
-            command.description ?? 'Runs `${command.command.join(' ')}`.',
+            command.description ?? 'Runs `${describeRun(command.run)}`.',
         parameters: [
           if (command.argument case var argument?)
             ActionParameter(argument, argument, required: false),
@@ -651,6 +807,19 @@ class DevStackCore extends PluginCore {
   }
 }
 
+/// [run] as a line to show a human — the panel's "where this came from", a
+/// command's fallback description, the console's header.
+///
+/// **A script is described as `dart …`, not with the absolute path to the SDK's
+/// binary.** The interpreter is 80 characters of `~/fvm/versions/…` that answer a
+/// question nobody reading a panel is asking; what they want to know is which
+/// script ran with which arguments. The absolute path is what gets *spawned*, and
+/// that is a different question from what gets shown.
+String describeRun(StackRun run) => switch (run) {
+  CommandRun(:var command) => command.join(' '),
+  ScriptRun(:var path, :var args) => ['dart', path, ...args].join(' '),
+};
+
 /// How long ago [at] was, in the shortest form that is still true.
 ///
 /// Shared with the panel: a reading's age is part of what the reading *means*,
@@ -708,11 +877,6 @@ String _tail(String text) {
   var stripped = text.replaceAll(_ansi, '');
   if (stripped.length <= _maxOutput) return stripped;
   return '…\n${stripped.substring(stripped.length - _maxOutput)}';
-}
-
-List<String>? _commandFrom(Object? value) {
-  if (value is! List || value.isEmpty) return null;
-  return [for (var arg in value) '$arg'];
 }
 
 PluginCore devStackCoreFactory(PluginHost host) => DevStackCore(host);

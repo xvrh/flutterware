@@ -49,15 +49,47 @@ void main() {
     expect(again.guest, isTrue);
   });
 
-  test('an entrypoint outside lib/ launches unwrapped, with the reason', () {
+  test('wraps an entrypoint outside lib/, by path', () {
+    // `demo/` is where a project that keeps dev-only entry points out of what
+    // it ships puts them — the same `demo/` the previews plugin scans. This
+    // used to launch uninstrumented, so those projects got no knobs, no
+    // inspect and no act: the wrapper wanted a `package:` URI, which a file
+    // outside `lib/` has none of. It does not need one. It sits inside the
+    // package, so a path reaches the file, and a file with no `package:`
+    // spelling cannot be reached under two URIs by anything else either.
     var result = writeGuestEntrypoint(
       packageRoot: root.path,
-      entrypoint: 'tool/spike.dart',
+      entrypoint: 'demo/main_desktop_dev.dart',
+    );
+
+    expect(result.guest, isTrue);
+    expect(
+      result.target,
+      '.dart_tool/flutterware/run/main_desktop_dev_guest.dart',
+    );
+    var content = File(
+      p.joinAll([root.path, ...p.posix.split(result.target)]),
+    ).readAsStringSync();
+    // Three levels out of `.dart_tool/flutterware/run/`, then back down.
+    expect(
+      content,
+      contains("import '../../../demo/main_desktop_dev.dart' as entry;"),
+    );
+  });
+
+  test('an entrypoint outside the package launches unwrapped', () {
+    // The wrapper is written inside the package. A target above it can be
+    // spelled as a path, and must not be: a file in a sibling package is
+    // reached by `package:` URI from everywhere else in the checkout, and one
+    // library under two URIs is two libraries.
+    var result = writeGuestEntrypoint(
+      packageRoot: root.path,
+      entrypoint: '../other_app/lib/main.dart',
     );
 
     expect(result.guest, isFalse);
-    expect(result.target, 'tool/spike.dart');
-    expect(result.reason, contains('not under lib/'));
+    expect(result.target, '../other_app/lib/main.dart');
+    expect(result.reason, contains('outside'));
   });
 
   test('a missing package name launches unwrapped, with the reason', () {
@@ -123,6 +155,36 @@ void main() {
       // Rewritten to a package: URI: the wrapper does not sit where the entry
       // point sits.
       expect(content, contains("import 'package:shop_app/src/backend.dart';"));
+      expect(content, contains('backend: Backend.staging,'));
+    });
+
+    test("rewrites a demo/ entry point's imports from the wrapper", () {
+      // The two halves of one wrapper: the entry point named by path because
+      // it is outside `lib/`, an enum beside it named by path for the same
+      // reason, and a shared enum in `lib/` named by its `package:` URI. One
+      // function spells all three, so they cannot disagree.
+      File(p.join(root.path, 'demo', 'src', 'seed.dart'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('enum Seed { empty, full }');
+      writeLib('src/backend.dart', 'enum Backend { dev, staging }');
+      File(p.join(root.path, 'demo', 'main_dev.dart')).writeAsStringSync(
+        "import 'src/seed.dart';\n"
+        "import '../lib/src/backend.dart';\n"
+        'void main({Seed seed = Seed.empty, Backend backend = Backend.dev}) {}',
+      );
+
+      var result = writeGuestEntrypoint(
+        packageRoot: root.path,
+        entrypoint: 'demo/main_dev.dart',
+        knobs: {'seed': 'full', 'backend': 'staging'},
+      );
+      var content = File(
+        p.joinAll([root.path, ...p.posix.split(result.target)]),
+      ).readAsStringSync();
+
+      expect(content, contains("import '../../../demo/src/seed.dart';"));
+      expect(content, contains("import 'package:shop_app/src/backend.dart';"));
+      expect(content, contains('seed: Seed.full,'));
       expect(content, contains('backend: Backend.staging,'));
     });
 

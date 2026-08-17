@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutterware/plugins.dart';
 
 /// The sample project, configured as a project in its own right.
@@ -10,9 +8,6 @@ import 'package:flutterware/plugins.dart';
 /// case. Neither is a special mode — a config is whatever `tool/flutterware.dart`
 /// is found beside the directory you opened.
 const app = Pkg('.');
-
-/// The dart this config is running under — see the [DevStack] note below.
-final dart = Platform.resolvedExecutable;
 
 void main() => Flutterware.configure((fw) {
   fw.use(Dependencies(packages: [.new(app)]));
@@ -32,24 +27,23 @@ void main() => Flutterware.configure((fw) {
   // exactly the same thing, which is the property that makes a stack worth
   // *observing* rather than owning.
   //
-  // `Platform.resolvedExecutable` rather than the string `dart`: a config runs
-  // under the SDK the project is pinned to, and that is the one that can run
-  // this project's scripts. Whatever `dart` is on PATH is a different question
-  // with a frequently different answer — here it is two versions behind and
-  // refuses the file outright.
-  //
-  // `dart tool/stack.dart`, not `dart run tool/stack.dart`, which a person
-  // would type: `run` costs 450ms of resolution the script does not need, and
-  // announces `Running build hooks...` on stderr while doing it.
+  // `StackRun.script` names the file and lets flutterware supply the SDK — the
+  // one thing this file cannot know. Whatever `dart` is on PATH is a different
+  // question with a frequently different answer: here it is two versions behind
+  // and refuses the file outright. It spawns `dart tool/stack.dart` rather than
+  // `dart run tool/stack.dart`, which a person would type — `run` re-resolves
+  // the graph and runs every build hook in it, on every poll.
   fw.use(
     DevStack.background(
       label: 'Example server',
       // JSON rather than an exit code, for the one state an exit code cannot
       // report: port 8080 already taken by something that is not this server.
       // `down` would offer a bring-up that is certain to fail.
-      probe: Probe.json([dart, 'tool/stack.dart', 'status', '--json']),
-      start: [dart, 'tool/stack.dart', 'up'],
-      stop: [dart, 'tool/stack.dart', 'down'],
+      probe: Probe.json(
+        StackRun.script('tool/stack.dart', args: ['status', '--json']),
+      ),
+      start: StackRun.script('tool/stack.dart', args: ['up']),
+      stop: StackRun.script('tool/stack.dart', args: ['down']),
       // No `stopIsDestructive:` — stopping this server destroys nothing. The
       // flag is for a `down --volumes` that takes the database with it.
       poll: const Duration(seconds: 15),
@@ -57,7 +51,7 @@ void main() => Flutterware.configure((fw) {
         StackCommand(
           'logs',
           'Logs',
-          [dart, 'tool/stack.dart', 'logs'],
+          StackRun.script('tool/stack.dart', args: ['logs']),
           description:
               'The last 40 lines the server logged. A background process has '
               'no terminal, so it appends to a file instead.',
@@ -65,7 +59,7 @@ void main() => Flutterware.configure((fw) {
         StackCommand(
           'hit',
           'Send a request',
-          [dart, 'tool/stack.dart', 'hit'],
+          StackRun.script('tool/stack.dart', args: ['hit']),
           argument: 'path',
           description:
               'Requests a path — /users, /slow, /error — so the Server panel '

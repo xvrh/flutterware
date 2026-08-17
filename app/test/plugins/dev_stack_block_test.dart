@@ -61,11 +61,11 @@ void main() {
   }
 
   Map<String, Object?> jsonConfig() => DevStack.background(
-    probe: Probe.json(['stack', 'doctor']),
-    start: ['stack', 'up'],
-    stop: ['stack', 'down'],
+    probe: Probe.json(StackRun.command(['stack', 'doctor'])),
+    start: StackRun.command(['stack', 'up']),
+    stop: StackRun.command(['stack', 'down']),
     commands: [
-      const StackCommand('logs', 'Logs', ['stack', 'logs']),
+      const StackCommand('logs', 'Logs', StackRun.command(['stack', 'logs'])),
     ],
   ).config;
 
@@ -232,7 +232,9 @@ void main() {
     tester,
   ) async {
     var plugin = pluginWith(
-      DevStack.background(probe: Probe.json(['stack', 'doctor'])).config,
+      DevStack.background(
+        probe: Probe.json(StackRun.command(['stack', 'doctor'])),
+      ).config,
       probeOutput: '{"state":"up","detail":"shared, not ours"}',
     );
     await pump(tester, plugin);

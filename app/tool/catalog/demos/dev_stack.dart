@@ -132,17 +132,23 @@ DevStackPlugin _plugin({required _Scripted state, bool controls = true}) {
       ),
       config: DevStack.background(
         workingDirectory: 'packages/server',
-        probe: Probe.json(['stack', 'doctor', '--json']),
-        start: controls ? ['stack', 'up'] : null,
-        stop: controls ? ['stack', 'down'] : null,
+        probe: Probe.json(StackRun.command(['stack', 'doctor', '--json'])),
+        start: controls ? StackRun.command(['stack', 'up']) : null,
+        stop: controls ? StackRun.command(['stack', 'down']) : null,
         stopIsDestructive: true,
         poll: const Duration(seconds: 5),
         commands: [
-          const StackCommand('logs', 'Logs', ['stack', 'logs']),
-          const StackCommand('restart', 'Restart', [
-            'stack',
+          const StackCommand(
+            'logs',
+            'Logs',
+            StackRun.command(['stack', 'logs']),
+          ),
+          const StackCommand(
             'restart',
-          ], argument: 'service'),
+            'Restart',
+            StackRun.command(['stack', 'restart']),
+            argument: 'service',
+          ),
         ],
       ).config,
     ),

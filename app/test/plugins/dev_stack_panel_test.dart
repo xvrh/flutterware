@@ -52,9 +52,9 @@ void main() {
 
   Map<String, Object?> configWith(List<StackCommand> commands) =>
       DevStack.background(
-        probe: Probe.json(['stack', 'doctor']),
-        start: ['stack', 'up'],
-        stop: ['stack', 'down'],
+        probe: Probe.json(StackRun.command(['stack', 'doctor'])),
+        start: StackRun.command(['stack', 'up']),
+        stop: StackRun.command(['stack', 'down']),
         commands: commands,
       ).config;
 
@@ -87,10 +87,12 @@ void main() {
   ) async {
     var core = coreWith(
       configWith([
-        const StackCommand('hit', 'Send a request', [
-          'stack',
+        const StackCommand(
           'hit',
-        ], argument: 'path'),
+          'Send a request',
+          StackRun.command(['stack', 'hit']),
+          argument: 'path',
+        ),
       ]),
     );
     await pump(tester, core);
@@ -118,7 +120,7 @@ void main() {
     // them would be a control that does nothing.
     var core = coreWith(
       configWith([
-        const StackCommand('logs', 'Logs', ['stack', 'logs']),
+        const StackCommand('logs', 'Logs', StackRun.command(['stack', 'logs'])),
       ]),
     );
     await pump(tester, core);
