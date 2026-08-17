@@ -748,7 +748,10 @@ class LauncherIconPackage extends PluginPackage {
 /// fw.use(DevStack.background(
 ///   workingDirectory: 'packages/server',
 ///   // Not `docker compose ps --quiet` on its own: that exits 0 whether or
-///   // not anything is up. See [Probe.exitCode].
+///   // not anything is up. And in a worktree, even this answers about
+///   // whichever compose project the working directory resolves to — which
+///   // is the checkout next door if this one has never come up. See
+///   // [Probe.exitCode], and prefer a [Probe.json] script in a monorepo.
 ///   probe: Probe.exitCode(StackRun.command([
 ///     'sh',
 ///     '-c',
@@ -987,6 +990,20 @@ class Probe {
   /// more than one platform is better off putting the check in a
   /// [StackRun.script] of its own — which is most of the work of earning a
   /// [Probe.json], and gets the service list and the *broken* state with it.
+  ///
+  /// **And a lister exits 0 over someone else's stack, too.** The example above
+  /// is right about zero containers and still wrong in a worktree: `docker
+  /// compose` resolves its project from the working directory, so a checkout
+  /// that has never brought its own stack up reports `up` — describing the
+  /// containers of the *main* checkout next door. Measured in exactly that
+  /// shape: exit 0, eight containers, none of them the worktree's. This is the
+  /// monorepo the plugin is aimed at, and the failure is silent and confident.
+  ///
+  /// The reliable order is to answer from what identifies *this* checkout
+  /// before asking the tool anything — no `.env`, no compose project name, no
+  /// stack, answer `down` without spawning docker at all. That is a
+  /// [StackRun.script] again, and one more reason the useful ceiling is
+  /// [Probe.json].
   ///
   /// What it cannot do is tell *down* from *broken*: a health check that fails
   /// because Docker Desktop is asleep exits non-zero exactly like one that

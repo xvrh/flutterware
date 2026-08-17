@@ -99,6 +99,166 @@ void main() {
     expect(caused.single['query'], 'select 1');
   });
 
+  /// **The filters are what makes the details affordable.** A server up for an
+  /// hour holds far more than any one question wants, and before this the only
+  /// narrowing was a count — so "the 5xx on /api/cases" was a client-side scan
+  /// over everything the ring held.
+  test('requests narrows by path, status and window', () async {
+    inspector.addEvent('http', {
+      'method': 'GET',
+      'path': '/api/cases?page=2',
+      'status': 200,
+    });
+    inspector.addEvent('http', {
+      'method': 'PUT',
+      'path': '/api/cases/7',
+      'status': 500,
+    });
+    inspector.addEvent('http', {
+      'method': 'GET',
+      'path': '/health',
+      'status': 500,
+    });
+    await core.computeAll();
+
+    Future<List<Object?>> requests(Map<String, Object?> arguments) async {
+      var result =
+          (await core.invoke('requests', arguments: arguments))!
+              as Map<String, Object?>;
+      var servers = result['servers']! as List;
+      return (servers.single as Map)['requests']! as List;
+    }
+
+    expect(await requests({}), hasLength(3));
+    expect(await requests({'path': '/api/cases'}), hasLength(2));
+    expect(await requests({'minStatus': 500}), hasLength(2));
+    expect(
+      await requests({'path': 'CASES', 'minStatus': 500}),
+      hasLength(1),
+      reason: 'the path match is case-insensitive and the filters compose',
+    );
+    expect(
+      await requests({'path': 'page=2'}),
+      isEmpty,
+      reason: 'the query string is not part of the path a request is named by',
+    );
+    expect(await requests({'since': '1h'}), hasLength(3));
+    expect(await requests({'since': '0s'}), isEmpty);
+  });
+
+  test('an unreadable since is refused, not ignored', () async {
+    inspector.addEvent('http', {'method': 'GET', 'path': '/x', 'status': 200});
+    await core.computeAll();
+
+    await expectLater(
+      () => core.invoke('requests', arguments: {'since': 'yesterday'}),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '$e',
+          'message',
+          contains('ISO-8601'),
+        ),
+      ),
+      reason: 'silently handing back the whole ring would look like an answer',
+    );
+  });
+
+  test('last cuts to the newest and says how many it left', () async {
+    for (var i = 0; i < 5; i++) {
+      inspector.addEvent('http', {
+        'method': 'GET',
+        'path': '/p$i',
+        'status': 200,
+      });
+    }
+    await core.computeAll();
+
+    var result =
+        (await core.invoke('requests', arguments: {'last': 2}))!
+            as Map<String, Object?>;
+    var server = (result['servers']! as List).single as Map;
+    var requests = (server['requests']! as List).cast<Map>();
+    expect([for (var r in requests) r['path']], ['/p4', '/p3']);
+    expect(server['more'], 3);
+  });
+
+  test('details are attached on request, and only on request', () async {
+    inspector.addEvent(
+      'http',
+      {'method': 'PUT', 'path': '/api/cases/7', 'status': 500},
+      details: {
+        'requestBody': '{"broken": true}',
+        'requestHeaders': {'content-type': 'application/json'},
+      },
+    );
+    await core.computeAll();
+
+    Future<Map<String, Object?>> one(Map<String, Object?> arguments) async {
+      var result =
+          (await core.invoke('errors', arguments: arguments))!
+              as Map<String, Object?>;
+      var server = (result['servers']! as List).single as Map;
+      return ((server['errors']! as List).single as Map)
+          .cast<String, Object?>();
+    }
+
+    var without = await one({});
+    expect(without['details'], isNull);
+    expect(without['id'], isNotNull, reason: 'the handle a follow-up names');
+
+    var with_ = await one({'details': true});
+    expect(with_['details'], {
+      'requestBody': '{"broken": true}',
+      'requestHeaders': {'content-type': 'application/json'},
+    });
+  });
+
+  /// The status question and the "anything that went wrong" question are
+  /// different questions, and which one `errors` answers used to be decided by
+  /// how the project's logger happened to be wired.
+  test(
+    'errors takes minStatus as a replacement for its default rule',
+    () async {
+      inspector.addEvent('http', {
+        'method': 'GET',
+        'path': '/denied',
+        'status': 403,
+      }, rid: 'r1');
+      inspector.addEvent('log', {
+        'level': 'INFO',
+        'message': 'denied',
+        'error': 'Forbidden',
+      }, rid: 'r1');
+      inspector.addEvent('http', {
+        'method': 'GET',
+        'path': '/ok',
+        'status': 200,
+      });
+      await core.computeAll();
+
+      Future<List<Map>> errors(Map<String, Object?> arguments) async {
+        var result =
+            (await core.invoke('errors', arguments: arguments))!
+                as Map<String, Object?>;
+        var server = (result['servers']! as List).single as Map;
+        return (server['errors']! as List).cast<Map>();
+      }
+
+      expect(
+        [for (var e in await errors({})) e['channel']],
+        ['log'],
+        reason: 'a 403 is not an error by status; the log line carrying one is',
+      );
+      expect(
+        [
+          for (var e in await errors({'minStatus': 400})) e['path'],
+        ],
+        ['/denied'],
+        reason: 'minStatus asks about the status alone, logger wiring aside',
+      );
+    },
+  );
+
   test('a dropped connection reattaches without duplicating history', () async {
     inspector.addEvent('log', {'message': 'one'});
     await core.computeAll();
@@ -201,15 +361,51 @@ void main() {
     core.track();
     await _until(() => core.servers.single.connected);
 
-    var response = await sqlCommand(core.servers.single, 'explain', 'select 1');
+    var server = core.servers.single;
+    var response = await sqlCommand(server, 'explain', server.events.single);
     expect(response['plan'], 'SCAN (select 1)');
 
     // No requery handler registered — the panel shows this as text.
     await expectLater(
-      () => sqlCommand(core.servers.single, 'requery', 'select 1'),
+      () => sqlCommand(server, 'requery', server.events.single),
       throwsA(isA<ServerRequestException>()),
     );
   });
+
+  /// **A parameterized statement is the case explain exists for, and the text
+  /// alone does not run it.** The query is reported as the driver received it
+  /// so `normalizeSql` can group occurrences by shape; that leaves `@since` in
+  /// the text, and postgres has no parameter `@since` outside a prepared
+  /// statement. So the occurrence's own params have to reach the handler.
+  test(
+    'a command carries the occurrence params, and omits absent ones',
+    () async {
+      Map<String, Object?>? seen;
+      inspector.registerHandler('sql', 'explain', (params) {
+        seen = params;
+        return {'plan': 'ok'};
+      });
+      inspector.addEvent('sql', {
+        'query': 'select * from posts where created_at > @since',
+        'params': {'since': '2026-01-01'},
+        'ms': 1.0,
+      });
+      inspector.addEvent('sql', {'query': 'select 1', 'ms': 1.0});
+      await core.computeAll();
+      core.track();
+      await _until(() => core.servers.single.connected);
+      var server = core.servers.single;
+
+      await sqlCommand(server, 'explain', server.events.first);
+      expect(seen, {
+        'query': 'select * from posts where created_at > @since',
+        'params': {'since': '2026-01-01'},
+      });
+
+      await sqlCommand(server, 'explain', server.events.last);
+      expect(seen, {'query': 'select 1'});
+    },
+  );
 
   test(
     'the errors action collects failures with their causing request',

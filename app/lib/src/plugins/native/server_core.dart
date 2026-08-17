@@ -175,16 +175,25 @@ class ServerCore extends PluginCore {
           'Recent requests',
           description:
               'The latest HTTP requests a running server reported, each with '
-              'the SQL queries and log lines it caused.',
+              'the SQL queries and log lines it caused. Narrow with path, '
+              'minStatus and since rather than reading everything and '
+              'filtering — a server up for an hour holds far more than the '
+              'question usually wants.',
           parameters: [
             _serverParameter,
+            _lastParameter,
             ActionParameter(
-              'last',
-              'Count',
-              kind: ActionParameterKind.integer,
+              'path',
+              'Path contains',
               required: false,
-              defaultValue: '20',
+              description:
+                  'Only requests whose path contains this — "/api/cases". '
+                  'Matched case-insensitively on the path alone, without the '
+                  'query string.',
             ),
+            _minStatusParameter,
+            _sinceParameter,
+            _detailsParameter,
           ],
         ),
         PluginAction(
@@ -193,16 +202,14 @@ class ServerCore extends PluginCore {
           description:
               'Failed requests (5xx or thrown), severe log lines, and any '
               'event carrying an error — each with the request it happened '
-              'under.',
+              'under. What counts as an error is deliberately broader than '
+              'the status: pass minStatus to ask the status question alone.',
           parameters: [
             _serverParameter,
-            ActionParameter(
-              'last',
-              'Count',
-              kind: ActionParameterKind.integer,
-              required: false,
-              defaultValue: '20',
-            ),
+            _lastParameter,
+            _minStatusParameter,
+            _sinceParameter,
+            _detailsParameter,
           ],
         ),
         PluginAction(
@@ -276,43 +283,130 @@ class ServerCore extends PluginCore {
     Map<String, Object?> arguments = const {},
   }) async {
     var name = arguments['name'] as String?;
+    var last = _intArgument(arguments['last'], 20);
+    var minStatus = _intArgument(arguments['minStatus'], null);
+    var since = _sinceArgument(arguments['since']);
+    var details = arguments['details'] == true;
     return switch (actionId) {
-      'requests' => _collect(name, (client) {
-        return {
-          'requests': _shapeRequests(
-            client.received,
-            _intArgument(arguments['last'], 20),
-          ),
-        };
+      'requests' => _collect(name, (client) async {
+        var matched = [
+          for (var event in client.received)
+            if (event.channel == 'http' &&
+                _within(event, since) &&
+                _pathMatches(event, arguments['path'] as String?) &&
+                _atLeast(event, minStatus))
+              event,
+        ];
+        return _page(
+          client,
+          matched,
+          last: last,
+          details: details,
+          key: 'requests',
+          shape: (kept) => _shapeRequests(kept, client.received),
+        );
       }),
-      'errors' => _collect(name, (client) {
-        return {
-          'errors': _shapeErrors(
-            client.received,
-            _intArgument(arguments['last'], 20),
-          ),
-        };
+      'errors' => _collect(name, (client) async {
+        var matched = [
+          for (var event in client.received)
+            if (_within(event, since) &&
+                (minStatus == null
+                    ? _isError(event)
+                    : _atLeast(event, minStatus)))
+              event,
+        ];
+        return _page(
+          client,
+          matched,
+          last: last,
+          details: details,
+          key: 'errors',
+          shape: (kept) => _shapeErrors(kept, client.received),
+        );
       }),
-      'sql' => _collect(name, (client) {
+      'sql' => _collect(name, (client) async {
         return {
           'queries': _shapeSqlStats(
             client.received,
-            _intArgument(arguments['top'], 20),
+            _intArgument(arguments['top'], 20)!,
           ),
         };
       }),
-      'info' => _collect(name, (client) {
+      'info' => _collect(name, (client) async {
         return {'info': _shapeInfo(ServerInfo.fromEvents(client.received))};
       }),
       _ => super.invoke(actionId),
     };
   }
 
+  /// The newest [last] of [matched], shaped, and — when asked — each with its
+  /// captured headers and bodies hung off it.
+  ///
+  /// **The details budget is here rather than in a smaller default `last`.**
+  /// One captured body can be 32 KB and most are a few hundred bytes, so a
+  /// count cannot bound the answer, and a count small enough to try would make
+  /// the common case useless. Newest first until the budget is gone, and then
+  /// the reply says how many went without: a truncation nobody is told about
+  /// reads as "there was nothing there", which is the failure this whole
+  /// plugin keeps being redesigned around.
+  static Future<Map<String, Object?>> _page(
+    ServerAttachClient client,
+    List<ServerEvent> matched, {
+    required int? last,
+    required bool details,
+    required String key,
+    required List<Map<String, Object?>> Function(List<ServerEvent> kept) shape,
+  }) async {
+    // Newest first from here down, so a row and the event it came from share
+    // an index and the budget spends on the newest.
+    var kept =
+        (last != null && matched.length > last
+                ? matched.sublist(matched.length - last)
+                : matched)
+            .reversed
+            .toList();
+    var rows = shape(kept);
+    var withheld = 0;
+    if (details) {
+      var budget = _detailsByteBudget;
+      for (var i = 0; i < rows.length; i++) {
+        var fetched = budget <= 0 ? null : await client.details(kept[i].id);
+        if (fetched == null) {
+          // Never captured, evicted, or past the budget — and only the last
+          // is something the caller can do anything about.
+          if (budget <= 0) withheld++;
+          continue;
+        }
+        var encoded = jsonEncode(fetched);
+        // The first row is allowed to overrun: an answer that spends its whole
+        // budget on the one request asked about is the answer that was wanted.
+        if (encoded.length > budget && i > 0) {
+          withheld++;
+          continue;
+        }
+        budget -= encoded.length;
+        rows[i]['details'] = fetched;
+      }
+    }
+    return {
+      key: rows,
+      if (matched.length > kept.length) 'more': matched.length - kept.length,
+      if (withheld > 0)
+        'note':
+            '$withheld of these have details that did not fit one reply. Ask '
+            'again for fewer — a narrower path, a higher minStatus, a shorter '
+            'since, or a smaller last.',
+    };
+  }
+
+  /// What one reply will spend on captured headers and bodies.
+  static const _detailsByteBudget = 48 * 1024;
+
   /// One ephemeral attachment per matching server: replay the ring, let
   /// [shape] reduce it, leave. What all three read actions share.
   Future<Object?> _collect(
     String? name,
-    Map<String, Object?> Function(ServerAttachClient client) shape,
+    Future<Map<String, Object?>> Function(ServerAttachClient client) shape,
   ) async {
     var handles = scanServerHandles(
       runDirProvider(),
@@ -354,7 +448,11 @@ class ServerCore extends PluginCore {
       if (client == null) continue;
       try {
         await _replayed(client);
-        out.add({'name': handle.name, 'pid': handle.pid, ...shape(client)});
+        out.add({
+          'name': handle.name,
+          'pid': handle.pid,
+          ...await shape(client),
+        });
       } finally {
         await client.close();
       }
@@ -365,11 +463,63 @@ class ServerCore extends PluginCore {
     };
   }
 
-  static int _intArgument(Object? value, int fallback) => switch (value) {
+  static int? _intArgument(Object? value, [int? fallback]) => switch (value) {
     int n => n,
     String s => int.tryParse(s) ?? fallback,
     _ => fallback,
   };
+
+  /// `30s`, `10m`, `2h`, `1d`, or an ISO-8601 instant, as the moment to count
+  /// from. Null for an absent argument.
+  ///
+  /// **Anything else is refused.** A `since` that silently did nothing would
+  /// hand back the whole ring wearing the shape of a filtered answer, which is
+  /// the same failure the undeclared-parameter refusal exists for.
+  static DateTime? _sinceArgument(Object? value) {
+    if (value == null) return null;
+    var text = '$value'.trim();
+    if (text.isEmpty) return null;
+    var relative = RegExp(r'^(\d+)\s*([smhd])$').firstMatch(text);
+    if (relative != null) {
+      var n = int.parse(relative.group(1)!);
+      return DateTime.now().subtract(switch (relative.group(2)!) {
+        's' => Duration(seconds: n),
+        'm' => Duration(minutes: n),
+        'h' => Duration(hours: n),
+        _ => Duration(days: n),
+      });
+    }
+    var instant = DateTime.tryParse(text);
+    if (instant != null) return instant;
+    throw ArgumentError.value(
+      value,
+      'since',
+      'must be a duration back from now — "30s", "10m", "2h", "1d" — or an '
+          'ISO-8601 instant like "2026-08-17T09:00:00Z"',
+    );
+  }
+
+  static bool _within(ServerEvent event, DateTime? since) =>
+      since == null || !event.time.isBefore(since);
+
+  /// The path alone, case-insensitively. The query string is excluded because
+  /// `?` and `&` in an argument are a shell's problem, and a path is what the
+  /// panel and the timeline both name a request by.
+  static bool _pathMatches(ServerEvent event, String? needle) {
+    if (needle == null || needle.isEmpty) return true;
+    var path = event.payload['path'];
+    if (path is! String) return false;
+    var withoutQuery = path.split('?').first;
+    return withoutQuery.toLowerCase().contains(needle.toLowerCase());
+  }
+
+  static bool _atLeast(ServerEvent event, int? minStatus) {
+    if (minStatus == null) return true;
+    return switch (event.payload['status']) {
+      int status => status >= minStatus,
+      _ => false,
+    };
+  }
 
   static Future<void> _replayed(ServerAttachClient client) async {
     var deadline = DateTime.now().add(const Duration(seconds: 2));
@@ -378,25 +528,27 @@ class ServerCore extends PluginCore {
     }
   }
 
-  /// One entry per `http` event, newest first, with everything sharing its
+  /// One entry per request in [requests], with everything sharing its
   /// correlation id nested under it — the agent-readable waterfall.
+  ///
+  /// [all] is the whole attachment, because the events a request caused are
+  /// found by correlation and survive any filter applied to the requests.
   static List<Map<String, Object?>> _shapeRequests(
-    List<ServerEvent> events,
-    int last,
+    List<ServerEvent> requests,
+    List<ServerEvent> all,
   ) {
     var byRid = <String, List<ServerEvent>>{};
-    for (var event in events) {
+    for (var event in all) {
       if (event.rid != null && event.channel != 'http') {
         byRid.putIfAbsent(event.rid!, () => []).add(event);
       }
     }
-    var requests = events.where((e) => e.channel == 'http').toList();
-    var recent = requests.length > last
-        ? requests.sublist(requests.length - last)
-        : requests;
     return [
-      for (var request in recent.reversed)
+      for (var request in requests)
         {
+          // The handle a follow-up names. Absent before, which left `details`
+          // reachable only by asking for the same page again.
+          'id': request.id,
           'time': request.time.toIso8601String(),
           ...request.payload,
           if (request.rid != null && byRid[request.rid] != null)
@@ -408,29 +560,23 @@ class ServerCore extends PluginCore {
     ];
   }
 
-  /// Anything that went wrong, newest first: failed requests, severe logs,
-  /// and any event carrying an error — with the request it happened under,
-  /// because "what broke" is only half the question.
+  /// Everything in [errors], with the request it happened under, because
+  /// "what broke" is only half the question. [all] is the whole attachment,
+  /// which is where the causing request is looked up.
   static List<Map<String, Object?>> _shapeErrors(
-    List<ServerEvent> events,
-    int last,
+    List<ServerEvent> errors,
+    List<ServerEvent> all,
   ) {
     var requestsByRid = <String, ServerEvent>{};
-    for (var event in events) {
+    for (var event in all) {
       if (event.channel == 'http' && event.rid != null) {
         requestsByRid[event.rid!] = event;
       }
     }
-    var errors = [
-      for (var event in events)
-        if (_isError(event)) event,
-    ];
-    var recent = errors.length > last
-        ? errors.sublist(errors.length - last)
-        : errors;
     return [
-      for (var event in recent.reversed)
+      for (var event in errors)
         {
+          'id': event.id,
           'time': event.time.toIso8601String(),
           'channel': event.channel,
           ...event.payload,
@@ -664,16 +810,31 @@ String _shellQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";
 /// runs it on its own connection and answers. Throws [StateError] when not
 /// attached and [ServerRequestException] when the server has no such handler
 /// or the handler failed; the panel shows both as text, not as crashes.
+///
+/// **Takes the occurrence, not the query text, because the text alone does not
+/// run.** A bound statement is reported as the driver received it — `$1`,
+/// `@name`, `?` still in place — and that is deliberate: [normalizeSql] groups
+/// by shape, and an N+1 is precisely a set of queries differing only in their
+/// literals. But `EXPLAIN` on such a text fails, because a parameter has no
+/// meaning outside a prepared statement. So the occurrence's own `params` ride
+/// along and the handler binds them, which is also the only spelling of this
+/// that does not ask a project to interpolate values into SQL.
 Future<Map<String, Object?>> sqlCommand(
   TrackedServer server,
   String method,
-  String query,
+  ServerEvent occurrence,
 ) {
   var client = server.client;
   if (client == null) {
     throw StateError('Not attached to ${server.handle.name}.');
   }
-  return client.request('sql', method, {'query': query});
+  return client.request('sql', method, {
+    'query': occurrence.payload['query'],
+    // Absent rather than empty when the statement took none: a handler reads
+    // `params['params'] ?? const []` and an absent key is the simpler read.
+    if (occurrence.payload['params'] != null)
+      'params': occurrence.payload['params'],
+  });
 }
 
 /// One normalized query shape, aggregated across everything a server
@@ -752,6 +913,49 @@ const _serverParameter = ActionParameter(
   'Server',
   required: false,
   description: 'Which server, when several are running.',
+);
+
+const _lastParameter = ActionParameter(
+  'last',
+  'Count',
+  kind: ActionParameterKind.integer,
+  required: false,
+  defaultValue: '20',
+  description: 'How many to return, newest first. Applied after the filters.',
+);
+
+const _minStatusParameter = ActionParameter(
+  'minStatus',
+  'Minimum status',
+  kind: ActionParameterKind.integer,
+  required: false,
+  description:
+      'Only requests whose status is at least this — 400 for everything that '
+      "failed, 500 for the server's own faults. On `errors`, this replaces "
+      'the default rule rather than adding to it: it asks about the status '
+      'and nothing else.',
+);
+
+const _sinceParameter = ActionParameter(
+  'since',
+  'Since',
+  required: false,
+  description:
+      'Only what happened within this window, as a duration back from now — '
+      '"30s", "10m", "2h" — or an ISO-8601 instant. Anything else is refused '
+      'rather than ignored.',
+);
+
+const _detailsParameter = ActionParameter(
+  'details',
+  'With details',
+  kind: ActionParameterKind.boolean,
+  required: false,
+  description:
+      "Attach each event's captured headers and bodies — the half a 500 is "
+      'usually opened for, and the expensive half. Held server-side and '
+      'fetched per event, so narrow the answer with the filters first; the '
+      'reply says so when a byte budget cut the rest short.',
 );
 
 PluginCore serverCoreFactory(PluginHost host) => ServerCore(host);

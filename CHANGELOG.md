@@ -17,18 +17,26 @@
     the difference is the `workingDirectory` this plugin has.)
   - Spawned as `dart <path>`, not `dart run <path>`: `run` re-resolves the
     package graph and executes every build hook in it on every invocation, which
-    a probe would pay on every poll. The cost of that is that build hooks do not
-    run, so a script needing native assets built must be a `StackRun.command`.
+    a probe would pay on every poll. Measured at 0.33s against 0.28s here and
+    0.70s against 0.58s on a consumer's real probe — small, and it grows with
+    the project. The cost of that is that build hooks do not run, so a script
+    needing native assets built must be a `StackRun.command`.
+  - The larger win is that flutterware resolves the SDK and spawns it directly
+    rather than going through a version manager: the same consumer's probe went
+    from ~5s to 0.58s, because `fvm dart --version` on a loaded machine was
+    measured at 4.3–7.7s doing nothing at all.
   - Older configs still read. A bare `List` where a `StackRun` now goes is taken
     as a command, so a project pinning an older `flutterware` keeps working.
 - **A slow probe now widens its own interval instead of saturating the core.**
   `poll:` is a floor rather than a promise: the interval becomes at least four
   times the last probe's duration, so a probe never occupies more than a quarter
   of it. A fast probe never reaches the multiplier and nothing changes. Only the
-  last probe knows what a probe costs — a `dart run` of `void main(){}` was
-  measured at 4.4s in a workspace with native-asset build hooks, against a
-  default 10s interval, and the project's only recourse was to write a bigger
-  number into `poll:` and explain the tool's cost model in a comment.
+  last probe knows what a probe costs — a consumer measured a probe at 4.4s
+  against a default 10s interval, and the project's only recourse was to write a
+  bigger number into `poll:` and explain the tool's cost model in a comment.
+  (That 4.4s was a version manager on a loaded machine, not the build hooks this
+  changelog first blamed; the cost a probe can turn out to have is the point,
+  and it is not capped by anything flutterware knows in advance.)
 - **Two probes can no longer race.** The poll timer used to fire whether or not
   the last probe had come back, so a probe slower than the interval left two
   subprocesses both writing the reading and the panel showed whichever finished
@@ -48,6 +56,52 @@
 - Relatedly, an entry point's own import that climbs out of `lib/` but stays in
   the package — `import '../tool/helpers.dart'` — is now copied into the wrapper
   rather than dropped, so a knob whose type is declared there works.
+- **Correction to 0.5.2: a `Run` entry point declares `knobs`, not `defines`.**
+  That entry announced a rename to `Entrypoint(defines:)` / `DartDefine` /
+  `--defines=`; it was undone before release, because a value a run supplies is
+  a session value rather than a build value and does not always cost a rebuild.
+  What ships is `Entrypoint(knobs: …)`, the class `Knob`, and `fw run run launch
+  --knobs=`. The one piece of that rename still standing is the source type,
+  which is published as `DefineSource` with `ValueSource` as its alias — the
+  noun outlived the defines. The API moved twice and only the first move was
+  written down here, which is what a consumer pinning a git ref reads this file
+  to find out.
+- **An unencodable value in a reported event no longer takes the whole
+  attachment down.** `FlutterwareServer.event` / `span` accept whatever a
+  reporter binds — a `DateTime`, an enum, a non-finite double — and one of them
+  used to throw inside the encode on the way to an attacher, which the inspector
+  reads as a dead peer and disconnects. The event stayed in the ring, so every
+  reattach died in the same place until it rolled out: one bound parameter put a
+  server's panel out for the rest of the session. Values `jsonEncode` refuses
+  are now replaced by their own `toString()` on the way into the ring, which is
+  also the more useful answer — a reporter that bound a date wants to read the
+  date. A type with a `toJson()` is still encoded whole.
+- **`explain` and `requery` are handed the occurrence's parameters, not just its
+  text.** A bound statement is reported with `$1` / `@name` / `?` in place so
+  `normalizeSql` can group occurrences by shape, which means the text alone will
+  not run — `EXPLAIN` on it fails outside a prepared statement, and that is
+  every query worth explaining in a real application. Commands now carry
+  `params` beside `query`, and the adapter snippets in
+  `doc/server_inspection.md` bind them instead of interpolating. The postgres
+  snippet also reports the parameter *map* rather than `.values.toList()`, which
+  was throwing away the names that bind it back.
+- **`requests` and `errors` take filters and can return captured details.**
+  `path`, `minStatus` and `since` narrow the answer where only `last` did
+  before, `details: true` attaches the redacted headers and capped bodies the
+  middleware already captures — the half a 500 is opened for, previously
+  reachable only from the GUI — and every row now carries its event `id`.
+  Details are bounded by a byte budget per reply, and the reply says how many
+  went without.
+- **The MCP tools refuse a top-level argument they do not declare.** A call that
+  misspelled the wrapper key — `parameters:` where `arguments:` goes — used to
+  run the action with its defaults and answer as if it had been asked. All five
+  tools now declare `additionalProperties: false` and name what they do take.
+- **`flutterware_status` takes `brief` and `plugin`.** The panel projection is
+  the inventory and measures 90% of the reply — 19.2k of 21.7k characters on
+  this repository — which every agent session paid on first contact because the
+  instructions say to start here. `brief` keeps the status lines and the
+  per-package entries and drops the rest (21.7k → 2.4k); `plugin` answers one in
+  full, loading only that core.
 
 ## 0.5.2
 

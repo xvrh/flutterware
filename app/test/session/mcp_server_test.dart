@@ -128,6 +128,72 @@ void main() {
     expect(text, isNot(contains('Unhandled')));
   });
 
+  /// **The outer layer had to learn what the inner one already knew.** A call
+  /// that misspells the *wrapper* key — `parameters:` for `arguments:` — used
+  /// to run the action with its defaults and answer as if it had been asked,
+  /// which is precisely the failure `Session._undeclared` exists to prevent one
+  /// level in. Nothing downstream can catch a plausible answer to a question
+  /// that was never asked.
+  test('a top-level key the tool does not declare is refused', () async {
+    var result = await connection.callTool(
+      CallToolRequest(
+        name: 'flutterware_invoke',
+        arguments: {
+          'plugin': 'previews',
+          'action': 'list',
+          'parameters': {'top': '3'},
+        },
+      ),
+    );
+
+    expect(result.isError, isTrue);
+    var text = (result.content.single as TextContent).text;
+    expect(text, contains('"parameters" is not an argument'));
+    expect(
+      text,
+      contains('It takes: plugin, action, arguments.'),
+      reason: 'naming what it does take is what saves the round trip',
+    );
+  });
+
+  test('and a near miss is named', () async {
+    var result = await connection.callTool(
+      CallToolRequest(
+        name: 'flutterware_actions',
+        arguments: {'plugins': 'run'},
+      ),
+    );
+    expect(
+      (result.content.single as TextContent).text,
+      contains('did you mean "plugin"?'),
+    );
+  });
+
+  test(
+    'every tool closes its schema, not just the ones checked above',
+    () async {
+      // Declared as well as enforced, for whoever is holding the schema rather
+      // than calling it — a client that validates can then refuse without a
+      // round trip.
+      for (var tool in (await connection.listTools()).tools) {
+        expect(
+          tool.inputSchema.additionalProperties,
+          isFalse,
+          reason: '${tool.name} accepts keys it does not document',
+        );
+
+        var result = await connection.callTool(
+          CallToolRequest(name: tool.name, arguments: {'notAKey': 'x'}),
+        );
+        expect(result.isError, isTrue, reason: '${tool.name} took a bogus key');
+        expect(
+          (result.content.single as TextContent).text,
+          contains('"notAKey" is not an argument of ${tool.name}'),
+        );
+      }
+    },
+  );
+
   test('the act tool teaches the layer it can address', () async {
     // The forwarding test above catches a dropped argument; it cannot catch a
     // parameter an agent never learns exists. `layer` reached the plugin
@@ -262,6 +328,67 @@ void main() {
       var plugins = (payload['plugins']! as List).cast<Map<String, Object?>>();
       expect(plugins.every((p) => p.containsKey('actions')), isTrue);
     });
+
+    /// **The instructions say to start here, so every session pays it.** The
+    /// panel projection is the inventory and the inventory is nine tenths of
+    /// the reply — measured on this repo at 19.2k of 21.7k characters, most of
+    /// it rows naming every dependency of every package. `brief` answers the
+    /// question the first call is actually asking — which plugins are there and
+    /// which are unhappy — and each plugin's own actions still serve the rest.
+    test('brief keeps the status lines and drops the inventory', () async {
+      var full = _text(
+        await connection.callTool(CallToolRequest(name: 'flutterware_status')),
+      );
+      var brief = _text(
+        await connection.callTool(
+          CallToolRequest(
+            name: 'flutterware_status',
+            arguments: {'brief': true},
+          ),
+        ),
+      );
+
+      expect(brief.length, lessThan(full.length ~/ 2));
+      var plugins = ((jsonDecode(brief) as Map)['plugins']! as List)
+          .cast<Map<String, Object?>>();
+      expect(plugins, isNotEmpty);
+      expect(
+        plugins.every((p) => !p.containsKey('view')),
+        isTrue,
+        reason: 'the projection is what brief drops',
+      );
+      expect(
+        plugins.every((p) => p.containsKey('status')),
+        isTrue,
+        reason: 'and the status line is what it keeps',
+      );
+    });
+
+    test(
+      'naming a plugin answers that one, and refuses an unknown one',
+      () async {
+        var one = _text(
+          await connection.callTool(
+            CallToolRequest(
+              name: 'flutterware_status',
+              arguments: {'plugin': 'previews'},
+            ),
+          ),
+        );
+        var plugins = ((jsonDecode(one) as Map)['plugins']! as List)
+            .cast<Map>();
+        expect(plugins, hasLength(1));
+        expect(plugins.single['id'], 'flutterware.previews');
+
+        var missing = await connection.callTool(
+          CallToolRequest(
+            name: 'flutterware_status',
+            arguments: {'plugin': 'nope'},
+          ),
+        );
+        expect(missing.isError, isTrue);
+      },
+    );
 
     test('replies are compact — indentation is bytes no model reads', () async {
       var text = _text(

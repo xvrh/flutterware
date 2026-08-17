@@ -231,12 +231,18 @@ class DevStackCore extends PluginCore {
   ///
   /// **`dart <path>`, not `dart run <path>`, which is what a person would type.**
   /// `run` re-resolves the package graph and executes every build hook in it on
-  /// every invocation — measured here at 0.33s against 0.28s for the direct form,
-  /// and the gap is the hooks, so it grows with the project rather than staying a
-  /// rounding error: a consumer measured 4.4s for a `dart run` of
-  /// `void main(){}` in a workspace with native assets. A probe pays this on
-  /// every poll, which makes it the difference between a plugin that costs
-  /// nothing to leave open and one that does not.
+  /// every invocation — measured here at 0.33s against 0.28s for the direct
+  /// form, and the gap is the hooks, so it grows with the project rather than
+  /// staying constant. A probe pays it on every poll.
+  ///
+  /// It is the smaller half of the win, though, and worth not overstating: a
+  /// consumer re-measured their own probe idle and got 0.70s for `dart run`
+  /// against 0.58s direct. The 4.4s this line used to quote was `fvm dart` on a
+  /// loaded machine — `fvm dart --version`, doing nothing at all, was 4.3–7.7s
+  /// there. What took their probe from ~5s to 0.58s was resolving the SDK here
+  /// and spawning it directly instead of going through a version manager, which
+  /// is the same decision as [ScriptSource]'s and the reason a config file
+  /// cannot name an interpreter.
   ///
   /// The price is that build hooks do *not* run, so a script whose imports need
   /// native assets built will not find them, and a stale `package_config.json`

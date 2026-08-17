@@ -89,6 +89,13 @@ Middleware inspect() {
           'ms': watch.elapsedMicroseconds / 1000,
         });
         return response;
+      } on HijackException {
+        // Shelf signals a hijack — a websocket upgrade, an SSE stream taking
+        // the socket — by *throwing* past the middleware. It is the success
+        // path. Caught below as an error, every websocket connection posts a
+        // phantom 500 to the timeline, and the one it posts for is the
+        // connection that worked.
+        rethrow;
       } catch (e) {
         FlutterwareServer.event('http', {
           'method': request.method,
@@ -105,6 +112,11 @@ Middleware inspect() {
 
 // var handler = const Pipeline().addMiddleware(inspect()).addHandler(router);
 ```
+
+A hijacked request is reported by nothing here, which is the honest answer:
+the response never existed and the socket's life is no longer the handler's.
+To see that the upgrade happened, report an `event` of your own before the
+hijack — the correlation zone is still yours at that point.
 
 The version in `example_server.dart` goes further and is the one to copy for
 the Request/Response tabs: it captures **redacted headers** and **capped
@@ -153,11 +165,47 @@ Future<void> main() async {
 }
 ```
 
+### What counts as an error
+
+The Errors tab and the `errors` action admit three things, and only the first
+is about the response:
+
+- an `http` event whose `status` is **500 or more**;
+- a `log` event at **`SEVERE`** or **`SHOUT`**;
+- **any event carrying an `error` key**, on any channel.
+
+So what lands there depends on how your project logs, not only on what it
+answered. A 403 whose handler logs with `error:` attached shows up — through
+the third rule, not the first. A 4xx handler that logs at `INFO` with no error
+attached shows up nowhere, for a request that failed. That is deliberate: a 404
+is traffic, not a fault, and only your code knows which of yours are which.
+Attach `error:` to the log line for the ones that are.
+
+When the question really is about the status, ask it directly:
+`errors` takes `minStatus`, which replaces the three rules above with that one
+comparison — `minStatus: 400` is every request that failed, whatever the logger
+was doing.
+
 ## SQL: drift
 
 `QueryInterceptor` is the one hook that sees every statement. The `explain`
 and `requery` handlers run **inside your server, on your own connection** —
 that is why the GUI needs no driver and no credentials to show a real plan.
+
+**Report the statement as the driver received it, and report its parameters
+beside it.** Substituting values into the text would break the grouping the SQL
+tab is built on — `normalizeSql` gathers occurrences by shape, and an N+1 is
+exactly a set of queries differing only in their literals. So `$1` / `@name` /
+`?` stay where they are, which means the text alone will not run: `EXPLAIN` on
+it fails, because a parameter has no meaning outside a prepared statement.
+A command is therefore invoked with `params` as well as `query` — the chosen
+occurrence's own, as your `span` reported them — and every handler below binds
+them rather than interpolating. A statement that took no parameters arrives
+without the key.
+
+Report them in the shape your driver binds: a list where the placeholders are
+positional, a **map where they are named**. `parameters.values.toList()` on a
+named query throws the names away, and the names are the half that binds back.
 
 ```dart
 import 'package:drift/drift.dart';
@@ -189,18 +237,31 @@ class InspectingInterceptor extends QueryInterceptor {
 
 void registerSqlCommands(MyDatabase db) {
   FlutterwareServer.handle('sql', 'explain', (params) async {
-    var query = params['query']! as String;
     var rows = await db
-        .customSelect('EXPLAIN QUERY PLAN $query')
+        .customSelect(
+          'EXPLAIN QUERY PLAN ${params['query']}',
+          variables: _bind(params['params']),
+        )
         .get();
     return {'plan': [for (var row in rows) row.data]};
   });
   FlutterwareServer.handle('sql', 'requery', (params) async {
-    var query = params['query']! as String;
-    var rows = await db.customSelect(query).get();
+    var rows = await db
+        .customSelect(
+          params['query']! as String,
+          variables: _bind(params['params']),
+        )
+        .get();
     return {'rows': [for (var row in rows.take(50)) row.data]};
   });
 }
+
+/// The parameters as they crossed the wire, back into drift variables. They
+/// arrive JSON-shaped, so a `DateTime` is the string the reporter recorded —
+/// good enough for a plan, and the reason `requery` is for dev databases.
+List<Variable> _bind(Object? reported) => [
+  for (var value in reported as List? ?? const []) Variable(value),
+];
 ```
 
 ## SQL: package:postgres
@@ -216,19 +277,25 @@ Future<Result> query(
 }) {
   return FlutterwareServer.span('sql', {
     'query': sql,
-    if (parameters != null) 'params': parameters.values.toList(),
+    // The map, not `parameters.values.toList()`: this query is named, so a
+    // list is the half of it that cannot be bound back.
+    if (parameters != null) 'params': parameters,
   }, () => connection.execute(Sql.named(sql), parameters: parameters));
 }
 
 void registerSqlCommands(Connection connection) {
   FlutterwareServer.handle('sql', 'explain', (params) async {
     var rows = await connection.execute(
-      'EXPLAIN ANALYZE ${params['query']}',
+      Sql.named('EXPLAIN ANALYZE ${params['query']}'),
+      parameters: (params['params'] as Map?)?.cast<String, Object?>(),
     );
     return {'plan': [for (var row in rows) row.first]};
   });
   FlutterwareServer.handle('sql', 'requery', (params) async {
-    var rows = await connection.execute(params['query']! as String);
+    var rows = await connection.execute(
+      Sql.named(params['query']! as String),
+      parameters: (params['params'] as Map?)?.cast<String, Object?>(),
+    );
     return {'rows': [for (var row in rows.take(50)) row.toColumnMap()]};
   });
 }
@@ -252,14 +319,19 @@ ResultSet query(Database db, String sql, [List<Object?> params = const []]) {
 
 void registerSqlCommands(Database db) {
   FlutterwareServer.handle('sql', 'explain', (params) {
-    var rows = db.select('EXPLAIN QUERY PLAN ${params['query']}');
+    var rows = db.select(
+      'EXPLAIN QUERY PLAN ${params['query']}',
+      _bind(params['params']),
+    );
     return {'plan': [for (var row in rows) row['detail']]};
   });
   FlutterwareServer.handle('sql', 'requery', (params) {
-    var rows = db.select(params['query']! as String);
+    var rows = db.select(params['query']! as String, _bind(params['params']));
     return {'rows': rows.take(50).toList()};
   });
 }
+
+List<Object?> _bind(Object? reported) => [...?reported as List?];
 ```
 
 ## HTTP out: the other half of a slow endpoint
@@ -287,9 +359,18 @@ class InspectingClient extends http.BaseClient {
 ## Notes that apply to every snippet
 
 - **Redaction is yours**: before reporting headers or parameters, drop what
-  must not leave the process (`Authorization`, `Cookie`, password fields).
-  The snippets above report no headers for exactly that reason — add them
-  consciously.
+  must not leave the process. The snippets above report no headers for exactly
+  that reason — add them consciously.
+
+  **Build the list by grepping your handlers for the headers they read, not
+  from a list of usual suspects.** `Authorization`, `Cookie` and password
+  fields are where everyone starts and where no real server ends: a project
+  that accepts `x-authorization` as a fallback for `authorization` has a
+  credential no outside list names, and it is one grep away from being found.
+  The same grep catches the other half — a `x-publishable-key` is *publishable*,
+  and redacting it costs you which integrator a request came from, which is
+  half of why anyone opens the panel. Redact what your code treats as a secret;
+  leave what it treats as an identity.
 - **`requery` re-executes the statement.** Registering it for a toy or a
   local dev database is convenient; think before registering it against
   anything shared.

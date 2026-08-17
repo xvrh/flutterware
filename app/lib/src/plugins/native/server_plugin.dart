@@ -600,7 +600,7 @@ class _QueryDetailState extends State<_QueryDetail> {
   Object? _result;
   var _busy = false;
 
-  Future<void> _run(String method, String query) async {
+  Future<void> _run(String method, ServerEvent occurrence) async {
     setState(() {
       _busy = true;
       _resultTitle = method;
@@ -608,7 +608,7 @@ class _QueryDetailState extends State<_QueryDetail> {
     });
     Object? result;
     try {
-      result = await sqlCommand(widget.server, method, query);
+      result = await sqlCommand(widget.server, method, occurrence);
     } on Object catch (e) {
       // A missing handler or a failing one — an answer, not a crash. The
       // hint names the fix because "no handler for sql.explain" alone reads
@@ -637,7 +637,6 @@ class _QueryDetailState extends State<_QueryDetail> {
         message: 'This query shape is no longer being kept.',
       );
     }
-    var latestQuery = stats.latest.payload['query']! as String;
     return ListView(
       padding: const EdgeInsets.all(panelGutter),
       children: [
@@ -674,7 +673,10 @@ class _QueryDetailState extends State<_QueryDetail> {
                 child: OutlinedButton(
                   onPressed: _busy || !widget.server.connected
                       ? null
-                      : () => _run(method, latestQuery),
+                      // The latest occurrence, which is a statement the
+                      // database has really seen — the `?`-shape above it is a
+                      // grouping key and would not run.
+                      : () => _run(method, stats.latest),
                   child: Text(method),
                 ),
               ),
@@ -1170,11 +1172,10 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
   final _busy = <int>{};
 
   Future<void> _explain(ServerEvent event) async {
-    var query = event.payload['query']! as String;
     setState(() => _busy.add(event.id));
     Object? result;
     try {
-      result = await sqlCommand(widget.server, 'explain', query);
+      result = await sqlCommand(widget.server, 'explain', event);
     } on Object catch (e) {
       result =
           '$e\n\nThe server registers command handlers itself — see the '

@@ -903,12 +903,29 @@ directory every other command of the stack already runs in.
 package with native-asset build hooks: 0.33s for `dart run` of
 `void main(){print('hi');}` against 0.28s direct, and the gap is the hooks —
 `dart run` re-resolves the graph and executes every hook in it, every time, while
-the direct form runs none. That is why the gap grows with the project instead of
-staying a rounding error: the reporting consumer measured **4.4s** for a
-`dart run` of the same trivial script in a 16-package workspace, and their own
-report shows `Running build hooks...Running build hooks...` on the tail of every
-command. The example project's config had already found this and written
+the direct form runs none. So the gap grows with the project instead of staying
+constant. The example project's config had already found this and written
 `dart tool/stack.dart` by hand.
+
+**Corrected 2026-08-17, and the correction matters more than the original
+number.** This section first quoted **4.4s** for a `dart run` of a trivial
+script in the reporting consumer's 16-package workspace, and attributed it to
+the build hooks. It was not the hooks. Re-measured idle by the same consumer,
+spawning the SDK binary the way `StackRun.script` now does:
+
+| | trivial script | their real probe |
+|---|---|---|
+| `dart run <path>` | 0.33s | 0.70s |
+| `dart <path>` | 0.30s | 0.58s |
+| `fvm dart --version`, doing nothing | **4.3–7.7s** | |
+
+The 4.4s was a version manager on a loaded machine. `dart <path>` buys ~0.12s
+on a real probe, which is worth having and is not the headline. **The headline
+is the other half of the same decision**: because a `StackRun.script` names a
+Dart file rather than an executable, flutterware resolves the SDK itself and
+spawns it directly, and never goes through `fvm` at all. That took their probe
+from ~5s to 0.58s — an 8× win, and the reason a config file cannot be the thing
+that names an interpreter.
 
 The price is real and worth stating: build hooks do not run, so a script whose
 imports need native assets built will not find them, and a stale
@@ -920,10 +937,13 @@ in `--help`) and is a real win on compile — 0.59s to 0.25s on a script with
 dependencies — and, importantly, the resident compiler does its own incremental
 staleness tracking, so it does not cost the caller the invalidation logic that
 pre-compiling a binary would. But it **does not skip build hooks**: measured with
-hooks present, `--resident` still prints them and still pays them. So it cannot
-address the 4.4s case, which is the one that prompted this, while `dart <path>`
-can. It also spawns a long-lived compiler daemon on a port, which a plugin whose
-whole posture is *it owns nothing* should not do implicitly.
+hooks present, `--resident` still prints them and still pays them — so it buys
+back less of the `dart run` overhead than the direct form does, for more
+machinery. It also spawns a long-lived compiler daemon on a port, which a plugin
+whose whole posture is *it owns nothing* should not do implicitly. (This
+paragraph used to rest its case on the 4.4s figure corrected above; the
+correction removes an argument it did not need — `--resident` still pays the
+hooks, and still leaves a daemon behind.)
 
 ### The interval a slow probe earns
 

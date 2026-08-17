@@ -46,6 +46,66 @@ abstract class InspectorPeer {
   void close();
 }
 
+/// [map], with anything `jsonEncode` would refuse replaced by its own text.
+///
+/// **Reporting is not allowed to fail, and an unencodable value used to take
+/// the whole attachment down.** [InspectorCore.send] treats a throw as "this
+/// peer is gone", which is right for a dead socket and wrong for a `DateTime`
+/// in a bound parameter: the encode threw on the way to a perfectly healthy
+/// peer and the peer was destroyed for it. Worse, the event stayed in the ring,
+/// so every reattach died the same way inside [InspectorCore.attach]'s replay
+/// for as long as it was held — one such value put a server's panel out until
+/// the ring rolled over. A reporter cannot be asked to prevent this either: it
+/// is a `span` around somebody's query, and it may not throw into the query.
+///
+/// So every payload passes through here on the way into the ring, and the
+/// substitution is the value's own `toString()` rather than a placeholder,
+/// because a reporter that bound a date wants to read the date. `<unencodable>`
+/// appears only where even that threw.
+Map<String, Object?> jsonSafeMap(Map<String, Object?> map) => {
+  for (var entry in map.entries) entry.key: _jsonSafe(entry.value, 0),
+};
+
+/// How deep the walk goes before it stops describing and starts quoting. Also
+/// what terminates a cyclic structure, which `jsonEncode` refuses outright.
+const _maxJsonDepth = 20;
+
+Object? _jsonSafe(Object? value, int depth) {
+  if (value == null || value is bool || value is String) return value;
+  // Non-finite doubles are numbers Dart has and JSON does not.
+  if (value is num) return value.isFinite ? value : _text(value);
+  if (depth == _maxJsonDepth) return _text(value);
+  if (value is List) {
+    return [for (var element in value) _jsonSafe(element, depth + 1)];
+  }
+  if (value is Map) {
+    return {
+      for (var entry in value.entries)
+        entry.key is String ? entry.key as String : _text(entry.key): _jsonSafe(
+          entry.value,
+          depth + 1,
+        ),
+    };
+  }
+  // Anything else might still be encodable: `jsonEncode` calls `toJson()` on
+  // an object that has one, and a reporter's own type carrying one is a value
+  // worth keeping whole rather than flattening to its text.
+  try {
+    jsonEncode(value);
+    return value;
+  } on Object {
+    return _text(value);
+  }
+}
+
+String _text(Object? value) {
+  try {
+    return '$value';
+  } on Object {
+    return '<unencodable>';
+  }
+}
+
 /// An event held in a channel's ring.
 class RingEvent {
   RingEvent(this.id, this.channel, this.time, this.rid, this.payload);
@@ -120,20 +180,15 @@ class InspectorCore {
     Map<String, Object?>? details,
   }) {
     if (_stopped) return 0;
-    var event = RingEvent(
-      _nextEventId++,
-      channel,
-      DateTime.now(),
-      rid,
-      payload,
-    );
+    var safe = jsonSafeMap(payload);
+    var event = RingEvent(_nextEventId++, channel, DateTime.now(), rid, safe);
     if (details != null) _stashDetails(event.id, details);
     var ring = _ring.putIfAbsent(channel, Queue.new);
     ring.add(event);
     while (ring.length > ringSize) {
       ring.removeFirst();
     }
-    onEvent?.call(channel, payload);
+    onEvent?.call(channel, safe);
     if (_attached.isNotEmpty) _broadcast(event.toFrame());
     return event.id;
   }
@@ -143,7 +198,7 @@ class InspectorCore {
   void _stashDetails(int eventId, Map<String, Object?> details) {
     String encoded;
     try {
-      encoded = jsonEncode(details);
+      encoded = jsonEncode(jsonSafeMap(details));
     } on Object {
       return;
     }
