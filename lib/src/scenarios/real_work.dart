@@ -95,34 +95,58 @@ Future<({bool settled, bool landed})> landRealWork(
   WidgetTester tester,
   Settle policy, {
   required bool settled,
+  required RealWorkBudget budget,
   ScenarioAssetBundle? assets,
   ScenarioMotionRecorder? record,
 }) async {
   if (!settled) return (settled: false, landed: true);
   var guesses = 0;
-  var waited = Duration.zero;
   while (true) {
-    var pending = _announced(assets);
-    if (pending && waited >= realWorkWait) {
-      return (settled: true, landed: false);
-    }
-    if (!pending && guesses >= realWorkTurns) {
-      return (settled: true, landed: true);
-    }
-    await tester.runAsync(
-      () => Future<void>.delayed(pending ? _waitingTurn : Duration.zero),
-    );
-    if (pending) {
-      waited += _waitingTurn;
+    if (_announced(assets)) {
+      if (!await budget.land(tester, assets)) {
+        return (settled: true, landed: false);
+      }
     } else {
+      if (guesses >= realWorkTurns) return (settled: true, landed: true);
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       guesses++;
     }
     if (!tester.binding.hasScheduledFrame) continue;
     // A frame is progress, so the next link starts from a full budget rather
     // than from whatever this one had left.
     guesses = 0;
-    settled = await policy.apply(tester, record: record);
+    settled = await policy.apply(
+      tester,
+      record: record,
+      land: () => budget.land(tester, assets),
+    );
     if (!settled) return (settled: false, landed: true);
+  }
+}
+
+/// One step's allowance of real clock for work that announced itself, spent by
+/// the settle loop and by the landing after it out of the same purse.
+///
+/// It has to be one purse, and one per step. Per *call* and a step with a
+/// pending decode could pay [realWorkWait] once inside its policy and again
+/// after it; per *run* and one wedged read would spend the ceiling on the step
+/// that started it and leave nothing for the rest of the scenario.
+class RealWorkBudget {
+  var _spent = Duration.zero;
+
+  /// Waits, on the real clock, while anything announced is still in flight.
+  ///
+  /// Returns false only when the allowance ran out with something still
+  /// pending — which is what puts `landed: false` on the step. Returns
+  /// immediately, and free, when nothing is in flight: two integer reads is
+  /// the whole cost on the path almost every frame of almost every step takes.
+  Future<bool> land(WidgetTester tester, ScenarioAssetBundle? assets) async {
+    while (_announced(assets)) {
+      if (_spent >= realWorkWait) return false;
+      await tester.runAsync(() => Future<void>.delayed(_waitingTurn));
+      _spent += _waitingTurn;
+    }
+    return true;
   }
 }
 

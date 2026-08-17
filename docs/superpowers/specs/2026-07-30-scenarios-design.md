@@ -456,6 +456,31 @@ are fake time meeting work that does not run on it.
    half and there cannot be — not knowing whether anything is coming is why
    those turns are spent.
 
+   ~~**A still that is right does not make the movie behind it right.**~~
+   **Fixed 2026-08-17.** Reported against the fix above, and a genuinely
+   different bug wearing the same clothes: the recording the GUI plays when you
+   hover a step showed no artwork in any frame. Counting pixels rather than
+   comparing frames — which is the whole lesson — a tap whose ripple runs 21
+   recorded frames gave `[0, 0, 0, …, 0, present]`. A landing that happens
+   *after* the settle loop can only fill in the last frame, and a movie with one
+   good frame at the end plays as never having decoded. The equality assertion
+   written for the still was blind to it: two captures both missing the artwork
+   are equal.
+
+   Fake time is why the app never catches up. A transition of several hundred
+   fake milliseconds is spent in a few real ones, so a decode that a device
+   would have finished inside the first frame cannot finish inside any of them.
+   The fix is a `land` hook on `Settle.apply`, awaited before every pump, so the
+   loop lets announced work land *between* its frames — a scenario passes one,
+   a policy applied by hand gets none and keeps meaning what it says, and
+   `settle.dart` stays free of any dependency on `real_work.dart`. The wait is
+   one `RealWorkBudget` per step, shared with the landing after it: per call and
+   a step could pay the ceiling twice, per run and one wedged read would leave
+   nothing for the rest of the scenario. Frames now read `[0, 0, present, …]` —
+   the screen before the verb, the pump that mounts the widget and so starts the
+   decode, then every frame after. Cost is a two-integer read per pump; the
+   example scenario suite measures 3.6–3.9s against 3.8–4.0s before.
+
    `previews audit` had the same blind spot in a milder form — it turns the real
    loop once at boot, so an entry whose load starts *during* the settle was
    judged with it in flight. Measured: an entry pointing at an asset that does

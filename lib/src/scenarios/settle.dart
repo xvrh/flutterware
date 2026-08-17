@@ -31,7 +31,10 @@ const _frameInterval = Duration(milliseconds: 100);
 /// that real work does not read. Landing that work is a separate step a verb
 /// takes after this one, deliberately not a policy: it is not a choice an
 /// author makes, and a policy applied by hand through [apply] — as a plain
-/// widget test does — should keep meaning exactly what it says.
+/// widget test does — should keep meaning exactly what it says. What a policy
+/// does take is the [apply] hook that *waits* for such work between its own
+/// frames, because a landing that only happens afterwards fills in the last
+/// frame and leaves every earlier one with a hole in it.
 ///
 /// This is also the one place a run records **motion**: a policy that owns its
 /// pump loop hands every frame to the [ScenarioMotionRecorder] a run passes,
@@ -101,7 +104,20 @@ sealed class Settle {
   ///
   /// [record], when a run is recording, receives the frame after every pump —
   /// and, where the policy chooses its own interval, dictates it.
-  Future<bool> apply(WidgetTester tester, {ScenarioMotionRecorder? record});
+  ///
+  /// [land] is awaited *before* every pump, so whatever it lands is drawn by
+  /// the frame that follows rather than by the frame after the loop. A scenario
+  /// passes one; a policy applied by hand gets none and keeps meaning exactly
+  /// what it says. See `landRealWork` for what it waits on and why the
+  /// difference is visible: fake time runs a 700ms transition out in a few real
+  /// milliseconds, so a decode that a device would have finished in the first
+  /// frame otherwise lands after the last one — the still comes out right and
+  /// every frame of the movie behind it is a hole.
+  Future<bool> apply(
+    WidgetTester tester, {
+    ScenarioMotionRecorder? record,
+    Future<void> Function()? land,
+  });
 }
 
 class _Budgeted extends Settle {
@@ -113,6 +129,7 @@ class _Budgeted extends Settle {
   Future<bool> apply(
     WidgetTester tester, {
     ScenarioMotionRecorder? record,
+    Future<void> Function()? land,
   }) async {
     // Our own loop rather than `pumpAndSettle(timeout:)`: the SDK's version
     // *throws* when the budget runs out, and the whole point here is to carry
@@ -125,6 +142,7 @@ class _Budgeted extends Settle {
     var interval = record?.interval ?? _frameInterval;
     var elapsed = Duration.zero;
     do {
+      await land?.call();
       await tester.pump(interval);
       elapsed += interval;
       record?.capture(tester);
@@ -142,6 +160,7 @@ class _Elapsed extends Settle {
   Future<bool> apply(
     WidgetTester tester, {
     ScenarioMotionRecorder? record,
+    Future<void> Function()? land,
   }) async {
     // [_Budgeted]'s loop kept in the same shape on purpose — same interval,
     // same recorder cadence, same one guaranteed pump — so the only thing that
@@ -149,6 +168,7 @@ class _Elapsed extends Settle {
     var interval = record?.interval ?? _frameInterval;
     var elapsed = Duration.zero;
     do {
+      await land?.call();
       await tester.pump(interval);
       elapsed += interval;
       record?.capture(tester);
@@ -164,7 +184,9 @@ class _None extends Settle {
   Future<bool> apply(
     WidgetTester tester, {
     ScenarioMotionRecorder? record,
+    Future<void> Function()? land,
   }) async {
+    await land?.call();
     await tester.pump();
     record?.capture(tester);
     return !tester.binding.hasScheduledFrame;
@@ -181,10 +203,12 @@ class _Frames extends Settle {
   Future<bool> apply(
     WidgetTester tester, {
     ScenarioMotionRecorder? record,
+    Future<void> Function()? land,
   }) async {
     // [interval] is the author's, not the recorder's: `Settle.frames(3)` says
     // where in the animation to land, and a recording may not move it.
     for (var i = 0; i < count; i++) {
+      await land?.call();
       await tester.pump(interval);
       record?.capture(tester);
     }
@@ -199,6 +223,7 @@ class _Full extends Settle {
   Future<bool> apply(
     WidgetTester tester, {
     ScenarioMotionRecorder? record,
+    Future<void> Function()? land,
   }) async {
     await tester.pumpAndSettle();
     return true;

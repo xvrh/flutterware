@@ -767,13 +767,23 @@ class ScenarioTester {
       _recorder?.capture(tester);
       await action();
       var policy = settle ?? this.settle;
-      settled = await policy.apply(tester, record: _recorder);
+      // One purse for the whole step: the policy's frames draw whatever has
+      // announced itself as they go — otherwise fake time runs the transition
+      // out in a few real milliseconds and every frame of the movie behind the
+      // step is a hole — and the landing below spends what is left.
+      var budget = RealWorkBudget();
+      settled = await policy.apply(
+        tester,
+        record: _recorder,
+        land: () => budget.land(tester, assets),
+      );
       // Frames are all a policy follows; work on the real event loop
       // schedules none while it is in flight. See [landRealWork].
       (settled: settled, landed: landed) = await landRealWork(
         tester,
         policy,
         settled: settled,
+        budget: budget,
         assets: assets,
         record: _recorder,
       );
