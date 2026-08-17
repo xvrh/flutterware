@@ -12,13 +12,17 @@ import 'package:vm_service/vm_service.dart';
 /// what is under test is how a JSON-RPC 32601 is read, and a stub that returned
 /// a Dart exception instead would be testing the test.
 class _FakeGuest {
-  _FakeGuest({required this.registerAfter}) {
+  _FakeGuest({required this.registerAfter, this.silent = false}) {
     service = VmService(_toClient.stream, _onRequest);
   }
 
   /// How many calls answer "no such method" before the extension appears. The
   /// guest's `main` registering while the host is already asking.
   final int registerAfter;
+
+  /// Takes the call and never answers — a guest busy enough that the client is
+  /// disposed while the call is still out.
+  final bool silent;
 
   late final VmService service;
   final _toClient = StreamController<String>();
@@ -56,6 +60,7 @@ class _FakeGuest {
     }
 
     calls++;
+    if (silent) return;
     if (calls <= registerAfter) {
       _reply({
         'id': id,
@@ -131,6 +136,76 @@ void main() {
       await expectLater(
         vm.requireExtension('ext.flutterware.watch'),
         throwsA(anything),
+      );
+    });
+  });
+
+  group('a guest that is gone', () {
+    // The bug: `unwatch` runs from the inspect panel's `dispose`, by which time
+    // the guest is usually already going away. It is documented as tolerant and
+    // is fire-and-forget, but `unawaited` silences the lint rather than the
+    // error — so the whole widget-unmount stack trace landed in the run's log
+    // on every hot restart, under an exception nobody could act on.
+
+    test('a call in flight when the connection dies answers null', () async {
+      var guest = _FakeGuest(registerAfter: 0, silent: true);
+      addTearDown(guest.close);
+      var vm = GuestVmService.forTesting(guest.service, 'isolates/1');
+
+      var pending = vm.callExtension('ext.flutterware.watch');
+      await guest.service.dispose();
+
+      expect(await pending, isNull);
+    });
+
+    test('a call made after it died answers null rather than hanging', () async {
+      // The half a `catch` cannot reach. `VmService.dispose` errors the
+      // completers it is holding and then clears them, so a *later* call
+      // registers one that nothing will ever complete: the caller waits
+      // forever. Hence the timeout — a regression here is a hang, not a throw.
+      var guest = _FakeGuest(registerAfter: 0);
+      addTearDown(guest.close);
+      var vm = GuestVmService.forTesting(guest.service, 'isolates/1');
+
+      await guest.service.dispose();
+      await pumpEventQueue();
+      expect(vm.isGone, isTrue);
+
+      expect(
+        await vm
+            .callExtension('ext.flutterware.watch', args: {'on': 'false'})
+            .timeout(const Duration(seconds: 2)),
+        isNull,
+      );
+      expect(guest.calls, 0, reason: 'a dead connection is not asked');
+    });
+
+    test('a write still refuses, and refuses at once', () async {
+      // Tolerance is for reads and teardown. A write that cannot land is a
+      // failure — it just must not spend the registration window discovering
+      // that, because against a disposed client the call never returns at all.
+      var guest = _FakeGuest(registerAfter: 0);
+      addTearDown(guest.close);
+      var vm = GuestVmService.forTesting(
+        guest.service,
+        'isolates/1',
+        registrationWindow: const Duration(seconds: 30),
+      );
+
+      await guest.service.dispose();
+      await pumpEventQueue();
+
+      await expectLater(
+        vm
+            .requireExtension('ext.flutterware.setParameters')
+            .timeout(const Duration(seconds: 2)),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('the guest is gone'),
+          ),
+        ),
       );
     });
   });

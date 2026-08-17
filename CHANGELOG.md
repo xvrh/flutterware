@@ -1,5 +1,39 @@
 ## Unreleased
 
+- **`run inspect --native` reads the platform's own log — the half `flutter
+  run` structurally cannot show you.** Its device-log filter admits a line only
+  from the app's main executable, the engine or `libswiftCore`, and a plugin
+  ships a framework, so *every* line a plugin logs natively was dropped before
+  flutterware could see it. Measured on one simulator over a window holding two
+  runs of an app with a push SDK: 1366 events came from the app's process,
+  `flutter run` admitted 7, and 105 of the ones it dropped were the SDK's —
+  the entire evidence of whether the integration worked. Android is blind the
+  same way for a different reason: logcat is filtered to a tag allow-list, so a
+  plugin's `Log.d` never arrives either.
+  - Scoped to this run's process and lifetime, and to code that is not the OS —
+    the last clause is what makes it readable, taking that same window from
+    1889 lines to 141. iOS simulator, Android and macOS; a physical iOS device
+    is refused with the command to run by hand.
+  - Off by default, because it costs a `log show` or an `adb logcat` — about a
+    second — and the answer carries the exact command it ran, as `nativeLog`.
+  - **A log read on a device we are not reading now says so.** The failure this
+    closes was silence: a healthy-looking launch answered `errors: []` and six
+    lines of build narration while the native half was where the story was.
+  - The Run panel's Logs tab gains a **Platform** filter alongside App and
+    Build.
+
+- **A guest that is gone is an answer, not an exception.** The tolerant form of
+  a guest extension call excused an unregistered extension but not a *dead
+  connection*, so teardown calls made from a `dispose` — `unwatch`,
+  `clearLogs`, documented as tolerant and fired without awaiting — threw into
+  the zone, putting a whole widget-unmount stack trace in the run's log on
+  every hot restart. `unawaited` silences the lint, not the error. Both shapes
+  are handled now: a call in flight when the client is disposed, and one made
+  afterwards — which did not throw at all but *hung*, because the client errors
+  the completers it holds and then clears them. Writes still refuse, and refuse
+  at once rather than waiting out the registration window against a connection
+  that can never answer.
+
 - **The previews catalog runs your `transformers:`.** An asset declared with
   `transformers:` is compiled the way a build compiles it — the same
   `dart run <package> --input --output`, the same arguments, chained in order —

@@ -19,7 +19,9 @@ class GuestVmService {
     this.service,
     this.isolateId, {
     this.registrationWindow = _defaultRegistrationWindow,
-  });
+  }) {
+    unawaited(service.onDone.then((_) => _gone = true));
+  }
 
   /// A client over a [service] somebody else connected, for a test.
   ///
@@ -40,6 +42,18 @@ class GuestVmService {
 
   /// The underlying client, for calls this wrapper does not name.
   final VmService service;
+
+  /// Whether the connection has finished — the guest exited, or somebody
+  /// closed it.
+  ///
+  /// **Checked before calling, not only caught after.** A call made after the
+  /// client was disposed does not fail cleanly: `VmService` errors the
+  /// completers it is *holding* and then clears them, so a later one registers
+  /// a completer nothing will ever complete and writes to a closed sink. The
+  /// caller waits forever. Only a call already in flight at the moment of
+  /// disposal comes back as an error, which is why both halves are handled.
+  bool get isGone => _gone;
+  var _gone = false;
 
   /// The guest's main isolate, captured once at connect.
   final String isolateId;
@@ -108,6 +122,15 @@ class GuestVmService {
   /// an answer, not a failure: a panel asking what knobs a demo has, of a demo
   /// that has not built, should show nothing rather than an error.
   ///
+  /// **Null covers a guest that is gone, too**, for the same reason and one
+  /// more. The same reason: a question put to a guest that no longer exists has
+  /// nothing to answer with, and every caller of this form already handles
+  /// nothing. The one more: the calls that meet a dead connection are mostly
+  /// *teardown* — `unwatch`, `clearLogs` — made from a `dispose` as the guest
+  /// goes away, fire-and-forget by nature. `unawaited` silences the lint, not
+  /// the error, so the failure they were documented as tolerating arrived as an
+  /// unhandled exception and a widget-unmount stack trace in the run's log.
+  ///
   /// Use it only where "not registered" is genuinely one of the answers. For a
   /// call that has no meaning if it did not land — anything that *writes* —
   /// use [requireExtension], which is the same call without the excuse.
@@ -115,10 +138,11 @@ class GuestVmService {
     String method, {
     Map<String, String>? args,
   }) async {
+    if (_gone) return null;
     try {
       return await _call(method, args);
     } on RPCError catch (e) {
-      if (_isMethodNotFound(e)) return null;
+      if (_isMethodNotFound(e) || _isConnectionGone(e)) return null;
       rethrow;
     }
   }
@@ -151,6 +175,11 @@ class GuestVmService {
     String method, {
     Map<String, String>? args,
   }) async {
+    // Strict here too: a write that cannot land is a failure, and this is the
+    // form whose whole point is saying so. What it must not do is *wait* —
+    // against a disposed client the call would never come back at all, and a
+    // silent forever is the one answer worse than an error.
+    if (_gone) throw StateError('the guest is gone — cannot $method');
     var waited = Stopwatch()..start();
     while (true) {
       try {
@@ -204,6 +233,16 @@ class GuestVmService {
   /// 32601 is JSON-RPC's "method not found", which is what an unregistered
   /// extension is. Sign varies with who wrapped it.
   static bool _isMethodNotFound(RPCError e) => e.code.abs() == 32601;
+
+  /// What a call already in flight gets when the client is disposed under it.
+  ///
+  /// By message as well as by code: 32000 is JSON-RPC's *server error*, the
+  /// bucket a guest's own extension throwing would land in too, and swallowing
+  /// that would hide a real fault. The wording is `package:vm_service`'s own,
+  /// from the one place it completes its outstanding calls on `dispose`.
+  static bool _isConnectionGone(RPCError e) =>
+      e.code.abs() == 32000 &&
+      e.message.contains('Service connection disposed');
 
   /// What the isolate does register, for the error above — an extension that is
   /// missing is nearly always one that was renamed.

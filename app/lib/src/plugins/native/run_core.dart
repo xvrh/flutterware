@@ -32,6 +32,7 @@ import '../../run/journal.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
 import '../../run/native/native_driver.dart';
+import '../../run/native/native_logs.dart';
 import '../../run/native/native_session.dart';
 import '../../run/network_tracker.dart';
 import '../../run/panel_client.dart';
@@ -897,12 +898,36 @@ class RunCore extends PluginCore {
               kind: ActionParameterKind.choice,
               required: false,
               description:
-                  "Whose lines: the app's own output, or `flutter run` talking "
-                  'about the build. Both when omitted.',
+                  "Whose lines: the app's own output, `flutter run` talking "
+                  'about the build, or the platform log. All of them when '
+                  'omitted. Naming `native` turns `native` on by itself, '
+                  'since asking for lines nothing read would answer nothing.',
               options: [
                 ActionOption('app', label: 'The app'),
                 ActionOption('tool', label: 'flutter run'),
+                ActionOption('native', label: 'The platform'),
               ],
+            ),
+            const ActionParameter(
+              'native',
+              "The platform's own log",
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'Also read the platform log — what the *native* half of the '
+                  'app logged, which `flutter run` does not forward and no '
+                  'amount of reading its output would recover. On an iOS '
+                  "simulator its filter admits only the app's own executable "
+                  'and the engine, so every line a plugin ships in a framework '
+                  'is dropped; on Android a tag allow-list drops the same '
+                  'class. This is where push, purchases, deep links, maps, '
+                  'camera and biometrics say whether they worked. Off by '
+                  'default: it costs a `log show` or an `adb logcat`, about a '
+                  'second. Scoped to the code inside the app bundle and to '
+                  "this run's lifetime, and the command it ran comes back with "
+                  'it. iOS simulator, Android and macOS; a physical iOS device '
+                  'is refused with the command to run by hand.',
             ),
             const ActionParameter(
               'lines',
@@ -3373,7 +3398,6 @@ class RunCore extends PluginCore {
     var wantsTree = _boolArgument(arguments['tree']);
     var full = _boolArgument(arguments['full']);
     var wantsShot = _boolArgument(arguments['screenshot']);
-    var wantsLogs = _boolArgument(arguments['logs']);
     var wantsErrors = arguments['errors'] == null
         ? true
         : _boolArgument(arguments['errors']);
@@ -3381,8 +3405,15 @@ class RunCore extends PluginCore {
     var source = switch (arguments['source']) {
       'app' => RunLogSource.app,
       'tool' => RunLogSource.tool,
+      'native' => RunLogSource.native,
       _ => null,
     };
+    // Naming the source is asking for it: `source: native` with the flag off
+    // would answer nothing, and nobody means that. Asking for the platform log
+    // is asking for logs, for the same reason.
+    var wantsNative =
+        _boolArgument(arguments['native']) || source == RunLogSource.native;
+    var wantsLogs = _boolArgument(arguments['logs']) || wantsNative;
 
     // The log first, and unconditionally reachable: it needs no connection, so
     // it is the half that still answers while the app is building or gone.
@@ -3392,6 +3423,25 @@ class RunCore extends PluginCore {
     var errors = wantsErrors
         ? readLogs(handle, errorsOnly: true, tail: limit)
         : const <RunLogLine>[];
+
+    // The platform's own log, when asked for — a separate read against a
+    // separate source, so its tail is its own. Appended rather than merged:
+    // the launcher's lines carry no timestamp, so there is no honest order to
+    // interleave them in, and a native flood may not evict the build output
+    // somebody asked for in the same call.
+    String? nativeCommand;
+    var nativeNotes = <String>[];
+    if (wantsNative) {
+      var read = await readNativeLogs(handle, tail: limit);
+      nativeCommand = read.command;
+      if (read.note case var note?) nativeNotes.add(note);
+      lines = [...lines, ...read.lines];
+      if (wantsErrors) {
+        errors = [...errors, ...read.lines.where((line) => line.error)];
+      }
+    } else if (wantsLogs) {
+      if (await _unreadNativeLog(handle) case var hint?) nativeNotes.add(hint);
+    }
 
     var up = probe?.canInspect ?? false;
     InspectTree? tree;
@@ -3421,6 +3471,11 @@ class RunCore extends PluginCore {
       }
     }
 
+    var notes = [
+      ?failure ?? _inspectNote(up: up, wanted: wantsTree || wantsShot),
+      ...nativeNotes,
+    ];
+
     return RunInspectResult(
       device: handle.device,
       entrypoint: handle.entrypoint,
@@ -3439,12 +3494,57 @@ class RunCore extends PluginCore {
           ? [for (var line in errors) _logEntry(line)]
           : null,
       log: handle.logPath,
-      note: failure ?? _inspectNote(up: up, wanted: wantsTree || wantsShot),
+      nativeLog: nativeCommand,
+      note: notes.isEmpty ? null : notes.join('\n'),
     );
   }
 
   static RunLogEntry _logEntry(RunLogLine line) =>
       RunLogEntry(source: line.source.name, text: line.text, error: line.error);
+
+  /// The platform's own log for one run, bounded by the run's own lifetime.
+  ///
+  /// A device log is machine-wide and remembers days; this run is the only
+  /// slice of it anybody meant. [RunHandle.startedAt] is that bound, and it is
+  /// already on the handle — which also makes the read cheap, because a
+  /// narrower window is a faster `log show`.
+  Future<NativeLogRead> readNativeLogs(RunHandle handle, {int? tail}) async {
+    var source = await _nativeSessionFor(handle).logSource();
+    if (source == null) {
+      return const NativeLogRead.unread(
+        note:
+            'There is no platform log flutterware can read on this device. It '
+            'reads the iOS simulator, Android and macOS. A physical iOS device '
+            'is not one of them — its log comes off `xcrun devicectl device '
+            'console` or `idevicesyslog`, which is a different mechanism '
+            'rather than a different argument, so run one of those by hand.',
+      );
+    }
+    return source.read(since: handle.startedAt, tail: tail);
+  }
+
+  /// The line that stops somebody concluding "nothing happened".
+  ///
+  /// **The failure this closes was silence.** A launch whose native half was
+  /// misbehaving answered `errors: []` and six lines of build narration, which
+  /// reads as an uneventful, healthy run rather than as "look somewhere else"
+  /// — and the somewhere else held the whole story. So a log read on a device
+  /// whose platform log we are *not* reading says so.
+  ///
+  /// Only where the omission bites. macOS pipes the app's stdout and stderr
+  /// through the launcher already, so a note there would be noise on the inner
+  /// loop this repository lives in; and a device with no readable log at all
+  /// has nothing to offer instead.
+  Future<String?> _unreadNativeLog(RunHandle handle) async {
+    var source = await _nativeSessionFor(handle).logSource();
+    if (source == null || source.platform == NativeLogPlatform.macos) {
+      return null;
+    }
+    return 'These are the lines `flutter run` forwarded, which on '
+        '${source.platform.label} is the app and the engine only — anything '
+        'a plugin logs from its own framework is filtered out before it gets '
+        'here. Pass `native: true` to read the platform log as well.';
+  }
 
   /// Held drive connections, one per run — the loop's fast path. A session
   /// drops its connection on any error and reconnects on the next call;

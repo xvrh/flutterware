@@ -3838,6 +3838,12 @@ final resultShapes = <String, ResultShape>{
         'doc':
             'The launcher\'s log file, for anyone who would rather tail it themselves.',
       },
+      <String, Object?>{
+        'name': 'nativeLog',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The command the `native` lines came from, verbatim.',
+      },
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),

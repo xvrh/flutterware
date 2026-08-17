@@ -9,6 +9,7 @@ import '../handle.dart';
 import 'adb_driver.dart';
 import 'ax_driver.dart';
 import 'native_driver.dart';
+import 'native_logs.dart';
 
 /// One native transaction, and the driver it runs on.
 ///
@@ -63,6 +64,41 @@ class NativeSession {
   }
 
   bool? _available;
+
+  /// This run's platform log, or null when this machine cannot read one.
+  ///
+  /// Held here because it is the same identity question [driver] answers —
+  /// which device is this, really — and the answers are the same three:
+  /// `adb` owns the serial, it is a booted simulator, or it is a macOS bundle.
+  /// **It costs no Swift compile**, unlike [driver]: reading a log needs the
+  /// device's name, not the accessibility helper.
+  ///
+  /// A physical iOS device is deliberately not one of them. Its log comes off
+  /// `devicectl` or `idevicesyslog` rather than the host's own store, which is
+  /// a third mechanism rather than a fourth argument, and half-working here
+  /// would be worse than refusing with the command.
+  Future<NativeLogSource?> logSource() {
+    if (_resolvingLog case var held?) return held;
+    return _resolvingLog = _resolveLogSource();
+  }
+
+  Future<NativeLogSource?>? _resolvingLog;
+
+  Future<NativeLogSource?> _resolveLogSource() async {
+    var adb = AdbNativeDriver.findAdb();
+    if (adb != null && await AdbNativeDriver.owns(handle.device, adb)) {
+      return AndroidLogSource(serial: handle.device, adb: adb);
+    }
+    if (!Platform.isMacOS) return null;
+    if (handle.device == 'macos') {
+      var bundle = await macosBundle();
+      return bundle == null ? null : AppleLogSource.macos(bundle: bundle);
+    }
+    if (await _bootedSimulator(handle.device) != null) {
+      return AppleLogSource.simulator(udid: handle.device);
+    }
+    return null;
+  }
 
   Future<NativeDriver?> _resolve() async {
     var adb = AdbNativeDriver.findAdb();
