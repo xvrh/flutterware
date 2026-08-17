@@ -958,19 +958,19 @@ class _WorktreeTab extends StatelessWidget {
         ),
         child: Row(
           children: [
-            if (loading) ...[
-              SizedBox.square(
-                dimension: 9,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  color: colors.mut2,
-                ),
-              ),
-              const Gap(FwSpacing.md),
-            ] else if (!status.isEmpty && status.tone != Tone.neutral) ...[
-              _Dot(toneColor(colors, status.tone)),
-              const Gap(FwSpacing.sm),
-            ],
+            // **Always allocated, empty when there is nothing to show** — the
+            // same rule the border above follows, for the same reason and one
+            // more. A glyph that arrives by *widening* the tab pushes the
+            // branch name along and re-ellipsises it, so a status the tab
+            // gains for a moment moves a whole line of text to announce
+            // itself. And the two glyphs are different sizes, so a load that
+            // ends in a status used to nudge the label a second time on the
+            // way out. One box, both tenants, no motion either way.
+            SizedBox.square(
+              dimension: 9,
+              child: Center(child: _tabGlyph(colors, loading, status)),
+            ),
+            const Gap(FwSpacing.sm),
             // Capped, or a branch called `feature/some-long-description` gives
             // itself a tab wide enough to push the switcher off screen. The
             // tooltip is where the whole name still lives.
@@ -997,6 +997,16 @@ class _WorktreeTab extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What sits in a tab's leading box: the loader while the worktree opens, then
+/// its worst plugin status, then nothing.
+Widget? _tabGlyph(FwPalette colors, bool loading, Status status) {
+  if (loading) {
+    return CircularProgressIndicator(strokeWidth: 1.5, color: colors.mut2);
+  }
+  if (status.isEmpty || status.tone == Tone.neutral) return null;
+  return _Dot(toneColor(colors, status.tone));
 }
 
 /// Closing releases the worktree's plugins. A plugin that hard-blocks teardown
@@ -1681,11 +1691,25 @@ class _PluginRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var report = plugin.core.report;
+    // **A row does not repeat a word the row underneath it is already saying.**
+    // The rail expands the selected plugin's packages, and several plugin
+    // statuses are a reduction over exactly those children — previews answers
+    // with whatever its busy package answers — so a compile wrote `compiling`
+    // twice, one line directly above the other, and neither said more than the
+    // other did.
+    //
+    // On an exact match only, which is what keeps this from hiding anything: a
+    // summary no single child makes — `2 packages failed discovery` — is not
+    // equal to any of them and stays where it is.
+    var expanded = shell.selectedPluginId == plugin.id;
+    var echoed =
+        expanded &&
+        report.children.any((child) => child.status == report.status);
     return _Row(
       label: report.label,
-      selected: shell.selectedPluginId == plugin.id,
+      selected: expanded,
       onTap: () => shell.selectPlugin(plugin.id),
-      status: report.status,
+      status: echoed ? Status.none : report.status,
       actions: [
         for (var command in plugin.rowCommands())
           (
