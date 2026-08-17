@@ -134,6 +134,229 @@ void main() {
     expect(finder.evaluate(), hasLength(1));
   });
 
+  testWidgets('an nth index past the end is refused with the count, not a '
+      'RangeError', (tester) async {
+    await tester.pumpWidget(_covered());
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(
+      () => resolver.resolve(const Target.nth('Buy', 4), 'tap'),
+    );
+
+    // notFound rather than a raw RangeError is what puts it back on the retry
+    // ladder: mid-transition, the match it wanted may be one frame away.
+    expect(error.failure, TargetFailure.notFound);
+    expect('$error', contains('"Buy" matches 1 widget'));
+    expect('$error', contains('`nth` index 4 is out of range'));
+    expect('$error', contains('the only index is 0'));
+  });
+
+  testWidgets('an nth index past several matches names the valid range', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Row(children: [Text('Buy'), Text('Buy'), Text('Buy')]),
+      ),
+    );
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(
+      () => resolver.resolve(const Target.nth('Buy', 7), 'tap'),
+    );
+
+    expect('$error', contains('"Buy" matches 3 widgets'));
+    expect('$error', contains('valid indices are 0–2'));
+  });
+
+  testWidgets('an nth over a target matching nothing says the index is not '
+      'the problem', (tester) async {
+    await tester.pumpWidget(_covered());
+    var resolver = TargetResolver(
+      tester,
+      describeScreen: () => visibleTextsOf(tester).join(', '),
+    );
+
+    var error = await _refusal(
+      () => resolver.resolve(const Target.nth('Moderate', 1), 'drag'),
+    );
+
+    expect(error.failure, TargetFailure.notFound);
+    expect('$error', contains('`nth` has nothing to index'));
+    expect('$error', contains('"Moderate" matches nothing'));
+    // The miss underneath still gets its usual treatment.
+    expect('$error', contains('Visible text: Buy'));
+    expect('$error', isNot(contains('out of range')));
+  });
+
+  testWidgets('a nested nth reports the level that actually ran out', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_covered());
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(
+      () => resolver.resolve(const Target.nth(Target.nth('Buy', 6), 0), 'tap'),
+    );
+
+    expect('$error', contains('"Buy" matches 1 widget'));
+    expect('$error', contains('`nth` index 6 is out of range'));
+  });
+
+  testWidgets('a miss on a string that differs by an invisible character '
+      'names the character', (tester) async {
+    // The two strings below are not the same string: the rendered one holds a
+    // literal U+202F before `PM`, the target a plain U+0020 — what modern ICU
+    // emits against what anybody types. Said here because the source shows the
+    // difference exactly as well as the screen does, which is not at all.
+    await tester.pumpWidget(const MaterialApp(home: Text('Aug 17, 2:58 PM')));
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(
+      () => resolver.resolve('Aug 17, 2:58 PM', 'tap'),
+    );
+
+    expect(error.failure, TargetFailure.notFound);
+    expect('$error', contains('differs from yours at character 12'));
+    expect('$error', contains('yours has U+0020 SPACE'));
+    expect('$error', contains('U+202F NARROW NO-BREAK SPACE'));
+    expect('$error', contains(r'{"containing": "Aug 17, 2:58"}'));
+    // The guess it replaces would have sent the reader scrolling.
+    expect('$error', isNot(contains('lazy list')));
+  });
+
+  testWidgets('a miss on a string the screen only contains offers containing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: Text('Save changes')));
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(() => resolver.resolve('Save', 'tap'));
+
+    expect('$error', contains('"Save changes" is on screen'));
+    expect('$error', contains('yours ends and the rendered one continues'));
+    expect('$error', contains(r'{"containing": "Save"}'));
+  });
+
+  testWidgets('a numbered item further down a list is not a near miss', (
+    tester,
+  ) async {
+    // "Item 40" shares six characters with "Item 4" and means nothing by it.
+    // Reporting a divergence here would suppress the one hint that is right,
+    // which is what `scrollTo` is for.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ListView(children: [for (var i = 0; i < 8; i++) Text('Item $i')]),
+      ),
+    );
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(() => resolver.resolve('Item 40', 'tap'));
+
+    expect('$error', isNot(contains('differs from yours')));
+    expect('$error', contains('`scrollTo` walks to it'));
+  });
+
+  testWidgets('a trailing invisible character is still a near miss', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: Text('Checkout')));
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(() => resolver.resolve('Checkout ', 'tap'));
+
+    expect('$error', contains('yours has U+0020 SPACE'));
+    expect('$error', contains('nothing — it ends there'));
+  });
+
+  testWidgets('two unrelated words are not reported as a near miss', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: Text('Buy')));
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(() => resolver.resolve('Back', 'tap'));
+
+    expect('$error', isNot(contains('differs from yours')));
+    expect('$error', contains('lazy list'));
+  });
+
+  testWidgets('a miss on words the semantics tree carries names label', (
+    tester,
+  ) async {
+    // A `Slider.label` is what `screen` reports as the control's words, and
+    // it is not a rendered `Text` at rest — the trap this refusal exists for.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: Slider(
+            value: 5,
+            max: 10,
+            divisions: 10,
+            label: '5 — Moderate',
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(() => resolver.resolve('5 — Moderate', 'drag'));
+
+    expect(error.failure, TargetFailure.notFound);
+    expect('$error', contains('No *rendered* text matches'));
+    expect('$error', contains('1 semantics label does'));
+    expect('$error', contains(r'{"label": …}'));
+    expect('$error', isNot(contains('lazy list')));
+    // And the target it names does resolve.
+    var finder = await resolver.resolve(
+      const Target.label('5 — Moderate'),
+      'drag',
+    );
+    expect(finder.evaluate(), hasLength(1));
+  });
+
+  testWidgets('a miss on words only a tooltip carries names tooltip', (
+    tester,
+  ) async {
+    // The other half of the same trap, and the one the live GUI actually
+    // produced: `screen` falls back to the tooltip for a control with no
+    // label and no text, so its `w` is unreachable as bare text too.
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Material(
+          child: Tooltip(message: 'Reload (⌘R)', child: Icon(Icons.refresh)),
+        ),
+      ),
+    );
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(() => resolver.resolve('Reload (⌘R)', 'tap'));
+
+    expect('$error', contains('1 tooltip does'));
+    expect('$error', contains(r'{"tooltip": …}'));
+
+    var finder = await resolver.resolve(
+      const Target.tooltip('Reload (⌘R)'),
+      'tap',
+    );
+    expect(finder.evaluate(), isNotEmpty);
+  });
+
+  testWidgets(
+    'the semantics probe stays quiet when semantics is off',
+    (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: Text('Buy')));
+      var resolver = TargetResolver(tester);
+
+      var error = await _refusal(() => resolver.resolve('Add to cart', 'tap'));
+
+      expect('$error', isNot(contains('semantics label')));
+      expect('$error', contains('lazy list'));
+    },
+    semanticsEnabled: false,
+  );
+
   testWidgets('below the fold resolves after the ladder scrolls to it', (
     tester,
   ) async {

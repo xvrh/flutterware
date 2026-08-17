@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math' as math;
+
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -58,19 +61,92 @@ class TargetMessages {
   /// complete, while a live app is usually just still drawing.
   final String blankScreenHint;
 
+  /// The nothing-matched refusal.
+  ///
+  /// [hint] is what the resolver worked out about *this* miss — a rendered
+  /// string that differs from the wanted one by a character nobody can see, or
+  /// a semantics label carrying the words. It replaces the guess rather than
+  /// joining it: told the exact string is on screen, a reader does not also
+  /// need to be told to scroll. [prelude] goes in front of either, for the
+  /// part of a composed target that failed before the miss itself matters.
   String notFound(
     String verb,
     String described,
     String? screen, {
     bool blank = false,
+    String? hint,
+    String prelude = '',
   }) {
-    var hint = blank && blankScreenHint.isNotEmpty
+    var guess = blank && blankScreenHint.isNotEmpty
         ? blankScreenHint
         : 'A widget further down a lazy list is not built yet — '
               '`${prefix}scrollTo` walks to it.';
-    return 'nothing matches $described, which `$prefix$verb` needs. $hint'
+    return 'nothing matches $described, which `$prefix$verb` needs. '
+        '$prelude${hint ?? guess}'
         '${screen == null ? '' : '\nVisible text: $screen'}';
   }
+
+  /// An `nth` index past the end of what its target matched.
+  ///
+  /// Both halves are named because both are wrong in different calls, and the
+  /// exception underneath tells them apart badly: `elementAt` says "no indices
+  /// are valid" when the target matched *zero* widgets, which never mentions
+  /// the count that is the actual problem, and reads like a complaint about
+  /// the index when the index is the one part that was fine.
+  String outOfRange(String inner, int count, int index) =>
+      '$inner matches $count widget${count == 1 ? '' : 's'}, so `nth` index '
+      '$index is out of range — '
+      '${count == 1 ? 'the only index is 0' : 'valid indices are 0–${count - 1}'}.';
+
+  /// An `nth` over a target that matches nothing at all.
+  ///
+  /// Said first and on its own: the index is not what needs fixing, so the
+  /// reader should stop looking at it and read the miss underneath.
+  String nthOverNothing(String inner) =>
+      '`nth` has nothing to index — $inner matches nothing, so the index is '
+      'not the problem. ';
+
+  /// A rendered string that is *nearly* the one asked for.
+  ///
+  /// The refusal is the one position that can notice: it holds the wanted
+  /// string and the candidates, and neither string shows the difference to
+  /// anyone staring at it — a narrow no-break space before AM/PM, a curly
+  /// apostrophe, a non-breaking hyphen. So the character is named rather than
+  /// printed, and the offered target is the prefix that is known to match.
+  String nearMiss({
+    required String rendered,
+    required String common,
+    required String? yours,
+    required String theirs,
+  }) {
+    var at = yours == null
+        ? 'yours ends and the rendered one continues with $theirs'
+        : 'yours has $yours and the rendered one has $theirs';
+    return 'No exact match, but "$rendered" is on screen and differs from '
+        'yours at character ${common.length}: $at. Target it with '
+        '`{"containing": ${jsonEncode(common)}}`, or copy the rendered string.';
+  }
+
+  /// A miss on rendered text that another property would have hit.
+  ///
+  /// **`screen` is the thing you read to decide what to act on**, and its `w`
+  /// is whatever carries the control's words: the semantics label first — a
+  /// `Slider.label`, an icon button's `Semantics` — and the tooltip when
+  /// nothing else does. A bare target is rendered text only, so a reader
+  /// copying a `w` verbatim lands in a refusal that reads like the control is
+  /// unreachable, which is the one thing it is not.
+  ///
+  /// [noun] is what the property is called in prose, [form] the key that
+  /// targets it — "semantics label" and `label`, "tooltip" and `tooltip`.
+  String propertyMiss(
+    int count, {
+    required String noun,
+    required String form,
+  }) =>
+      'No *rendered* text matches, but $count $noun${count == 1 ? '' : 's'} '
+      'do${count == 1 ? 'es' : ''} — target it with `{"$form": …}`. A bare '
+      "target matches rendered text only, while `screen` reports a control's "
+      '`w` from its semantics label or its tooltip wherever it has one.';
 
   /// How to get from many matches to one, flavored per host.
   ///
@@ -159,8 +235,9 @@ class TargetResolver {
       await ensureSemantics?.call();
     }
     var finder = finderForTarget(target);
-    var count = finder.evaluate().length;
     var described = describeTarget(target);
+    var count = _countOf(finder);
+    if (count == null) throw _indexRefusal(target, described, verb);
     if (count == 0) {
       throw TargetError(
         TargetFailure.notFound,
@@ -169,6 +246,7 @@ class TargetResolver {
           described,
           describeScreen?.call(),
           blank: _screenIsBlank,
+          hint: _diagnose(target),
         ),
       );
     }
@@ -180,6 +258,188 @@ class TargetResolver {
     }
     await _ensureReachable(finder, described, verb);
     return finder;
+  }
+
+  /// How many widgets [finder] matches, or null when it indexed past its end.
+  ///
+  /// `Finder.at(i)` is `candidates.elementAt(i)`, so an out-of-range `nth` is
+  /// a `RangeError` thrown out of the evaluate rather than a miss. Caught here
+  /// and turned into a [TargetError] for two reasons: the raw error is the one
+  /// refusal in this tool that does not say what to do next, and — being no
+  /// [TargetError] — it also escaped the retry ladder every other refusal
+  /// gets, so an `nth` on a screen mid-transition failed hard where a plain
+  /// text target would have been pumped through.
+  static int? _countOf(Finder finder) {
+    try {
+      return finder.evaluate().length;
+    } on RangeError {
+      return null;
+    }
+  }
+
+  /// The refusal an out-of-range index deserves, with the count in it.
+  ///
+  /// Targets compose, so `nth(nth(…))` runs out at whichever level ran out
+  /// first and the sentence has to be about *that* one; the walk descends to
+  /// the innermost `nth` whose own target still evaluates.
+  TargetError _indexRefusal(dynamic target, String described, String verb) {
+    dynamic offender = target;
+    while (true) {
+      var parts = nthPartsOf(offender);
+      if (parts == null) break;
+      var inner = parts.target;
+      var count = _countOf(finderForTarget(inner));
+      // The inner target range-errored too, so the level that actually ran
+      // out is further in; this one never got to index anything.
+      if (count == null) {
+        offender = inner;
+        continue;
+      }
+      var innerDescribed = describeTarget(inner);
+      // An index over a target that matched nothing is not an index problem
+      // at all, and `elementAt`'s "no indices are valid" never says so.
+      if (count == 0) {
+        return TargetError(
+          TargetFailure.notFound,
+          messages.notFound(
+            verb,
+            describeTarget(offender),
+            describeScreen?.call(),
+            blank: _screenIsBlank,
+            hint: _diagnose(inner),
+            prelude: messages.nthOverNothing(innerDescribed),
+          ),
+        );
+      }
+      return TargetError(
+        TargetFailure.notFound,
+        messages.outOfRange(innerDescribed, count, parts.index),
+      );
+    }
+    // No `nth` anywhere in it: something else indexed past its end, and a
+    // guess about what would be worse than the generic miss.
+    return TargetError(
+      TargetFailure.notFound,
+      messages.notFound(
+        verb,
+        described,
+        describeScreen?.call(),
+        blank: _screenIsBlank,
+      ),
+    );
+  }
+
+  /// What is actually wrong with a target that matched nothing, when the
+  /// screen can be made to say — see [TargetMessages.nearMiss] and
+  /// [TargetMessages.propertyMiss]. Null when it cannot, and then the refusal
+  /// keeps its guess.
+  String? _diagnose(dynamic target) {
+    if (target is! String || target.isEmpty) return null;
+    return _nearMiss(target) ?? _propertyMiss(target);
+  }
+
+  /// The same words, carried by a property a bare target does not read.
+  ///
+  /// Tooltip before semantics because it is the cheaper question and, on a
+  /// live app, the likelier one: a tooltip is always there to be asked about,
+  /// where the semantics tree is off until somebody holds a handle.
+  String? _propertyMiss(String wanted) {
+    var tooltips = find.byTooltip(wanted).evaluate().length;
+    if (tooltips > 0) {
+      return messages.propertyMiss(tooltips, noun: 'tooltip', form: 'tooltip');
+    }
+    var labels = _semanticsMatches(wanted);
+    if (labels != null) {
+      return messages.propertyMiss(
+        labels,
+        noun: 'semantics label',
+        form: 'label',
+      );
+    }
+    return null;
+  }
+
+  /// The rendered string sharing the longest prefix with [wanted].
+  ///
+  /// A prefix rather than a substring because that is what actually catches
+  /// the case: the wanted and rendered strings agree up to the character
+  /// nobody can see and diverge there, so `textContaining(wanted)` — the
+  /// obvious probe — misses for the same reason `find.text` did.
+  String? _nearMiss(String wanted) {
+    String? best;
+    var bestPrefix = 0;
+    for (var candidate in visibleTextsOf(controller)) {
+      if (candidate.isEmpty || candidate == wanted) continue;
+      var shared = _commonPrefix(wanted, candidate);
+      if (shared > bestPrefix) {
+        bestPrefix = shared;
+        best = candidate;
+      }
+    }
+    // Half the string and at least three characters: two words that happen to
+    // start with the same letter are a coincidence, not a near miss.
+    if (best == null || bestPrefix < 3 || bestPrefix * 2 < wanted.length) {
+      return null;
+    }
+    var yoursRuns = bestPrefix < wanted.length;
+    var renderedRuns = bestPrefix < best.length;
+    // **Where the rendered string simply stops, this is not a near miss.**
+    // `"Item 40"` against a list showing `"Item 4"` shares six characters and
+    // means nothing by it: the wanted item is further down the lazy list, and
+    // saying "differs at character 6" there suppresses the one hint that was
+    // right. Kept only when what yours continues with is itself invisible —
+    // the typed-a-trailing-space version of the same bug.
+    if (!renderedRuns &&
+        !(yoursRuns &&
+            _confusableNames.containsKey(wanted.codeUnitAt(bestPrefix)))) {
+      return null;
+    }
+    return messages.nearMiss(
+      rendered: best,
+      common: wanted.substring(0, bestPrefix),
+      yours: yoursRuns ? _nameChar(wanted, bestPrefix) : null,
+      theirs: renderedRuns
+          ? _nameChar(best, bestPrefix)
+          : 'nothing — it ends there',
+    );
+  }
+
+  /// Matches the semantics tree does have, when it is already on.
+  ///
+  /// **Never turns semantics on to answer.** It is not free, it changes what
+  /// the app builds, and an error path is the last place to do that quietly —
+  /// and it would buy nothing: a label that never reached a `screen` reply is
+  /// not the label anybody copied.
+  int? _semanticsMatches(String wanted) {
+    if (!SemanticsBinding.instance.semanticsEnabled) return null;
+    var count = find.bySemanticsLabel(wanted).evaluate().length;
+    return count == 0 ? null : count;
+  }
+
+  /// Code units, not runes: the index is only ever handed back inside a
+  /// substring of one of the two strings, so a surrogate pair can be split
+  /// only where the strings already differ inside one — and there both halves
+  /// are named by codepoint anyway.
+  static int _commonPrefix(String a, String b) {
+    var limit = math.min(a.length, b.length);
+    var i = 0;
+    while (i < limit && a.codeUnitAt(i) == b.codeUnitAt(i)) {
+      i++;
+    }
+    return i;
+  }
+
+  /// The character at [index], said in a way that survives being invisible.
+  ///
+  /// Printing it is what fails: the whole class of bug here is characters that
+  /// look like the one you typed or like nothing at all, so the codepoint
+  /// leads and the glyph follows only when there is one worth showing.
+  static String _nameChar(String text, int index) {
+    var code = text.codeUnitAt(index);
+    var hex = code.toRadixString(16).toUpperCase().padLeft(4, '0');
+    if (_confusableNames[code] case var name?) return 'U+$hex $name';
+    var printable = code > 0x20 && code < 0x7F;
+    return printable ? 'U+$hex "${text[index]}"' : 'U+$hex';
   }
 
   /// How many matches a refusal lists before it stops.
@@ -300,6 +560,46 @@ class TargetResolver {
     );
   }
 }
+
+/// The characters a refusal names rather than prints.
+///
+/// Not a Unicode name table — the entries are the ones that actually produce a
+/// target nobody can debug by looking at it: the spaces a formatter emits
+/// where you typed U+0020 (modern ICU puts U+202F before AM/PM), the marks
+/// with no width at all, and the punctuation a text editor or a designer
+/// substitutes. Everything else is printed, which for a visible glyph says
+/// more than a name would.
+const _confusableNames = <int, String>{
+  0x0009: 'TAB',
+  0x000A: 'LINE FEED',
+  0x000D: 'CARRIAGE RETURN',
+  0x0020: 'SPACE',
+  0x00A0: 'NO-BREAK SPACE',
+  0x00AD: 'SOFT HYPHEN',
+  0x2002: 'EN SPACE',
+  0x2003: 'EM SPACE',
+  0x2007: 'FIGURE SPACE',
+  0x2009: 'THIN SPACE',
+  0x200A: 'HAIR SPACE',
+  0x200B: 'ZERO WIDTH SPACE',
+  0x200C: 'ZERO WIDTH NON-JOINER',
+  0x200D: 'ZERO WIDTH JOINER',
+  0x200E: 'LEFT-TO-RIGHT MARK',
+  0x200F: 'RIGHT-TO-LEFT MARK',
+  0x2011: 'NON-BREAKING HYPHEN',
+  0x2013: 'EN DASH',
+  0x2014: 'EM DASH',
+  0x2018: 'LEFT SINGLE QUOTATION MARK',
+  0x2019: 'RIGHT SINGLE QUOTATION MARK',
+  0x201C: 'LEFT DOUBLE QUOTATION MARK',
+  0x201D: 'RIGHT DOUBLE QUOTATION MARK',
+  0x2026: 'HORIZONTAL ELLIPSIS',
+  0x202F: 'NARROW NO-BREAK SPACE',
+  0x205F: 'MEDIUM MATHEMATICAL SPACE',
+  0x2060: 'WORD JOINER',
+  0x3000: 'IDEOGRAPHIC SPACE',
+  0xFEFF: 'ZERO WIDTH NO-BREAK SPACE',
+};
 
 /// Longest string [visibleTextsOf] reports before truncating with an
 /// ellipsis. Screens that render logs or protocol dumps put whole essays in
