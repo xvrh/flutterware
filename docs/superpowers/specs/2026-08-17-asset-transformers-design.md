@@ -65,6 +65,28 @@ makes an unchanged asset never pay again. An edited SVG costs one invocation.
 design does not lean on it. It is recorded because it shows where the headroom
 is if a project ever turns out to have hundreds of transformed assets.
 
+**`dart run <package>` is the invocation, and it is the fast one** — which is
+the opposite of what this note first assumed. `dart run` was expected to cost
+the package-graph re-resolution the dev-stack `StackRun.script` change measured,
+so spawning the resolved `bin/<name>.dart` directly looked like the saving.
+Alternated five times each, one asset, SDK `dart` (no `fvm` in the path):
+
+| | wall clock |
+|---|---|
+| `dart run vector_graphics_compiler …` | 0.17 / 0.13 / 0.12 / 0.12 / 0.12 |
+| `dart --packages=… <pubcache>/bin/….dart …` | 0.92 / 0.85 / 0.84 / 0.86 / 0.86 |
+
+**Seven times faster, because pub precompiles executables.** `.dart_tool/pub/
+bin/<package>/<name>.dart-<sdk>.snapshot` is what `dart run` executes; spawning
+the source recompiles it on every asset. The snapshot is keyed by SDK version,
+so a project resolved under a different SDK pays one ~0.9s recompile and is warm
+after. Output byte-identical either way.
+
+So the contract's invocation is also the right one, and the per-asset cost is
+**~0.12s** rather than the 0.365s above — that figure was `fvm`'s overhead, not
+the transformer's. 21 assets sequential is ~2.5s, pooled four ways ~0.7s, paid
+once.
+
 **The output is exactly the tool's.** All 21 were compiled both ways — the
 per-file `--input`/`--output` invocation `flutter_tools` uses, and the batch —
 and compared byte for byte: 21 identical, 0 differing. So this is not
@@ -199,19 +221,10 @@ the current slug sends the reader to look for a file that is right there.
 
 ## Open, to settle before building
 
-1. **`dart run <package>` or `dart <resolved bin>`.** The tool's contract is
-   `dart run`, which re-resolves the package graph and runs every build hook on
-   each invocation — the cost the dev-stack `StackRun.script` change measured at
-   0.33s against 0.28s. Resolving `bin/<name>.dart` from `package_config.json`
-   and spawning it directly would save that on every asset, and it is the same
-   code either way. Worth one alternated measurement before choosing, and worth
-   remembering that build hooks then do not run — which for a transformer that
-   needs native assets built would be a silent wrong answer rather than a slow
-   one.
-2. **Where the pool's width comes from.** Four, because the tool uses four; or
+1. **Where the pool's width comes from.** Four, because the tool uses four; or
    the core count, which is what the one transformer we have measured picks for
    itself.
-3. **Whether a transform failure quarantines the entry or the bundle.** The
+2. **Whether a transform failure quarantines the entry or the bundle.** The
    compiler daemon quarantines a preview that will not build so the rest still
    serve. The equivalent here — link the source, report the failure, let the
    rest of the catalog render — is friendlier and is also how the blank icon got
