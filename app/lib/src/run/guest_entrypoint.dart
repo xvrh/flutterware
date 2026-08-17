@@ -48,6 +48,12 @@ class GuestEntrypoint {
 /// out of reach the launch proceeds uninstrumented rather than failing —
 /// stated in [GuestEntrypoint.reason], which the caller logs.
 ///
+/// [targetsWeb] withdraws the path spelling, because the browser's compiler
+/// does not share the file system the path is a fact about — the whole of the
+/// why is on [webWrapperImportRefusal]. Passed in rather than sniffed from the
+/// entrypoint: the same file is wrapped on a phone and refused on Chrome, so it
+/// is the launch that decides, never the file.
+///
 /// [knobs] are the values to pass `main` as named arguments, keyed by parameter
 /// name — `2026-08-12-run-knobs-design.md` § K3. Rewriting this file and hot
 /// restarting is what makes changing one cost 262ms rather than a rebuild, so
@@ -57,6 +63,7 @@ GuestEntrypoint writeGuestEntrypoint({
   required String packageRoot,
   required String entrypoint,
   Map<String, Object?> knobs = const {},
+  bool targetsWeb = false,
 }) {
   String? package;
   Object? packageProblem;
@@ -70,18 +77,26 @@ GuestEntrypoint writeGuestEntrypoint({
     // not refused for missing it.
     packageProblem = e;
   }
-  var importUri = wrapperImportOf(entrypoint, package: package);
+  var importUri = wrapperImportOf(
+    entrypoint,
+    package: package,
+    web: targetsWeb,
+  );
   if (importUri == null) {
-    return GuestEntrypoint._(
-      entrypoint,
-      guest: false,
-      reason: p.posix.isWithin('lib', entrypoint)
-          ? 'could not read the package name from pubspec.yaml, and a lib/ '
-                'entrypoint has to be imported by its package: URI: '
-                '$packageProblem'
-          : '$entrypoint is outside $packageRoot, so the wrapper written inside '
-                'it has no import that reaches the entrypoint',
-    );
+    // Ordered by which fact is the *reason*. Outside the package first: that
+    // one is true on every platform, so reporting web at it would name the
+    // launch's device for a refusal the device did not cause.
+    var reason = switch (entrypoint) {
+      _ when !p.posix.isWithin('.', entrypoint) =>
+        '$entrypoint is outside $packageRoot, so the wrapper written inside '
+            'it has no import that reaches the entrypoint',
+      _ when p.posix.isWithin('lib', entrypoint) =>
+        'could not read the package name from pubspec.yaml, and a lib/ '
+            'entrypoint has to be imported by its package: URI: '
+            '$packageProblem',
+      _ => webWrapperImportRefusal(entrypoint)!,
+    };
+    return GuestEntrypoint._(entrypoint, guest: false, reason: reason);
   }
   var target = p.posix.join(
     wrapperDirectory,

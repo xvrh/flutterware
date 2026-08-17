@@ -30,11 +30,43 @@ const wrapperDirectory = '.dart_tool/flutterware/run';
 /// in the checkout, which is the hazard above with the packages swapped. An
 /// absolute path is outside by the same test, which is why there is no separate
 /// check for one.
-String? wrapperImportOf(String target, {String? package}) {
+///
+/// **On web the path is dropped too**, and that is the compiler's rule rather
+/// than ours — see [webWrapperImportRefusal].
+String? wrapperImportOf(String target, {String? package, bool web = false}) {
   if (!p.posix.isWithin('.', target)) return null;
   if (p.posix.isWithin('lib', target)) {
     if (package == null) return null;
     return 'package:$package/${p.posix.relative(target, from: 'lib')}';
   }
+  if (web) return null;
   return p.posix.relative(target, from: wrapperDirectory);
+}
+
+/// Why a web launch cannot use the path spelling, in the words the launcher
+/// logs — null when [target] is fine on web.
+///
+/// **A relative import out of the wrapper is a file-system fact that web does
+/// not share.** Compiling for the browser, flutter_tools finds no `package:`
+/// URI for a target outside `lib/`, so it adds *the target's own directory* as
+/// a virtual file-system root and names the target `org-dartlang-app:///` plus
+/// its basename (`resident_web_runner.dart`, 3.47). The wrapper is the target
+/// there, so the wrapper's directory becomes the root of the world and the
+/// `../../../` that reaches the entry point on a disk climbs out of it — the
+/// compile fails on generated source, reporting a file not found and an
+/// undefined `main`.
+///
+/// Nothing the wrapper can be *written* as fixes this; only where it is written
+/// would, and every directory the import could reach down from — the entry
+/// point's own, the package root — is one the project commits. Rather than put
+/// a generated file there, a web launch of such an entry point goes
+/// uninstrumented and says so. `lib/` is unaffected: a `package:` URI means no
+/// root is added and nothing has to climb.
+String? webWrapperImportRefusal(String target) {
+  if (!p.posix.isWithin('.', target)) return null;
+  if (p.posix.isWithin('lib', target)) return null;
+  return '$target is outside lib/, and a web build roots the compiler at the '
+      "generated wrapper's own directory — so the wrapper has no import that "
+      'reaches the entry point. Move it under lib/ to get knobs, inspect and '
+      'drive on web; every other platform wraps it as it is.';
 }

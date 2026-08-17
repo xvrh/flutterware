@@ -2203,8 +2203,8 @@ class RunCore extends PluginCore {
   }) async {
     _checkKnobNames(package, entry, knobs);
     var resolvedKnobs = await _resolveKnobs(package, entry, knobs);
-    var deviceName = devices
-        .where((candidate) => candidate.id == device)
+    var known = devices.where((candidate) => candidate.id == device);
+    var deviceName = known
         .map((candidate) => candidate.displayName)
         .firstOrNull;
     var handle = await launchApp(
@@ -2219,6 +2219,15 @@ class RunCore extends PluginCore {
       entrypoint: entry.path,
       entrypointName: entry.declared ? entry.name : null,
       flavor: flavor,
+      // The device the daemon described, never the id: `chrome` and
+      // `web-server` are the two we would think to name, and a browser the
+      // daemon adds next would go on compiling into a wrapper it cannot see.
+      // A device the cache has never mentioned is launchable on purpose, and
+      // reads as not-web here — which wraps it, exactly as today.
+      targetsWeb: known.any(
+        (candidate) =>
+            RunPlatform.byName(candidate.platformType ?? '') == RunPlatform.web,
+      ),
       defines: defines,
       knobs: resolvedKnobs,
     );

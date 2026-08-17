@@ -77,6 +77,61 @@ void main() {
     );
   });
 
+  group('on web', () {
+    test('an entrypoint outside lib/ launches unwrapped, with the way out', () {
+      // The path spelling is a fact about a disk the browser's compiler does
+      // not share: it roots the world at the wrapper's own directory, so the
+      // `../../../` that reaches `demo/` on every other platform climbs out of
+      // it. This used to be written anyway and fail the *compile*, reporting a
+      // missing file and an undefined `main` in generated source nobody wrote.
+      var result = writeGuestEntrypoint(
+        packageRoot: root.path,
+        entrypoint: 'demo/main_dev.dart',
+        targetsWeb: true,
+      );
+
+      expect(result.guest, isFalse);
+      expect(result.target, 'demo/main_dev.dart');
+      expect(result.reason, contains('outside lib/'));
+      expect(
+        result.reason,
+        contains('Move it under lib/'),
+        reason: 'a refusal with no way out is a dead end',
+      );
+    });
+
+    test('a lib/ entrypoint is wrapped as it always was', () {
+      // No file-system root is added for a target that has a `package:` URI, so
+      // there is nothing to climb out of and nothing to refuse.
+      var result = writeGuestEntrypoint(
+        packageRoot: root.path,
+        entrypoint: 'lib/main_dev.dart',
+        targetsWeb: true,
+      );
+
+      expect(result.guest, isTrue);
+      var content = File(
+        p.joinAll([root.path, ...p.posix.split(result.target)]),
+      ).readAsStringSync();
+      expect(content, contains("import 'package:shop_app/main_dev.dart'"));
+    });
+
+    test('outside the package is reported as that, not as web', () {
+      // Both are true of this entrypoint; only one of them is the reason. A
+      // refusal naming the browser for a file that no platform can reach sends
+      // the reader to change the device.
+      var result = writeGuestEntrypoint(
+        packageRoot: root.path,
+        entrypoint: '../other_app/lib/main.dart',
+        targetsWeb: true,
+      );
+
+      expect(result.guest, isFalse);
+      expect(result.reason, contains('outside'));
+      expect(result.reason, isNot(contains('web build')));
+    });
+  });
+
   test('an entrypoint outside the package launches unwrapped', () {
     // The wrapper is written inside the package. A target above it can be
     // spelled as a path, and must not be: a file in a sibling package is

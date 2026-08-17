@@ -52,7 +52,11 @@
   outside `lib/` has no `package:` spelling for a path to conflict with. A `lib/`
   entry point is still named by its `package:` URI, and only that — a library
   reached under two URIs is two libraries. An entry point *outside* its package
-  is still refused, for that same reason.
+  is still refused, for that same reason. **Except on web**, where the path is
+  not a spelling the compiler shares: a target with no `package:` URI is rooted
+  at its own directory, so the wrapper's `../` climbs out of the world. Such a
+  launch goes uninstrumented and says which `lib/` move would fix it — it used
+  to fail the compile instead, naming generated source.
 - Relatedly, an entry point's own import that climbs out of `lib/` but stays in
   the package — `import '../tool/helpers.dart'` — is now copied into the wrapper
   rather than dropped, so a knob whose type is declared there works.

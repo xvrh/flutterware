@@ -56,6 +56,7 @@ Future<RunHandle> launchApp({
   String? entrypointName,
   String? deviceName,
   String? flavor,
+  bool targetsWeb = false,
   Map<String, String> defines = const {},
   Map<String, Object?> knobs = const {},
 }) async {
@@ -101,6 +102,7 @@ Future<RunHandle> launchApp({
     packageRoot: packageRoot,
     entrypoint: entrypoint,
     knobs: knobs,
+    targetsWeb: targetsWeb,
   );
   if (!guestTarget.guest) {
     _logger.info('Launching without the run guest: ${guestTarget.reason}');
