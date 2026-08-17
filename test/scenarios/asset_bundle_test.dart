@@ -119,6 +119,41 @@ void main() {
     expect(source.reads, 3);
   });
 
+  testWidgets('a read in flight is counted while it is', (tester) async {
+    var source = _Source();
+    var bundle = ScenarioAssetBundle(source: source);
+    expect(bundle.readsInFlight, 0);
+
+    // The count is what tells a step that work it cannot see is genuinely on
+    // the way, so it has to rise on the read the app started and fall on the
+    // one it finished — `loadString`'s read included, since that is the
+    // spelling an `SvgPicture.asset` reaches for. Read from inside `runAsync`,
+    // which is where a step reads it.
+    await tester.runAsync(() async {
+      var reading = bundle.loadString('logo.svg');
+      var loading = bundle.load('logo.svg');
+      expect(bundle.readsInFlight, 2);
+      await Future.wait([reading, loading]);
+      expect(bundle.readsInFlight, 0);
+    });
+
+    // A cache hit is a value, not a read: nothing is in flight, and a step
+    // that waited on this count would wait forever if it were.
+    unawaited(bundle.loadString('logo.svg'));
+    expect(bundle.readsInFlight, 0);
+  });
+
+  testWidgets('a read that throws is not left counted', (tester) async {
+    var bundle = ScenarioAssetBundle(source: _Source(fails: true));
+    // A key the app asked for and the bundle does not have leaves the count
+    // where it found it — otherwise one missing asset would make every step
+    // after it wait out the ceiling.
+    await tester.runAsync(
+      () => expectLater(bundle.load('logo.svg'), throwsA(anything)),
+    );
+    expect(bundle.readsInFlight, 0);
+  });
+
   // What a scenario memoized on `rootBundle` is a *future*, and it belongs to
   // that scenario's FakeAsync zone. Left in flight it can never complete
   // again — nothing will ever flush that zone — so the next scenario awaiting
@@ -162,18 +197,24 @@ void main() {
 /// An asset source that answers the way the engine does: from the real event
 /// loop, which under fake time means "not until something flushes".
 class _Source extends AssetBundle {
+  _Source({this.fails = false});
+
+  /// Answers every read with a missing-asset error instead of bytes — the
+  /// engine's reply for a key the bundle does not have.
+  final bool fails;
+
   var reads = 0;
 
   @override
   Future<ByteData> load(String key) {
     reads++;
     var completer = Completer<ByteData>();
-    Zone.root.createTimer(
-      const Duration(milliseconds: 10),
-      () => completer.complete(
+    Zone.root.createTimer(const Duration(milliseconds: 10), () {
+      if (fails) return completer.completeError(FlutterError('no such asset'));
+      completer.complete(
         ByteData.sublistView(Uint8List.fromList(utf8.encode('$key contents'))),
-      ),
-    );
+      );
+    });
     return completer.future;
   }
 }

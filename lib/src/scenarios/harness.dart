@@ -876,9 +876,10 @@ Future<Map<String, Object?>> _runOne(
         'frameIntervalMs': capture.motionInterval!.inMilliseconds,
         if (capture.motion.dropped > 0) 'framesDropped': capture.motion.dropped,
       },
-      // Both omitted in the healthy case, so a normal step's record stays the
+      // All omitted in the healthy case, so a normal step's record stays the
       // size it was.
       if (!capture.settled) 'settled': false,
+      if (!capture.landed) 'landed': false,
       if (capture.strayFrames > 0) 'strayFrames': capture.strayFrames,
       'failure': ?capture.failure,
     };

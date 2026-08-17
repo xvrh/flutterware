@@ -321,6 +321,7 @@ class ScenarioRunStep {
     this.frameIntervalMs,
     this.framesDropped,
     this.settled = true,
+    this.landed = true,
     this.strayFrames = 0,
     this.failure,
     this.attachments = const [],
@@ -494,6 +495,13 @@ class ScenarioRunStep {
   /// something on this screen animates indefinitely — a spinner, a shimmer —
   /// and the capture is of a moving picture. Not a failure.
   final bool settled;
+
+  /// False when the shutter fell with an image decode or an asset read still
+  /// in flight: the picture is of a screen that was still filling in, and the
+  /// artwork it is missing turns up on the next step. Not a failure, and not
+  /// the same thing as [settled] — a screen can be perfectly still and still
+  /// be waiting for its illustration.
+  final bool landed;
 
   /// Frames drawn before this step that none of the scenario's verbs drew —
   /// the scenario reached for the raw `tester`, and whatever the app did in

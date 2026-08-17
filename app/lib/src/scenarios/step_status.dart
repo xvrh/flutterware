@@ -31,7 +31,7 @@ String? scenarioStepTransition(ScenarioRunStep step) {
 Color scenarioStepTone(BuildContext context, ScenarioRunStep step) {
   var colors = context.colors;
   if (step.failure != null) return colors.red;
-  if (!step.settled) return colors.amber;
+  if (!step.settled || !step.landed) return colors.amber;
   return colors.mut;
 }
 
@@ -58,6 +58,14 @@ class ScenarioStepNotice extends StatelessWidget {
         'Still animating when this was captured — the settle budget ran out '
             'with frames still scheduled. A spinner or a looping animation '
             'does that; the picture is of a moving screen.',
+      ),
+      ScenarioRunStep(landed: false) => (
+        colors.amber,
+        Icons.image_not_supported_outlined,
+        'Still loading when this was captured — an image decode or an asset '
+            'read had not finished after a second of real time. Whatever this '
+            'picture is missing turns up on the next step; the app is the one '
+            'taking its time, not the shutter.',
       ),
       ScenarioRunStep(:var strayFrames) when strayFrames > 0 => (
         colors.mut2,

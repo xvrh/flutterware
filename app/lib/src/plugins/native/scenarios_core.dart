@@ -2661,6 +2661,7 @@ class ScenariosCore extends PluginCore {
       // Absent means settled: the harness writes the field only when it is
       // not, so a healthy step's record stays the size it was.
       settled: step['settled'] as bool? ?? true,
+      landed: step['landed'] as bool? ?? true,
       strayFrames: step['strayFrames'] as int? ?? 0,
       failure: step['failure'] as String?,
       attachments: [

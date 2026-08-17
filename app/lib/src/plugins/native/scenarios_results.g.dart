@@ -149,6 +149,7 @@ ScenarioRunStep _$ScenarioRunStepFromJson(Map<String, dynamic> json) =>
       frameIntervalMs: (json['frameIntervalMs'] as num?)?.toInt(),
       framesDropped: (json['framesDropped'] as num?)?.toInt(),
       settled: json['settled'] as bool? ?? true,
+      landed: json['landed'] as bool? ?? true,
       strayFrames: (json['strayFrames'] as num?)?.toInt() ?? 0,
       failure: json['failure'] as String?,
       attachments:
@@ -195,6 +196,7 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
       'statusBrightness': ?instance.statusBrightness,
       'navBrightness': ?instance.navBrightness,
       'settled': instance.settled,
+      'landed': instance.landed,
       'strayFrames': instance.strayFrames,
       'failure': ?instance.failure,
       'attachments': instance.attachments.map((e) => e.toJson()).toList(),

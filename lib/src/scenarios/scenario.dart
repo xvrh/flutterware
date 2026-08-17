@@ -759,6 +759,7 @@ class ScenarioTester {
     // the flow. Read before the action, reported on the step it precedes.
     var stray = _frames - _framesAtLastStep;
     bool settled;
+    bool landed;
     try {
       // The frame the transition starts from, banked before the verb acts —
       // otherwise a movie of a tap opens on the frame after the tap and the
@@ -769,10 +770,11 @@ class ScenarioTester {
       settled = await policy.apply(tester, record: _recorder);
       // Frames are all a policy follows; work on the real event loop
       // schedules none while it is in flight. See [landRealWork].
-      settled = await landRealWork(
+      (settled: settled, landed: landed) = await landRealWork(
         tester,
         policy,
         settled: settled,
+        assets: assets,
         record: _recorder,
       );
     } catch (error) {
@@ -786,6 +788,7 @@ class ScenarioTester {
     await _afterStep(
       shot,
       settled: settled,
+      landed: landed,
       stray: stray,
       verb: verb,
       target: target,
@@ -857,6 +860,7 @@ class ScenarioTester {
   Future<void> _afterStep(
     Shot? shot, {
     required bool settled,
+    required bool landed,
     required int stray,
     String? verb,
     String? target,
@@ -869,6 +873,7 @@ class ScenarioTester {
     await _capture(
       shot,
       settled: settled,
+      landed: landed,
       stray: stray,
       verb: verb,
       target: target,
@@ -943,6 +948,7 @@ class ScenarioTester {
   Future<void> _capture(
     Shot? shot, {
     bool settled = true,
+    bool landed = true,
     int stray = 0,
     String? verb,
     String? target,
@@ -981,6 +987,7 @@ class ScenarioTester {
       branch: branch,
       shot: shot,
       settled: settled,
+      landed: landed,
       stray: stray,
       verb: verb,
       target: target,
@@ -1033,6 +1040,7 @@ class ScenarioTester {
     required String? branch,
     required Shot? shot,
     required bool settled,
+    bool landed = true,
     int stray = 0,
     String? verb,
     String? target,
@@ -1112,6 +1120,7 @@ class ScenarioTester {
             motion: motion,
             motionInterval: _recorder?.interval,
             settled: settled,
+            landed: landed,
             strayFrames: stray,
             failure: failure,
             attachments: attachments,

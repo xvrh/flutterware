@@ -48,11 +48,29 @@ class ScenarioAssetBundle extends AssetBundle {
   final _structured = <String, Object?>{};
   final _structuredBinary = <String, Object?>{};
 
-  @override
-  Future<ByteData> load(String key) => _source.load(key);
+  /// Reads started here and not finished — the count a scenario reads to know
+  /// that work it cannot see is genuinely in flight, rather than taking a turn
+  /// of the real event loop to guess. See `landRealWork`.
+  ///
+  /// Everything an app reads through the bundle passes here, so an
+  /// `SvgPicture.asset` or a `Lottie.asset` is counted for as long as its bytes
+  /// are on the way — the part of those loads that costs the most and announces
+  /// the least. The decode on the other end is not in it; that is what the
+  /// guessed turns are still for.
+  int get readsInFlight => _readsInFlight;
+  var _readsInFlight = 0;
+
+  Future<T> _counted<T>(Future<T> read) {
+    _readsInFlight++;
+    return read.whenComplete(() => _readsInFlight--);
+  }
 
   @override
-  Future<ui.ImmutableBuffer> loadBuffer(String key) => _source.loadBuffer(key);
+  Future<ByteData> load(String key) => _counted(_source.load(key));
+
+  @override
+  Future<ui.ImmutableBuffer> loadBuffer(String key) =>
+      _counted(_source.loadBuffer(key));
 
   @override
   Future<String> loadString(String key, {bool cache = true}) {
