@@ -169,8 +169,8 @@ Widget counter() => const Placeholder();
     await scanned(subject);
 
     var text = subject.report.toText();
-    expect(text, contains('Avatar tile / Members'));
-    expect(text, contains('Avatar tile / Empty'));
+    expect(text, contains('avatar_tile / Members'));
+    expect(text, contains('avatar_tile / Empty'));
     expect(text, contains('Counter'));
     expect(text, contains('demo/counter.dart#counter'));
   });
@@ -519,15 +519,16 @@ Widget b() => const Placeholder();
 
       // Every rule at once, and every one of them is a rule a reader
       // reconstructing this from the ids has to guess: `demo` is dropped
-      // because every entry shares it, `team` stays as written rather than
-      // humanised, `Avatar tile` *is* humanised because it is derived from a
-      // file holding two entries, folders come before entries, and both are
-      // alphabetical by name.
+      // because every entry shares it, `team` and `avatar_tile` are spelled the
+      // way the directory and the file are spelled — nothing in this tree is
+      // prettified, which is what stops one row following a rule the row above
+      // it does not — a file holding two entries becomes a level of its own,
+      // folders come before entries, and both are alphabetical by name.
       expect(outline(result.packages.single.tree), [
         'team',
-        'team/Avatar tile',
-        'team/Avatar tile/Empty',
-        'team/Avatar tile/Members',
+        'team/avatar_tile',
+        'team/avatar_tile/Empty',
+        'team/avatar_tile/Members',
         'Counter',
       ]);
     });

@@ -1433,10 +1433,16 @@ class RunCore extends PluginCore {
     if (!device.isConnected) 'not connected',
   ].join(' · ');
 
+  /// The ledger is machine-wide, so this list holds runs no one here started.
+  /// The worktree name alone does not say so — a reader who does not already
+  /// know every checkout on the machine reads an unrelated repository's app as
+  /// one of this project's, under a heading that says Running.
   String _handleDetail(RunHandle handle) {
     var probe = probeOf(handle);
     return [
-      handle.worktreeName,
+      isMine(handle)
+          ? handle.worktreeName
+          : '${handle.worktreeName} · another checkout',
       if (probe == null)
         'not probed'
       else if (probe.canReload)
@@ -1835,9 +1841,15 @@ class RunCore extends PluginCore {
                   platforms: [
                     for (var platform in entry.platforms) platform.name,
                   ],
-                  devices: entry.platforms.isEmpty
-                      ? const []
-                      : [for (var device in devicesFor(entry)) device.id],
+                  // Every connected device when the entry point restricts
+                  // nothing, which is what `devicesFor` already answers and
+                  // what the field promises. Special-cased to empty once, on
+                  // the reasoning that an unrestricted entry point has nothing
+                  // to report — but the field is not "what was filtered out",
+                  // it is what this entry point can run on right now, and the
+                  // one entry point in a project that names its platforms was
+                  // the only one a picker could offer anything for.
+                  devices: [for (var device in devicesFor(entry)) device.id],
                   knobs: knobEntriesOf(path, entry),
                 ),
             ],

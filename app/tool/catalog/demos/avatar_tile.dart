@@ -17,13 +17,13 @@ const _longText = [
   ),
 ];
 
-@Preview(name: 'Members', wrapper: wrapInApp)
+@Preview(name: 'Members', group: 'Avatar tile', wrapper: wrapInApp)
 Widget avatarTileMembers() => _list(_members);
 
-@Preview(name: 'Empty', wrapper: wrapInApp)
+@Preview(name: 'Empty', group: 'Avatar tile', wrapper: wrapInApp)
 Widget avatarTileEmpty() => _list(const []);
 
-@Preview(name: 'Long text', wrapper: wrapInApp)
+@Preview(name: 'Long text', group: 'Avatar tile', wrapper: wrapInApp)
 Widget avatarTileLongText() => _list(_longText);
 
 Widget _list(List<(String, String, String)> people) {
