@@ -25,6 +25,7 @@ import '../../ui/popover.dart';
 import '../../ui/popover_menu.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
+import '../../utils/directory_watch.dart';
 import '../native_plugin.dart';
 import 'scenarios_address.dart';
 import 'scenarios_core.dart';
@@ -43,7 +44,13 @@ export 'scenarios_core.dart' show ScenariosCore, scenariosPluginId;
 /// Everything the pages show comes out of [ScenariosCore.panelRunFor]; the
 /// panel starts runs and draws state, and that is all it does.
 class ScenariosPlugin extends NativePlugin<ScenariosCore> {
-  ScenariosPlugin(super.core);
+  ScenariosPlugin(super.core, {this.watchSources});
+
+  /// How the panel watches the scan root, for tests that need the timing rules
+  /// without a filesystem — the seam every other watcher in this app has
+  /// (`WorktreeWatcher`, `WorkingTreeWatcher`, `ConfigWatcher`). Null is the
+  /// real `dart:io` watch.
+  final WatchDirectory? watchSources;
 
   /// A server per served directory, so re-exporting the same page reuses the
   /// port a browser tab already has open — the tab reloads onto the new run
@@ -203,11 +210,67 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
     super.didChangeDependencies();
     if (_resolve() case var place?) {
       _core.track(place.package);
+      _watchSources(place.package);
       _followPool(place);
       // Only once a scenario is open: listing compiles the harness, and the
       // page that opens one is about to pay for that anyway.
       if (place.file != null) _core.trackListings(place.package);
     }
+  }
+
+  /// The directory [_sources] is watching — the *root*, not the package, so a
+  /// configured `directory` that moves re-arms rather than going quietly deaf.
+  String? _watching;
+  DirectoryWatch? _sources;
+  StreamSubscription<void>? _sourceEvents;
+
+  /// Keeps the list pane honest about a suite that changes under it.
+  ///
+  /// **The scan is otherwise one-shot for the life of the worktree session.**
+  /// `track` returns early once a package has been scanned, and the only two
+  /// things that ever replaced that scan were finishing a run and writing a
+  /// file through the New dialog — so an agent adding twenty scenarios while
+  /// you watched the panel changed nothing on screen, and opening one made the
+  /// list catch up for a reason that had nothing to do with the edit.
+  ///
+  /// Mounted-only, like the previews panel's poll: a package is scanned because
+  /// its panel is visible, and it stays live for the same reason. The sidebar's
+  /// per-package count is still as old as the last scan, which is the honest
+  /// scope — watching every declared package's `test/` for a badge is the cost
+  /// the laziness rule exists to avoid.
+  ///
+  /// Dart only, and that filter is what makes it affordable: the scan root is
+  /// `test/`, but nothing stops a suite keeping golden images or fixtures
+  /// beside its tests, and a rescan is worth exactly one thing — a
+  /// `scenario('…')` call appearing, moving or going.
+  void _watchSources(String package) {
+    var root = p.join(
+      _core.packageRootFor(package),
+      _core.scanRootFor(package),
+    );
+    if (_watching == root) return;
+    _watching = root;
+    unawaited(_sourceEvents?.cancel());
+    unawaited(_sources?.dispose());
+    var sources = _sources = DirectoryWatch(
+      directory: root,
+      accept: (path) => path.endsWith('.dart'),
+      // A parse of the whole scan root measured 26–34 ms off-isolate on a
+      // 212-file suite, so the floor is here to bound an agent writing without
+      // pause rather than to protect anything expensive.
+      minInterval: const Duration(seconds: 1),
+      watch: widget.plugin.watchSources,
+    )..start();
+    _sourceEvents = sources.changes.listen((_) {
+      if (mounted) _core.rescan(package);
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_sourceEvents?.cancel());
+    unawaited(_sources?.dispose());
+    super.dispose();
   }
 
   @override
@@ -371,6 +434,8 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
       children: [
         _ListPaneHeader(
           directory: _displayDirectory(),
+          scanning: core.isScanning(package),
+          onRefresh: () => core.refresh(package),
           onNew: () => unawaited(_newScenario(context, core, package)),
           onHelp: () => AddressScope.write(
             context,
@@ -542,12 +607,22 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
 class _ListPaneHeader extends StatelessWidget {
   const _ListPaneHeader({
     required this.directory,
+    required this.scanning,
+    required this.onRefresh,
     required this.onNew,
     required this.onHelp,
     required this.helpSelected,
   });
 
   final String directory;
+
+  /// Whether a scan is in flight — the refresh button's own feedback, and the
+  /// only feedback there is: a rescan that finds the same scenarios changes
+  /// nothing on screen, and a button that answers a press with nothing at all
+  /// reads as broken.
+  final bool scanning;
+
+  final VoidCallback onRefresh;
   final VoidCallback onNew;
   final VoidCallback onHelp;
   final bool helpSelected;
@@ -575,6 +650,12 @@ class _ListPaneHeader extends StatelessWidget {
             ),
           ),
           _HeaderButton(
+            icon: Icons.refresh,
+            tooltip: 'Rescan for scenarios',
+            onTap: onRefresh,
+            busy: scanning,
+          ),
+          _HeaderButton(
             icon: Icons.help_outline,
             tooltip: 'How to write a scenario',
             onTap: onHelp,
@@ -593,12 +674,17 @@ class _HeaderButton extends StatelessWidget {
     required this.tooltip,
     required this.onTap,
     this.selected = false,
+    this.busy = false,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
   final bool selected;
+
+  /// Draws a spinner in the icon's place, at the icon's size, so the row does
+  /// not reflow as the work starts and stops.
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -613,10 +699,15 @@ class _HeaderButton extends StatelessWidget {
             color: selected || hovered ? colors.panel : Colors.transparent,
             borderRadius: BorderRadius.circular(context.radii.radius),
           ),
-          child: Icon(
-            icon,
-            size: FwIconSize.md,
-            color: selected || hovered ? colors.ink : colors.mut,
+          child: SizedBox.square(
+            dimension: FwIconSize.md,
+            child: busy
+                ? CircularProgressIndicator(strokeWidth: 2, color: colors.mut)
+                : Icon(
+                    icon,
+                    size: FwIconSize.md,
+                    color: selected || hovered ? colors.ink : colors.mut,
+                  ),
           ),
         ),
       ),

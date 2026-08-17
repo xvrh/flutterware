@@ -457,6 +457,26 @@ class ScenariosCore extends PluginCore {
         .whenComplete(notifyChanged);
   }
 
+  /// Re-reads the suite from disk — what [track] deliberately never does.
+  ///
+  /// The panel's watcher calls this on a save, which is why it is the *scan*
+  /// alone: parsing `test/` is ~30ms on a spawned isolate, and a listing is a
+  /// compiled harness. A file arriving must cost the first and never the
+  /// second.
+  void rescan(String path) => _rescan(path);
+
+  /// [rescan], and the live listing with it — profiles, offered devices and
+  /// languages, tags — for the one caller that is a person asking: the list
+  /// pane's refresh button.
+  ///
+  /// A relisting is only queued for a package that has already got one, which
+  /// is [_relist]'s rule and the reason this is safe to press: nobody pays for
+  /// a harness compile by pressing refresh on a suite they have not opened.
+  void refresh(String path) {
+    _rescan(path);
+    _relist(path);
+  }
+
   /// Replaces the cached scan — what [track] deliberately never does.
   void _rescan(String path) {
     var scanner = ScenarioScanner(

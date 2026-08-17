@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -782,6 +783,115 @@ void main() {
     await tester.enterText(find.byType(TextField), 'zzz');
     await tester.pump();
     expect(find.text('No scenario matches “zzz”.'), findsOneWidget);
+  });
+
+  // The scan used to be one-shot for the life of the worktree session: `track`
+  // returns early once a package has one, and the only things that ever
+  // replaced it were finishing a run and the New dialog. So a suite that grew
+  // while you watched the panel did not, and opening a scenario made the list
+  // catch up for a reason that had nothing to do with the edit.
+  testWidgets('a scenario written under the panel lands in the list, and the '
+      'button asks', (tester) async {
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    core.debugInstallRunner('.', _FakeRunner());
+
+    var directory = Directory('${root.path}/test/scenarios')
+      ..createSync(recursive: true);
+    void writeScenario(String file, String name) =>
+        File(p.join(directory.path, file)).writeAsStringSync('''
+void main() {
+  scenario('$name', () {});
+}
+''');
+    writeScenario('checkout_test.dart', 'Pays with a card');
+
+    // The filesystem stands in for itself everywhere except the events: a real
+    // watch would make this test wait on FSEvents, and what is under test is
+    // the wiring, not `dart:io`.
+    var events = StreamController<String>.broadcast();
+    addTearDown(events.close);
+    var plugin = ScenariosPlugin(
+      core,
+      watchSources: (path, {required recursive}) => events.stream,
+    );
+
+    // A scan runs on an isolate, and its completion is scheduled back on the
+    // *test* zone — so real time alone never lands it and pumping alone never
+    // advances it. Alternating is what does both.
+    Future<void> settleScan(int scenarios) async {
+      for (var attempt = 0; attempt < 300; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+        if ((core.scanResultFor('.')?.scenarios.length ?? 0) >= scenarios) {
+          // The core defers its notification by a microtask, so the frame the
+          // result landed on is one behind the frame that draws it.
+          await tester.pump();
+          return;
+        }
+      }
+      fail('the scan never reached $scenarios scenarios');
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: AddressRoot(
+            address: ValueNotifier(
+              Address(worktree: 'wt', plugin: scenariosPluginId),
+            ),
+            onChanged: (_) {},
+            child: Builder(builder: plugin.buildPanel),
+          ),
+        ),
+      ),
+    );
+    await settleScan(1);
+    expect(find.text('Pays with a card'), findsOneWidget);
+
+    // An agent writes another one. On disk is not on screen — nothing has
+    // looked yet.
+    writeScenario('login_test.dart', 'Signs in with email');
+    await tester.pump();
+    expect(find.text('Signs in with email'), findsNothing);
+
+    events.add(p.join(directory.path, 'login_test.dart'));
+    // Past the debounce, which is what turns a save's several writes into one
+    // rescan.
+    await tester.pump(const Duration(milliseconds: 400));
+    await settleScan(2);
+    expect(find.text('Signs in with email'), findsOneWidget);
+
+    // And the button is the same demand, pressed rather than noticed — for the
+    // watch that could not be established, and for the reader who does not
+    // know whether it was.
+    writeScenario('profile_test.dart', 'Edits their address');
+    await tester.pump();
+    expect(find.text('Edits their address'), findsNothing);
+
+    await tester.tap(find.byTooltip('Rescan for scenarios'));
+    await settleScan(3);
+    expect(find.text('Edits their address'), findsOneWidget);
   });
 
   // The labels drop what every file shares — computed from the files, so a
