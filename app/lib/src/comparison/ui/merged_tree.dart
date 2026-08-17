@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
+import '../../ui/zoomable_canvas.dart';
 import '../../utils/graphite.dart';
 import '../channels.dart';
 import '../frame_ref.dart';
@@ -63,10 +64,9 @@ class MergedTree extends StatelessWidget {
       contactEdgesDistance: 0,
       tipLength: 14,
       orientation: MatrixOrientation.horizontal,
-      interactiveBuilder: (context, child) => InteractiveViewer(
+      interactiveBuilder: (context, child) => ZoomableCanvas(
         maxScale: 1.5,
         minScale: 0.2,
-        constrained: false,
         boundaryMargin: const EdgeInsets.all(2000),
         child: child,
       ),

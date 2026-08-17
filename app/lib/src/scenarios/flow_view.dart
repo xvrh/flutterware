@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../previews/devices.dart';
 import '../plugins/native/scenarios_results.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
+import '../ui/zoomable_canvas.dart';
 import '../utils/graphite.dart';
 import 'artifacts.dart';
 import 'framed_shot.dart';
@@ -63,19 +63,7 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
   void initState() {
     super.initState();
     widget.transform.addListener(_onTransform);
-    // For ⌘-scroll zoom: the modifier state decides what a trackpad scroll
-    // means, and only key events say when it changed.
-    HardwareKeyboard.instance.addHandler(_onKey);
   }
-
-  bool _onKey(KeyEvent event) {
-    setState(() {});
-    return false;
-  }
-
-  bool get _zoomKeyPressed =>
-      HardwareKeyboard.instance.isMetaPressed ||
-      HardwareKeyboard.instance.isControlPressed;
 
   void _onTransform() {
     var scale = widget.transform.value.getMaxScaleOnAxis();
@@ -93,7 +81,6 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_onKey);
     widget.transform.removeListener(_onTransform);
     super.dispose();
   }
@@ -145,16 +132,14 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
             contactEdgesDistance: 0,
             tipLength: 20,
             orientation: MatrixOrientation.horizontal,
-            interactiveBuilder: (context, child) => InteractiveViewer(
+            // A mouse wheel zooms by itself; a trackpad scroll pans unless ⌘
+            // (or Ctrl) turns it into the zoom gesture — dev_studio's
+            // behaviour.
+            interactiveBuilder: (context, child) => ZoomableCanvas(
               transformationController: widget.transform,
               maxScale: 1.5,
               minScale: 0.05,
-              constrained: false,
               boundaryMargin: const EdgeInsets.all(5000),
-              // A mouse wheel zooms by itself; a trackpad scroll pans unless
-              // ⌘ (or Ctrl) turns it into the zoom gesture — dev_studio's
-              // behaviour.
-              trackpadScrollCausesScale: _zoomKeyPressed,
               child: child,
             ),
             builder: (context, node) => _StepNode(
