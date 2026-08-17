@@ -24,13 +24,13 @@ import 'shell.dart';
 /// running the app against `examples/example`, which ships two weights of
 /// Roboto for exactly this.
 
-@Preview(name: 'List', wrapper: wrapInApp)
+@Preview(name: 'List', group: 'Asset inspector', wrapper: wrapInApp)
 Widget assetInspectorList() => const _Lists();
 
-@Preview(name: 'Previews', wrapper: wrapInApp)
+@Preview(name: 'Previews', group: 'Asset inspector', wrapper: wrapInApp)
 Widget assetInspectorPreviews() => const _Previews();
 
-@Preview(name: 'Detail', wrapper: wrapInApp)
+@Preview(name: 'Detail', group: 'Asset inspector', wrapper: wrapInApp)
 Widget assetInspectorDetail() => const _Detail();
 
 /// Every state of the list at once, which is the point of stacking them: an

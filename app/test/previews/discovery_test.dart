@@ -279,9 +279,13 @@ Widget few() => const Placeholder();
 Widget empty() => const Placeholder();
 ''');
 
+    // The file's name, not a prettified version of it. This used to answer
+    // `Member list view`, which made a derived group the one label in the tree
+    // that was not spelled the way its source spells it — a directory beside it
+    // stayed `team`. `group:` is how you ask for prose.
     expect(
       scan().entries.map((e) => e.group),
-      everyElement('Member list view'),
+      everyElement('member_list_view'),
     );
   });
 
@@ -299,7 +303,7 @@ Widget empty() => const Placeholder();
 ''');
 
     var few = scan().entries.singleWhere((e) => e.name == 'Few');
-    expect(few.group, 'Member list view');
+    expect(few.group, 'member_list_view');
     expect(few.knobs.map((k) => k.name), ['count']);
   });
 
@@ -563,8 +567,10 @@ Widget stepper() => const Placeholder();
       var result = scanner.scan();
       expect(result.entries.map((e) => e.name), ['Counter', 'Stepper']);
       // Two entries in one file, so the file's own name becomes their group —
-      // derived per file, which is why it survives being cached per file.
-      expect(result.entries.map((e) => e.group), ['Counter', 'Counter']);
+      // derived per file, which is why it survives being cached per file. The
+      // file's name, note, not the entry's: `counter.dart` holding a `Counter`
+      // is a coincidence this used to be able to hide behind.
+      expect(result.entries.map((e) => e.group), ['counter', 'counter']);
     });
 
     test('a new file appears and a deleted one goes', () {

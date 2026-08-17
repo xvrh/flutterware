@@ -192,12 +192,17 @@ fw.use(Previews(packages: [.new(app, directory: 'demo')]));
 ```
 
 **The tree in the panel is your directory layout.** A preview in
-`demo/care_planner/add_or_edit.dart` lands under `Care planner`, and a file
+`demo/care_planner/add_or_edit.dart` lands under `care_planner`, and a file
 holding several entries becomes a level of its own — so the folders you already
-have are the grouping, and there is nothing to declare. `@Preview(group:)` is a
-flat label rendered beside the name as `group / name`; it labels an entry
-within the tree and does **not** build folders, so `group: 'Assessment/Detail'`
-is one label with a slash in it rather than two levels.
+have are the grouping, and there is nothing to declare. **Every label is spelled
+the way its source spells it**: a directory as it is on disk, a file as it is on
+disk, a `group:` and a `name:` as you typed them. Nothing is prettified, so a
+row in the tree always names something you can open. `@Preview(group:)` is how
+you say it differently — entries sharing a `group:` are gathered into a folder
+by that name, under the directory they live in, so `group: 'Care planner'`
+across several files in one directory is one folder rather than one per file.
+It is a label rather than a path, so `group: 'Assessment/Detail'` is a single
+folder with a slash in its name and not two levels.
 
 **Say what your app is shaped like, once.** With no device a preview renders in
 a 900 × 700 rectangle — landscape, desktop-shaped — which for a phone app is

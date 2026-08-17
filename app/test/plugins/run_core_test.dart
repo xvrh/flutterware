@@ -827,6 +827,43 @@ void main() {
       );
     });
 
+    test('declaring no platforms reports every device, not none', () async {
+      // Empty means "anything" everywhere else — `allowsDevice` says so and
+      // `devicesFor` says so — and `entrypoints` used to special-case it to an
+      // empty list, on the reasoning that an unrestricted entry point has
+      // nothing to report. It reads as the opposite: a picker filtering on this
+      // field was offered nothing for the ordinary entry point and everything
+      // for the one that restricted itself, which is exactly backwards.
+      _writePackage(worktree, 'app', {'lib/main.dart': 'void main() {}'});
+      DeviceCache.write(runDir.path, const [
+        DaemonDevice(id: 'phone', name: 'Pixel', platformType: 'android'),
+        DaemonDevice(
+          id: 'macos',
+          name: 'macOS',
+          platformType: 'macos',
+          ephemeral: false,
+        ),
+      ]);
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var entry = result.packages.single.entrypoints.single;
+      expect(entry.platforms, isEmpty);
+      expect(entry.devices, ['phone', 'macos']);
+    });
+
     test('a platform this build has no name for lifts the restriction', () {
       // The config imports the flutterware version the *project* pins, which a
       // hosted install can carry ahead of the GUI reading its manifest. Too
@@ -2274,6 +2311,39 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
             ),
           ),
         ),
+      );
+    });
+
+    test("the Running list says which runs are not this project's", () async {
+      // The ledger is machine-wide, so this heading lists apps nobody here
+      // launched. The worktree name was already on the row and said nothing on
+      // its own: a reader who does not know every checkout on the machine reads
+      // an unrelated repository's app as one of this project's.
+      core.debugRepoWorktrees = Future.value({p.canonicalize(worktree.path)});
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'macos',
+        entrypoint: 'lib/main.dart',
+        worktreeName: 'ours',
+        launcherPid: pid,
+      );
+      _writeHandle(
+        runDir,
+        otherWorktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        worktreeName: 'theirs',
+        launcherPid: pid,
+      );
+      await core.computeAll();
+
+      var text = core.report.toText();
+      expect(text, contains('theirs · another checkout'));
+      expect(
+        text,
+        isNot(contains('ours · another checkout')),
+        reason: 'our own run carries no marker — it is the unremarkable case',
       );
     });
 

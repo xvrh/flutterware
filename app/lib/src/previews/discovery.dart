@@ -433,6 +433,14 @@ class CatalogScanner {
 
   /// A file holding more than one entry gives its entries a group, so variants
   /// get a parent without anyone declaring one. `group:` overrides it.
+  ///
+  /// **The file's name as written, never prettified.** This used to sentence-case
+  /// it — `avatar_tile.dart` became `Avatar tile` — which made one row in the
+  /// tree follow a rule none of the others did: a directory folder, a declared
+  /// `group:` and an entry's name are all shown exactly as their source spells
+  /// them. Two spellings in one column is the whole of what it bought, and the
+  /// capital letter is one line away for anyone who wants it: `group: 'Avatar
+  /// tile'` is the deliberate act, and it beats this.
   void _deriveGroups(List<CatalogEntry> entries) {
     var byFile = <String, List<CatalogEntry>>{};
     for (var entry in entries) {
@@ -440,7 +448,7 @@ class CatalogScanner {
     }
     for (var MapEntry(key: path, value: fileEntries) in byFile.entries) {
       if (fileEntries.length < 2) continue;
-      var derived = _humanize(p.basenameWithoutExtension(path));
+      var derived = p.basenameWithoutExtension(path);
       for (var i = 0; i < entries.length; i++) {
         var entry = entries[i];
         if (entry.path != path || entry.group != null) continue;
@@ -540,14 +548,5 @@ class CatalogScanner {
       if (value is SimpleStringLiteral) return value.value;
     }
     return null;
-  }
-
-  static String _humanize(String fileName) {
-    var words = fileName.split('_').where((w) => w.isNotEmpty).toList();
-    if (words.isEmpty) return fileName;
-    return [
-      words.first[0].toUpperCase() + words.first.substring(1),
-      ...words.skip(1),
-    ].join(' ');
   }
 }
