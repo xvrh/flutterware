@@ -10,6 +10,7 @@ import '../../previews/authoring.dart';
 import '../../previews/catalog_devices.dart';
 import '../../previews/catalog_session.dart';
 import '../../previews/catalog_view.dart';
+import '../../previews/compiler_daemon_client.dart';
 import '../../previews/discovery.dart';
 import '../../previews/new_preview_dialog.dart';
 import '../../previews/web_build_dialog.dart';
@@ -36,9 +37,22 @@ export 'previews_core.dart' show PreviewsCore, uiCatalogPluginId;
 /// the compiler is doing while you are looking elsewhere. That progress reaches
 /// the report through [PreviewsCore.busyStatusFor].
 class PreviewsPlugin extends NativePlugin<PreviewsCore> {
-  PreviewsPlugin(super.core) {
+  PreviewsPlugin(
+    super.core, {
+    this.connectToDaemon = CompilerDaemonClient.connect,
+  }) {
     core.busyStatusFor = _busyStatusFor;
   }
+
+  /// How the sessions this builds reach a compiler — see
+  /// [CatalogSession.connectToDaemon], which already exists for the same
+  /// reason and is simply threaded through here.
+  ///
+  /// Nothing in production passes it. What it buys is a test that can mount
+  /// this panel: the real connect compiles a snapshot and spawns a process, so
+  /// without a seam the only way to exercise the panel's own wiring is not to
+  /// exercise it.
+  final DaemonConnector connectToDaemon;
 
   final _sessions = <String, CatalogSession>{};
 
@@ -92,6 +106,7 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
       // The whole list, not one resolved device: which of them applies is a
       // function of the entry on screen, and the panel is where that changes.
       canvases: core.canvasesFor(path),
+      connectToDaemon: connectToDaemon,
     )..addListener(core.notifyChanged);
     unawaited(session.start());
     return session;
@@ -201,6 +216,24 @@ class _CatalogPanel extends StatefulWidget {
 }
 
 class _CatalogPanelState extends State<_CatalogPanel> {
+  /// The plugin the binding below belongs to — **not** always the one
+  /// [widget] holds.
+  ///
+  /// A config reload throws the whole plugin graph away and builds it again
+  /// (`ShellController._apply` → `open.release()` → `_build`), so this plugin
+  /// object is replaced. The shell keys the panel on the worktree and the
+  /// plugin *id*, both of which survive that, so Flutter keeps this `State` —
+  /// and it woke up holding a [CatalogSession] whose owner had already
+  /// disposed it. The panel then went on rendering that session: the entry list
+  /// and the top bar listen to it, and `addListener` on a disposed
+  /// `ChangeNotifier` throws, which took the canvas out for the rest of the
+  /// process. Saving `tool/flutterware.dart` was the whole of the repro.
+  ///
+  /// Compared by identity rather than asked about, because there is nothing to
+  /// ask: a rebuilt graph is new objects all the way down, and *this is a
+  /// different plugin* is the only fact that distinguishes it from the load
+  /// that declared nothing new — which builds nothing and swaps nothing.
+  PreviewsPlugin? _plugin;
   String? _package;
   CatalogSession? _session;
   var _writeScheduled = false;
@@ -241,9 +274,13 @@ class _CatalogPanelState extends State<_CatalogPanel> {
   void _follow(CatalogPlace? place) {
     var package = place?.package ?? widget.plugin.packages.firstOrNull;
 
-    var sessionChanged = package != _package;
+    // A swapped plugin is as much a new session as a different package is, and
+    // for a stronger reason: the old one is not merely stale, it is disposed.
+    // See [_plugin].
+    var sessionChanged = package != _package || widget.plugin != _plugin;
     if (sessionChanged) {
       _release();
+      _plugin = widget.plugin;
       _package = package;
       if (package != null) {
         // The scan, always. The compile loop only once the scan has found
@@ -315,13 +352,21 @@ class _CatalogPanelState extends State<_CatalogPanel> {
     ).setSegments(catalogSegments(package, result.id));
   }
 
+  /// Lets go of whatever is bound, **through the plugin it was bound to**.
+  ///
+  /// [widget.plugin] is already the new one by the time a swap reaches here, so
+  /// untracking through it would release a package on a core that has never
+  /// been asked for it and leave the old one tracked — releasing the wrong half
+  /// of a swap the whole point of which is that the two halves are different
+  /// objects.
   void _release() {
     _hasFollowed = false;
     _followed = null;
-    if (_package case var previous?) widget.plugin.core.untrack(previous);
+    if (_package case var previous?) _plugin?.core.untrack(previous);
     _session?.removeListener(_settled);
     _session = null;
     _package = null;
+    _plugin = null;
   }
 
   /// The other direction: the catalog moved on its own — a click in its tree, a
@@ -351,6 +396,17 @@ class _CatalogPanelState extends State<_CatalogPanel> {
       // would vanish along with what you had asked for, and a pasted link would
       // look like it had worked.
       if (session.missingEntryId != null) return;
+
+      // **Nor before it has landed anywhere.** A session notifies while it is
+      // starting — `building`, and again for every step of it — and until the
+      // daemon reports there is no selection to write back. Writing one anyway
+      // states the package alone, which reads as *this catalog is on no entry*
+      // and is not something the session ever said; the shell then drops
+      // `knob` and `inspect` along with the segment, because the write looks
+      // like the end of an entry. A config reload builds a fresh session under
+      // a mounted panel, so that turned saving `tool/flutterware.dart` into
+      // losing whatever the demo's knobs were set to.
+      if (session.selected == null) return;
 
       // Nothing about the device or the axes here. Neither is state to write
       // back: their controls write the address directly, and what is on screen
@@ -441,8 +497,20 @@ class _CatalogPanelState extends State<_CatalogPanel> {
             // agent read without a daemon running — but what the panel shows is
             // the compiled catalog, because only the daemon knows which entries
             // actually build.
+            //
+            // **Keyed on the session, not on the package.** The package was
+            // enough for as long as a new session only ever arrived with one,
+            // and a config reload is the case where it does not: the package
+            // is the same string and the session below it is a different
+            // object. Everything under here binds to a session *at mount* —
+            // `InspectPanel` turns the watch and the log stream on from
+            // `initState`, `CatalogView` starts its poll there — so a swap the
+            // key did not notice left the new session with nobody watching it
+            // and no logs, silently, until you left the plugin and came back.
+            // A package change still remounts, since one session is one
+            // package.
             Expanded(
-              child: CatalogView(key: ValueKey(path), session: session),
+              child: CatalogView(key: ObjectKey(session), session: session),
             ),
           ],
         );
