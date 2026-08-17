@@ -1,9 +1,12 @@
 import 'dart:io';
 
 import 'package:flutterware_app/src/previews/asset_bundle.dart';
+import 'package:flutterware_app/src/previews/asset_transformer.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+
+import '../support/dart_executable.dart';
 
 /// The in-place contract: a rebuild updates the directory the engine holds a
 /// file descriptor to, and never replaces it. Each test is one clause of that
@@ -130,6 +133,112 @@ flutter:
       reason:
           'The bundle entry is a symlink to the file, so the edit is already '
           'in the bundle. This is what makes edits need no rebundle at all.',
+    );
+  });
+
+  group('a declared transformer', () {
+    /// A cache whose `dart` is the SDK's, so `dart run` in the builder is a
+    /// real spawn. Everything else in this cache is still absent, which is what
+    /// keeps the SDK payload links out of these tests.
+    AssetBundleBuilder builderWithDart() {
+      var dart = p.join(root.path, 'cache', 'dart-sdk', 'bin', 'dart');
+      if (!File(dart).existsSync()) {
+        Directory(p.dirname(dart)).createSync(recursive: true);
+        Link(dart).createSync(resolveDartExecutable());
+      }
+      return builder();
+    }
+
+    /// Resolves the fixture so `dart run <package>` finds the transformer.
+    Future<void> resolveProject() async {
+      var result = await Process.run(resolveDartExecutable(), [
+        'pub',
+        'get',
+        '--offline',
+      ], workingDirectory: projectRoot());
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+    }
+
+    setUp(() async {
+      write(
+        'upcase/pubspec.yaml',
+        'name: upcase\nenvironment:\n  sdk: ^3.0.0\n',
+      );
+      write('upcase/bin/upcase.dart', """
+import 'dart:io';
+void main(List<String> args) {
+  var input = args.firstWhere((a) => a.startsWith('--input=')).substring(8);
+  var output = args.firstWhere((a) => a.startsWith('--output=')).substring(9);
+  File(output)
+    ..parent.createSync(recursive: true)
+    ..writeAsStringSync(File(input).readAsStringSync().toUpperCase());
+}
+""");
+      write('project/pubspec.yaml', '''
+name: project
+environment:
+  sdk: ^3.0.0
+dependencies:
+  upcase:
+    path: ../upcase
+flutter:
+  assets:
+    - path: assets/icons/logo.svg
+      transformers:
+        - package: upcase
+''');
+      write('project/assets/icons/logo.svg', 'source bytes');
+      await resolveProject();
+    });
+
+    test('puts the transformed bytes at the declared key', () async {
+      // The end of the whole mechanism: the key is what the app names, and what
+      // stands behind it is what a build would ship. Reading through the link
+      // is the point — an app asking for `assets/icons/logo.svg` gets this.
+      await builderWithDart().build(output());
+
+      var entry = File(p.join(output(), 'assets/icons/logo.svg'));
+      expect(entry.readAsStringSync(), 'SOURCE BYTES');
+      expect(
+        Link(entry.path).targetSync(),
+        isNot(p.join(projectRoot(), 'assets/icons/logo.svg')),
+        reason: 'linking the source is the bug this exists to end',
+      );
+    });
+
+    test('an edited asset reaches the bundle transformed', () async {
+      await builderWithDart().build(output());
+      write('project/assets/icons/logo.svg', 'repainted');
+
+      var sync = await builderWithDart().build(output());
+
+      // Unlike an untransformed asset, this *is* a bundle change: the entry
+      // pointed at the old content's cache entry and now points at the new
+      // one, so the guest has to be told.
+      expect(sync.changed, isTrue);
+      expect(
+        File(p.join(output(), 'assets/icons/logo.svg')).readAsStringSync(),
+        'REPAINTED',
+      );
+    });
+
+    test(
+      'a failing transformer fails the build rather than serving source',
+      () async {
+        write('upcase/bin/upcase.dart', """
+import 'dart:io';
+void main(List<String> args) {
+  stderr.writeln('bad glyph');
+  exit(3);
+}
+""");
+        write('project/assets/icons/logo.svg', 'unseen content');
+
+        await expectLater(
+          builderWithDart().build(output()),
+          throwsA(isA<AssetTransformerException>()),
+        );
+      },
     );
   });
 }

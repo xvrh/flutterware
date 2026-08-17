@@ -8,6 +8,7 @@ import 'package:standard_message_codec/standard_message_codec.dart';
 import '../assets/model/asset_catalog.dart';
 import '../embedder/flutter_cache.dart';
 import '../utils/run_dir.dart';
+import 'asset_transformer.dart';
 
 /// What one [AssetBundleBuilder.build] did to the directory, so a caller can
 /// decide whether anyone needs telling.
@@ -33,7 +34,17 @@ typedef BundleSync = ({bool changed, bool fontsChanged});
 ///   bundle entry *is* the project's file;
 /// - `NOTICES.Z` is simply absent, which the guest does not mind.
 ///
-/// The one payload that cannot be symlinked to its source is the framework's
+/// Two kinds of payload cannot be symlinked to their source, and both are the
+/// same shape: something compiles them, and the loader on the other side parses
+/// the compiled form.
+///
+/// An asset the project declared with `transformers:` is the project's own
+/// case. A build runs the chain and ships the output under the declared key, so
+/// linking the source resolves the key to bytes no app ever sees —
+/// `AssetBundleBuilder` runs the same chain and links the output, content-cached
+/// so an unchanged asset never pays twice. See [AssetTransformerRunner].
+///
+/// The other is the framework's
 /// fragment shaders: the tool *compiles* those with `impellerc`, and
 /// `FragmentProgram.fromAsset` parses the compiled bundle — handed the GLSL
 /// source instead, it throws, which surfaces as a crash on the first tap of a
@@ -87,10 +98,48 @@ class AssetBundleBuilder {
 
     var sync = _Sync();
     _writeManifests(output, catalog, sync);
-    _linkPayloads(output, catalog, sync);
+    _linkPayloads(output, catalog, await _transformed(catalog), sync);
     await _linkCompiledShaders(output, sync);
     _prune(output, sync);
     return (changed: sync.changed, fontsChanged: sync.fontsChanged);
+  }
+
+  /// Where each transformed file's bytes actually are, keyed by the file's own
+  /// path — empty when nothing in the catalog declares a transformer, which is
+  /// the ordinary project and costs one `isEmpty` check.
+  ///
+  /// **Run here rather than inside [_linkPayloads]** because it is the one part
+  /// of a bundle build that is neither cheap nor synchronous: a cold cache
+  /// spawns a process per asset. Pooled [AssetTransformerRunner.concurrency]
+  /// wide, so a catalog of 21 vectors costs ~0.7s once instead of ~2.5s, and
+  /// nothing on a warm cache.
+  Future<Map<String, String>> _transformed(AssetCatalog catalog) async {
+    var work = [
+      for (var asset in catalog.assets)
+        if (asset.transformers.isNotEmpty)
+          for (var file in asset.files) (file, asset.transformers),
+    ];
+    if (work.isEmpty) return const {};
+
+    var runner = AssetTransformerRunner(
+      dart: cache.dart,
+      projectRoot: rootPackageRoot,
+      packageConfigPath: packageConfigPath,
+    );
+    var transformed = <String, String>{};
+    var index = 0;
+    Future<void> worker() async {
+      while (true) {
+        if (index >= work.length) return;
+        var (file, chain) = work[index++];
+        transformed[file.path] = await runner.pathFor(file, chain);
+      }
+    }
+
+    await Future.wait([
+      for (var i = 0; i < AssetTransformerRunner.concurrency; i++) worker(),
+    ]);
+    return transformed;
   }
 
   void _writeManifests(String output, AssetCatalog catalog, _Sync sync) {
@@ -157,10 +206,18 @@ class AssetBundleBuilder {
     _write(output, 'vm_snapshot_data', Uint8List(0), sync);
   }
 
-  void _linkPayloads(String output, AssetCatalog catalog, _Sync sync) {
+  void _linkPayloads(
+    String output,
+    AssetCatalog catalog,
+    Map<String, String> transformed,
+    _Sync sync,
+  ) {
     for (var asset in catalog.assets) {
       for (var file in asset.files) {
-        _link(output, file.key, file.path, sync);
+        // The declared key, pointed at the bytes a build would ship. That is
+        // the whole of transformer support at this layer: the key never
+        // changes, only what stands behind it.
+        _link(output, file.key, transformed[file.path] ?? file.path, sync);
       }
     }
 

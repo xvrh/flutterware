@@ -467,11 +467,12 @@ flutter:
     });
   });
 
-  test('a transformed asset resolves, and says its bytes are wrong', () async {
-    // A build runs `dart run <package> --input --output` over the file and
-    // ships the result; the catalog serves the source bytes. Both facts are
-    // reported: the asset resolves — the inspector can still show it — and
-    // the problem says what a guest render of it is *not*.
+  test('a transformed asset carries its chain, and is not a problem', () async {
+    // The chain reaches the asset because the bundle builder walks assets: it
+    // needs the transformers of the file it is about to link. Not a problem
+    // any more, either — this used to file `unsupportedTransformer` against a
+    // correct declaration, which put a permanently red job in front of every
+    // project that ships SVGs the documented way.
     write('app/pubspec.yaml', '''
 name: app
 flutter:
@@ -479,16 +480,40 @@ flutter:
     - path: assets/icons/check.svg
       transformers:
         - package: vector_graphics_compiler
+          args: ['--tessellate']
 ''');
     write('app/assets/icons/check.svg', '<svg/>');
 
     var catalog = await resolve();
 
-    expect(catalog.byKey.keys, ['assets/icons/check.svg']);
-    var problem = catalog.problems.single;
-    expect(problem.kind, AssetProblemKind.unsupportedTransformer);
-    expect(problem.declaration, 'assets/icons/check.svg');
-    expect(problem.detail, contains('vector_graphics_compiler'));
+    expect(catalog.problems, isEmpty);
+    var asset = catalog.byKey['assets/icons/check.svg']!;
+    expect(asset.transformers.single.package, 'vector_graphics_compiler');
+    expect(asset.transformers.single.args, ['--tessellate']);
+    expect(catalog.declarations.single.transformers, hasLength(1));
+  });
+
+  test('a transformer chain keeps its order, and a bare name works', () async {
+    // Order is the contract: each output is the next one's input, so a list
+    // read backwards is a bundle of wrong bytes that still resolves.
+    write('app/pubspec.yaml', '''
+name: app
+flutter:
+  assets:
+    - path: assets/icons/check.svg
+      transformers:
+        - package: first_pass
+        - package: second_pass
+          args: ['--x=1', 2]
+''');
+    write('app/assets/icons/check.svg', '<svg/>');
+
+    var catalog = await resolve();
+
+    var chain = catalog.byKey['assets/icons/check.svg']!.transformers;
+    expect(chain.map((t) => t.package), ['first_pass', 'second_pass']);
+    // Stringified, because a pubspec number is an int and a process takes text.
+    expect(chain.last.args, ['--x=1', '2']);
   });
 
   group('parseScale', () {

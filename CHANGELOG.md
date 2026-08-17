@@ -1,5 +1,36 @@
 ## Unreleased
 
+- **The previews catalog runs your `transformers:`.** An asset declared with
+  `transformers:` is compiled the way a build compiles it — the same
+  `dart run <package> --input --output`, the same arguments, chained in order —
+  and the bundle serves the *output* under the declared key. Until now it served
+  the source, so an app loading a precompiled SVG through
+  `AssetBytesLoader` got raw XML and drew nothing, in a preview every surface
+  called healthy. `previews audit`, `previews inspect` and the panel all read
+  the same bundle, so all three were blind to it together.
+  - **Check your test-environment fallbacks.** An app that branches on the
+    binding — `WidgetsBinding.instance is! WidgetsFlutterBinding`, then parse
+    the source with `flutter_svg` — is working around `flutter test` serving
+    untransformed assets. That branch also fired under `previews audit`, and now
+    hands a compiled payload to a source parser. Plain `flutter test` still
+    needs it; flutterware's lanes no longer do, and one binding check can no
+    longer tell the two apart. If you have such a branch, gate it on something
+    narrower than the binding.
+  - Output is cached by content under `~/.flutterware/transformed`, keyed on the
+    asset's bytes and each transformer's resolved package root and arguments —
+    so bumping a transformer recompiles, an unchanged asset never does, and two
+    worktrees share every hit. Measured on a real 21-vector catalog: 1.7s for
+    the first bundle, 118ms for every one after. Entries nothing has produced
+    for 30 days are swept on a miss.
+  - A transformer that fails, or that exits 0 without writing its output, fails
+    the sync and quotes what the process said. It does not fall back to the
+    source: bytes that resolve and cannot be decoded are the failure this
+    removes.
+  - `assets audit` no longer reports `declared-missing` against a correct
+    `transformers:` declaration. That finding described a limitation of the
+    catalog rather than a defect in the project, and since 0.5.2 made the audit
+    exit 1 it made the command unusable in CI for anyone shipping SVGs the
+    documented way.
 - **A `DevStack` says what to run with `StackRun`, and can name a script instead
   of an executable.** Breaking: `Probe.exitCode` / `Probe.json`, `start:`,
   `stop:` and `StackCommand`'s third argument all took a `List<String>` and now

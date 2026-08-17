@@ -22,10 +22,13 @@ import 'package:yaml/yaml.dart';
 /// else. No decoding, no hashing, no `flutter pub get` — that keeps it inside
 /// `PluginCore.computeAll`'s budget, so every surface can call it freely.
 ///
+/// `transformers:` are read here and **run** by `AssetBundleBuilder`, which
+/// serves their output — see [AssetTransformer] and the 2026-08-17 design. This
+/// class only records the chain: running one spawns a process, and [resolve]
+/// reads and parses.
+///
 /// Not yet handled, and absent rather than half-done: `flavors:` on an asset
-/// entry and `.lottie` archives. `transformers:` are *reported*, not run —
-/// see [AssetProblemKind.unsupportedTransformer] and the 2026-07-30
-/// transformers spike for what running them would cost.
+/// entry and `.lottie` archives.
 class AssetCatalog {
   AssetCatalog._({
     required this.assets,
@@ -149,6 +152,7 @@ class ResolvedAsset {
     required this.packageRoot,
     required this.declaration,
     required this.files,
+    this.transformers = const [],
   });
 
   /// What `Image.asset` is given: `assets/logo.png` for the root package,
@@ -177,6 +181,14 @@ class ResolvedAsset {
 
   /// The main asset and its density variants, in manifest order.
   final List<AssetFile> files;
+
+  /// The chain the declaration attached, applied to every file here.
+  ///
+  /// Carried onto the asset rather than left on the declaration because the
+  /// bundle builder walks assets: it has to reach the chain from the file it is
+  /// about to link, and looking the declaration back up by its string is a join
+  /// that can miss.
+  final List<AssetTransformer> transformers;
 
   /// The file used at 1× — the one the key names directly.
   AssetFile get main =>
@@ -207,6 +219,7 @@ class AssetDeclaration {
     required this.package,
     required this.packageRoot,
     required this.path,
+    this.transformers = const [],
   });
 
   /// The package that declared it; null for the root package.
@@ -218,7 +231,34 @@ class AssetDeclaration {
   /// this names one file or the files directly inside a directory.
   final String path;
 
+  /// What a build runs over every file this declaration reaches, in order.
+  ///
+  /// Empty for the ordinary declaration. Kept rather than reported: the bundle
+  /// builder runs these, so what is here decides which bytes the guest gets —
+  /// see [AssetTransformer].
+  final List<AssetTransformer> transformers;
+
   bool get isDirectory => path.endsWith('/');
+}
+
+/// One `transformers:` entry — a package to run, and what to pass it.
+///
+/// A build spawns `dart run <package> --input=<tmp> --output=<tmp> <args>` and
+/// ships the output, chaining each transformer's output into the next
+/// (`asset_transformer.dart` in flutter_tools). Reproduced rather than
+/// approximated: the catalog's bundle serves the *output*, so an argument
+/// dropped here is a preview rendering bytes the app will never see.
+class AssetTransformer {
+  const AssetTransformer({required this.package, this.args = const []});
+
+  /// The package name, as `dart run` takes it.
+  final String package;
+
+  final List<String> args;
+
+  /// Every distinguishing input as one line, for a cache key and for a reader.
+  @override
+  String toString() => [package, ...args].join(' ');
 }
 
 /// One file behind an asset key.
@@ -300,19 +340,7 @@ enum AssetProblemKind {
   malformedDeclaration('Not a path.'),
   missingFontFile('Font file declared, and not on disk.'),
   malformedFontEntry('Font entry is unusable and was dropped.'),
-  unreadablePubspec('The pubspec could not be parsed.'),
-
-  /// The asset still resolves — to the *untransformed* file, which is the
-  /// point of reporting it: a build runs `dart run <package> --input --output`
-  /// over these bytes and ships the result, so what the catalog's guest
-  /// renders is not what the app would. Reported rather than half-run: the
-  /// transformers spike (2026-07-30) measured ~0.3s per asset per run, and
-  /// until the bundle builder runs them for real, an honest wrong-bytes
-  /// warning beats a silent one.
-  unsupportedTransformer(
-    'Declared with transformers, which the catalog '
-    'does not run — its bytes are served untransformed.',
-  );
+  unreadablePubspec('The pubspec could not be parsed.');
 
   const AssetProblemKind(this.summary);
 
@@ -440,22 +468,12 @@ class _Resolver {
         if (entry is String) {
           _addAsset(packageRoot, entry, packageName);
         } else if (entry is YamlMap && entry['path'] is String) {
-          var path = entry['path'] as String;
-          _addAsset(packageRoot, path, packageName);
-          if (entry['transformers'] case YamlList transformers
-              when transformers.isNotEmpty) {
-            problems.add(
-              AssetProblem(
-                kind: AssetProblemKind.unsupportedTransformer,
-                package: packageName,
-                packageRoot: packageRoot,
-                declaration: path,
-                detail:
-                    'Transformed by '
-                    '${transformers.map(_transformerName).join(', then ')}.',
-              ),
-            );
-          }
+          _addAsset(
+            packageRoot,
+            entry['path'] as String,
+            packageName,
+            transformers: _transformersOf(entry['transformers']),
+          );
         } else {
           problems.add(
             AssetProblem(
@@ -475,13 +493,29 @@ class _Resolver {
     }
   }
 
-  /// `{package: name, args: […]}` in the manifest, or a bare string; either
-  /// way the package is the name worth reporting.
-  static String _transformerName(Object? transformer) => switch (transformer) {
-    YamlMap map when map['package'] is String => map['package'] as String,
-    String name => name,
-    _ => '$transformer',
-  };
+  /// The `transformers:` list of one asset entry, in the order a build runs it.
+  ///
+  /// `{package: name, args: […]}` in the manifest, or a bare string. An entry
+  /// naming no package is dropped rather than reported: there is nothing to
+  /// run, and a build reads the same list the same way.
+  static List<AssetTransformer> _transformersOf(Object? declared) {
+    if (declared is! YamlList) return const [];
+    return [
+      for (var transformer in declared)
+        switch (transformer) {
+          YamlMap map when map['package'] is String => AssetTransformer(
+            package: map['package'] as String,
+            args: [
+              // Stringified rather than cast: a `--font-size: 14` in the
+              // pubspec parses as an int, and the process takes text.
+              for (var arg in (map['args'] as YamlList?) ?? const []) '$arg',
+            ],
+          ),
+          String package => AssetTransformer(package: package),
+          _ => null,
+        },
+    ].nonNulls.toList();
+  }
 
   /// A declaration is either a file or, when it ends in `/`, every file
   /// **directly** inside that directory.
@@ -490,12 +524,18 @@ class _Resolver {
   /// declaring `assets/` leaves `assets/icons/star.png` out of the bundle while
   /// leaving it plainly visible on disk. `examples/example` carries a fixture
   /// for it.
-  void _addAsset(String packageRoot, String declaration, String? packageName) {
+  void _addAsset(
+    String packageRoot,
+    String declaration,
+    String? packageName, {
+    List<AssetTransformer> transformers = const [],
+  }) {
     declarations.add(
       AssetDeclaration(
         package: packageName,
         packageRoot: packageRoot,
         path: declaration,
+        transformers: transformers,
       ),
     );
 
@@ -531,6 +571,7 @@ class _Resolver {
           relative,
           packageName,
           declaration,
+          transformers,
         );
       }
     } else {
@@ -543,6 +584,7 @@ class _Resolver {
           declaration,
           packageName,
           declaration,
+          transformers,
         );
         return;
       }
@@ -558,6 +600,7 @@ class _Resolver {
             reach.relative,
             packageName,
             declaration,
+            transformers,
           );
           return;
         }
@@ -631,6 +674,7 @@ class _Resolver {
     String relative,
     String? packageName,
     String declaration,
+    List<AssetTransformer> transformers,
   ) {
     // A variant directory is itself listed when a whole directory is declared;
     // it must not become an entry of its own.
@@ -656,6 +700,7 @@ class _Resolver {
       package: packageName,
       packageRoot: packageRoot,
       declaration: declaration,
+      transformers: transformers,
       files: [
         for (var path in paths)
           AssetFile(
