@@ -573,7 +573,7 @@ knobs: Map<String, String>?   # For `setKnobs`: everything the app is now runnin
 One reading of a running app — whether it is up, whether it can still be reloaded, and whatever you ask about it: its widget tree, a picture, what it printed. With no flags it answers the question worth asking first, whether anything has gone wrong. Everything else is opt-in and every flag you add is answered from the **same** connection, and the tree and the picture from the same reading — two calls against a live app are two moments that only happen to agree. Answers even while the app is still building, when the logs are the only thing there is to read.
 
 ```sh
-fw run run inspect [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--tree=…] [--full=…] [--screenshot=…] [--out=…] [--logs=…] [--source=…] [--lines=…] [--errors=…]
+fw run run inspect [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--tree=…] [--full=…] [--screenshot=…] [--out=…] [--logs=…] [--source=…] [--native=…] [--lines=…] [--errors=…]
 ```
 
 Returns `RunInspectResult`:
@@ -600,6 +600,7 @@ errors: List<RunLogEntry>?   # Lines the launcher marked as errors.
   text: String
   error: bool   # The launcher marked it as an error.
 log: String?   # The launcher's log file, for anyone who would rather tail it themselves.
+nativeLog: String?   # The command the `native` lines came from, verbatim.
 note: String?
 ```
 
@@ -614,7 +615,8 @@ note: String?
 | `screenshot` | boolean | no | false | Write a PNG of the same reading everything else comes from, and hand back its path. Rendered by the app rather than grabbed from the device, so it works on hardware that cannot be asked for a screen grab — and platform views (native maps, webviews, video) will not appear. |
 | `out` | string | no | — | Where to write the PNG. A file beside the run's log when omitted, overwritten on each call. |
 | `logs` | boolean | no | false | Report the run's output. Read from the launcher's log file rather than from the app, so it covers the build and survives a crash. |
-| `source` | choice | no | — | Whose lines: the app's own output, or `flutter run` talking about the build. Both when omitted. |
+| `source` | choice | no | — | Whose lines: the app's own output, `flutter run` talking about the build, or the platform log. All of them when omitted. Naming `native` turns `native` on by itself, since asking for lines nothing read would answer nothing. |
+| `native` | boolean | no | false | Also read the platform log — what the *native* half of the app logged, which `flutter run` does not forward and no amount of reading its output would recover. On an iOS simulator its filter admits only the app's own executable and the engine, so every line a plugin ships in a framework is dropped; on Android a tag allow-list drops the same class. This is where push, purchases, deep links, maps, camera and biometrics say whether they worked. Off by default: it costs a `log show` or an `adb logcat`, about a second. Scoped to the code inside the app bundle and to this run's lifetime, and the command it ran comes back with it. iOS simulator, Android and macOS; a physical iOS device is refused with the command to run by hand. |
 | `lines` | integer | no | 200 | How many of the most recent lines to return |
 | `errors` | boolean | no | true | Report the lines the launcher marked as errors — never guessed from the text. On by default, and with no other flag it is the whole answer. |
 

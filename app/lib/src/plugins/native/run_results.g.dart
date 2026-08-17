@@ -187,6 +187,7 @@ Map<String, dynamic> _$RunInspectResultToJson(RunInspectResult instance) =>
       'logLines': ?instance.logLines,
       'errors': ?instance.errors?.map((e) => e.toJson()).toList(),
       'log': ?instance.log,
+      'nativeLog': ?instance.nativeLog,
       'note': ?instance.note,
     };
 

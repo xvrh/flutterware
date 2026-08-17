@@ -25,6 +25,15 @@ enum RunLogSource {
   /// `flutter run` talking about itself: `daemon.logMessage`, and every other
   /// plain line — the build, Xcode, the engine's own stderr.
   tool,
+
+  /// The platform's own log, read by us rather than forwarded by the launcher.
+  ///
+  /// **Not in the launcher's log file, and no amount of forwarding would put
+  /// it there.** `flutter run` reads the device log through a filter that keeps
+  /// only the app's *main executable* and the engine, so every line a plugin's
+  /// framework logs is dropped before it reaches anything we could read.
+  /// `NativeLogSource` is what reads the platform log itself.
+  native,
 }
 
 /// One line of a run's log.

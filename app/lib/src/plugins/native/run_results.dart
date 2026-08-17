@@ -698,6 +698,7 @@ class RunInspectResult implements PluginResult {
     this.errors,
     this.progress,
     this.log,
+    this.nativeLog,
     this.note,
   });
 
@@ -752,6 +753,14 @@ class RunInspectResult implements PluginResult {
 
   /// The launcher's log file, for anyone who would rather tail it themselves.
   final String? log;
+
+  /// The command the `native` lines came from, verbatim.
+  ///
+  /// Reported because the read it describes is one flutterware performs on the
+  /// caller's behalf against a source it does not own, and an answer nobody
+  /// can re-run by hand is an answer nobody can disagree with. Absent when the
+  /// platform log was not asked for, or when this device has none to read.
+  final String? nativeLog;
 
   final String? note;
 

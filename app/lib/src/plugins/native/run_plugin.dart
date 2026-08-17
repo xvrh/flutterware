@@ -23,6 +23,7 @@ import '../../run/network_tab.dart';
 import '../../run/panels_tab.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
+import '../../run/native/native_logs.dart';
 import '../../inspect/elements_view.dart';
 import '../../inspect/inspect_dock.dart';
 import '../../ui/capture_button.dart';
@@ -1114,6 +1115,16 @@ class _LogsTabState extends State<_LogsTab> {
   List<RunLogLine> _lines = const [];
   _FileRefresh? _refresh;
 
+  /// The platform log, once somebody has asked for it.
+  ///
+  /// **A fetch, not a filter, and the tab says so by loading.** The other three
+  /// pills narrow a file this tab already holds; this one spends a `log show`
+  /// or an `adb logcat` against the device. Selecting it is the asking, and
+  /// selecting it again is how you refresh — there is nothing to poll, because
+  /// unlike the launcher's log nothing here changes on disk.
+  NativeLogRead? _native;
+  var _readingNative = false;
+
   @override
   void initState() {
     super.initState();
@@ -1127,7 +1138,12 @@ class _LogsTabState extends State<_LogsTab> {
     if (old.handle.key != widget.handle.key) {
       _refresh?.dispose();
       _refresh = _FileRefresh(widget.handle.logPath, _reread);
+      _native = null;
       _reread();
+      // A different run is a different device: what was read for the last one
+      // says nothing about this one, and an empty list would read as "it
+      // logged nothing" rather than as "nobody has asked yet".
+      if (_only == RunLogSource.native) unawaited(_rereadNative());
     }
   }
 
@@ -1147,9 +1163,24 @@ class _LogsTabState extends State<_LogsTab> {
     setState(() => _lines = lines);
   }
 
+  /// **Never on [_FileRefresh].** The launcher's log file changes constantly
+  /// while an app runs, and this spawns a process: hanging it off the same
+  /// callback would fire a `log show` every poll. It runs when somebody asks —
+  /// which is what selecting the filter is.
+  Future<void> _rereadNative() async {
+    setState(() => _readingNative = true);
+    var read = await widget.core.readNativeLogs(widget.handle, tail: 2000);
+    if (!mounted) return;
+    setState(() {
+      _native = read;
+      _readingNative = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    var lines = _lines;
+    var native = _only == RunLogSource.native;
+    var lines = native ? _native?.lines ?? const <RunLogLine>[] : _lines;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1164,6 +1195,7 @@ class _LogsTabState extends State<_LogsTab> {
                 ('All', null),
                 ('App', RunLogSource.app),
                 ('Build', RunLogSource.tool),
+                ('Platform', RunLogSource.native),
               ])
                 Padding(
                   padding: const EdgeInsets.only(right: FwSpacing.xs),
@@ -1174,13 +1206,17 @@ class _LogsTabState extends State<_LogsTab> {
                       _only = value;
                       // Immediately, not on the next tick: a filter that took
                       // most of a second to answer would read as broken.
-                      _reread();
+                      if (value == RunLogSource.native) {
+                        unawaited(_rereadNative());
+                      } else {
+                        _reread();
+                      }
                     },
                   ),
                 ),
               const Spacer(),
               Text(
-                '${lines.length} lines',
+                _readingNative ? 'reading…' : '${lines.length} lines',
                 style: context.type.micro.copyWith(color: context.colors.mut3),
               ),
             ],
@@ -1188,12 +1224,18 @@ class _LogsTabState extends State<_LogsTab> {
         ),
         Expanded(
           child: lines.isEmpty
-              ? _Hint(
-                  _only == RunLogSource.app
-                      ? 'The app has printed nothing. The build output is '
-                            'under Build.'
-                      : 'Nothing logged yet.',
-                )
+              ? _Hint(switch (_only) {
+                  RunLogSource.app =>
+                    'The app has printed nothing. The build output is '
+                        'under Build.',
+                  RunLogSource.native =>
+                    _readingNative
+                        ? 'Asking the platform…'
+                        : _native?.note ??
+                              'The native half of this app has logged '
+                                  'nothing.',
+                  _ => 'Nothing logged yet.',
+                })
               // `reverse` rather than a scroll controller: it pins the view to
               // the newest line, which is the one anybody opening a log is
               // looking for, and keeps it pinned as more arrive. The list is
