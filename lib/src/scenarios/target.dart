@@ -44,6 +44,17 @@ String describeTarget(dynamic target) => switch (target) {
   _ => '$target',
 };
 
+/// The target and index inside a `Target.nth`, or null for anything else.
+///
+/// Internal, and it exists for one message: `Finder.at(i)` is
+/// `candidates.elementAt(i)`, so an index past the end throws a `RangeError`
+/// out of the evaluate rather than missing the way every other target misses.
+/// Writing the refusal that deserves needs the count of what the *inner*
+/// target matched, which only the caller of [Target.nth] can ask for and only
+/// this can hand it.
+({Object target, int index})? nthPartsOf(dynamic target) =>
+    target is _Nth ? (target: target.target, index: target.index) : null;
+
 /// The targets the plain vocabulary cannot express: the ones that need a
 /// property other than visible text, a scope, or an index.
 ///
@@ -199,7 +210,8 @@ class _Within extends Target {
   );
 
   @override
-  String toString() => 'Target.within($scope, $child)';
+  String toString() =>
+      'Target.within(${describeTarget(scope)}, ${describeTarget(child)})';
 }
 
 class _Nth extends Target {
@@ -216,5 +228,5 @@ class _Nth extends Target {
   Finder toFinder() => finderForTarget(target).at(index);
 
   @override
-  String toString() => 'Target.nth($target, $index)';
+  String toString() => 'Target.nth(${describeTarget(target)}, $index)';
 }
