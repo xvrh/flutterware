@@ -16,6 +16,7 @@ import 'async_watchdog.dart';
 import 'events.dart';
 import 'motion.dart';
 import 'profile.dart';
+import 'real_work.dart';
 import 'run_args.dart';
 import 'run_listener.dart';
 import 'settle.dart';
@@ -764,7 +765,16 @@ class ScenarioTester {
       // "before" is nowhere in it.
       _recorder?.capture(tester);
       await action();
-      settled = await (settle ?? this.settle).apply(tester, record: _recorder);
+      var policy = settle ?? this.settle;
+      settled = await policy.apply(tester, record: _recorder);
+      // Frames are all a policy follows; work on the real event loop
+      // schedules none while it is in flight. See [landRealWork].
+      settled = await landRealWork(
+        tester,
+        policy,
+        settled: settled,
+        record: _recorder,
+      );
     } catch (error) {
       // The verb that broke captures its own frame; `scenario`'s catch is the
       // backstop for everything else. Both go through the same once-per-error
