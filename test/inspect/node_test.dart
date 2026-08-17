@@ -263,6 +263,47 @@ void main() {
       expect(tree.nodeAt('1/9'), isNull);
     });
 
+    test('resolve takes a name as well as an id', () {
+      // The whole point of it: `screenshot --node=Text` is a thing somebody
+      // has in their hand, where an id is a thing they have to go and read a
+      // tree for first.
+      expect([for (var node in tree.resolve('Text')) node.id], ['1/0']);
+      expect([for (var node in tree.resolve('1/0')) node.id], ['1/0']);
+    });
+
+    test('resolve prefers the exact id over a name that also matches', () {
+      // The two vocabularies do not collide in practice — no widget is called
+      // `1/0` — but if one ever did, exact wins.
+      expect(tree.resolve('1').single.type, 'Row', reason: 'the id, not a hit');
+    });
+
+    test(
+      'resolve reports every match, and leaves the choosing to the caller',
+      () {
+        var twice = InspectTree(
+          entryId: 'demo/a.dart#a',
+          root: const InspectNode(
+            id: '',
+            type: 'Column',
+            children: [
+              InspectNode(id: '0', type: 'ElevatedButton'),
+              InspectNode(id: '1', type: 'ElevatedButton'),
+            ],
+          ),
+        );
+        // Not one node: a crop refuses on this and a tree read narrows to the
+        // outermost, and neither answer belongs in here.
+        expect(
+          [for (var node in twice.resolve('ElevatedButton')) node.id],
+          ['0', '1'],
+        );
+      },
+    );
+
+    test('resolve answers empty for a name nothing carries', () {
+      expect(tree.resolve('Nonesuch'), isEmpty);
+    });
+
     test('an unbuilt entry is an empty answer, not a broken one', () {
       var empty = InspectTree.fromJson(
         const InspectTree(entryId: 'x', root: null).toJson(),

@@ -70,7 +70,7 @@ class HeadlessCatalog {
     Map<String, String> axes = const {},
     Map<String, String> debug = const {},
 
-    /// Cut the picture down to this node, by the id a tree read gave.
+    /// Cut the picture down to one widget, by name or by a tree id.
     String? node,
 
     /// Draw every node of the tree over the picture, id and all.
@@ -519,30 +519,78 @@ class _Framing {
   }) {
     InspectLayout? crop;
     if (node != null && node.isNotEmpty) {
-      var found = tree.nodeAt(node);
-      if (found == null) {
-        throw ArgumentError.value(
-          node,
-          'node',
-          'no node with that id in $entryId. An id names a position in the '
-              'tree, so one from before an edit may no longer name anything — '
-              'read the tree again.',
-        );
-      }
-      crop = found.layout;
-      if (crop == null) {
-        throw ArgumentError.value(
-          node,
-          'node',
-          '${found.type} has no box of its own to crop to. Providers and '
-              'builders lay nothing out; ask for one of its children.',
-        );
-      }
+      crop = _cropTo(tree, node, entryId);
     }
     return _Framing(
       crop: crop,
       boxes: annotate ? tree.nodes.toList() : const [],
     );
+  }
+
+  /// The box [selector] names — **a widget's name, or a tree id**.
+  ///
+  /// The name is what this is for, and the id is the fallback rather than the
+  /// other way round. Asking for a picture of a widget you are working on is
+  /// the common case by a distance, and requiring an id made it a two-step:
+  /// read a tree, find the position, ask again — thousands of tokens to
+  /// photograph something the caller could already name. `SplitButton` is what
+  /// somebody has in their hand.
+  ///
+  /// Matched by [InspectTree.matching], which is the same matcher `find` uses,
+  /// so one grammar covers looking something up and cropping to it.
+  ///
+  /// **Several matches are refused, never guessed.** A silently-picked first
+  /// match is a picture of the wrong widget that looks like a picture of the
+  /// right one, and the refusal carries the ids so the next call is exact.
+  static InspectLayout _cropTo(
+    InspectTree tree,
+    String selector,
+    String entryId,
+  ) {
+    var found = tree.resolve(selector);
+    if (found.length == 1) return _boxOf(found.single, selector, entryId);
+
+    var matches = [
+      for (var node in found)
+        if (node.layout != null) node,
+    ];
+    if (matches.length == 1) return matches.single.layout!;
+    if (matches.isEmpty) {
+      throw ArgumentError.value(
+        selector,
+        'node',
+        'nothing in $entryId is called that, and it is not the id of a node '
+            'either. `node` takes a widget name — `SplitButton`, `Save` — '
+            'matched against every type, description and label on screen, or '
+            'an id from a tree read. Read the entry without `node` to see '
+            'what is there.',
+      );
+    }
+    var named = matches
+        .take(8)
+        .map((node) => '${node.type} (${node.id})')
+        .join(', ');
+    throw ArgumentError.value(
+      selector,
+      'node',
+      '${matches.length} widgets match "$selector" in $entryId, and cropping '
+          'to the wrong one produces a picture that looks right: $named'
+          '${matches.length > 8 ? ', …' : ''}. Name one by its id, or narrow '
+          'the text.',
+    );
+  }
+
+  static InspectLayout _boxOf(InspectNode found, String named, String entryId) {
+    var box = found.layout;
+    if (box == null) {
+      throw ArgumentError.value(
+        named,
+        'node',
+        '${found.type} has no box of its own to crop to. Providers and '
+            'builders lay nothing out; ask for one of its children.',
+      );
+    }
+    return box;
   }
 
   final InspectLayout? crop;

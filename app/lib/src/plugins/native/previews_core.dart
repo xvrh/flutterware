@@ -661,7 +661,20 @@ class PreviewsCore extends PluginCore {
         'screenshot',
         'Screenshot',
         returns: Artifact,
-        description: 'Render one entry to a PNG',
+        description:
+            'Render one entry to a PNG. **This is how you look at a Flutter '
+            'widget.** Whenever the question is how something *looks* — a '
+            'corner, a glyph, a border, two candidate designs side by side, a '
+            'state that is three clicks deep in the running app — this answers '
+            'it in one call: the real widget, the real fonts, the real theme, '
+            'at any device in the table and at that device pixel ratio, so a '
+            'detail worth a pixel comes back worth several. The alternatives '
+            'people reach for instead are worse and quietly so: a widget test '
+            'rendering to an image has no font loaded and draws every glyph as '
+            'a filled box, and a screenshot of the whole app shrinks the thing '
+            'you are asking about to a smudge. A widget that is not an entry '
+            'yet becomes one in a few lines — a top-level function returning '
+            'it, marked `@Preview` — and then it is here for good.',
         parameters: [
           ActionParameter(
             'entry',
@@ -765,9 +778,20 @@ class PreviewsCore extends PluginCore {
             'Crop to',
             required: false,
             description:
-                'Cut the picture down to one node, by the id `tree` gave. Cut '
-                'out of the real frame rather than re-rendered alone, so the '
-                'widget is still in its surroundings.',
+                'Photograph **one widget** instead of the whole viewport — '
+                'name it: `node=SplitButton`, `node=Save`. Matched against '
+                'every type, description and label on screen, the same way '
+                '`find` matches, so no tree read is needed first and nothing '
+                'has to be looked up. This is what to pass when the question '
+                'is about a control rather than a screen: an entry laid out on '
+                'a 900×700 canvas answers it with the thing you asked about in '
+                'one corner and dead space everywhere else, which is a picture '
+                'you then have to squint at. A tree id works too, for the case '
+                'where the name is ambiguous — several matches are refused '
+                'with their ids rather than guessed at, because cropping to '
+                'the wrong one gives a picture that looks right. Cut out of '
+                'the real frame rather than re-rendered alone, so the widget '
+                'is still surrounded by what surrounds it.',
           ),
           const ActionParameter(
             'annotate',
@@ -911,9 +935,14 @@ class PreviewsCore extends PluginCore {
             'Subtree',
             required: false,
             description:
-                'Narrow `tree` to this node and below, and crop `screenshot` '
-                'to it, by the id a previous read gave. Ids come from tree '
-                'shape, so one taken in another process still names this node.',
+                'Narrow `tree` to one widget and below, and crop `screenshot` '
+                'to it — **name it**: `node=SplitButton`, `node=Save`, matched '
+                'the way `find` matches, so nothing has to be looked up first. '
+                'An id from an earlier read works too and is exact; ids come '
+                'from tree shape, so one taken in another process still names '
+                'this node. A name matching several widgets narrows to the '
+                'outermost of them here, and is refused by `screenshot`, '
+                'because too much tree is visible and the wrong crop is not.',
           ),
           ActionParameter(
             'depth',
@@ -2248,16 +2277,26 @@ class PreviewsCore extends PluginCore {
     var root = tree.root;
     var offset = 0;
     if (node != null) {
-      var subtree = tree.nodeAt(node);
-      if (subtree == null) {
+      // The same grammar `screenshot` crops with — a name or an id — so one
+      // value means one thing wherever it is passed. Several matches narrow to
+      // the outermost rather than refusing: unlike a crop, a tree read that
+      // included too much is something the reader can see and step past, and
+      // the alternative is a refusal for the ordinary case of a widget that
+      // appears twice on a page.
+      var found = tree.resolve(node);
+      if (found.isEmpty) {
         throw ArgumentError.value(
           node,
           'node',
-          'no node with that id in $entryId. An id names a position in the '
-              'tree, so one from before an edit may no longer name anything — '
-              'read the tree again.',
+          'nothing in $entryId is called that, and it is not the id of a node '
+              'either. `node` takes a widget name — `SplitButton`, `Save` — or '
+              'an id from an earlier read. Ids are positions in the tree, so '
+              'one taken before an edit may name nothing now.',
         );
       }
+      var subtree = found.reduce(
+        (a, b) => _depthOf(a.id) <= _depthOf(b.id) ? a : b,
+      );
       root = subtree;
       offset = _depthOf(subtree.id);
     }
@@ -2465,7 +2504,11 @@ class PreviewsCore extends PluginCore {
     var debug = parsePairs(arguments['debug']);
     var node = arguments['node'];
     if (node != null && node is! String) {
-      throw ArgumentError.value(node, 'node', 'must be a node id');
+      throw ArgumentError.value(
+        node,
+        'node',
+        'must be text — a widget name or a node id',
+      );
     }
     var annotate = arguments['annotate'] == true;
 

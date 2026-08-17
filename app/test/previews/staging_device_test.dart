@@ -28,10 +28,11 @@ void main() {
 
   group('the list is the only source', () {
     test('a phone or tablet with no artwork is drawn from its own numbers', () {
-      // The generic half. `iphone-16` is deliberate: it is a device the table
-      // added after `device_frame` stopped shipping bodies, and it renders
-      // without anybody drawing one. `frames_test.dart` covers the other half.
-      var device = deviceById('iphone-16')!;
+      // The generic half. An Android size is deliberate: it is named after a
+      // size class rather than a handset, so a silhouette of its kind is the
+      // whole claim. `frames_test.dart` covers the other two halves — the
+      // borrowed bodies, and the iPhone one we draw ourselves.
+      var device = deviceById('android-tall')!;
       expect(namedFrameFor(device.id), isNull, reason: 'no body to borrow');
       var chrome = deviceFrameFor(device)!;
 

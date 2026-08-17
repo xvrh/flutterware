@@ -71,7 +71,46 @@ void main() => Flutterware.configure((fw) {
       packages: [
         // flutterware's own demos sit beside the harness that renders them
         // rather than in `demo/`, because they exist to exercise the catalog.
-        .new(app, directory: 'tool/catalog'),
+        //
+        // **Declared desktop, because this app is a desktop app.** Almost
+        // everything here is a piece of the studio's own chrome — a panel, a
+        // bar, a row of a table — and undeclared they opened on the plain
+        // rectangle, which offers no window size and reads as no opinion. It
+        // is the same trap `PreviewsPackage.device` names in the other
+        // direction: nothing about the wrong canvas looks wrong, and whoever
+        // renders one of these has no way to know they should have said
+        // `--device`. Measured 2026-08-17: an agent asked for a picture of a
+        // 24pt control and got it on an iPad, because nothing said otherwise.
+        .new(
+          app,
+          directory: 'tool/catalog',
+          canvases: [
+            // The head is the default and the list is what the picker offers,
+            // so: open at the size the studio is usually run at, with the
+            // narrow one beside it — the width most of these panels break at.
+            PreviewCanvas(
+              '',
+              devices: [
+                Devices.window,
+                Devices.smallWindow,
+                Devices.wideWindow,
+              ],
+            ),
+            // The exceptions, and they are exceptions: these two are *app
+            // content* rather than studio chrome — a receipt and a player
+            // card, which is what a motion demo has to be to be worth
+            // scrubbing. A phone first, and a small one beside it because
+            // that is where a stagger runs out of room.
+            PreviewCanvas(
+              'tool/catalog/demos/motion_receipt.dart',
+              devices: [Devices.iphone16, Devices.iphoneSe],
+            ),
+            PreviewCanvas(
+              'tool/catalog/demos/motion_player.dart',
+              devices: [Devices.iphone16, Devices.iphoneSe],
+            ),
+          ],
+        ),
         .new(example),
       ],
     ),

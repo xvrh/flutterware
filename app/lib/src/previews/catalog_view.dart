@@ -22,6 +22,7 @@ import 'catalog_params.dart';
 import 'catalog_devices.dart';
 import 'catalog_entry.dart';
 import 'catalog_session.dart';
+import 'staged_device.dart';
 import 'catalog_tree.dart';
 import 'inspect_panel.dart';
 
@@ -778,7 +779,7 @@ class _Knob extends StatelessWidget {
           onChanged: (v) => _choose(context, v),
         );
       case KnobKind.picker:
-        return _Popover<String?>(
+        return Popover<String?>(
           selected: _value as String?,
           onSelected: (v) => _choose(context, v),
           groups: [
@@ -1137,11 +1138,12 @@ class _TopBar extends StatelessWidget {
       child: Row(
         spacing: FwSpacing.md,
         children: [
-          _DevicePicker(
+          StagedDevice(
             device: device,
+            orientation: orientation,
             declared: _canvasOf(session)?.devices ?? const [],
+            staging: staging,
           ),
-          _RotateToggle(device: device, orientation: orientation),
           if (device != null)
             Text(
               // The *turned* size: the one number on the bar that says whether
@@ -1156,7 +1158,7 @@ class _TopBar extends StatelessWidget {
           // Scrolling rather than wrapping or shrinking: the bar is one row
           // tall by design, a project may declare more axes than fit beside a
           // device name, and the alternative is that the last one silently
-          // pushes the frame toggle off the end.
+          // pushes the capture button off the end.
           Expanded(
             // The shell's axes own `axis.*`, and only this subtree. Nested
             // rather than written as a full key so the controls below say
@@ -1195,19 +1197,6 @@ class _TopBar extends StatelessWidget {
             captureButton: captureButton,
             highlight: highlight,
           ),
-          if (device != null)
-            IconButton(
-              icon: Icon(
-                staging.frameVisible ? Icons.phone_iphone : Icons.crop_din,
-                size: FwIconSize.md,
-              ),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-              tooltip: staging.frameVisible
-                  ? 'Hide the frame'
-                  : 'Show the frame',
-              onPressed: () => staging.frameVisible = !staging.frameVisible,
-            ),
         ],
       ),
     );
@@ -1367,7 +1356,7 @@ class _Axis extends StatelessWidget {
         if (axis.kind == KnobKind.boolean)
           _Toggle(value: value == true, onChanged: (v) => _choose(context, v))
         else
-          _Popover<String?>(
+          Popover<String?>(
             selected: value as String?,
             onSelected: (v) => _choose(context, v),
             groups: [
@@ -1391,274 +1380,6 @@ class _Axis extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-/// Turns the picked device on its side.
-///
-/// **Beside the picker, not inside it.** Orientation is a state of the device
-/// you already chose, so "iPad" and "iPad (landscape)" as two rows would make
-/// the list say they are different devices — which is the modelling this
-/// deliberately does not use, and the list would grow by one row per rotatable
-/// entry to say it.
-///
-/// **Disabled rather than hidden** when there is nothing to turn: a control
-/// that vanished would reflow the bar every time you moved between a phone and
-/// a monitor, and "this one does not rotate" is worth saying. The size beside
-/// it is the confirmation the axis landed — `810×1080` becomes `1080×810`.
-class _RotateToggle extends StatelessWidget {
-  const _RotateToggle({required this.device, required this.orientation});
-
-  /// The upright device, or null for the panel — which has no other way up.
-  final Device? device;
-
-  final ScreenOrientation? orientation;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var enabled = device?.canRotate ?? false;
-    var landscape = enabled && orientation == ScreenOrientation.landscape;
-    var ink = enabled ? (landscape ? colors.bg : colors.ink) : colors.mut;
-    return Tooltip(
-      message: !enabled
-          ? '${device?.label ?? 'The panel'} does not rotate'
-          : landscape
-          ? 'Back to portrait'
-          : 'Rotate to landscape',
-      child: GestureDetector(
-        onTap: enabled
-            // Portrait clears the parameter rather than writing itself: the
-            // default belongs in nobody's address, and a link that says
-            // nothing about orientation has to keep meaning what it meant.
-            ? () => AddressScope.write(context).setParam(
-                'orientation',
-                landscape ? null : ScreenOrientation.landscape.name,
-              )
-            : null,
-        child: Container(
-          height: 24,
-          width: 26,
-          decoration: BoxDecoration(
-            color: landscape ? colors.ink : colors.bg,
-            border: Border.all(color: colors.line),
-            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-          ),
-          child: Icon(
-            landscape
-                ? Icons.stay_current_landscape
-                : Icons.stay_current_portrait,
-            size: FwIconSize.sm,
-            color: ink,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Picks what the guest is sized to. "Fit" is the panel itself.
-///
-/// Hand-rolled rather than a [PopupMenuButton]: the stock menu gives every row
-/// the same weight, so the platform headings read as disabled entries, and its
-/// scale-from-nothing entrance belongs to a floating action button rather than
-/// to a control that drops open under your cursor.
-class _DevicePicker extends StatelessWidget {
-  const _DevicePicker({required this.device, this.declared = const []});
-
-  /// What is on screen, already resolved. The picker holds nothing.
-  final Device? device;
-
-  /// The devices the entry's canvas names, head first.
-  ///
-  /// Offered at the top rather than merely defaulted to, which is the other
-  /// half of "the list is the offered set": a card with a breakpoint in it is
-  /// meant to survive a small phone *and* a large one, and a project that has
-  /// written down which two should not have to find them again in a table of
-  /// every phone ever made.
-  final List<Device> declared;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return _Popover<Device?>(
-      selected: device,
-      // **The only place a device is chosen, and it writes the address.** It
-      // used to set the staging and let the panel copy that into the address a
-      // frame later; the copy came back stale and undid the pick.
-      onSelected: (value) => AddressScope.write(
-        context,
-      ).setParam('device', value?.id ?? fitDeviceId),
-      groups: [
-        (
-          heading: null,
-          items: [(value: null, label: 'Fit', detail: 'the panel')],
-        ),
-        if (declared.isNotEmpty)
-          (
-            heading: 'Declared',
-            items: [
-              for (var d in declared)
-                (value: d, label: d.label, detail: describeDevice(d)),
-            ],
-          ),
-        for (var group in {for (var d in Devices.all) d.group})
-          (
-            heading: group,
-            items: [
-              for (var d in Devices.all.where((d) => d.group == group))
-                (value: d, label: d.label, detail: describeDevice(d)),
-            ],
-          ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.only(left: FwSpacing.md, right: FwSpacing.xs),
-        height: 24,
-        decoration: BoxDecoration(
-          color: colors.bg,
-          border: Border.all(color: colors.line),
-          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-        ),
-        child: Row(
-          spacing: FwSpacing.xs,
-          children: [
-            Text(
-              // Straight off the device now. It used to be a scan of the list
-              // by `device_frame` identifier, because staging held that type
-              // rather than ours.
-              device?.label ?? 'Fit',
-              style: context.type.caption.copyWith(color: colors.ink),
-            ),
-            Icon(Icons.expand_more, size: FwIconSize.sm, color: colors.mut),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-typedef _PopoverItem<T> = ({T value, String label, String detail});
-typedef _PopoverGroup<T> = ({String? heading, List<_PopoverItem<T>> items});
-
-/// A menu that drops open under its anchor.
-class _Popover<T> extends StatelessWidget {
-  const _Popover({
-    required this.groups,
-    required this.selected,
-    required this.onSelected,
-    required this.child,
-  });
-
-  final List<_PopoverGroup<T>> groups;
-  final T selected;
-  final ValueChanged<T> onSelected;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return MenuAnchor(
-      alignmentOffset: const Offset(0, FwSpacing.xs),
-      style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(context.colors.panel),
-        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(vertical: FwSpacing.sm),
-        ),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            side: BorderSide(color: context.colors.line),
-            borderRadius: BorderRadius.circular(context.radii.radius),
-          ),
-        ),
-      ),
-      builder: (context, controller, child) => InkWell(
-        onTap: () => controller.isOpen ? controller.close() : controller.open(),
-        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-        child: child,
-      ),
-      menuChildren: [
-        for (var group in groups) ...[
-          if (group.heading case var heading?)
-            // A heading, not a disabled row: uppercase, muted and half-height,
-            // so the eye takes it for a label rather than for something it is
-            // not allowed to pick.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                FwSpacing.lg,
-                FwSpacing.md,
-                FwSpacing.lg,
-                FwSpacing.xxs,
-              ),
-              child: Text(
-                heading.toUpperCase(),
-                style: context.type.micro.copyWith(
-                  color: context.colors.mut2,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ),
-          for (var item in group.items)
-            _PopoverRow(
-              item: item,
-              selected: item.value == selected,
-              onTap: () => onSelected(item.value),
-            ),
-        ],
-      ],
-      child: child,
-    );
-  }
-}
-
-class _PopoverRow<T> extends StatelessWidget {
-  const _PopoverRow({
-    required this.item,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final _PopoverItem<T> item;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return MenuItemButton(
-      onPressed: onTap,
-      style: ButtonStyle(
-        backgroundColor: WidgetStatePropertyAll(
-          selected ? colors.accentSoft : Colors.transparent,
-        ),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: FwSpacing.lg),
-        ),
-        minimumSize: const WidgetStatePropertyAll(Size(0, 28)),
-      ),
-      child: SizedBox(
-        width: 200,
-        child: Row(
-          spacing: FwSpacing.lg,
-          children: [
-            Expanded(
-              child: Text(
-                item.label,
-                style: context.type.bodySmall.copyWith(color: colors.ink),
-              ),
-            ),
-            // The size, right-aligned in its own column: it is what you are
-            // choosing between once you know the names.
-            Text(
-              item.detail,
-              style: context.type.caption.copyWith(
-                fontFamily: 'monospace',
-                color: colors.mut,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

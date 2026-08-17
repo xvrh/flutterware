@@ -1032,6 +1032,23 @@ class InspectTree {
     return null;
   }
 
+  /// Every node [selector] could mean — an **id** first, then a name matched
+  /// the way [matching] matches.
+  ///
+  /// One list rather than one node, because how to answer "several" is the
+  /// caller's business and not the same everywhere: a crop refuses and lists
+  /// them, a tree read might narrow to the outermost. What is not the caller's
+  /// business is the *rule* — an id is exact and a name is a search — and
+  /// having that written once is why this is here rather than in each of them.
+  ///
+  /// An id wins outright when it hits: ids are positions like `0/3/1/0` and no
+  /// widget is called that, so the two vocabularies do not collide in practice
+  /// — and if one ever did, the exact answer is the right one.
+  List<InspectNode> resolve(String selector) {
+    var exact = nodeAt(selector);
+    return exact != null ? [exact] : matching(selector).toList();
+  }
+
   /// This tree, narrowed to what [filter] asks for.
   ///
   /// Throws when [InspectFilter.root] names no node, for the reason
