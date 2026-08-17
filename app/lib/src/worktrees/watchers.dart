@@ -88,7 +88,10 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../utils/directory_watch.dart';
 import '../utils/run_dir.dart';
+
+export '../utils/directory_watch.dart' show WatchDirectory;
 
 /// What moved. See the note above on why this is not one signal.
 enum WorktreeChange {
@@ -109,15 +112,6 @@ enum WorktreeChange {
   stack,
 }
 
-/// How a directory is watched: a stream of **paths that changed**, nothing more.
-///
-/// Injectable, so the timing rules below — the part worth pinning down — can be
-/// tested without a filesystem. Paths rather than `FileSystemEvent` for two
-/// reasons: it is all this uses (any event means "look again"), and dart:io's
-/// event classes have private constructors, so a test could not have made one.
-typedef WatchDirectory =
-    Stream<String> Function(String path, {required bool recursive});
-
 /// Whether a changed path is worth waking anything for.
 typedef _Accept = bool Function(String path);
 
@@ -132,7 +126,7 @@ class WorktreeWatcher {
     DateTime Function()? now,
     this.onFailure,
   }) : agentRoot = agentRoot ?? defaultAgentRoot(),
-       _watch = watch ?? _watchDirectory,
+       _watch = watch ?? watchDirectoryPaths,
        _now = now ?? DateTime.now;
 
   /// The **main** checkout. Every git watch is under its `.git`, including the
@@ -171,7 +165,7 @@ class WorktreeWatcher {
   final _subscriptions = <StreamSubscription<String>>[];
   late final _coalescers = {
     for (var kind in WorktreeChange.values)
-      kind: _Coalescer(
+      kind: Coalescer(
         debounce: debounce,
         minInterval: minInterval,
         now: _now,
@@ -282,11 +276,6 @@ class WorktreeWatcher {
     _subscriptions.clear();
     await _changes.close();
   }
-
-  static Stream<String> _watchDirectory(
-    String path, {
-    required bool recursive,
-  }) => Directory(path).watch(recursive: recursive).map((event) => event.path);
 }
 
 /// One checkout's **working tree**, watched recursively — the scoped exception
@@ -342,7 +331,7 @@ class WorkingTreeWatcher {
     WatchDirectory? watch,
     DateTime Function()? now,
     this.onFailure,
-  }) : _watch = watch ?? WorktreeWatcher._watchDirectory,
+  }) : _watch = watch ?? watchDirectoryPaths,
        _now = now ?? DateTime.now;
 
   final String worktreePath;
@@ -371,96 +360,34 @@ class WorkingTreeWatcher {
   /// correctness — the screen still refreshes on arrival and on the button.
   final void Function(Object error)? onFailure;
 
-  Stream<void> get changes => _changes.stream;
-  final _changes = StreamController<void>.broadcast();
+  Stream<void> get changes => _watcher.changes;
 
   /// Whether a watch is actually established. False before [start], and after
   /// a [start] that could not — which the screen says out loud, because a live
   /// screen that has silently stopped being live is the failure worth naming.
-  bool get isWatching => _subscription != null;
+  bool get isWatching => _watcher.isWatching;
 
-  StreamSubscription<String>? _subscription;
-  late final _coalescer = _Coalescer(
+  /// The timing rules and the plumbing are [DirectoryWatch]'s; what belongs to
+  /// *this* class is the filter and the floor, which are the two things a
+  /// checkout needs and a plain directory does not.
+  late final _git = p.join(worktreePath, '.git');
+  late final _watcher = DirectoryWatch(
+    directory: worktreePath,
+    accept: (changed) {
+      if (changed == _git || p.isWithin(_git, changed)) return false;
+      return !changed.endsWith('.lock');
+    },
     debounce: debounce,
     minInterval: minInterval,
+    watch: _watch,
     now: _now,
-    fire: () {
-      if (!_changes.isClosed) _changes.add(null);
-    },
+    onFailure: onFailure,
   );
 
   /// Begins watching. Idempotent, and **never throws** — a checkout that has
   /// been deleted under us, or a system out of watches, costs one live signal
   /// and nothing else.
-  void start() {
-    if (_started) return;
-    _started = true;
-    try {
-      if (!Directory(worktreePath).existsSync()) return;
-      var git = p.join(worktreePath, '.git');
-      _subscription = _watch(worktreePath, recursive: true).listen(
-        (changed) {
-          if (changed == git || p.isWithin(git, changed)) return;
-          if (changed.endsWith('.lock')) return;
-          _coalescer.poke();
-        },
-        onError: (Object error) => onFailure?.call(error),
-        cancelOnError: true,
-      );
-    } catch (e) {
-      onFailure?.call(e);
-    }
-  }
+  void start() => _watcher.start();
 
-  var _started = false;
-
-  Future<void> dispose() async {
-    _coalescer.cancel();
-    unawaited(_subscription?.cancel());
-    _subscription = null;
-    await _changes.close();
-  }
-}
-
-/// Debounce with a floor: settles a burst, and never fires faster than
-/// [minInterval] however hard it is poked.
-class _Coalescer {
-  _Coalescer({
-    required this.debounce,
-    required this.minInterval,
-    required this.fire,
-    required this.now,
-  });
-
-  final Duration debounce;
-  final Duration minInterval;
-  final void Function() fire;
-  final DateTime Function() now;
-
-  var _pending = false;
-  Timer? _timer;
-  DateTime? _firedAt;
-
-  void poke() {
-    _pending = true;
-    if (_timer != null) return;
-
-    var wait = debounce;
-    if (_firedAt case var at?) {
-      var remaining = minInterval - now().difference(at);
-      if (remaining > wait) wait = remaining;
-    }
-    _timer = Timer(wait, () {
-      _timer = null;
-      if (!_pending) return;
-      _pending = false;
-      _firedAt = now();
-      fire();
-    });
-  }
-
-  void cancel() {
-    _timer?.cancel();
-    _timer = null;
-  }
+  Future<void> dispose() => _watcher.dispose();
 }
