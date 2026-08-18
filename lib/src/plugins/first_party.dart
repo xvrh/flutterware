@@ -454,7 +454,11 @@ class Run extends Plugin {
 }
 
 class RunPackage extends PluginPackage {
-  const RunPackage(super.pkg, {this.entrypoints = const []});
+  const RunPackage(
+    super.pkg, {
+    this.entrypoints = const [],
+    this.flavors = const {},
+  });
 
   /// The `main()`s worth launching, named.
   ///
@@ -467,9 +471,55 @@ class RunPackage extends PluginPackage {
   /// `main_staging.dart` only tells it where the thing lives.
   final List<Entrypoint> entrypoints;
 
+  /// The flavors this package has, per platform — the author's word, so the
+  /// cockpit can offer a list instead of an empty box and a launch can refuse
+  /// a name the build system was never going to accept.
+  ///
+  /// ```dart
+  /// flavors: {
+  ///   RunPlatform.mobile: ['local', 'patientLocal', 'staging', 'prod'],
+  ///   RunPlatform.macos: ['local', 'staging', 'prod'],
+  ///   RunPlatform.linux: [], // this platform has no flavors
+  /// },
+  /// ```
+  ///
+  /// Declared rather than discovered, deliberately: the real authorities are
+  /// Gradle and the Xcode schemes, which cost three parsers to read — see
+  /// the note on the pubspec's `default-flavor` — and on Linux and Windows
+  /// there is nothing to read at all, since `--flavor` there gates no build
+  /// and merely sets `FLUTTER_APP_FLAVOR`.
+  ///
+  /// Four rules, one per shape:
+  ///
+  /// - **Not declared at all**: nothing changes — free text, no checking.
+  /// - **A platform not in the map**: unknown vocabulary; a flavor there is
+  ///   passed as written and unchecked. Omission means "I did not say",
+  ///   never "there are none".
+  /// - **A platform mapped to `[]`**: this platform has no flavors, and it
+  ///   behaves the way web already does — the launch drops the flag instead
+  ///   of handing Xcode a scheme that does not exist.
+  /// - **A platform with a list**: the New run page offers a picker, and a
+  ///   launch whose flavor is not on the list refuses before building — a
+  ///   typo becomes a sentence naming the list instead of a Gradle failure
+  ///   minutes later.
+  ///
+  /// Keys follow the same rules as [Entrypoint.flavorByPlatform]: shorthands
+  /// allowed, a concrete key beats the shorthand containing it. The list
+  /// carries **no default** — order means nothing. Which flavor an entry
+  /// point builds with is [Entrypoint.flavor]'s job, and what a bare
+  /// `flutter run` does is the pubspec's `default-flavor:` — a third answer
+  /// here could only disagree with those two.
+  final Map<RunPlatform, List<String>> flavors;
+
   @override
   Map<String, Object?> toJson() => {
     ...super.toJson(),
+    // As written, shorthand keys and all — the same author's-word rule as
+    // `Entrypoint.platforms`.
+    if (flavors.isNotEmpty)
+      'flavors': {
+        for (var entry in flavors.entries) entry.key.name: entry.value,
+      },
     if (entrypoints.isNotEmpty)
       'entrypoints': [for (var e in entrypoints) e.toJson()],
   };

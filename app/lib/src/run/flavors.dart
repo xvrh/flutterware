@@ -4,6 +4,8 @@ import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import 'refusal.dart';
+
 /// The `--flavor` a package builds with when nobody says otherwise, from its
 /// pubspec's `flutter: default-flavor:`.
 ///
@@ -114,4 +116,51 @@ T? lookupByPlatform<T>(
   }
   var shorthand = RunPlatform.byName(category ?? '');
   return shorthand != null ? map[shorthand] : null;
+}
+
+/// The flavors a package's config declares per platform, from the raw
+/// `flavors` map — `RunPackage.flavors` on the wire.
+///
+/// Same forgiving posture as the other config decoders: a platform name this
+/// build has no member for is dropped rather than refused, and a value that
+/// is not a list of strings likewise. An **empty list survives** — it is a
+/// declaration ("this platform has no flavors"), not an absence.
+Map<RunPlatform, List<String>> declaredFlavors(Object? raw) => {
+  for (var entry in (raw is Map ? raw.entries : const <MapEntry>[]))
+    if (entry.key case String name)
+      if (entry.value case List values)
+        ?RunPlatform.byName(name): [
+          for (var value in values)
+            if (value is String) value,
+        ],
+};
+
+/// [flavor], as [vocabulary] allows it — the declared list for the platform
+/// being launched onto, or null where the package declared none.
+///
+/// Three of the four vocabulary rules live here (the fourth — no declaration
+/// — is [vocabulary] arriving null): an unknown platform passes [flavor]
+/// through unchecked, an empty list drops it the way web drops its flag, and
+/// a list that does not contain it refuses **before anything is built** —
+/// the alternative is a Gradle failure minutes later, or worse, a Linux
+/// build that quietly runs under a meaningless `FLUTTER_APP_FLAVOR` because
+/// nothing on that platform gates the name.
+///
+/// Refusing the caller's own word too, not only a declaration, follows the
+/// knob-name check: a declared vocabulary is authority the way a declared
+/// signature is, and the refusal names both the list and the way out.
+String? applyFlavorVocabulary({
+  required String? flavor,
+  required List<String>? vocabulary,
+  required String package,
+  required String platformLabel,
+}) {
+  if (flavor == null || vocabulary == null) return flavor;
+  if (vocabulary.isEmpty) return null;
+  if (vocabulary.contains(flavor)) return flavor;
+  throw RunRefusal(
+    '"$flavor" is not a flavor $package declares for $platformLabel — it has '
+    '${vocabulary.join(', ')}. Pass one of those, an empty `flavor` to build '
+    'without one, or add it to the `flavors:` list in tool/flutterware.dart.',
+  );
 }

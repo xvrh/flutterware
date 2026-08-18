@@ -1831,10 +1831,14 @@ class _NewRunPageState extends State<_NewRunPage> {
                       : null,
                   child: _FlavorField(
                     declared: _declaredFlavor,
+                    vocabulary: _entry == null
+                        ? null
+                        : _core.flavorVocabularyFor(_entry!.package, _device),
                     controller: _flavor,
                     overriding: _overridingFlavor,
                     onOverride: () => setState(() => _overridingFlavor = true),
                     onRevert: () => setState(_resetFlavor),
+                    onPicked: (choice) => setState(() => _flavor.text = choice),
                   ),
                 ),
                 if (_offeredKnobs.isNotEmpty) ...[
@@ -2239,25 +2243,49 @@ class _DeskState extends State<_Desk> {
 ///
 /// Overriding stays one click away, because the case that needs it is real:
 /// running the one entry point under a second flavor without declaring it
-/// twice.
+/// twice. Where the package declares its flavors ([vocabulary]), overriding is
+/// picking off that list rather than typing — the launch would refuse an
+/// unlisted word anyway, and a picker says so before the attempt. A platform
+/// declared flavorless collapses the field to that one fact.
 class _FlavorField extends StatelessWidget {
   const _FlavorField({
     required this.declared,
+    required this.vocabulary,
     required this.controller,
     required this.overriding,
     required this.onOverride,
     required this.onRevert,
+    required this.onPicked,
   });
 
   final ({String? flavor, FlavorSource source}) declared;
+
+  /// The declared flavors for the selected device's platform — null where the
+  /// package declares nothing, empty where it declares "none here".
+  final List<String>? vocabulary;
+
   final TextEditingController controller;
   final bool overriding;
   final VoidCallback onOverride;
   final VoidCallback onRevert;
 
+  /// A pick from the vocabulary — the dropdown writes through this rather
+  /// than into [controller] directly so the page can rebuild around it.
+  final void Function(String) onPicked;
+
   @override
   Widget build(BuildContext context) {
+    if (vocabulary?.isEmpty == true) {
+      // Nothing to read, nothing to override: the declaration says this
+      // platform has no flavors, and the launch drops the flag the way web
+      // does. An Override button here could only produce a refused launch.
+      return Text(
+        'none — the platform declares no flavors',
+        style: context.type.caption.copyWith(color: context.colors.mut3),
+      );
+    }
     if (overriding) {
+      var options = vocabulary;
       return Row(
         children: [
           // Capped and unstyled, so this is the same control as a knob's: no
@@ -2269,13 +2297,31 @@ class _FlavorField extends StatelessWidget {
               constraints: const BoxConstraints(
                 maxWidth: KnobField.controlWidth,
               ),
-              child: TextField(
-                controller: controller,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  hintText: 'dev, staging…',
-                ),
-              ),
+              // The declared list where there is one — same control as an
+              // enum knob's, and only values the list actually holds, for the
+              // same reason: a dropdown asked to show a value it has no item
+              // for asserts rather than degrading.
+              child: options == null
+                  ? TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: 'dev, staging…',
+                      ),
+                    )
+                  : DropdownButtonFormField<String>(
+                      initialValue: options.contains(controller.text)
+                          ? controller.text
+                          : null,
+                      isDense: true,
+                      items: [
+                        for (var option in options)
+                          DropdownMenuItem(value: option, child: Text(option)),
+                      ],
+                      onChanged: (choice) {
+                        if (choice != null) onPicked(choice);
+                      },
+                    ),
             ),
           ),
           const Gap(FwSpacing.xs),

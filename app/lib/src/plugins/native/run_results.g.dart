@@ -51,6 +51,7 @@ Map<String, dynamic> _$RunEntrypointPackageToJson(
 ) => <String, dynamic>{
   'path': instance.path,
   'declared': instance.declared,
+  'flavors': ?instance.flavors,
   'entrypoints': instance.entrypoints.map((e) => e.toJson()).toList(),
 };
 

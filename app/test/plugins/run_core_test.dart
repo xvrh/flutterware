@@ -2213,6 +2213,119 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
         expect(entry.toJson(), isNot(contains('flavorByPlatform')));
       },
     );
+
+    test('a declared vocabulary refuses an unlisted flavor before '
+        'building', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': 'void main() {}',
+        'pubspec.yaml': 'name: app\n',
+      });
+      DeviceCache.write(runDir.path, [
+        const DaemonDevice(id: 'phone', platformType: 'android'),
+      ]);
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'flavors': {
+                'mobile': ['local', 'staging'],
+              },
+              'entrypoints': [
+                // The typo is in the declaration itself — the case the
+                // vocabulary exists for, since without it this is a Gradle
+                // failure minutes into the build.
+                {'path': 'lib/main.dart', 'flavor': 'stagign'},
+              ],
+            },
+          ],
+        },
+      );
+
+      await expectLater(
+        core.invoke('launch', arguments: {'device': 'phone'}),
+        throwsA(
+          isA<RunRefusal>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('stagign'),
+              contains('local, staging'),
+              contains('android'),
+            ),
+          ),
+        ),
+      );
+
+      // The caller's word is checked against the same list — a typo'd
+      // override on Linux would otherwise run under a meaningless
+      // FLUTTER_APP_FLAVOR with nothing gating the name.
+      await expectLater(
+        core.invoke('launch', arguments: {'device': 'phone', 'flavor': 'pord'}),
+        throwsA(isA<RunRefusal>()),
+      );
+    });
+
+    test('the vocabulary is echoed as written, empty lists and all', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': 'void main() {}',
+        'pubspec.yaml': 'name: app\n',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'flavors': {
+                'mobile': ['local', 'staging'],
+                'linux': <String>[],
+              },
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'flavor': 'local'},
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var package = result.packages.single;
+      expect(package.flavors, {
+        'mobile': ['local', 'staging'],
+        'linux': <String>[],
+      });
+    });
+
+    test(
+      'a package declaring no vocabulary does not carry the field',
+      () async {
+        _writePackage(worktree, 'app', {
+          'lib/main.dart': 'void main() {}',
+          'pubspec.yaml': 'name: app\n',
+        });
+        core = _coreFor(
+          worktree,
+          config: {
+            'packages': [
+              {
+                'path': 'app',
+                'entrypoints': [
+                  {'path': 'lib/main.dart'},
+                ],
+              },
+            ],
+          },
+        );
+
+        var result =
+            (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+        var package = result.packages.single;
+        expect(package.flavors, isNull);
+        expect(package.toJson(), isNot(contains('flavors')));
+      },
+    );
   });
 
   group('the launcher log', () {

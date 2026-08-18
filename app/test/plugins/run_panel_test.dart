@@ -456,6 +456,185 @@ void main() {
     expect(find.text('Use dev'), findsOneWidget);
   });
 
+  testWidgets('the flavor pre-fills for the selected device, and overriding '
+      'against a declared vocabulary is a pick, not a box', (tester) async {
+    File(p.join(worktree.path, 'pubspec.yaml'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('name: app\n');
+    File(p.join(worktree.path, 'lib', 'main_patient.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('void main() {}');
+    DeviceCache.write(runDir.path, const [
+      DaemonDevice(id: 'phone', name: 'Pixel', platformType: 'android'),
+    ]);
+
+    var core = RunCore(
+      PluginHost(
+        id: runPluginId,
+        label: 'Run',
+        worktree: Worktree(path: worktree.path),
+        workspace: Workspace(
+          root: worktree.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: const {
+          'packages': [
+            {
+              'path': '.',
+              'flavors': {
+                'mobile': ['local', 'patientLocal'],
+              },
+              'entrypoints': [
+                {
+                  'path': 'lib/main_patient.dart',
+                  'name': 'Patient',
+                  'flavor': 'local',
+                  'flavorByPlatform': {'mobile': 'patientLocal'},
+                },
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    addTearDown(core.dispose);
+
+    RunHandle(
+      worktree: worktree.path,
+      worktreeName: Worktree(path: worktree.path).name,
+      device: 'phone',
+      entrypoint: 'lib/main_patient.dart',
+      launcherPid: pid,
+      startedAt: DateTime.now(),
+    ).publish(runDir.path);
+    await tester.runAsync(core.computeAll);
+
+    var address = ValueNotifier(
+      Address(
+        worktree: 'wt',
+        plugin: runPluginId,
+        segments: const [newRunSegment],
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: AddressRoot(
+            address: address,
+            onChanged: (a) => address.value = a,
+            child: Builder(builder: RunPlugin(core).buildPanel),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The pairing resolved for the phone — not the plain declaration.
+    expect(find.text('patientLocal'), findsOneWidget);
+    expect(find.text('from the entry point'), findsOneWidget);
+
+    // Overriding offers the declared vocabulary instead of an empty box —
+    // the launch would refuse an unlisted word, and a picker says so first.
+    await tester.tap(find.text('Override'));
+    await tester.pump();
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('local'), findsWidgets);
+  });
+
+  testWidgets('a platform declared flavorless collapses the field to that '
+      'fact', (tester) async {
+    File(p.join(worktree.path, 'pubspec.yaml'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('name: app\n');
+    File(p.join(worktree.path, 'lib', 'main.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('void main() {}');
+    DeviceCache.write(runDir.path, const [
+      DaemonDevice(
+        id: 'macos',
+        name: 'macOS',
+        platformType: 'macos',
+        ephemeral: false,
+      ),
+    ]);
+
+    var core = RunCore(
+      PluginHost(
+        id: runPluginId,
+        label: 'Run',
+        worktree: Worktree(path: worktree.path),
+        workspace: Workspace(
+          root: worktree.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: const {
+          'packages': [
+            {
+              'path': '.',
+              'flavors': {
+                'mobile': ['local', 'patientLocal'],
+                'macos': <String>[],
+              },
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App', 'flavor': 'local'},
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    addTearDown(core.dispose);
+
+    RunHandle(
+      worktree: worktree.path,
+      worktreeName: Worktree(path: worktree.path).name,
+      device: 'macos',
+      entrypoint: 'lib/main.dart',
+      launcherPid: pid,
+      startedAt: DateTime.now(),
+    ).publish(runDir.path);
+    await tester.runAsync(core.computeAll);
+
+    var address = ValueNotifier(
+      Address(
+        worktree: 'wt',
+        plugin: runPluginId,
+        segments: const [newRunSegment],
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: AddressRoot(
+            address: address,
+            onChanged: (a) => address.value = a,
+            child: Builder(builder: RunPlugin(core).buildPanel),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The declaration answers the whole question: nothing to read beyond the
+    // fact, and nothing to override — the launch drops the flag as on web.
+    expect(
+      find.text('none — the platform declares no flavors'),
+      findsOneWidget,
+    );
+    expect(find.text('Override'), findsNothing);
+  });
+
   testWidgets("the New run page comes back holding last time's knobs", (
     tester,
   ) async {

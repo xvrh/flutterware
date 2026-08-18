@@ -180,6 +180,7 @@ class RunEntrypointPackage {
   RunEntrypointPackage({
     required this.path,
     required this.declared,
+    this.flavors,
     this.entrypoints = const [],
   });
 
@@ -190,6 +191,15 @@ class RunEntrypointPackage {
   /// scanning `lib/`. Worth carrying: a scanned list is a guess that happens to
   /// be right most of the time, and a caller choosing from it should know.
   final bool declared;
+
+  /// The flavors this package declares per platform, as written — shorthand
+  /// keys unexpanded, absent when it declares none.
+  ///
+  /// An empty list is a declaration, not a gap: that platform has no flavors,
+  /// and a launch there goes out without `--flavor` the way web always has.
+  /// On a platform with a list, a launch naming anything else refuses — so
+  /// this is the vocabulary a caller picks from, not a suggestion.
+  final Map<String, List<String>>? flavors;
 
   final List<RunEntrypointEntry> entrypoints;
 

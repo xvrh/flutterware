@@ -197,6 +197,32 @@ class RunCore extends PluginCore {
 
   final _entrypoints = <String, List<EntrypointRef>>{};
 
+  /// The flavors [package] declares for the platform [device] describes, or
+  /// null where it declares nothing — `RunPackage.flavors`, looked up the way
+  /// every per-platform declaration is (concrete key, then shorthand, then
+  /// the daemon category for a device that named no platform).
+  ///
+  /// The null/empty distinction is the point: null is "unknown, check
+  /// nothing", empty is "this platform has no flavors" — the declared
+  /// equivalent of what web is by nature.
+  List<String>? flavorVocabularyFor(String package, String? device) {
+    var target = devices
+        .where((candidate) => candidate.id == device)
+        .firstOrNull;
+    return lookupByPlatform(
+      _flavorVocabularies[package] ?? const {},
+      platformType: target?.platformType,
+      category: target?.category,
+    );
+  }
+
+  /// [package]'s declared flavors, as written — for the report, which echoes
+  /// the author's word rather than a per-device expansion.
+  Map<RunPlatform, List<String>> flavorVocabularyOf(String package) =>
+      _flavorVocabularies[package] ?? const {};
+
+  final _flavorVocabularies = <String, Map<RunPlatform, List<String>>>{};
+
   /// [path]'s `flutter: default-flavor:`, when its pubspec declares one.
   ///
   /// Cached beside the entry points because it is read the same way, at the
@@ -287,6 +313,15 @@ class RunCore extends PluginCore {
       if (device.allowedBy(entry)) device,
   ];
 
+  /// What to call [device]'s platform in a sentence — `macos`, `ios`, or the
+  /// id itself for a device the cache has not described.
+  String platformLabelFor(String? device) {
+    var target = devices
+        .where((candidate) => candidate.id == device)
+        .firstOrNull;
+    return target?.platformType ?? target?.category ?? device ?? 'this device';
+  }
+
   /// True when [path]'s entry points came from `tool/flutterware.dart` rather
   /// than from scanning.
   bool isDeclared(String path) =>
@@ -343,6 +378,7 @@ class RunCore extends PluginCore {
           ? declared
           : scanEntrypoints(root);
       _defaultFlavors[path] = defaultFlavorOf(root);
+      _flavorVocabularies[path] = declaredFlavors(_configFor(path)['flavors']);
     }
     // Dropped so the next ask re-reads sources that may have moved since.
     _entrypointKnobs.clear();
@@ -1933,6 +1969,12 @@ class RunCore extends PluginCore {
           RunEntrypointPackage(
             path: path,
             declared: isDeclared(path),
+            flavors: flavorVocabularyOf(path).isEmpty
+                ? null
+                : {
+                    for (var entry in flavorVocabularyOf(path).entries)
+                      entry.key.name: entry.value,
+                  },
             entrypoints: [
               for (var entry in entrypointsFor(path))
                 RunEntrypointEntry(
@@ -2298,16 +2340,36 @@ class RunCore extends PluginCore {
     var defines = PreviewsCore.parsePairs(arguments['dartDefines']);
     var knobs = PreviewsCore.parsePairs(arguments['knobs']);
 
+    // The caller's word beats the entry point's declaration, and an empty
+    // string is how a caller says "no flavor" about an entry point that
+    // declares one.
+    var flavor = switch (arguments['flavor']) {
+      String given => given.isEmpty ? null : given,
+      _ => flavorFor(package, entry, device: device).flavor,
+    };
+    // The two ways a flavor is quietly not passed, said out loud. Both drops
+    // happen below this action — the vocabulary's in `launch`, web's in the
+    // command builder — and a flag that silently went missing already
+    // confused one agent into filing it as a fault.
+    var flavorless =
+        flavor != null && flavorVocabularyFor(package, device)?.isEmpty == true
+        ? '$package declares no flavors on ${platformLabelFor(device)} — '
+              'launched without --flavor, as on web.'
+        : null;
+    var web =
+        flavor != null &&
+            devices.any(
+              (candidate) =>
+                  candidate.id == device && candidate.platformType == 'web',
+            )
+        ? 'web takes no --flavor — launched without it.'
+        : null;
+
     var handle = await launch(
       device: device,
       package: package,
       entry: entry,
-      // The caller's word beats every declaration, and an empty string is how a
-      // caller says "no flavor" about an entry point that declares one.
-      flavor: switch (arguments['flavor']) {
-        String given => given.isEmpty ? null : given,
-        _ => flavorFor(package, entry, device: device).flavor,
-      },
+      flavor: flavor,
       defines: defines,
       knobs: knobs,
     );
@@ -2360,7 +2422,11 @@ class RunCore extends PluginCore {
           failure ?? (status == 'failed' ? 'the app stopped starting' : null),
       headline: status == 'failed' ? log.failureHeadline : null,
       logPath: status == 'failed' ? handle.logPath : null,
-      note: _joinNotes([if (status == 'starting' && wait) stillBuilding]),
+      note: _joinNotes([
+        flavorless,
+        web,
+        if (status == 'starting' && wait) stillBuilding,
+      ]),
       app: _appEntry(handle, probe),
     );
   }
@@ -2381,6 +2447,11 @@ class RunCore extends PluginCore {
   /// default, and the handle recorded `eight` — a cockpit showing a value the
   /// app was not using. A knob that quietly does nothing is the exact failure
   /// this design deleted `--dart-define` to escape.
+  ///
+  /// [flavor] is vetted here too, for the same both-surfaces reason: where the
+  /// package declares its flavors per platform, an unlisted one refuses before
+  /// the build, and a platform declared flavorless drops the flag the way web
+  /// does.
   Future<RunHandle> launch({
     required String device,
     required String package,
@@ -2390,6 +2461,12 @@ class RunCore extends PluginCore {
     Map<String, String> knobs = const {},
   }) async {
     _checkKnobNames(package, entry, knobs);
+    flavor = applyFlavorVocabulary(
+      flavor: flavor,
+      vocabulary: flavorVocabularyFor(package, device),
+      package: package,
+      platformLabel: platformLabelFor(device),
+    );
     var resolvedKnobs = await _resolveKnobs(package, entry, knobs);
     var known = devices.where((candidate) => candidate.id == device);
     var deviceName = known

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:flutterware_app/src/run/entrypoints.dart';
 import 'package:flutterware_app/src/run/flavors.dart';
+import 'package:flutterware_app/src/run/refusal.dart';
 
 void main() {
   group('lookupByPlatform', () {
@@ -107,6 +108,105 @@ void main() {
       expect(
         const Entrypoint('lib/main.dart').toJson(),
         isNot(contains('flavorByPlatform')),
+      );
+    });
+
+    test('what RunPackage writes is what the decoder reads', () {
+      var declared = const RunPackage(
+        Pkg('app'),
+        flavors: {
+          RunPlatform.mobile: ['local', 'patientLocal'],
+          RunPlatform.linux: [],
+        },
+      ).toJson();
+
+      expect(declaredFlavors(declared['flavors']), {
+        RunPlatform.mobile: ['local', 'patientLocal'],
+        // The empty list survives the wire: it is a declaration, not a gap.
+        RunPlatform.linux: <String>[],
+      });
+      expect(const RunPackage(Pkg('app')).toJson(), isNot(contains('flavors')));
+    });
+
+    test('a vocabulary key this build cannot name is dropped', () {
+      expect(
+        declaredFlavors({
+          'mobile': ['local'],
+          'fuchsia': ['next'],
+          'macos': 'oops',
+        }),
+        {
+          RunPlatform.mobile: ['local'],
+        },
+      );
+    });
+  });
+
+  group('applyFlavorVocabulary', () {
+    test('no vocabulary checks nothing', () {
+      expect(
+        applyFlavorVocabulary(
+          flavor: 'anything',
+          vocabulary: null,
+          package: 'app',
+          platformLabel: 'linux',
+        ),
+        'anything',
+      );
+    });
+
+    test('a flavorless platform drops the flag the way web does', () {
+      expect(
+        applyFlavorVocabulary(
+          flavor: 'local',
+          vocabulary: const [],
+          package: 'app',
+          platformLabel: 'macos',
+        ),
+        isNull,
+      );
+    });
+
+    test('a listed flavor passes, an unlisted one refuses with the list', () {
+      expect(
+        applyFlavorVocabulary(
+          flavor: 'staging',
+          vocabulary: const ['local', 'staging'],
+          package: 'app',
+          platformLabel: 'ios',
+        ),
+        'staging',
+      );
+      expect(
+        () => applyFlavorVocabulary(
+          flavor: 'stagign',
+          vocabulary: const ['local', 'staging'],
+          package: 'app',
+          platformLabel: 'ios',
+        ),
+        throwsA(
+          isA<RunRefusal>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('stagign'),
+              contains('local, staging'),
+              contains('tool/flutterware.dart'),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('no flavor at all is nobody’s problem', () {
+      expect(
+        applyFlavorVocabulary(
+          flavor: null,
+          vocabulary: const ['local'],
+          package: 'app',
+          platformLabel: 'ios',
+        ),
+        isNull,
       );
     });
   });
