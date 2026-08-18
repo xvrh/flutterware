@@ -274,6 +274,7 @@ class RunKnobEntry {
     this.description,
     this.kind,
     this.defaultValue,
+    this.defaultSource,
     this.options = const [],
     this.problem,
   });
@@ -295,6 +296,18 @@ class RunKnobEntry {
   /// one was computed, else the parameter's own default.
   @JsonKey(name: 'default')
   final String? defaultValue;
+
+  /// How the default is written, when it is a reference this cannot evaluate —
+  /// `ServerUrls.localPort`.
+  ///
+  /// **Present exactly when [defaultValue] is absent and a default exists**, so
+  /// the two never disagree and neither ever stands in for the other. It is the
+  /// answer to a form that showed a blank for a parameter with a default two
+  /// lines away: the reader recognises what they wrote, and the value field
+  /// stays honest about not knowing it. A project that needs the value itself
+  /// declares `from:` and gets it computed.
+  @JsonKey(name: 'defaultSource')
+  final String? defaultSource;
 
   /// Everything worth offering — an enum's constants, this machine's
   /// addresses, a list a project script printed, or what the config wrote.

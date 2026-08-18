@@ -73,6 +73,7 @@ Map<String, dynamic> _$RunKnobEntryToJson(RunKnobEntry instance) =>
       'description': ?instance.description,
       'kind': ?instance.kind,
       'default': ?instance.defaultValue,
+      'defaultSource': ?instance.defaultSource,
       'options': instance.options,
       'problem': ?instance.problem,
     };

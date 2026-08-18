@@ -395,6 +395,7 @@ packages: List<RunEntrypointPackage>
       description: String?
       kind: String?   # `string`, `boolean`, `integer`, `number` or `picker` — how it draws.
       default: String?   # What the launch uses when nobody says otherwise: a script's answer when one was computed, else the parameter's own default.
+      defaultSource: String?   # How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.
       options: List<String>   # Everything worth offering — an enum's constants, this machine's addresses, a list a project script printed, or what the config wrote.
       problem: String?   # What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.
 note: String?

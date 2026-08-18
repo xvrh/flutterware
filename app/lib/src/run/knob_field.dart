@@ -255,7 +255,18 @@ class _KnobFieldState extends State<KnobField> {
       // The default is shown rather than filled in, so leaving the field alone
       // and leaving it at its default are the same thing — the rule the define
       // form already followed.
-      decoration: InputDecoration(hintText: _knob.defaultValue, isDense: true),
+      //
+      // Falling back to how the default is *written* when there is no value to
+      // show for it. A parameter defaulted to a `const` — which is most of them
+      // in a project whose values came from `--dart-define`, since that is what
+      // `String.fromEnvironment` is — showed an empty hint, indistinguishable
+      // from a parameter with no default at all. `ServerUrls.localPort` is not
+      // a value and is not offered as one; it is the line the reader wrote, and
+      // it tells them the field is already covered.
+      decoration: InputDecoration(
+        hintText: _knob.defaultValue ?? _knob.defaultSource,
+        isDense: true,
+      ),
       keyboardType: switch (_knob.kind) {
         'integer' || 'number' => TextInputType.number,
         _ => TextInputType.text,
