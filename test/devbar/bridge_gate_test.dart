@@ -41,4 +41,20 @@ void main() {
     expect(GuestChannels.panels.descriptors, isEmpty);
     expect(GuestChannels.core.channels, isNot(contains('flags')));
   });
+
+  testWidgets('nor does a panel scoped to a subtree', (tester) async {
+    expect(GuestChannels.installed, isFalse);
+
+    await tester.pumpWidget(
+      AddDevbarPanel(source: _FlagsPlugin(), child: const SizedBox()),
+    );
+    await tester.pumpAndSettle();
+
+    // `AddDevbarPanel` asks the same gate the same question, so an app that
+    // scopes a panel to a session still pays nothing for it outside
+    // flutterware — including the part where it has no devbar above it to
+    // find, which is not something it needs.
+    expect(GuestChannels.panels.descriptors, isEmpty);
+    expect(GuestChannels.core.channels, isNot(contains('flags')));
+  });
 }

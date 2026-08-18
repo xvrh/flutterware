@@ -122,6 +122,14 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
+  /// A wire round trip the app started, then the frames it causes.
+  Future<void> settle(WidgetTester tester) async {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+  }
+
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -143,6 +151,37 @@ void main() {
     expect(find.text('Controls'), findsOneWidget);
     expect(find.text('newCheckout'), findsOneWidget);
     expect(find.byType(Switch), findsOneWidget);
+  });
+
+  /// **A panel is not only declared at startup.** `AddDevbarPanel` serves one
+  /// for as long as a subtree is mounted, so an app signing in halfway through
+  /// a run grows a panel while the cockpit is looking at it. Nothing pushes
+  /// the panel itself: the app announces that its list moved and the tab
+  /// re-reads it.
+  testWidgets('a panel the app adds mid-run appears, and going takes it away', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.text('Database'), findsNothing);
+
+    app.panels
+        .add('db:main', 'Database')
+        .action(const PluginAction('query', 'Run a query'), (_) => {});
+    // The app announced that its list moved; the tab's re-read is a round trip
+    // over the wire, which needs the real event loop rather than more frames.
+    await settle(tester);
+
+    // Two panels now, so the strip that chooses between them is there too.
+    expect(find.text('Database'), findsOneWidget);
+    expect(find.text('Feature flags'), findsOneWidget);
+
+    app.panels.remove('db:main');
+    await settle(tester);
+
+    expect(find.text('Database'), findsNothing);
+    // The one that is left is showing, rather than a pane for a panel that
+    // signed out.
+    expect(find.text('newCheckout'), findsOneWidget);
   });
 
   testWidgets('toggling a knob reaches the app and is remembered as a wish', (

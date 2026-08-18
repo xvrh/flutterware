@@ -130,8 +130,20 @@ class DevbarState extends State<Devbar> {
       future: _loadPluginsFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          // Never painted: the first frame stays deferred until loading ends.
-          return Container(color: Colors.red);
+          // Nothing, and deliberately nothing to look at.
+          //
+          // At the root this is never painted — the first frame stays deferred
+          // until loading ends — and it used to be a red `Container` saying so.
+          // But **a devbar mounted after the app has started paints it**:
+          // `sendFramesToEngine` is `_firstFrameSent || _firstFrameDeferredCount
+          // == 0`, so once a frame is out, deferring another is a no-op. A
+          // devbar scoped to a session then flashed full-bleed red at every
+          // login, for the frame its plugins took to construct.
+          //
+          // The child cannot be built instead: a descendant may reach for
+          // `DevbarState.of(context).plugin<T>()` on the way up, and a plugin
+          // that has not loaded is not there to be found.
+          return const SizedBox.shrink();
         }
 
         // The plugins are loaded and reporting; the overlay is what is

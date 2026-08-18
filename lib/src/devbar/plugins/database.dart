@@ -35,6 +35,62 @@ typedef DatabaseWatch = Stream<List<Map<String, Object?>>> Function(String sql);
 ///   watch: (sql) => db.watch(sql),
 /// )
 /// ```
+///
+/// ## A database that is not open yet
+///
+/// Plenty of apps have no database at `runApp`: it is opened at login, closed
+/// at logout, and replaced when the user switches environment. There is
+/// nothing to hand this constructor at the moment the devbar is built.
+///
+/// **The adapter is the shape; the session is the data.** Close over the
+/// lookup rather than over the database, and resolve it inside each function:
+///
+/// ```dart
+/// DatabaseAdapter(
+///   query: (sql, args) => _db().getAll(sql, args),
+///   watch: (sql) => _db().watch(sql),
+///   updates: _updates.stream,
+/// )
+///
+/// Database _db() {
+///   var db = session?.database;
+///   if (db == null) {
+///     throw DatabaseUnavailable('No session is open — sign in to reach the '
+///         'database.');
+///   }
+///   return db;
+/// }
+/// ```
+///
+/// Two things about that are not optional. **Presence is read once**, when the
+/// panel is described: an adapter that leaves [execute] null while logged out
+/// declares an app with no write door, permanently, and the same goes for
+/// [watch] and [updates]. Pass every function the app will ever offer, and let
+/// the ones with nothing to work on throw. And **[updates] is the one field
+/// that cannot be resolved late** — it is a stream, handed over once, not a
+/// function called per query. Own a broadcast controller that outlives every
+/// session and forward the current database into it:
+///
+/// ```dart
+/// final _updates = StreamController<Set<String>>.broadcast();
+/// StreamSubscription<void>? _forwarding;
+///
+/// void _sessionChanged(Session? session) {
+///   unawaited(_forwarding?.cancel());
+///   _forwarding = session?.database.updates
+///       .listen((update) => _updates.add(update.tables));
+/// }
+/// ```
+///
+/// **Why a panel that answers rather than one that disappears.** The other
+/// shape — declaring the panel only while a session is open, which
+/// `AddDevbarPanel` makes possible — leaves the absence unexplained. Ask for
+/// `db:main` when it is gone and every surface says the same thing, *"this app
+/// declares no panel db:main"*, whether the app has no database at all or the
+/// user is one tap from opening one. A panel that is always listed and answers
+/// [DatabaseUnavailable] tells those apart, and it is the same call flutterware
+/// makes for an app that never reached `runApp`: say what is wrong, do not go
+/// missing.
 class DatabaseAdapter {
   DatabaseAdapter({
     this.name = 'main',
@@ -61,6 +117,28 @@ class DatabaseAdapter {
   /// **Presence is the write opt-in.** No function, no `execute` action, on
   /// any surface — an agent cannot even see it (§ Decision 3 of the design).
   final DatabaseQuery? execute;
+}
+
+/// What a database function throws when there is no database to reach —
+/// nobody is signed in, the session is closing, the environment is switching.
+///
+/// It exists for its [toString]. An error crossing the channel travels as its
+/// message and nothing else, and lands verbatim in the cockpit's error pane
+/// and in an MCP reply, so `StateError` puts *"Bad state:"* in front of a
+/// sentence somebody has to read and `ArgumentError` does worse. This puts
+/// nothing in front of it.
+///
+/// The message is for whoever hits it, which is often an agent that cannot see
+/// the screen: say what is missing **and what would fix it** — *"No session is
+/// open — sign in to reach the database"* rather than *"no database"*.
+class DatabaseUnavailable implements Exception {
+  DatabaseUnavailable(this.reason);
+
+  /// A sentence, shown exactly as written.
+  final String reason;
+
+  @override
+  String toString() => reason;
 }
 
 /// How many rows an inline `query`/`execute` reply carries by default. The

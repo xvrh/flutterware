@@ -13,6 +13,7 @@
 library;
 
 import '../server/vm_transport.dart';
+import 'add_panel.dart';
 import 'devbar.dart';
 import 'panel_source.dart';
 
@@ -35,9 +36,8 @@ class DevbarBridge {
     var claimed = <String>[];
     for (var plugin in plugins) {
       if (plugin case DevbarPanelSource source) {
-        var id = _freeId(source.panelId);
-        source.describePanel(GuestChannels.panels.add(id, source.panelLabel));
-        claimed.add(id);
+        var id = add(source);
+        if (id != null) claimed.add(id);
       }
     }
     _mounted[devbar] = claimed;
@@ -45,8 +45,32 @@ class DevbarBridge {
 
   static void unmount(DevbarState devbar) {
     for (var id in _mounted.remove(devbar) ?? const <String>[]) {
-      GuestChannels.panels.remove(id);
+      remove(id);
     }
+  }
+
+  /// Starts serving [source], and answers with **the id it actually got** —
+  /// which is not always [DevbarPanelSource.panelId], because [_freeId] steps
+  /// aside for a panel already using that name.
+  ///
+  /// Null when nothing is watching, which is the whole of what a caller has to
+  /// remember: hold the answer, hand it back to [remove], and an app running
+  /// outside flutterware has quietly done nothing.
+  ///
+  /// The other door into this is [mount], for the panels a devbar's own
+  /// plugins declare. This one is for [AddDevbarPanel] — a panel that belongs
+  /// to a subtree rather than to the devbar, and so comes and goes with it.
+  static String? add(DevbarPanelSource source) {
+    if (!active) return null;
+    var id = _freeId(source.panelId);
+    source.describePanel(GuestChannels.panels.add(id, source.panelLabel));
+    return id;
+  }
+
+  /// Stops serving the panel [add] claimed. Null is the no-op that lets a
+  /// caller hold the answer without checking it.
+  static void remove(String? id) {
+    if (id != null) GuestChannels.panels.remove(id);
   }
 
   /// `network`, then `network#2`, then `network#3`.
