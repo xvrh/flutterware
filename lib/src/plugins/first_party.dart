@@ -454,7 +454,11 @@ class Run extends Plugin {
 }
 
 class RunPackage extends PluginPackage {
-  const RunPackage(super.pkg, {this.entrypoints = const []});
+  const RunPackage(
+    super.pkg, {
+    this.entrypoints = const [],
+    this.flavors = const {},
+  });
 
   /// The `main()`s worth launching, named.
   ///
@@ -467,9 +471,55 @@ class RunPackage extends PluginPackage {
   /// `main_staging.dart` only tells it where the thing lives.
   final List<Entrypoint> entrypoints;
 
+  /// The flavors this package has, per platform — the author's word, so the
+  /// cockpit can offer a list instead of an empty box and a launch can refuse
+  /// a name the build system was never going to accept.
+  ///
+  /// ```dart
+  /// flavors: {
+  ///   RunPlatform.mobile: ['local', 'patientLocal', 'staging', 'prod'],
+  ///   RunPlatform.macos: ['local', 'staging', 'prod'],
+  ///   RunPlatform.linux: [], // this platform has no flavors
+  /// },
+  /// ```
+  ///
+  /// Declared rather than discovered, deliberately: the real authorities are
+  /// Gradle and the Xcode schemes, which cost three parsers to read — see
+  /// the note on the pubspec's `default-flavor` — and on Linux and Windows
+  /// there is nothing to read at all, since `--flavor` there gates no build
+  /// and merely sets `FLUTTER_APP_FLAVOR`.
+  ///
+  /// Four rules, one per shape:
+  ///
+  /// - **Not declared at all**: nothing changes — free text, no checking.
+  /// - **A platform not in the map**: unknown vocabulary; a flavor there is
+  ///   passed as written and unchecked. Omission means "I did not say",
+  ///   never "there are none".
+  /// - **A platform mapped to `[]`**: this platform has no flavors, and it
+  ///   behaves the way web already does — the launch drops the flag instead
+  ///   of handing Xcode a scheme that does not exist.
+  /// - **A platform with a list**: the New run page offers a picker, and a
+  ///   launch whose flavor is not on the list refuses before building — a
+  ///   typo becomes a sentence naming the list instead of a Gradle failure
+  ///   minutes later.
+  ///
+  /// Keys follow the same rules as [Entrypoint.flavorByPlatform]: shorthands
+  /// allowed, a concrete key beats the shorthand containing it. The list
+  /// carries **no default** — order means nothing. Which flavor an entry
+  /// point builds with is [Entrypoint.flavor]'s job, and what a bare
+  /// `flutter run` does is the pubspec's `default-flavor:` — a third answer
+  /// here could only disagree with those two.
+  final Map<RunPlatform, List<String>> flavors;
+
   @override
   Map<String, Object?> toJson() => {
     ...super.toJson(),
+    // As written, shorthand keys and all — the same author's-word rule as
+    // `Entrypoint.platforms`.
+    if (flavors.isNotEmpty)
+      'flavors': {
+        for (var entry in flavors.entries) entry.key.name: entry.value,
+      },
     if (entrypoints.isNotEmpty)
       'entrypoints': [for (var e in entrypoints) e.toJson()],
   };
@@ -482,6 +532,7 @@ class Entrypoint {
     this.name,
     this.description,
     this.flavor,
+    this.flavorByPlatform = const {},
     this.platforms = const [],
     this.knobs = const [],
   });
@@ -519,7 +570,9 @@ class Entrypoint {
   /// Declared per entry point because that is how the pairing actually works:
   /// `main_dev.dart` goes with `dev`, and it is the same fact twice. To run one
   /// entry point under several flavors, declare it several times with different
-  /// [name]s, or pass `flavor` to the launch action.
+  /// [name]s, or pass `flavor` to the launch action. When the flavor varies by
+  /// *platform* rather than by intent, that is [flavorByPlatform], not a second
+  /// declaration.
   ///
   /// Every platform but web — `supportsFlavors` is true on Linux, macOS and
   /// Windows as well as Android and iOS, and web is the one that inherits the
@@ -528,6 +581,32 @@ class Entrypoint {
   /// which is what a project setting `flutter: default-flavor:` for its web
   /// build already expects.
   final String? flavor;
+
+  /// [flavor], where it depends on the platform the launch targets.
+  ///
+  /// The case is real: an app split into two store identities builds the same
+  /// entry point under `patientLocal` on a phone — where the flavor decides
+  /// the package id and the deep links, and the wrong one *installs over the
+  /// other app* — and under plain `local` on a desktop, where none of that
+  /// exists. One declaration:
+  ///
+  /// ```dart
+  /// Entrypoint('lib/main_patient.dart', name: 'Patient',
+  ///     flavor: 'local',
+  ///     flavorByPlatform: {RunPlatform.mobile: 'patientLocal'}),
+  /// ```
+  ///
+  /// The launch resolves against the target device's platform: a concrete key
+  /// ([RunPlatform.ios]) beats a shorthand ([RunPlatform.mobile]), a shorthand
+  /// beats [flavor], and a platform in neither falls back to [flavor] and then
+  /// to the pubspec's `default-flavor:` as always. The two shorthands cannot
+  /// overlap each other, so there is no ambiguity to refuse. The launch
+  /// action's `flavor` argument still beats all of it.
+  ///
+  /// Before this field the answer was two declarations of the same path with
+  /// the platform spelled twice — once in each [name], once in [platforms] —
+  /// and a picker showing two rows for one thing.
+  final Map<RunPlatform, String> flavorByPlatform;
 
   /// What this entry point can actually run on. Everything, when empty.
   ///
@@ -557,6 +636,11 @@ class Entrypoint {
     'name': ?name,
     'description': ?description,
     'flavor': ?flavor,
+    // As written, shorthands and all — same rule as `platforms` below.
+    if (flavorByPlatform.isNotEmpty)
+      'flavorByPlatform': {
+        for (var entry in flavorByPlatform.entries) entry.key.name: entry.value,
+      },
     // As written, shorthands and all. The tool expands them where it matches
     // devices; the manifest keeps the author's word so a picker can say
     // `desktop` rather than reciting three platforms back at them.

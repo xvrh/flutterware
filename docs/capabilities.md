@@ -381,12 +381,14 @@ Returns `RunEntrypointsResult`:
 packages: List<RunEntrypointPackage>
   path: String   # Package path, relative to the worktree.
   declared: bool   # True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.
+  flavors: Map<String, List<String>>?   # The flavors this package declares per platform, as written — shorthand keys unexpanded, absent when it declares none.
   entrypoints: List<RunEntrypointEntry>
     path: String   # Package-relative — what `launch` takes as its `entrypoint`.
     name: String
     description: String?   # What it is, in a line, when the config said.
     flavor: String?   # The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package's `flutter: default-flavor:`.
     flavorSource: String?   # `entrypoint` or `pubspec` — which of the two put [flavor] there.
+    flavorByPlatform: Map<String, String>?   # [flavor] where the declaration varies it by platform, as written — shorthand keys (`mobile`) unexpanded, absent when it does not.
     platforms: List<String>   # What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.
     devices: List<String>   # The ids of the devices currently connected that [platforms] allows.
     knobs: List<RunKnobEntry>   # The knobs this entry point's `main` takes — the optional named parameters of its signature, with what the config annotated them with.

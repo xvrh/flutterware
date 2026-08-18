@@ -180,6 +180,7 @@ class RunEntrypointPackage {
   RunEntrypointPackage({
     required this.path,
     required this.declared,
+    this.flavors,
     this.entrypoints = const [],
   });
 
@@ -190,6 +191,15 @@ class RunEntrypointPackage {
   /// scanning `lib/`. Worth carrying: a scanned list is a guess that happens to
   /// be right most of the time, and a caller choosing from it should know.
   final bool declared;
+
+  /// The flavors this package declares per platform, as written — shorthand
+  /// keys unexpanded, absent when it declares none.
+  ///
+  /// An empty list is a declaration, not a gap: that platform has no flavors,
+  /// and a launch there goes out without `--flavor` the way web always has.
+  /// On a platform with a list, a launch naming anything else refuses — so
+  /// this is the vocabulary a caller picks from, not a suggestion.
+  final Map<String, List<String>>? flavors;
 
   final List<RunEntrypointEntry> entrypoints;
 
@@ -208,6 +218,7 @@ class RunEntrypointEntry {
     this.description,
     this.flavor,
     this.flavorSource,
+    this.flavorByPlatform,
     this.platforms = const [],
     this.devices = const [],
     this.knobs = const [],
@@ -237,6 +248,16 @@ class RunEntrypointEntry {
   /// overridden with different confidence: a pubspec default is the project's
   /// blanket answer, while an entry point's is a pairing somebody wrote down.
   final String? flavorSource;
+
+  /// [flavor] where the declaration varies it by platform, as written —
+  /// shorthand keys (`mobile`) unexpanded, absent when it does not.
+  ///
+  /// A launch onto a device whose platform is in this map builds with the
+  /// map's value instead of [flavor]; the platform of every connected device
+  /// is in `status`. The map is echoed rather than resolved per device
+  /// because three tokens of the author's word say the whole rule, where an
+  /// expansion repeats it once per device.
+  final Map<String, String>? flavorByPlatform;
 
   /// What this entry point declares it can run on, as the config wrote it —
   /// `mobile` stays `mobile`. Empty means anything.

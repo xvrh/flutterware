@@ -3388,6 +3388,13 @@ final resultShapes = <String, ResultShape>{
             '`entrypoint` or `pubspec` — which of the two put [flavor] there.',
       },
       <String, Object?>{
+        'name': 'flavorByPlatform',
+        'type': 'Map<String, String>',
+        'optional': true,
+        'doc':
+            '[flavor] where the declaration varies it by platform, as written — shorthand keys (`mobile`) unexpanded, absent when it does not.',
+      },
+      <String, Object?>{
         'name': 'platforms',
         'type': 'List<String>',
         'doc':
@@ -3482,6 +3489,13 @@ final resultShapes = <String, ResultShape>{
             'True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.',
       },
       <String, Object?>{
+        'name': 'flavors',
+        'type': 'Map<String, List<String>>',
+        'optional': true,
+        'doc':
+            'The flavors this package declares per platform, as written — shorthand keys unexpanded, absent when it declares none.',
+      },
+      <String, Object?>{
         'name': 'entrypoints',
         'type': 'List<RunEntrypointEntry>',
         'shape': <String, Object?>{
@@ -3513,6 +3527,13 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
               'doc':
                   '`entrypoint` or `pubspec` — which of the two put [flavor] there.',
+            },
+            <String, Object?>{
+              'name': 'flavorByPlatform',
+              'type': 'Map<String, String>',
+              'optional': true,
+              'doc':
+                  '[flavor] where the declaration varies it by platform, as written — shorthand keys (`mobile`) unexpanded, absent when it does not.',
             },
             <String, Object?>{
               'name': 'platforms',
@@ -3619,6 +3640,13 @@ final resultShapes = <String, ResultShape>{
                   'True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.',
             },
             <String, Object?>{
+              'name': 'flavors',
+              'type': 'Map<String, List<String>>',
+              'optional': true,
+              'doc':
+                  'The flavors this package declares per platform, as written — shorthand keys unexpanded, absent when it declares none.',
+            },
+            <String, Object?>{
               'name': 'entrypoints',
               'type': 'List<RunEntrypointEntry>',
               'shape': <String, Object?>{
@@ -3650,6 +3678,13 @@ final resultShapes = <String, ResultShape>{
                     'optional': true,
                     'doc':
                         '`entrypoint` or `pubspec` — which of the two put [flavor] there.',
+                  },
+                  <String, Object?>{
+                    'name': 'flavorByPlatform',
+                    'type': 'Map<String, String>',
+                    'optional': true,
+                    'doc':
+                        '[flavor] where the declaration varies it by platform, as written — shorthand keys (`mobile`) unexpanded, absent when it does not.',
                   },
                   <String, Object?>{
                     'name': 'platforms',

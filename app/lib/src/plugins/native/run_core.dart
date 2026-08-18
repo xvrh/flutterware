@@ -27,6 +27,7 @@ import '../../run/handle.dart';
 import '../../inspect/lens.dart';
 import '../../inspect/screen_read.dart';
 import '../../run/inspect.dart';
+import '../../run/refusal.dart';
 import '../../run/inventory.dart';
 import '../../run/journal.dart';
 import '../../run/launch.dart';
@@ -196,6 +197,32 @@ class RunCore extends PluginCore {
 
   final _entrypoints = <String, List<EntrypointRef>>{};
 
+  /// The flavors [package] declares for the platform [device] describes, or
+  /// null where it declares nothing — `RunPackage.flavors`, looked up the way
+  /// every per-platform declaration is (concrete key, then shorthand, then
+  /// the daemon category for a device that named no platform).
+  ///
+  /// The null/empty distinction is the point: null is "unknown, check
+  /// nothing", empty is "this platform has no flavors" — the declared
+  /// equivalent of what web is by nature.
+  List<String>? flavorVocabularyFor(String package, String? device) {
+    var target = devices
+        .where((candidate) => candidate.id == device)
+        .firstOrNull;
+    return lookupByPlatform(
+      _flavorVocabularies[package] ?? const {},
+      platformType: target?.platformType,
+      category: target?.category,
+    );
+  }
+
+  /// [package]'s declared flavors, as written — for the report, which echoes
+  /// the author's word rather than a per-device expansion.
+  Map<RunPlatform, List<String>> flavorVocabularyOf(String package) =>
+      _flavorVocabularies[package] ?? const {};
+
+  final _flavorVocabularies = <String, Map<RunPlatform, List<String>>>{};
+
   /// [path]'s `flutter: default-flavor:`, when its pubspec declares one.
   ///
   /// Cached beside the entry points because it is read the same way, at the
@@ -248,19 +275,34 @@ class RunCore extends PluginCore {
   }
 
   /// What [entry] builds with when nobody overrides it, and where that came
-  /// from — its own declaration, or [package]'s `flutter: default-flavor:`.
+  /// from — its per-platform pairing when [device]'s platform is in it, its
+  /// own declaration, or [package]'s `flutter: default-flavor:`.
   ///
   /// One chain, used by the panel and by the `launch` action, because a form
   /// that pre-fills `dev` and an agent that passes nothing must build the same
   /// thing. They did not before: the action stopped at the entry point's
   /// declaration and never looked at the pubspec.
+  ///
+  /// [device] is an id from the cache; one the cache has never mentioned is
+  /// still launchable (see `_checkDevice`) and resolves without the pairing,
+  /// as does no device at all — which is what the `entrypoints` report asks,
+  /// since its answer describes the entry point rather than a launch.
   ({String? flavor, FlavorSource source}) flavorFor(
     String package,
-    EntrypointRef entry,
-  ) => resolveFlavor(
-    entrypointFlavor: entry.flavor,
-    packageDefault: defaultFlavorFor(package),
-  );
+    EntrypointRef entry, {
+    String? device,
+  }) {
+    var target = devices
+        .where((candidate) => candidate.id == device)
+        .firstOrNull;
+    return resolveFlavor(
+      entrypointFlavor: entry.flavor,
+      packageDefault: defaultFlavorFor(package),
+      byPlatform: entry.flavorByPlatform,
+      platformType: target?.platformType,
+      category: target?.category,
+    );
+  }
 
   /// The devices [entry] can run on, in the order every surface lists them.
   ///
@@ -270,6 +312,15 @@ class RunCore extends PluginCore {
     for (var device in devices)
       if (device.allowedBy(entry)) device,
   ];
+
+  /// What to call [device]'s platform in a sentence — `macos`, `ios`, or the
+  /// id itself for a device the cache has not described.
+  String platformLabelFor(String? device) {
+    var target = devices
+        .where((candidate) => candidate.id == device)
+        .firstOrNull;
+    return target?.platformType ?? target?.category ?? device ?? 'this device';
+  }
 
   /// True when [path]'s entry points came from `tool/flutterware.dart` rather
   /// than from scanning.
@@ -327,6 +378,7 @@ class RunCore extends PluginCore {
           ? declared
           : scanEntrypoints(root);
       _defaultFlavors[path] = defaultFlavorOf(root);
+      _flavorVocabularies[path] = declaredFlavors(_configFor(path)['flavors']);
     }
     // Dropped so the next ask re-reads sources that may have moved since.
     _entrypointKnobs.clear();
@@ -1917,6 +1969,12 @@ class RunCore extends PluginCore {
           RunEntrypointPackage(
             path: path,
             declared: isDeclared(path),
+            flavors: flavorVocabularyOf(path).isEmpty
+                ? null
+                : {
+                    for (var entry in flavorVocabularyOf(path).entries)
+                      entry.key.name: entry.value,
+                  },
             entrypoints: [
               for (var entry in entrypointsFor(path))
                 RunEntrypointEntry(
@@ -1928,6 +1986,12 @@ class RunCore extends PluginCore {
                     FlavorSource.none => null,
                     var source => source.name,
                   },
+                  flavorByPlatform: entry.flavorByPlatform.isEmpty
+                      ? null
+                      : {
+                          for (var pairing in entry.flavorByPlatform.entries)
+                            pairing.key.name: pairing.value,
+                        },
                   platforms: [
                     for (var platform in entry.platforms) platform.name,
                   ],
@@ -2276,16 +2340,36 @@ class RunCore extends PluginCore {
     var defines = PreviewsCore.parsePairs(arguments['dartDefines']);
     var knobs = PreviewsCore.parsePairs(arguments['knobs']);
 
+    // The caller's word beats the entry point's declaration, and an empty
+    // string is how a caller says "no flavor" about an entry point that
+    // declares one.
+    var flavor = switch (arguments['flavor']) {
+      String given => given.isEmpty ? null : given,
+      _ => flavorFor(package, entry, device: device).flavor,
+    };
+    // The two ways a flavor is quietly not passed, said out loud. Both drops
+    // happen below this action — the vocabulary's in `launch`, web's in the
+    // command builder — and a flag that silently went missing already
+    // confused one agent into filing it as a fault.
+    var flavorless =
+        flavor != null && flavorVocabularyFor(package, device)?.isEmpty == true
+        ? '$package declares no flavors on ${platformLabelFor(device)} — '
+              'launched without --flavor, as on web.'
+        : null;
+    var web =
+        flavor != null &&
+            devices.any(
+              (candidate) =>
+                  candidate.id == device && candidate.platformType == 'web',
+            )
+        ? 'web takes no --flavor — launched without it.'
+        : null;
+
     var handle = await launch(
       device: device,
       package: package,
       entry: entry,
-      // The caller's word beats every declaration, and an empty string is how a
-      // caller says "no flavor" about an entry point that declares one.
-      flavor: switch (arguments['flavor']) {
-        String given => given.isEmpty ? null : given,
-        _ => flavorFor(package, entry).flavor,
-      },
+      flavor: flavor,
       defines: defines,
       knobs: knobs,
     );
@@ -2338,7 +2422,11 @@ class RunCore extends PluginCore {
           failure ?? (status == 'failed' ? 'the app stopped starting' : null),
       headline: status == 'failed' ? log.failureHeadline : null,
       logPath: status == 'failed' ? handle.logPath : null,
-      note: _joinNotes([if (status == 'starting' && wait) stillBuilding]),
+      note: _joinNotes([
+        flavorless,
+        web,
+        if (status == 'starting' && wait) stillBuilding,
+      ]),
       app: _appEntry(handle, probe),
     );
   }
@@ -2359,6 +2447,11 @@ class RunCore extends PluginCore {
   /// default, and the handle recorded `eight` — a cockpit showing a value the
   /// app was not using. A knob that quietly does nothing is the exact failure
   /// this design deleted `--dart-define` to escape.
+  ///
+  /// [flavor] is vetted here too, for the same both-surfaces reason: where the
+  /// package declares its flavors per platform, an unlisted one refuses before
+  /// the build, and a platform declared flavorless drops the flag the way web
+  /// does.
   Future<RunHandle> launch({
     required String device,
     required String package,
@@ -2368,6 +2461,12 @@ class RunCore extends PluginCore {
     Map<String, String> knobs = const {},
   }) async {
     _checkKnobNames(package, entry, knobs);
+    flavor = applyFlavorVocabulary(
+      flavor: flavor,
+      vocabulary: flavorVocabularyFor(package, device),
+      package: package,
+      platformLabel: platformLabelFor(device),
+    );
     var resolvedKnobs = await _resolveKnobs(package, entry, knobs);
     var known = devices.where((candidate) => candidate.id == device);
     var deviceName = known
@@ -2535,7 +2634,7 @@ class RunCore extends PluginCore {
     var scan = knobsReadBy(package, entry.path);
     var required = scan.required;
     if (required.isNotEmpty) {
-      throw StateError(
+      throw RunRefusal(
         "${entry.name}'s main requires ${required.join(', ')}, so it cannot "
         'start without one. A knob has to be optional — give the parameter a '
         "default (String apiHost = 'localhost') and it becomes one.",
@@ -2625,7 +2724,7 @@ class RunCore extends PluginCore {
       }
     }
     if (unresolved.isNotEmpty) {
-      throw StateError(
+      throw RunRefusal(
         'cannot work out ${unresolved.join(', ')}. Fix the script, or pass the '
         'knob explicitly to launch without it.',
       );
@@ -2634,7 +2733,7 @@ class RunCore extends PluginCore {
     // after the failed-script refusal above, which is the more specific reason
     // for the same missing value.
     if (requiredKnobsProblem(package, entry, resolved) case var problem?) {
-      throw StateError(problem);
+      throw RunRefusal(problem);
     }
     return resolved;
   }
@@ -2804,7 +2903,7 @@ class RunCore extends PluginCore {
     // worktree's wrapper and restart that app onto this worktree's code — a
     // wrong file and a wrong app, with nothing on screen to say so.
     if (!isMine(handle)) {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} belongs to ${handle.worktreeName}. Change '
         'its knobs from that checkout: this one would rewrite its own copy of '
         'the wrapper.',
@@ -2812,7 +2911,7 @@ class RunCore extends PluginCore {
     }
     var package = handle.package;
     if (package == null) {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} was launched without a package, so there is '
         'no wrapper to rewrite.',
       );
@@ -2822,7 +2921,7 @@ class RunCore extends PluginCore {
       // Refused rather than written unchecked. Without the entry point there is
       // nothing to validate against, and an unvalidated value becomes a literal
       // in generated source — a build failure in a file nobody wrote.
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypoint} is not an entry point this worktree knows, so '
         'its knobs cannot be checked. Run it from the worktree that declares '
         'it.',
@@ -2914,7 +3013,7 @@ class RunCore extends PluginCore {
     if (debugControl case var stub?) return stub(action, handle);
     var uri = handle.vmService;
     if (uri == null && action != 'stop') {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} has no VM service yet — it is still '
         'building. Watch ${handle.logPath}.',
       );
@@ -3156,7 +3255,7 @@ class RunCore extends PluginCore {
   ) async {
     var uri = handle.vmService;
     if (uri == null) {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} has no VM service yet — it is still '
         'building. Watch ${handle.logPath}.',
       );
@@ -3186,7 +3285,7 @@ class RunCore extends PluginCore {
   ) async {
     var uri = handle.vmService;
     if (uri == null) {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} has no VM service yet — it is still '
         'building. Watch ${handle.logPath}.',
       );
@@ -3203,7 +3302,7 @@ class RunCore extends PluginCore {
       // Not a failure of this call so much as a fact about the app: an app
       // that mounts no `Devbar` installs no channels, and saying which is the
       // difference between a bug hunt and reading one line.
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} is not reporting any panels. An app '
         'reports them by mounting `Devbar(plugins: …)` around its own widget '
         'and being launched by flutterware.',
@@ -3264,7 +3363,7 @@ class RunCore extends PluginCore {
                 if (panel.id == only) panel,
             ];
       if (only != null && chosen.isEmpty) {
-        throw StateError(
+        throw RunRefusal(
           'This app declares no panel "$only" — it has '
           '${listed.isEmpty ? 'none' : listed.map((p) => p.id).join(', ')}.',
         );
@@ -3359,7 +3458,7 @@ class RunCore extends PluginCore {
   ) async {
     var uri = handle.vmService;
     if (uri == null) {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} has no VM service yet — it is still '
         'building. Watch ${handle.logPath}.',
       );
@@ -3368,7 +3467,7 @@ class RunCore extends PluginCore {
     try {
       var isolateId = connection.isolateId;
       if (isolateId == null) {
-        throw StateError('${handle.entrypointLabel} has no isolate yet.');
+        throw RunRefusal('${handle.entrypointLabel} has no isolate yet.');
       }
       await connection.service.httpEnableTimelineLogging(isolateId, true);
       return await body(connection, isolateId);
@@ -3425,7 +3524,7 @@ class RunCore extends PluginCore {
       try {
         detail = await connection.service.getHttpProfileRequest(isolateId, id);
       } on RPCError {
-        throw StateError(
+        throw RunRefusal(
           "No request `$id` in ${handle.entrypointLabel}'s profile. Ids "
           'come from `network`, and a hot restart clears them.',
         );
@@ -4452,7 +4551,7 @@ class RunCore extends PluginCore {
           : ' Other worktrees are: '
                 '${others.map((h) => '${h.worktreeName} (${h.device}/${h.entrypoint})').join(', ')}'
                 ' — pass `worktree` to drive one.';
-      throw StateError(
+      throw RunRefusal(
         '$nothing$elsewhere '
         '`launch` starts an app; `status` lists devices and declared entry '
         'points.',
@@ -4463,7 +4562,7 @@ class RunCore extends PluginCore {
       // are the ones a worktree, a device and an entry point cannot separate:
       // two Studios launched from one checkout onto one device printed the
       // same string twice and left no argument that could pick either.
-      throw StateError(
+      throw RunRefusal(
         'More than one app matches. Pass `run` with one of: '
         '${matches.map((h) => '${h.runId} (${h.worktreeName}: ${h.device}/${h.entrypoint}, ${_startedAgo(h.startedAt)})').join(', ')}',
       );
