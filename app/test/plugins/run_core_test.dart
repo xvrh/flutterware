@@ -14,6 +14,7 @@ import 'package:flutterware_app/src/run/entrypoints.dart';
 import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/inventory.dart';
 import 'package:flutterware_app/src/run/launch.dart';
+import 'package:flutterware_app/src/run/refusal.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/daemon/device.dart';
@@ -646,7 +647,7 @@ void main() {
       await expectLater(
         core.invoke('launch', arguments: {'device': 'phone'}),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             allOf(contains('serverPort'), contains('run local_env up first')),
@@ -1358,7 +1359,7 @@ void main({
       await expectLater(
         core.invoke('launch', arguments: {'device': 'phone'}),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             allOf(contains('apiHost'), contains('has to be optional')),
@@ -1376,7 +1377,7 @@ void main({
           arguments: {'device': 'phone', 'knobs': 'apiHost=x'},
         ),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             isNot(contains('takes no knobs')),
@@ -1438,7 +1439,7 @@ void main({
       await expectLater(
         core.invoke('launch', arguments: {'device': 'phone'}),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             allOf(contains('apiToken'), contains('needs')),
@@ -2397,7 +2398,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       await expectLater(
         core.invoke('reload'),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             contains('Nothing is running'),
@@ -2420,7 +2421,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       await expectLater(
         core.invoke('restart'),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             contains('More than one app matches'),
@@ -2447,7 +2448,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       await expectLater(
         core.invoke('restart'),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             allOf(contains('Pass `run`'), contains('mine: phone/lib/a.dart')),
@@ -2485,7 +2486,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       await expectLater(
         core.invoke('restart'),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             allOf(
@@ -2536,7 +2537,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       await expectLater(
         core.invoke('restart', arguments: {'run': 'app-nope-1'}),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             allOf(contains('No run "app-nope-1"'), contains('apps')),
@@ -2605,7 +2606,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       await expectLater(
         core.invoke('reload', arguments: {'worktree': '~'}),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             contains('Nothing is running from worktree "~"'),
@@ -2631,7 +2632,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       await expectLater(
         core.invoke('reload'),
         throwsA(
-          isA<StateError>().having(
+          isA<RunRefusal>().having(
             (e) => e.message,
             'message',
             allOf(

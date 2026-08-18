@@ -27,6 +27,7 @@ import '../../run/handle.dart';
 import '../../inspect/lens.dart';
 import '../../inspect/screen_read.dart';
 import '../../run/inspect.dart';
+import '../../run/refusal.dart';
 import '../../run/inventory.dart';
 import '../../run/journal.dart';
 import '../../run/launch.dart';
@@ -2535,7 +2536,7 @@ class RunCore extends PluginCore {
     var scan = knobsReadBy(package, entry.path);
     var required = scan.required;
     if (required.isNotEmpty) {
-      throw StateError(
+      throw RunRefusal(
         "${entry.name}'s main requires ${required.join(', ')}, so it cannot "
         'start without one. A knob has to be optional — give the parameter a '
         "default (String apiHost = 'localhost') and it becomes one.",
@@ -2625,7 +2626,7 @@ class RunCore extends PluginCore {
       }
     }
     if (unresolved.isNotEmpty) {
-      throw StateError(
+      throw RunRefusal(
         'cannot work out ${unresolved.join(', ')}. Fix the script, or pass the '
         'knob explicitly to launch without it.',
       );
@@ -2634,7 +2635,7 @@ class RunCore extends PluginCore {
     // after the failed-script refusal above, which is the more specific reason
     // for the same missing value.
     if (requiredKnobsProblem(package, entry, resolved) case var problem?) {
-      throw StateError(problem);
+      throw RunRefusal(problem);
     }
     return resolved;
   }
@@ -2804,7 +2805,7 @@ class RunCore extends PluginCore {
     // worktree's wrapper and restart that app onto this worktree's code — a
     // wrong file and a wrong app, with nothing on screen to say so.
     if (!isMine(handle)) {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} belongs to ${handle.worktreeName}. Change '
         'its knobs from that checkout: this one would rewrite its own copy of '
         'the wrapper.',
@@ -2812,7 +2813,7 @@ class RunCore extends PluginCore {
     }
     var package = handle.package;
     if (package == null) {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} was launched without a package, so there is '
         'no wrapper to rewrite.',
       );
@@ -2822,7 +2823,7 @@ class RunCore extends PluginCore {
       // Refused rather than written unchecked. Without the entry point there is
       // nothing to validate against, and an unvalidated value becomes a literal
       // in generated source — a build failure in a file nobody wrote.
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypoint} is not an entry point this worktree knows, so '
         'its knobs cannot be checked. Run it from the worktree that declares '
         'it.',
@@ -2914,7 +2915,7 @@ class RunCore extends PluginCore {
     if (debugControl case var stub?) return stub(action, handle);
     var uri = handle.vmService;
     if (uri == null && action != 'stop') {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} has no VM service yet — it is still '
         'building. Watch ${handle.logPath}.',
       );
@@ -3156,7 +3157,7 @@ class RunCore extends PluginCore {
   ) async {
     var uri = handle.vmService;
     if (uri == null) {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} has no VM service yet — it is still '
         'building. Watch ${handle.logPath}.',
       );
@@ -3186,7 +3187,7 @@ class RunCore extends PluginCore {
   ) async {
     var uri = handle.vmService;
     if (uri == null) {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} has no VM service yet — it is still '
         'building. Watch ${handle.logPath}.',
       );
@@ -3203,7 +3204,7 @@ class RunCore extends PluginCore {
       // Not a failure of this call so much as a fact about the app: an app
       // that mounts no `Devbar` installs no channels, and saying which is the
       // difference between a bug hunt and reading one line.
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} is not reporting any panels. An app '
         'reports them by mounting `Devbar(plugins: …)` around its own widget '
         'and being launched by flutterware.',
@@ -3264,7 +3265,7 @@ class RunCore extends PluginCore {
                 if (panel.id == only) panel,
             ];
       if (only != null && chosen.isEmpty) {
-        throw StateError(
+        throw RunRefusal(
           'This app declares no panel "$only" — it has '
           '${listed.isEmpty ? 'none' : listed.map((p) => p.id).join(', ')}.',
         );
@@ -3359,7 +3360,7 @@ class RunCore extends PluginCore {
   ) async {
     var uri = handle.vmService;
     if (uri == null) {
-      throw StateError(
+      throw RunRefusal(
         '${handle.entrypointLabel} has no VM service yet — it is still '
         'building. Watch ${handle.logPath}.',
       );
@@ -3368,7 +3369,7 @@ class RunCore extends PluginCore {
     try {
       var isolateId = connection.isolateId;
       if (isolateId == null) {
-        throw StateError('${handle.entrypointLabel} has no isolate yet.');
+        throw RunRefusal('${handle.entrypointLabel} has no isolate yet.');
       }
       await connection.service.httpEnableTimelineLogging(isolateId, true);
       return await body(connection, isolateId);
@@ -3425,7 +3426,7 @@ class RunCore extends PluginCore {
       try {
         detail = await connection.service.getHttpProfileRequest(isolateId, id);
       } on RPCError {
-        throw StateError(
+        throw RunRefusal(
           "No request `$id` in ${handle.entrypointLabel}'s profile. Ids "
           'come from `network`, and a hot restart clears them.',
         );
@@ -4452,7 +4453,7 @@ class RunCore extends PluginCore {
           : ' Other worktrees are: '
                 '${others.map((h) => '${h.worktreeName} (${h.device}/${h.entrypoint})').join(', ')}'
                 ' — pass `worktree` to drive one.';
-      throw StateError(
+      throw RunRefusal(
         '$nothing$elsewhere '
         '`launch` starts an app; `status` lists devices and declared entry '
         'points.',
@@ -4463,7 +4464,7 @@ class RunCore extends PluginCore {
       // are the ones a worktree, a device and an entry point cannot separate:
       // two Studios launched from one checkout onto one device printed the
       // same string twice and left no argument that could pick either.
-      throw StateError(
+      throw RunRefusal(
         'More than one app matches. Pass `run` with one of: '
         '${matches.map((h) => '${h.runId} (${h.worktreeName}: ${h.device}/${h.entrypoint}, ${_startedAgo(h.startedAt)})').join(', ')}',
       );
