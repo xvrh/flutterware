@@ -4,7 +4,7 @@
 ///
 /// ```
 /// <package>                       the table
-/// <package>/<catalogue>/<key>     one key open
+/// <package>/<catalog>/<key>     one key open
 /// ?locale=nl                      which language is beside the source
 /// ?filter=missing|no-picture      which rows the table is showing
 /// ```
@@ -18,39 +18,39 @@ library;
 class TranslationPlace {
   const TranslationPlace(
     this.package, {
-    this.catalogue,
+    this.catalog,
     this.key,
     this.locale,
     this.filter = TranslationFilter.all,
-  }) : assert(key == null || catalogue != null, 'a key needs its catalogue');
+  }) : assert(key == null || catalog != null, 'a key needs its catalog');
 
   /// The workspace-relative package path whose translations are shown.
   final String package;
 
-  final String? catalogue;
+  final String? catalog;
 
-  /// The open key within [catalogue], or null for the table alone.
+  /// The open key within [catalog], or null for the table alone.
   final String? key;
 
-  /// The language shown beside the source text, or null for the catalogue's
+  /// The language shown beside the source text, or null for the catalog's
   /// own template — which is the one locale that is never a comparison.
   final String? locale;
 
   final TranslationFilter filter;
 
-  String? get id => key == null ? null : '$catalogue/$key';
+  String? get id => key == null ? null : '$catalog/$key';
 
   @override
   bool operator ==(Object other) =>
       other is TranslationPlace &&
       other.package == package &&
-      other.catalogue == catalogue &&
+      other.catalog == catalog &&
       other.key == key &&
       other.locale == locale &&
       other.filter == filter;
 
   @override
-  int get hashCode => Object.hash(package, catalogue, key, locale, filter);
+  int get hashCode => Object.hash(package, catalog, key, locale, filter);
 
   @override
   String toString() =>
@@ -93,11 +93,11 @@ enum TranslationFilter {
 /// The address segments naming [package] and, if given, the key inside it.
 List<String> translationSegments(
   String package, {
-  String? catalogue,
+  String? catalog,
   String? key,
 }) {
-  assert(key == null || catalogue != null, 'a key needs its catalogue');
-  return [package, ?catalogue, ?key];
+  assert(key == null || catalog != null, 'a key needs its catalog');
+  return [package, ?catalog, ?key];
 }
 
 /// The axes for a table's current view.
@@ -125,7 +125,7 @@ TranslationPlace? translationPlace(
   if (segments.isEmpty) return null;
   return TranslationPlace(
     segments.first,
-    catalogue: segments.length > 1 ? segments[1] : null,
+    catalog: segments.length > 1 ? segments[1] : null,
     key: segments.length > 2 ? segments.skip(2).join('/') : null,
     locale: locale,
     filter: TranslationFilter.byId(filter),

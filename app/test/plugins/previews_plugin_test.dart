@@ -845,7 +845,7 @@ Widget added() => const Placeholder();
     test('asks which package when the plugin has several', () async {
       var subject = catalog(packages: const ['.', 'packages/ui']);
 
-      // Not "build the first one": two catalogues are declared separately
+      // Not "build the first one": two catalogs are declared separately
       // because they are separate, and picking silently produces a page of the
       // wrong demos.
       await expectLater(

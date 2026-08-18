@@ -24,7 +24,7 @@ class TranslationExportResult implements PluginResult, ReportsFailure {
     required this.output,
     required this.keysJson,
     required this.indexHtml,
-    required this.catalogues,
+    required this.catalogs,
     required this.locales,
     required this.keys,
     required this.keysSeen,
@@ -34,7 +34,7 @@ class TranslationExportResult implements PluginResult, ReportsFailure {
     this.fallingBack = 0,
     this.disagrees = 0,
     this.notReached = 0,
-    this.absentFromCatalogue = 0,
+    this.absentFromCatalog = 0,
     this.overflowing = 0,
     this.unkeyed = 0,
     this.scenariosFailed = 0,
@@ -52,13 +52,13 @@ class TranslationExportResult implements PluginResult, ReportsFailure {
   /// The page a person reads.
   final String indexHtml;
 
-  final int catalogues;
+  final int catalogs;
 
   /// How many languages the run covered. **One means the falling-back list is
   /// empty because nothing could have fallen back**, not because nothing does.
   final int locales;
 
-  /// Every key the catalogues define.
+  /// Every key the catalogs define.
   final int keys;
 
   /// How many of them this run put on a screen. The gap is [notReached].
@@ -85,13 +85,13 @@ class TranslationExportResult implements PluginResult, ReportsFailure {
   /// Declared keys this run never asked for. **Coverage, not dead code.**
   final int notReached;
 
-  /// Keys the app read that no declared catalogue defines.
-  final int absentFromCatalogue;
+  /// Keys the app read that no declared catalog defines.
+  final int absentFromCatalog;
 
   /// Sightings where the words did not fit.
   final int overflowing;
 
-  /// Distinct strings on screen that belonged to no catalogue.
+  /// Distinct strings on screen that belonged to no catalog.
   final int unkeyed;
 
   /// Scenarios that came back red. Their screens are in the export.

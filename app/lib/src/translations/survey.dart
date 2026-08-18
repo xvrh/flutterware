@@ -1,15 +1,15 @@
-/// A whole run's translations, joined against the catalogues on disk.
+/// A whole run's translations, joined against the catalogs on disk.
 ///
 /// Pure Dart and pure data: it is handed what a run captured and what the
-/// catalogue files say, and answers questions about the pair. No IO, so the
+/// catalog files say, and answers questions about the pair. No IO, so the
 /// export, the panel and a test all reason about the same object.
 ///
 /// Design: `2026-08-18-translation-index-design.md`.
 library;
 
-/// One catalogue's files, loaded — locale to key to value.
-class LoadedCatalogue {
-  const LoadedCatalogue({
+/// One catalog's files, loaded — locale to key to value.
+class LoadedCatalog {
+  const LoadedCatalog({
     required this.name,
     required this.template,
     required this.byLocale,
@@ -22,13 +22,13 @@ class LoadedCatalogue {
 
   final Map<String, Map<String, String>> byLocale;
 
-  /// Every key the catalogue defines anywhere — the denominator for "never
+  /// Every key the catalog defines anywhere — the denominator for "never
   /// reached", and deliberately the union rather than the template's alone: a
   /// key present only in a target locale is a key, and usually a stale one.
   Set<String> get keys => {for (var values in byLocale.values) ...values.keys};
 
   /// What this locale says, or null when it says nothing. Empty is nothing:
-  /// catalogues spell a missing translation as `""` about as often as they
+  /// catalogs spell a missing translation as `""` about as often as they
   /// leave the key out.
   String? valueOf(String locale, String key) {
     var value = byLocale[locale]?[key];
@@ -39,7 +39,7 @@ class LoadedCatalogue {
 /// One place a key was seen, on one captured screen.
 class KeySighting {
   const KeySighting({
-    required this.catalogue,
+    required this.catalog,
     required this.key,
     required this.scenario,
     required this.step,
@@ -58,7 +58,7 @@ class KeySighting {
     this.textsOnScreen = 0,
   });
 
-  final String catalogue;
+  final String catalog;
   final String key;
 
   /// `file/name`, as the run reports a scenario.
@@ -99,10 +99,10 @@ class KeySighting {
   /// in its context and a string shown on a spinner.
   final int textsOnScreen;
 
-  String get id => '$catalogue/$key';
+  String get id => '$catalog/$key';
 }
 
-/// Words on a screen that belonged to no catalogue.
+/// Words on a screen that belonged to no catalog.
 class UnkeyedSighting {
   const UnkeyedSighting({
     required this.text,
@@ -131,7 +131,7 @@ enum LocaleVerdict {
   /// app is showing untranslated words to a user who asked for this language.
   fallingBack,
 
-  /// The locale has text, and something else rendered. The catalogue on disk
+  /// The locale has text, and something else rendered. The catalog on disk
   /// is not what the app ran with: a stale build, or a value overridden
   /// somewhere the files do not know about.
   disagrees,
@@ -139,7 +139,7 @@ enum LocaleVerdict {
 
 class LocaleFinding {
   const LocaleFinding({
-    required this.catalogue,
+    required this.catalog,
     required this.key,
     required this.locale,
     required this.verdict,
@@ -147,7 +147,7 @@ class LocaleFinding {
     this.expected,
   });
 
-  final String catalogue;
+  final String catalog;
   final String key;
   final String locale;
   final LocaleVerdict verdict;
@@ -155,10 +155,10 @@ class LocaleFinding {
   final String? expected;
 }
 
-/// A run's translations, and what the catalogues make of them.
+/// A run's translations, and what the catalogs make of them.
 class TranslationSurvey {
   TranslationSurvey({
-    required this.catalogues,
+    required this.catalogs,
     required List<KeySighting> sightings,
     required this.unkeyed,
     required this.read,
@@ -168,14 +168,14 @@ class TranslationSurvey {
     }
   }
 
-  final Map<String, LoadedCatalogue> catalogues;
+  final Map<String, LoadedCatalog> catalogs;
   final List<KeySighting> _sightings;
   final Map<String, List<KeySighting>> _byKey = {};
 
   final List<UnkeyedSighting> unkeyed;
 
-  /// What each catalogue was asked for and answered, per locale:
-  /// `locale -> catalogue -> key -> value`.
+  /// What each catalog was asked for and answered, per locale:
+  /// `locale -> catalog -> key -> value`.
   ///
   /// The keys a run *read*, which is a larger set than the keys it *showed*:
   /// a string read into a variable and never rendered is in here and in no
@@ -192,44 +192,43 @@ class TranslationSurvey {
     return ids;
   }
 
-  List<KeySighting> occurrencesOf(String catalogue, String key) =>
-      List.unmodifiable(_byKey['$catalogue/$key'] ?? const []);
+  List<KeySighting> occurrencesOf(String catalog, String key) =>
+      List.unmodifiable(_byKey['$catalog/$key'] ?? const []);
 
-  /// Keys the catalogues define that this run never asked for.
+  /// Keys the catalogs define that this run never asked for.
   ///
   /// **Phrased as "not reached", never as "unused".** It is a statement about
   /// the suite's coverage as much as about the product, and a key behind a
   /// screen nobody wrote a scenario for is not a dead key.
-  List<({String catalogue, String key})> keysNotReached() {
-    var found = <({String catalogue, String key})>[];
-    for (var catalogue in catalogues.values) {
+  List<({String catalog, String key})> keysNotReached() {
+    var found = <({String catalog, String key})>[];
+    for (var catalog in catalogs.values) {
       var reached = <String>{
-        for (var perCatalogue in read.values)
-          ...?perCatalogue[catalogue.name]?.keys,
+        for (var perCatalog in read.values) ...?perCatalog[catalog.name]?.keys,
       };
-      for (var key in catalogue.keys) {
+      for (var key in catalog.keys) {
         if (!reached.contains(key)) {
-          found.add((catalogue: catalogue.name, key: key));
+          found.add((catalog: catalog.name, key: key));
         }
       }
     }
     return found..sort((a, b) => a.key.compareTo(b.key));
   }
 
-  /// Keys the run read that no declared catalogue defines.
+  /// Keys the run read that no declared catalog defines.
   ///
-  /// Either the code asks for something stale, or a catalogue's `files:` does
+  /// Either the code asks for something stale, or a catalog's `files:` does
   /// not point where its keys actually live. Both are worth saying out loud —
-  /// a half-declared catalogue would otherwise show up as an export that
+  /// a half-declared catalog would otherwise show up as an export that
   /// quietly attributed nothing.
-  List<({String catalogue, String key})> keysAbsentFromCatalogue() {
-    var found = <({String catalogue, String key})>{};
-    for (var perCatalogue in read.values) {
-      for (var entry in perCatalogue.entries) {
-        var catalogue = catalogues[entry.key];
+  List<({String catalog, String key})> keysAbsentFromCatalog() {
+    var found = <({String catalog, String key})>{};
+    for (var perCatalog in read.values) {
+      for (var entry in perCatalog.entries) {
+        var catalog = catalogs[entry.key];
         for (var key in entry.value.keys) {
-          if (catalogue == null || !catalogue.keys.contains(key)) {
-            found.add((catalogue: entry.key, key: key));
+          if (catalog == null || !catalog.keys.contains(key)) {
+            found.add((catalog: entry.key, key: key));
           }
         }
       }
@@ -250,18 +249,18 @@ class TranslationSurvey {
   List<LocaleFinding> localeFindings() {
     var found = <LocaleFinding>[];
 
-    for (var catalogue in catalogues.values) {
-      for (var locale in catalogue.byLocale.keys) {
-        if (locale == catalogue.template) continue;
-        for (var key in catalogue.keys) {
-          var source = catalogue.valueOf(catalogue.template, key);
+    for (var catalog in catalogs.values) {
+      for (var locale in catalog.byLocale.keys) {
+        if (locale == catalog.template) continue;
+        for (var key in catalog.keys) {
+          var source = catalog.valueOf(catalog.template, key);
           // A key with no text in the source language either does not draw or
           // is a stale entry; either way there is nothing to fall back *to*.
           if (source == null) continue;
-          if (catalogue.valueOf(locale, key) != null) continue;
+          if (catalog.valueOf(locale, key) != null) continue;
           found.add(
             LocaleFinding(
-              catalogue: catalogue.name,
+              catalog: catalog.name,
               key: key,
               locale: locale,
               verdict: LocaleVerdict.fallingBack,
@@ -274,18 +273,18 @@ class TranslationSurvey {
 
     for (var perLocale in read.entries) {
       var locale = perLocale.key;
-      for (var perCatalogue in perLocale.value.entries) {
-        var catalogue = catalogues[perCatalogue.key];
-        if (catalogue == null || locale == catalogue.template) continue;
-        for (var entry in perCatalogue.value.entries) {
-          if (!catalogue.keys.contains(entry.key)) continue;
-          var expected = catalogue.valueOf(locale, entry.key);
+      for (var perCatalog in perLocale.value.entries) {
+        var catalog = catalogs[perCatalog.key];
+        if (catalog == null || locale == catalog.template) continue;
+        for (var entry in perCatalog.value.entries) {
+          if (!catalog.keys.contains(entry.key)) continue;
+          var expected = catalog.valueOf(locale, entry.key);
           // Nothing on file is the fallback case above, already reported.
           if (expected == null || expected == entry.value) continue;
           if (entry.value.isEmpty) continue;
           found.add(
             LocaleFinding(
-              catalogue: perCatalogue.key,
+              catalog: perCatalog.key,
               key: entry.key,
               locale: locale,
               verdict: LocaleVerdict.disagrees,
@@ -314,8 +313,8 @@ class TranslationSurvey {
   /// those is worth a translator's time. In order: on screen at all, then not
   /// clipped, then the step succeeded, then the screen has other words on it
   /// (context beats a spinner), then the biggest box.
-  KeySighting? representative(String catalogue, String key) {
-    var candidates = occurrencesOf(catalogue, key);
+  KeySighting? representative(String catalog, String key) {
+    var candidates = occurrencesOf(catalog, key);
     if (candidates.isEmpty) return null;
     var ranked = candidates.toList()
       ..sort((a, b) {

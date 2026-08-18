@@ -1615,7 +1615,7 @@ class PreviewsCore extends PluginCore {
   /// [_requestedPackages] answers.
   ///
   /// A build writes one page from one package's demos. Defaulting to "all of
-  /// them" would either concatenate catalogues that are deliberately separate
+  /// them" would either concatenate catalogs that are deliberately separate
   /// or silently build the first — so a repo with several is asked, once,
   /// rather than guessed at.
   String _requireOnePackage(String? requested) {

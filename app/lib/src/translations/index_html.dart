@@ -141,8 +141,8 @@ final _js =
 const data = JSON.parse(document.getElementById('data').textContent);
 const keys = data.keys || [];
 const f = data.findings || {};
-const byId = new Map(keys.map(k => [k.catalogue + '/' + k.key, k]));
-const fallingBack = new Set((f.fallingBack || []).map(x => x.catalogue + '/' + x.key));
+const byId = new Map(keys.map(k => [k.catalog + '/' + k.key, k]));
+const fallingBack = new Set((f.fallingBack || []).map(x => x.catalog + '/' + x.key));
 const el = (t, c, x) => { const n = document.createElement(t);
   if (c) n.className = c; if (x != null) n.textContent = x; return n; };
 
@@ -152,11 +152,11 @@ const TABS = [
   ['disagrees', 'Disagrees', (f.disagrees || []).length],
   ['overflowing', 'Clipped', (f.overflowing || []).length],
   ['notReached', 'Not reached', (f.notReached || []).length],
-  ['absentFromCatalogue', 'Not in catalogue', (f.absentFromCatalogue || []).length],
+  ['absentFromCatalog', 'Not in catalog', (f.absentFromCatalog || []).length],
   ['unkeyed', 'Unkeyed', (f.unkeyed || []).length],
 ];
 let tab = 'keys';
-let selected = keys.length ? keys[0].catalogue + '/' + keys[0].key : null;
+let selected = keys.length ? keys[0].catalog + '/' + keys[0].key : null;
 
 const nav = document.getElementById('tabs');
 for (const [id, label, count] of TABS) {
@@ -174,7 +174,7 @@ function renderList() {
   const list = document.getElementById('list');
   list.textContent = '';
   for (const k of keys) {
-    const id = k.catalogue + '/' + k.key;
+    const id = k.catalog + '/' + k.key;
     const values = Object.values(k.values || {}).join(' ').toLowerCase();
     if (q && !id.toLowerCase().includes(q) && !values.includes(q)) continue;
     const li = el('li');
@@ -238,7 +238,7 @@ function table(head, rows) {
 function renderKey(host) {
   const k = selected && byId.get(selected);
   if (!k) { host.appendChild(el('p', 'empty', 'No key selected.')); return; }
-  host.appendChild(el('h2', null, k.catalogue + '/' + k.key));
+  host.appendChild(el('h2', null, k.catalog + '/' + k.key));
 
   const values = Object.entries(k.values || {});
   if (values.length) {
@@ -251,7 +251,7 @@ function renderKey(host) {
     }
     host.appendChild(t);
   } else {
-    host.appendChild(el('p', 'sub', 'No catalogue file defines this key.'));
+    host.appendChild(el('p', 'sub', 'No catalog file defines this key.'));
   }
 
   if (!k.representative) {
@@ -287,9 +287,9 @@ function renderFindings(host) {
   if (tab === 'fallingBack' || tab === 'disagrees') {
     host.appendChild(el('p', 'sub', tab === 'fallingBack'
       ? 'The locale has no text, so the source language rendered instead.'
-      : 'The catalogue on disk is not what the app ran with.'));
+      : 'The catalog on disk is not what the app ran with.'));
     host.appendChild(table(['Key', 'Locale', 'Rendered', 'Expected'],
-      rows.map(r => [r.catalogue + '/' + r.key, r.locale, r.rendered,
+      rows.map(r => [r.catalog + '/' + r.key, r.locale, r.rendered,
         r.expected || '—'])));
   } else if (tab === 'overflowing') {
     host.appendChild(el('p', 'sub', 'The words did not fit their box.'));
@@ -298,16 +298,16 @@ function renderFindings(host) {
     host.appendChild(shots);
   } else if (tab === 'unkeyed') {
     host.appendChild(el('p', 'sub',
-      'Words on a screen that belonged to no catalogue.'));
+      'Words on a screen that belonged to no catalog.'));
     host.appendChild(table(['Text', 'Built at', 'Scenario', 'Step'],
       rows.map(r => [r.text, r.source || '—', r.scenario, r.step])));
   } else {
     host.appendChild(el('p', 'sub', tab === 'notReached'
       ? 'Declared, and this run never asked for them. A key behind a screen ' +
         'nobody wrote a scenario for is not a dead key.'
-      : 'Read by the app, and no declared catalogue defines them.'));
+      : 'Read by the app, and no declared catalog defines them.'));
     host.appendChild(table(['Key'],
-      rows.map(r => [r.catalogue + '/' + r.key])));
+      rows.map(r => [r.catalog + '/' + r.key])));
   }
 }
 

@@ -367,7 +367,7 @@ class GuestInspector {
     // **The widget's own property, for anything that renders text its own way.**
     // A markdown renderer builds its spans out of substrings and a chart paints
     // its labels with no paragraph at all, so identity finds nothing below
-    // here — but the string the catalogue handed out is still sitting on the
+    // here — but the string the catalog handed out is still sitting on the
     // widget, and reading it there is exact rather than inferred.
     var claimed = element == null ? null : sources.claims[element];
     var spans = _keysOf(
@@ -599,7 +599,7 @@ class GuestInspector {
   }
 
   /// Which translation keys this node's glyphs came from, and how many of its
-  /// spans came from no catalogue at all.
+  /// spans came from no catalog at all.
   ///
   /// **Per span, not per `Text`.** A first version read `Text.data` and
   /// flattened a `Text.rich` with `toPlainText()`, which destroyed exactly the
@@ -660,7 +660,7 @@ class GuestInspector {
           if (TranslationIndex.keyOf(text) case var found?) {
             keys.add(
               InspectKey(
-                catalogue: found.catalogue,
+                catalog: found.catalog,
                 key: found.key,
                 start: offset,
                 end: offset + text.length,
@@ -725,14 +725,14 @@ class GuestInspector {
   /// The key a registered widget property names, or null.
   ///
   /// First source that both matches the widget *and* resolves wins. A source
-  /// whose property holds a string no catalogue minted does not stop the next
+  /// whose property holds a string no catalog minted does not stop the next
   /// one being tried, so registering two for one widget is safe.
   static InspectKey? _sourceKeyOf(Widget? widget) {
     if (!TranslationIndex.recording || widget == null) return null;
     for (var source in TranslationIndex.sources) {
       if (source(widget) case var text?) {
         if (TranslationIndex.keyOf(text) case var found?) {
-          return InspectKey(catalogue: found.catalogue, key: found.key);
+          return InspectKey(catalog: found.catalog, key: found.key);
         }
       }
     }

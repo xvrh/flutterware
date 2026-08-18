@@ -2632,7 +2632,7 @@ class ScenariosCore extends PluginCore {
       height: step['height'] as int? ?? 0,
       tree: _relative(step['tree']! as String),
       // The translation keys on this screen. Absent for every project that has
-      // not wired a catalogue, which is why it is read rather than required.
+      // not wired a catalog, which is why it is read rather than required.
       keys: switch (step['keys']) {
         String path => _relative(path),
         _ => null,
@@ -2712,7 +2712,7 @@ class ScenariosCore extends PluginCore {
             ok: outcome['ok'] == true,
             device: outcome['device'] as String?,
             ms: outcome['ms'] as int? ?? 0,
-            // What every catalogue was asked for on the way through this
+            // What every catalog was asked for on the way through this
             // scenario — a larger set than what any screen *showed*, and the
             // only thing that can say a key was reached at all.
             translations: switch (outcome['translations']) {

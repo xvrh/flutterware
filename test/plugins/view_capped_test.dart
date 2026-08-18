@@ -5,7 +5,7 @@ import 'package:test/test.dart';
 ///
 /// The rule being checked is the one [ViewItems.truncated] was written for:
 /// *never silently drop rows*. A status reply that looked complete while
-/// holding a tenth of a catalogue would be worse than the long one it replaced,
+/// holding a tenth of a catalog would be worse than the long one it replaced,
 /// so every test here is really about the count that comes with the cut.
 void main() {
   ViewItems items(int count) =>

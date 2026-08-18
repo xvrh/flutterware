@@ -313,8 +313,8 @@ void main() => Flutterware.configure((fw) {
       packages: [
         TranslationsPackage(
           example,
-          catalogues: [
-            TranslationCatalogue(name: 'shop', files: 'assets/i18n/*.json'),
+          catalogs: [
+            TranslationCatalog(name: 'shop', files: 'assets/i18n/*.json'),
           ],
         ),
       ],

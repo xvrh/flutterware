@@ -176,21 +176,21 @@ class ExportedShot {
 /// One key, everything the run learned about it.
 class ExportedKey {
   const ExportedKey({
-    required this.catalogue,
+    required this.catalog,
     required this.key,
     this.values = const {},
     this.representative,
     this.occurrences = const [],
   });
 
-  final String catalogue;
+  final String catalog;
   final String key;
 
-  /// `catalogue/key` — what a service knows the string as, and how
+  /// `catalog/key` — what a service knows the string as, and how
   /// [TranslationExport.operator []] addresses it.
-  String get id => '$catalogue/$key';
+  String get id => '$catalog/$key';
 
-  /// What the catalogue files say, per locale.
+  /// What the catalog files say, per locale.
   final Map<String, String> values;
 
   /// The one shot worth showing a translator, or null when the key was
@@ -201,7 +201,7 @@ class ExportedKey {
   final List<ExportedShot> occurrences;
 
   Map<String, Object?> toJson() => {
-    'catalogue': catalogue,
+    'catalog': catalog,
     'key': key,
     if (values.isNotEmpty) 'values': values,
     if (representative case var shot?) 'representative': shot.toJson(),
@@ -210,7 +210,7 @@ class ExportedKey {
   };
 
   static ExportedKey fromJson(Map<String, Object?> json) => ExportedKey(
-    catalogue: json['catalogue'] as String? ?? '',
+    catalog: json['catalog'] as String? ?? '',
     key: json['key'] as String? ?? '',
     values: _strings(json['values']),
     representative: switch (json['representative']) {
@@ -224,9 +224,9 @@ class ExportedKey {
   );
 }
 
-/// A declared catalogue, as the export found it.
-class ExportedCatalogue {
-  const ExportedCatalogue({
+/// A declared catalog, as the export found it.
+class ExportedCatalog {
+  const ExportedCatalog({
     required this.name,
     required this.template,
     this.locales = const [],
@@ -251,29 +251,28 @@ class ExportedCatalogue {
     'keys': keys,
   };
 
-  static ExportedCatalogue fromJson(Map<String, Object?> json) =>
-      ExportedCatalogue(
-        name: json['name'] as String? ?? '',
-        template: json['template'] as String? ?? 'en',
-        locales: [
-          for (var locale in json['locales'] as List? ?? const [])
-            if (locale is String) locale,
-        ],
-        keys: _int(json['keys']),
-      );
+  static ExportedCatalog fromJson(Map<String, Object?> json) => ExportedCatalog(
+    name: json['name'] as String? ?? '',
+    template: json['template'] as String? ?? 'en',
+    locales: [
+      for (var locale in json['locales'] as List? ?? const [])
+        if (locale is String) locale,
+    ],
+    keys: _int(json['keys']),
+  );
 }
 
 /// A key whose rendered words were not what its locale's file says.
 class ExportedLocaleFinding {
   const ExportedLocaleFinding({
-    required this.catalogue,
+    required this.catalog,
     required this.key,
     required this.locale,
     required this.rendered,
     this.expected,
   });
 
-  final String catalogue;
+  final String catalog;
   final String key;
   final String locale;
 
@@ -285,7 +284,7 @@ class ExportedLocaleFinding {
   final String? expected;
 
   Map<String, Object?> toJson() => {
-    'catalogue': catalogue,
+    'catalog': catalog,
     'key': key,
     'locale': locale,
     'rendered': rendered,
@@ -294,7 +293,7 @@ class ExportedLocaleFinding {
 
   static ExportedLocaleFinding fromJson(Map<String, Object?> json) =>
       ExportedLocaleFinding(
-        catalogue: json['catalogue'] as String? ?? '',
+        catalog: json['catalog'] as String? ?? '',
         key: json['key'] as String? ?? '',
         locale: json['locale'] as String? ?? '',
         rendered: json['rendered'] as String? ?? '',
@@ -304,22 +303,22 @@ class ExportedLocaleFinding {
 
 /// A key named by one of the two coverage lists.
 class ExportedKeyRef {
-  const ExportedKeyRef({required this.catalogue, required this.key});
+  const ExportedKeyRef({required this.catalog, required this.key});
 
-  final String catalogue;
+  final String catalog;
   final String key;
 
-  String get id => '$catalogue/$key';
+  String get id => '$catalog/$key';
 
-  Map<String, Object?> toJson() => {'catalogue': catalogue, 'key': key};
+  Map<String, Object?> toJson() => {'catalog': catalog, 'key': key};
 
   static ExportedKeyRef fromJson(Map<String, Object?> json) => ExportedKeyRef(
-    catalogue: json['catalogue'] as String? ?? '',
+    catalog: json['catalog'] as String? ?? '',
     key: json['key'] as String? ?? '',
   );
 }
 
-/// Words on a screen that belonged to no catalogue.
+/// Words on a screen that belonged to no catalog.
 class ExportedUnkeyed {
   const ExportedUnkeyed({
     required this.text,
@@ -365,7 +364,7 @@ class ExportFindings {
     this.fallingBack = const [],
     this.disagrees = const [],
     this.notReached = const [],
-    this.absentFromCatalogue = const [],
+    this.absentFromCatalog = const [],
     this.overflowing = const [],
     this.unkeyed = const [],
   });
@@ -382,8 +381,8 @@ class ExportFindings {
   /// suite's coverage as much as the product's** — never call it unused.
   final List<ExportedKeyRef> notReached;
 
-  /// Read, and no declared catalogue defines it.
-  final List<ExportedKeyRef> absentFromCatalogue;
+  /// Read, and no declared catalog defines it.
+  final List<ExportedKeyRef> absentFromCatalog;
 
   final List<ExportedShot> overflowing;
 
@@ -393,7 +392,7 @@ class ExportFindings {
       fallingBack.isEmpty &&
       disagrees.isEmpty &&
       notReached.isEmpty &&
-      absentFromCatalogue.isEmpty &&
+      absentFromCatalog.isEmpty &&
       overflowing.isEmpty &&
       unkeyed.isEmpty;
 
@@ -401,7 +400,7 @@ class ExportFindings {
     'fallingBack': [for (var it in fallingBack) it.toJson()],
     'disagrees': [for (var it in disagrees) it.toJson()],
     'notReached': [for (var it in notReached) it.toJson()],
-    'absentFromCatalogue': [for (var it in absentFromCatalogue) it.toJson()],
+    'absentFromCatalog': [for (var it in absentFromCatalog) it.toJson()],
     'overflowing': [for (var it in overflowing) it.toJson()],
     'unkeyed': [for (var it in unkeyed) it.toJson()],
   };
@@ -410,8 +409,8 @@ class ExportFindings {
     fallingBack: _list(json['fallingBack'], ExportedLocaleFinding.fromJson),
     disagrees: _list(json['disagrees'], ExportedLocaleFinding.fromJson),
     notReached: _list(json['notReached'], ExportedKeyRef.fromJson),
-    absentFromCatalogue: _list(
-      json['absentFromCatalogue'],
+    absentFromCatalog: _list(
+      json['absentFromCatalog'],
       ExportedKeyRef.fromJson,
     ),
     overflowing: _list(json['overflowing'], ExportedShot.fromJson),
@@ -433,7 +432,7 @@ class TranslationExport {
   const TranslationExport({
     this.version = translationExportVersion,
     this.directory = '.',
-    this.catalogues = const [],
+    this.catalogs = const [],
     this.keys = const [],
     this.findings = const ExportFindings(),
   });
@@ -445,14 +444,14 @@ class TranslationExport {
   /// be wrong.
   final String directory;
 
-  final List<ExportedCatalogue> catalogues;
+  final List<ExportedCatalog> catalogs;
 
   /// Every key, most-seen first, then declared-but-unseen.
   final List<ExportedKey> keys;
 
   final ExportFindings findings;
 
-  /// The key with this `catalogue/key` id, or null.
+  /// The key with this `catalog/key` id, or null.
   ExportedKey? operator [](String id) {
     for (var key in keys) {
       if (key.id == id) return key;
@@ -512,7 +511,7 @@ class TranslationExport {
     return TranslationExport(
       version: version,
       directory: directory,
-      catalogues: _list(json['catalogues'], ExportedCatalogue.fromJson),
+      catalogs: _list(json['catalogs'], ExportedCatalog.fromJson),
       keys: _list(json['keys'], ExportedKey.fromJson),
       findings: switch (json['findings']) {
         Map findings => ExportFindings.fromJson(
@@ -525,7 +524,7 @@ class TranslationExport {
 
   Map<String, Object?> toJson() => {
     'version': version,
-    'catalogues': [for (var it in catalogues) it.toJson()],
+    'catalogs': [for (var it in catalogs) it.toJson()],
     'keys': [for (var it in keys) it.toJson()],
     'findings': findings.toJson(),
   };

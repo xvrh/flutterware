@@ -15,7 +15,7 @@ void main() {
     await tester.pumpWidget(const ShopApp());
     // The shop's copy is loaded from `assets/i18n/`, so the first frame has no
     // strings and therefore no screen to tap. One settle is the whole cost of
-    // a catalogue that is read rather than compiled in — and it is what any
+    // a catalog that is read rather than compiled in — and it is what any
     // app loading its translations asynchronously already pays.
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(ShopKeys.getStarted));

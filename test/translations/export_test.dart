@@ -10,8 +10,8 @@ TranslationExport export({
   String directory = '.',
 }) => TranslationExport(
   directory: directory,
-  catalogues: const [
-    ExportedCatalogue(
+  catalogs: const [
+    ExportedCatalog(
       name: 'app',
       template: 'en',
       locales: ['en', 'nl'],
@@ -56,7 +56,7 @@ void main() {
       var original = export(
         keys: [
           const ExportedKey(
-            catalogue: 'app',
+            catalog: 'app',
             key: 'save',
             values: {'en': 'Save', 'nl': 'Opslaan'},
             representative: ExportedShot(
@@ -75,7 +75,7 @@ void main() {
         findings: const ExportFindings(
           fallingBack: [
             ExportedLocaleFinding(
-              catalogue: 'app',
+              catalog: 'app',
               key: 'save',
               locale: 'nl',
               rendered: 'Save',
@@ -100,7 +100,7 @@ void main() {
       expect(back.findings.fallingBack.single.rendered, 'Save');
       expect(back.findings.fallingBack.single.expected, isNull);
       expect(back.findings.unkeyed.single.source, 'home.dart:42:7');
-      expect(back.catalogues.single.locales, ['en', 'nl']);
+      expect(back.catalogs.single.locales, ['en', 'nl']);
     });
 
     test('a newer version is refused rather than half-decoded', () {
@@ -129,7 +129,7 @@ void main() {
       var back = TranslationExport.fromJson({
         'version': 1,
         'keys': [
-          {'catalogue': 'app', 'key': 'save'},
+          {'catalog': 'app', 'key': 'save'},
         ],
       });
 
@@ -140,7 +140,7 @@ void main() {
       var it = export(
         keys: [
           const ExportedKey(
-            catalogue: 'app',
+            catalog: 'app',
             key: 'save',
             representative: ExportedShot(
               image: 'a.png',
@@ -149,7 +149,7 @@ void main() {
               stepIndex: 1,
             ),
           ),
-          const ExportedKey(catalogue: 'app', key: 'never'),
+          const ExportedKey(catalog: 'app', key: 'never'),
         ],
       );
 

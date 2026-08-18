@@ -30,7 +30,7 @@ export 'translations_core.dart' show TranslationsCore, translationsPluginId;
 /// is a coverage number rather than a worklist. What survived is two filters
 /// over the same rows, which is why this panel has no tabs.
 ///
-/// **It is useful before anything has run.** The catalogue files fill every
+/// **It is useful before anything has run.** The catalog files fill every
 /// column but the picture, so the first open shows the whole product's strings
 /// and which languages are behind — and the export becomes something you
 /// choose rather than a toll you pay before the tab does anything.
@@ -124,7 +124,7 @@ class _TranslationsPanelState extends State<_TranslationsPanel> {
   void _go(TranslationPlace place) => AddressScope.of(context).go(
     _core.addressFor(
       place.package,
-      catalogue: place.catalogue,
+      catalog: place.catalog,
       key: place.key,
       locale: place.locale,
       filter: place.filter,
@@ -145,7 +145,7 @@ class _TranslationsPanelState extends State<_TranslationsPanel> {
     }
   }
 
-  /// Rebuilds when the catalogues land: the core notifies, the plugin
+  /// Rebuilds when the catalogs land: the core notifies, the plugin
   /// forwards. Without it the first frame — parsed nothing yet — is the only
   /// frame, and the table reads as an empty project.
   @override
@@ -164,7 +164,7 @@ class _TranslationsPanelState extends State<_TranslationsPanel> {
     }
     if (_core.failureFor(place.package) case var failure?) {
       return ErrorState(
-        title: 'The catalogues could not be read',
+        title: 'The catalogs could not be read',
         message: failure,
       );
     }
@@ -372,7 +372,7 @@ class _NoExportYet extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              'No export yet. The table is read straight from your catalogue '
+              'No export yet. The table is read straight from your catalog '
               'files — running the export adds a picture of each string in '
               'place, and a folder you can send a translator.',
               style: context.type.bodySmall,
@@ -449,7 +449,7 @@ class _Filters extends StatelessWidget {
             onChanged: (it) => onChanged(
               TranslationPlace(
                 place.package,
-                catalogue: place.catalogue,
+                catalog: place.catalog,
                 key: place.key,
                 locale: it,
                 filter: place.filter,
@@ -475,7 +475,7 @@ class _Filters extends StatelessWidget {
                 onTap: () => onChanged(
                   TranslationPlace(
                     place.package,
-                    catalogue: place.catalogue,
+                    catalog: place.catalog,
                     key: place.key,
                     locale: place.locale,
                     filter: filter,
@@ -739,7 +739,7 @@ class _Table extends StatelessWidget {
       onOpen: (row) => onOpen(
         TranslationPlace(
           place.package,
-          catalogue: row.catalogue,
+          catalog: row.catalog,
           key: row.key,
           locale: place.locale,
           filter: place.filter,

@@ -1,10 +1,10 @@
 import 'package:flutterware/src/translations/index.dart';
 import 'package:test/test.dart';
 
-/// A catalogue compiled as constants — the case that breaks a scheme relying on
+/// A catalog compiled as constants — the case that breaks a scheme relying on
 /// the stored string's own identity, and the reason [TranslationIndex] mints
 /// its own token.
-const constCatalogue = <String, String>{
+const constCatalog = <String, String>{
   'common_cancel': 'Cancel',
   'dialog_cancel': 'Cancel',
   'common_save': 'Save',
@@ -21,10 +21,10 @@ void main() {
     TranslationIndex.recording = false;
   });
 
-  String read(String key, {String catalogue = 'app'}) =>
-      indexTranslations(catalogue)(key, constCatalogue[key]!);
+  String read(String key, {String catalog = 'app'}) =>
+      indexTranslations(catalog)(key, constCatalog[key]!);
 
-  test('a read renders exactly what the catalogue said', () {
+  test('a read renders exactly what the catalog said', () {
     expect(read('common_cancel'), 'Cancel');
   });
 
@@ -41,11 +41,11 @@ void main() {
   test('a literal written in the UI is not attributed to a key', () {
     read('common_cancel');
 
-    // The const catalogue's value and this literal *are* the same object. If
+    // The const catalog's value and this literal *are* the same object. If
     // the index registered the stored string rather than a copy of it, this
     // would come back `common_cancel` and a hardcoded string would be reported
     // as translated.
-    expect(identical(constCatalogue['common_cancel'], 'Cancel'), isTrue);
+    expect(identical(constCatalog['common_cancel'], 'Cancel'), isTrue);
     expect(TranslationIndex.keyOf('Cancel'), isNull);
   });
 
@@ -53,15 +53,15 @@ void main() {
     expect(identical(read('common_save'), read('common_save')), isTrue);
   });
 
-  test('two catalogues can use the same key name', () {
+  test('two catalogs can use the same key name', () {
     var app = indexTranslations('app')('title', 'Home');
     var package = indexTranslations('package')('title', 'Home');
 
-    expect(TranslationIndex.keyOf(app)?.catalogue, 'app');
-    expect(TranslationIndex.keyOf(package)?.catalogue, 'package');
+    expect(TranslationIndex.keyOf(app)?.catalog, 'app');
+    expect(TranslationIndex.keyOf(package)?.catalog, 'package');
   });
 
-  test('the wrapper for a catalogue is the same closure every time', () {
+  test('the wrapper for a catalog is the same closure every time', () {
     expect(
       identical(indexTranslations('app'), indexTranslations('app')),
       isTrue,
@@ -93,9 +93,9 @@ void main() {
     expect(TranslationIndex.read['app'], containsPair('missing', ''));
   });
 
-  test('every key asked for is recorded, per catalogue', () {
+  test('every key asked for is recorded, per catalog', () {
     read('common_cancel');
-    read('common_save', catalogue: 'other');
+    read('common_save', catalog: 'other');
 
     expect(TranslationIndex.read['app']?.keys, ['common_cancel']);
     expect(TranslationIndex.read['other']?.keys, ['common_save']);
@@ -133,7 +133,7 @@ void main() {
       expect(identical(ada, bo), isFalse);
     });
 
-    test('an expansion is not what the catalogue answered', () {
+    test('an expansion is not what the catalog answered', () {
       // `read` is compared against the locale's file to report a value that
       // disagrees with it. An expansion never equals the file's value, so
       // recording it there would make every substituted key look wrong.
@@ -143,7 +143,7 @@ void main() {
       expect(TranslationIndex.read['app'], {'greeting': 'Hello, {name}'});
     });
 
-    test('the wrapper for a catalogue is the same closure every time', () {
+    test('the wrapper for a catalog is the same closure every time', () {
       expect(identical(indexExpansions('app'), indexExpansions('app')), isTrue);
       expect(
         identical(indexExpansions('app'), indexTranslations('app')),
@@ -163,7 +163,7 @@ void main() {
     TranslationIndex.recording = false;
     var value = read('common_cancel');
 
-    expect(identical(value, constCatalogue['common_cancel']), isTrue);
+    expect(identical(value, constCatalog['common_cancel']), isTrue);
     expect(TranslationIndex.keyOf(value), isNull);
   });
 }

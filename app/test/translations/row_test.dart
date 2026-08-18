@@ -6,7 +6,7 @@ TranslationRow row({
   Map<String, String> values = const {'en': 'Save', 'nl': 'Opslaan'},
   ExportedShot? shot,
 }) => TranslationRow(
-  catalogue: 'app',
+  catalog: 'app',
   key: 'save',
   template: 'en',
   values: values,
@@ -22,7 +22,7 @@ void main() {
   });
 
   test('an empty string counts as missing, like an absent key', () {
-    // Catalogues spell a missing translation both ways about equally often,
+    // Catalogs spell a missing translation both ways about equally often,
     // and a blank cell that reads as translated is the one that never gets
     // fixed.
     expect(row(values: const {'en': 'Save', 'nl': ''}).missingIn('nl'), isTrue);

@@ -107,7 +107,7 @@ class InspectSource {
 
 /// A translation key, and which characters of this node's text it produced.
 ///
-/// Resolved by **object identity**, not by comparing words: the catalogue's
+/// Resolved by **object identity**, not by comparing words: the catalog's
 /// funnel hands out a distinct string per key, and the walk asks which key a
 /// span's exact object came from. So two keys reading `Cancel` stay apart, and
 /// a `'Cancel'` written inline in the UI is correctly not attributed to either.
@@ -117,22 +117,22 @@ class InspectSource {
 /// the whole node.
 class InspectKey {
   const InspectKey({
-    required this.catalogue,
+    required this.catalog,
     required this.key,
     this.start,
     this.end,
   });
 
   factory InspectKey.fromJson(Map<String, Object?> json) => InspectKey(
-    catalogue: json['catalogue'] as String? ?? '',
+    catalog: json['catalog'] as String? ?? '',
     key: json['key'] as String? ?? '',
     start: json['start'] as int?,
     end: json['end'] as int?,
   );
 
-  /// Which catalogue, as `indexTranslations` was told. Recorded per key rather
-  /// than per project: several catalogues in one UI is ordinary.
-  final String catalogue;
+  /// Which catalog, as `indexTranslations` was told. Recorded per key rather
+  /// than per project: several catalogs in one UI is ordinary.
+  final String catalog;
 
   final String key;
 
@@ -147,14 +147,14 @@ class InspectKey {
   final int? end;
 
   Map<String, Object?> toJson() => {
-    'catalogue': catalogue,
+    'catalog': catalog,
     'key': key,
     if (start != null) 'start': start,
     if (end != null) 'end': end,
   };
 
   @override
-  String toString() => '$catalogue/$key';
+  String toString() => '$catalog/$key';
 }
 
 /// One key, on one screen, in one place — what an export is a list of.
@@ -198,7 +198,7 @@ class TranslationOccurrence {
   };
 }
 
-/// Words on a screen that belong to no catalogue.
+/// Words on a screen that belong to no catalog.
 class UnkeyedText {
   const UnkeyedText({
     required this.text,
@@ -644,12 +644,12 @@ class InspectNode {
   /// Which translation keys produced this node's words, and where.
   ///
   /// Empty for a node that draws no text, for text that came from somewhere
-  /// other than a catalogue — a date, a name, a hardcoded literal — and for
-  /// every node when no catalogue was wired up. Absence is never a claim that
+  /// other than a catalog — a date, a name, a hardcoded literal — and for
+  /// every node when no catalog was wired up. Absence is never a claim that
   /// the text *should* have had a key; see [unkeyedSpans] for the other half.
   final List<InspectKey> keys;
 
-  /// This node's text spans that no catalogue claimed — the words themselves.
+  /// This node's text spans that no catalog claimed — the words themselves.
   ///
   /// The counterpart to [keys], and what makes "text nobody translated"
   /// answerable rather than merely countable. Most of it is text that has no
@@ -1336,7 +1336,7 @@ class InspectTree {
     return found;
   }
 
-  /// Every span on this screen that no catalogue claimed, with where it is.
+  /// Every span on this screen that no catalog claimed, with where it is.
   ///
   /// The other half of [translationKeys], and deliberately *not* called a list
   /// of untranslated strings: most of it has no key by construction — a
