@@ -18,6 +18,8 @@ import 'changes_controller.dart';
 import 'changes_tree.dart';
 import 'diff_lines.dart';
 import 'diff_view.dart';
+import 'file_body.dart';
+import 'file_contents.dart';
 import 'hunk_syntax.dart';
 import 'patch_index.dart';
 import 'ranking.dart';
@@ -184,6 +186,18 @@ class _ChangesScreenState extends State<ChangesScreen> {
   /// file rather than by the patch.
   HunkTokenCache? _tokens;
   String? _tokensFile;
+
+  /// The bytes behind the bodies a diff cannot draw — images, rendered
+  /// markdown, an untracked file's lines. Keyed by the worktree because the
+  /// screen can be re-targeted at another one under the same element.
+  FileContentStore get _contents {
+    if (_contentsStore?.worktreePath != widget.worktree.path) {
+      _contentsStore = FileContentStore(widget.worktree.path);
+    }
+    return _contentsStore!;
+  }
+
+  FileContentStore? _contentsStore;
 
   var _query = '';
 
@@ -786,6 +800,12 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         untracked: _selectedUntracked(set),
                         missing: _selected,
                         uncommitted: set.uncommitted,
+                        contents: _contents,
+                        // The left side of the very diff being drawn — what
+                        // an image's base cell must be read from, or it is a
+                        // differ whose two halves disagree about the range.
+                        baseRevision: set.mergeBase ?? set.head,
+                        readAt: _changes.readAt,
                         lines: _linesFor(set),
                         tokens: switch (_selectedFile(set)) {
                           var file? => _tokensFor(set, file),
@@ -1926,6 +1946,9 @@ class _FilePane extends StatefulWidget {
     required this.untracked,
     required this.missing,
     required this.uncommitted,
+    required this.contents,
+    required this.baseRevision,
+    required this.readAt,
     required this.lines,
     required this.tokens,
     required this.controller,
@@ -1958,6 +1981,20 @@ class _FilePane extends StatefulWidget {
   final String? missing;
 
   final Set<String> uncommitted;
+
+  /// Where the bodies a diff cannot draw get their bytes.
+  final FileContentStore contents;
+
+  /// The revision the delta is measured from — an image differ's base side.
+  /// Null when nothing resolved, in which case no base is claimed.
+  final String? baseRevision;
+
+  /// When the probe last read the worktree. The new-side bodies key their
+  /// reload on it: an in-place overwrite of an untracked file moves neither
+  /// the patch nor the untracked list, so this stamp is the only signal that
+  /// reaches them.
+  final DateTime? readAt;
+
   final HunkLineCache lines;
 
   /// Null when nothing is selected, and carrying a null language for a file
@@ -2032,12 +2069,22 @@ class _FilePaneState extends State<_FilePane> {
   /// jump built.
   static const _revealTries = 4;
 
+  /// Which face of the selected file the body shows, when it has two. Null is
+  /// the default for its kind; reset with the selection, because *Rendered* is
+  /// an answer about one file, not a mode the pane enters.
+  FileBodyView? _view;
+
   @override
   void didUpdateWidget(_FilePane old) {
     super.didUpdateWidget(old);
     // A new file is a new set of line lengths, and a position 400 px in would
     // open it on whatever happens to sit at that column.
-    if (old.file?.path != widget.file?.path) _scrollX.reset();
+    var was = old.file?.path ?? old.untracked?.path;
+    var showing = widget.file?.path ?? widget.untracked?.path;
+    if (was != showing) {
+      _scrollX.reset();
+      _view = null;
+    }
     _scheduleReveal();
   }
 
@@ -2100,56 +2147,19 @@ class _FilePaneState extends State<_FilePane> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.file case var it?) {
-      var rows = _rows = _rowsFor(it);
-      var lines = widget.lines;
-      // The lines the composer's anchor covers, so you can see what you picked
-      // while you write about it. Resolved per line rather than per span
-      // because a span crosses hunks and its two ends are two lookups anyway.
-      var span = <RowSpot>{
-        if (widget.composing case LineAnchor a when a.path == it.path)
-          for (var line = a.from; line <= a.to; line++)
-            ?spotOf(it, line, a.side, lines.linesFor),
-      };
-
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _FileHeader(
-            file: it,
-            uncommitted: widget.uncommitted.contains(it.path),
-            onComment: () => widget.onCommentFile(it.path),
-          ),
-          Divider(height: 1, color: context.colors.line),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // What the code column actually has to itself: the gutters and
-                // the comment margin are pinned, so they are not part of the
-                // window the offset is clamped against.
-                _scrollX.setViewport(constraints.maxWidth - diffChromeWidth);
-                return _body(context, rows, lines, span, it);
-              },
-            ),
-          ),
-          DiffScrollBar(model: _scrollX),
-        ],
-      );
-    }
+    if (widget.file case var it?) return _filePage(context, it);
 
     if (widget.untracked case var it?) {
-      return _Empty(
-        icon: it.isDirectory ? Icons.folder_outlined : Icons.note_add_outlined,
-        title: it.path,
-        // Untracked means git has no other side to compare against — there is
-        // no diff to render, and saying "no changes" would be a lie about a
-        // file that is entirely new.
-        body: it.isDirectory
-            ? 'An untracked directory. Nothing here has been scanned — see the '
-                  'note on the changes list.'
-            : 'Not tracked yet, so there is nothing to compare it against. '
-                  'Every line in it is new.',
-      );
+      if (it.isDirectory) {
+        return _Empty(
+          icon: Icons.folder_outlined,
+          title: it.path,
+          body:
+              'An untracked directory. Nothing here has been scanned — see '
+              'the note on the changes list.',
+        );
+      }
+      return _untrackedPage(context, it);
     }
 
     if (widget.missing case var it?) {
@@ -2169,6 +2179,291 @@ class _FilePaneState extends State<_FilePane> {
           'All is every path in this delta, as a tree. Important is what a '
           'rule in tool/flutterware.dart pinned.',
     );
+  }
+
+  /// One tracked file's body: its diff, its pixels, or its rendered face.
+  Widget _filePage(BuildContext context, FileChange it) {
+    var kind = fileBodyKind(it.path);
+
+    // An image's diff is one line saying "binary". The pixels are the body.
+    if (kind == FileBodyKind.image) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _FileHeader(
+            file: it,
+            uncommitted: widget.uncommitted.contains(it.path),
+            onComment: () => widget.onCommentFile(it.path),
+          ),
+          Divider(height: 1, color: context.colors.line),
+          Expanded(
+            child: ImageChangeBody(
+              store: widget.contents,
+              path: it.path,
+              oldPath: it.oldPath,
+              status: it.status,
+              baseRevision: widget.baseRevision,
+              refreshedAt: widget.readAt,
+              leading: _leadingFor(it.path),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Markdown and SVG carry a second face. A deleted file does not: its
+    // working-tree side is gone, and the diff already shows what left.
+    var faces =
+        (kind == FileBodyKind.markdown || kind == FileBodyKind.svg) &&
+        it.status != ChangeStatus.deleted;
+    var view =
+        _view ??
+        // Rendered by default only for a *new* markdown file, whose all-`+`
+        // diff says nothing the index has not already said. A modified one
+        // opens on its diff — the change is what review is about.
+        (kind == FileBodyKind.markdown && it.status == ChangeStatus.added
+            ? FileBodyView.rendered
+            : FileBodyView.source);
+
+    if (!faces || view == FileBodyView.source) {
+      return _diffPage(context, it, kind: kind, faces: faces, view: view);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _FileHeader(
+          file: it,
+          uncommitted: widget.uncommitted.contains(it.path),
+          onComment: () => widget.onCommentFile(it.path),
+          view: view,
+          renderedLabel: _renderedLabel(kind),
+          onView: (v) => setState(() => _view = v),
+        ),
+        Divider(height: 1, color: context.colors.line),
+        Expanded(
+          child: FileContentBuilder(
+            signature: (it.path, widget.readAt),
+            load: () => widget.contents.onDisk(
+              it.path,
+              maxBytes: ChangesLimits.textContentBytes,
+            ),
+            builder: (context, content) => switch (content) {
+              FileBytes f when kind == FileBodyKind.svg => SvgFileBody(
+                bytes: f.bytes,
+                leading: _leadingFor(it.path),
+              ),
+              FileBytes f => MarkdownFileBody(
+                content: f.text,
+                imageDirectory: _imageDirectoryOf(it.path),
+                leading: _leadingFor(it.path),
+              ),
+              FileMissing() => const FileBodyNotice(
+                'Not on disk any more — Source still shows the diff.',
+              ),
+              FileTooLarge(:var length) => FileBodyNotice(
+                'This file is ${bytesLabel(length)} — past what the viewer '
+                'renders. Source still shows the diff.',
+              ),
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The diff, exactly as it has always been drawn — plus the toggle when the
+  /// file has a rendered face to switch to.
+  Widget _diffPage(
+    BuildContext context,
+    FileChange it, {
+    required FileBodyKind kind,
+    required bool faces,
+    required FileBodyView view,
+  }) {
+    var rows = _rows = _rowsFor(it);
+    var lines = widget.lines;
+    // The lines the composer's anchor covers, so you can see what you picked
+    // while you write about it. Resolved per line rather than per span
+    // because a span crosses hunks and its two ends are two lookups anyway.
+    var span = <RowSpot>{
+      if (widget.composing case LineAnchor a when a.path == it.path)
+        for (var line = a.from; line <= a.to; line++)
+          ?spotOf(it, line, a.side, lines.linesFor),
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _FileHeader(
+          file: it,
+          uncommitted: widget.uncommitted.contains(it.path),
+          onComment: () => widget.onCommentFile(it.path),
+          view: faces ? view : null,
+          renderedLabel: _renderedLabel(kind),
+          onView: faces ? (v) => setState(() => _view = v) : null,
+        ),
+        Divider(height: 1, color: context.colors.line),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // What the code column actually has to itself: the gutters and
+              // the comment margin are pinned, so they are not part of the
+              // window the offset is clamped against.
+              _scrollX.setViewport(constraints.maxWidth - diffChromeWidth);
+              return _body(context, rows, lines, span, it);
+            },
+          ),
+        ),
+        DiffScrollBar(model: _scrollX),
+      ],
+    );
+  }
+
+  /// An untracked file's body. There is no diff to draw — git has no other
+  /// side — but there is a file, and showing it beats a placeholder that says
+  /// every line is new without showing one of them.
+  Widget _untrackedPage(BuildContext context, UntrackedEntry it) {
+    var kind = fileBodyKind(it.path);
+    var faces = kind == FileBodyKind.markdown || kind == FileBodyKind.svg;
+    var view =
+        _view ??
+        // A new markdown file opens rendered — the same rule as a tracked
+        // one. An SVG opens on its source: rendering is the second question.
+        (kind == FileBodyKind.markdown
+            ? FileBodyView.rendered
+            : FileBodyView.source);
+    var charWidth = _measure(context);
+
+    Widget body;
+    if (kind == FileBodyKind.image) {
+      body = ImageChangeBody(
+        store: widget.contents,
+        path: it.path,
+        status: ChangeStatus.added,
+        refreshedAt: widget.readAt,
+        leading: _leadingFor(it.path),
+      );
+    } else {
+      body = FileContentBuilder(
+        signature: (it.path, widget.readAt),
+        load: () => widget.contents.onDisk(
+          it.path,
+          maxBytes: ChangesLimits.textContentBytes,
+        ),
+        builder: (context, content) => switch (content) {
+          FileMissing() => const FileBodyNotice('No longer on disk.'),
+          FileTooLarge(:var length) => FileBodyNotice(
+            'This file is ${bytesLabel(length)} — past what the viewer '
+            'reads. Open it in your editor.',
+          ),
+          FileBytes f when faces && view == FileBodyView.rendered =>
+            kind == FileBodyKind.svg
+                ? SvgFileBody(bytes: f.bytes, leading: _leadingFor(it.path))
+                : MarkdownFileBody(
+                    content: f.text,
+                    imageDirectory: _imageDirectoryOf(it.path),
+                    leading: _leadingFor(it.path),
+                  ),
+          // The one sniff worth doing: no patch has classified this file, and
+          // a NUL-ridden blob drawn as monospace rows is a screen of tofu.
+          FileBytes f when looksBinary(f.bytes) => FileBodyNotice(
+            'Binary file — ${bytesLabel(f.bytes.length)}, and no text to '
+            'draw.',
+          ),
+          FileBytes f => TextFileBody(
+            lines: _linesOf(f.text),
+            scrollX: _scrollX,
+            charWidth: charWidth,
+            controller: widget.controller,
+            leading: _leadingFor(it.path),
+          ),
+        },
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _UntrackedHeader(
+          entry: it,
+          view: faces ? view : null,
+          renderedLabel: _renderedLabel(kind),
+          onView: faces ? (v) => setState(() => _view = v) : null,
+          onComment: () => widget.onCommentFile(it.path),
+        ),
+        Divider(height: 1, color: context.colors.line),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _scrollX.setViewport(constraints.maxWidth - textChromeWidth);
+              return body;
+            },
+          ),
+        ),
+        // Invisible unless the text body reported lines wider than the pane.
+        DiffScrollBar(model: _scrollX),
+      ],
+    );
+  }
+
+  /// What the second face is called: an SVG is *previewed*, prose is
+  /// *rendered*. One word each, shown beside `Source` in the toggle.
+  static String _renderedLabel(FileBodyKind kind) =>
+      kind == FileBodyKind.svg ? 'Preview' : 'Rendered';
+
+  /// Comment threads and the composer, for a body with no diff rows to weave
+  /// them into. They draw at the top — the same place a diff puts a comment
+  /// whose line could not be found, and *about this file* means the same
+  /// thing over pixels as over three hundred lines.
+  List<Widget> _leadingFor(String path) {
+    var rows = <Widget>[];
+    for (var comment in widget.comments) {
+      if (comment.anchor.path != path) continue;
+      rows.add(
+        comment.id == widget.deleted
+            ? ReviewUndoStrip(onUndo: widget.onUndoDelete)
+            : ReviewThread(
+                key: _threads[comment.id] ??= GlobalKey(),
+                comment: comment,
+                drifted: widget.drifted(comment),
+                highlighted: comment.id == widget.flash,
+                onEdit: () => widget.onEditComment(comment),
+                onDelete: () => widget.onDeleteComment(comment.id),
+                onResolve: () => widget.onResolveComment(comment.id),
+                onUnresolve: () => widget.onUnresolveComment(comment.id),
+              ),
+      );
+    }
+    if (widget.composing case var anchor? when anchor.path == path) {
+      rows.add(
+        ReviewComposer(
+          anchor: anchor,
+          controller: widget.draft,
+          editing: widget.editing,
+          quote: widget.editingQuote ?? const [],
+          onSubmit: widget.onSubmit,
+          onCancel: widget.onCancel,
+        ),
+      );
+    }
+    return rows;
+  }
+
+  /// Where a relative image reference in this file's markdown points: its own
+  /// directory in the worktree, spelled the way flutter_markdown concatenates
+  /// it — absolute, with a trailing slash.
+  String _imageDirectoryOf(String path) {
+    var slash = path.lastIndexOf('/');
+    var directory = slash < 0 ? '' : '${path.substring(0, slash)}/';
+    return '${widget.contents.worktreePath}/$directory';
+  }
+
+  static List<String> _linesOf(String text) {
+    var lines = text.split('\n');
+    // The artefact of splitting on a final newline, not a line of the file.
+    if (lines.isNotEmpty && lines.last.isEmpty) lines.removeLast();
+    return lines;
   }
 
   /// The rows themselves.
@@ -2350,6 +2645,9 @@ class _FileHeader extends StatelessWidget {
     required this.file,
     required this.uncommitted,
     required this.onComment,
+    this.view,
+    this.onView,
+    this.renderedLabel = 'Rendered',
   });
 
   final FileChange file;
@@ -2358,6 +2656,11 @@ class _FileHeader extends StatelessWidget {
   /// **Not every note has a line.** *No test covers this* is about the file,
   /// and a line-only tool forces it into a lie about line 1.
   final VoidCallback onComment;
+
+  /// Which face the body is on, when this file has two. Null draws no toggle.
+  final FileBodyView? view;
+  final ValueChanged<FileBodyView>? onView;
+  final String renderedLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -2420,37 +2723,15 @@ class _FileHeader extends StatelessWidget {
                 ),
               ),
               const Gap(FwSpacing.md),
-              Tappable(
-                onTap: onComment,
-                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: FwSpacing.md,
-                    vertical: FwSpacing.xs,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(
-                      context.radii.radiusSmall,
-                    ),
-                    border: Border.all(color: colors.line),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.mode_comment_outlined,
-                        size: FwIconSize.sm,
-                        color: colors.mut2,
-                      ),
-                      const Gap(FwSpacing.xs),
-                      Text(
-                        'Comment on this file',
-                        style: context.type.micro.copyWith(color: colors.mut),
-                      ),
-                    ],
-                  ),
+              if (view case var it? when onView != null) ...[
+                _ViewToggle(
+                  view: it,
+                  onView: onView!,
+                  renderedLabel: renderedLabel,
                 ),
-              ),
+                const Gap(FwSpacing.md),
+              ],
+              _CommentOnFileButton(onTap: onComment),
             ],
           ),
           const Gap(FwSpacing.xs),
@@ -2509,6 +2790,209 @@ class _FileCounts extends StatelessWidget {
         // `not coloured · 1109-line hunk` note beside a 500-line cap — a note
         // that existed only because the cap did.
       ],
+    );
+  }
+}
+
+/// The header's one action, shared by the tracked and untracked headers so
+/// the same gesture cannot drift into two spellings.
+class _CommentOnFileButton extends StatelessWidget {
+  const _CommentOnFileButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tappable(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.md,
+          vertical: FwSpacing.xs,
+        ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          border: Border.all(color: colors.line),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.mode_comment_outlined,
+              size: FwIconSize.sm,
+              color: colors.mut2,
+            ),
+            const Gap(FwSpacing.xs),
+            Text(
+              'Comment on this file',
+              style: context.type.micro.copyWith(color: colors.mut),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// `Source ⇄ Rendered`, in the header. Two labelled segments rather than an
+/// icon pair: the words are the whole explanation, and the header has the
+/// room.
+class _ViewToggle extends StatelessWidget {
+  const _ViewToggle({
+    required this.view,
+    required this.onView,
+    required this.renderedLabel,
+  });
+
+  final FileBodyView view;
+  final ValueChanged<FileBodyView> onView;
+
+  /// What the second face is called for this kind of file.
+  final String renderedLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        border: Border.all(color: colors.line),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _segment(context, 'Source', FileBodyView.source),
+          Container(width: 1, height: 22, color: colors.line),
+          _segment(context, renderedLabel, FileBodyView.rendered),
+        ],
+      ),
+    );
+  }
+
+  Widget _segment(BuildContext context, String label, FileBodyView value) {
+    var selected = view == value;
+    return Tappable(
+      // The selected segment is inert rather than disabled-looking: pressing
+      // the face you are on is not an error, it is just already true.
+      onTap: selected ? null : () => onView(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.md,
+          vertical: FwSpacing.xs,
+        ),
+        color: selected ? context.colors.accentSoft : null,
+        child: Text(
+          label,
+          style: context.type.micro.copyWith(
+            color: selected ? null : context.colors.mut,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The right pane's header for an untracked file — the same anatomy as
+/// [_FileHeader] with the one honest difference: there are no counts,
+/// because there is no other side to count against.
+class _UntrackedHeader extends StatelessWidget {
+  const _UntrackedHeader({
+    required this.entry,
+    required this.onComment,
+    this.view,
+    this.onView,
+    this.renderedLabel = 'Rendered',
+  });
+
+  final UntrackedEntry entry;
+  final VoidCallback onComment;
+  final FileBodyView? view;
+  final ValueChanged<FileBodyView>? onView;
+  final String renderedLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var slash = entry.path.lastIndexOf('/');
+    var directory = slash < 0 ? '' : entry.path.substring(0, slash + 1);
+    var name = slash < 0 ? entry.path : entry.path.substring(slash + 1);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.xxl,
+        FwSpacing.lg,
+        FwSpacing.xxl,
+        FwSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: context.type.bodyStrong,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                    ),
+                    if (directory.isNotEmpty) ...[
+                      const Gap(FwSpacing.sm),
+                      Flexible(
+                        child: Text(
+                          directory,
+                          style: context.type.micro.copyWith(
+                            color: colors.mut3,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Gap(FwSpacing.md),
+              if (view case var it? when onView != null) ...[
+                _ViewToggle(
+                  view: it,
+                  onView: onView!,
+                  renderedLabel: renderedLabel,
+                ),
+                const Gap(FwSpacing.md),
+              ],
+              _CommentOnFileButton(onTap: onComment),
+            ],
+          ),
+          const Gap(FwSpacing.xs),
+          Wrap(
+            spacing: FwSpacing.md,
+            children: [
+              Text(
+                'untracked',
+                style: context.type.micro.copyWith(color: colors.amber),
+              ),
+              Text(
+                'no other side to diff against',
+                style: context.type.micro.copyWith(color: colors.mut2),
+              ),
+              if (entry.reason case var it?)
+                Text(it, style: context.type.micro),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
