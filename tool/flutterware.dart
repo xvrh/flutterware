@@ -192,6 +192,38 @@ void main() => Flutterware.configure((fw) {
                   'The flutterware GUI on the worktree shell — the '
                   'edit-reload-drive inner loop for GUI work',
               platforms: [RunPlatform.desktop],
+              // **The studio is a Flutter tool, so it needs a Flutter SDK, and
+              // it is the one thing a launched app cannot find out.** A
+              // `flutter run` hands its child a stripped environment: this
+              // process cannot see which `flutter` started it, and guessing
+              // from PATH would pick a different version from the one `.fvmrc`
+              // pins. So flutterware says it out loud — `from:` is the launcher
+              // handing over the SDK it is building with, and `required:` is
+              // what refuses a launch that somehow arrives without one.
+              //
+              // It was neither before, and the cost was paid on every session:
+              // the launch succeeded, ~40s of build went by, and `main` threw
+              // on an empty string. Three equal-looking knobs with no defaults
+              // said nothing about which of them was load-bearing.
+              knobs: [
+                Knob(
+                  'flutterSdkRoot',
+                  label: 'Flutter SDK',
+                  description:
+                      'The SDK the studio runs projects with. Supplied by '
+                      'whichever flutterware launched this one',
+                  from: ValueSource.flutterSdk,
+                  required: true,
+                ),
+                Knob(
+                  'appRoot',
+                  label: 'App root',
+                  description:
+                      'The flutterware_app package root — where tool/catalog/ '
+                      'lives. Only the catalog panel reads it, and only when '
+                      'it is opened',
+                ),
+              ],
             ),
           ],
         ),

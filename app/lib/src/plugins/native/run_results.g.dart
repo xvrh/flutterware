@@ -76,6 +76,7 @@ Map<String, dynamic> _$RunKnobEntryToJson(RunKnobEntry instance) =>
       'defaultSource': ?instance.defaultSource,
       'options': instance.options,
       'problem': ?instance.problem,
+      'required': ?RunKnobEntry._ifRequired(instance.required),
     };
 
 Map<String, dynamic> _$RunLaunchResultToJson(RunLaunchResult instance) =>

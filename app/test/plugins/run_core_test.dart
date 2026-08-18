@@ -1395,6 +1395,245 @@ void main({
     });
   });
 
+  /// The other half of the same problem, and the one a signature cannot state.
+  /// `void main({required String x})` is not an entry point — Flutter's
+  /// bootstrap calls `main()` — so an entry point that must also run under a
+  /// plain `flutter run` carries a placeholder default and has no way to say
+  /// the placeholder is not a value to run against. `Knob(required: true)` is
+  /// where it says so.
+  group('a knob the config declares required', () {
+    Map<String, Object?> configWith(Map<String, Object?> knob) => {
+      'packages': [
+        {
+          'path': 'app',
+          'entrypoints': [
+            {
+              'path': 'lib/main.dart',
+              'name': 'App',
+              'knobs': [knob],
+            },
+          ],
+        },
+      ],
+    };
+
+    setUp(() {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': "void main({String apiToken = ''}) {}",
+      });
+    });
+
+    test('refuses a launch that leaves it alone, before the build', () async {
+      core = _coreFor(
+        worktree,
+        config: configWith({'knob': 'apiToken', 'required': true}),
+      );
+
+      // The cost of not doing this is the whole point: a compile, an install, a
+      // boot, and then whatever the app makes of an empty string — minutes
+      // after the mistake and naming neither the knob nor the launch.
+      await expectLater(
+        core.invoke('launch', arguments: {'device': 'phone'}),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('apiToken'), contains('needs')),
+          ),
+        ),
+      );
+    });
+
+    test('and launches once it is passed', () async {
+      core = _coreFor(
+        worktree,
+        config: configWith({'knob': 'apiToken', 'required': true}),
+      );
+      await core.computeAll();
+
+      var handle = await core.launch(
+        device: 'phone',
+        package: 'app',
+        entry: core.entrypointsFor('app').single,
+        knobs: {'apiToken': 'abc'},
+      );
+
+      expect(handle.knobs, {'apiToken': 'abc'});
+    });
+
+    test('withholds the placeholder default it says not to trust', () async {
+      core = _coreFor(
+        worktree,
+        config: configWith({'knob': 'apiToken', 'required': true}),
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+
+      var knob = result.packages.single.entrypoints.single.knobs.single;
+      expect(knob.required, isTrue);
+      // Not `''`. The parameter has a default because it must — the file still
+      // has to run under a plain `flutter run` — and reporting it would hand a
+      // caller a fallback the config has just said does not exist.
+      expect(knob.defaultValue, isNull);
+      expect(knob.defaultSource, isNull);
+      // Still a control, unlike a `required` *parameter*: there is a value to
+      // set, and setting it is how the launch goes ahead.
+      expect(knob.kind, 'string');
+      expect(knob.problem, isNull);
+    });
+
+    test('withholds the source text of a const placeholder too', () async {
+      // The likelier half of the same mistake. `_literal` reads a literal or
+      // nothing, so a `const String.fromEnvironment(…)` default — which is what
+      // a required knob's placeholder actually looks like — leaves
+      // `defaultValue` null and lands in `defaultSource`, where the form takes
+      // it as the field's hint. Suppressing only one of the two would put the
+      // fallback straight back on screen.
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart':
+            'void main({String apiToken = '
+            "const String.fromEnvironment('API_TOKEN')}) {}",
+      });
+      core = _coreFor(
+        worktree,
+        config: configWith({'knob': 'apiToken', 'required': true}),
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+
+      var knob = result.packages.single.entrypoints.single.knobs.single;
+      expect(knob.required, isTrue);
+      expect(knob.defaultValue, isNull);
+      expect(knob.defaultSource, isNull);
+    });
+
+    test('a source that answers satisfies it without anyone typing', () async {
+      _writeScript(worktree, "void main() { print('from-the-script'); }");
+      core = _coreFor(
+        worktree,
+        sdk: _sdkWithRealDart(worktree),
+        config: configWith({
+          'knob': 'apiToken',
+          'required': true,
+          'from': {'script': 'tool/env.dart'},
+        }),
+      );
+      await core.computeAll();
+
+      // `required` is about *some value having been chosen for this launch*,
+      // not about a human having typed one — otherwise every computed knob
+      // would have to be re-typed to satisfy the flag that protects it.
+      var handle = await core.launch(
+        device: 'phone',
+        package: 'app',
+        entry: core.entrypointsFor('app').single,
+      );
+
+      expect(handle.knobs, {'apiToken': 'from-the-script'});
+    });
+
+    test('a declaration naming no parameter is a typo, not a block', () async {
+      core = _coreFor(
+        worktree,
+        config: configWith({'knob': 'apiTokn', 'required': true}),
+      );
+
+      // Refusing here would replace a precise diagnostic with a vague one, and
+      // the launch could not be satisfied anyway: `_checkKnobNames` refuses the
+      // misspelled name too, so there would be no way past it.
+      await core.computeAll();
+      await core.launch(
+        device: 'phone',
+        package: 'app',
+        entry: core.entrypointsFor('app').single,
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      // Two lines: the parameter `main` really takes, and the declaration that
+      // meant to name it.
+      var knobs = result.packages.single.entrypoints.single.knobs;
+      expect(knobs.map((k) => k.name), ['apiToken', 'apiTokn']);
+      expect(knobs.last.required, isFalse);
+      expect(knobs.last.problem, contains('main takes no `apiTokn`'));
+    });
+  });
+
+  /// The value flutterware is holding while the app it launches cannot see it:
+  /// a `flutter run` hands its child a stripped environment, so nothing inside
+  /// the process can tell which `flutter` started it.
+  group('the Flutter SDK as a source', () {
+    setUp(() {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': "void main({String flutterSdkRoot = ''}) {}",
+      });
+      core = _coreFor(
+        worktree,
+        sdk: FlutterSdkPath('/tmp/pinned-flutter'),
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main.dart',
+                  'name': 'App',
+                  'knobs': [
+                    {
+                      'knob': 'flutterSdkRoot',
+                      'required': true,
+                      'from': {'source': 'flutterSdk'},
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      );
+    });
+
+    test('is passed to main without anyone naming it', () async {
+      await core.computeAll();
+
+      var handle = await core.launch(
+        device: 'phone',
+        package: 'app',
+        entry: core.entrypointsFor('app').single,
+      );
+
+      // The SDK the *workspace* resolved against — never one found on PATH,
+      // which in this repo is two versions behind what `.fvmrc` pins.
+      expect(handle.knobs, {'flutterSdkRoot': '/tmp/pinned-flutter'});
+    });
+
+    test('and is the reported default, not an offered chip', () async {
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+
+      var knob = result.packages.single.entrypoints.single.knobs.single;
+      expect(knob.defaultValue, '/tmp/pinned-flutter');
+      // One SDK, already shown as the default. A chip beside it would be the
+      // same value twice with the second dressed as a choice.
+      expect(knob.options, isEmpty);
+      expect(knob.problem, isNull);
+    });
+
+    test('a value the caller passed still wins', () async {
+      await core.computeAll();
+
+      var handle = await core.launch(
+        device: 'phone',
+        package: 'app',
+        entry: core.entrypointsFor('app').single,
+        knobs: {'flutterSdkRoot': '/opt/other'},
+      );
+
+      expect(handle.knobs, {'flutterSdkRoot': '/opt/other'});
+    });
+  });
+
   group('a knob value the signature cannot take', () {
     // Refused here rather than left to the compiler: the value becomes a
     // literal in generated source, so a bad one is a build failure pointing at

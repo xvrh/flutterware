@@ -92,6 +92,16 @@ class _KnobFieldState extends State<KnobField> {
   /// Whether somebody has moved this knob off what it would be anyway.
   bool get _set => widget.value != null;
 
+  /// A required knob with nothing set and nothing computed for it — the state
+  /// a launch is refused in.
+  ///
+  /// Reads off [RunKnobEntry.defaultValue] rather than repeating the core's
+  /// rule: a required knob is reported *without* the parameter's placeholder
+  /// default precisely so that a default here means somebody or something
+  /// chose one.
+  bool get _unanswered =>
+      _knob.required && widget.value == null && _knob.defaultValue == null;
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
@@ -125,6 +135,19 @@ class _KnobFieldState extends State<KnobField> {
                       Text(
                         kind,
                         style: context.type.micro.copyWith(color: colors.mut3),
+                      ),
+                    ],
+                    // Amber while it is the thing stopping the launch, and
+                    // quiet once something has answered for it — the same
+                    // reading the Start button below is doing, said where the
+                    // empty field is.
+                    if (_knob.required) ...[
+                      const Gap(FwSpacing.sm),
+                      Text(
+                        'required',
+                        style: context.type.micro.copyWith(
+                          color: _unanswered ? colors.amber : colors.mut3,
+                        ),
                       ),
                     ],
                   ],

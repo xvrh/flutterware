@@ -574,6 +574,7 @@ class Knob {
     this.description,
     this.options = const [],
     this.from,
+    this.required = false,
   });
 
   /// The parameter's name, exactly — `serverPort`. A knob naming a parameter
@@ -603,12 +604,45 @@ class Knob {
   /// a constant, and "whichever port this worktree was allocated" is not.
   final ValueSource? from;
 
+  /// Whether a launch that sets no value for this knob is refused.
+  ///
+  /// **The second thing a signature cannot say, and for a harder reason than
+  /// [from].** A knob *is* an optional named parameter, and
+  /// `void main({required String x})` is not an entry point at all: Flutter's
+  /// bootstrap calls `main()` with no arguments, so the word `required` in the
+  /// signature stops the file running under plain `flutter run`. That is why a
+  /// parameter genuinely declared `required` is reported as unlaunchable rather
+  /// than as a knob to fill in — there is no way to satisfy it and keep the
+  /// entry point.
+  ///
+  /// So the parameter keeps a default, because it has to, and this says the
+  /// default is a placeholder rather than a value anybody meant to run against:
+  ///
+  /// ```dart
+  /// // lib/main_dev.dart — still launchable by hand
+  /// void main({String apiToken = const String.fromEnvironment('API_TOKEN')})
+  ///
+  /// // tool/flutterware.dart — but not by flutterware without one
+  /// Knob('apiToken', required: true),
+  /// ```
+  ///
+  /// A [from] that answers satisfies it. The point is that *some* value was
+  /// chosen for this launch, not that a human typed it — which is what makes
+  /// `required` with a working source a declaration rather than a chore.
+  ///
+  /// **The refusal comes before anything is built, which is the whole value.**
+  /// Left to the app, forgetting one costs a compile, an install, a boot and
+  /// whatever the code does about a placeholder — usually throwing somewhere
+  /// that names neither the knob nor the launch, minutes after the mistake.
+  final bool required;
+
   Map<String, Object?> toJson() => {
     'knob': name,
     if (label != null) 'label': label,
     if (description != null) 'description': description,
     if (options.isNotEmpty) 'options': options,
     if (from != null) 'from': from!.toJson(),
+    if (required) 'required': true,
   };
 }
 
@@ -638,6 +672,30 @@ sealed class DefineSource {
   /// This machine's addresses on the local network. What a phone has to be
   /// told, since `localhost` on a phone is the phone.
   static const DefineSource hostAddresses = HostAddressesSource();
+
+  /// The root of the Flutter SDK this launch is being built with.
+  ///
+  /// **A value flutterware is holding while the app it launches cannot see
+  /// it.** `flutter run` hands its child a stripped environment, so nothing
+  /// inside the process can tell which `flutter` started it — and an app that
+  /// has to spawn Flutter itself, a dev tool or a codegen harness or this GUI,
+  /// must not fall back to the one on PATH: that is routinely a different
+  /// version from the one the project pinned.
+  ///
+  /// Which makes it the same kind of fact as [hostAddresses] — something the
+  /// machine knows, the app cannot reach, and no constant can be written down
+  /// for. The difference is only that there is exactly one answer, so it fills
+  /// the knob in rather than offering a list.
+  ///
+  /// ```dart
+  /// // main({String flutterSdkRoot = const String.fromEnvironment(…)})
+  /// Knob('flutterSdkRoot', from: ValueSource.flutterSdk, required: true),
+  /// ```
+  ///
+  /// Pairs naturally with [Knob.required]: the source answers for every launch
+  /// flutterware makes, and the flag is what refuses the one where it could
+  /// not.
+  static const DefineSource flutterSdk = FlutterSdkSource();
 
   /// A Dart script in this worktree that prints the value, or a JSON array of
   /// values to choose from.
@@ -680,6 +738,7 @@ sealed class DefineSource {
   static DefineSource? fromJson(Object? raw) {
     if (raw is! Map) return null;
     if (raw['source'] == 'hostAddresses') return hostAddresses;
+    if (raw['source'] == 'flutterSdk') return flutterSdk;
     if (raw['script'] case String path) {
       return ScriptSource(
         path,
@@ -699,6 +758,14 @@ final class HostAddressesSource extends DefineSource {
 
   @override
   Map<String, Object?> toJson() => {'source': 'hostAddresses'};
+}
+
+/// See [DefineSource.flutterSdk].
+final class FlutterSdkSource extends DefineSource {
+  const FlutterSdkSource();
+
+  @override
+  Map<String, Object?> toJson() => {'source': 'flutterSdk'};
 }
 
 /// See [DefineSource.script].

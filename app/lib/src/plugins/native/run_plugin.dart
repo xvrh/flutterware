@@ -1731,6 +1731,18 @@ class _NewRunPageState extends State<_NewRunPage> {
         : _core.knobEntriesOf(choice.package, choice.entry);
   }
 
+  /// Why Start is off, when a knob is the reason.
+  ///
+  /// Asked of the core rather than worked out from [_offeredKnobs], so the
+  /// button and the `launch` it calls cannot disagree: a form that let this be
+  /// pressed would spend a build finding out what the same rule already knows.
+  String? get _knobsProblem {
+    var choice = _entry;
+    return choice == null
+        ? null
+        : _core.requiredKnobsProblem(choice.package, choice.entry, _knobs);
+  }
+
   @override
   Widget build(BuildContext context) {
     _prime();
@@ -1748,6 +1760,9 @@ class _NewRunPageState extends State<_NewRunPage> {
         ? _core.devices
         : _core.devicesFor(_entry!.entry);
     var device = allowed.where((d) => d.id == _device).firstOrNull;
+    // Read once for the button and the sentence beside it: two readings could
+    // grey out Start and then explain nothing.
+    var blocked = _knobsProblem;
     // A column, not the window. Fields stretched across a desktop panel put
     // the label and the caret a hand's width apart, and the form is a short
     // sequence of decisions rather than a table.
@@ -1844,14 +1859,25 @@ class _NewRunPageState extends State<_NewRunPage> {
                 Row(
                   children: [
                     FilledButton(
-                      onPressed: _launching || device == null ? null : _start,
+                      onPressed: _launching || device == null || blocked != null
+                          ? null
+                          : _start,
                       child: Text(_launching ? 'Starting…' : 'Start'),
                     ),
                     const Gap(FwSpacing.md),
                     // Said before the click, not explained after it: every wireless
                     // launch in the spike stalled on an OS dialog while the tool
                     // reported only `Installing and launching…`.
-                    if (device != null && device.isWireless)
+                    if (blocked case var reason?)
+                      Flexible(
+                        child: Text(
+                          reason,
+                          style: context.type.caption.copyWith(
+                            color: context.colors.amber,
+                          ),
+                        ),
+                      )
+                    else if (device != null && device.isWireless)
                       Flexible(
                         child: Text(
                           'wireless — expect a slow install, and a permission prompt '

@@ -3434,6 +3434,12 @@ final resultShapes = <String, ResultShape>{
               'doc':
                   'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
             },
+            <String, Object?>{
+              'name': 'required',
+              'type': 'bool',
+              'doc':
+                  'True when a launch that sets no value for this knob is refused — see [Knob.required].',
+            },
           ],
         },
       },
@@ -3555,6 +3561,12 @@ final resultShapes = <String, ResultShape>{
                     'optional': true,
                     'doc':
                         'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
+                  },
+                  <String, Object?>{
+                    'name': 'required',
+                    'type': 'bool',
+                    'doc':
+                        'True when a launch that sets no value for this knob is refused — see [Knob.required].',
                   },
                 ],
               },
@@ -3686,6 +3698,12 @@ final resultShapes = <String, ResultShape>{
                           'optional': true,
                           'doc':
                               'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
+                        },
+                        <String, Object?>{
+                          'name': 'required',
+                          'type': 'bool',
+                          'doc':
+                              'True when a launch that sets no value for this knob is refused — see [Knob.required].',
                         },
                       ],
                     },
@@ -3915,6 +3933,12 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc':
             'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
+      },
+      <String, Object?>{
+        'name': 'required',
+        'type': 'bool',
+        'doc':
+            'True when a launch that sets no value for this knob is refused — see [Knob.required].',
       },
     ],
   }),

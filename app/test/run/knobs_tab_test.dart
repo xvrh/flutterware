@@ -210,6 +210,37 @@ void main() {
     expect(find.byType(DropdownButtonFormField<String>), findsNothing);
   });
 
+  testWidgets('a required knob says so, loudest while nothing answers it', (
+    tester,
+  ) async {
+    // The word that separates a knob nobody has touched from one the launch is
+    // waiting on. A required knob is reported *without* the parameter's own
+    // default — that placeholder is exactly what the flag says not to trust —
+    // so "no default" here is the state Start is greyed out in.
+    await pump(
+      tester,
+      offered: [
+        RunKnobEntry(name: 'apiToken', kind: 'string', required: true),
+        RunKnobEntry(
+          name: 'flutterSdkRoot',
+          kind: 'string',
+          required: true,
+          // A source worked this one out, which is what satisfies the flag: the
+          // point is that a value was chosen for this launch, not that a human
+          // typed it.
+          defaultValue: '/opt/flutter',
+        ),
+      ],
+    );
+
+    expect(find.text('required'), findsNWidgets(2));
+    var amber = tester
+        .widgetList<Text>(find.text('required'))
+        .map((text) => text.style?.color)
+        .toSet();
+    expect(amber.length, 2, reason: 'the answered one is not shouting');
+  });
+
   testWidgets('an apply that changes nothing still settles the form', (
     tester,
   ) async {

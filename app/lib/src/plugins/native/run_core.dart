@@ -2092,10 +2092,12 @@ class RunCore extends PluginCore {
     Map<String, String> undrawable = const {},
   }) {
     var descriptor = read?.knob;
-    var computed = switch (declared?.from) {
-      ScriptSource source => outcomeOf(source)?.value,
-      _ => null,
-    };
+    var computed = declared == null ? null : computedValueOf(declared);
+    // Only a knob the signature actually has. A declaration naming a parameter
+    // that is not there already carries the typo as its problem, and marking it
+    // required as well would say a launch is missing a value that nothing can
+    // accept.
+    var required = read != null && (declared?.required ?? false);
     return RunKnobEntry(
       name: read?.name ?? declared!.name,
       label: declared?.label,
@@ -2105,16 +2107,79 @@ class RunCore extends PluginCore {
       // now; then what the signature falls back to. There is deliberately no
       // config default — the parameter has one, and repeating it is the two
       // places to be wrong this design removes.
-      defaultValue: computed ?? descriptor?.defaultValue?.toString(),
+      //
+      // **Except under `required`, where the parameter's own default is
+      // withheld — in both spellings.** That is the whole content of the flag:
+      // the default is a placeholder the entry point carries so the file still
+      // runs under a plain `flutter run`, not a value to run against.
+      // Reporting it would hand an agent a fallback that does not exist and
+      // pre-fill the form's hint with it, so a knob nothing can supply reads as
+      // one nobody needs to.
+      //
+      // [defaultSource] especially, because it is the likelier of the two to be
+      // there: a required knob's placeholder is typically
+      // `const String.fromEnvironment(…)`, which is exactly the const
+      // [defaultValue] cannot read and this one can.
+      defaultValue:
+          computed ?? (required ? null : descriptor?.defaultValue?.toString()),
       // Only when nothing above produced a value. A script that answered has
       // said what the launch will use, and the spelling of a fallback nobody
       // reaches is noise beside it.
-      defaultSource: computed == null && descriptor?.defaultValue == null
-          ? read?.defaultSource
-          : null,
+      defaultSource:
+          required || computed != null || descriptor?.defaultValue != null
+          ? null
+          : read?.defaultSource,
       options: _knobOptions(descriptor, declared),
       problem: _knobProblem(read, declared, undrawable),
+      required: required,
     );
+  }
+
+  /// What [knob]'s source works out for this launch, or null when it has none.
+  ///
+  /// One reading, because three callers want the same value for three
+  /// different purposes and a source read differently by any of them would be
+  /// a knob shown with one value and launched with another: [knobEntry] reports
+  /// it as the default, [_resolveKnobs] passes it to `main`, and
+  /// [requiredKnobsProblem] counts it as somebody having chosen.
+  ///
+  /// A [ScriptSource] answers only once [_resolveScripts] has run — before
+  /// then this is null, which reads the same as a script that has not answered
+  /// and is refused in the same place.
+  String? computedValueOf(Knob knob) => switch (knob.from) {
+    FlutterSdkSource() => host.workspace.flutterSdk.root,
+    ScriptSource source => outcomeOf(source)?.value,
+    _ => null,
+  };
+
+  /// Why a launch of [entry] with [values] cannot go ahead — the `required`
+  /// knobs nothing has chosen a value for — or null when it can.
+  ///
+  /// **Composed in one place because two surfaces say it**, the rule
+  /// [_undrawable] already follows: the New run page greys Start out with this
+  /// sentence beside it, and `launch` throws it. A form offering a button the
+  /// action would refuse is the tool disagreeing with itself, and the disagreement
+  /// only shows up after a build.
+  String? requiredKnobsProblem(
+    String package,
+    EntrypointRef entry,
+    Map<String, Object?> values,
+  ) {
+    var missing = [
+      for (var (:read, :declared) in knobsFor(package, entry))
+        if (read != null && declared != null && declared.required)
+          if (!values.containsKey(declared.name) &&
+              computedValueOf(declared) == null)
+            declared.name,
+    ];
+    if (missing.isEmpty) return null;
+    return '${entry.name} needs ${missing.join(', ')} set. '
+        'tool/flutterware.dart declares ${missing.length == 1 ? 'it' : 'them'} '
+        'required, which means the parameter default is a placeholder rather '
+        'than a value to run against — so launching without one would build, '
+        'install and boot an app configured by nobody. Pass '
+        '${missing.length == 1 ? 'it' : 'them'} to launch, or give the knob a '
+        '`from:` that can work the value out.';
   }
 
   /// Everything worth offering: an enum's own constants, this machine's
@@ -2142,6 +2207,11 @@ class RunCore extends PluginCore {
         for (var value in outcomeOf(source)?.options ?? const <String>[]) {
           if (!options.contains(value)) options.add(value);
         }
+      case FlutterSdkSource():
+        // There is one Flutter SDK behind a launch and it is already the
+        // knob's default, so a chip offering it would be the same value twice
+        // with the second one dressed as a choice.
+        break;
       case null:
         break;
     }
@@ -2549,7 +2619,9 @@ class RunCore extends PluginCore {
           );
           continue;
         }
-        if (outcome.value case var value?) resolved[declared.name] = value;
+      }
+      if (computedValueOf(declared) case var value?) {
+        resolved[declared.name] = value;
       }
     }
     if (unresolved.isNotEmpty) {
@@ -2557,6 +2629,12 @@ class RunCore extends PluginCore {
         'cannot work out ${unresolved.join(', ')}. Fix the script, or pass the '
         'knob explicitly to launch without it.',
       );
+    }
+    // Last, so a source that answered counts as somebody having chosen — and
+    // after the failed-script refusal above, which is the more specific reason
+    // for the same missing value.
+    if (requiredKnobsProblem(package, entry, resolved) case var problem?) {
+      throw StateError(problem);
     }
     return resolved;
   }
