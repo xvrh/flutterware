@@ -5,7 +5,7 @@ void main() {
   test('a place round-trips through its segments and axes', () {
     var place = const TranslationPlace(
       'packages/app',
-      catalogue: 'app',
+      catalog: 'app',
       key: 'checkout.title',
       locale: 'nl',
       filter: TranslationFilter.missing,
@@ -14,7 +14,7 @@ void main() {
     var back = translationPlace(
       translationSegments(
         place.package,
-        catalogue: place.catalogue,
+        catalog: place.catalog,
         key: place.key,
       ),
       locale: translationAxes(

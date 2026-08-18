@@ -1,7 +1,7 @@
-/// Assembling a [TranslationSurvey] out of a run and the catalogue files.
+/// Assembling a [TranslationSurvey] out of a run and the catalog files.
 ///
 /// The two halves reach this from different places — the run's artifacts
-/// through whatever the panel or the export reads steps with, the catalogues
+/// through whatever the panel or the export reads steps with, the catalogs
 /// off the project's own directory — so both arrive as injected readers and
 /// nothing here touches a filesystem. That is what lets the join be tested
 /// against a run that was never written to disk.
@@ -22,9 +22,8 @@ import 'survey.dart';
 /// says a step has no keys, which is a better answer than no export.
 typedef ArtifactReader = Future<String?> Function(String path);
 
-/// Lists the files a catalogue's glob matches, and reads them.
-typedef CatalogueReader =
-    Future<Map<String, String>> Function(String filesGlob);
+/// Lists the files a catalog's glob matches, and reads them.
+typedef CatalogReader = Future<Map<String, String>> Function(String filesGlob);
 
 /// The locale a matrix point ran as, from the axes recorded on it.
 ///
@@ -41,7 +40,7 @@ String? localeOf(Map<String, String>? axes) => axes?['language'];
 /// ranking compares the two.
 Future<TranslationSurvey> buildSurvey({
   required ScenarioRunResult run,
-  required Map<String, LoadedCatalogue> catalogues,
+  required Map<String, LoadedCatalog> catalogs,
   required ArtifactReader readArtifact,
   double captureScale = 1,
 }) async {
@@ -58,14 +57,14 @@ Future<TranslationSurvey> buildSurvey({
 
       if (outcome.translations case var translations?) {
         // Merged rather than overwritten: two scenarios under the same locale
-        // each read part of the catalogue, and the union is what "this product
+        // each read part of the catalog, and the union is what "this product
         // asks for" means. Two answers for one key cannot disagree within a
-        // locale — the catalogue is the same file — so first wins.
+        // locale — the catalog is the same file — so first wins.
         var perLocale = read[locale ?? ''] ??= {};
         for (var entry in translations.entries) {
-          var perCatalogue = perLocale[entry.key] ??= {};
+          var perCatalog = perLocale[entry.key] ??= {};
           for (var value in entry.value.entries) {
-            perCatalogue.putIfAbsent(value.key, () => value.value);
+            perCatalog.putIfAbsent(value.key, () => value.value);
           }
         }
       }
@@ -87,7 +86,7 @@ Future<TranslationSurvey> buildSurvey({
           var rect = key['rect'] as String?;
           sightings.add(
             KeySighting(
-              catalogue: key['catalogue'] as String? ?? '',
+              catalog: key['catalog'] as String? ?? '',
               key: key['key'] as String? ?? '',
               scenario: scenario,
               step: label,
@@ -134,26 +133,26 @@ Future<TranslationSurvey> buildSurvey({
   }
 
   return TranslationSurvey(
-    catalogues: catalogues,
+    catalogs: catalogs,
     sightings: sightings,
     unkeyed: unkeyed,
     read: read,
   );
 }
 
-/// Loads every declared catalogue.
+/// Loads every declared catalog.
 ///
-/// A catalogue whose glob matches nothing is **kept, empty**, rather than
+/// A catalog whose glob matches nothing is **kept, empty**, rather than
 /// dropped: a declaration pointing at the wrong place should show up as a
-/// catalogue with no keys and every read absent from it, which names the
+/// catalog with no keys and every read absent from it, which names the
 /// problem, instead of vanishing and taking its keys' attribution with it.
-Future<Map<String, LoadedCatalogue>> loadCatalogues(
-  List<({String name, String files, String template})> catalogues, {
-  required CatalogueReader read,
+Future<Map<String, LoadedCatalog>> loadCatalogs(
+  List<({String name, String files, String template})> catalogs, {
+  required CatalogReader read,
 }) async {
-  var loaded = <String, LoadedCatalogue>{};
-  for (var catalogue in catalogues) {
-    var files = await read(catalogue.files);
+  var loaded = <String, LoadedCatalog>{};
+  for (var catalog in catalogs) {
+    var files = await read(catalog.files);
     var byLocale = <String, Map<String, String>>{};
     for (var file in files.entries) {
       var locale = _localeFromFileName(file.key);
@@ -166,9 +165,9 @@ Future<Map<String, LoadedCatalogue>> loadCatalogues(
         _ => <String, String>{},
       };
     }
-    loaded[catalogue.name] = LoadedCatalogue(
-      name: catalogue.name,
-      template: catalogue.template,
+    loaded[catalog.name] = LoadedCatalog(
+      name: catalog.name,
+      template: catalog.template,
       byLocale: byLocale,
     );
   }
@@ -178,7 +177,7 @@ Future<Map<String, LoadedCatalogue>> loadCatalogues(
 /// `…/en.json` to `en`, or null when the base name is not a locale tag.
 ///
 /// A convention rather than a parse, and the null is deliberate: a stray file
-/// beside the catalogue — a schema, a README — should be skipped rather than
+/// beside the catalog — a schema, a README — should be skipped rather than
 /// loaded as a locale called `schema`.
 String? _localeFromFileName(String path) {
   var name = path.split(RegExp(r'[/\\]')).last;
@@ -204,12 +203,12 @@ String _describeSource(Map<String, Object?> json) {
   return '$name:${json['line'] ?? 0}:${json['column'] ?? 0}';
 }
 
-/// A [CatalogueReader] over a project's own directory.
+/// A [CatalogReader] over a project's own directory.
 ///
-/// Split out from [loadCatalogues] rather than folded into it because the join
-/// is worth testing against catalogues that were never written to disk — and
+/// Split out from [loadCatalogs] rather than folded into it because the join
+/// is worth testing against catalogs that were never written to disk — and
 /// because the export will one day read a project it has only fetched.
-CatalogueReader catalogueFilesUnder(String root) => (filesGlob) async {
+CatalogReader catalogFilesUnder(String root) => (filesGlob) async {
   var found = <String, String>{};
   // Matched against paths relative to the project, always: a declared glob is
   // written by somebody looking at their own repository, and an absolute one

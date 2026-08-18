@@ -260,8 +260,8 @@ class ScenarioRunOutcome {
   /// just before it.
   final List<ScenarioRunError> errors;
 
-  /// Every key each catalogue was asked for on the way through this scenario,
-  /// and what it answered: `catalogue -> key -> value`.
+  /// Every key each catalog was asked for on the way through this scenario,
+  /// and what it answered: `catalog -> key -> value`.
   ///
   /// **Per scenario, and that is load-bearing.** A scenario runs under one
   /// assignment, so this belongs to one locale — which is what lets the
@@ -392,7 +392,7 @@ class ScenarioRunStep {
   final String tree;
 
   /// The translation keys on this screen, and the words that belonged to no
-  /// catalogue — relative like [image]. Null when no catalogue was wired up,
+  /// catalog — relative like [image]. Null when no catalog was wired up,
   /// which is every project that has not asked for this.
   ///
   /// A file rather than an inlined list, like [tree] and for the same reason:

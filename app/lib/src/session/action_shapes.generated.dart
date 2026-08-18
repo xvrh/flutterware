@@ -4644,7 +4644,7 @@ final resultShapes = <String, ResultShape>{
               'type': 'String',
               'optional': true,
               'doc':
-                  'The translation keys on this screen, and the words that belonged to no catalogue — relative like [image].',
+                  'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
             },
             <String, Object?>{
               'name': 'semantics',
@@ -4846,7 +4846,7 @@ final resultShapes = <String, ResultShape>{
         'type': 'Map<String, Map<String, String>>',
         'optional': true,
         'doc':
-            'Every key each catalogue was asked for on the way through this scenario, and what it answered: `catalogue -> key -> value`.',
+            'Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.',
       },
     ],
   }),
@@ -4986,7 +4986,7 @@ final resultShapes = <String, ResultShape>{
                     'type': 'String',
                     'optional': true,
                     'doc':
-                        'The translation keys on this screen, and the words that belonged to no catalogue — relative like [image].',
+                        'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
                   },
                   <String, Object?>{
                     'name': 'semantics',
@@ -5189,7 +5189,7 @@ final resultShapes = <String, ResultShape>{
               'type': 'Map<String, Map<String, String>>',
               'optional': true,
               'doc':
-                  'Every key each catalogue was asked for on the way through this scenario, and what it answered: `catalogue -> key -> value`.',
+                  'Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.',
             },
           ],
         },
@@ -5352,7 +5352,7 @@ final resultShapes = <String, ResultShape>{
                           'type': 'String',
                           'optional': true,
                           'doc':
-                              'The translation keys on this screen, and the words that belonged to no catalogue — relative like [image].',
+                              'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
                         },
                         <String, Object?>{
                           'name': 'semantics',
@@ -5556,7 +5556,7 @@ final resultShapes = <String, ResultShape>{
                     'type': 'Map<String, Map<String, String>>',
                     'optional': true,
                     'doc':
-                        'Every key each catalogue was asked for on the way through this scenario, and what it answered: `catalogue -> key -> value`.',
+                        'Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.',
                   },
                 ],
               },
@@ -5670,7 +5670,7 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc':
-            'The translation keys on this screen, and the words that belonged to no catalogue — relative like [image].',
+            'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
       },
       <String, Object?>{
         'name': 'semantics',
@@ -6338,7 +6338,7 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'doc': 'The page a person reads.',
       },
-      <String, Object?>{'name': 'catalogues', 'type': 'int'},
+      <String, Object?>{'name': 'catalogs', 'type': 'int'},
       <String, Object?>{
         'name': 'locales',
         'type': 'int',
@@ -6347,7 +6347,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'keys',
         'type': 'int',
-        'doc': 'Every key the catalogues define.',
+        'doc': 'Every key the catalogs define.',
       },
       <String, Object?>{
         'name': 'keysSeen',
@@ -6388,9 +6388,9 @@ final resultShapes = <String, ResultShape>{
         'doc': 'Declared keys this run never asked for.',
       },
       <String, Object?>{
-        'name': 'absentFromCatalogue',
+        'name': 'absentFromCatalog',
         'type': 'int',
-        'doc': 'Keys the app read that no declared catalogue defines.',
+        'doc': 'Keys the app read that no declared catalog defines.',
       },
       <String, Object?>{
         'name': 'overflowing',
@@ -6400,7 +6400,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'unkeyed',
         'type': 'int',
-        'doc': 'Distinct strings on screen that belonged to no catalogue.',
+        'doc': 'Distinct strings on screen that belonged to no catalog.',
       },
       <String, Object?>{
         'name': 'scenariosFailed',

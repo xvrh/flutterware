@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-/// The demo shop's copy — **a loader-based catalogue**, which is the shape
+/// The demo shop's copy — **a loader-based catalog**, which is the shape
 /// this repository's translation tooling is built for.
 ///
 /// The words live in `assets/i18n/<locale>.json` rather than in this file, and
@@ -16,7 +16,7 @@ import 'package:flutter/widgets.dart';
 /// wire it.
 ///
 /// Deliberately hand-rolled rather than codegen: a demo should show localized
-/// scenarios without dragging in a pipeline, and a hand-rolled catalogue is
+/// scenarios without dragging in a pipeline, and a hand-rolled catalog is
 /// also what most projects with a funnel actually have.
 class ShopStrings {
   const ShopStrings(this.locale, this._values, this._fallback);
@@ -27,7 +27,7 @@ class ShopStrings {
 
   static const supported = ['en', 'fr'];
 
-  /// Wraps every value on its way out of the catalogue.
+  /// Wraps every value on its way out of the catalog.
   ///
   /// **The seam, and the only thing a project has to add.** Null in
   /// production, so this costs nothing there. A scenario run sets it to
@@ -87,9 +87,9 @@ class ShopStrings {
   /// says which key built it, which is exact where reading the words back
   /// would be a guess.
   ///
-  /// Note where this lives. It is one method on the catalogue, not a call
+  /// Note where this lives. It is one method on the catalog, not a call
   /// site, which is what makes the hook cheap in a real project: a loader-based
-  /// catalogue substitutes in one place per key however many screens use it.
+  /// catalog substitutes in one place per key however many screens use it.
   ///
   /// The value carries `**` besides, so what renders it is [MiniMarkdown] —
   /// see there for the other half.
@@ -113,7 +113,7 @@ class _Delegate extends LocalizationsDelegate<ShopStrings> {
   ///
   /// Asynchronous because that is what reading an asset is, and because
   /// `Localizations` is built for exactly this — no caller has to know the
-  /// catalogue is loaded rather than compiled in.
+  /// catalog is loaded rather than compiled in.
   @override
   Future<ShopStrings> load(Locale locale) async {
     var values = await _read(locale.languageCode);

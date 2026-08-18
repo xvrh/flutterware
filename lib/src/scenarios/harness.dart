@@ -102,7 +102,7 @@ Future<void> _runHarness(
   // as it has handed back the folder's profile, before it reaches the flag. So
   // the one line there covered a bare `flutter test` and nothing else, and a
   // project with the seam wired saw every export come back empty. It costs
-  // nothing when no catalogue is registered — the walk reads the flag and
+  // nothing when no catalog is registered — the walk reads the flag and
   // returns — which is why it is on here rather than behind a request field.
   TranslationIndex.recording = true;
 
@@ -782,7 +782,7 @@ Future<Map<String, Object?>> _runOne(
     var read = inspector.read();
     var tree = read.toJson();
     File('$base.tree.json').writeAsStringSync(jsonEncode(tree));
-    // The seventh, and only when a catalogue was wired up: which translation
+    // The seventh, and only when a catalog was wired up: which translation
     // keys this screen shows and where. Flattened out of the tree it was just
     // read from — an export asking "which screens show this key" should not
     // have to parse every node of every step to find out.
@@ -1017,7 +1017,7 @@ Future<Map<String, Object?>> _runOne(
     'ms': watch.elapsedMilliseconds,
     'steps': steps,
     if (!passed) 'errors': errors,
-    // Every key every catalogue was asked for on the way through this
+    // Every key every catalog was asked for on the way through this
     // scenario, and what it answered — **including the keys whose value never
     // reached a glyph.** The steps say where a key was *seen*; only this says
     // it was read at all, which is the difference between "not on this screen"

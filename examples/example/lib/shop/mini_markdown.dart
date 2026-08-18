@@ -1,14 +1,14 @@
 import 'package:flutter/widgets.dart';
 
 /// The smallest thing that behaves like a markdown renderer, so the demo has a
-/// widget that really does destroy the catalogue's string.
+/// widget that really does destroy the catalog's string.
 ///
 /// It splits the source on `**` and builds its own spans out of the pieces —
 /// which is what any markdown package does, and why object identity cannot
 /// follow the words down here: every span holds a fresh substring, and the
 /// `**` themselves never reach a glyph at all.
 ///
-/// The recovery is [data]. The string the catalogue handed out is still sitting
+/// The recovery is [data]. The string the catalog handed out is still sitting
 /// on this widget untouched, and a scenario says so in one line:
 ///
 /// ```dart

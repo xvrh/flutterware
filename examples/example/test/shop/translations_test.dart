@@ -31,7 +31,7 @@ void main() {
     await tester.pumpWidget(const ShopApp());
     await tester.pumpAndSettle();
 
-    // What the catalogue was asked for on the way to this screen.
+    // What the catalog was asked for on the way to this screen.
     expect(TranslationIndex.read['shop'], contains('tagline'));
     expect(
       TranslationIndex.read['shop']!['tagline'],
@@ -70,7 +70,7 @@ void main() {
     // not gone though, and `thanks` routes it rather than leaving it to be
     // guessed back out of the words.
     expect(TranslationIndex.keyOf(built), TranslationKey('shop', 'thanks'));
-    // And what the catalogue *answered* is still the template, which is what
+    // And what the catalog *answered* is still the template, which is what
     // the export compares against the locale's file.
     expect(TranslationIndex.read['shop']!['thanks'], 'Thanks, **{name}**!');
   });
@@ -79,7 +79,7 @@ void main() {
     tester,
   ) async {
     // `MiniMarkdown` splits its source into fresh substrings and drops the
-    // `**` entirely, so nothing below it is the object the catalogue handed
+    // `**` entirely, so nothing below it is the object the catalog handed
     // out. `data` is, which is the whole of what the scenario declares.
     var built = 'Thanks, **Ada**!';
     await tester.pumpWidget(

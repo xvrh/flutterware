@@ -66,11 +66,11 @@ void main() {
       () async {
         var survey = await buildSurvey(
           run: run(steps: [step()], axes: {'language': 'nl'}),
-          catalogues: const {},
+          catalogs: const {},
           readArtifact: (path) async => keysArtifact(
             keys: [
               {
-                'catalogue': 'app',
+                'catalog': 'app',
                 'key': 'save',
                 'start': 0,
                 'end': 4,
@@ -94,7 +94,7 @@ void main() {
     test('a step with no keys artifact is skipped, not an error', () async {
       var survey = await buildSurvey(
         run: run(steps: [step(keys: null), step(index: 2)]),
-        catalogues: const {},
+        catalogs: const {},
         readArtifact: (path) async => null,
       );
 
@@ -104,10 +104,10 @@ void main() {
     test('a failed step marks its sightings', () async {
       var survey = await buildSurvey(
         run: run(steps: [step(failure: 'boom')]),
-        catalogues: const {},
+        catalogs: const {},
         readArtifact: (path) async => keysArtifact(
           keys: [
-            {'catalogue': 'app', 'key': 'save'},
+            {'catalog': 'app', 'key': 'save'},
           ],
         ),
       );
@@ -118,7 +118,7 @@ void main() {
     test('unkeyed words carry where they were built', () async {
       var survey = await buildSurvey(
         run: run(steps: [step()]),
-        catalogues: const {},
+        catalogs: const {},
         readArtifact: (path) async => keysArtifact(
           unkeyed: [
             {
@@ -146,8 +146,8 @@ void main() {
             'app': {'save': 'Save'},
           },
         ),
-        catalogues: {
-          'app': const LoadedCatalogue(
+        catalogs: {
+          'app': const LoadedCatalog(
             name: 'app',
             template: 'en',
             byLocale: {
@@ -165,9 +165,9 @@ void main() {
     });
   });
 
-  group('loading catalogues', () {
-    test('a file per locale becomes a locale per catalogue', () async {
-      var loaded = await loadCatalogues(
+  group('loading catalogs', () {
+    test('a file per locale becomes a locale per catalog', () async {
+      var loaded = await loadCatalogs(
         [(name: 'app', files: 'l10n/*.json', template: 'en')],
         read: (glob) async => {
           'l10n/en.json': '{"save":"Save"}',
@@ -181,7 +181,7 @@ void main() {
     });
 
     test('a file that is not a locale is skipped, not loaded as one', () async {
-      var loaded = await loadCatalogues(
+      var loaded = await loadCatalogs(
         [(name: 'app', files: 'l10n/*.json', template: 'en')],
         read: (glob) async => {
           'l10n/en.json': '{"save":"Save"}',
@@ -192,19 +192,19 @@ void main() {
       expect(loaded['app']!.byLocale.keys, ['en']);
     });
 
-    test('a glob matching nothing keeps the catalogue, empty', () async {
-      var loaded = await loadCatalogues([
+    test('a glob matching nothing keeps the catalog, empty', () async {
+      var loaded = await loadCatalogs([
         (name: 'app', files: 'nowhere/*.json', template: 'en'),
       ], read: (glob) async => {});
 
-      // Kept rather than dropped: an empty catalogue names the problem, a
+      // Kept rather than dropped: an empty catalog names the problem, a
       // missing one silently unattributes every key that belonged to it.
       expect(loaded, contains('app'));
       expect(loaded['app']!.keys, isEmpty);
     });
 
     test('a non-string value is left out rather than stringified', () async {
-      var loaded = await loadCatalogues(
+      var loaded = await loadCatalogs(
         [(name: 'app', files: 'l10n/*.json', template: 'en')],
         read: (glob) async => {
           'l10n/en.json': '{"save":"Save","meta":{"note":"x"}}',
@@ -226,8 +226,8 @@ void main() {
     });
     tearDown(() => package.deleteSync(recursive: true));
 
-    test('finds the catalogue beside the package', () async {
-      var files = await catalogueFilesUnder(package.path)('assets/i18n/*.json');
+    test('finds the catalog beside the package', () async {
+      var files = await catalogFilesUnder(package.path)('assets/i18n/*.json');
 
       expect(files.keys, [p.join('assets', 'i18n', 'en.json')]);
     });
@@ -244,7 +244,7 @@ void main() {
         ..parent.createSync(recursive: true)
         ..writeAsStringSync('{"stale":"Stale"}');
 
-      var files = await catalogueFilesUnder(package.path)('**/i18n/*.json');
+      var files = await catalogFilesUnder(package.path)('**/i18n/*.json');
 
       expect(
         files.keys,
@@ -254,7 +254,7 @@ void main() {
     });
 
     test('a glob pointing nowhere reads as no files, not as a crawl', () async {
-      var files = await catalogueFilesUnder(package.path)('nowhere/*.json');
+      var files = await catalogFilesUnder(package.path)('nowhere/*.json');
 
       expect(files, isEmpty);
     });

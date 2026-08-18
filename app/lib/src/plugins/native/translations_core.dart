@@ -22,7 +22,7 @@ const translationsPluginId = 'flutterware.translations';
 /// Which translation key is on which screen, and a picture of it.
 ///
 /// Two halves that only answer together. A run knows **where a key appeared**,
-/// because the app's catalogue was funnelled through `indexTranslations` and
+/// because the app's catalog was funnelled through `indexTranslations` and
 /// every string it rendered can be traced back by object identity. The files
 /// on disk know **which keys exist and what each locale says**. Put them side
 /// by side and the same pass that answers "show me this string in context"
@@ -31,7 +31,7 @@ const translationsPluginId = 'flutterware.translations';
 ///
 /// Holds to the two rules every core holds to: the constructor allocates
 /// nothing, and [report] only formats what somebody already caused to load.
-/// Loading here is reading and parsing the catalogue JSON — the run that
+/// Loading here is reading and parsing the catalog JSON — the run that
 /// produces the screens is behind the `export` action, where a caller chose it
 /// by name.
 class TranslationsCore extends PluginCore {
@@ -44,7 +44,7 @@ class TranslationsCore extends PluginCore {
       if (host.workspace.exists(path)) path,
   ];
 
-  final _catalogues = <String, Map<String, LoadedCatalogue>>{};
+  final _catalogs = <String, Map<String, LoadedCatalog>>{};
   final _failures = <String, String>{};
   final _pending = <String, Future<void>>{};
 
@@ -64,7 +64,7 @@ class TranslationsCore extends PluginCore {
   /// What `export` says while it is running.
   final _busy = <String, String>{};
 
-  /// The catalogues declared for [path], as `tool/flutterware.dart` wrote
+  /// The catalogs declared for [path], as `tool/flutterware.dart` wrote
   /// them.
   List<({String name, String files, String template})> declaredFor(
     String path,
@@ -72,7 +72,7 @@ class TranslationsCore extends PluginCore {
     for (var config in host.packageConfigs) {
       if (config['path'] != path) continue;
       return [
-        for (var entry in config['catalogues'] as List? ?? const [])
+        for (var entry in config['catalogs'] as List? ?? const [])
           if (entry is Map)
             (
               name: entry['name'] as String? ?? '',
@@ -84,8 +84,8 @@ class TranslationsCore extends PluginCore {
     return const [];
   }
 
-  /// The loaded catalogues for [path], or null when nothing has read them yet.
-  Map<String, LoadedCatalogue>? cataloguesFor(String path) => _catalogues[path];
+  /// The loaded catalogs for [path], or null when nothing has read them yet.
+  Map<String, LoadedCatalog>? catalogsFor(String path) => _catalogs[path];
 
   String? failureFor(String path) => _failures[path];
 
@@ -103,14 +103,14 @@ class TranslationsCore extends PluginCore {
   /// surfaces come to disagree about what a thing is called.
   Address addressFor(
     String package, {
-    String? catalogue,
+    String? catalog,
     String? key,
     String? locale,
     TranslationFilter filter = TranslationFilter.all,
   }) => Address(
     worktree: host.worktree.name,
     plugin: host.id,
-    segments: translationSegments(package, catalogue: catalogue, key: key),
+    segments: translationSegments(package, catalog: catalog, key: key),
     axes: translationAxes(locale: locale, filter: filter),
   );
 
@@ -119,26 +119,25 @@ class TranslationsCore extends PluginCore {
     host.workspace.packageFor(path).directory.path,
   );
 
-  /// Every locale any of [path]'s catalogues has a file for, sorted.
+  /// Every locale any of [path]'s catalogs has a file for, sorted.
   ///
   /// This is what an export runs across when the caller names no languages:
   /// **the set the project actually ships**, which is the only set for which
   /// "this locale is falling back" is a statement worth making.
   List<String> localesFor(String path) {
     var found = <String>{};
-    for (var catalogue
-        in _catalogues[path]?.values ?? const <LoadedCatalogue>[]) {
-      found.addAll(catalogue.byLocale.keys);
+    for (var catalog in _catalogs[path]?.values ?? const <LoadedCatalog>[]) {
+      found.addAll(catalog.byLocale.keys);
     }
     return found.toList()..sort();
   }
 
   void track(String path) => unawaited(_load(path));
 
-  /// Drops the cached catalogues so the next read re-parses. What the panel
+  /// Drops the cached catalogs so the next read re-parses. What the panel
   /// calls when a translation file changes underneath it.
   void invalidate(String path) {
-    _catalogues.remove(path);
+    _catalogs.remove(path);
     _failures.remove(path);
     _pending.remove(path);
     notifyChanged();
@@ -150,14 +149,14 @@ class TranslationsCore extends PluginCore {
   }
 
   Future<void> _load(String path) {
-    if (_catalogues.containsKey(path)) return Future.value();
+    if (_catalogs.containsKey(path)) return Future.value();
     if (_pending[path] case var pending?) return pending;
     return _pending[path] = () async {
       try {
         var root = host.workspace.packageFor(path).directory.path;
-        _catalogues[path] = await loadCatalogues(
+        _catalogs[path] = await loadCatalogs(
           declaredFor(path),
-          read: catalogueFilesUnder(root),
+          read: catalogFilesUnder(root),
         );
         await _loadExport(path);
         _failures.remove(path);
@@ -173,7 +172,7 @@ class TranslationsCore extends PluginCore {
   /// Reads the export beside [path], if there is one.
   ///
   /// Best effort and quiet about it: an export that is absent, half-written or
-  /// from a version this build cannot read must not take the catalogues down
+  /// from a version this build cannot read must not take the catalogs down
   /// with it. The table is useful with no export at all, which is the whole
   /// reason the panel does not wait for one.
   Future<void> _loadExport(String path) async {
@@ -193,7 +192,7 @@ class TranslationsCore extends PluginCore {
     }
   }
 
-  /// Every key the catalogues define, with what each locale says and the shot
+  /// Every key the catalogs define, with what each locale says and the shot
   /// the last export found for it.
   ///
   /// **Values come from the files, not from the export**, because the files are
@@ -201,22 +200,22 @@ class TranslationsCore extends PluginCore {
   /// row whose text disagrees with its picture is the honest rendering of a
   /// stale export.
   List<TranslationRow> rowsFor(String path) {
-    var catalogues = _catalogues[path];
-    if (catalogues == null) return const [];
+    var catalogs = _catalogs[path];
+    if (catalogs == null) return const [];
     var export = _exports[path]?.export;
     var rows = <TranslationRow>[];
-    for (var catalogue in catalogues.values) {
-      var keys = catalogue.keys.toList()..sort();
+    for (var catalog in catalogs.values) {
+      var keys = catalog.keys.toList()..sort();
       for (var key in keys) {
-        var exported = export?['${catalogue.name}/$key'];
+        var exported = export?['${catalog.name}/$key'];
         rows.add(
           TranslationRow(
-            catalogue: catalogue.name,
+            catalog: catalog.name,
             key: key,
-            template: catalogue.template,
+            template: catalog.template,
             values: {
-              for (var locale in catalogue.byLocale.keys)
-                locale: ?catalogue.valueOf(locale, key),
+              for (var locale in catalog.byLocale.keys)
+                locale: ?catalog.valueOf(locale, key),
             },
             shot: exported?.representative,
             occurrences: exported?.occurrences ?? const [],
@@ -227,10 +226,10 @@ class TranslationsCore extends PluginCore {
     return rows;
   }
 
-  /// The template locale of [path]'s first catalogue — what a switch starts on
+  /// The template locale of [path]'s first catalog — what a switch starts on
   /// and what stays pinned beside whatever it switches to.
   String templateFor(String path) =>
-      _catalogues[path]?.values.firstOrNull?.template ?? 'en';
+      _catalogs[path]?.values.firstOrNull?.template ?? 'en';
 
   @override
   PluginReport get report => PluginReport(
@@ -254,7 +253,7 @@ class TranslationsCore extends PluginCore {
     if (packages.isEmpty) return const Status.warn('No packages configured');
     var declared = [for (var path in packages) ...declaredFor(path)];
     if (declared.isEmpty) {
-      return const Status.warn('No catalogues declared');
+      return const Status.warn('No catalogs declared');
     }
     return Status.none;
   }
@@ -299,21 +298,21 @@ class TranslationsCore extends PluginCore {
     if (_busy[path] case var message?) return Status.info(message);
     if (_failures[path] case var failure?) return Status.error(failure);
     var declared = declaredFor(path);
-    if (declared.isEmpty) return const Status.warn('No catalogues declared');
-    var loaded = _catalogues[path];
+    if (declared.isEmpty) return const Status.warn('No catalogs declared');
+    var loaded = _catalogs[path];
     if (loaded == null) return Status.none;
-    // A catalogue whose glob matched nothing is the mistake worth shouting
+    // A catalog whose glob matched nothing is the mistake worth shouting
     // about: everything downstream still works, and quietly attributes
     // nothing.
     var empty = [
-      for (var catalogue in loaded.values)
-        if (catalogue.keys.isEmpty) catalogue.name,
+      for (var catalog in loaded.values)
+        if (catalog.keys.isEmpty) catalog.name,
     ];
     if (empty.isNotEmpty) {
       return Status.error(
         empty.length == 1
-            ? 'Catalogue "${empty.single}" matched no files'
-            : '${empty.length} catalogues matched no files',
+            ? 'Catalog "${empty.single}" matched no files'
+            : '${empty.length} catalogs matched no files',
       );
     }
     var missing = missingFor(path);
@@ -327,22 +326,22 @@ class TranslationsCore extends PluginCore {
   PluginView get _view => PluginView([
     if (packages.isEmpty)
       const ViewText(
-        'Declare a package with its catalogues in tool/flutterware.dart:\n'
-        'fw.use(Translations(packages: [TranslationsPackage(app, catalogues: '
-        "[TranslationCatalogue(name: 'app', files: 'assets/i18n/*.json')])]));",
+        'Declare a package with its catalogs in tool/flutterware.dart:\n'
+        'fw.use(Translations(packages: [TranslationsPackage(app, catalogs: '
+        "[TranslationCatalog(name: 'app', files: 'assets/i18n/*.json')])]));",
       ),
     for (var path in packages)
       ViewSection(path == '.' ? 'root' : path, [
         if (_failures[path] case var failure?)
           ViewText(failure)
         else ...[
-          for (var catalogue
-              in _catalogues[path]?.values ?? const <LoadedCatalogue>[])
+          for (var catalog
+              in _catalogs[path]?.values ?? const <LoadedCatalog>[])
             ViewField(
-              catalogue.name,
-              '${catalogue.keys.length} keys · '
-              '${catalogue.byLocale.keys.join(', ')} · '
-              'from ${catalogue.template}',
+              catalog.name,
+              '${catalog.keys.length} keys · '
+              '${catalog.byLocale.keys.join(', ')} · '
+              'from ${catalog.template}',
             ),
           if (missingFor(path) case var missing when missing > 0)
             ViewField('Untranslated somewhere', '$missing keys'),
@@ -364,7 +363,7 @@ class TranslationsCore extends PluginCore {
       'Export',
       returns: TranslationExportResult,
       description:
-          'Runs the scenarios across every locale the catalogues have, and '
+          'Runs the scenarios across every locale the catalogs have, and '
           'writes a directory a translator can read: the screenshots, a '
           '`keys.json` of key to where it was seen, and a page that draws the '
           'box. Nothing is cropped and nothing is drawn into the pixels — the '
@@ -399,7 +398,7 @@ class TranslationsCore extends PluginCore {
               'A matrix — `en,nl,fr`. Defaults to the source language alone, '
               'because that is the one a translator is shown: a service '
               'attaches the picture to the string id, not to a locale. Which '
-              'locales are missing a key is read off the catalogue files and '
+              'locales are missing a key is read off the catalog files and '
               'needs no run. Name languages here when you want the target '
               'screens themselves — what German does to a button.',
         ),
@@ -458,10 +457,10 @@ class TranslationsCore extends PluginCore {
     await _load(path);
     if (_failures[path] case var failure?) throw StateError(failure);
 
-    var catalogues = _catalogues[path] ?? const <String, LoadedCatalogue>{};
-    if (catalogues.isEmpty) {
+    var catalogs = _catalogs[path] ?? const <String, LoadedCatalog>{};
+    if (catalogs.isEmpty) {
       throw StateError(
-        'Package "$path" declares no translation catalogues. Add them to its '
+        'Package "$path" declares no translation catalogs. Add them to its '
         'TranslationsPackage in tool/flutterware.dart.',
       );
     }
@@ -472,7 +471,7 @@ class TranslationsCore extends PluginCore {
     // locale: the translator is shown the English in place and writes the
     // French. Shots of the French would be a picture of what they are about to
     // replace. And the questions the other locales could answer — which of
-    // them is missing a key — are answered by the catalogue files with no run
+    // them is missing a key — are answered by the catalog files with no run
     // at all, which is what the panel's columns already read.
     //
     // So running every locale cost N passes over the whole suite and bought
@@ -486,7 +485,7 @@ class TranslationsCore extends PluginCore {
     };
     if (languages.isEmpty) {
       throw StateError(
-        'No locales to run. The declared catalogues matched no files — check '
+        'No locales to run. The declared catalogs matched no files — check '
         'their `files:` globs, which are relative to the package.',
       );
     }
@@ -541,7 +540,7 @@ class TranslationsCore extends PluginCore {
       var worktreeRoot = host.worktree.path;
       var survey = await buildSurvey(
         run: run,
-        catalogues: catalogues,
+        catalogs: catalogs,
         readArtifact: (artifact) async {
           var file = File(p.join(worktreeRoot, artifact));
           return file.existsSync() ? file.readAsString() : null;
@@ -568,7 +567,7 @@ class TranslationsCore extends PluginCore {
         output: _relative(written.output),
         keysJson: _relative(written.keysJson),
         indexHtml: _relative(written.indexHtml),
-        catalogues: written.export.catalogues.length,
+        catalogs: written.export.catalogs.length,
         locales: languages.length,
         keys: written.export.keys.length,
         keysSeen: written.export.seen.length,
@@ -578,7 +577,7 @@ class TranslationsCore extends PluginCore {
         fallingBack: written.export.findings.fallingBack.length,
         disagrees: written.export.findings.disagrees.length,
         notReached: written.export.findings.notReached.length,
-        absentFromCatalogue: written.export.findings.absentFromCatalogue.length,
+        absentFromCatalog: written.export.findings.absentFromCatalog.length,
         overflowing: written.export.findings.overflowing.length,
         unkeyed: written.export.findings.unkeyed.length,
         scenariosFailed: failed,

@@ -140,16 +140,16 @@ class TranslationExporter {
     // upload in when it has a budget.
     for (var id in survey.keysSeen) {
       var parts = id.split('/');
-      var catalogue = parts.first;
+      var catalog = parts.first;
       var key = parts.skip(1).join('/');
       seen.add(id);
-      var occurrences = survey.occurrencesOf(catalogue, key);
+      var occurrences = survey.occurrencesOf(catalog, key);
       keys.add(
         ExportedKey(
-          catalogue: catalogue,
+          catalog: catalog,
           key: key,
-          values: _valuesOf(survey, catalogue, key),
-          representative: switch (survey.representative(catalogue, key)) {
+          values: _valuesOf(survey, catalog, key),
+          representative: switch (survey.representative(catalog, key)) {
             var pick? => shotOf(pick),
             _ => null,
           },
@@ -160,18 +160,18 @@ class TranslationExporter {
       );
     }
 
-    // Then everything the catalogues declare that this run never showed, so
-    // `keys` is the whole catalogue rather than the part that photographed
+    // Then everything the catalogs declare that this run never showed, so
+    // `keys` is the whole catalog rather than the part that photographed
     // well. A translator's list should not silently omit the untested screens.
-    for (var catalogue in survey.catalogues.values) {
-      var sorted = catalogue.keys.toList()..sort();
+    for (var catalog in survey.catalogs.values) {
+      var sorted = catalog.keys.toList()..sort();
       for (var key in sorted) {
-        if (seen.contains('${catalogue.name}/$key')) continue;
+        if (seen.contains('${catalog.name}/$key')) continue;
         keys.add(
           ExportedKey(
-            catalogue: catalogue.name,
+            catalog: catalog.name,
             key: key,
-            values: _valuesOf(survey, catalogue.name, key),
+            values: _valuesOf(survey, catalog.name, key),
           ),
         );
       }
@@ -180,13 +180,13 @@ class TranslationExporter {
     var localeFindings = survey.localeFindings();
     var export = TranslationExport(
       directory: output,
-      catalogues: [
-        for (var catalogue in survey.catalogues.values)
-          ExportedCatalogue(
-            name: catalogue.name,
-            template: catalogue.template,
-            locales: catalogue.byLocale.keys.toList()..sort(),
-            keys: catalogue.keys.length,
+      catalogs: [
+        for (var catalog in survey.catalogs.values)
+          ExportedCatalog(
+            name: catalog.name,
+            template: catalog.template,
+            locales: catalog.byLocale.keys.toList()..sort(),
+            keys: catalog.keys.length,
           ),
       ],
       keys: keys,
@@ -201,11 +201,11 @@ class TranslationExporter {
         ],
         notReached: [
           for (var key in survey.keysNotReached())
-            ExportedKeyRef(catalogue: key.catalogue, key: key.key),
+            ExportedKeyRef(catalog: key.catalog, key: key.key),
         ],
-        absentFromCatalogue: [
-          for (var key in survey.keysAbsentFromCatalogue())
-            ExportedKeyRef(catalogue: key.catalogue, key: key.key),
+        absentFromCatalog: [
+          for (var key in survey.keysAbsentFromCatalog())
+            ExportedKeyRef(catalog: key.catalog, key: key.key),
         ],
         overflowing: [
           for (var sighting in survey.overflowing()) ?shotOf(sighting),
@@ -247,7 +247,7 @@ class TranslationExporter {
 
   static ExportedLocaleFinding _finding(LocaleFinding finding) =>
       ExportedLocaleFinding(
-        catalogue: finding.catalogue,
+        catalog: finding.catalog,
         key: finding.key,
         locale: finding.locale,
         rendered: finding.rendered,
@@ -257,10 +257,10 @@ class TranslationExporter {
   /// What every locale's file says for one key.
   static Map<String, String> _valuesOf(
     TranslationSurvey survey,
-    String catalogue,
+    String catalog,
     String key,
   ) {
-    var loaded = survey.catalogues[catalogue];
+    var loaded = survey.catalogs[catalog];
     if (loaded == null) return const {};
     return {
       for (var locale in loaded.byLocale.keys)

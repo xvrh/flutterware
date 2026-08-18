@@ -1,9 +1,9 @@
 /// Which translation key is on which screen, and a picture of it.
 ///
-/// Two halves that meet at a catalogue name:
+/// Two halves that meet at a catalog name:
 ///
 /// * [indexTranslations] is the seam. Hand it to whatever the project's
-///   catalogue already funnels its reads through, in a test, and every string
+///   catalog already funnels its reads through, in a test, and every string
 ///   it renders can be traced back to the key it came from — by object
 ///   identity, so nothing is inserted into the text and no pixel moves.
 /// * [TranslationExport] reads what the export wrote, typed, so pushing

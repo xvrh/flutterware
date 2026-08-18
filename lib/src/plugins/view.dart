@@ -36,7 +36,7 @@ class PluginView {
   ///
   /// For a reader that pays by the row. An agent's whole reply has a size
   /// ceiling, and a plugin that lists every dependency of every package spends
-  /// it on a catalogue it has an action for: `flutterware_status` was 10k tokens
+  /// it on a catalog it has an action for: `flutterware_status` was 10k tokens
   /// on this repo, three quarters of it item rows, before a question had been
   /// asked. The panel and `fw` keep the full list — a window scrolls and a
   /// terminal pipes.

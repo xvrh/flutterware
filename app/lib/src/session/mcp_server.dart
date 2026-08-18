@@ -194,7 +194,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
   ///
   /// Chosen against what the plugins actually show: it keeps every device, every
   /// surface of a splash, every icon role and every scenario whole, and cuts
-  /// only the catalogues — dependencies, preview entries — which are what their
+  /// only the catalogs — dependencies, preview entries — which are what their
   /// own actions answer in full.
   static const _statusViewRows = 10;
 
@@ -277,7 +277,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
             //
             // And with the long lists cut short for the same reason: what was
             // left was still 10k tokens, three quarters of it rows naming every
-            // dependency of every package — a catalogue this plugin has an
+            // dependency of every package — a catalog this plugin has an
             // action for. The count of what was left out rides along, so a
             // reader that wants the rest knows there is a rest.
             for (var report in session.reports)

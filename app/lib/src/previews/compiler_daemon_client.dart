@@ -1048,7 +1048,7 @@ Future<_DaemonLaunch> _ensureCompiled({
     throw StateError(
       'No daemon script at $script.\n'
       "DaemonConfig.appPackageRoot must be flutterware's own app/ directory, "
-      'not the package being catalogued — it is where the daemon script, the '
+      'not the package being cataloged — it is where the daemon script, the '
       'embedder framework and the native host live.',
     );
   }

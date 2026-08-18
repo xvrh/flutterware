@@ -98,7 +98,7 @@ void main() {
       }
 
       // Plugin by plugin, because MCP documents the parameters only when asked
-      // for one — the whole catalogue at once does not fit in a reply. Walking
+      // for one — the whole catalog at once does not fit in a reply. Walking
       // what the CLI answered means a plugin MCP cannot serve at all fails here
       // rather than being skipped.
       var fromMcp = <String, Object?>{};

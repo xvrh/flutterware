@@ -7,7 +7,7 @@ import 'package:flutterware/src/translations/index.dart';
 /// Compiled constants, so two keys sharing a value share an object and a
 /// literal in the widget below is the same object again — the case the index
 /// mints a token to survive.
-const catalogue = <String, String>{
+const catalog = <String, String>{
   'bold_greeting': 'Welcome **back**',
   'common_cancel': 'Cancel',
   'dialog_cancel': 'Cancel',
@@ -16,7 +16,7 @@ const catalogue = <String, String>{
   'agree_terms': 'Terms of Service',
 };
 
-String t(String key) => indexTranslations('app')(key, catalogue[key]!);
+String t(String key) => indexTranslations('app')(key, catalog[key]!);
 
 void main() {
   InspectTree read(WidgetTester tester) => GuestInspector(
@@ -65,7 +65,7 @@ void main() {
     var keys = await keysOf(tester, Text(t('greeting')));
 
     expect(keys.map((o) => o.key.key), contains('greeting'));
-    expect(keys.first.key.catalogue, 'app');
+    expect(keys.first.key.catalog, 'app');
     expect(keys.first.layout, isNotNull, reason: 'the crop needs a box');
   });
 
@@ -110,11 +110,11 @@ void main() {
     // The second span starts where the first ends, over the paragraph's plain
     // text — which is what lets an export highlight one of the two.
     expect(found['agree_lead']!.start, 0);
-    expect(found['agree_lead']!.end, catalogue['agree_lead']!.length);
-    expect(found['agree_terms']!.start, catalogue['agree_lead']!.length);
+    expect(found['agree_lead']!.end, catalog['agree_lead']!.length);
+    expect(found['agree_terms']!.start, catalog['agree_lead']!.length);
   });
 
-  testWidgets('text from outside every catalogue is counted, not claimed', (
+  testWidgets('text from outside every catalog is counted, not claimed', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -163,7 +163,7 @@ void main() {
     /// into fresh substrings, and the `**` never reach a glyph at all.
     ///
     /// This is the shape of every markdown package, and of anything that
-    /// paints its labels with a `TextPainter` — the string the catalogue handed
+    /// paints its labels with a `TextPainter` — the string the catalog handed
     /// out survives on the widget and nowhere below it.
     Widget reparsed(String source) => _Reparsing(source);
 
@@ -222,7 +222,7 @@ void main() {
       );
     });
 
-    testWidgets('a property holding words no catalogue minted claims nothing', (
+    testWidgets('a property holding words no catalog minted claims nothing', (
       tester,
     ) async {
       indexTranslationsIn<_Reparsing>((widget) => widget.source);
@@ -264,7 +264,7 @@ bool _anyNode(InspectTree tree, bool Function(InspectNode) test) {
 /// A widget that renders a string its own way, which is the whole case.
 ///
 /// `substring` allocates, so not one span below here is the object the
-/// catalogue handed out — and the `**` are gone besides. [source] is untouched.
+/// catalog handed out — and the `**` are gone besides. [source] is untouched.
 class _Reparsing extends StatelessWidget {
   const _Reparsing(this.source, {this.child});
 

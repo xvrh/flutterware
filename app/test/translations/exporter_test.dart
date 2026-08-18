@@ -32,7 +32,7 @@ KeySighting sighting({
   int textsOnScreen = 10,
   int area = 4000,
 }) => KeySighting(
-  catalogue: 'app',
+  catalog: 'app',
   key: key,
   scenario: scenario,
   step: step,
@@ -55,8 +55,8 @@ TranslationSurvey survey({
   Map<String, String> nl = const {},
   List<UnkeyedSighting> unkeyed = const [],
 }) => TranslationSurvey(
-  catalogues: {
-    'app': LoadedCatalogue(
+  catalogs: {
+    'app': LoadedCatalog(
       name: 'app',
       template: 'en',
       byLocale: {'en': en, 'nl': nl},
@@ -140,7 +140,7 @@ void main() {
     test('carries declared keys the run never showed', () {
       var written = write(survey(sightings: [sighting(key: 'save')]));
 
-      // `keys` is the whole catalogue, not the part that photographed well —
+      // `keys` is the whole catalog, not the part that photographed well —
       // a translator's list may not silently omit the untested screens.
       expect(written.export['app/greeting'], isNotNull);
       expect(written.export['app/greeting']?.representative, isNull);
@@ -187,7 +187,7 @@ void main() {
       expect(findings.fallingBack.single.key, 'save');
       expect(findings.disagrees.single.key, 'greeting');
       expect(findings.disagrees.single.expected, 'Hallo');
-      expect(findings.absentFromCatalogue.single.key, 'stale');
+      expect(findings.absentFromCatalog.single.key, 'stale');
       expect(findings.overflowing.single.overflowed, isTrue);
       expect(findings.unkeyed.single.source, 'home.dart:42:7');
     });

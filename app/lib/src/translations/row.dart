@@ -1,7 +1,7 @@
 /// One key, as the panel's table shows it.
 ///
 /// The join the panel needs and neither half has alone: the text comes from
-/// the catalogue files, the picture from the last export. Kept as its own type
+/// the catalog files, the picture from the last export. Kept as its own type
 /// rather than reusing [ExportedKey] because the table has to draw a row for a
 /// key that has never been photographed — which is most of them, the first
 /// time anyone opens the tab.
@@ -11,7 +11,7 @@ import 'package:flutterware/translations.dart';
 
 class TranslationRow {
   const TranslationRow({
-    required this.catalogue,
+    required this.catalog,
     required this.key,
     required this.template,
     this.values = const {},
@@ -19,14 +19,14 @@ class TranslationRow {
     this.occurrences = const [],
   });
 
-  final String catalogue;
+  final String catalog;
   final String key;
 
   /// The locale this key's source text is written in.
   final String template;
 
   /// What each locale's file says. A locale absent from the map has nothing —
-  /// empty and missing are the same thing here, because catalogues spell a
+  /// empty and missing are the same thing here, because catalogs spell a
   /// missing translation both ways about equally often.
   final Map<String, String> values;
 
@@ -35,7 +35,7 @@ class TranslationRow {
 
   final List<ExportedShot> occurrences;
 
-  String get id => '$catalogue/$key';
+  String get id => '$catalog/$key';
 
   String? valueIn(String locale) => values[locale];
 

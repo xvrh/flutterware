@@ -1,14 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/translations/survey.dart';
 
-LoadedCatalogue app({
+LoadedCatalog app({
   Map<String, String> en = const {'save': 'Save', 'greeting': 'Hello'},
   Map<String, String> nl = const {},
-}) => LoadedCatalogue(
-  name: 'app',
-  template: 'en',
-  byLocale: {'en': en, 'nl': nl},
-);
+}) =>
+    LoadedCatalog(name: 'app', template: 'en', byLocale: {'en': en, 'nl': nl});
 
 KeySighting sighting({
   String key = 'save',
@@ -22,7 +19,7 @@ KeySighting sighting({
   int textsOnScreen = 10,
   int area = 5000,
 }) => KeySighting(
-  catalogue: 'app',
+  catalog: 'app',
   key: key,
   scenario: scenario,
   step: step,
@@ -39,10 +36,10 @@ KeySighting sighting({
 TranslationSurvey survey({
   List<KeySighting> sightings = const [],
   Map<String, Map<String, Map<String, String>>> read = const {},
-  LoadedCatalogue? catalogue,
+  LoadedCatalog? catalog,
   List<UnkeyedSighting> unkeyed = const [],
 }) => TranslationSurvey(
-  catalogues: {'app': catalogue ?? app()},
+  catalogs: {'app': catalog ?? app()},
   sightings: sightings,
   unkeyed: unkeyed,
   read: read,
@@ -65,7 +62,7 @@ void main() {
     });
   });
 
-  group('the catalogue join', () {
+  group('the catalog join', () {
     test('a key the run never asked for is not reached', () {
       var it = survey(
         read: {
@@ -75,10 +72,10 @@ void main() {
         },
       );
 
-      expect(it.keysNotReached(), [(catalogue: 'app', key: 'greeting')]);
+      expect(it.keysNotReached(), [(catalog: 'app', key: 'greeting')]);
     });
 
-    test('a key read but absent from the catalogue is reported', () {
+    test('a key read but absent from the catalog is reported', () {
       var it = survey(
         read: {
           'en': {
@@ -87,12 +84,10 @@ void main() {
         },
       );
 
-      expect(it.keysAbsentFromCatalogue(), [
-        (catalogue: 'app', key: 'stale_key'),
-      ]);
+      expect(it.keysAbsentFromCatalog(), [(catalog: 'app', key: 'stale_key')]);
     });
 
-    test('a key read from an undeclared catalogue is reported too', () {
+    test('a key read from an undeclared catalog is reported too', () {
       var it = survey(
         read: {
           'en': {
@@ -101,7 +96,7 @@ void main() {
         },
       );
 
-      expect(it.keysAbsentFromCatalogue(), [(catalogue: 'other', key: 'x')]);
+      expect(it.keysAbsentFromCatalog(), [(catalog: 'other', key: 'x')]);
     });
   });
 
@@ -127,7 +122,7 @@ void main() {
     });
 
     test('a translated key in its own locale is not a finding', () {
-      var it = survey(catalogue: app(nl: {'save': 'Opslaan'}));
+      var it = survey(catalog: app(nl: {'save': 'Opslaan'}));
 
       expect(it.localeFindings().map((f) => f.key), ['greeting']);
     });
@@ -136,7 +131,7 @@ void main() {
       // This half *does* need the run: only the index knows what reached the
       // screen, and only the files know what should have.
       var it = survey(
-        catalogue: app(nl: {'save': 'Opslaan', 'greeting': 'Hallo'}),
+        catalog: app(nl: {'save': 'Opslaan', 'greeting': 'Hallo'}),
         read: {
           'nl': {
             'app': {'save': 'Bewaren'},
@@ -150,7 +145,7 @@ void main() {
 
     test('the template locale is never a finding against itself', () {
       var it = survey(
-        catalogue: LoadedCatalogue(
+        catalog: LoadedCatalog(
           name: 'app',
           template: 'en',
           byLocale: const {
@@ -171,15 +166,15 @@ void main() {
       // Nothing to fall back *to*: the key either does not draw, or it is a
       // stale entry that only a target locale still carries.
       var it = survey(
-        catalogue: app(en: {'save': ''}, nl: {}),
+        catalog: app(en: {'save': ''}, nl: {}),
       );
 
       expect(it.localeFindings(), isEmpty);
     });
 
-    test('a key no catalogue defines is not called a fallback', () {
+    test('a key no catalog defines is not called a fallback', () {
       var it = survey(
-        catalogue: app(en: {'save': 'Save'}, nl: {'save': 'Opslaan'}),
+        catalog: app(en: {'save': 'Save'}, nl: {'save': 'Opslaan'}),
         read: {
           'nl': {
             'app': {'stale_key': 'Whatever'},
@@ -187,8 +182,8 @@ void main() {
         },
       );
 
-      // It is unknown, not untranslated, and [keysAbsentFromCatalogue] says so.
-      expect(it.keysAbsentFromCatalogue(), hasLength(1));
+      // It is unknown, not untranslated, and [keysAbsentFromCatalog] says so.
+      expect(it.keysAbsentFromCatalog(), hasLength(1));
       expect(it.localeFindings(), isEmpty);
     });
   });

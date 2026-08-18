@@ -259,8 +259,8 @@ class ScenariosPackage extends PluginPackage {
 /// Translations — which key is on which screen, and a picture of it.
 ///
 /// Two halves that have to agree on a name. In the app, a test hands
-/// `indexTranslations('app')` to whatever the catalogue funnels its reads
-/// through; here, a catalogue called `app` says where that catalogue's files
+/// `indexTranslations('app')` to whatever the catalog funnels its reads
+/// through; here, a catalog called `app` says where that catalog's files
 /// live. Neither half can produce an export alone — the run knows where a key
 /// appeared, only the files know which keys exist and what each locale says —
 /// which is why the files are declared rather than discovered. Guessing at a
@@ -281,26 +281,26 @@ class Translations extends Plugin {
 }
 
 class TranslationsPackage extends PluginPackage {
-  const TranslationsPackage(super.pkg, {this.catalogues = const []});
+  const TranslationsPackage(super.pkg, {this.catalogs = const []});
 
   /// Where this package's translations live.
   ///
-  /// **A list, never a single catalogue with a special case.** Several in one
+  /// **A list, never a single catalog with a special case.** Several in one
   /// UI is ordinary — a product's own strings beside a shared package's, or
   /// two halves of a migration — and a shape that makes the second one awkward
   /// is a shape that gets worked around.
-  final List<TranslationCatalogue> catalogues;
+  final List<TranslationCatalog> catalogs;
 
   @override
   Map<String, Object?> toJson() => {
     ...super.toJson(),
-    'catalogues': [for (var c in catalogues) c.toJson()],
+    'catalogs': [for (var c in catalogs) c.toJson()],
   };
 }
 
-/// One catalogue, as `tool/flutterware.dart` declares it.
-class TranslationCatalogue {
-  const TranslationCatalogue({
+/// One catalog, as `tool/flutterware.dart` declares it.
+class TranslationCatalog {
+  const TranslationCatalog({
     required this.name,
     required this.files,
     this.template = 'en',
@@ -313,7 +313,7 @@ class TranslationCatalogue {
   /// rather than quietly producing an export that attributes half its keys.
   final String name;
 
-  /// A glob of the catalogue's files, one per locale, each a flat JSON object
+  /// A glob of the catalog's files, one per locale, each a flat JSON object
   /// of key to string. Package-relative, like every other path in this file.
   ///
   /// The locale is the file's base name: `en.json` is `en`. That is a
@@ -331,8 +331,8 @@ class TranslationCatalogue {
     'template': template,
   };
 
-  static TranslationCatalogue fromJson(Map<String, Object?> json) =>
-      TranslationCatalogue(
+  static TranslationCatalog fromJson(Map<String, Object?> json) =>
+      TranslationCatalog(
         name: json['name']! as String,
         files: json['files']! as String,
         template: json['template'] as String? ?? 'en',

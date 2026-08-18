@@ -448,8 +448,8 @@ class DaemonConfig {
   /// rather than a convention — see `test/previews/daemon_config_test.dart`.
   ///
   /// [appToolDirectory] is flutterware's own `app/` install; [packageRoot] is
-  /// the package whose demos are being catalogued. They are the same directory
-  /// only when cataloguing flutterware itself.
+  /// the package whose demos are being cataloged. They are the same directory
+  /// only when cataloging flutterware itself.
   factory DaemonConfig.forPackage({
     required String appToolDirectory,
     required String packageRoot,
@@ -470,7 +470,7 @@ class DaemonConfig {
   );
 
   /// flutterware's own `app/` directory — **not** the package being
-  /// catalogued.
+  /// cataloged.
   ///
   /// It is where the daemon's own machinery lives: the daemon script and its
   /// snapshot, the embedder framework under `.engine/`, the C host sources

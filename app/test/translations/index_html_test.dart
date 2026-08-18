@@ -8,7 +8,7 @@ void main() {
       const TranslationExport(
         keys: [
           ExportedKey(
-            catalogue: 'app',
+            catalog: 'app',
             key: 'save',
             values: {'en': 'Save'},
             representative: ExportedShot(
@@ -35,7 +35,7 @@ void main() {
       const TranslationExport(
         keys: [
           ExportedKey(
-            catalogue: 'app',
+            catalog: 'app',
             key: 'evil',
             values: {'en': '</script><script>alert(1)</script>'},
           ),
