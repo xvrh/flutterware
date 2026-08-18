@@ -84,7 +84,8 @@ typedef DatabaseWatch = Stream<List<Map<String, Object?>>> Function(String sql);
 ///
 /// **Why a panel that answers rather than one that disappears.** The other
 /// shape — declaring the panel only while a session is open, which
-/// `AddDevbarPanel` makes possible — leaves the absence unexplained. Ask for
+/// `AddDevbarPanel` and `DevbarPanels` make possible — leaves the absence
+/// unexplained. Ask for
 /// `db:main` when it is gone and every surface says the same thing, *"this app
 /// declares no panel db:main"*, whether the app has no database at all or the
 /// user is one tap from opening one. A panel that is always listed and answers

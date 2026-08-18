@@ -156,4 +156,42 @@ void main() {
 
     expect(tester.getRect(find.text('signed in')), bare);
   });
+
+  group('served from code, for a scope that is not a subtree', () {
+    test('a session opens and closes it, with no widget in sight', () {
+      var source = _SessionPanel('prod');
+
+      var panel = DevbarPanels.add(source);
+      expect(panel.id, 'db:main');
+      expect(panelIds(), ['db:main']);
+
+      panel.remove();
+      expect(panelIds(), isEmpty);
+      expect(GuestChannels.core.channels, isNot(contains('db:main')));
+    });
+
+    test('removing twice is a no-op, so it can sit next to a close()', () {
+      var panel = DevbarPanels.add(_SessionPanel('prod'));
+      panel.remove();
+      var other = DevbarPanels.add(_SessionPanel('staging'));
+
+      // The second remove must not take the panel somebody else has since
+      // claimed under the same name.
+      panel.remove();
+      expect(panelIds(), ['db:main']);
+      expect(other.id, 'db:main');
+    });
+
+    test('the handle says which id it actually got', () {
+      var first = DevbarPanels.add(_SessionPanel('prod'));
+      var second = DevbarPanels.add(_SessionPanel('staging'));
+
+      // Forgetting the first `remove` is what this looks like from outside:
+      // the panel that wanted `db:main` did not get it.
+      expect(first.id, 'db:main');
+      expect(second.id, 'db:main#2');
+      first.remove();
+      second.remove();
+    });
+  });
 }

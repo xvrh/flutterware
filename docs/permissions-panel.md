@@ -186,6 +186,20 @@ AddDevbarPanel(
 )
 ```
 
+Or, when the scope is a service rather than a subtree — a session opened at
+login and closed at logout has no subtree to hang from — the same call without
+the widget:
+
+```dart
+_panel = DevbarPanels.add(DatabasePanelSource(adapter));  // at login
+_panel.remove();                                          // at logout
+```
+
+`AddDevbarPanel` is that call with the removal wired to `dispose`, the way
+`AddDevbarButton` wraps `UiService.addButton`. Use the widget when a subtree
+already has the lifetime you want, and the handle when it does not — inserting
+a widget above an existing subtree to borrow its lifetime remounts it.
+
 The list of panels is announced on every change and every host re-reads it, so
 a panel appearing halfway through a run reaches the cockpit, `fw` and MCP with
 none of them knowing what a session is.

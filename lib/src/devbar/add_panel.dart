@@ -3,8 +3,8 @@ library;
 
 import 'package:flutter/widgets.dart';
 
-import 'bridge.dart';
 import 'panel_source.dart';
+import 'panels.dart';
 
 /// Serves [source] as a panel for as long as this widget is mounted.
 ///
@@ -27,6 +27,12 @@ import 'panel_source.dart';
 /// announced on every change and every host re-reads it, so a panel appearing
 /// mid-run reaches the cockpit's App tab, `fw` and MCP without any of them
 /// being told about sessions.
+///
+/// **The same call, tied to a lifetime.** This is `DevbarPanels.add` with the
+/// removal wired to `dispose`, the way `AddDevbarButton` wraps
+/// `UiService.addButton`. Reach past it to `DevbarPanels` when the scope is a
+/// service rather than a subtree — a session opened at login has no subtree to
+/// hang from, and inventing one costs a remount.
 ///
 /// **[source] is not owned here.** [DevbarPanelSource] declares no `dispose`,
 /// so this cannot be the thing that disposes one — build the source where its
@@ -58,14 +64,12 @@ class AddDevbarPanel extends StatefulWidget {
 }
 
 class _AddDevbarPanelState extends State<AddDevbarPanel> {
-  /// The id the bridge gave out, which is not always the one the source asked
-  /// for. Null outside flutterware, where all of this is a no-op.
-  String? _panelId;
+  DevbarPanelHandle? _panel;
 
   @override
   void initState() {
     super.initState();
-    _panelId = DevbarBridge.add(widget.source);
+    _panel = DevbarPanels.add(widget.source);
   }
 
   /// A new source is a new panel — the environment switched, the session was
@@ -76,8 +80,8 @@ class _AddDevbarPanelState extends State<AddDevbarPanel> {
   void didUpdateWidget(covariant AddDevbarPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (identical(oldWidget.source, widget.source)) return;
-    DevbarBridge.remove(_panelId);
-    _panelId = DevbarBridge.add(widget.source);
+    _panel?.remove();
+    _panel = DevbarPanels.add(widget.source);
   }
 
   @override
@@ -85,7 +89,7 @@ class _AddDevbarPanelState extends State<AddDevbarPanel> {
 
   @override
   void dispose() {
-    DevbarBridge.remove(_panelId);
+    _panel?.remove();
     super.dispose();
   }
 }

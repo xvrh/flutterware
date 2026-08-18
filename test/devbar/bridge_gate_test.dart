@@ -57,4 +57,14 @@ void main() {
     expect(GuestChannels.panels.descriptors, isEmpty);
     expect(GuestChannels.core.channels, isNot(contains('flags')));
   });
+
+  test('nor one served from code, and the handle is still safe to hold', () {
+    var panel = DevbarPanels.add(_FlagsPlugin());
+
+    // Inert rather than null: an app that opens a database at login writes the
+    // same two lines whether or not anybody is watching.
+    expect(panel.id, isNull);
+    panel.remove();
+    expect(GuestChannels.panels.descriptors, isEmpty);
+  });
 }
