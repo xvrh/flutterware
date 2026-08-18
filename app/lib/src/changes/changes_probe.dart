@@ -232,6 +232,41 @@ class ChangesProbe {
     return result.ok ? result.text : null;
   }
 
+  /// The size of [path]'s blob at [revision], or null when there is no such
+  /// object — a file that did not exist on that side, or a revision nothing
+  /// resolves. Asked before [blobBytes], because it is the only way to refuse
+  /// an oversized object without first receiving all of it.
+  Future<int?> blobSize(
+    String worktreePath,
+    String revision,
+    String path,
+  ) async {
+    var result = await _git(worktreePath, [
+      'cat-file',
+      '-s',
+      '$revision:$path',
+    ]);
+    return result.ok ? int.tryParse(result.text) : null;
+  }
+
+  /// The bytes of [path] as they were at [revision] — the other side of an
+  /// image diff, which the patch itself only says is binary.
+  ///
+  /// `cat-file blob` rather than `show`, so no textconv or diff driver ever
+  /// rewrites what comes back.
+  Future<Uint8List?> blobBytes(
+    String worktreePath,
+    String revision,
+    String path,
+  ) async {
+    var result = await _git(worktreePath, [
+      'cat-file',
+      'blob',
+      '$revision:$path',
+    ]);
+    return result.ok ? result.stdout : null;
+  }
+
   Future<String?> _renameSourceFor(
     String worktreePath,
     String path,

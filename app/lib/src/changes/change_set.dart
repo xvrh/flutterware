@@ -16,6 +16,18 @@ import 'ranking.dart';
 class ChangesLimits {
   /// Past this a file is listed and counted but not expandable.
   static const filePatchBytes = 512 * 1024;
+
+  /// Past this a file's own text — rendered markdown, an untracked file's
+  /// lines — is not read for the viewer. The same order of magnitude as
+  /// [filePatchBytes], because it bounds the same thing: how much becomes
+  /// Dart strings for one screen.
+  static const textContentBytes = 512 * 1024;
+
+  /// Past this an image is not decoded for the viewer. Far looser than the
+  /// text bound — image bytes never become strings, and a 4 MB screenshot is
+  /// an ordinary asset — but a bound all the same, because decode memory is
+  /// width × height and nothing else on this screen scales with it.
+  static const imageContentBytes = 20 * 1024 * 1024;
 }
 
 /// Where the base came from. The header shows this, because the one thing

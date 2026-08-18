@@ -145,9 +145,12 @@ void main() {
     expect(find.textContaining('no longer part of the delta'), findsOneWidget);
   });
 
-  testWidgets('an untracked file explains itself instead of showing a diff', (
+  testWidgets('an untracked file opens on its header, not on a diff', (
     tester,
   ) async {
+    // The body itself — the file's own lines — is covered in
+    // file_body_test.dart, where the worktree is a real directory. Here the
+    // path does not exist, which is its own case: the header still stands.
     current = setOf(
       [file('lib/alpha.dart')],
       untracked: const [UntrackedEntry('scratch.txt')],
@@ -156,7 +159,8 @@ void main() {
     await tester.tap(inIndex('scratch.txt'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Not tracked yet'), findsOneWidget);
+    expect(find.text('untracked'), findsOneWidget);
+    expect(find.textContaining('no other side to diff against'), findsOne);
     expect(find.textContaining('@@'), findsNothing);
   });
 

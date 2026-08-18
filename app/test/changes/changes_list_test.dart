@@ -25,6 +25,12 @@ void main() {
       indexPatch(Uint8List.fromList(utf8.encode(patch)));
 
   Future<void> pumpPatch(WidgetTester tester, PatchIndex patch) async {
+    // Wider than the 800 px default: a markdown file's header now carries the
+    // Source ⇄ Rendered toggle, which in the all-squares test font overflows
+    // a pane the real font has slack in.
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
         theme: appTheme,
