@@ -680,6 +680,7 @@ void main() {
         entry: core.entrypointsFor('app').single,
         knobs: {'serverPort': '9000'},
       );
+      addTearDown(() => _stopLauncher(handle));
 
       expect(handle.knobs, {'serverPort': '9000'});
     });
@@ -938,6 +939,7 @@ void main() {
         entry: core.entrypointsFor('app').single,
         defines: {'SOME_SDK_KEY': 'abc', 'NOTHING_READS_THIS': 'x'},
       );
+      addTearDown(() => _stopLauncher(handle));
 
       expect(handle.defines, {
         'SOME_SDK_KEY': 'abc',
@@ -1458,6 +1460,7 @@ void main({
         entry: core.entrypointsFor('app').single,
         knobs: {'apiToken': 'abc'},
       );
+      addTearDown(() => _stopLauncher(handle));
 
       expect(handle.knobs, {'apiToken': 'abc'});
     });
@@ -1530,6 +1533,7 @@ void main({
         package: 'app',
         entry: core.entrypointsFor('app').single,
       );
+      addTearDown(() => _stopLauncher(handle));
 
       expect(handle.knobs, {'apiToken': 'from-the-script'});
     });
@@ -1544,11 +1548,12 @@ void main({
       // the launch could not be satisfied anyway: `_checkKnobNames` refuses the
       // misspelled name too, so there would be no way past it.
       await core.computeAll();
-      await core.launch(
+      var handle = await core.launch(
         device: 'phone',
         package: 'app',
         entry: core.entrypointsFor('app').single,
       );
+      addTearDown(() => _stopLauncher(handle));
 
       var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
       // Two lines: the parameter `main` really takes, and the declaration that
@@ -1603,6 +1608,7 @@ void main({
         package: 'app',
         entry: core.entrypointsFor('app').single,
       );
+      addTearDown(() => _stopLauncher(handle));
 
       // The SDK the *workspace* resolved against — never one found on PATH,
       // which in this repo is two versions behind what `.fvmrc` pins.
@@ -1629,6 +1635,7 @@ void main({
         entry: core.entrypointsFor('app').single,
         knobs: {'flutterSdkRoot': '/opt/other'},
       );
+      addTearDown(() => _stopLauncher(handle));
 
       expect(handle.knobs, {'flutterSdkRoot': '/opt/other'});
     });
@@ -2839,6 +2846,37 @@ RunHandle _writeHandle(
     knobs: knobs,
     startedAt: startedAt ?? DateTime.now(),
   ).publish(runDir.path);
+}
+
+/// Ends the launcher a successful `launch` started, and does not come back
+/// until it is gone.
+///
+/// **A launch outlives the call that made it.** `launchApp` starts a *detached*
+/// shell whose redirect opens the run's log with `>`, so the log is created by
+/// a process nothing waits for — and the `deleteSync(recursive: true)` in
+/// `tearDown` running beside it emptied the run directory, watched the shell
+/// recreate the log, and failed the `rmdir` that followed with `Directory not
+/// empty`. Measured 2026-08-18: 2 failures in 300 launches on an idle machine,
+/// and about one full-suite `flutter test` in ten, landing on whichever of the
+/// launching tests lost the race.
+///
+/// Killed rather than waited out, because a real launcher is `flutter run` and
+/// would never exit on its own. What makes the delete safe is the wait *after*
+/// the kill — a process that is gone cannot create a file — so a launcher that
+/// will not die fails the test loudly instead of falling through to the delete
+/// that would flake.
+Future<void> _stopLauncher(RunHandle handle) async {
+  Process.killPid(handle.launcherPid);
+  var deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (isProcessAlive(handle.launcherPid)) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail(
+        'the launcher ${handle.launcherPid} outlived the test that started '
+        'it, so the run directory cannot be deleted without racing it',
+      );
+    }
+    await Future.delayed(const Duration(milliseconds: 5));
+  }
 }
 
 /// A pid that is certainly *there*, and gone when the test ends.
