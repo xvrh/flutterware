@@ -194,6 +194,8 @@ class GuestInspector {
   ({InspectTree tree, Map<RenderObject, String> byRenderObject}) _build() {
     var entryId = entryIdOf();
     var byRenderObject = <RenderObject, String>{};
+    // One entry per distinct style rather than per text — see [_describeStyle].
+    var styles = <TextStyle, Map<String, String>>{};
     // A group name of our own: the inspector refcounts these and the panel or
     // DevTools may be holding others against the same isolate.
     const group = 'flutterware.inspect';
@@ -221,7 +223,7 @@ class GuestInspector {
       return (
         tree: InspectTree(
           entryId: entryId,
-          root: _convert(demo, '', byRenderObject, null, false),
+          root: _convert(demo, '', byRenderObject, styles, null, false),
         ),
         byRenderObject: byRenderObject,
       );
@@ -327,6 +329,7 @@ class GuestInspector {
     Map<String, Object?> json,
     String path,
     Map<RenderObject, String> byRenderObject,
+    Map<TextStyle, Map<String, String>> styles,
     RenderObject? ancestorRender,
     bool ancestorOffstage,
   ) {
@@ -337,6 +340,7 @@ class GuestInspector {
     // the inspector's object registry, which is not free per node.
     var element = _elementOf(json);
     var render = element?.renderObject;
+    var textStyle = _textStyleOf(render, styles);
     if (render != null) {
       // First writer wins. Several widgets in a summary tree can share one
       // render object — a `Padding` under a `Semantics` under a builder all
@@ -355,7 +359,17 @@ class GuestInspector {
           _preview(element) ?? (description == type ? null : description),
       createdByLocalProject: json['createdByLocalProject'] as bool? ?? false,
       offstage: offstage,
-      properties: _propertiesOf(element?.widget),
+      properties: _propertiesOf(element?.widget, textStyle.keys.toSet()),
+      textStyle: textStyle,
+      // Only for something that draws words. Every one of these is another
+      // walk up the element tree or another style described, and a tree is
+      // mostly nodes with no glyphs in them at all.
+      inheritedStyle: textStyle.isEmpty
+          ? const {}
+          : _ambientStyleOf(element, styles),
+      styleReplacesInherited: textStyle.isEmpty
+          ? null
+          : _replacesInherited(element?.widget),
       source: switch (json['creationLocation']) {
         Map location => InspectSource.fromJson(
           location.cast<String, Object?>(),
@@ -372,6 +386,7 @@ class GuestInspector {
               child.cast<String, Object?>(),
               path.isEmpty ? '$index' : '$path/$index',
               byRenderObject,
+              styles,
               render ?? ancestorRender,
               offstage,
             ),
@@ -417,23 +432,223 @@ class GuestInspector {
   /// walk pays this on every node of every read — measured before keeping,
   /// like the semantics capture before it: +168µs on the shop tree's 1.5ms
   /// read, +6KB on its 37KB JSON (see the consolidation spec).
-  static Map<String, String> _propertiesOf(Widget? widget) {
+  /// [styleKeys] are the fields the resolved style already carries, and they
+  /// are exempt from the cap — see the counter below.
+  static Map<String, String> _propertiesOf(
+    Widget? widget,
+    Set<String> styleKeys,
+  ) {
     if (widget == null) return const {};
     var properties = <String, String>{};
+    var configuration = 0;
     for (var property in widget.toDiagnosticsNode().getProperties()) {
       if (property.isFiltered(DiagnosticLevel.info)) continue;
       var name = property.name;
       if (name == null) continue;
-      // The one named exception: every `Text` inlines its style's
-      // diagnostics, and `inherit: true` is the resting state of every style
-      // — a property that appears on every text node distinguishes none.
-      if (name == 'inherit') continue;
+      // Every `Text` inlines its style's diagnostics, and these three say the
+      // same thing on every one of them — see [_plumbing].
+      if (_plumbing.contains(name)) continue;
       var value = property.toDescription();
       if (value.isEmpty || value == 'null') continue;
       properties[name] = shortenPropertyValue(value);
-      if (properties.length >= 12) break;
+      // **The cap counts the widget's own configuration, not its style.**
+      // A `Text` handed a whole theme slot reports fifteen properties, eleven
+      // of them style fields — measured, `overflow` and `maxLines` fell off
+      // the end of a cap of twelve, and they are exactly the two rows the
+      // detail pane's `widget` block exists to show. The style fields used to
+      // be the noise this cap was defending against; now the pane groups by
+      // them, so they may ride along, but they must not be what starves the
+      // rest.
+      if (!styleKeys.contains(name) && ++configuration >= 12) break;
     }
     return properties;
+  }
+
+  /// The default text style in force where this widget sits.
+  ///
+  /// The third column of the merge, and the only one that cannot be derived
+  /// from the other two: what the *theme* offered here, including for the
+  /// fields the widget went on to override. Without it "you set 13" cannot be
+  /// told from "you set 13, and it was already 13" — an override that changes
+  /// nothing is a line of source that could go, and a design system wants to
+  /// know which of its overrides are those.
+  ///
+  /// **Read without registering a dependency.**
+  /// [BuildContext.getInheritedWidgetOfExactType] is documented O(1) and,
+  /// unlike `dependOnInheritedWidgetOfExactType`, leaves no trace: an
+  /// inspector that dirtied the elements it looked at would change the app it
+  /// is reporting on. Measured at 13µs for a whole walk's worth of lookups —
+  /// the describing is the cost, not the finding, which is what
+  /// [_describeStyle] is for.
+  ///
+  /// It is *ambient*, not necessarily inherited: see [_replacesInherited].
+  static Map<String, String> _ambientStyleOf(
+    Element? element,
+    Map<TextStyle, Map<String, String>> styles,
+  ) {
+    var style = element
+        ?.getInheritedWidgetOfExactType<DefaultTextStyle>()
+        ?.style;
+    return style == null ? const {} : _describeStyle(style, styles);
+  }
+
+  /// Whether the widget's own style **replaced** the ambient one rather than
+  /// merging with it — or null when this kind of widget cannot say.
+  ///
+  /// `Text.build` merges the default style only when the widget's own is null
+  /// or `inherit: true`. Material's type-ramp entries are `inherit: false`, so
+  /// `style: theme.textTheme.titleLarge` throws the ambient style away
+  /// wholesale — measured, the resolved provenance then names `titleLarge` and
+  /// never mentions the `bodyMedium` that was in scope.
+  ///
+  /// This is the difference between a column of values that contributed and a
+  /// column that merely *was in the air*, and a pane that showed the second as
+  /// the first would be confidently wrong. Null for a widget that builds its
+  /// paragraph internally — an `Icon` — because a guess there would be the
+  /// same mistake in miniature.
+  static bool? _replacesInherited(Widget? widget) => switch (widget) {
+    Text(:var style?) => !style.inherit,
+    RichText(text: TextSpan(style: var style?)) => !style.inherit,
+    _ => null,
+  };
+
+  /// The style this node's glyphs were painted with — **resolved, and read off
+  /// the render tree rather than off the widget.**
+  ///
+  /// [_propertiesOf] answers what the author wrote, because
+  /// `Text.debugFillProperties` reports `style?.debugFillProperties(…)` and
+  /// that style is null for most of the text in a themed app. Measured, a bare
+  /// `Text` under a `MaterialApp` reports exactly one property — its words —
+  /// while drawing 14pt Roboto at `#1D1B20` with `letterSpacing: 0.3`. Ten
+  /// facts, none of them reported, and the one place they were being consumed
+  /// (`InspectTree.styles`, the type ramp) was silently answering about the
+  /// exceptions.
+  ///
+  /// `Text.build` merges the ambient `DefaultTextStyle`, then
+  /// `MediaQuery.boldTextOf` and the line-height/letter-spacing/word-spacing
+  /// overrides, into the span it hands down; `RenderParagraph.text` is where
+  /// that merged span is public. So this is the answer after every inherit,
+  /// merge, apply and accessibility override — the thing a person means when
+  /// they ask what a style *is*.
+  ///
+  /// `debugLabel` rides along under its own name, and it is the provenance:
+  /// Material seeds one per type-ramp slot and every `merge`, `apply` and
+  /// `copyWith` extends it, so ordinary body text reads `(englishLike
+  /// bodyMedium 2021).merge((blackMountainView bodyMedium).apply)`. A
+  /// hand-written `TextStyle` literal contributes `unknown` and a style no
+  /// labelled ancestor touched has none at all — both are absences of
+  /// authorship rather than failures of the read, and are left to say so.
+  ///
+  /// Measured before keeping, like the properties and the semantics capture
+  /// before it: **+47µs on a 2367µs property pass** over 984 elements, 72 of
+  /// them paragraphs. Only paragraphs pay, and a summary tree is a few dozen
+  /// nodes. `Icon` comes along for nothing — it is a `RichText` over an icon
+  /// font, so its size and colour arrive by the same route.
+  static Map<String, String> _textStyleOf(
+    RenderObject? render,
+    Map<TextStyle, Map<String, String>> styles,
+  ) {
+    var style = _paragraphOf(render)?.text.style;
+    return style == null ? const {} : _describeStyle(style, styles);
+  }
+
+  /// One style as rows — **memoised across the walk**, which is most of what
+  /// it costs.
+  ///
+  /// A screen has far fewer styles than texts. Measured on a thirty-card list:
+  /// **112 paragraphs and three distinct resolved styles**, two distinct
+  /// ambient ones. `debugFillProperties` and a `toDescription` per field is
+  /// the expensive half and it was being paid per *text*. Keyed on the style
+  /// itself, so two equal styles built in different places still share an
+  /// entry — `TextStyle` has value equality.
+  ///
+  /// On that tree: resolved 288µs → 135µs, ambient 304µs → 84µs. Which is why
+  /// adding the ambient style *lowered* the cost of the pass it joined, and
+  /// why the memo is threaded through the walk rather than kept on the
+  /// inspector — it must not outlive the read and pin styles.
+  static Map<String, String> _describeStyle(
+    TextStyle style,
+    Map<TextStyle, Map<String, String>> styles,
+  ) => styles.putIfAbsent(style, () {
+    var builder = DiagnosticPropertiesBuilder();
+    style.debugFillProperties(builder);
+    var resolved = <String, String>{};
+    for (var property in builder.properties) {
+      if (property.isFiltered(DiagnosticLevel.info)) continue;
+      var name = property.name;
+      if (name == null) continue;
+      if (_plumbing.contains(name)) continue;
+      var value = property.toDescription();
+      if (value.isEmpty || value == 'null') continue;
+      // A decoration that decorates nothing. The value is spelled
+      // `#3A3D43 TextDecoration.none` — a colour, which reads like an answer,
+      // for a line that is not drawn.
+      if (name == 'decoration' && value.endsWith('TextDecoration.none')) {
+        continue;
+      }
+      resolved[name] = shortenPropertyValue(value);
+    }
+    return resolved;
+  });
+
+  /// Fields every resolved style carries and no reader acts on.
+  ///
+  /// The same cut [_propertiesOf] makes, one level down and for a sharper
+  /// reason: these are not *usually* uninteresting, they are filled in on
+  /// literally every text a Material app draws, so a row for each is three
+  /// lines of `alphabetic` / `even` / `false` on every node of every read.
+  /// `inherit` is here because a resolved style is `inherit: false` by
+  /// construction — it is the resolution saying it happened.
+  ///
+  /// Seen in the pane before being cut: the detail of a heading read
+  /// `baseline alphabetic`, `leadingDistribution even`, and a `decoration`
+  /// whose value was a colour and the word `none`.
+  static const _plumbing = {'inherit', 'baseline', 'leadingDistribution'};
+
+  /// The paragraph [render] draws through, or null.
+  ///
+  /// Nearly always [render] itself: `Element.renderObject` already descends to
+  /// the first descendant render object, so an ordinary `Text` node arrives
+  /// here holding its own `RenderParagraph` and this returns on the first line.
+  ///
+  /// The walk is for the two shapes where it does not. An `Icon` puts a sized
+  /// box and a centre above its `RichText`, and a `Text` inside a
+  /// `SelectionContainer` builds a `MouseRegion` and a selection container
+  /// first — in both, the widget being asked about is a couple of render
+  /// objects above the glyphs.
+  ///
+  /// **It follows only-children, and a depth bound was tried first and was
+  /// wrong in both directions.** Render depth is not widget depth: two render
+  /// levels can span fifteen widgets, so "two levels down" let a `Scaffold`
+  /// adopt the style of a `Text` two `Column`s inside it, while an `Icon` —
+  /// three render objects, all of them plumbing — still came back empty. Both
+  /// were caught by `test/inspect/guest_properties_test.dart` rather than
+  /// reasoned about, and both cases are pinned there.
+  ///
+  /// A chain of only-children is the honest version of what the bound was
+  /// reaching for, and it is the noise filter's rule seen from another angle:
+  /// a render object with one child is not deciding anything about it, so a
+  /// paragraph at the end of such a chain *is* what this node draws. The
+  /// moment a node has two children it is composing rather than wrapping, and
+  /// the walk stops — which is what keeps a `Column` of texts from claiming
+  /// the first one's style. The depth cap that remains is a runaway guard, not
+  /// the rule.
+  static RenderParagraph? _paragraphOf(RenderObject? render) {
+    var node = render;
+    for (var depth = 0; node != null && depth < 6; depth++) {
+      if (node is RenderParagraph) return node;
+      RenderObject? only;
+      var many = false;
+      node.visitChildren((child) {
+        if (only == null) {
+          only = child;
+        } else {
+          many = true;
+        }
+      });
+      node = many ? null : only;
+    }
+    return null;
   }
 
   static bool _visitsForSemantics(RenderObject parent, RenderObject child) {

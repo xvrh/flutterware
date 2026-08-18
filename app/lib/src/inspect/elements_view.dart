@@ -9,6 +9,7 @@ import 'package:flutterware/src/inspect/node.dart' show InspectFilter;
 
 import '../address/address_scope.dart';
 import 'inspect_dock.dart';
+import '../ui/popover.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
 
@@ -688,20 +689,471 @@ class _Detail extends StatelessWidget {
               style: context.type.caption.copyWith(color: colors.mut),
             ),
           ],
+          // The style the glyphs were painted with, which is a different
+          // question from the one below and was for a long time being answered
+          // by it. See [InspectNode.textStyle].
+          if (it.textStyle.isNotEmpty) ...[
+            const SizedBox(height: FwSpacing.md),
+            const _Section('style'),
+            ..._styleRows(it),
+          ],
           // What the widget says about itself — its diagnostics, already
           // filtered at capture. Empty for a tree read from outside the app,
           // where the line above has already accounted for it; for every other
           // reader an empty map means the widget said nothing, which is not
           // worth a line of its own.
-          if (it.properties.isNotEmpty) ...[
+          if (_widgetRows(it) case var rows when rows.isNotEmpty) ...[
             const SizedBox(height: FwSpacing.md),
-            for (var MapEntry(key: name, value: value) in it.properties.entries)
+            if (it.textStyle.isNotEmpty) const _Section('widget'),
+            for (var MapEntry(key: name, value: value) in rows.entries)
               _Pair(label: name, value: value),
           ],
         ],
       ),
     );
   }
+}
+
+/// The style block: what this widget set, then what it inherited, in that
+/// order and divided by a rule that says which is which.
+///
+/// **Grouping replaced a per-row badge, and the badge had two problems.** It
+/// said `set here` four times down a 170px column on an ordinary label — a
+/// checklist rendered as decoration — and, worse, it distinguished nothing in
+/// the case a reader most needs it: a widget written
+/// `style: theme.textTheme.titleLarge` reports the *whole* style as its own,
+/// so every row wore the badge. One divider says the same thing once, and its
+/// absence is itself the answer — a block with no rule under it is a widget
+/// that set everything.
+///
+/// A field the widget set to something the renderer then overruled is spelled
+/// `300 → 700` rather than given a note. That case is rare (the OS bold-text
+/// setting is the one that turns up) and it is the most valuable row in the
+/// pane when it happens, so it reads as an arrow rather than as a footnote.
+List<Widget> _styleRows(InspectNode node) {
+  var resolved = {...node.textStyle}..remove('debugLabel');
+  var set = <String>[];
+  var inherited = <String>[];
+  for (var name in resolved.keys) {
+    (node.properties.containsKey(name) ? set : inherited).add(name);
+  }
+  for (var group in [set, inherited]) {
+    group.sort((a, b) => _styleRank(a).compareTo(_styleRank(b)));
+  }
+
+  Widget row(String name) {
+    var rendered = resolved[name]!;
+    var asked = node.properties[name];
+    return _Pair(
+      label: name,
+      value: asked == null || asked == rendered
+          ? rendered
+          : '$asked → $rendered',
+    );
+  }
+
+  return [
+    for (var name in set) row(name),
+    if (inherited.isNotEmpty) const _Section('inherited', inset: true),
+    for (var name in inherited) row(name),
+    _OriginRow(node: node),
+  ];
+}
+
+/// The order a person says a style out loud.
+///
+/// `TextStyle.debugFillProperties` declares them colour-first and puts `family`
+/// above `size`, which is a serialisation order rather than a reading one.
+/// Nobody describes a label as "dark, Roboto, 13"; they say "13 regular, dark".
+const _styleOrder = [
+  'size',
+  'weight',
+  'color',
+  'family',
+  'letterSpacing',
+  'height',
+];
+
+int _styleRank(String name) {
+  var at = _styleOrder.indexOf(name);
+  return at < 0 ? _styleOrder.length : at;
+}
+
+/// The name of the style this one was built on — `bodyMedium` — out of the
+/// framework's provenance label.
+///
+/// The raw label is the whole merge chain and it is 88 characters of nested
+/// parentheses: `((englishLike bodyMedium 2021).merge((blackRedwoodCity
+/// bodyMedium).apply)).merge(unknown)`. Printed in a 170px column it was a
+/// paragraph nobody read. The base of that chain is its innermost group, and
+/// the name of the base is the last word in it — which is the part everybody
+/// was reading it *for*.
+///
+/// **It recognises a shape; it knows no vocabulary.** No list of Material slot
+/// names, so an app that labels its own styles is read the same way. The
+/// tokens that are not names — the `2021` of a type-ramp year — are dropped,
+/// and `unknown`, which is what the framework writes for a `TextStyle` literal
+/// nobody labelled, is not a name either.
+///
+/// The whole chain is deliberately not shown anywhere yet. The place for it is
+/// the three-way merge popover of `2026-08-18-style-detail-ux.md` § D, on this
+/// same row; putting a tooltip here in the meantime would be the second
+/// interaction on the target that popover wants, which is the trap
+/// `HoverCard`'s own doc records.
+String _originOf(String? label) {
+  if (label != null && label.isNotEmpty) {
+    // The first group with nothing nested in it is the base of the chain;
+    // everything outside it was applied to it.
+    var inner = _innermost.firstMatch(label)?.group(1) ?? label;
+    var names = [
+      for (var word in inner.split(RegExp(r'\s+')))
+        if (_name.hasMatch(word) && word != 'unknown') word,
+    ];
+    if (names.isNotEmpty) return names.last;
+  }
+  // An absence of authorship, not a failure of the read — saying nothing here
+  // would read as a gap in the tool.
+  return 'nothing labelled it — written inline, not a theme slot';
+}
+
+final _innermost = RegExp(r'\(([^()]*)\)');
+final _name = RegExp(r'^[a-zA-Z][a-zA-Z0-9]*$');
+
+/// The widget's own properties, minus the ones the style block already showed.
+///
+/// **Subtraction, because the two blocks were saying the same thing twice.**
+/// Measured on a label written the way this app writes them —
+/// `style: TextStyle(fontSize: 13, fontWeight: w400, color: …, letterSpacing:
+/// 0)` — four of fourteen rows were a key and a value repeated verbatim:
+/// `color`, `size`, `weight`, `letterSpacing`. Ten distinct facts presented as
+/// fourteen rows.
+///
+/// Nothing is lost by dropping them. A key here that the style block also
+/// carries *is* that style field, and where the two values disagree the style
+/// row already spells the disagreement as `300 → 700`. What survives is the
+/// widget's actual configuration — `data`, `maxLines`, `overflow` — which is a
+/// different question and now has a block to itself.
+Map<String, String> _widgetRows(InspectNode node) => {
+  for (var entry in node.properties.entries)
+    if (!node.textStyle.containsKey(entry.key)) entry.key: entry.value,
+};
+
+/// The `from` row, and the way in to the whole merge.
+///
+/// The row itself is the slot name — `bodyMedium` — because that is the part
+/// of an 88-character provenance label anybody was reading. The rest of the
+/// label, and the two columns the pane has no width for, live one click away.
+///
+/// **Click, not hover.** `HoverCard` exists for things a pointer brushes past
+/// on its way somewhere else; this is a read you go looking for, and its own
+/// doc records what happens when one target carries two interactions.
+class _OriginRow extends StatelessWidget {
+  const _OriginRow({required this.node});
+
+  final InspectNode node;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var origin = _originOf(node.textStyle['debugLabel']);
+    // Nothing to decompose: no ambient style was captured (an older reading,
+    // or a reader that never had one), so the popover would be one column of
+    // what the pane already shows.
+    if (node.inheritedStyle.isEmpty) {
+      return _Pair(label: 'from', value: origin);
+    }
+    return Popover(
+      autofocus: false,
+      // Upward. This is the last row of the style block, which puts it at the
+      // bottom of a pane that is itself at the bottom of a dock — opening
+      // downward the card landed on the address bar. The primitive clamps
+      // on-screen either way, so a pane tall enough to put this row near its
+      // top still gets a card that fits.
+      side: PopoverSide.top,
+      content: (context, controller) => _MergeCard(node: node, origin: origin),
+      anchor: (context, controller) => Tappable.builder(
+        onTap: controller.toggle,
+        builder: (context, hovered) => Padding(
+          padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 80,
+                child: Text(
+                  'from',
+                  style: context.type.micro.copyWith(color: colors.mut3),
+                ),
+              ),
+              Flexible(
+                child: Text(
+                  origin,
+                  style: context.type.caption.copyWith(
+                    color: hovered || controller.isOpen
+                        ? colors.accent
+                        : colors.ink2,
+                  ),
+                ),
+              ),
+              const SizedBox(width: FwSpacing.xs),
+              Icon(
+                Icons.info_outline,
+                size: FwIconSize.sm,
+                color: hovered || controller.isOpen
+                    ? colors.accent
+                    : colors.mut3,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The three-way merge: what was in scope, what this widget said, what won.
+///
+/// **The middle column is the reason this exists.** The pane can already show
+/// the first and the last — grouped either side of the `inherited` rule — but
+/// not both for the *same* field, and that overlap is where the interesting
+/// answers are: the theme offered 14 and this widget asked for 13, or the
+/// theme offered 400 and this widget asked for 400, which is a line of source
+/// doing nothing.
+class _MergeCard extends StatelessWidget {
+  const _MergeCard({required this.node, required this.origin});
+
+  final InspectNode node;
+  final String origin;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var resolved = {...node.textStyle}..remove('debugLabel');
+    var ambient = {...node.inheritedStyle}..remove('debugLabel');
+    var replaced = node.styleReplacesInherited ?? false;
+
+    // Every field any of the three has an opinion about, in reading order.
+    var names =
+        <String>{...resolved.keys, ...ambient.keys, ...node.properties.keys}
+            .where(
+              (name) => resolved.containsKey(name) || ambient.containsKey(name),
+            )
+            .toList()
+          ..sort((a, b) => _styleRank(a).compareTo(_styleRank(b)));
+
+    return Container(
+      // Four columns of values that cannot wrap: a font family has no space
+      // in it to break at, so a narrow card does not ellipsize it, it spills
+      // it into the next column. Width first, ellipsis as the backstop.
+      constraints: const BoxConstraints(maxWidth: 520),
+      padding: const EdgeInsets.all(FwSpacing.md),
+      decoration: BoxDecoration(
+        color: colors.panel2,
+        borderRadius: BorderRadius.circular(context.radii.radius),
+        border: Border.all(color: colors.line),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0x22000000),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SelectableText(
+            node.textStyle['debugLabel'] ?? origin,
+            style: context.type.micro.copyWith(color: colors.mut2),
+          ),
+          const SizedBox(height: FwSpacing.sm),
+          _MergeHead(replaced: replaced, origin: origin),
+          const SizedBox(height: FwSpacing.xs),
+          for (var name in names)
+            _MergeRow(
+              name: name,
+              // Struck through rather than dropped when the ambient style was
+              // replaced: it *was* in scope here, and "the theme had a
+              // bodyMedium and this widget threw it away" is the answer to why
+              // a DefaultTextStyle appears to do nothing.
+              ambient: ambient[name],
+              ambientApplied: !replaced,
+              asked: node.properties[name],
+              renders: resolved[name],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MergeHead extends StatelessWidget {
+  const _MergeHead({required this.replaced, required this.origin});
+
+  final bool replaced;
+  final String origin;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    Widget head(String text, int flex) => Expanded(
+      flex: flex,
+      child: Text(text, style: context.type.micro.copyWith(color: colors.mut3)),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (replaced)
+          Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+            child: Text(
+              'this widget’s style is inherit: false — it replaced what '
+              'was in scope rather than merging into it',
+              style: context.type.micro.copyWith(color: colors.mut),
+            ),
+          ),
+        Row(
+          children: [
+            head('field', 3),
+            head(replaced ? 'was in scope' : 'inherited', 4),
+            head('this widget', 4),
+            head('renders as', 4),
+          ],
+        ),
+        Container(
+          height: 1,
+          margin: const EdgeInsets.only(top: FwSpacing.xxs),
+          color: colors.line,
+        ),
+      ],
+    );
+  }
+}
+
+class _MergeRow extends StatelessWidget {
+  const _MergeRow({
+    required this.name,
+    required this.ambient,
+    required this.ambientApplied,
+    required this.asked,
+    required this.renders,
+  });
+
+  final String name;
+  final String? ambient;
+  final bool ambientApplied;
+  final String? asked;
+  final String? renders;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    // An override that changed nothing: the widget asked for the value the
+    // ambient style was already going to give it. Worth saying out loud —
+    // it is a line of source that could go.
+    var redundant = ambientApplied && asked != null && asked == ambient;
+
+    Widget cell(String? value, {required Color color, bool struck = false}) =>
+        Expanded(
+          flex: 4,
+          child: Text(
+            value ?? '—',
+            overflow: TextOverflow.ellipsis,
+            style: context.type.caption.copyWith(
+              color: value == null ? colors.mut3 : color,
+              decoration: struck ? TextDecoration.lineThrough : null,
+              decorationColor: colors.mut3,
+            ),
+          ),
+        );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: FwSpacing.xxs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              name,
+              style: context.type.micro.copyWith(color: colors.mut3),
+            ),
+          ),
+          cell(
+            ambient,
+            color: colors.mut2,
+            // It was in scope and did not apply — see [_MergeCard].
+            struck: !ambientApplied && ambient != null,
+          ),
+          Expanded(
+            flex: 4,
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    asked ?? '—',
+                    overflow: TextOverflow.ellipsis,
+                    style: context.type.caption.copyWith(
+                      color: asked == null ? colors.mut3 : colors.ink2,
+                    ),
+                  ),
+                ),
+                if (redundant) ...[
+                  const SizedBox(width: FwSpacing.xxs),
+                  Text(
+                    'same',
+                    style: context.type.micro.copyWith(color: colors.mut3),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          cell(renders, color: colors.ink),
+        ],
+      ),
+    );
+  }
+}
+
+/// A rule with a word on it, dividing the pane into the questions it answers.
+///
+/// Only drawn where two blocks would otherwise run together: a text node's
+/// resolved style is ten rows, and against the widget's own properties below
+/// it the two read as one list of twenty in which `size` appears twice meaning
+/// two different things.
+class _Section extends StatelessWidget {
+  const _Section(this.label, {this.inset = false});
+
+  final String label;
+
+  /// Whether this divides *within* a block rather than between two.
+  ///
+  /// Pushed in to where the values start, so `inherited` sits visibly inside
+  /// the style block. Flush left it was pixel-identical to the `style` and
+  /// `widget` headers and read as a third block — which would have made the
+  /// inherited rows look like something other than style.
+  final bool inset;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(
+      left: inset ? 80 : 0,
+      top: inset ? FwSpacing.xs : 0,
+      bottom: FwSpacing.xs,
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: context.type.micro.copyWith(color: context.colors.mut3),
+        ),
+        const SizedBox(width: FwSpacing.sm),
+        Expanded(child: Container(height: 1, color: context.colors.panel)),
+      ],
+    ),
+  );
 }
 
 class _Pair extends StatelessWidget {
@@ -718,7 +1170,11 @@ class _Pair extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 64,
+            // Wide enough for `letterSpacing`, which is what the resolved
+            // style brought in: at 64 it wrapped to `letterSpaci` / `ng` and
+            // took two rows to say one thing. The layout labels above it are
+            // all short, so the extra sixteen pixels cost them nothing.
+            width: 80,
             child: Text(
               label,
               style: context.type.micro.copyWith(color: context.colors.mut3),

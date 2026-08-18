@@ -321,6 +321,9 @@ class InspectNode {
     this.createdByLocalProject = false,
     this.offstage = false,
     this.properties = const {},
+    this.textStyle = const {},
+    this.inheritedStyle = const {},
+    this.styleReplacesInherited,
     this.layout,
     this.label,
     this.selected,
@@ -341,6 +344,15 @@ class InspectNode {
       Map properties => properties.cast<String, String>(),
       _ => const {},
     },
+    textStyle: switch (json['style']) {
+      Map style => style.cast<String, String>(),
+      _ => const {},
+    },
+    inheritedStyle: switch (json['inherited']) {
+      Map style => style.cast<String, String>(),
+      _ => const {},
+    },
+    styleReplacesInherited: json['styleReplaces'] as bool?,
     layout: switch (json['layout']) {
       Map layout => InspectLayout.fromJson(layout.cast<String, Object?>()),
       _ => null,
@@ -413,6 +425,78 @@ class InspectNode {
   /// node's bytes. Empty for the VM-service path (`run`), which cannot read
   /// widgets — the same gap as [layout].
   final Map<String, String> properties;
+
+  /// The style this node's glyphs were **actually painted with**, resolved.
+  ///
+  /// Empty for everything that draws no text, and for every reader that cannot
+  /// get inside the app (`run`'s cockpit) — the same gap as [layout].
+  ///
+  /// It is a second bucket rather than more [properties] because the two
+  /// answer different questions and one of them was being mistaken for the
+  /// other. [properties] is what the *author* wrote: `Text.debugFillProperties`
+  /// reports `style?.debugFillProperties(…)`, so a bare `Text` under a
+  /// `MaterialApp` reports one property — its words — and says nothing about
+  /// the 14pt Roboto it draws. This is the merged result: `DefaultTextStyle`,
+  /// the theme slot behind it, `MediaQuery.boldTextOf` and the spacing
+  /// overrides, all already applied. See `guest_inspect.dart` for where it is
+  /// read from and what it cost.
+  ///
+  /// Keyed by the framework's own diagnostic names — `color`, `size`,
+  /// `weight`, `family`, `letterSpacing`, `height`, `decoration` — so a row
+  /// here and the same row in [properties] are the same measurement of the
+  /// same field, which is what makes the two comparable. [debugLabel] rides
+  /// along under its own name and is the provenance rather than a value.
+  ///
+  /// Separate from [properties] for a second, duller reason too: that map is
+  /// capped at twelve entries, and a resolved style is ten of them.
+  final Map<String, String> textStyle;
+
+  /// The default text style in force where this widget sits — what the theme
+  /// was offering here, **including for the fields the widget overrode.**
+  ///
+  /// The third column of the merge, and the only one not derivable from the
+  /// other two. [textStyle] says what won and [properties] says what the
+  /// widget asked for; neither can tell "you set 13" from "you set 13, and it
+  /// was already 13". An override that changes nothing is a line of source
+  /// that could go, and that is a thing a design system wants told.
+  ///
+  /// **Ambient, which is not always the same as inherited** — see
+  /// [styleReplacesInherited]. Empty for everything that draws no text and for
+  /// every reader outside the app.
+  final Map<String, String> inheritedStyle;
+
+  /// Whether the widget's own style **replaced** [inheritedStyle] rather than
+  /// merging into it. Null when this kind of widget cannot say.
+  ///
+  /// `Text.build` merges the ambient style only when the widget's own is null
+  /// or `inherit: true`, and Material's type-ramp entries are `inherit: false`
+  /// — so `style: theme.textTheme.titleLarge` discards what was in scope
+  /// rather than building on it. Without this a reader is shown a column of
+  /// values that look like they contributed and did not.
+  ///
+  /// Tri-state for the same reason [selected] is: an `Icon` builds its
+  /// paragraph internally and publishes no style to ask, and guessing there
+  /// would be exactly the confident wrong answer this field exists to prevent.
+  final bool? styleReplacesInherited;
+
+  /// The style in one line — `14/400 #1D1B20 Roboto` — or null when this node
+  /// draws no text.
+  ///
+  /// For the readers that pay per byte. A `find` hit spelling its style out in
+  /// full is ten keys and ~70 tokens, and thirty of them is most of a reply;
+  /// this is the four fields anybody scanning a list is scanning *for*, in
+  /// about twelve. The whole map is still on the node for whoever opened one.
+  String? get styleLine {
+    if (textStyle.isEmpty) return null;
+    var size = textStyle['size'];
+    var weight = textStyle['weight'];
+    var head = [?size, ?weight].join('/');
+    return [
+      if (head.isNotEmpty) head,
+      ?textStyle['color'],
+      ?textStyle['family'],
+    ].join(' ');
+  }
 
   /// Where it ended up, when it has a box.
   ///
@@ -492,6 +576,9 @@ class InspectNode {
     // it is true.
     if (offstage) 'offstage': true,
     if (properties.isNotEmpty) 'properties': properties,
+    if (textStyle.isNotEmpty) 'style': textStyle,
+    if (inheritedStyle.isNotEmpty) 'inherited': inheritedStyle,
+    if (styleReplacesInherited != null) 'styleReplaces': styleReplacesInherited,
     if (layout != null) 'layout': layout!.toJson(),
     if (label != null) 'label': label,
     if (selected != null) 'selected': selected,
@@ -519,6 +606,10 @@ class InspectNode {
       'local': createdByLocalProject,
       if (offstage) 'offstage': true,
       if (properties.isNotEmpty) 'properties': properties,
+      if (textStyle.isNotEmpty) 'style': textStyle,
+      if (inheritedStyle.isNotEmpty) 'inherited': inheritedStyle,
+      if (styleReplacesInherited != null)
+        'styleReplaces': styleReplacesInherited,
       if (layout != null) 'layout': _rounded(layout!.toJson()),
       if (label != null) 'label': label,
       if (selected != null) 'selected': selected,
@@ -556,6 +647,9 @@ class InspectNode {
         createdByLocalProject: createdByLocalProject,
         offstage: offstage,
         properties: properties,
+        textStyle: textStyle,
+        inheritedStyle: inheritedStyle,
+        styleReplacesInherited: styleReplacesInherited,
         layout: layout,
         label: label,
         selected: selected,
@@ -812,6 +906,15 @@ class InspectTree {
         Map properties => properties.cast<String, String>(),
         _ => const {},
       },
+      textStyle: switch (json['style']) {
+        Map style => style.cast<String, String>(),
+        _ => const {},
+      },
+      inheritedStyle: switch (json['inherited']) {
+        Map style => style.cast<String, String>(),
+        _ => const {},
+      },
+      styleReplacesInherited: json['styleReplaces'] as bool?,
       layout: switch (json['layout']) {
         Map layout => InspectLayout.fromJson(layout.cast<String, Object?>()),
         _ => null,
@@ -991,10 +1094,26 @@ class InspectTree {
   /// it the cheapest question in the drill-down and the one that settles most
   /// design arguments (two greys that should be one, a ramp with 11.5 *and*
   /// 12.5 in it).
+  ///
+  /// **Buckets on [InspectNode.textStyle], and that is a correction.** It used
+  /// to read [InspectNode.properties], which for a `Text` is the style its
+  /// author wrote — so every text that took its size and colour from the theme
+  /// had neither key and fell out of the ramp entirely. In a themed app that is
+  /// most of the screen, and the answer was a table of the exceptions
+  /// presented as a table of the whole. A ramp that cannot see the body text
+  /// cannot settle "are these two greys the same grey", which is the question
+  /// it exists for.
+  ///
+  /// The fallback to `properties` is for stored readings, not for live ones:
+  /// scenario artifacts and comparison caches written before the resolved
+  /// style existed have only the old keys, and a ramp of the exceptions still
+  /// beats an empty table when reopening an old run.
   List<InspectStyle> styles() {
     var buckets = <String, InspectStyle>{};
     for (var node in _onstage) {
-      var properties = node.properties;
+      var properties = node.textStyle.isNotEmpty
+          ? node.textStyle
+          : node.properties;
       if (properties['size'] == null && properties['color'] == null) continue;
       // Text nodes only: a `size` on something that draws no words is a
       // different measurement wearing the same name.

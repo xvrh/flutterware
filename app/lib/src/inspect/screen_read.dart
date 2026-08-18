@@ -77,6 +77,14 @@ class ScreenRead {
   /// supposed to be an alternative to. The source is spelled relative to the
   /// worktree for the same reason the tree's compact spelling exists: the same
   /// absolute path on thirty nodes is most of the reply.
+  ///
+  /// `style` is [InspectNode.styleLine] rather than the whole resolved map,
+  /// and that is the same trade: the map is ten keys and ~70 tokens, thirty of
+  /// which would be most of a `find`. The line is the four fields anyone
+  /// scanning a list is scanning for. It is also what makes
+  /// `matching`'s promise — *"`find "Watching"` answers what colour and size
+  /// is that label"* — true for a text that took its style from the theme,
+  /// which until the resolved style existed it was not.
   static Map<String, Object?> describe(InspectNode node, String? worktree) => {
     'id': node.id,
     'type': node.type,
@@ -94,6 +102,7 @@ class ScreenRead {
     if (node.source case var source?)
       'src': source.describe(relativeTo: worktree),
     if (node.properties.isNotEmpty) 'props': node.properties,
+    'style': ?node.styleLine,
     if (node.children.isNotEmpty) 'children': node.children.length,
   };
 
