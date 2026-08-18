@@ -61,6 +61,7 @@ Map<String, dynamic> _$RunEntrypointEntryToJson(RunEntrypointEntry instance) =>
       'description': ?instance.description,
       'flavor': ?instance.flavor,
       'flavorSource': ?instance.flavorSource,
+      'flavorByPlatform': ?instance.flavorByPlatform,
       'platforms': instance.platforms,
       'devices': instance.devices,
       'knobs': instance.knobs.map((e) => e.toJson()).toList(),

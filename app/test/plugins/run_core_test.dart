@@ -2103,6 +2103,116 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       // one of the words is a sentinel.
       expect(entry.flavorSource, isNull);
     });
+
+    test('varies by the platform of the target device', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main_patient.dart': 'void main() {}',
+        'pubspec.yaml': 'name: app\n',
+      });
+      DeviceCache.write(runDir.path, [
+        const DaemonDevice(id: 'phone', platformType: 'ios'),
+        const DaemonDevice(id: 'mac', platformType: 'macos'),
+        const DaemonDevice(id: 'shy'),
+      ]);
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main_patient.dart',
+                  'name': 'Patient',
+                  'flavor': 'local',
+                  'flavorByPlatform': {'mobile': 'patientLocal'},
+                },
+              ],
+            },
+          ],
+        },
+      );
+      await core.computeAll();
+
+      var entry = core.entrypointsFor('app').single;
+      // The shorthand covers the phone; the Mac falls back to the plain
+      // declaration — the split-store case: same entry point, its own package
+      // id on a phone, none of that on a desktop.
+      expect(
+        core.flavorFor('app', entry, device: 'phone').flavor,
+        'patientLocal',
+      );
+      expect(core.flavorFor('app', entry, device: 'mac').flavor, 'local');
+      // A device the cache never described, and no device at all, resolve
+      // without the pairing rather than guessing a platform.
+      expect(core.flavorFor('app', entry, device: 'shy').flavor, 'local');
+      expect(core.flavorFor('app', entry).flavor, 'local');
+    });
+
+    test('the pairing is echoed as written, unknown keys dropped', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main_patient.dart': 'void main() {}',
+        'pubspec.yaml': 'name: app\n',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main_patient.dart',
+                  'name': 'Patient',
+                  'flavor': 'local',
+                  // `fuchsia` is a platform this build has no member for — the
+                  // config can come from a newer flutterware than the GUI.
+                  'flavorByPlatform': {
+                    'mobile': 'patientLocal',
+                    'fuchsia': 'patientNext',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var entry = result.packages.single.entrypoints.single;
+      expect(entry.flavorByPlatform, {'mobile': 'patientLocal'});
+      // The map rides beside the base, not instead of it.
+      expect(entry.flavor, 'local');
+    });
+
+    test(
+      'an entry point without the pairing does not carry the field',
+      () async {
+        _writePackage(worktree, 'app', {
+          'lib/main.dart': 'void main() {}',
+          'pubspec.yaml': 'name: app\n',
+        });
+        core = _coreFor(
+          worktree,
+          config: {
+            'packages': [
+              {
+                'path': 'app',
+                'entrypoints': [
+                  {'path': 'lib/main.dart', 'flavor': 'dev'},
+                ],
+              },
+            ],
+          },
+        );
+
+        var result =
+            (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+        var entry = result.packages.single.entrypoints.single;
+        expect(entry.flavorByPlatform, isNull);
+        expect(entry.toJson(), isNot(contains('flavorByPlatform')));
+      },
+    );
   });
 
   group('the launcher log', () {

@@ -15,6 +15,7 @@ class EntrypointRef {
     required this.declared,
     this.description,
     this.flavor,
+    this.flavorByPlatform = const {},
     this.platforms = const [],
     this.knobs = const [],
   });
@@ -39,6 +40,10 @@ class EntrypointRef {
   /// The `--flavor` this entry point is built with, when the project has them.
   /// A flavoured project cannot be run without one — see [Entrypoint.flavor].
   final String? flavor;
+
+  /// [flavor] where it depends on the platform launched onto, as written —
+  /// shorthand keys unexpanded. See [Entrypoint.flavorByPlatform].
+  final Map<RunPlatform, String> flavorByPlatform;
 
   /// What this entry point declares it can run on, as written — shorthands
   /// unexpanded. Empty means anything.
@@ -109,11 +114,22 @@ List<EntrypointRef> declaredEntrypoints(Map<String, Object?> config) => [
           name: entry['name'] as String? ?? _nameFor(path),
           description: entry['description'] as String?,
           flavor: entry['flavor'] as String?,
+          flavorByPlatform: _flavorByPlatformOf(entry['flavorByPlatform']),
           platforms: _platformsOf(entry['platforms']),
           declared: true,
           knobs: _knobsOf(entry['knobs']),
         ),
 ];
+
+/// Same forgiving posture as [_platformsOf]: a key this build has no member
+/// for is dropped rather than refused, and the launch then falls back to the
+/// entry point's plain `flavor` there — the safe direction, since a dropped
+/// pairing fails loudly at build time while a refused config runs nothing.
+Map<RunPlatform, String> _flavorByPlatformOf(Object? raw) => {
+  for (var entry in (raw is Map ? raw.entries : const <MapEntry>[]))
+    if (entry.value case String flavor)
+      if (entry.key case String name) ?RunPlatform.byName(name): flavor,
+};
 
 /// A name this build has no member for is dropped rather than refused: the
 /// config imports the `flutterware` version the *project* pins, which a hosted

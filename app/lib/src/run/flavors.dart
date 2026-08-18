@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
@@ -54,10 +55,30 @@ enum FlavorSource {
 /// answer to a different question — what *this* run does — and folding it in
 /// here would make the panel unable to say what the project declares once the
 /// user had typed over it.
+///
+/// [byPlatform] is the entry point's per-platform pairing and wins where it
+/// names the platform launched onto, described by [platformType] and
+/// [category] — the two strings `flutter daemon` reports about a device, both
+/// optional there, which is why this takes them rather than an enum a caller
+/// would have to derive. A device that says nothing about itself resolves as
+/// if the map were empty: falling back to the plain declaration is the safe
+/// direction, and the platforms it could mis-serve are the desktop ones,
+/// which always name themselves.
 ({String? flavor, FlavorSource source}) resolveFlavor({
   required String? entrypointFlavor,
   required String? packageDefault,
+  Map<RunPlatform, String> byPlatform = const {},
+  String? platformType,
+  String? category,
 }) {
+  var paired = lookupByPlatform(
+    byPlatform,
+    platformType: platformType,
+    category: category,
+  );
+  if (paired != null && paired.isNotEmpty) {
+    return (flavor: paired, source: FlavorSource.entrypoint);
+  }
   if (entrypointFlavor != null && entrypointFlavor.isNotEmpty) {
     return (flavor: entrypointFlavor, source: FlavorSource.entrypoint);
   }
@@ -65,4 +86,32 @@ enum FlavorSource {
     return (flavor: packageDefault, source: FlavorSource.pubspec);
   }
   return (flavor: null, source: FlavorSource.none);
+}
+
+/// [map]'s entry for the platform a device describes, or null for a platform
+/// it does not name.
+///
+/// A concrete key beats a shorthand — `ios:` wins over `mobile:` for an
+/// iPhone — and the two shorthands cannot overlap each other, so this is the
+/// whole precedence. A device reporting no `platformType` can still match a
+/// shorthand key through its daemon `category`, which groups devices the same
+/// way the shorthands do.
+T? lookupByPlatform<T>(
+  Map<RunPlatform, T> map, {
+  String? platformType,
+  String? category,
+}) {
+  if (map.isEmpty) return null;
+  var platform = RunPlatform.byName(platformType ?? '');
+  if (platform != null) {
+    if (map[platform] case var direct?) return direct;
+    for (var entry in map.entries) {
+      if (entry.key.expanded.contains(platform) && entry.key != platform) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+  var shorthand = RunPlatform.byName(category ?? '');
+  return shorthand != null ? map[shorthand] : null;
 }

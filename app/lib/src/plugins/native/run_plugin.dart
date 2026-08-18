@@ -1656,6 +1656,10 @@ class _NewRunPageState extends State<_NewRunPage> {
       // restoring them onto whatever entry point happened to sort first put a
       // stale flavor on an unrelated build.
       _rebuildKnobs(restored != null ? last?.knobs ?? const {} : const {});
+      // The device before the flavor, because the flavor can depend on it —
+      // an entry point pairing `patientLocal` with `mobile` pre-fills
+      // differently for a phone than for this machine.
+      _device ??= _pickDevice(preferred: last?.device);
       _resetFlavor(used: restored != null ? last?.flavor : null);
     }
     _device ??= _pickDevice(preferred: last?.device);
@@ -1676,7 +1680,7 @@ class _NewRunPageState extends State<_NewRunPage> {
     var choice = _entry;
     return choice == null
         ? (flavor: null, source: FlavorSource.none)
-        : _core.flavorFor(choice.package, choice.entry);
+        : _core.flavorFor(choice.package, choice.entry, device: _device);
   }
 
   /// The device to select: the one asked for when this entry point allows it,
@@ -1807,7 +1811,12 @@ class _NewRunPageState extends State<_NewRunPage> {
                     devices: allowed,
                     selected: _device,
                     restricted: _entry?.entry.platforms.isNotEmpty ?? false,
-                    onChanged: (id) => setState(() => _device = id),
+                    onChanged: (id) => setState(() {
+                      _device = id;
+                      // The declared flavor can differ per device; a value the
+                      // user typed over it stays theirs.
+                      if (!_overridingFlavor) _resetFlavor();
+                    }),
                   ),
                 ),
                 // Always present, not only when something declared one: whether

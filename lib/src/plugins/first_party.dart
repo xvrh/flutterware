@@ -482,6 +482,7 @@ class Entrypoint {
     this.name,
     this.description,
     this.flavor,
+    this.flavorByPlatform = const {},
     this.platforms = const [],
     this.knobs = const [],
   });
@@ -519,7 +520,9 @@ class Entrypoint {
   /// Declared per entry point because that is how the pairing actually works:
   /// `main_dev.dart` goes with `dev`, and it is the same fact twice. To run one
   /// entry point under several flavors, declare it several times with different
-  /// [name]s, or pass `flavor` to the launch action.
+  /// [name]s, or pass `flavor` to the launch action. When the flavor varies by
+  /// *platform* rather than by intent, that is [flavorByPlatform], not a second
+  /// declaration.
   ///
   /// Every platform but web — `supportsFlavors` is true on Linux, macOS and
   /// Windows as well as Android and iOS, and web is the one that inherits the
@@ -528,6 +531,32 @@ class Entrypoint {
   /// which is what a project setting `flutter: default-flavor:` for its web
   /// build already expects.
   final String? flavor;
+
+  /// [flavor], where it depends on the platform the launch targets.
+  ///
+  /// The case is real: an app split into two store identities builds the same
+  /// entry point under `patientLocal` on a phone — where the flavor decides
+  /// the package id and the deep links, and the wrong one *installs over the
+  /// other app* — and under plain `local` on a desktop, where none of that
+  /// exists. One declaration:
+  ///
+  /// ```dart
+  /// Entrypoint('lib/main_patient.dart', name: 'Patient',
+  ///     flavor: 'local',
+  ///     flavorByPlatform: {RunPlatform.mobile: 'patientLocal'}),
+  /// ```
+  ///
+  /// The launch resolves against the target device's platform: a concrete key
+  /// ([RunPlatform.ios]) beats a shorthand ([RunPlatform.mobile]), a shorthand
+  /// beats [flavor], and a platform in neither falls back to [flavor] and then
+  /// to the pubspec's `default-flavor:` as always. The two shorthands cannot
+  /// overlap each other, so there is no ambiguity to refuse. The launch
+  /// action's `flavor` argument still beats all of it.
+  ///
+  /// Before this field the answer was two declarations of the same path with
+  /// the platform spelled twice — once in each [name], once in [platforms] —
+  /// and a picker showing two rows for one thing.
+  final Map<RunPlatform, String> flavorByPlatform;
 
   /// What this entry point can actually run on. Everything, when empty.
   ///
@@ -557,6 +586,11 @@ class Entrypoint {
     'name': ?name,
     'description': ?description,
     'flavor': ?flavor,
+    // As written, shorthands and all — same rule as `platforms` below.
+    if (flavorByPlatform.isNotEmpty)
+      'flavorByPlatform': {
+        for (var entry in flavorByPlatform.entries) entry.key.name: entry.value,
+      },
     // As written, shorthands and all. The tool expands them where it matches
     // devices; the manifest keeps the author's word so a picker can say
     // `desktop` rather than reciting three platforms back at them.

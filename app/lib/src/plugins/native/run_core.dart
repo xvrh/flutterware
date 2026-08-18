@@ -249,19 +249,34 @@ class RunCore extends PluginCore {
   }
 
   /// What [entry] builds with when nobody overrides it, and where that came
-  /// from — its own declaration, or [package]'s `flutter: default-flavor:`.
+  /// from — its per-platform pairing when [device]'s platform is in it, its
+  /// own declaration, or [package]'s `flutter: default-flavor:`.
   ///
   /// One chain, used by the panel and by the `launch` action, because a form
   /// that pre-fills `dev` and an agent that passes nothing must build the same
   /// thing. They did not before: the action stopped at the entry point's
   /// declaration and never looked at the pubspec.
+  ///
+  /// [device] is an id from the cache; one the cache has never mentioned is
+  /// still launchable (see `_checkDevice`) and resolves without the pairing,
+  /// as does no device at all — which is what the `entrypoints` report asks,
+  /// since its answer describes the entry point rather than a launch.
   ({String? flavor, FlavorSource source}) flavorFor(
     String package,
-    EntrypointRef entry,
-  ) => resolveFlavor(
-    entrypointFlavor: entry.flavor,
-    packageDefault: defaultFlavorFor(package),
-  );
+    EntrypointRef entry, {
+    String? device,
+  }) {
+    var target = devices
+        .where((candidate) => candidate.id == device)
+        .firstOrNull;
+    return resolveFlavor(
+      entrypointFlavor: entry.flavor,
+      packageDefault: defaultFlavorFor(package),
+      byPlatform: entry.flavorByPlatform,
+      platformType: target?.platformType,
+      category: target?.category,
+    );
+  }
 
   /// The devices [entry] can run on, in the order every surface lists them.
   ///
@@ -1929,6 +1944,12 @@ class RunCore extends PluginCore {
                     FlavorSource.none => null,
                     var source => source.name,
                   },
+                  flavorByPlatform: entry.flavorByPlatform.isEmpty
+                      ? null
+                      : {
+                          for (var pairing in entry.flavorByPlatform.entries)
+                            pairing.key.name: pairing.value,
+                        },
                   platforms: [
                     for (var platform in entry.platforms) platform.name,
                   ],
@@ -2285,7 +2306,7 @@ class RunCore extends PluginCore {
       // caller says "no flavor" about an entry point that declares one.
       flavor: switch (arguments['flavor']) {
         String given => given.isEmpty ? null : given,
-        _ => flavorFor(package, entry).flavor,
+        _ => flavorFor(package, entry, device: device).flavor,
       },
       defines: defines,
       knobs: knobs,
