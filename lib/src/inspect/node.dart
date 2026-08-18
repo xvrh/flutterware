@@ -331,42 +331,59 @@ class InspectNode {
     this.elidedChildren = 0,
   });
 
-  factory InspectNode.fromJson(Map<String, Object?> json) => InspectNode(
-    id: json['id'] as String? ?? '',
-    type: json['type'] as String? ?? '',
-    description: json['description'] as String?,
-    createdByLocalProject: json['local'] as bool? ?? false,
-    offstage: json['offstage'] as bool? ?? false,
-    elidedChildren: json['elided'] as int? ?? 0,
-    label: json['label'] as String?,
-    selected: json['selected'] as bool?,
-    properties: switch (json['properties']) {
-      Map properties => properties.cast<String, String>(),
-      _ => const {},
-    },
-    textStyle: switch (json['style']) {
+  /// The ambient style as [toJson] wrote it: a map, or `"same"` standing in
+  /// for one byte-identical to [textStyle].
+  ///
+  /// **Absent and `"same"` are different answers**, which is the whole reason
+  /// the sentinel is a value rather than an omission: nothing captured means
+  /// no reader looked, and the detail pane offers no merge card for it. A
+  /// widget that set no style of its own captured plenty — it simply captured
+  /// the same thing twice.
+  static Map<String, String> _readInherited(
+    Object? json,
+    Map<String, String> textStyle,
+  ) => switch (json) {
+    'same' => textStyle,
+    Map style => style.cast<String, String>(),
+    _ => const {},
+  };
+
+  factory InspectNode.fromJson(Map<String, Object?> json) {
+    var textStyle = switch (json['style']) {
       Map style => style.cast<String, String>(),
-      _ => const {},
-    },
-    inheritedStyle: switch (json['inherited']) {
-      Map style => style.cast<String, String>(),
-      _ => const {},
-    },
-    styleReplacesInherited: json['styleReplaces'] as bool?,
-    layout: switch (json['layout']) {
-      Map layout => InspectLayout.fromJson(layout.cast<String, Object?>()),
-      _ => null,
-    },
-    source: switch (json['source']) {
-      Map<String, Object?> source => InspectSource.fromJson(source),
-      Map source => InspectSource.fromJson(source.cast<String, Object?>()),
-      _ => null,
-    },
-    children: [
-      for (var child in json['children'] as List? ?? const [])
-        InspectNode.fromJson((child as Map).cast<String, Object?>()),
-    ],
-  );
+      _ => const <String, String>{},
+    };
+    return InspectNode(
+      id: json['id'] as String? ?? '',
+      type: json['type'] as String? ?? '',
+      description: json['description'] as String?,
+      createdByLocalProject: json['local'] as bool? ?? false,
+      offstage: json['offstage'] as bool? ?? false,
+      elidedChildren: json['elided'] as int? ?? 0,
+      label: json['label'] as String?,
+      selected: json['selected'] as bool?,
+      properties: switch (json['properties']) {
+        Map properties => properties.cast<String, String>(),
+        _ => const {},
+      },
+      textStyle: textStyle,
+      inheritedStyle: _readInherited(json['inherited'], textStyle),
+      styleReplacesInherited: json['styleReplaces'] as bool?,
+      layout: switch (json['layout']) {
+        Map layout => InspectLayout.fromJson(layout.cast<String, Object?>()),
+        _ => null,
+      },
+      source: switch (json['source']) {
+        Map<String, Object?> source => InspectSource.fromJson(source),
+        Map source => InspectSource.fromJson(source.cast<String, Object?>()),
+        _ => null,
+      },
+      children: [
+        for (var child in json['children'] as List? ?? const [])
+          InspectNode.fromJson((child as Map).cast<String, Object?>()),
+      ],
+    );
+  }
 
   /// The node's identity, and the whole reason this type exists rather than
   /// the inspector's JSON being passed through.
@@ -479,6 +496,16 @@ class InspectNode {
   /// would be exactly the confident wrong answer this field exists to prevent.
   final bool? styleReplacesInherited;
 
+  /// Whether [inheritedStyle] would serialise byte for byte as [textStyle].
+  ///
+  /// True for every text that sets no style of its own — most of them — where
+  /// the resolved style *is* the ambient one. Measured on one scenario run:
+  /// **2215 of 22714 tree bytes, 9%**, spent writing the same seven pairs a
+  /// second time.
+  bool get _sameAsResolved =>
+      inheritedStyle.length == textStyle.length &&
+      inheritedStyle.entries.every((e) => textStyle[e.key] == e.value);
+
   /// The style in one line — `14/400 #1D1B20 Roboto` — or null when this node
   /// draws no text.
   ///
@@ -577,7 +604,9 @@ class InspectNode {
     if (offstage) 'offstage': true,
     if (properties.isNotEmpty) 'properties': properties,
     if (textStyle.isNotEmpty) 'style': textStyle,
-    if (inheritedStyle.isNotEmpty) 'inherited': inheritedStyle,
+    // `"same"` rather than the whole map again — see [_readInherited].
+    if (inheritedStyle.isNotEmpty)
+      'inherited': _sameAsResolved ? 'same' : inheritedStyle,
     if (styleReplacesInherited != null) 'styleReplaces': styleReplacesInherited,
     if (layout != null) 'layout': layout!.toJson(),
     if (label != null) 'label': label,
@@ -607,7 +636,9 @@ class InspectNode {
       if (offstage) 'offstage': true,
       if (properties.isNotEmpty) 'properties': properties,
       if (textStyle.isNotEmpty) 'style': textStyle,
-      if (inheritedStyle.isNotEmpty) 'inherited': inheritedStyle,
+      // `"same"` rather than the whole map again — see [_readInherited].
+      if (inheritedStyle.isNotEmpty)
+        'inherited': _sameAsResolved ? 'same' : inheritedStyle,
       if (styleReplacesInherited != null)
         'styleReplaces': styleReplacesInherited,
       if (layout != null) 'layout': _rounded(layout!.toJson()),
@@ -893,6 +924,10 @@ class InspectTree {
   ) {
     var own = json['id'] as String? ?? '';
     var id = parentId.isEmpty || own.isEmpty ? own : '$parentId/$own';
+    var textStyle = switch (json['style']) {
+      Map style => style.cast<String, String>(),
+      _ => const <String, String>{},
+    };
     return InspectNode(
       id: id,
       type: json['type'] as String? ?? '',
@@ -906,14 +941,8 @@ class InspectTree {
         Map properties => properties.cast<String, String>(),
         _ => const {},
       },
-      textStyle: switch (json['style']) {
-        Map style => style.cast<String, String>(),
-        _ => const {},
-      },
-      inheritedStyle: switch (json['inherited']) {
-        Map style => style.cast<String, String>(),
-        _ => const {},
-      },
+      textStyle: textStyle,
+      inheritedStyle: InspectNode._readInherited(json['inherited'], textStyle),
       styleReplacesInherited: json['styleReplaces'] as bool?,
       layout: switch (json['layout']) {
         Map layout => InspectLayout.fromJson(layout.cast<String, Object?>()),

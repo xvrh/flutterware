@@ -12,6 +12,7 @@ import 'package:test/test.dart';
 /// live check caught it only because somebody ran it; this catches it in
 /// milliseconds, on every push, without an SDK or a GPU.
 void main() {
+  _ambientSentinel();
   group('InspectSource', () {
     test('prints a file URI as a path relative to the worktree', () {
       var source = const InspectSource(
@@ -537,6 +538,76 @@ void main() {
         'Card',
         'Text',
       ]);
+    });
+  });
+}
+
+/// The ambient style is written as `"same"` when it would repeat the resolved
+/// one — most texts, since most set no style of their own.
+void _ambientSentinel() {
+  group('the ambient style on the wire', () {
+    InspectNode nodeWith({
+      required Map<String, String> style,
+      required Map<String, String> inherited,
+    }) => InspectNode(
+      id: '',
+      type: 'Text',
+      description: 'Text("Save")',
+      textStyle: style,
+      inheritedStyle: inherited,
+    );
+
+    const resolved = {'size': '14.0', 'weight': '400', 'color': '#1D1B20'};
+
+    test('a style nobody overrode is not written twice', () {
+      var json = nodeWith(style: resolved, inherited: resolved).toJson();
+
+      expect(json['inherited'], 'same');
+      expect(
+        InspectNode.fromJson(json).inheritedStyle,
+        resolved,
+        reason: 'the sentinel resolves back to the resolved style',
+      );
+    });
+
+    test('an ambient style that differs is written in full', () {
+      var json = nodeWith(
+        style: resolved,
+        inherited: {...resolved, 'size': '22.0'},
+      ).toJson();
+
+      expect(json['inherited'], isA<Map<String, String>>());
+      expect(InspectNode.fromJson(json).inheritedStyle['size'], '22.0');
+    });
+
+    test('nothing captured stays different from captured-and-identical', () {
+      // The distinction the sentinel exists to keep: a reader that never
+      // looked has no merge to show, and the detail pane offers no card.
+      var none = InspectNode.fromJson({'id': '', 'type': 'Text'});
+      expect(none.inheritedStyle, isEmpty);
+
+      var same = InspectNode.fromJson({
+        'id': '',
+        'type': 'Text',
+        'style': resolved,
+        'inherited': 'same',
+      });
+      expect(same.inheritedStyle, resolved);
+    });
+
+    test('both spellings read the sentinel', () {
+      var tree = InspectTree(
+        entryId: null,
+        root: nodeWith(style: resolved, inherited: resolved),
+      );
+      for (var compact in [false, true]) {
+        var decoded = InspectTree.fromJson(tree.toJson(compact: compact));
+        expect(
+          decoded.root!.inheritedStyle,
+          resolved,
+          reason: 'compact: $compact',
+        );
+      }
     });
   });
 }

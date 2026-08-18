@@ -119,6 +119,16 @@ above the divider and the divider vanishes. That is not the design breaking,
 it is the design reporting that the widget really did set everything — which
 is what P2 currently obscures.
 
+**The mirror case needed a third spelling, found by looking at a scenario
+step.** A `Text` that sets *nothing* puts every field below the divider, so the
+rule landed directly under the block header: two micro labels with rules four
+pixels apart, reading as a doubled heading. The position was carrying the
+meaning correctly — rule at the top means everything below is inherited — but
+nothing about it read that way. Where there is nothing to divide, the header
+says it instead: `style · all inherited`. So the three states are a plain
+header with a rule in the middle, a plain header with no rule (the widget set
+everything), and a qualified header (it set nothing).
+
 Also worth taking here: **order the rows the way a person says a style out
 loud** — size, weight, colour, then the rest. The framework's declaration
 order puts `family` second and `size` third.
@@ -240,6 +250,13 @@ Three things the build turned up:
 - **A font family has no space to break at**, so a narrow card did not
   ellipsize `.AppleSystemUIFont`, it spilled it into the next column. Width
   first, ellipsis as the backstop. Seen in the pane, not predicted.
+- **The ambient style was being written twice for most texts.** Where a widget
+  sets no style, the resolved style *is* the ambient one, so the two maps
+  serialise byte for byte alike — measured at 9% of one scenario run's tree
+  bytes. `toJson` writes `"inherited": "same"` for that case; 8% came off the
+  same run's trees. The sentinel is a value rather than an omission because
+  absent already means *nothing captured*, which is what suppresses the merge
+  card.
 
 ## Recommendation
 
