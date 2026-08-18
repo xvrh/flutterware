@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/material.dart' show InputDecorator;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -178,6 +179,34 @@ class TargetMessages {
       '$described is on screen, but `$prefix$verb` at its center would not '
       'reach it — another widget covers it, or an IgnorePointer/'
       'AbsorbPointer swallows the pointer.$coveredEscapeHatch';
+
+  /// The covered refusal for the one covering that is not a mistake: a text
+  /// field's own decoration.
+  ///
+  /// **A field's `labelText` is a visible string, so a bare target matches
+  /// it** — and matches the label `Text`, the one widget in that field nobody
+  /// can act on: the decoration sits under an `IgnorePointer`, so the pointer
+  /// at the label's centre goes to the field. The generic covered sentence is
+  /// true and useless there, because the thing "covering" the label is the
+  /// field the caller was aiming at all along.
+  ///
+  /// [label] is `{"label": …}` spelled out, and it arrives **only when the
+  /// resolver has just checked that it resolves** — a refusal that hands back
+  /// an address it has not tried costs the reader the round trip it was
+  /// written to save. Null leaves the point, which the ladder can always
+  /// vouch for.
+  String decorationLabel(
+    String verb,
+    String described, {
+    required String? label,
+    required Offset center,
+  }) =>
+      "$described belongs to a text field's decoration — its label, its hint, "
+      'a prefix — and `$prefix$verb` at its centre lands on the field rather '
+      'than on it. Act on the field: '
+      '`{"at": {"x": ${center.dx.round()}, "y": ${center.dy.round()}}}`, its '
+      'centre'
+      '${label == null ? '' : ', or `{"label": ${jsonEncode(label)}}`'}.';
 
   String offscreen(String described, Offset center) =>
       '$described sits off screen at $center and nothing scrolls it '
@@ -514,13 +543,83 @@ class TargetResolver {
     if (bounds.contains(center)) {
       throw TargetError(
         TargetFailure.covered,
-        messages.covered(verb, described),
+        _decorationRefusal(finder, described, verb) ??
+            messages.covered(verb, described),
       );
     }
     throw TargetError(
       TargetFailure.offscreen,
       messages.offscreen(described, center),
     );
+  }
+
+  /// The refusal for a target that landed inside a text field's decoration,
+  /// or null when it landed anywhere else — see
+  /// [TargetMessages.decorationLabel].
+  ///
+  /// The walk stops at whichever of `EditableText` and `InputDecorator` it
+  /// meets first, and that order is the whole test: the field's *value* is
+  /// drawn inside the editable, everything the decoration draws around it —
+  /// label, hint, helper, prefix — is not. Reaching the editable first means
+  /// the covering is an ordinary one and deserves the ordinary sentence.
+  String? _decorationRefusal(Finder finder, String described, String verb) {
+    var elements = finder.evaluate().toList();
+    if (elements.length != 1) return null;
+    Element? decorator;
+    elements.single.visitAncestorElements((ancestor) {
+      if (ancestor.widget is EditableText) return false;
+      if (ancestor.widget is! InputDecorator) return true;
+      decorator = ancestor;
+      return false;
+    });
+    var found = decorator;
+    if (found == null) return null;
+    var render = found.renderObject;
+    if (render is! RenderBox || !render.hasSize) return null;
+    return messages.decorationLabel(
+      verb,
+      described,
+      label: _labelReaching(found),
+      center: render.localToGlobal(render.size.center(Offset.zero)),
+    );
+  }
+
+  /// The `{"label": …}` that reaches the field [decorator] decorates, or null
+  /// when this cannot say that it does.
+  ///
+  /// **Deduced from the decoration, then resolved — never deduced and
+  /// offered.** The first version of this message read `labelText ?? hintText`
+  /// off the decoration and handed it over, which a widget test agreed with
+  /// and the live GUI did not: on the studio's own filter field the offered
+  /// label found nothing, because a word had just been typed into it and a
+  /// hint stops being the field's semantics label somewhere the widget test
+  /// did not reproduce. Whatever the rule is, this does not need to know it —
+  /// it runs the caller's own lookup and keeps the string only when that
+  /// lands on one widget holding this field's editable.
+  ///
+  /// Null whenever the semantics tree is off, for the reason in
+  /// [_semanticsMatches]: turning it on to write an error message changes what
+  /// the app builds. The point in the same sentence never needed it.
+  String? _labelReaching(Element decorator) {
+    if (!SemanticsBinding.instance.semanticsEnabled) return null;
+    var decoration = (decorator.widget as InputDecorator).decoration;
+    var said = decoration.labelText ?? decoration.hintText;
+    if (said == null) return null;
+    var matches = find.bySemanticsLabel(said).evaluate().toList();
+    if (matches.length != 1) return null;
+    // The same search the verb will make: one match, holding one editable —
+    // and that editable inside this decorator, so the label being unique on
+    // the screen is not mistaken for it belonging to this field.
+    var editables = editableWithin(
+      find.byElementPredicate((element) => identical(element, matches.single)),
+    ).evaluate().toList();
+    if (editables.length != 1) return null;
+    var inside = false;
+    editables.single.visitAncestorElements((ancestor) {
+      inside = identical(ancestor, decorator);
+      return !inside;
+    });
+    return inside ? said : null;
   }
 
   /// The view [render] paints into, walked up the render tree.
@@ -559,6 +658,47 @@ class TargetResolver {
       (entry) => isRenderObjectAncestorOfTarget(render, entry.target),
     );
   }
+}
+
+/// The `EditableText` a text-entering verb means, given the [finder] its
+/// target resolved to.
+///
+/// **A point inside a field resolves *below* the editable, not above it.**
+/// `Target.at` — which is what `item:` becomes — takes the innermost render
+/// object the hit test reached, and inside a `TextField` that is the
+/// `RenderEditable` itself. The descendant search alone then comes back
+/// empty, because `EditableText` is an *ancestor* of what the point resolved
+/// to, and the verb refuses a field the caller can see with "contains 0 text
+/// fields" — the one refusal in this tool that tells a reader the thing in
+/// front of them is not there.
+///
+/// So the search runs both ways: down first, which is what a target naming
+/// the `TextField`, its key or its semantics label needs, then up to the
+/// nearest *enclosing* editable. A point inside a field means that field
+/// either way.
+///
+/// Enclosing, and nothing looser: a point on an icon inside a field's
+/// decoration is on the icon, and typing into the field beside it would be a
+/// guess. Nothing found leaves the empty descendant finder, so the caller
+/// still refuses with the count it would have refused with.
+Finder editableWithin(Finder finder) {
+  var within = find.descendant(
+    of: finder,
+    matching: find.byType(EditableText),
+    matchRoot: true,
+  );
+  if (within.evaluate().isNotEmpty) return within;
+  var elements = finder.evaluate().toList();
+  if (elements.length != 1) return within;
+  Element? enclosing;
+  elements.single.visitAncestorElements((ancestor) {
+    if (ancestor.widget is! EditableText) return true;
+    enclosing = ancestor;
+    return false;
+  });
+  var found = enclosing;
+  if (found == null) return within;
+  return find.byElementPredicate((element) => identical(element, found));
 }
 
 /// The characters a refusal names rather than prints.

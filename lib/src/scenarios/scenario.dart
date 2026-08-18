@@ -594,7 +594,14 @@ class ScenarioTester {
   }) => _step(
     shot,
     settle,
-    () async => tester.enterText(await _resolve(target, 'enterText'), text),
+    // `editableWithin` rather than the finder itself: `tester.enterText`
+    // searches down for the editable, and a point target — `Target.at`, and
+    // the `item:` an agent spells it with — resolves to a render object below
+    // it, where down finds nothing.
+    () async => tester.enterText(
+      editableWithin(await _resolve(target, 'enterText')),
+      text,
+    ),
     verb: 'enterText',
     target: describeTarget(target),
   );

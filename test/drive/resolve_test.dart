@@ -435,6 +435,175 @@ void main() {
 
     await tester.tap(finder, warnIfMissed: true);
   });
+
+  /// **Reported by a consumer driving a form.** `item:` is documented as the
+  /// way to reach a control with no words, a field whose label floats above
+  /// it is exactly that, and `enterText` on one refused with "contains 0 text
+  /// fields" — about a field the reply's own screen had just listed.
+  testWidgets('a point inside a field finds the editable above it', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_form());
+    var box = tester.getRect(find.byType(TextField));
+    var resolver = TargetResolver(tester);
+
+    var finder = await resolver.resolve(
+      Target.at(box.center.dx, box.center.dy),
+      'enterText',
+    );
+
+    // The point itself resolves below the editable — that is the bug — so it
+    // is the walk up that has to produce exactly one field.
+    expect(
+      find
+          .descendant(
+            of: finder,
+            matching: find.byType(EditableText),
+            matchRoot: true,
+          )
+          .evaluate(),
+      isEmpty,
+    );
+    expect(editableWithin(finder).evaluate(), hasLength(1));
+  });
+
+  testWidgets('a target above the editable still finds it downwards', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_form());
+
+    expect(editableWithin(find.byType(TextField)).evaluate(), hasLength(1));
+  });
+
+  testWidgets('nothing enclosing a target that is no field', (tester) async {
+    await tester.pumpWidget(_form());
+
+    expect(editableWithin(find.text('Sign in')).evaluate(), isEmpty);
+  });
+
+  /// **Reported alongside the one above.** A `labelText` is a visible string,
+  /// so the bare target matches it, and the generic covered sentence sent the
+  /// reader looking for whatever was on top of the field they were aiming at.
+  testWidgets("a field label is refused with the field's own centre", (
+    tester,
+  ) async {
+    await tester.pumpWidget(_form());
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(
+      () => resolver.resolve('Phone number', 'enterText'),
+    );
+
+    expect(error.failure, TargetFailure.covered);
+    expect(
+      '$error',
+      contains('"Phone number" belongs to a text field\'s decoration'),
+    );
+    var box = tester.getRect(find.byType(InputDecorator));
+    expect(
+      '$error',
+      contains(
+        '{"x": ${box.center.dx.round()}, "y": ${box.center.dy.round()}}',
+      ),
+    );
+    // And the address it hands back is one that works.
+    var finder = await resolver.resolve(
+      Target.at(box.center.dx, box.center.dy),
+      'enterText',
+    );
+    expect(editableWithin(finder).evaluate(), hasLength(1));
+  });
+
+  testWidgets('the label form is offered once it can be checked', (
+    tester,
+  ) async {
+    var semantics = tester.ensureSemantics();
+    await tester.pumpWidget(_form());
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(
+      () => resolver.resolve('Phone number', 'enterText'),
+    );
+
+    expect('$error', contains('`{"label": "Phone number"}`'));
+    // Checked by resolving it, which is what the refusal claims of it.
+    var finder = await resolver.resolve(
+      const Target.label('Phone number'),
+      'enterText',
+    );
+    expect(editableWithin(finder).evaluate(), hasLength(1));
+    semantics.dispose();
+  });
+
+  /// **The live GUI disproved the first version of this message**, which
+  /// offered `{"label": …}` for whatever it read off the decoration: on the
+  /// studio's own filter field the offered label found nothing, because a
+  /// word had just been typed into it. So the string is resolved before it is
+  /// offered, and a field the semantics tree does not carry gets the point
+  /// alone.
+  testWidgets('a label the semantics tree does not carry is not offered', (
+    tester,
+  ) async {
+    var semantics = tester.ensureSemantics();
+    await tester.pumpWidget(_form(excludeSemantics: true));
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(
+      () => resolver.resolve('Phone number', 'enterText'),
+    );
+
+    expect('$error', contains("belongs to a text field's decoration"));
+    expect('$error', isNot(contains('"label"')));
+    semantics.dispose();
+  });
+
+  testWidgets('a decoration with neither offers only the point', (
+    tester,
+  ) async {
+    var semantics = tester.ensureSemantics();
+    await tester.pumpWidget(_form(label: null, prefix: '+32'));
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(() => resolver.resolve('+32', 'enterText'));
+
+    expect('$error', contains("belongs to a text field's decoration"));
+    expect('$error', isNot(contains('"label"')));
+    expect('$error', contains('its centre'));
+    semantics.dispose();
+  });
+
+  testWidgets('an ordinary covering keeps the ordinary sentence', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_covered());
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(() => resolver.resolve('Buy', 'tap'));
+
+    expect('$error', contains('another widget covers it'));
+    expect('$error', isNot(contains('decoration')));
+  });
+}
+
+/// A field whose only words are its decoration's — the shape both consumer
+/// reports were made on.
+Widget _form({
+  String? label = 'Phone number',
+  String? hint,
+  String? prefix,
+  bool excludeSemantics = false,
+}) {
+  Widget field = TextField(
+    decoration: InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixText: prefix,
+    ),
+  );
+  if (excludeSemantics) field = ExcludeSemantics(child: field);
+  return MaterialApp(
+    home: Scaffold(body: Column(children: [const Text('Sign in'), field])),
+  );
 }
 
 Widget _covered() => MaterialApp(
