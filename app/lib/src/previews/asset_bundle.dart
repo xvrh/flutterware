@@ -235,18 +235,7 @@ class AssetBundleBuilder {
       );
     }
 
-    _link(
-      output,
-      'isolate_snapshot_data',
-      p.join(
-        cache.cacheDir,
-        'artifacts',
-        'engine',
-        'darwin-x64',
-        'isolate_snapshot.bin',
-      ),
-      sync,
-    );
+    _link(output, 'isolate_snapshot_data', cache.isolateSnapshotData, sync);
   }
 
   /// The framework's default shaders — the M3 ink-sparkle ripple and the
