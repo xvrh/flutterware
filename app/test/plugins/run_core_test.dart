@@ -1012,6 +1012,70 @@ void main({
       expect(knobs.every((k) => k.problem == null), isTrue);
     });
 
+    /// **The shape a consumer's entry points actually have.** The values knobs
+    /// replace are usually already `String.fromEnvironment` constants, because
+    /// that is what a `--dart-define` build reads — and the same file being
+    /// compiled by their server is what forces it, since bare literals would
+    /// make the served bundle ignore the defines. So the default is a `const`
+    /// reference, and the form showed a blank for a parameter that plainly had
+    /// one two lines away.
+    ///
+    /// Carried as the spelling, never evaluated: `default` stays empty and
+    /// honest, `defaultSource` says what was written. A project that needs the
+    /// value has `from:`, which is what computes one.
+    test('a const default is reported as written, not as a blank', () async {
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/server_urls.dart': '''
+class ServerUrls {
+  static const localHost = String.fromEnvironment('LOCALDEV_HOST',
+      defaultValue: 'localhost');
+  static const localPort = int.fromEnvironment('LOCALDEV_SERVER_PORT',
+      defaultValue: 8086);
+}
+''',
+        'lib/main.dart': '''
+import 'server_urls.dart';
+void main({
+  String serverHost = ServerUrls.localHost,
+  int serverPort = ServerUrls.localPort,
+}) {}
+''',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var knobs = result.packages.single.entrypoints.single.knobs;
+
+      expect(knobs.map((k) => k.name), ['serverHost', 'serverPort']);
+      // The type still comes off the signature, so the control is right.
+      expect(knobs.map((k) => k.kind), ['string', 'integer']);
+      expect(knobs.map((k) => k.defaultSource), [
+        'ServerUrls.localHost',
+        'ServerUrls.localPort',
+      ]);
+      expect(
+        knobs.map((k) => k.defaultValue),
+        [null, null],
+        reason: 'the value field may not carry source text',
+      );
+      // Not a fault: the parameter is drawable and has a default. Reporting a
+      // problem here would put a warning on the ordinary case.
+      expect(knobs.every((k) => k.problem == null), isTrue);
+    });
+
     test('an entry point taking none offers none', () async {
       // The `Studio (dev)` embarrassment, gone by construction: a package-level
       // scan offered four constants belonging to another entry point, and a

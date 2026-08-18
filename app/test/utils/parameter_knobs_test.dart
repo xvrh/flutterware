@@ -277,4 +277,88 @@ Widget demo({String? host, Backend? backend}) => Placeholder();
       expect(skipped['key'], contains('is `Color`'));
     });
   });
+
+  /// **A default that is a reference, which is the ordinary shape.** Reported
+  /// by a consumer: the values knobs replace are usually already
+  /// `String.fromEnvironment` constants, because that is what a `--dart-define`
+  /// build reads — so the default is a `const` reference rather than a literal,
+  /// and the form showed a blank for a parameter that plainly had one.
+  ///
+  /// The spelling is carried, never evaluated. Following it would mean
+  /// answering an open question (`a + b`, a const constructor, a getter) in
+  /// something that is not a compiler, and resolution — which answers all of
+  /// it — costs 5.5s on an entry point that imports Flutter, on a scan that
+  /// runs on every knob change.
+  group('a default it cannot evaluate', () {
+    test('carries how it is written, and no value', () {
+      var knobs = knobsOf(
+        'void main({String serverHost = ServerUrls.localHost, '
+        'int serverPort = ServerUrls.localPort}) {}',
+      );
+
+      expect(knobs.map((k) => k.name), ['serverHost', 'serverPort']);
+      expect(knobs[0].defaultSource, 'ServerUrls.localHost');
+      expect(knobs[1].defaultSource, 'ServerUrls.localPort');
+      expect(
+        knobs.map((k) => k.knob.defaultValue),
+        [null, null],
+        reason: 'the value field stays honest about not knowing',
+      );
+      expect(
+        knobs.map((k) => k.knob.kind),
+        [KnobKind.string, KnobKind.integer],
+        reason: 'the type is still read off the signature',
+      );
+    });
+
+    /// The pair is what carries the meaning, so they may never both be set:
+    /// a value means there is nothing to spell out, and source text where a
+    /// value belongs is the thing this is careful not to do.
+    test('a literal default carries a value and no source', () {
+      var knobs = knobsOf(
+        "void main({String host = 'localhost', int port = 8080, "
+        'bool verbose = false, double scale = 1.5}) {}',
+      );
+
+      expect(knobs.map((k) => k.knob.defaultValue), [
+        'localhost',
+        8080,
+        false,
+        1.5,
+      ]);
+      expect(knobs.map((k) => k.defaultSource), everyElement(isNull));
+    });
+
+    test('no default at all carries neither', () {
+      var knobs = knobsOf('void main({String? host, int? port}) {}');
+
+      expect(knobs.map((k) => k.knob.defaultValue), everyElement(isNull));
+      expect(knobs.map((k) => k.defaultSource), everyElement(isNull));
+    });
+
+    /// An expression is as unevaluatable as a reference, and just as
+    /// recognisable to whoever wrote it.
+    test('an expression is carried the same way', () {
+      var knobs = knobsOf('void main({int seconds = 60 * 5}) {}');
+
+      expect(knobs.single.defaultSource, '60 * 5');
+      expect(knobs.single.knob.defaultValue, isNull);
+    });
+
+    /// A picker reads its default off the end of whatever was written, so a
+    /// constant holding an enum value already answers — and must not also be
+    /// reported as unevaluated.
+    test('a picker that resolved its constant carries no source', () {
+      var knobs = knobsOf(
+        '''
+import 'backend.dart';
+void main({Backend backend = Backend.staging}) {}
+''',
+        alongside: {'backend.dart': 'enum Backend { dev, staging, prod }'},
+      );
+
+      expect(knobs.single.knob.defaultValue, 'staging');
+      expect(knobs.single.defaultSource, isNull);
+    });
+  });
 }

@@ -2106,6 +2106,12 @@ class RunCore extends PluginCore {
       // config default — the parameter has one, and repeating it is the two
       // places to be wrong this design removes.
       defaultValue: computed ?? descriptor?.defaultValue?.toString(),
+      // Only when nothing above produced a value. A script that answered has
+      // said what the launch will use, and the spelling of a fallback nobody
+      // reaches is noise beside it.
+      defaultSource: computed == null && descriptor?.defaultValue == null
+          ? read?.defaultSource
+          : null,
       options: _knobOptions(descriptor, declared),
       problem: _knobProblem(read, declared, undrawable),
     );
