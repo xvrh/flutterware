@@ -4583,6 +4583,13 @@ final resultShapes = <String, ResultShape>{
                   'The widget-tree JSON captured at the same moment, relative like [image].',
             },
             <String, Object?>{
+              'name': 'keys',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The translation keys on this screen, and the words that belonged to no catalogue — relative like [image].',
+            },
+            <String, Object?>{
               'name': 'semantics',
               'type': 'String',
               'optional': true,
@@ -4777,6 +4784,13 @@ final resultShapes = <String, ResultShape>{
           ],
         },
       },
+      <String, Object?>{
+        'name': 'translations',
+        'type': 'Map<String, Map<String, String>>',
+        'optional': true,
+        'doc':
+            'Every key each catalogue was asked for on the way through this scenario, and what it answered: `catalogue -> key -> value`.',
+      },
     ],
   }),
   'ScenarioRunPackage': ResultShape.fromJson(<String, Object?>{
@@ -4909,6 +4923,13 @@ final resultShapes = <String, ResultShape>{
                     'type': 'String',
                     'doc':
                         'The widget-tree JSON captured at the same moment, relative like [image].',
+                  },
+                  <String, Object?>{
+                    'name': 'keys',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The translation keys on this screen, and the words that belonged to no catalogue — relative like [image].',
                   },
                   <String, Object?>{
                     'name': 'semantics',
@@ -5106,6 +5127,13 @@ final resultShapes = <String, ResultShape>{
                 ],
               },
             },
+            <String, Object?>{
+              'name': 'translations',
+              'type': 'Map<String, Map<String, String>>',
+              'optional': true,
+              'doc':
+                  'Every key each catalogue was asked for on the way through this scenario, and what it answered: `catalogue -> key -> value`.',
+            },
           ],
         },
       },
@@ -5261,6 +5289,13 @@ final resultShapes = <String, ResultShape>{
                           'type': 'String',
                           'doc':
                               'The widget-tree JSON captured at the same moment, relative like [image].',
+                        },
+                        <String, Object?>{
+                          'name': 'keys',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The translation keys on this screen, and the words that belonged to no catalogue — relative like [image].',
                         },
                         <String, Object?>{
                           'name': 'semantics',
@@ -5459,6 +5494,13 @@ final resultShapes = <String, ResultShape>{
                       ],
                     },
                   },
+                  <String, Object?>{
+                    'name': 'translations',
+                    'type': 'Map<String, Map<String, String>>',
+                    'optional': true,
+                    'doc':
+                        'Every key each catalogue was asked for on the way through this scenario, and what it answered: `catalogue -> key -> value`.',
+                  },
                 ],
               },
             },
@@ -5565,6 +5607,13 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'doc':
             'The widget-tree JSON captured at the same moment, relative like [image].',
+      },
+      <String, Object?>{
+        'name': 'keys',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The translation keys on this screen, and the words that belonged to no catalogue — relative like [image].',
       },
       <String, Object?>{
         'name': 'semantics',
@@ -6213,5 +6262,102 @@ final resultShapes = <String, ResultShape>{
         'doc': 'Something the scan depends on had moved since the last read.',
       },
     ],
+  }),
+  'TranslationExportResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'TranslationExportResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'output',
+        'type': 'String',
+        'doc': 'The directory, worktree-relative where it sits inside one.',
+      },
+      <String, Object?>{
+        'name': 'keysJson',
+        'type': 'String',
+        'doc': 'The index a script reads.',
+      },
+      <String, Object?>{
+        'name': 'indexHtml',
+        'type': 'String',
+        'doc': 'The page a person reads.',
+      },
+      <String, Object?>{'name': 'catalogues', 'type': 'int'},
+      <String, Object?>{
+        'name': 'locales',
+        'type': 'int',
+        'doc': 'How many languages the run covered.',
+      },
+      <String, Object?>{
+        'name': 'keys',
+        'type': 'int',
+        'doc': 'Every key the catalogues define.',
+      },
+      <String, Object?>{
+        'name': 'keysSeen',
+        'type': 'int',
+        'doc': 'How many of them this run put on a screen.',
+      },
+      <String, Object?>{
+        'name': 'occurrences',
+        'type': 'int',
+        'doc':
+            'Every place a key was seen — the sum over all keys, and roughly what a service push will cost in calls.',
+      },
+      <String, Object?>{
+        'name': 'shots',
+        'type': 'int',
+        'doc':
+            'Frames written, deduplicated: several keys on one screen cost one file.',
+      },
+      <String, Object?>{
+        'name': 'missingShots',
+        'type': 'int',
+        'doc': 'Frames a step named that were not on disk.',
+      },
+      <String, Object?>{
+        'name': 'fallingBack',
+        'type': 'int',
+        'doc':
+            'Places the app showed the source language to somebody who asked for another one.',
+      },
+      <String, Object?>{
+        'name': 'disagrees',
+        'type': 'int',
+        'doc': 'Places the files and the run disagree — usually a stale build.',
+      },
+      <String, Object?>{
+        'name': 'notReached',
+        'type': 'int',
+        'doc': 'Declared keys this run never asked for.',
+      },
+      <String, Object?>{
+        'name': 'absentFromCatalogue',
+        'type': 'int',
+        'doc': 'Keys the app read that no declared catalogue defines.',
+      },
+      <String, Object?>{
+        'name': 'overflowing',
+        'type': 'int',
+        'doc': 'Sightings where the words did not fit.',
+      },
+      <String, Object?>{
+        'name': 'unkeyed',
+        'type': 'int',
+        'doc': 'Distinct strings on screen that belonged to no catalogue.',
+      },
+      <String, Object?>{
+        'name': 'scenariosFailed',
+        'type': 'int',
+        'doc': 'Scenarios that came back red.',
+      },
+      <String, Object?>{'name': 'durationMs', 'type': 'int'},
+      <String, Object?>{
+        'name': 'open',
+        'type': 'String',
+        'doc': 'How to look at it.',
+      },
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
+    ],
+    'gates': true,
   }),
 };

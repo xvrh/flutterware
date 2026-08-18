@@ -29,6 +29,7 @@ const _declaredPlugins = [
   'flutterware.dev_stack',
   'flutterware.run',
   'flutterware.scenarios',
+  'flutterware.translations',
 ];
 
 /// Drives the server through a real MCP client over an in-memory channel, so

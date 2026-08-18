@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:meta/meta.dart';
 
 import '../devices.dart';
+import '../translations/index.dart';
 import 'fonts.dart';
 
 /// What a folder of scenarios is *for* — the devices and languages worth
@@ -143,6 +144,12 @@ Future<void> runScenarios(
   // declares the files itself, one pass, with the axes the request named.
   // Whatever setup the config does around `testMain` still runs — which is the
   // point of coming through this door rather than parsing the file.
+  // Armed before the probe returns, not after: under the harness this function
+  // is called only to *ask* what the folder is for, so anything below the
+  // early return never runs in the runner's lane. The harness arms it too, for
+  // the folder that declares no config at all.
+  TranslationIndex.recording = true;
+
   if (scenarioProbing) {
     scenarioProbedProfile = profile;
     return;

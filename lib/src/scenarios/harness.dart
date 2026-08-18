@@ -28,6 +28,7 @@ import 'run_args.dart';
 import 'scenario.dart';
 import 'run_listener.dart';
 import '../inspect/semantics_capture.dart';
+import '../translations/index.dart';
 
 // ignore_for_file: implementation_imports
 
@@ -95,6 +96,16 @@ Future<void> _runHarness(
   // a wedged scenario takes ten real minutes to be called wedged.
   scenarioDefaultTimeout = const Timeout(_defaultScenarioTimeout);
   var fonts = await loadScenarioFonts();
+
+  // **The runner's own lane has to arm the index itself.** `runScenarios` also
+  // sets this, but under the harness that call is a *probe*: it returns as soon
+  // as it has handed back the folder's profile, before it reaches the flag. So
+  // the one line there covered a bare `flutter test` and nothing else, and a
+  // project with the seam wired saw every export come back empty. It costs
+  // nothing when no catalogue is registered — the walk reads the flag and
+  // returns — which is why it is on here rather than behind a request field.
+  TranslationIndex.recording = true;
+
   var profiles = await _probeProfiles(configs);
 
   var inspector = GuestInspector(
@@ -749,6 +760,11 @@ Future<Map<String, Object?>> _runOne(
   var steps = <Map<String, Object?>>[];
   var directory = Directory('$outDir/${_fileSafe(file)}/${_fileSafe(name)}')
     ..createSync(recursive: true);
+  // Per scenario, so the read set below belongs to *one* assignment. A matrix
+  // runs its locales sequentially in one process, and an index carried across
+  // them would report the last locale's value for every key — which is exactly
+  // the value the falling-back-to-the-template report has to compare against.
+  TranslationIndex.reset();
 
   scenarioRunListener = (capture) {
     // The verb and what it was aimed at, which is what an automatic capture
@@ -763,8 +779,24 @@ Future<Map<String, Object?>> _runOne(
     // The tree next to the pixels — the step triple's third leg. Written to a
     // file rather than inlined: a run's response stays readable, and the tree
     // is fetched per step by whoever wants it.
-    var tree = inspector.read().toJson();
+    var read = inspector.read();
+    var tree = read.toJson();
     File('$base.tree.json').writeAsStringSync(jsonEncode(tree));
+    // The seventh, and only when a catalogue was wired up: which translation
+    // keys this screen shows and where. Flattened out of the tree it was just
+    // read from — an export asking "which screens show this key" should not
+    // have to parse every node of every step to find out.
+    var keys = read.translationKeys();
+    var unkeyed = read.unkeyedText();
+    if (keys.isNotEmpty || unkeyed.isNotEmpty) {
+      File('$base.keys.json').writeAsStringSync(
+        jsonEncode({
+          'keys': [for (var key in keys) key.toJson()],
+          if (unkeyed.isNotEmpty)
+            'unkeyed': [for (var text in unkeyed) text.toJson()],
+        }),
+      );
+    }
     // And the fourth: what a screen reader gets. Absent rather than empty
     // when there is no semantics tree to read — which under `testWidgets`'s
     // default handle is never, but a capture must not invent a screen.
@@ -843,6 +875,7 @@ Future<Map<String, Object?>> _runOne(
       'width': capture.width,
       'height': capture.height,
       'tree': '$base.tree.json',
+      if (keys.isNotEmpty) 'keys': '$base.keys.json',
       if (semantics != null) 'semantics': '$base.semantics.json',
       'texts': capture.texts,
       'statusBrightness': ?capture.statusBrightness,
@@ -984,6 +1017,15 @@ Future<Map<String, Object?>> _runOne(
     'ms': watch.elapsedMilliseconds,
     'steps': steps,
     if (!passed) 'errors': errors,
+    // Every key every catalogue was asked for on the way through this
+    // scenario, and what it answered — **including the keys whose value never
+    // reached a glyph.** The steps say where a key was *seen*; only this says
+    // it was read at all, which is the difference between "not on this screen"
+    // and "this product never asks for it". Written per scenario, merged
+    // across the run by whoever reads them, because a key reached by one
+    // scenario is reached.
+    if (TranslationIndex.read case var read when read.isNotEmpty)
+      'translations': read,
     // Read by the host, not by a reader: the body is still running in there,
     // so this harness is spent and the next run needs a fresh one.
     if (timedOut) 'timedOut': true,

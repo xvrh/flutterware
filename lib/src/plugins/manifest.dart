@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'address.dart';
 import 'changes_config.dart';
-import 'project_identity.dart';
 import 'package.dart';
 import 'plugin.dart';
+import 'project_identity.dart';
 
 /// What `tool/flutterware.dart` prints: the project's plugin declarations.
 ///

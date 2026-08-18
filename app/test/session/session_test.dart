@@ -51,6 +51,7 @@ void main() {
       'flutterware.dev_stack',
       'flutterware.run',
       'flutterware.scenarios',
+      'flutterware.translations',
     ]);
   });
 

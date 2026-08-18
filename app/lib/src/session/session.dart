@@ -26,6 +26,7 @@ import '../plugins/native/scenarios_core.dart';
 import '../plugins/native/icon_core.dart';
 import '../plugins/native/splash_core.dart';
 import '../plugins/native/previews_core.dart';
+import '../plugins/native/translations_core.dart';
 import '../plugins/plugin_core.dart';
 import '../shell/workspace.dart';
 import '../shell/worktree.dart';
@@ -599,6 +600,7 @@ PluginCoreRegistry defaultCoreRegistry() => PluginCoreRegistry({
   splashPluginId: splashCoreFactory,
   uiCatalogPluginId: uiCatalogCoreFactory,
   devStackPluginId: devStackCoreFactory,
+  translationsPluginId: translationsCoreFactory,
 });
 
 class SessionException implements Exception {

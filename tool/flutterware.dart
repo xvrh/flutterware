@@ -302,4 +302,22 @@ void main() => Flutterware.configure((fw) {
       ],
     ),
   );
+
+  // **The demo shop's copy, and where it lives.** `examples/example` funnels
+  // every string through one function, and its scenario config hands that
+  // funnel `indexTranslations('shop')` — so a run can say which key is on
+  // which screen. This declares the other half: where the words themselves
+  // are, which is the only thing a run cannot work out for itself.
+  fw.use(
+    Translations(
+      packages: [
+        TranslationsPackage(
+          example,
+          catalogues: [
+            TranslationCatalogue(name: 'shop', files: 'assets/i18n/*.json'),
+          ],
+        ),
+      ],
+    ),
+  );
 });

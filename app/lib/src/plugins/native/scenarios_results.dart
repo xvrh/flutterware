@@ -232,6 +232,7 @@ class ScenarioRunOutcome {
     this.steps = const [],
     this.stepCount = 0,
     this.errors = const [],
+    this.translations,
   });
 
   final String file;
@@ -259,6 +260,20 @@ class ScenarioRunOutcome {
   /// just before it.
   final List<ScenarioRunError> errors;
 
+  /// Every key each catalogue was asked for on the way through this scenario,
+  /// and what it answered: `catalogue -> key -> value`.
+  ///
+  /// **Per scenario, and that is load-bearing.** A scenario runs under one
+  /// assignment, so this belongs to one locale — which is what lets the
+  /// falling-back report compare a rendered string against the file that was
+  /// supposed to supply it. Carried across a whole run it would hold whichever
+  /// locale ran last.
+  ///
+  /// Wider than the steps: a key read and never rendered is here and in no
+  /// step, which is the difference between "not on this screen" and "this
+  /// product never asks for it".
+  final Map<String, Map<String, String>>? translations;
+
   /// This outcome with [keep] of its steps; the rest are on disk.
   ScenarioRunOutcome carrying(List<ScenarioRunStep> keep) => ScenarioRunOutcome(
     file: file,
@@ -269,6 +284,7 @@ class ScenarioRunOutcome {
     steps: keep,
     stepCount: stepCount,
     errors: errors,
+    translations: translations,
   );
 
   /// This outcome with its steps left on disk.
@@ -296,6 +312,7 @@ class ScenarioRunStep {
     required this.width,
     required this.height,
     required this.tree,
+    this.keys,
     required this.texts,
     required this.address,
     this.root = '',
@@ -373,6 +390,14 @@ class ScenarioRunStep {
 
   /// The widget-tree JSON captured at the same moment, relative like [image].
   final String tree;
+
+  /// The translation keys on this screen, and the words that belonged to no
+  /// catalogue — relative like [image]. Null when no catalogue was wired up,
+  /// which is every project that has not asked for this.
+  ///
+  /// A file rather than an inlined list, like [tree] and for the same reason:
+  /// a run's response stays readable, and the export fetches it per step.
+  final String? keys;
 
   /// The semantics-tree JSON — what a screen reader gets — relative like
   /// [image]. Null on artifacts from before the capture existed, and when the
