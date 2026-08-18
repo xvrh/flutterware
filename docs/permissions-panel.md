@@ -161,6 +161,56 @@ app, and iOS then suspends it.
 **On Android it works best**, and even there the status you can read is
 coarser than it looks. Which brings us to:
 
+## A panel scoped to something that opens and closes
+
+The plugin above is declared in the devbar's plugin list, which is right for a
+panel the app has all the time. Some panels are not like that: a database
+opened at login and closed at logout has nothing to hand a devbar built at
+`runApp`, and the same goes for anything belonging to a checkout, a document, a
+selected workspace.
+
+Two shapes, and the first is usually the better one.
+
+**Keep the panel and let it say why it is empty.** Close over the lookup rather
+than over the thing, resolve it inside each handler, and throw a sentence when
+there is nothing to resolve. `DatabaseAdapter`'s own documentation carries the
+worked version, `DatabaseUnavailable` and all.
+
+**Or scope the panel to the subtree** with `AddDevbarPanel`, which serves a
+`DevbarPanelSource` for exactly as long as it is mounted:
+
+```dart
+AddDevbarPanel(
+  source: _session.databasePanel,
+  child: signedInApp,
+)
+```
+
+Or, when the scope is a service rather than a subtree — a session opened at
+login and closed at logout has no subtree to hang from — the same call without
+the widget:
+
+```dart
+_panel = DevbarPanels.add(DatabasePanelSource(adapter));  // at login
+_panel.remove();                                          // at logout
+```
+
+`AddDevbarPanel` is that call with the removal wired to `dispose`, the way
+`AddDevbarButton` wraps `UiService.addButton`. Use the widget when a subtree
+already has the lifetime you want, and the handle when it does not — inserting
+a widget above an existing subtree to borrow its lifetime remounts it.
+
+The list of panels is announced on every change and every host re-reads it, so
+a panel appearing halfway through a run reaches the cockpit, `fw` and MCP with
+none of them knowing what a session is.
+
+The reason to prefer the first: **a panel that is not there cannot explain
+itself.** Ask for `db:main` when it has gone and every surface answers *"this
+app declares no panel db:main"* — the same sentence whether the app has no
+database at all or the user is one tap away from opening one. Reach for
+`AddDevbarPanel` when the panel genuinely does not exist outside its scope,
+not merely when its data does not.
+
 ## The traps worth knowing
 
 If you use `permission_handler`, two of its states do not mean what the names

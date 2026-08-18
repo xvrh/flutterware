@@ -384,6 +384,69 @@ void main() {
       );
     });
   });
+
+  group('a database that is not open yet', () {
+    /// The sentence an app hands [DatabaseUnavailable]. Written once here so
+    /// the test reads as "exactly this, nowhere altered".
+    const reason = 'No session is open — sign in to reach the database.';
+
+    /// Sends one request the way an attached host does, and answers with the
+    /// error frame it got — the only path the panel's own `run` cannot show,
+    /// because the point is what the message looks like after it crosses.
+    Future<Map<String, Object?>> requestError(
+      Panel panel,
+      String method, [
+      Map<String, Object?> params = const {},
+    ]) async {
+      var peer = _Peer();
+      core.handleFrame(peer, {
+        'ch': panel.id,
+        't': 'req',
+        'id': 7,
+        'm': method,
+        'p': params,
+      });
+      await pumpEventQueue();
+      return (peer.frames.singleWhere((f) => f['t'] == 'err')['p']! as Map)
+          .cast<String, Object?>();
+    }
+
+    test('the sentence crosses the wire with nothing in front of it', () async {
+      db.onQuery = (_, _) async => throw DatabaseUnavailable(reason);
+      var (panel, _) = mount(db.adapter());
+
+      expect(await requestError(panel, 'query', {'sql': 'SELECT 1'}), {
+        'message': reason,
+      });
+    });
+
+    test('a StateError would not — which is why the type exists', () async {
+      db.onQuery = (_, _) async => throw StateError(reason);
+      var (panel, _) = mount(db.adapter());
+
+      expect(
+        (await requestError(panel, 'query', {'sql': 'SELECT 1'}))['message'],
+        'Bad state: $reason',
+      );
+    });
+
+    test('the panel stays listed, with everything it declared', () async {
+      db.onQuery = (_, _) async => throw DatabaseUnavailable(reason);
+      var (panel, _) = mount(db.adapter(writable: true));
+      // Reading the schema is the first thing the cockpit does, and it fails
+      // like everything else — without taking the declaration with it.
+      expect(await requestError(panel, 'fw:state', {'id': 'schema'}), {
+        'message': reason,
+      });
+
+      var descriptor = panels.descriptors.single;
+      expect(descriptor.id, 'db:main');
+      expect(
+        descriptor.actions.map((a) => a.id),
+        containsAll(['query', 'execute']),
+      );
+    });
+  });
 }
 
 class _Peer implements InspectorPeer {
