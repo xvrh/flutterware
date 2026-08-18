@@ -2384,26 +2384,43 @@ class _FileHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Flexible(
-                child: Text(
-                  name,
-                  style: context.type.bodyStrong,
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: false,
+              // **The name and its directory are one flexible thing, and the
+              // button is the other.** They used to be three peers — two
+              // [Flexible]s and a [Spacer], each with the default flex of 1 —
+              // so the free space was split in thirds and the [Spacer] only
+              // ever pushed the button a third of the way over. Measured on a
+              // root file in a 950 px header: the button ended 323 px short of
+              // the right edge, reading as floating rather than trailing.
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: context.type.bodyStrong,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                    ),
+                    if (directory.isNotEmpty) ...[
+                      const Gap(FwSpacing.sm),
+                      Flexible(
+                        child: Text(
+                          directory,
+                          style: context.type.micro.copyWith(
+                            color: colors.mut3,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (directory.isNotEmpty) ...[
-                const Gap(FwSpacing.sm),
-                Flexible(
-                  child: Text(
-                    directory,
-                    style: context.type.micro.copyWith(color: colors.mut3),
-                    overflow: TextOverflow.ellipsis,
-                    softWrap: false,
-                  ),
-                ),
-              ],
-              const Spacer(),
+              const Gap(FwSpacing.md),
               Tappable(
                 onTap: onComment,
                 borderRadius: BorderRadius.circular(context.radii.radiusSmall),
