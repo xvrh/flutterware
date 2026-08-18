@@ -1186,6 +1186,12 @@ class _IndexPane extends StatelessWidget {
     // makes the other tab look like the place the file went.
     var pinned = buildImportantRows(set).length;
 
+    // **This pane keeps an 8 px gutter where the rest of the screen uses
+    // [panelGutter]'s 24**, so its content starts 16 px left of the page title
+    // above it. That step is deliberate, not an oversight: the column is a
+    // fixed 320 px and 24 px gutters would spend 48 px of it on air, in a list
+    // whose file names already ellipsise. A panel narrow enough to be a list
+    // is allowed its own gutter; a wider one is not.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

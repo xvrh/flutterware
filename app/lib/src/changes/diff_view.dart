@@ -129,10 +129,36 @@ class IndexFileRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       softWrap: false,
                     ),
+                  // **[FwPalette.micro]'s own [FwPalette.mut], not a step
+                  // down to [FwPalette.mut3].** This line carries the reason a
+                  // rule pinned the row, which on the *Important* tab is the
+                  // only answer to *why is this here* — and mut3 is documented
+                  // as the step where "text is decoration; do not put a
+                  // sentence in it that the reader needs". Measured on white:
+                  // mut3 #c4c7cd is 1.70:1 and mut2 #9aa1ac is 2.62:1, against
+                  // the 4.5:1 normal text is meant to clear; mut #6b7280 is
+                  // 4.83:1 and is the only muted step that does.
                   if (_notes.isNotEmpty)
-                    Text(
-                      _notes.join(' · '),
-                      style: context.type.micro.copyWith(color: colors.mut3),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          for (var (index, note) in _notes.indexed) ...[
+                            if (index > 0) const TextSpan(text: ' · '),
+                            TextSpan(
+                              text: note.text,
+                              // **Uncommitted keeps the amber the summary
+                              // gives it.** The header counts these in
+                              // [FwPalette.amber]; a row that then whispers the
+                              // same fact in grey makes the reader work out
+                              // that the two are about the same thing.
+                              style: note.amber
+                                  ? TextStyle(color: colors.amber)
+                                  : null,
+                            ),
+                          ],
+                        ],
+                      ),
+                      style: context.type.micro,
                       overflow: TextOverflow.ellipsis,
                       softWrap: false,
                     ),
@@ -169,15 +195,15 @@ class IndexFileRow extends StatelessWidget {
   /// directory is deliberately **not** among these — that is what put it last
   /// in a `·`-joined string behind `uncommitted`, where it was the first thing
   /// to be ellipsised away.
-  List<String> get _notes => [
+  List<({String text, bool amber})> get _notes => [
     // **The rule first.** A row that was pinned has to say what pinned it or
     // the pin is magic, and magic is what people learn to ignore.
-    ?reason,
+    if (reason case var it?) (text: it, amber: false),
     // A rename says where it came from: `R` alone is a status nobody can act
     // on, and the index is where you decide whether to look.
-    if (file.oldPath case var it?) 'from $it',
-    if (uncommitted) 'uncommitted',
-    if (file.isBinary) 'binary',
+    if (file.oldPath case var it?) (text: 'from $it', amber: false),
+    if (uncommitted) (text: 'uncommitted', amber: true),
+    if (file.isBinary) (text: 'binary', amber: false),
   ];
 
   Color _tone(FwPalette colors) => switch (file.status) {
