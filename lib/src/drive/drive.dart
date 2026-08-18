@@ -212,12 +212,7 @@ class Drive {
   /// below is for.
   Future<DriveStep> enterText(dynamic target, String text, {Duration? settle}) {
     return _act('enterText', target, settle, (finder) async {
-      var editable = find.descendant(
-        of: finder,
-        matching: find.byType(EditableText),
-        matchRoot: true,
-      );
-      var elements = editable.evaluate().toList();
+      var elements = editableWithin(finder).evaluate().toList();
       if (elements.length != 1) {
         throw TargetError(
           TargetFailure.notFound,

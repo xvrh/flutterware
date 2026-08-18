@@ -149,6 +149,19 @@ void main() {
     expect(find.text('bought second'), findsOneWidget);
   });
 
+  /// **Reported by a consumer driving a form.** A point is the target for a
+  /// control with no words, a field labelled from its decoration is one, and
+  /// `enterText` at a point resolves *below* the editable — so the search the
+  /// verb makes downwards found nothing to type into.
+  scenario('a point inside a field types into it', (s) async {
+    await s.pumpWidget(const _FormApp());
+    var box = s.tester.getRect(find.byType(TextField));
+
+    await s.enterText(Target.at(box.center.dx, box.center.dy), '918406');
+
+    expect(find.text('918406'), findsOneWidget);
+  });
+
   scenario('frames the verbs did not draw are counted onto the next step', (
     s,
   ) async {
@@ -301,6 +314,17 @@ class _LabelledAppState extends State<_LabelledApp> {
           Text(_note),
         ],
       ),
+    ),
+  );
+}
+
+class _FormApp extends StatelessWidget {
+  const _FormApp();
+
+  @override
+  Widget build(BuildContext context) => const MaterialApp(
+    home: Scaffold(
+      body: TextField(decoration: InputDecoration(labelText: 'Phone number')),
     ),
   );
 }
