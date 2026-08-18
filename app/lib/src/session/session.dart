@@ -431,15 +431,29 @@ class Session {
     String action,
     Map<String, Object?> arguments,
   ) {
-    if (arguments.isEmpty) return arguments;
     var declaredAction = core.report.actions
         .where((candidate) => candidate.id == action)
         .firstOrNull;
-    // Not refused here, and deliberately: the action does not exist, and
-    // `PluginCore.invoke` says exactly that and lists the ones that do.
-    // Complaining about a parameter first would answer a question about the
-    // arguments of nothing.
-    if (declaredAction == null) return arguments;
+    // **Refused here, before dispatch, and that is what closes the hole.**
+    //
+    // This used to return the arguments untouched and leave the complaining to
+    // `PluginCore.invoke`, on the sound reasoning that answering "no such
+    // parameter" for an action that does not exist describes the arguments of
+    // nothing. The reasoning holds; the assumption under it did not. A core
+    // whose `invoke` *handles* an id it never declared never reaches that
+    // refusal — it runs, and the argument check below is keyed on the
+    // declaration, so every argument it was given was waved through
+    // unexamined. `run`'s `screenshot` was exactly that for the life of the
+    // cockpit, which is how `--output` came to be silently ignored in favour
+    // of the real `out`.
+    //
+    // Declared is therefore what makes an action invocable, not implemented.
+    // The words are `PluginCore`'s own, so a caller gets one sentence whether
+    // they arrived through a session or straight at a core.
+    if (declaredAction == null) {
+      throw PluginCore.unknownAction(core.id, action, core.report.actions);
+    }
+    if (arguments.isEmpty) return arguments;
     var declared = {
       for (var parameter in declaredAction.parameters) parameter.id: parameter,
     };

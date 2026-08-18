@@ -77,9 +77,54 @@ class GuestDrive {
     });
   }
 
+  /// Whether anything has been built yet.
+  ///
+  /// Null from the moment the binding exists until `runApp` mounts something —
+  /// which is a window this extension is fully alive inside, because the
+  /// generated wrapper installs the guest *around* the app's `main` rather
+  /// than after it. An app whose `main` throws never leaves that window: the
+  /// isolate lives, the VM service answers, `ext.flutterware.act` is
+  /// registered, and every verb behind it walks a tree that is not there.
+  static bool get _hasTree => WidgetsBinding.instance.rootElement != null;
+
+  /// What to say instead of crashing in that window.
+  ///
+  /// It used to crash, and the crash was the worst possible one to read: the
+  /// finder behind `observe` dereferences the root element, so the reply was
+  /// `Null check operator used on a null value` — a sentence that names
+  /// flutterware and sends whoever read it to debug the wrong program. Every
+  /// surface said something wrong or internal about the one failure an agent
+  /// is least able to diagnose. Reported by a consumer, who lost the time.
+  static const _notStarted =
+      'the app has not called runApp, so there is no widget tree to act on or '
+      'observe. This is the app failing to start rather than flutterware '
+      'failing to reach it — its `main` most likely threw before `runApp`, and '
+      'the engine writes that reason to the launcher log where no daemon event '
+      'carries it. `inspect {errors: true}` prints those lines.';
+
+  /// One transaction, without the extension around it.
+  ///
+  /// [registerExtensions] is `dart:developer` and a VM service away from a
+  /// widget test; the transaction is where the behaviour lives.
+  @visibleForTesting
+  Future<Map<String, Object?>> debugDispatch(Map<String, String> params) =>
+      _dispatch(params);
+
   Future<Map<String, Object?>> _dispatch(Map<String, String> params) async {
     var settle = _durationOf(params, 'settleMs');
     var before = _beforeAct();
+    // Refused before the verb, not inside it: with nothing mounted there is
+    // no target to resolve and no screen to describe, so every verb fails the
+    // same way and only one of them needs to say so. The observation still
+    // rides along — the logs and the errors in it are the whole of what this
+    // app has to say about itself.
+    if (!_hasTree) {
+      return {
+        'error': _notStarted,
+        'failure': 'notStarted',
+        ...await _observe(params, before),
+      };
+    }
     // Taken before the verb runs: what is in the buffer now happened on the
     // way here, which is the step these entries precede in the journal.
     var human = humanActions?.take();
@@ -239,18 +284,26 @@ class GuestDrive {
     // difference between the filtered and unfiltered spellings is 78KB against
     // 121KB over a local socket. Compact, because the host expands the
     // spelling before anything that consumes nodes sees it.
-    var tree = inspector?.read().toJson(compact: true);
+    //
+    // **Every one of these three needs a mounted app**, and this method is
+    // also what answers for one that has none — see [_notStarted]. Walking the
+    // tree, projecting the texts and reading the semantics all end at a null
+    // root, so they are skipped rather than guarded individually. What is left
+    // is the half that does not need a tree, and in that window it is the only
+    // half worth having: the logs and the errors.
+    var hasTree = _hasTree;
+    var tree = hasTree ? inspector?.read().toJson(compact: true) : null;
 
     return {
       'lifecycle': binding.lifecycleState?.name,
-      'texts': drive.visibleTexts(),
+      'texts': hasTree ? drive.visibleTexts() : const <String>[],
       'tree': ?tree,
       // The semantics tree, as the app publishes it — the same leg a scenario
       // step has kept for two milestones, so the run journal and a scenario
       // step archive the same four things. The nodes already carry the label
       // and the selected state read out of it; this is the rest, for a
       // reviewer asking what a screen reader would have said.
-      'semantics': ?inspector?.readSemantics().root,
+      'semantics': ?(hasTree ? inspector?.readSemantics().root : null),
       // Always taken, never conditional. Whether the caller wants to *see* a
       // picture is the host's business; whether the step is photographed is
       // not, because a journal missing the frame cannot answer a question

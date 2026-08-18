@@ -242,8 +242,20 @@ class _RecordingCore extends PluginCore {
 
   final void Function(Map<String, Object?>) onInvoke;
 
+  // Declared, because declared is what makes an action invocable and a
+  // parameter acceptable. This used to answer `go` while declaring nothing,
+  // which is the shape that let `run`'s undeclared `screenshot` take an
+  // unchecked `--output` — see `session/undeclared_action_test.dart`. What
+  // this test is *about* is that the arguments arrive unchanged, so it keeps
+  // the argument and gains the declaration.
   @override
-  PluginReport get report => PluginReport(id: host.id, label: host.label);
+  PluginReport get report => PluginReport(
+    id: host.id,
+    label: host.label,
+    actions: const [
+      PluginAction('go', 'Go', parameters: [ActionParameter('k', 'K')]),
+    ],
+  );
 
   @override
   Future<Object?> invoke(

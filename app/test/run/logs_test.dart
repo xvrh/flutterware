@@ -163,4 +163,70 @@ void main() {
     var path = write(['', '   ', 'something']);
     expect(readRunLog(path).map((l) => l.text), ['something']);
   });
+
+  group('the engine says it threw', () {
+    /// **The shape a consumer hit.** A `main` that awaited a config fetch
+    /// against a dead port threw before `runApp`, and the app then sat there
+    /// answering its VM service with nothing mounted. No `FlutterError`, no
+    /// `app.log`, no `daemon.logMessage` — the engine writes this straight to
+    /// the process's stderr, and `errors: true` used to answer `[]` for a log
+    /// that plainly contained the reason.
+    const unhandled =
+        '[ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled '
+        'Exception: ClientException with SocketException: Connection refused '
+        '(OS Error: Connection refused, errno = 61), '
+        'uri=http://localhost:8080/config';
+
+    test('an unhandled exception before runApp is an error line', () {
+      var path = write(['Launching lib/main.dart on macOS...', unhandled]);
+
+      var errors = readRunLog(path, errorsOnly: true);
+
+      expect(errors, hasLength(1));
+      expect(errors.single.text, unhandled);
+      expect(errors.single.source, RunLogSource.tool);
+    });
+
+    /// The guard on the rule this bends. `[IMPORTANT:…]` is the same emitter
+    /// in the same format at a severity that is not a fault, and it rides
+    /// every launch on macOS — matching it would make "errors" meaningless on
+    /// the platform most runs happen on.
+    test('the engine talking about Impeller is not an error', () {
+      var path = write([impellerLine]);
+
+      expect(readRunLog(path, errorsOnly: true), isEmpty);
+      expect(readRunLog(path).single.error, isFalse);
+    });
+
+    /// The older, larger rule: [RunLogLine.error] is not inferred from prose.
+    /// A fixed prefix is not prose, and neither of these has one.
+    test('prose about errors is still not an error', () {
+      var path = write([
+        'flutter: no errors found',
+        'Error: this line is the tool talking, and carries no severity',
+        'building with error reporting enabled',
+      ]);
+
+      expect(readRunLog(path, errorsOnly: true), isEmpty);
+    });
+
+    test('a FATAL line counts too', () {
+      const fatal =
+          '[FATAL:flutter/shell/common/shell.cc(93)] Check failed: could not '
+          'create the engine.';
+      var path = write([fatal]);
+
+      expect(readRunLog(path, errorsOnly: true), hasLength(1));
+    });
+
+    /// The app's own stream can carry one as well, and it stays the app's.
+    test('an engine line behind the app prefix keeps its source', () {
+      var path = write(['flutter: $unhandled']);
+
+      var errors = readRunLog(path, errorsOnly: true);
+
+      expect(errors.single.source, RunLogSource.app);
+      expect(errors.single.text, unhandled);
+    });
+  });
 }

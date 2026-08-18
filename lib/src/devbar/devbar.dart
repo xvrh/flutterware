@@ -29,8 +29,8 @@ class Devbar extends StatefulWidget {
   /// Hold the plugins and draw nothing at all.
   ///
   /// **Not the same as `overlayVisible: false`,** which only hides the button.
-  /// That leaves the overlay's `Stack`, its `Directionality`, its dialog and
-  /// toast layers and [DevbarAppWrapper]'s `Container`/`FittedBox` in the tree.
+  /// That leaves the overlay's `Stack`, its dialog and toast layers and
+  /// [DevbarAppWrapper]'s `Container`/`FittedBox` in the tree.
   /// With the panel shut and no plugin contributing a button those paint the
   /// same pixels — measured, in `test/devbar/headless_test.dart` — but a
   /// screenshot is not the only thing the cockpit reads: every `act` reply
@@ -138,40 +138,52 @@ class DevbarState extends State<Devbar> {
         // skipped. [FeatureFlagDevbar] stays either way — it is what turns a
         // declared flag into a variable, and a flag that only worked when
         // somebody could see the panel would be a trap.
-        if (widget.isHeadless) {
-          return FeatureFlagDevbar(child: widget.child);
-        }
-
+        //
+        // **So does the [Directionality], for a sharper reason.** It is here
+        // for the overlay's own [Stack] — but the app builds under it too, so
+        // a host app with a widget needing one *above* its `MaterialApp` (an
+        // environment banner, a device frame, a watermark) has been inheriting
+        // it. Dropped with the overlay, that app rendered nothing and said
+        // `No Directionality widget found` — and only ever when flutterware
+        // launched it, because [Devbar.isHeadless] is `GuestChannels.installed`
+        // and so a plain `flutter run` took the branch that supplied one. The
+        // author sees a failure in the one path they cannot reproduce, in a
+        // widget they wrote. Skipping the overlay may only skip the overlay.
         return FeatureFlagDevbar(
           child: Directionality(
             textDirection: TextDirection.ltr,
-            child: Stack(
-              children: <Widget>[
-                Positioned.fill(
-                  child: ValueStreamBuilder<OpenState?>(
-                    stream: ui.openState,
-                    builder: (context, openState) {
-                      return AnimatedOpacity(
-                        duration: const Duration(milliseconds: 500),
-                        opacity: openState == null ? 0 : 1,
-                        child: DevbarPanel(),
-                      );
-                    },
+            child: widget.isHeadless
+                ? widget.child
+                : Stack(
+                    children: <Widget>[
+                      Positioned.fill(
+                        child: ValueStreamBuilder<OpenState?>(
+                          stream: ui.openState,
+                          builder: (context, openState) {
+                            return AnimatedOpacity(
+                              duration: const Duration(milliseconds: 500),
+                              opacity: openState == null ? 0 : 1,
+                              child: DevbarPanel(),
+                            );
+                          },
+                        ),
+                      ),
+                      DevbarAppWrapper(
+                        child: KeyedSubtree(key: _appKey, child: widget.child),
+                      ),
+                      Positioned.fill(child: OverlayDialog()),
+                      Visibility(
+                        visible: widget.overlayVisible,
+                        child: AddDevbarButton(
+                          button: DevbarIcon(
+                            onTap: ui.open,
+                            icon: Icons.bug_report,
+                          ),
+                        ),
+                      ),
+                      ToastsOverlay(),
+                    ],
                   ),
-                ),
-                DevbarAppWrapper(
-                  child: KeyedSubtree(key: _appKey, child: widget.child),
-                ),
-                Positioned.fill(child: OverlayDialog()),
-                Visibility(
-                  visible: widget.overlayVisible,
-                  child: AddDevbarButton(
-                    button: DevbarIcon(onTap: ui.open, icon: Icons.bug_report),
-                  ),
-                ),
-                ToastsOverlay(),
-              ],
-            ),
           ),
         );
       },

@@ -134,6 +134,61 @@ void main() {
     expect(finder.evaluate(), hasLength(1));
   });
 
+  /// **Reported by a consumer driving a login screen.** The screenshot in the
+  /// same reply rendered bullets and the `texts` beside it carried the
+  /// password in clear — into the agent's transcript, into any log that
+  /// transcript reaches, and onto disk in the run's journal and in a
+  /// scenario's captured step, all of which archive this projection whole.
+  testWidgets('an obscured field reports what it draws, not what it holds', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              TextField(
+                obscureText: true,
+                controller: TextEditingController(text: 'hunter2!'),
+              ),
+              TextField(controller: TextEditingController(text: 'ada@dev.io')),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    var texts = visibleTextsOf(tester);
+
+    expect(texts, isNot(contains('hunter2!')));
+    expect(texts, contains('••••••••'), reason: 'the length still shows');
+    expect(
+      texts,
+      contains('ada@dev.io'),
+      reason: 'an ordinary field is untouched',
+    );
+  });
+
+  /// The mask is the field's own [EditableText.obscuringCharacter], so the
+  /// projection keeps matching the pixels for an app that picked another one.
+  testWidgets('the mask is the character the field actually draws', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TextField(
+            obscureText: true,
+            obscuringCharacter: '*',
+            controller: TextEditingController(text: 'abc'),
+          ),
+        ),
+      ),
+    );
+
+    expect(visibleTextsOf(tester), contains('***'));
+  });
+
   testWidgets('an nth index past the end is refused with the count, not a '
       'RangeError', (tester) async {
     await tester.pumpWidget(_covered());

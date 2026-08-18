@@ -50,7 +50,7 @@ AppDebugPortEvent _$AppDebugPortEventFromJson(Map<String, dynamic> json) =>
       json['appId'] as String,
       (json['port'] as num).toInt(),
       Uri.parse(json['wsUri'] as String),
-      Uri.parse(json['baseUri'] as String),
+      json['baseUri'] == null ? null : Uri.parse(json['baseUri'] as String),
     );
 
 AppProgressEvent _$AppProgressEventFromJson(Map<String, dynamic> json) =>

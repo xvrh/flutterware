@@ -30,6 +30,46 @@ final _saysError = RegExp(
   caseSensitive: false,
 );
 
+/// The `flutter run --machine` argv a launch runs.
+///
+/// Split out of [launchApp] because it is the one part of a launch that is a
+/// pure function of its inputs, and the flag rules below are worth holding to
+/// a test rather than to a reading of a process that has to be spawned.
+List<String> runCommand({
+  required String flutter,
+  required String device,
+  required String target,
+  required String? flavor,
+  required bool targetsWeb,
+  Map<String, String> defines = const {},
+}) => [
+  flutter,
+  'run',
+  '--machine',
+  '--device-id',
+  device,
+  '--target',
+  target,
+  // Before the defines, because a flavor decides which variant is built and
+  // the defines only decide what goes into it.
+  //
+  // **Never on web, which is where most of these flavors come from.** A
+  // resolved flavor is often the pubspec's `flutter: default-flavor:`, and
+  // that field exists *because* web takes no `--flavor` — it is how a web
+  // build gets `appFlavor` populated at all. Passing it back on the command
+  // line inverts what the field is for, and `flutter run` answers with a
+  // deprecation warning on every launch, whose wording does not promise to
+  // stay a warning. Everything else takes the flag: read off the pinned SDK,
+  // `supportsFlavors` is true on macOS, Linux and Windows as well as Android
+  // and iOS, and web is what inherits the `false` default. A device the daemon
+  // has never described reads as not-web and keeps the flag, as before.
+  if (flavor != null && !targetsWeb) ...['--flavor', flavor],
+  for (var define in defines.entries) ...[
+    '--dart-define',
+    '${define.key}=${define.value}',
+  ],
+];
+
 /// Starts `flutter run --machine` as a process nobody is waiting on, and
 /// announces it in the run dir.
 ///
@@ -107,22 +147,14 @@ Future<RunHandle> launchApp({
   if (!guestTarget.guest) {
     _logger.info('Launching without the run guest: ${guestTarget.reason}');
   }
-  var command = [
-    sdk.flutter,
-    'run',
-    '--machine',
-    '--device-id',
-    device,
-    '--target',
-    guestTarget.target,
-    // Before the defines, because a flavor decides which variant is built and
-    // the defines only decide what goes into it.
-    if (flavor != null) ...['--flavor', flavor],
-    for (var define in defines.entries) ...[
-      '--dart-define',
-      '${define.key}=${define.value}',
-    ],
-  ];
+  var command = runCommand(
+    flutter: sdk.flutter,
+    device: device,
+    target: guestTarget.target,
+    flavor: flavor,
+    targetsWeb: targetsWeb,
+    defines: defines,
+  );
 
   // `exec "$@"` replaces the shell with flutter, so the pid this returns *is*
   // the launcher's — which matters, because the handle's `launcherPid` is what

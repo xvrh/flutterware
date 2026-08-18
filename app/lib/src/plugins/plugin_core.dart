@@ -46,12 +46,25 @@ abstract class PluginCore {
   Future<Object?> invoke(
     String actionId, {
     Map<String, Object?> arguments = const {},
-  }) async {
-    var declared = report.actions.map((action) => action.id).toList();
-    throw ArgumentError.value(
+  }) async => throw unknownAction(id, actionId, report.actions);
+
+  /// The refusal for an action a plugin does not declare.
+  ///
+  /// **Shared, because the session refuses before dispatch and this refuses
+  /// after it**, and two spellings of one sentence is how a caller learns that
+  /// the answer depends on which door they came through. The session's check
+  /// is the one that matters — see `Session.invoke` — and this stays as the
+  /// backstop for a core invoked directly.
+  static ArgumentError unknownAction(
+    String pluginId,
+    String actionId,
+    List<PluginAction> actions,
+  ) {
+    var declared = actions.map((action) => action.id).toList();
+    return ArgumentError.value(
       actionId,
       'actionId',
-      'unknown action on $id. '
+      'unknown action on $pluginId. '
           '${declared.isEmpty ? 'It declares none.' : 'Declared: ${declared.join(', ')}'}',
     );
   }

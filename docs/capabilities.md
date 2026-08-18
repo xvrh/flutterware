@@ -620,6 +620,34 @@ note: String?
 | `lines` | integer | no | 200 | How many of the most recent lines to return |
 | `errors` | boolean | no | true | Report the lines the launcher marked as errors — never guessed from the text. On by default, and with no other flag it is the whole answer. |
 
+#### `screenshot` — Screenshot
+
+A PNG of a running app, written to a file. The picture alone, where `inspect {screenshot: true}` answers it beside the tree and the logs from one reading. Platform views — native maps, webviews, video — will not appear: they are composited by the OS rather than by Flutter's layer tree, so nothing rendering that tree can photograph them.
+
+```sh
+fw run run screenshot [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--out=…] [--maxSide=…]
+```
+
+Returns `RunScreenshotResult`:
+
+```
+device: String
+entrypoint: String
+path: String   # Where the PNG was written.
+bytes: int
+ms: int
+note: String?   # Said out loud when the picture may not be the whole story — a run with platform views in it, which Flutter's layer tree cannot photograph.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
+| `out` | string | no | — | Where to write the PNG. A file beside the run's log when omitted, overwritten on each call. |
+| `maxSide` | integer | no | — | Scale the render so its longest side is at most this many pixels. The render is scaled, not the encoding, so this is what bounds the cost rather than the file. |
+
 #### `act` — Act
 
 One drive transaction against a running app: resolve the target, check the pointer can reach it (retrying through route transitions until a deadline), perform the verb, settle, and observe — texts, a screenshot, what was printed — all in one reply describing one moment. Needs the app to have been launched by flutterware (the launch wraps it in the drive guest); anything else is inspect-only. A refusal still observes: the error comes back with the screen it happened on. Every step is appended to the run's journal. On a phone the app has to be in the foreground: iOS suspends a backgrounded app, which answers nothing until somebody brings it back — that comes back as a timeout saying so, never a hang. A hidden desktop window is fine, and so is a backgrounded Android app.

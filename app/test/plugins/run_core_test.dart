@@ -128,6 +128,26 @@ void main() {
   });
 
   group('report', () {
+    /// **`screenshot` was dispatched and never declared**, which made it
+    /// invisible to `fw run run`, unanswerable by `--help`, and exempt from
+    /// the argument check — that check is keyed on the declaration. A
+    /// consumer's `screenshot --output=…` therefore wrote the default path and
+    /// reported success for a flag that does not exist.
+    ///
+    /// Declaring it is half the fix; the other half is that an undeclared
+    /// action is no longer invocable at all, so this cannot come back as a
+    /// silent gap. See `session/undeclared_action_test.dart`.
+    test('declares screenshot, with the parameters it actually reads', () {
+      var action = core.report.actions
+          .where((a) => a.id == 'screenshot')
+          .singleOrNull;
+
+      expect(action, isNotNull, reason: 'dispatched, so it must be declared');
+      expect([
+        for (var parameter in action!.parameters) parameter.id,
+      ], containsAll(['out', 'maxSide', 'run']));
+    });
+
     test('reads the cache and the ledger without probing anything', () async {
       DeviceCache.write(runDir.path, [
         const DaemonDevice(id: 'phone', name: 'Xavier iPhone'),

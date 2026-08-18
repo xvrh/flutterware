@@ -4136,6 +4136,27 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),
+  'RunScreenshotResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunScreenshotResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'doc': 'Where the PNG was written.',
+      },
+      <String, Object?>{'name': 'bytes', 'type': 'int'},
+      <String, Object?>{'name': 'ms', 'type': 'int'},
+      <String, Object?>{
+        'name': 'note',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Said out loud when the picture may not be the whole story — a run with platform views in it, which Flutter\'s layer tree cannot photograph.',
+      },
+    ],
+  }),
   'ScenarioListEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioListEntry',
     'fields': <Object?>[
