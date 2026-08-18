@@ -121,3 +121,41 @@ jobs:
         # written to the day it was deleted.
         run: dart test integration_test --exclude-tags gpu
         working-directory: app
+
+  previews_audit_linux:
+    name: Previews audit on Linux
+    # The audit's whole bring-up — spawning `flutter_tester`, compiling the
+    # framework's default shaders with `impellerc`, linking
+    # `isolate_snapshot.bin` into the asset bundle — reads artifacts out of
+    # `engine/<host>/`, and every one of those paths was once hard-coded to
+    # `darwin-x64`. Development happens on macOS, where that mistake is
+    # invisible; this job is the only thing that would catch it coming back.
+    #
+    # It can block because nothing here needs a GPU: the tester runs
+    # `--enable-software-rendering`, and the host `artifacts.zip` (tester,
+    # impellerc, ICU data, snapshots) is in the universal bucket any `flutter`
+    # command downloads.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      # The same pin the macOS job reads, for the same reason.
+      - name: Read the pinned Flutter version
+        id: pin
+        run: |
+          version="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc)"
+          if [ -z "$version" ]; then echo "::error::.fvmrc names no Flutter version"; exit 1; fi
+          case "$version" in *-*) channel=beta ;; *) channel=stable ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.pin.outputs.version }}
+          channel: ${{ steps.pin.outputs.channel }}
+      - run: flutter --version
+      - run: flutter pub get
+      # `audit`, not `check`: `check` stops at the daemon handshake and never
+      # spawns a tester, so it proves nothing about the artifact paths this
+      # job exists for. `fw` exits 1 when the audit reports `ok: false`, so a
+      # broken example entry — or a tester that cannot come up — fails the job.
+      - run: dart run flutterware_app:fw run previews audit
+        working-directory: examples/example

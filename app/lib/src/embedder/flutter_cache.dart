@@ -62,18 +62,26 @@ class FlutterCache {
   String get platformDill =>
       p.join(flutterPatchedSdkDir, 'platform_strong.dill');
 
-  /// ICU data the engine needs at startup.
+  /// ICU data the *embedder guest's* engine needs at startup. macOS-only,
+  /// like the `FlutterEmbedder.framework` it is loaded next to; the tester
+  /// lane reads [testerIcuData] instead.
   //
   // `darwin-x64` is the canonical macOS desktop artifact directory for every
   // host architecture (including Apple Silicon) — there is no `darwin-arm64`
   // engine dir, and the engine binaries shipped here are universal.
   String get icuData => p.join(_engine, 'darwin-x64', 'icudtl.dat');
 
-  /// The Impeller shader compiler, a host tool living next to [icuData].
-  String get impellerc => p.join(_engine, 'darwin-x64', 'impellerc');
+  /// The Impeller shader compiler, a host tool shipped in every desktop
+  /// host's engine directory.
+  String get impellerc => p.join(_hostEngineDir, 'impellerc$_exe');
 
   /// The include directory with impellerc's standard library.
-  String get shaderLib => p.join(_engine, 'darwin-x64', 'shader_lib');
+  String get shaderLib => p.join(_hostEngineDir, 'shader_lib');
+
+  /// The JIT isolate snapshot bundled as `isolate_snapshot_data` in a debug
+  /// asset directory.
+  String get isolateSnapshotData =>
+      p.join(_hostEngineDir, 'isolate_snapshot.bin');
 
   /// The engine revision the cached artifacts were built at. Used to fetch the
   /// matching `FlutterEmbedder.framework` from Flutter's artifact storage.
@@ -82,14 +90,16 @@ class FlutterCache {
 
   /// The host platform's engine artifact directory — unlike [icuData] this is
   /// not embedder-specific, so it covers the three desktop hosts.
-  String get _hostEngineDir => p.join(
-    _engine,
-    Platform.isMacOS
-        ? 'darwin-x64'
-        : Platform.isLinux
-        ? 'linux-x64'
-        : 'windows-x64',
-  );
+  ///
+  /// macOS is always `darwin-x64` — the binaries there are universal and no
+  /// `darwin-arm64` dir exists — but Linux and Windows cache per architecture,
+  /// so the suffix comes from the VM actually running this.
+  String get _hostEngineDir {
+    if (Platform.isMacOS) return p.join(_engine, 'darwin-x64');
+    var os = Platform.isLinux ? 'linux' : 'windows';
+    var arch = Platform.version.contains('arm64') ? 'arm64' : 'x64';
+    return p.join(_engine, '$os-$arch');
+  }
 
   /// The headless test shell `flutter test` runs — and the scenario runner
   /// spawns directly (S4, `2026-07-30-s4-flutter-tester-findings.md`).
