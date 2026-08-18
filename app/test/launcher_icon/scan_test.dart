@@ -210,7 +210,7 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
       writePng('android/app/src/dev/res/mipmap-hdpi/ic_launcher.png', 144);
       Directory(path('android/app/src/debug')).createSync(recursive: true);
 
-      expect(scan().flavors, ['dev']);
+      expect(scan().flavors.map((f) => f.name), ['dev']);
       expect(
         scan(flavor: 'dev').forRole(IconRole.androidLegacy)!.largest!.width,
         144,

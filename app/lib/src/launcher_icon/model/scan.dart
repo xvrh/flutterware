@@ -162,11 +162,11 @@ class IconScan {
   /// Workspace-relative — `.`, `examples/example`.
   final String packagePath;
 
-  /// The source set this scan read, or null for the default.
+  /// The flavor this scan read, or null for the default.
   final String? flavor;
 
-  /// The other Android source sets that exist, so the panel can offer them.
-  final List<String> flavors;
+  /// The other flavors that exist, so the panel can offer them.
+  final List<IconFlavor> flavors;
 
   final List<IconRoleScan> roles;
   final List<IconFinding> findings;
@@ -217,14 +217,14 @@ IconScan scanIcons({
   var resources = <_Resource>[];
 
   var android = _scanAndroid(packageRoot, flavor, roles, resources);
-  var (ios, bundles) = _scanApple(packageRoot, roles);
+  var (ios, bundles) = _scanApple(packageRoot, flavor, roles);
   _scanWeb(packageRoot, roles);
   _scanDesktop(packageRoot, roles);
 
   var scan = IconScan(
     packagePath: packagePath,
     flavor: flavor,
-    flavors: androidFlavors(packageRoot),
+    flavors: discoverIconFlavors(packageRoot),
     roles: [
       for (var role in IconRole.values)
         roles[role] ?? IconRoleScan(role: role, files: const []),
@@ -239,10 +239,125 @@ IconScan scanIcons({
   return scan;
 }
 
+// ---- Flavors ---------------------------------------------------------------
+
+/// Where the evidence for a flavor came from.
+///
+/// Kept rather than reduced to a name because the three are not equivalent and
+/// the difference is the useful part. A flavor with a config and no output has
+/// never been generated; one with Android output and no iOS output is a project
+/// that generates half of itself, which is a real and quiet misconfiguration.
+enum IconFlavorSource {
+  /// `flutter_launcher_icons-<name>.yaml`. This is the generator's own list —
+  /// `getFlavors()` globs exactly this — so it is the closest thing to an
+  /// authority that costs no parser.
+  config,
+
+  /// `android/app/src/<name>/`.
+  androidSourceSet,
+
+  /// `ios/Runner/Assets.xcassets/AppIcon-<name>.appiconset`.
+  iosCatalog,
+}
+
+/// A flavor, and everything on disk that says so.
+class IconFlavor {
+  const IconFlavor(this.name, this.sources);
+
+  final String name;
+
+  /// Never empty — a flavor exists because something pointed at it.
+  final Set<IconFlavorSource> sources;
+
+  bool has(IconFlavorSource source) => sources.contains(source);
+
+  /// Configured but never generated: the chip is worth showing, and the panel
+  /// behind it will be empty for a reason the user can act on.
+  bool get isUnbuilt =>
+      sources.length == 1 && sources.first == IconFlavorSource.config;
+
+  @override
+  String toString() => name;
+}
+
+/// Every flavor this package appears to have, from the three sources that cost
+/// a directory listing.
+///
+/// **Gradle and Xcode are the real authorities and are deliberately not read.**
+/// `productFlavors` needs a Groovy parser and a Kotlin one, and the scheme list
+/// needs a third; `lib/src/run/flavors.dart` declined the same job for the same
+/// reason. What is here instead is the union of what the generator was told to
+/// make and what it actually made — which is all a viewer can show anyway. The
+/// only flavor it misses is one with no config and no output, and for such a
+/// flavor there is nothing to display.
+List<IconFlavor> discoverIconFlavors(String packageRoot) {
+  var sources = <String, Set<IconFlavorSource>>{};
+
+  void note(String name, IconFlavorSource source) {
+    if (name.isEmpty) return;
+    sources.putIfAbsent(name, () => {}).add(source);
+  }
+
+  for (var name in _flavorConfigs(packageRoot)) {
+    note(name, IconFlavorSource.config);
+  }
+  for (var name in _androidSourceSets(packageRoot)) {
+    note(name, IconFlavorSource.androidSourceSet);
+  }
+  for (var name in _flavoredAppIconSets(packageRoot)) {
+    note(name, IconFlavorSource.iosCatalog);
+  }
+
+  var names = sources.keys.toList()..sort();
+  return [for (var name in names) IconFlavor(name, sources[name]!)];
+}
+
+/// `flutter_launcher_icons-<flavor>.yaml`, the generator's own spelling.
+///
+/// Matched but not opened: a malformed config is still a declared flavor, and
+/// the panel behind the chip is what reports the state of the files.
+List<String> _flavorConfigs(String packageRoot) {
+  var dir = Directory(packageRoot);
+  if (!dir.existsSync()) return const [];
+  var found = <String>[];
+  try {
+    for (var entry in dir.listSync().whereType<File>()) {
+      var match = _flavorConfigPattern.firstMatch(p.basename(entry.path));
+      if (match != null) found.add(match.group(1)!);
+    }
+  } on FileSystemException {
+    return const [];
+  }
+  return found;
+}
+
+/// `flutter_launcher_icons/lib/main.dart`'s own `flavorConfigFilePattern`.
+final _flavorConfigPattern = RegExp(r'^flutter_launcher_icons-(.*)\.yaml$');
+
+/// The flavored asset catalogs, whose names give the flavor back verbatim.
+///
+/// Unlike the splash generator — which capitalises, and therefore cannot be
+/// read backwards — `flutter_launcher_icons` writes `AppIcon-$flavor` with the
+/// flavor untouched, so this direction is lossless.
+List<String> _flavoredAppIconSets(String packageRoot) {
+  var catalog = Directory(
+    p.join(packageRoot, 'ios', 'Runner', 'Assets.xcassets'),
+  );
+  if (!catalog.existsSync()) return const [];
+  var found = <String>[];
+  for (var entry in catalog.listSync().whereType<Directory>()) {
+    var match = _appIconSetPattern.firstMatch(p.basename(entry.path));
+    if (match != null) found.add(match.group(1)!);
+  }
+  return found;
+}
+
+final _appIconSetPattern = RegExp(r'^AppIcon-(.+)\.appiconset$');
+
 // ---- Android ---------------------------------------------------------------
 
 /// The Android source sets that are not build types, in listing order.
-List<String> androidFlavors(String packageRoot) {
+List<String> _androidSourceSets(String packageRoot) {
   var dir = Directory(p.join(packageRoot, 'android', 'app', 'src'));
   if (!dir.existsSync()) return const [];
 
@@ -468,14 +583,21 @@ String? _resolvedFile(String reference, List<_Resource> resources) {
 
 // ---- Apple -----------------------------------------------------------------
 
+/// [flavor] reaches iOS and stops there: `createIconsFromConfig` hands the
+/// flavor to the Android and iOS generators only, and the macOS, web and
+/// Windows ones take no flavor at all and write to the one fixed place. So a
+/// flavored scan reports the flavor's Android and iOS icons beside the single
+/// set of desktop and web ones, which is what the project actually ships.
 (IosCatalog, List<String>) _scanApple(
   String packageRoot,
+  String? flavor,
   Map<IconRole, IconRoleScan> roles,
 ) {
   _scanAssetCatalog(
     packageRoot,
     p.join(packageRoot, 'ios', 'Runner', 'Assets.xcassets'),
     roles,
+    flavor: flavor,
     light: IconRole.iosApp,
     dark: IconRole.iosDark,
     tinted: IconRole.iosTinted,
@@ -520,17 +642,27 @@ List<String> _iconBundles(String packageRoot) {
   return found..sort();
 }
 
-/// Reads every `*AppIcon.appiconset` in [catalogPath].
+/// Reads every `*AppIcon.appiconset` in [catalogPath] — or, under a [flavor],
+/// the one set that belongs to it.
 ///
 /// `Contents.json` is the authority rather than the filenames: it is what Xcode
 /// reads, it is written the same way whoever generated it, and it is the only
 /// place that says which file is the dark one. Guessing from `Icon-App-…@2x`
 /// naming would bind this to one generator's spelling.
+///
+/// A flavor gets one exact set, `AppIcon-<flavor>.appiconset`, because that is
+/// the whole of what `createIcons` writes for it — dark and tinted are entries
+/// *inside* it, told apart by their `appearances`, not catalogs of their own.
+/// The default keeps the loose `*AppIcon.appiconset` match it has always had,
+/// which already excludes a flavored set: `AppIcon-dev.appiconset` does not end
+/// in `AppIcon.appiconset`. That accident is why the default was right while
+/// every flavor silently reported the default's files.
 void _scanAssetCatalog(
   String packageRoot,
   String catalogPath,
   Map<IconRole, IconRoleScan> roles, {
   required IconRole light,
+  String? flavor,
   IconRole? dark,
   IconRole? tinted,
 }) {
@@ -545,8 +677,17 @@ void _scanAssetCatalog(
   // 15 files. Keyed by resolved path so two sets cannot collide.
   var seen = <String>{};
 
+  var wanted = flavor == null || flavor.isEmpty
+      ? null
+      : 'AppIcon-$flavor.appiconset';
+
   for (var set in catalog.listSync().whereType<Directory>()) {
-    if (!p.basename(set.path).endsWith('AppIcon.appiconset')) continue;
+    var name = p.basename(set.path);
+    if (wanted == null
+        ? !name.endsWith('AppIcon.appiconset')
+        : name != wanted) {
+      continue;
+    }
 
     var contents = File(p.join(set.path, 'Contents.json'));
     if (!contents.existsSync()) continue;

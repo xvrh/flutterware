@@ -13,6 +13,7 @@ import 'model/role.dart';
 import 'model/scan.dart';
 import 'model/wiring.dart';
 import 'ui/detail.dart';
+import 'ui/flavor_chips.dart';
 import 'ui/plate.dart';
 import '../ui/loading_state.dart';
 import '../ui/error_state.dart';
@@ -399,40 +400,9 @@ class _Header extends StatelessWidget {
         ],
         if (scan.flavors.isNotEmpty) ...[
           const Gap(FwSpacing.lg),
-          Wrap(
-            spacing: FwSpacing.sm,
-            children: [
-              _Chip(label: 'main', selected: selected == null),
-              for (var flavor in scan.flavors)
-                _Chip(label: flavor, selected: flavor == selected),
-            ],
-          ),
+          FlavorChips(flavors: scan.flavors, selected: selected),
         ],
       ],
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.selected});
-
-  final String label;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: FwSpacing.lg,
-        vertical: FwSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: selected ? colors.accentSoft : colors.panel2,
-        borderRadius: BorderRadius.circular(context.radii.pill),
-        border: Border.all(color: selected ? colors.accent : colors.line),
-      ),
-      child: Text(label, style: context.type.caption),
     );
   }
 }

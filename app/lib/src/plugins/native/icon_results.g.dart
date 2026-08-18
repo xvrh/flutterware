@@ -12,7 +12,7 @@ Map<String, dynamic> _$IconInventoryResultToJson(
   'package': instance.package,
   'address': instance.address,
   'flavor': ?instance.flavor,
-  'flavors': instance.flavors,
+  'flavors': instance.flavors.map((e) => e.toJson()).toList(),
   'iosCatalog': instance.iosCatalog,
   'iconBundles': instance.iconBundles,
   'minSdk': ?instance.minSdk,
@@ -20,6 +20,9 @@ Map<String, dynamic> _$IconInventoryResultToJson(
   'roles': instance.roles.map((e) => e.toJson()).toList(),
   'findings': instance.findings.map((e) => e.toJson()).toList(),
 };
+
+Map<String, dynamic> _$IconFlavorEntryToJson(IconFlavorEntry instance) =>
+    <String, dynamic>{'name': instance.name, 'sources': instance.sources};
 
 Map<String, dynamic> _$IconRoleEntryToJson(IconRoleEntry instance) =>
     <String, dynamic>{

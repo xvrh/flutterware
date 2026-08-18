@@ -345,7 +345,7 @@ class LauncherIconCore extends PluginCore {
           IosCatalog.none => 'none',
         }, tone: scan.ios == IosCatalog.both ? Tone.warn : Tone.neutral),
       if (scan.flavors.isNotEmpty)
-        ViewField('Android source sets', scan.flavors.join(', ')),
+        ViewField('Flavors', scan.flavors.map(_flavorSummary).join(', ')),
     ]),
   ];
 
@@ -368,7 +368,9 @@ class LauncherIconCore extends PluginCore {
     'Flavor',
     required: false,
     description:
-        'Which Android source set under android/app/src/; main when omitted',
+        'Which flavor — a flutter_launcher_icons-<flavor>.yaml, an '
+        'android/app/src/<flavor>/ or an AppIcon-<flavor>.appiconset; the '
+        'default when omitted',
   );
 
   List<PluginAction> get _actions => [
@@ -424,14 +426,32 @@ class LauncherIconCore extends PluginCore {
     return packages.first;
   }
 
+  /// A flavor as one readable phrase — the name, and what is behind it when
+  /// that is not everything.
+  ///
+  /// The qualification is the point. "dev (configured, not generated)" is a
+  /// different instruction from "dev", and the bare name was the only thing
+  /// this could ever say back when a flavor was a directory listing.
+  static String _flavorSummary(IconFlavor flavor) {
+    if (flavor.isUnbuilt) return '${flavor.name} (not generated)';
+    var missing = [
+      if (!flavor.has(IconFlavorSource.androidSourceSet)) 'Android',
+      if (!flavor.has(IconFlavorSource.iosCatalog)) 'iOS',
+    ];
+    if (missing.isEmpty) return flavor.name;
+    return '${flavor.name} (no ${missing.join(' or ')} icons)';
+  }
+
   IconInventoryResult _inventory(String path, String? flavor) {
     var scan = _scans[_key(path, flavor)]!;
     var packageRoot = host.workspace.packageFor(path).absolutePath;
 
-    if (flavor != null && !scan.flavors.contains(flavor)) {
+    if (flavor != null && !scan.flavors.any((f) => f.name == flavor)) {
       throw StateError(
-        'No android/app/src/$flavor/ in "$path". '
-        'Found: ${scan.flavors.isEmpty ? 'none' : scan.flavors.join(', ')}',
+        'No flavor "$flavor" in "$path" — nothing names it: no '
+        'flutter_launcher_icons-$flavor.yaml, no android/app/src/$flavor/ and '
+        'no AppIcon-$flavor.appiconset. '
+        'Found: ${scan.flavors.isEmpty ? 'none' : scan.flavors.map((f) => f.name).join(', ')}',
       );
     }
 
@@ -439,7 +459,13 @@ class LauncherIconCore extends PluginCore {
       package: path,
       address: '${addressFor(path, flavor: flavor)}',
       flavor: flavor,
-      flavors: scan.flavors,
+      flavors: [
+        for (var entry in scan.flavors)
+          IconFlavorEntry(
+            name: entry.name,
+            sources: [for (var s in entry.sources) s.name]..sort(),
+          ),
+      ],
       iosCatalog: scan.ios.name,
       iconBundles: scan.iconBundles,
       minSdk: scan.android?.minSdk,

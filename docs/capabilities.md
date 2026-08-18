@@ -1584,8 +1584,10 @@ Returns `IconInventoryResult`:
 ```
 package: String
 address: String   # The address of this package, pasteable back into the shell.
-flavor: String?   # Which Android source set this reports on, or null for `main`.
-flavors: List<String>   # The other source sets that exist.
+flavor: String?   # Which flavor this reports on, or null for the default.
+flavors: List<IconFlavorEntry>   # Every flavor the package has, and what says so.
+  name: String
+  sources: List<String>   # Some of `config`, `androidSourceSet`, `iosCatalog`.
 iosCatalog: String   # `none`, `appIconSet`, `iconComposer` or `both`.
 iconBundles: List<String>
 minSdk: int?   # Null when it could not be read, which is an answer rather than a failure: the current Flutter template writes `minSdk = flutter.minSdkVersion`, which is not a number until Gradle runs.
@@ -1617,7 +1619,7 @@ findings: List<IconFindingEntry>
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; the first when omitted |
-| `flavor` | string | no | — | Which Android source set under android/app/src/; main when omitted |
+| `flavor` | string | no | — | Which flavor — a flutter_launcher_icons-<flavor>.yaml, an android/app/src/<flavor>/ or an AppIcon-<flavor>.appiconset; the default when omitted |
 
 
 ### `flutterware.splash`

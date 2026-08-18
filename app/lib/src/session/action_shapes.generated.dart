@@ -2113,6 +2113,17 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'role', 'type': 'String', 'optional': true},
     ],
   }),
+  'IconFlavorEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'IconFlavorEntry',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'sources',
+        'type': 'List<String>',
+        'doc': 'Some of `config`, `androidSourceSet`, `iosCatalog`.',
+      },
+    ],
+  }),
   'IconInventoryResult': ResultShape.fromJson(<String, Object?>{
     'type': 'IconInventoryResult',
     'fields': <Object?>[
@@ -2126,12 +2137,23 @@ final resultShapes = <String, ResultShape>{
         'name': 'flavor',
         'type': 'String',
         'optional': true,
-        'doc': 'Which Android source set this reports on, or null for `main`.',
+        'doc': 'Which flavor this reports on, or null for the default.',
       },
       <String, Object?>{
         'name': 'flavors',
-        'type': 'List<String>',
-        'doc': 'The other source sets that exist.',
+        'type': 'List<IconFlavorEntry>',
+        'doc': 'Every flavor the package has, and what says so.',
+        'shape': <String, Object?>{
+          'type': 'IconFlavorEntry',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'sources',
+              'type': 'List<String>',
+              'doc': 'Some of `config`, `androidSourceSet`, `iosCatalog`.',
+            },
+          ],
+        },
       },
       <String, Object?>{
         'name': 'iosCatalog',
