@@ -75,6 +75,37 @@ What F did *not* take from §5: `parentRenderElement` — which ancestor actuall
 laid this node out — is in `getLayoutExplorerNode` and in no guest field, so it
 stays an open item on either route.
 
+**And the box over the picture, which the same rects unblocked.** Hovering a
+row in the cockpit's tree now draws that node's rectangle on the screenshot
+beside it, through the `NodeHighlightPainter` the catalog already uses, with
+the catalog's rules: hover and never selection, and nothing at all for an
+offstage node, whose rect is where it *was*. Two differences from the catalog,
+both from the picture being a still:
+
+- **The tree's rect is exact here.** The catalog has to prefer the guest's own
+  last frame, because there the picture is live and the tree is of the build it
+  was read from. This picture is a photograph of that build.
+- **The scaling is the host's, not a `FittedBox`'s.** The catalog paints into a
+  surface that *is* the guest's logical size, so its painter needs no
+  transform. This picture is the app shrunk into a third of a pane, and scaling
+  the painter would take the 10pt label down with it. So the rect is scaled
+  before it reaches the painter — which is what the painter's contract already
+  said the host does.
+
+The frame the rects are scaled against is the topmost `layout` in the tree, and
+that is not a guess: `getLayoutExplorerNode` reports no size for the root
+`RenderView`, so the size the screenshot RPC is framed on is the first child
+that has one — the same node the guest's walk gives its first `layout` to,
+because `_layoutOf` answers only for a `RenderBox`.
+
+`RunScreenPicture` came out of `run_plugin.dart` into its own file to get a
+`@Preview` entry, and that paid for itself immediately: **the first render
+showed the box in the wrong place**, and the fault was in the fixture —
+`toImageSync` rasterises a picture 1:1 into the bitmap it is handed rather than
+fitting one to the other, so a 390×844 drawing sat in the top-left quarter of a
+2× image. A hover cannot be driven, so without an entry there was no way to
+look at this feature at all.
+
 Deliberately not extended to the `inspect` action. Its whole selling point is
 answering about an app that never heard of flutterware, and a caller that wants
 the richer tree already has `act`.
@@ -374,7 +405,7 @@ for the same reason.**
 | A′ | ✅ fix `InspectTree.styles()` to bucket on the resolved style | the type ramp, correctly | same + every agent using `styles` | free with A | **XS**, but it changes a shipped answer |
 | D | render-object properties **on selection** | opacity, transform, clip, elevation, computed flex | same | one guest round trip | **M** — new extension beside `renderObjectFor` |
 | E | constraint chain (N ancestors: type, constraints, size) | *who made this unbounded* | same | walks `render.parent` | **M** |
-| F | ✅ fill the cockpit detail pane — *from the guest, not `getDetailsSubtree`* | ends "structure and source only" on a run flutterware launched | run cockpit | +150ms a read, whole tree, no per-selection cost | **S** — `preferGuest` on one read, no `valueId` side map |
+| F | ✅ fill the cockpit detail pane — *from the guest, not `getDetailsSubtree`* — and draw the hovered node's box on the picture | ends "structure and source only" on a run flutterware launched | run cockpit | +150ms a read, whole tree, no per-selection cost | **S** — `preferGuest` on one read, no `valueId` side map |
 | G | expand nested property values instead of truncating | a `BoxDecoration` you can read | all four | on-selection only | **S** |
 | H | effective paint chain (nearest painting ancestor, opacity, clip) | *what is this actually sitting on* | guest | walk | **M/L** — needs a rule for "which ancestor counts" |
 | I | colour → theme role (`colorScheme.primary`) | *is this the brand blue or a literal* | guest | lookup | **L** — `guest_inspect.dart` deliberately imports `widgets` and not `material`; reaching `ThemeData` means a dynamic ancestor lookup or a second, optional guest file. `debugLabel` already gives the text half for free, so this is the least urgent of the lot. |

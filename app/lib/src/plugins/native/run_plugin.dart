@@ -21,11 +21,13 @@ import '../../run/knob_field.dart';
 import '../../run/knobs_tab.dart';
 import '../../run/network_tab.dart';
 import '../../run/panels_tab.dart';
+import '../../run/screen_picture.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
 import '../../run/native/native_logs.dart';
 import '../../inspect/elements_view.dart';
 import '../../inspect/inspect_dock.dart';
+
 import '../../ui/capture_button.dart';
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
@@ -809,17 +811,14 @@ class _ScreenTabState extends State<_ScreenTab> {
   /// pane already holds, so exporting one costs no round trip to the app.
   Uint8List? get imageBytes => _image;
 
-  /// What the tree hovers, for a box drawn over the picture.
+  /// What the tree hovers, for the box drawn over the picture.
   ///
-  /// Nothing draws one yet. On the service-extension path it cannot: that
-  /// surface carries **no position at all** — `getLayoutExplorerNode` gives
-  /// size and constraints, `parentData` is `<none>`. A guest tree does carry
-  /// global rects, so on a run launched through flutterware the box is now
-  /// only unbuilt rather than impossible — and the thing to settle first is
-  /// that the picture and the tree are two RPCs apart, so a rect and a frame
-  /// of the same read are not quite the same moment. [ElementsView] requires
-  /// the notifier, so it gets a real one rather than a widget bent around the
-  /// gap.
+  /// **Only a guest tree can be drawn.** The service extension carries no
+  /// position at all — `getLayoutExplorerNode` gives size and constraints,
+  /// `parentData` is `<none>` — so a run the cockpit merely attached to has
+  /// no rect to draw and the picture stays a picture. Nothing here tests for
+  /// that: a node with no `layout` paints nothing, which is the same answer
+  /// arrived at without a second flag to keep in step.
   final _highlight = ValueNotifier<String?>(null);
 
   @override
@@ -933,10 +932,13 @@ class _ScreenTabState extends State<_ScreenTab> {
           children: [
             SizedBox(
               width: width,
-              child: _Picture(
+              child: RunScreenPicture(
                 picture: _picture,
                 undecodable: _undecodable,
                 loading: _loading,
+                highlight: _highlight,
+                tree: _tree,
+                canvas: RunScreenPicture.canvasOf(_tree),
               ),
             ),
             InspectSplitGrip(
@@ -990,83 +992,6 @@ Future<ui.Image?> _decodePicture(Uint8List? bytes) async {
     return frame.image;
   } on Object {
     return null;
-  }
-}
-
-/// The picture, and the caption that only a picture earns.
-///
-/// **The caption is tied to the decoded frame, not to the bytes.** It used to
-/// be tied to `image != null`, and that told the reader a lie for as long as
-/// the decode took: `Image.memory` resolves *asynchronously*, and a
-/// `RenderImage` with nothing to draw yet takes `constraints.smallest` — zero,
-/// under the loose constraints this column hands it. So the caption drew,
-/// slid up to where the picture should have been, and described a picture that
-/// was not on screen. Measured on macOS: 103ms against a painting app, and
-/// unbounded against one that is not painting — a hidden or occluded window
-/// schedules no frame, so the decoded picture had nothing to arrive on. That is
-/// the state a Studio is in for the whole of an agent's drive session.
-///
-/// Handing it an already-decoded [ui.Image] removes the window rather than
-/// narrowing it: there is no moment where this widget has bytes and no picture.
-class _Picture extends StatelessWidget {
-  const _Picture({
-    required this.picture,
-    required this.undecodable,
-    required this.loading,
-  });
-
-  final ui.Image? picture;
-
-  /// The app answered with bytes that are not an image. Worth its own word:
-  /// silence here reads as "no picture yet", which is the one thing it is not.
-  final bool undecodable;
-
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: context.colors.panel,
-      alignment: Alignment.topCenter,
-      padding: const EdgeInsets.all(FwSpacing.md),
-      // Shrink-wrapped and top-aligned so the caption sits *under the
-      // picture*, not at the bottom of whatever height the pane happens to
-      // have. `Expanded` put it a screen away from what it describes.
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          if (picture case var picture?) ...[
-            Flexible(
-              child: RawImage(
-                image: picture,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.medium,
-              ),
-            ),
-            const Gap(FwSpacing.sm),
-            Text(
-              'rendered by the app — platform views will not appear',
-              textAlign: TextAlign.center,
-              style: context.type.micro.copyWith(color: context.colors.mut3),
-            ),
-          ] else
-            Text(
-              switch ((loading, undecodable)) {
-                // Never the empty string: a pane that draws nothing is
-                // indistinguishable from a pane that is not there, and beside
-                // the grip it reads as an unexplained rule down the page.
-                (true, _) => 'Taking a picture…',
-                (_, true) =>
-                  'The app answered with a picture that decodes to nothing.',
-                _ => 'No picture yet',
-              },
-              textAlign: TextAlign.center,
-              style: context.type.caption.copyWith(color: context.colors.mut2),
-            ),
-        ],
-      ),
-    );
   }
 }
 
