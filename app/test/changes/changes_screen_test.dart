@@ -172,9 +172,8 @@ void main() {
     );
   });
 
-  testWidgets('an uncommitted file says so; a rename says where from', (
-    tester,
-  ) async {
+  testWidgets('the summary says what is uncommitted and the index does not; '
+      'a rename says where from', (tester) async {
     await pump(
       tester,
       setOf(
@@ -191,15 +190,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Scoped to the index, because the header's summary says "1 uncommitted"
-    // too — an unscoped finder here passes without testing its own claim.
+    // **The rows do not repeat it.** Whether a file is committed yet is a fact
+    // about the reader's git state rather than about the change, and the index
+    // is what you scan to decide which file to open. Scoped to the index,
+    // because the summary does say it — an unscoped finder here would pass off
+    // the summary and test nothing.
     expect(
       find.descendant(
         of: find.byKey(changesListKey),
         matching: find.textContaining('uncommitted'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
+    // And the summary is still where the count lives, so dropping it from the
+    // rows did not drop it from the screen.
+    expect(find.textContaining('1 uncommitted'), findsOneWidget);
     expect(find.textContaining('from lib/old.dart'), findsOneWidget);
 
     // Both files live under one directory, and the tree says so once rather

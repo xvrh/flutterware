@@ -1186,6 +1186,12 @@ class _IndexPane extends StatelessWidget {
     // makes the other tab look like the place the file went.
     var pinned = buildImportantRows(set).length;
 
+    // **This pane keeps an 8 px gutter where the rest of the screen uses
+    // [panelGutter]'s 24**, so its content starts 16 px left of the page title
+    // above it. That step is deliberate, not an oversight: the column is a
+    // fixed 320 px and 24 px gutters would spend 48 px of it on air, in a list
+    // whose file names already ellipsise. A panel narrow enough to be a list
+    // is allowed its own gutter; a wider one is not.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1346,7 +1352,6 @@ class _IndexPane extends StatelessWidget {
             node: tree,
             depth: 0,
             selected: selected,
-            uncommitted: set.uncommitted,
             ranking: set.ranking,
             onSelect: onSelect,
             // Open at the top, shut further down: a branch that touched one
@@ -1395,14 +1400,12 @@ class _IndexPane extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
     ),
-    FileRow(:var file, :var selected, :var uncommitted, :var reason) =>
-      IndexFileRow(
-        file: file,
-        selected: selected,
-        uncommitted: uncommitted,
-        reason: reason,
-        onTap: () => onSelect(file.path),
-      ),
+    FileRow(:var file, :var selected, :var reason) => IndexFileRow(
+      file: file,
+      selected: selected,
+      reason: reason,
+      onTap: () => onSelect(file.path),
+    ),
     UntrackedRow(:var entry, :var selected) => IndexUntrackedRow(
       entry: entry,
       selected: selected,
@@ -1419,7 +1422,7 @@ class _IndexPane extends StatelessWidget {
   };
 }
 
-/// The two tabs, with their counts.
+/// The three tabs, with their counts.
 ///
 /// **The count is what pays for the tab.** A tab's cost is that half the time
 /// it is hiding what it holds; a number on the label means the Important tab
@@ -1451,11 +1454,25 @@ class _Tabs extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: context.colors.line)),
       ),
-      // **Thirds, not intrinsic widths.** Three labels and three counts do not
-      // fit a 320 px column at their natural size — the strip overflowed by 21
-      // px the moment the third tab arrived. Sharing the width also gives each
-      // tab a hit area that does not change as its count goes from 4 to 40.
-      child: Row(
+      // **Intrinsic widths, packed left**, like the strip above this pane.
+      // Measured in the running app: the three tabs take 194 px of the 320 px
+      // column (40 + 85 + 69), and ~236 px with three-digit counts on all of
+      // them, so the width they were sharing was never scarce. Sharing it put
+      // a 107 px accent underline beneath a 15 px word and left each label
+      // stranded mid-third, aligned with nothing — and the thirds were not
+      // even buying centred labels, because the [Flexible] around each label
+      // consumed the free space its own row was trying to centre in.
+      //
+      // **[Wrap], not [Row], and the reason is the test binding.** This strip
+      // really does overflow 320 px under `flutter test` — by 7.8 px — because
+      // that binding loads no font and its fallback measures every glyph far
+      // wider than the system font does: 327.8 px for the same three labels
+      // that measure 194 px on screen. That is where the *thirds are the only
+      // thing that fits* reading came from; it was a measurement of the test
+      // font, not of the app. [Wrap] answers both — natural widths in one run
+      // here, a second run rather than an assertion wherever the labels really
+      // are too wide.
+      child: Wrap(
         children: [
           _Tab(
             label: 'All',
@@ -1515,53 +1532,51 @@ class _Tab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Expanded(
-      child: Tappable(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: FwSpacing.sm,
-            vertical: FwSpacing.md,
-          ),
-          decoration: BoxDecoration(
-            border: Border(
-              // Two pixels, drawn where the divider is, so the selected tab
-              // sits on the list it is naming.
-              bottom: BorderSide(
-                color: on ? colors.accent : Colors.transparent,
-                width: 2,
-              ),
+    return Tappable(
+      onTap: onTap,
+      child: Container(
+        // The horizontal padding is the column's own gutter, so the first
+        // label starts on the same 8 px as the filter field above and every
+        // file name below it, and two tabs sit 16 px apart.
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.md,
+          vertical: FwSpacing.md,
+        ),
+        decoration: BoxDecoration(
+          border: Border(
+            // Two pixels, drawn where the divider is, so the selected tab
+            // sits on the list it is naming. It now runs the label's width
+            // rather than a third of the pane, so it marks the word.
+            bottom: BorderSide(
+              color: on ? colors.accent : Colors.transparent,
+              width: 2,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Flexible(
-                child: Text(
-                  label,
-                  style: context.type.bodySmall.copyWith(
-                    color: on ? colors.accent : colors.mut2,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: false,
-                ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              label,
+              style: context.type.bodySmall.copyWith(
+                color: on ? colors.accent : colors.mut2,
               ),
+              softWrap: false,
+            ),
+            const Gap(FwSpacing.xs),
+            Text(
+              '$count',
+              style: context.type.micro.copyWith(
+                color: on || live ? colors.accent : colors.mut3,
+              ),
+            ),
+            if (alert) ...[
               const Gap(FwSpacing.xs),
-              Text(
-                '$count',
-                style: context.type.micro.copyWith(
-                  color: on || live ? colors.accent : colors.mut3,
-                ),
-              ),
-              if (alert) ...[
-                const Gap(FwSpacing.xs),
-                Icon(Icons.circle, size: 6, color: colors.accent),
-              ],
+              Icon(Icons.circle, size: 6, color: colors.accent),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -1795,7 +1810,6 @@ class _TreeNodeView extends StatefulWidget {
     required this.node,
     required this.depth,
     required this.selected,
-    required this.uncommitted,
     required this.ranking,
     required this.onSelect,
     required this.openDepth,
@@ -1804,7 +1818,6 @@ class _TreeNodeView extends StatefulWidget {
   final TreeNode node;
   final int depth;
   final String? selected;
-  final Set<String> uncommitted;
 
   /// So a pinned file can say, where it lives, what pinned it.
   final Ranking ranking;
@@ -1875,7 +1888,6 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
               node: child,
               depth: widget.depth + 1,
               selected: widget.selected,
-              uncommitted: widget.uncommitted,
               ranking: widget.ranking,
               onSelect: widget.onSelect,
               openDepth: widget.openDepth,
@@ -1889,7 +1901,6 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
                 child: IndexFileRow(
                   file: file,
                   selected: file.path == widget.selected,
-                  uncommitted: widget.uncommitted.contains(file.path),
                   // The second place attention is surfaced: a pinned file says
                   // what pinned it here too, where you are browsing, not only
                   // in the tab you may not have opened.
@@ -2372,26 +2383,43 @@ class _FileHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Flexible(
-                child: Text(
-                  name,
-                  style: context.type.bodyStrong,
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: false,
+              // **The name and its directory are one flexible thing, and the
+              // button is the other.** They used to be three peers — two
+              // [Flexible]s and a [Spacer], each with the default flex of 1 —
+              // so the free space was split in thirds and the [Spacer] only
+              // ever pushed the button a third of the way over. Measured on a
+              // root file in a 950 px header: the button ended 323 px short of
+              // the right edge, reading as floating rather than trailing.
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: context.type.bodyStrong,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                    ),
+                    if (directory.isNotEmpty) ...[
+                      const Gap(FwSpacing.sm),
+                      Flexible(
+                        child: Text(
+                          directory,
+                          style: context.type.micro.copyWith(
+                            color: colors.mut3,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (directory.isNotEmpty) ...[
-                const Gap(FwSpacing.sm),
-                Flexible(
-                  child: Text(
-                    directory,
-                    style: context.type.micro.copyWith(color: colors.mut3),
-                    overflow: TextOverflow.ellipsis,
-                    softWrap: false,
-                  ),
-                ),
-              ],
-              const Spacer(),
+              const Gap(FwSpacing.md),
               Tappable(
                 onTap: onComment,
                 borderRadius: BorderRadius.circular(context.radii.radiusSmall),
