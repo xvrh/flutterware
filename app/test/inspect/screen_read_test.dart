@@ -147,6 +147,32 @@ void main() {
     expect(result.reported(wantsShot: false), isEmpty);
   });
 
+  test('a hit says what it renders as, in one line rather than ten', () {
+    var node = InspectNode.fromJson({
+      'id': '0',
+      'type': 'Text',
+      'description': 'Text("Save")',
+      'style': {
+        'debugLabel': '(englishLike bodyMedium 2021).merge(…)',
+        'color': '#1D1B20',
+        'family': 'Roboto',
+        'size': '14.0',
+        'weight': '400',
+        'letterSpacing': '0.3',
+        'height': '1.4x',
+      },
+    });
+
+    // The whole map is ~70 tokens and thirty hits of it is most of a reply.
+    // What a reader scans a list *for* is the four fields.
+    expect(ScreenRead.describe(node, null)['style'], '14.0/400 #1D1B20 Roboto');
+  });
+
+  test('a hit that draws no text says nothing about style', () {
+    var node = InspectNode.fromJson({'id': '0', 'type': 'Padding'});
+    expect(ScreenRead.describe(node, null).containsKey('style'), isFalse);
+  });
+
   test('the offer names the drill-down, because a schema is read once', () {
     expect(
       ScreenRead.offer,
