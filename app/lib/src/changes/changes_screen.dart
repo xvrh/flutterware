@@ -1352,7 +1352,6 @@ class _IndexPane extends StatelessWidget {
             node: tree,
             depth: 0,
             selected: selected,
-            uncommitted: set.uncommitted,
             ranking: set.ranking,
             onSelect: onSelect,
             // Open at the top, shut further down: a branch that touched one
@@ -1401,14 +1400,12 @@ class _IndexPane extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
     ),
-    FileRow(:var file, :var selected, :var uncommitted, :var reason) =>
-      IndexFileRow(
-        file: file,
-        selected: selected,
-        uncommitted: uncommitted,
-        reason: reason,
-        onTap: () => onSelect(file.path),
-      ),
+    FileRow(:var file, :var selected, :var reason) => IndexFileRow(
+      file: file,
+      selected: selected,
+      reason: reason,
+      onTap: () => onSelect(file.path),
+    ),
     UntrackedRow(:var entry, :var selected) => IndexUntrackedRow(
       entry: entry,
       selected: selected,
@@ -1813,7 +1810,6 @@ class _TreeNodeView extends StatefulWidget {
     required this.node,
     required this.depth,
     required this.selected,
-    required this.uncommitted,
     required this.ranking,
     required this.onSelect,
     required this.openDepth,
@@ -1822,7 +1818,6 @@ class _TreeNodeView extends StatefulWidget {
   final TreeNode node;
   final int depth;
   final String? selected;
-  final Set<String> uncommitted;
 
   /// So a pinned file can say, where it lives, what pinned it.
   final Ranking ranking;
@@ -1893,7 +1888,6 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
               node: child,
               depth: widget.depth + 1,
               selected: widget.selected,
-              uncommitted: widget.uncommitted,
               ranking: widget.ranking,
               onSelect: widget.onSelect,
               openDepth: widget.openDepth,
@@ -1907,7 +1901,6 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
                 child: IndexFileRow(
                   file: file,
                   selected: file.path == widget.selected,
-                  uncommitted: widget.uncommitted.contains(file.path),
                   // The second place attention is surfaced: a pinned file says
                   // what pinned it here too, where you are browsing, not only
                   // in the tab you may not have opened.

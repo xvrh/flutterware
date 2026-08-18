@@ -44,18 +44,12 @@ final class SectionRow extends ChangeRow {
 
 /// A file's own row in the index: status, name, counts, ruler.
 final class FileRow extends ChangeRow {
-  const FileRow(
-    this.file, {
-    required this.selected,
-    required this.uncommitted,
-    this.reason,
-  });
+  const FileRow(this.file, {required this.selected, this.reason});
 
   final FileChange file;
 
   /// Whether this is the file the right pane is showing.
   final bool selected;
-  final bool uncommitted;
 
   /// The rule that pinned or demoted this file, in the words it was written
   /// in. Null for the ordinary case, which is most files.
@@ -151,7 +145,6 @@ List<ChangeRow> buildImportantRows(
       FileRow(
         ranked.file,
         selected: ranked.file.path == selected,
-        uncommitted: set.uncommitted.contains(ranked.file.path),
         reason: ranked.reason,
       ),
     );

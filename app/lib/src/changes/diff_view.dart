@@ -25,7 +25,7 @@ import 'patch_index.dart';
 /// ruler and two 46 px count columns, which is a row that only reads at 1200 px.
 ///
 /// **The directory is not a note.** It was, briefly, and it was the last of
-/// them — after `uncommitted`, after `binary` — in one `·`-joined line, which
+/// them — behind `binary` — in one `·`-joined line, which
 /// made *where a file lives* the first thing ellipsised away. Three lines of a
 /// list like that and you cannot tell `app/lib/src/changes/ranking.dart` from
 /// `test/changes/ranking.dart`. It gets its own line; the flags get theirs, and
@@ -34,7 +34,6 @@ class IndexFileRow extends StatelessWidget {
   const IndexFileRow({
     required this.file,
     required this.selected,
-    required this.uncommitted,
     required this.onTap,
     this.reason,
     this.showDirectory = true,
@@ -46,7 +45,6 @@ class IndexFileRow extends StatelessWidget {
 
   /// Whether the right pane is showing this file.
   final bool selected;
-  final bool uncommitted;
   final VoidCallback onTap;
 
   /// False inside the tree, where the row's position already says where the
@@ -139,25 +137,8 @@ class IndexFileRow extends StatelessWidget {
                   // the 4.5:1 normal text is meant to clear; mut #6b7280 is
                   // 4.83:1 and is the only muted step that does.
                   if (_notes.isNotEmpty)
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          for (var (index, note) in _notes.indexed) ...[
-                            if (index > 0) const TextSpan(text: ' · '),
-                            TextSpan(
-                              text: note.text,
-                              // **Uncommitted keeps the amber the summary
-                              // gives it.** The header counts these in
-                              // [FwPalette.amber]; a row that then whispers the
-                              // same fact in grey makes the reader work out
-                              // that the two are about the same thing.
-                              style: note.amber
-                                  ? TextStyle(color: colors.amber)
-                                  : null,
-                            ),
-                          ],
-                        ],
-                      ),
+                    Text(
+                      _notes.join(' · '),
                       style: context.type.micro,
                       overflow: TextOverflow.ellipsis,
                       softWrap: false,
@@ -193,17 +174,21 @@ class IndexFileRow extends StatelessWidget {
 
   /// A third line, and only when there is something to put on it. The
   /// directory is deliberately **not** among these — that is what put it last
-  /// in a `·`-joined string behind `uncommitted`, where it was the first thing
-  /// to be ellipsised away.
-  List<({String text, bool amber})> get _notes => [
+  /// in a `·`-joined string behind the other flags, where it was the first
+  /// thing to be ellipsised away.
+  ///
+  /// **Whether a file is committed yet is not one of these.** It is a fact
+  /// about the reader's git state rather than about the change, and this list
+  /// is what you scan to decide which file to open — a question it never
+  /// answers. The summary above the list still counts them.
+  List<String> get _notes => [
     // **The rule first.** A row that was pinned has to say what pinned it or
     // the pin is magic, and magic is what people learn to ignore.
-    if (reason case var it?) (text: it, amber: false),
+    ?reason,
     // A rename says where it came from: `R` alone is a status nobody can act
     // on, and the index is where you decide whether to look.
-    if (file.oldPath case var it?) (text: 'from $it', amber: false),
-    if (uncommitted) (text: 'uncommitted', amber: true),
-    if (file.isBinary) (text: 'binary', amber: false),
+    if (file.oldPath case var it?) 'from $it',
+    if (file.isBinary) 'binary',
   ];
 
   Color _tone(FwPalette colors) => switch (file.status) {
