@@ -438,9 +438,12 @@ class Entrypoint {
   /// entry point under several flavors, declare it several times with different
   /// [name]s, or pass `flavor` to the launch action.
   ///
-  /// Android and Apple platforms only — `flutter run` rejects `--flavor` for
-  /// web, Linux and Windows, so leave it null for an entry point that targets
-  /// those.
+  /// Every platform but web — `supportsFlavors` is true on Linux, macOS and
+  /// Windows as well as Android and iOS, and web is the one that inherits the
+  /// `false` default. Declaring one on an entry point that also runs in a
+  /// browser is fine: the launch drops the flag there rather than refusing,
+  /// which is what a project setting `flutter: default-flavor:` for its web
+  /// build already expects.
   final String? flavor;
 
   /// What this entry point can actually run on. Everything, when empty.

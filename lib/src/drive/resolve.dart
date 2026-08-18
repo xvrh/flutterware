@@ -618,7 +618,23 @@ List<String> visibleTextsOf(WidgetController controller) => [
   ))
     _capped(switch (widget) {
       Text(:var data, :var textSpan) => data ?? textSpan?.toPlainText() ?? '',
-      EditableText(:var controller) => controller.text,
+      // **An obscured field reports what it draws, not what it holds.** The
+      // screenshot in the same reply already renders bullets; the plain value
+      // beside it put the password into the agent's transcript, into every log
+      // that transcript reaches, and onto disk in the run's journal and in a
+      // scenario's captured step. Nothing wants the literal here — a driver
+      // that typed it knows it, and matching a field *by* its secret is not a
+      // thing worth keeping. The widget's own [EditableText.obscuringCharacter]
+      // and the length are what the pixels say, so the projection stays
+      // faithful: still one entry, still non-empty, still countable.
+      EditableText(
+        :var controller,
+        :var obscureText,
+        :var obscuringCharacter,
+      ) =>
+        obscureText
+            ? obscuringCharacter * controller.text.length
+            : controller.text,
       _ => '',
     }),
 ];

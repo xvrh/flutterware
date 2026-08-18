@@ -219,6 +219,21 @@ class JobResult {
 /// the copies agreed on dropping the most useful part. `ArgumentError` keeps
 /// the offending value in `invalidValue`, and "expected red or blue" without
 /// "you said purple" is half an error message.
+/// A failure that is a fact about the project, not a fault in flutterware.
+///
+/// **The marker decides whether a stack is printed**, and that is the whole of
+/// what it is for. [FwCli] prints one for anything it does not recognise,
+/// deliberately — a plugin bug has to be reportable from the surface that has
+/// a terminal. But a stack is also an accusation: it names files in this
+/// package, and a reader who gets one starts debugging this package.
+///
+/// The case that motivated it is an app whose `main` threw before `runApp`.
+/// Every surface answered that with something either wrong or internal, and a
+/// stack out of `RunCore` was the worst of them — it sent a consumer to debug
+/// the wrong program. Nothing here is broken in that situation; their app is.
+/// Implement this on the exceptions that say so.
+abstract interface class ProjectFault implements Exception {}
+
 String describeJobError(Object error) {
   if (error is! ArgumentError) return '$error';
   var named = error.name == null

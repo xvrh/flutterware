@@ -43,11 +43,14 @@ class RunLogLine {
   final RunLogSource source;
   final String text;
 
-  /// The launcher marked it as an error — an errored `app.log`, or a
-  /// `daemon.logMessage` at error level.
+  /// The launcher marked it as an error — an errored `app.log`, a
+  /// `daemon.logMessage` at error level, or the engine's own severity prefix
+  /// (see [_engineSeverity]).
   ///
-  /// Not inferred from the text. A line containing the word "error" is
-  /// extremely often a line about not having one.
+  /// Not inferred from prose. A line containing the word "error" is extremely
+  /// often a line about not having one, and no amount of it makes a line an
+  /// error report. A fixed prefix written by one emitter is a different thing
+  /// from prose, which is the whole of why [_engineSeverity] is allowed here.
   final bool error;
 
   Map<String, Object?> toJson() => {
@@ -94,9 +97,10 @@ List<RunLogLine> readRunLog(
     var object = DaemonProtocol.tryReadLine(line);
     if (object == null) {
       if (line.startsWith(_appPrefix)) {
-        add(RunLogSource.app, line.substring(_appPrefix.length));
+        var text = line.substring(_appPrefix.length);
+        add(RunLogSource.app, text, error: _engineSeverity.hasMatch(text));
       } else {
-        add(RunLogSource.tool, line);
+        add(RunLogSource.tool, line, error: _engineSeverity.hasMatch(line));
       }
       continue;
     }
@@ -127,6 +131,22 @@ List<RunLogLine> readRunLog(
   }
   return result;
 }
+
+/// The Flutter **engine**'s own severity prefix, as in
+/// `[ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: …`.
+///
+/// **This is a format, not a word.** [RunLogLine.error] refuses to guess an
+/// error from prose and should keep refusing; what is matched here is a fixed
+/// shape one emitter writes — severity, source file, line — which no sentence
+/// about not having an error produces by accident.
+///
+/// It earns its place because of what it is the only record of. An app whose
+/// `main` throws before `runApp` never reaches a `FlutterError`, never sends an
+/// `app.log`, and never produces a `daemon.logMessage`: the engine writes this
+/// one line straight to the process's stderr and the app then sits there,
+/// answering its VM service with nothing mounted. Without this, `errors: []`
+/// was the honest reading of a log that plainly contained the reason.
+final _engineSeverity = RegExp(r'^\[(ERROR|FATAL):[^\]]*\]');
 
 /// What `flutter run` puts in front of a line the app printed.
 ///

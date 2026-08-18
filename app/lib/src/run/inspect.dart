@@ -11,6 +11,7 @@ import 'package:vm_service/vm_service.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 
+import '../session/job.dart';
 import 'connection.dart';
 
 final _logger = Logger('run_inspect');
@@ -25,6 +26,34 @@ const guestTreeExtension = 'ext.flutterware.tree';
 /// JSON-RPC's "Method not found" — what the VM answers for an extension the
 /// isolate in the request does not have.
 const _methodNotFound = -32601;
+
+/// The app answered, and has mounted nothing.
+///
+/// **Not "still starting up", which is what this used to guess.** The two
+/// states are indistinguishable from here — a root element is absent during
+/// the first frames and absent forever after a `main` that threw — so the
+/// sentence says what is *known* and points at the one place that can tell
+/// them apart. The launcher log is that place: an exception before `runApp`
+/// reaches no `FlutterError` and no daemon event, and the engine writes it to
+/// the process's stderr, which is the log this run already keeps.
+///
+/// A [ProjectFault], so the CLI prints it without a stack out of this package.
+/// The stack was the actively harmful half of the old answer.
+class AppNotStarted implements ProjectFault {
+  AppNotStarted([this.detail]);
+
+  /// What the launcher log had to say, when the caller could look it up.
+  final String? detail;
+
+  static const summary =
+      'the app has not called runApp, so there is no widget tree yet. '
+      'Either it is still starting, or its `main` threw before `runApp` — '
+      'the launcher log tells you which, and `inspect {errors: true}` '
+      'prints the lines that matter.';
+
+  @override
+  String toString() => [summary, ?detail].join('\n\n');
+}
 
 /// Reads a running app through the framework's own inspector.
 ///
@@ -238,12 +267,7 @@ class RunInspector {
     required double maxPixelRatio,
     required int? maxSide,
   }) async {
-    if (rootId == null) {
-      throw StateError(
-        'The app has no widget tree yet, so there is nothing to photograph. '
-        'It may still be starting up.',
-      );
-    }
+    if (rootId == null) throw AppNotStarted();
     // The RPC fits the render into this box, so the box decides how big the
     // picture comes back. Asking the root how big it actually is costs one
     // call and is the difference between a phone-shaped photograph and an

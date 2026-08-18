@@ -1457,7 +1457,12 @@ class FwCli {
     var error = result.error;
     if (error is ArgumentError) return fail(describeJobError(error));
     err.writeln('fw: ${describeJobError(error!)}');
-    if (result.stackTrace case var stackTrace?) err.writeln(stackTrace);
+    // A [ProjectFault] is not ours, so it gets no stack — see that type. It
+    // still exits 1 rather than the usage code: the caller typed nothing
+    // wrong, and their app really did fail.
+    if (error is! ProjectFault) {
+      if (result.stackTrace case var stackTrace?) err.writeln(stackTrace);
+    }
     return 1;
   }
 

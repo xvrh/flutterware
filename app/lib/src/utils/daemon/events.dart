@@ -143,7 +143,16 @@ class AppDebugPortEvent implements Event {
   final String appId;
   final int port;
   final Uri wsUri;
-  final Uri baseUri;
+
+  /// **Absent on web, and nothing here reads it.** `flutter run --machine`
+  /// builds this key with a null-aware map entry, so a runner that leaves
+  /// `baseUri` unset omits it entirely — and the web runner is one, where the
+  /// mobile and desktop path sets it. Declared non-null, the generated parse
+  /// threw on every Chrome launch, [DaemonProtocol.tryReadEvent] caught it and
+  /// dropped the event, and the handle never learned its VM service: no
+  /// inspect, no act, no reload, for the life of the run. Kept rather than
+  /// deleted because it costs a field and the daemon does send it elsewhere.
+  final Uri? baseUri;
 
   AppDebugPortEvent(this.appId, this.port, this.wsUri, this.baseUri);
 

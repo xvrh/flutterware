@@ -155,12 +155,20 @@ void main() {
     });
 
     test('does not speak for an action that does not exist', () async {
-      // The plugin owns everything past its own name, and it already refuses
-      // an unknown action by listing the real ones. Answering "no such
-      // parameter" first would describe the arguments of nothing.
+      // The plugin owns everything past its own name, and an unknown action is
+      // refused by listing the real ones. Answering "no such parameter" first
+      // would describe the arguments of nothing.
       var message = await refusal('previews', 'not-an-action', {'axes': '1'});
       expect(message, contains('unknown action'));
       expect(message, isNot(contains('no such parameter')));
+    });
+
+    /// With no arguments at all there is nothing to coerce, and the check used
+    /// to be skipped wholesale on that shortcut — see
+    /// `undeclared_action_test.dart` for what that let through.
+    test('an unknown action is refused even with no arguments', () async {
+      var message = await refusal('previews', 'not-an-action', {});
+      expect(message, contains('unknown action'));
     });
   });
 

@@ -950,6 +950,46 @@ class RunCore extends PluginCore {
             ),
           ],
         ),
+        // **Declared, which it was not.** It has been dispatched by [invoke]
+        // since the cockpit was built and named in no report, which made it
+        // invisible to `fw run run`, unanswerable by `--help`, and — the
+        // expensive part — exempt from the argument check, because that is
+        // keyed on the declaration. `screenshot --output=…` therefore wrote
+        // the default path and reported success for a flag that does not
+        // exist. Found by a consumer who typed `--output` for `out`.
+        PluginAction(
+          'screenshot',
+          'Screenshot',
+          returns: RunScreenshotResult,
+          description:
+              'A PNG of a running app, written to a file. The picture alone, '
+              'where `inspect {screenshot: true}` answers it beside the tree '
+              'and the logs from one reading. Platform views — native maps, '
+              'webviews, video — will not appear: they are composited by the '
+              "OS rather than by Flutter's layer tree, so nothing rendering "
+              'that tree can photograph them.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'out',
+              'Output path',
+              required: false,
+              description:
+                  "Where to write the PNG. A file beside the run's log when "
+                  'omitted, overwritten on each call.',
+            ),
+            const ActionParameter(
+              'maxSide',
+              'Longest side',
+              kind: ActionParameterKind.integer,
+              required: false,
+              description:
+                  'Scale the render so its longest side is at most this many '
+                  'pixels. The render is scaled, not the encoding, so this is '
+                  'what bounds the cost rather than the file.',
+            ),
+          ],
+        ),
         PluginAction(
           'act',
           'Act',
@@ -1816,6 +1856,31 @@ class RunCore extends PluginCore {
       'bootEmulator' => _bootEmulatorAction(arguments),
       _ => super.invoke(actionId, arguments: arguments),
     };
+  }
+
+  /// [message] with the launcher's own error lines under it.
+  ///
+  /// For the failures the app cannot narrate about itself. The lines are the
+  /// ones [readRunLog] marked — an errored `app.log`, a `daemon.logMessage` at
+  /// error level, or the engine's severity prefix — never a text match, so an
+  /// empty tail here means the log genuinely says nothing rather than that the
+  /// filter was too shy.
+  ///
+  /// Bounded, because the reader is usually a context window: an unhandled
+  /// exception is one line and a stack, and the first few carry the cause.
+  String? _withLauncherErrors(
+    RunHandle handle,
+    String? message, {
+    int tail = 6,
+  }) {
+    var lines = readLogs(handle, errorsOnly: true, tail: tail);
+    if (lines.isEmpty) return message;
+    var quoted = [for (var line in lines) '  ${line.text}'].join('\n');
+    return [
+      ?message,
+      'The launcher log says:\n$quoted',
+      'All of it: ${handle.logPath}',
+    ].join('\n\n');
   }
 
   static String? _joinNotes(List<String?> parts) {
@@ -3387,12 +3452,20 @@ class RunCore extends PluginCore {
       var value => _intArgument(value, 0),
     };
     var started = DateTime.now();
-    var bytes = await _withInspector(
-      handle,
-      (i) => i.screenshot(
-        maxSide: maxSide == null || maxSide <= 0 ? null : maxSide,
-      ),
-    );
+    Uint8List bytes;
+    try {
+      bytes = await _withInspector(
+        handle,
+        (i) => i.screenshot(
+          maxSide: maxSide == null || maxSide <= 0 ? null : maxSide,
+        ),
+      );
+    } on AppNotStarted {
+      // Rethrown carrying the log, because the caller cannot join these two
+      // facts themselves: the inspector knows there is no tree and cannot see
+      // the file, and the file holds the reason and cannot see the request.
+      throw AppNotStarted(_withLauncherErrors(handle, null));
+    }
     var file = File(out);
     file.parent.createSync(recursive: true);
     file.writeAsBytesSync(bytes);
@@ -3737,7 +3810,16 @@ class RunCore extends PluginCore {
     );
     var step = (reply['step'] as Map?)?.cast<String, Object?>();
     var settle = (step?['settle'] as Map?)?.cast<String, Object?>();
+    var failure = reply['failure'] as String?;
     var error = reply['error'] as String?;
+    // **The app could not say why, so the launcher has to.** `notStarted` is
+    // the guest reporting that nothing was ever mounted, which it can detect
+    // and cannot explain: the exception that stopped `main` was written to the
+    // process's stderr by the engine, and the guest has no more access to that
+    // file than it has to a widget tree. The reason is in the log this handle
+    // already names, so it rides the refusal rather than waiting for a second
+    // call that the reader has to know to make.
+    if (failure == 'notStarted') error = _withLauncherErrors(handle, error);
     var treeJson = (reply['tree'] as Map?)?.cast<String, Object?>();
     var texts = (reply['texts'] as List?)?.cast<String>();
     var logs = (reply['logs'] as List?)?.cast<Map>();
@@ -3795,7 +3877,7 @@ class RunCore extends PluginCore {
             arguments['target'] as String? ??
             arguments['route'] as String?,
         error: error,
-        failure: reply['failure'] as String?,
+        failure: failure,
         attempts: step?['attempts'] as int?,
         elapsedMs: step?['elapsedMs'] as int?,
         settled: settle?['settled'] as bool?,
@@ -3850,8 +3932,8 @@ class RunCore extends PluginCore {
       ok: error == null,
       error: error == null
           ? null
-          : '$error${await _nativeHint(handle, reply['failure'] as String?)}',
-      failure: reply['failure'] as String?,
+          : '$error${await _nativeHint(handle, failure)}',
+      failure: failure,
       reconciled: reconciled == 0 ? null : reconciled,
       attempts: step?['attempts'] as int?,
       elapsedMs: step?['elapsedMs'] as int?,

@@ -166,11 +166,51 @@ void main() {
 
     expect(find.byIcon(Icons.bug_report), findsNothing);
     expect(find.byType(FittedBox), findsNothing);
-    expect(
-      find.byType(Directionality),
-      findsOneWidget,
-      reason: "the app's own",
-    );
+  });
+
+  /// **The ambient defaults are not chrome, and this is what it cost to learn
+  /// that.** Reported by a consumer wiring Run into a real app: the visible
+  /// branch supplied a `Directionality` for the overlay's own `Stack` and the
+  /// headless branch did not, so an app with a widget above its `MaterialApp`
+  /// that needed one rendered *nothing* and logged `No Directionality widget
+  /// found`. Only ever under flutterware, because `isHeadless` defaults to
+  /// `GuestChannels.installed` — a plain `flutter run` took the branch that
+  /// supplied one, so the author saw it break in the single path they could
+  /// not reproduce, in a widget they had written themselves.
+  ///
+  /// The subject is that shape: a `Stack` above the app's `MaterialApp`, which
+  /// is the environment banner / device frame / watermark every one of these
+  /// apps has. It must render under both branches and by the same rule as
+  /// every other widget — the picture test above is what holds the two to
+  /// identical *pixels*; this holds them to identical *inherited context*.
+  testWidgets('a banner above the app renders headless as it does visible', (
+    tester,
+  ) async {
+    for (var headless in [true, false]) {
+      await tester.pumpWidget(
+        Devbar(
+          plugins: const [],
+          headless: headless,
+          child: Stack(
+            children: [
+              _app(),
+              const Positioned(top: 0, left: 0, child: Text('staging')),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason:
+            'headless: $headless — the banner needs an ambient '
+            'Directionality, and the devbar is what supplies it',
+      );
+      expect(find.text('staging'), findsOneWidget);
+      expect(find.text('hello'), findsOneWidget);
+    }
   });
 }
 
