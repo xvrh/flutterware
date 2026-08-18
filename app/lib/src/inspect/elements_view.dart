@@ -694,7 +694,8 @@ class _Detail extends StatelessWidget {
           // by it. See [InspectNode.textStyle].
           if (it.textStyle.isNotEmpty) ...[
             const SizedBox(height: FwSpacing.md),
-            const _Section('style'),
+            // Header included: whether the block wants one rule or two is the
+            // grouping's business, not the caller's.
             ..._styleRows(it),
           ],
           // What the widget says about itself — its diagnostics, already
@@ -753,8 +754,16 @@ List<Widget> _styleRows(InspectNode node) {
   }
 
   return [
+    // **One rule, never two stacked.** A `Text` that sets no style of its own
+    // puts every field in the inherited group, and the divider then landed
+    // directly under the block header — two micro labels with rules, four
+    // pixels apart, reading as a doubled heading rather than as "everything
+    // below here came from the theme". Where there is nothing to divide, the
+    // header says it instead.
+    _Section(set.isEmpty ? 'style · all inherited' : 'style'),
     for (var name in set) row(name),
-    if (inherited.isNotEmpty) const _Section('inherited', inset: true),
+    if (set.isNotEmpty && inherited.isNotEmpty)
+      const _Section('inherited', inset: true),
     for (var name in inherited) row(name),
     _OriginRow(node: node),
   ];

@@ -377,5 +377,71 @@ void main() {
       // one column of what the pane already shows.
       expect(find.text('renders as'), findsNothing);
     });
+
+    testWidgets('a widget that set nothing gets one heading, not two rules', (
+      tester,
+    ) async {
+      await open(
+        tester,
+        InspectTree.fromJson({
+          'root': {
+            'id': '',
+            'type': 'Text',
+            'description': 'Text("Count: 0")',
+            'layout': {'x': 0, 'y': 0, 'width': 60, 'height': 20},
+            'properties': {'data': '"Count: 0"'},
+            'style': {
+              'debugLabel': '(englishLike bodyMedium 2021)',
+              'size': '14.0',
+              'weight': '400',
+            },
+            'inherited': 'same',
+          },
+        }).root!,
+      );
+
+      // Everything is inherited, so the rule had nothing above it and sat
+      // directly under the block header — two micro headings four pixels
+      // apart. The header carries it instead.
+      expect(find.text('style · all inherited'), findsOneWidget);
+      expect(find.text('style'), findsNothing);
+      expect(find.text('inherited'), findsNothing);
+      expect(find.text('14.0'), findsWidgets);
+    });
+
+    testWidgets('a split still gets the plain header and the rule', (
+      tester,
+    ) async {
+      await open(tester, styled());
+
+      expect(find.text('style'), findsOneWidget);
+      expect(find.text('inherited'), findsOneWidget);
+      expect(find.text('style · all inherited'), findsNothing);
+    });
+
+    testWidgets('the sentinel still opens the merge card', (tester) async {
+      await open(
+        tester,
+        InspectTree.fromJson({
+          'root': {
+            'id': '',
+            'type': 'Text',
+            'description': 'Text("Count: 0")',
+            'layout': {'x': 0, 'y': 0, 'width': 60, 'height': 20},
+            'style': {
+              'debugLabel': '(englishLike bodyMedium 2021)',
+              'size': '14.0',
+            },
+            'inherited': 'same',
+          },
+        }).root!,
+      );
+      await tester.tap(find.text('bodyMedium'));
+      await tester.pumpAndSettle();
+
+      // `"same"` means captured, so the card opens — unlike an absent
+      // `inherited`, which means nobody looked.
+      expect(find.text('renders as'), findsOneWidget);
+    });
   });
 }

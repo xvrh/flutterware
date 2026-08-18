@@ -2930,6 +2930,18 @@ class RunCore extends PluginCore {
   /// same frame. Two calls would be two moments, and a live app animates,
   /// fires timers and takes in data between them — the tree would describe a
   /// screen the picture no longer shows.
+  ///
+  /// **The app's own walk first, when it has one.** A run launched through
+  /// flutterware carries the guest, and the guest's tree is the one with boxes,
+  /// properties and resolved text styles in it — everything the pane's detail
+  /// side had to say "structure and source only" about. A run that has no
+  /// guest, or one attached to by something else, falls back to the service
+  /// extension and the pane goes on saying it. The reply says which happened;
+  /// see [InspectRead.fromGuest].
+  ///
+  /// Deliberately not extended to the `inspect` action, whose whole selling
+  /// point is that it answers about an app that never heard of flutterware —
+  /// and whose caller already has `act` when it wants the richer tree.
   Future<InspectRead> inspectRead(
     RunHandle handle, {
     bool tree = true,
@@ -2939,7 +2951,12 @@ class RunCore extends PluginCore {
       debugRead?.call(handle) ??
       _withInspector(
         handle,
-        (i) => i.read(tree: tree, screenshot: screenshot, summary: summary),
+        (i) => i.read(
+          tree: tree,
+          screenshot: screenshot,
+          summary: summary,
+          preferGuest: true,
+        ),
       );
 
   /// Stands in for the VM service so the panel can be pumped in a test.

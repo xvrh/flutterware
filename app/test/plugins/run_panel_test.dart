@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
@@ -10,6 +12,7 @@ import 'package:flutterware/src/inspect/node.dart';
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/context.dart';
+import 'package:flutterware_app/src/inspect/node_highlight.dart';
 import 'package:flutterware_app/src/plugins/native/run_address.dart';
 import 'package:flutterware_app/src/plugins/native/run_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
@@ -53,7 +56,11 @@ void main() {
   });
 
   /// Mounts the panel on the Screen tab against one fake reading.
-  Future<void> pumpScreenTab(WidgetTester tester, Uint8List? image) async {
+  Future<void> pumpScreenTab(
+    WidgetTester tester,
+    Uint8List? image, {
+    InspectTree? tree,
+  }) async {
     var core = RunCore(
       PluginHost(
         id: runPluginId,
@@ -90,14 +97,17 @@ void main() {
     await tester.runAsync(core.computeAll);
     core.debugSetProbe(handle, const RunProbe(app: true, launcher: true));
     core.debugRead = (_) async => InspectRead(
-      tree: InspectTree(
-        entryId: null,
-        root: const InspectNode(
-          id: '',
-          type: 'MyApp',
-          createdByLocalProject: true,
-        ),
-      ),
+      tree:
+          tree ??
+          InspectTree(
+            entryId: null,
+            root: const InspectNode(
+              id: '',
+              type: 'MyApp',
+              createdByLocalProject: true,
+            ),
+          ),
+      fromGuest: tree != null,
       image: image,
     );
 
@@ -194,6 +204,121 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Hot restart'), findsOneWidget);
+  });
+
+  /// The box over the picture, which only a guest tree can draw.
+  ///
+  /// Three things have to line up for it and only the first is arithmetic:
+  /// the rects are in the app's own logical pixels, the picture is those
+  /// pixels shrunk into a third of a pane, and what says how much they were
+  /// shrunk by is the topmost rect in the tree — the same box the screenshot
+  /// RPC was framed on.
+  group('the highlight', () {
+    /// `MyApp` is the canvas at 400×200; the `Text` sits in it; the `Ghost` is
+    /// wearing the rect it had when it was last on a screen.
+    InspectTree treeWithBoxes() => const InspectTree(
+      entryId: null,
+      root: InspectNode(
+        id: '',
+        type: 'MyApp',
+        createdByLocalProject: true,
+        layout: InspectLayout(x: 0, y: 0, width: 400, height: 200),
+        children: [
+          InspectNode(
+            id: '0',
+            type: 'Text',
+            createdByLocalProject: true,
+            layout: InspectLayout(x: 40, y: 20, width: 120, height: 30),
+          ),
+          InspectNode(
+            id: '1',
+            type: 'Ghost',
+            createdByLocalProject: true,
+            offstage: true,
+            layout: InspectLayout(x: 0, y: 0, width: 10, height: 10),
+          ),
+        ],
+      ),
+    );
+
+    TestGesture? mouse;
+
+    /// Points at [row] the way a mouse does.
+    Future<void> hover(WidgetTester tester, String row) async {
+      if (mouse == null) {
+        mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        addTearDown(() => mouse!.removePointer());
+        await mouse!.addPointer(location: Offset.zero);
+      }
+      await mouse!.moveTo(tester.getCenter(find.text(row)));
+      await tester.pump();
+    }
+
+    /// Whatever box is drawn over the picture — none being a real answer, and
+    /// the one two of these tests are about.
+    List<NodeHighlightPainter> painted(WidgetTester tester) => tester
+        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .map((paint) => paint.painter)
+        .whereType<NodeHighlightPainter>()
+        .toList();
+
+    testWidgets('lands where the node is, scaled into the picture', (
+      tester,
+    ) async {
+      await pumpScreenTab(
+        tester,
+        await _png(tester, 400, 200),
+        tree: treeWithBoxes(),
+      );
+
+      await hover(tester, 'Text');
+      var painter = painted(tester).single;
+      // Whatever width the pane happened to give the picture — the point is
+      // that the box is the same *fraction* of it that the node is of the app.
+      var picture = tester.getSize(find.byType(RawImage));
+      // **What makes the fraction the whole of the mapping.** `RenderImage`
+      // sizes itself preserving the image's aspect, so `BoxFit.contain` fills
+      // that box exactly and there is no letterbox inside it to account for.
+      // Asserted rather than assumed: a change of `fit` here would move every
+      // box and break nothing else.
+      expect(picture.width / picture.height, closeTo(400 / 200, 0.001));
+      expect(painter.label, 'Text');
+      expect(painter.rect!.left, closeTo(picture.width * 40 / 400, 0.01));
+      expect(painter.rect!.top, closeTo(picture.height * 20 / 200, 0.01));
+      expect(painter.rect!.width, closeTo(picture.width * 120 / 400, 0.01));
+      expect(painter.rect!.height, closeTo(picture.height * 30 / 200, 0.01));
+    });
+
+    testWidgets('leaves the picture alone for a node that is not on it', (
+      tester,
+    ) async {
+      await pumpScreenTab(
+        tester,
+        await _png(tester, 400, 200),
+        tree: treeWithBoxes(),
+      );
+
+      // Proves the pointer is doing something, so that the nothing below is
+      // an answer about the node rather than about the hover.
+      await hover(tester, 'Text');
+      expect(painted(tester), hasLength(1));
+
+      // An offstage node's rect is where it *was*. Drawing it would put a box
+      // on a screen the widget is not on.
+      await hover(tester, 'Ghost');
+      expect(painted(tester), isEmpty);
+    });
+
+    testWidgets('is not drawn at all over a tree that carries no box', (
+      tester,
+    ) async {
+      // The service-extension reading — every node without a layout. Nothing
+      // tests for the reader; a node with no rect simply paints nothing.
+      await pumpScreenTab(tester, await _png(tester, 400, 200));
+
+      await hover(tester, 'MyApp');
+      expect(painted(tester), isEmpty);
+    });
   });
 
   testWidgets('a picture that will not decode is said, not captioned', (
@@ -430,3 +555,23 @@ const _onePixelPng = [
   15, 0, 1, 4, 1, 0, 128, 187, 209, 91, 0, 0,
   0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
 ];
+
+/// A blank PNG [width]×[height], so the pane has a picture with a real shape
+/// to fit — a one-pixel image would make every fraction of it the same
+/// fraction.
+Future<Uint8List> _png(WidgetTester tester, int width, int height) async {
+  var bytes = await tester.runAsync(() async {
+    var recorder = ui.PictureRecorder();
+    Canvas(recorder).drawRect(
+      Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+      Paint()..color = const Color(0xFF202020),
+    );
+    var image = await recorder.endRecording().toImage(width, height);
+    try {
+      return await image.toByteData(format: ui.ImageByteFormat.png);
+    } finally {
+      image.dispose();
+    }
+  });
+  return bytes!.buffer.asUint8List();
+}
