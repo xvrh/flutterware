@@ -15,6 +15,17 @@ import 'connection.dart';
 
 final _logger = Logger('run_inspect');
 
+/// What the run guest registers its own tree walk as.
+///
+/// Named here rather than imported from the guest so that the host's copy of
+/// the string is the host's: this file talks to whichever flutterware built
+/// the app, which need not be this one.
+const guestTreeExtension = 'ext.flutterware.tree';
+
+/// JSON-RPC's "Method not found" — what the VM answers for an extension the
+/// isolate in the request does not have.
+const _methodNotFound = -32601;
+
 /// Reads a running app through the framework's own inspector.
 ///
 /// **Nothing here needs code in the user's app.** `WidgetInspectorService` is
@@ -52,20 +63,35 @@ class RunInspector {
   /// Asks for the tree even when only a picture is wanted, because the
   /// screenshot RPC takes an inspector id and ids only exist inside a group.
   /// Previews are skipped in that case, which is the only cost saved.
+  ///
+  /// [preferGuest] asks the app's own walk for the tree first and falls back
+  /// to the service extension — see [_guestTree] for what that buys and why it
+  /// is off by default.
   Future<InspectRead> read({
     bool tree = false,
     bool screenshot = false,
     bool summary = true,
+    bool preferGuest = false,
     double maxPixelRatio = 2,
     int? maxSide,
   }) => _inGroup((group) async {
-    var (:read, :rootId) = await _readTree(
-      group,
-      summary: summary,
-      withPreviews: tree,
-    );
+    // Only for a tree somebody asked for, and only for a summary one: the
+    // guest walks the summary tree and nothing else, so `full` is a question
+    // it cannot answer.
+    var guest = tree && summary && preferGuest ? await _guestTree() : null;
+    // **A picture still needs an inspector id**, because that is what the
+    // screenshot RPC takes and the guest's ids are positions rather than
+    // handles. It does not need a whole second tree for one, though — see
+    // [_rootId].
+    var (:read, :rootId) = guest == null
+        ? await _readTree(group, summary: summary, withPreviews: tree)
+        : (
+            read: InspectTree.empty,
+            rootId: screenshot ? await _rootId(group) : null,
+          );
     return InspectRead(
-      tree: tree ? read : null,
+      tree: tree ? guest ?? read : null,
+      fromGuest: guest != null,
       image: screenshot
           ? await _screenshot(
               group,
@@ -76,6 +102,101 @@ class RunInspector {
           : null,
     );
   });
+
+  /// The tree as the **app itself** walks it, or null when this run has no
+  /// guest in it.
+  ///
+  /// One shape, two readers. `ext.flutterware.tree` answers with the same
+  /// `GuestInspector.read()` that the drive loop, the previews panel and a
+  /// scenario step are answered from, so a cockpit handed this one gets what
+  /// the service extension has no way to part with: the boxes, the widget's
+  /// own properties, the resolved text style and the ambient style underneath
+  /// it. The last of those is not a matter of nobody having wired it —
+  /// `RenderParagraph`'s resolved span never leaves the app on any RPC. See
+  /// `docs/superpowers/specs/2026-08-18-node-detail-enrichment.md` §5.
+  ///
+  /// **It never throws, and the fallback is not a degraded mode.** An app with
+  /// no guest is the ordinary case here — this class exists to work against
+  /// one that has never heard of flutterware — so every failure lands on
+  /// [_readTree], which is what every run got before this existed. The cost of
+  /// being wrong is one refused RPC, plus a census on top when the refusal
+  /// could have been a wrong isolate.
+  Future<InspectTree?> _guestTree() async {
+    try {
+      return await _askGuest();
+    } on RPCError catch (error) {
+      if (error.code != _methodNotFound) {
+        _logger.fine('The guest would not answer with a tree: $error');
+        return null;
+      }
+      // `Unknown method` is two facts — no guest at all, or a guest in an
+      // isolate this connection did not pick — and only the VM tells them
+      // apart. Repaired rather than concluded, exactly as `DriveSession` does
+      // it: a guess left standing here would quietly downgrade the pane for
+      // the life of the run, and quietly is the problem.
+      var found = await connection.findIsolateWith(guestTreeExtension);
+      if (found.id case var id? when id != connection.isolateId) {
+        connection.useIsolate(id);
+        try {
+          return await _askGuest();
+        } on Object catch (e) {
+          _logger.fine('The guest in $id would not answer: $e');
+        }
+      }
+      return null;
+    } on Object catch (e) {
+      _logger.fine('Could not read a guest tree: $e');
+      return null;
+    }
+  }
+
+  /// An inspector id for the root, and nothing else.
+  ///
+  /// What [_screenshot] takes, and all of what it takes. `getRootWidget`
+  /// serializes the root node alone where `getRootWidgetTree` serializes the
+  /// whole summary tree — **2.7ms against 122ms**, measured against the studio
+  /// inspecting itself (835 nodes) — so a read that already has its tree from
+  /// the guest does not pay for a second one it is going to throw away. That
+  /// one call is the difference between the guest path costing more than the
+  /// service path and costing about the same.
+  ///
+  /// **`objectGroup`, not `groupName`.** The two spellings are not
+  /// interchangeable and the wrong one does not say so: this extension is
+  /// registered through `_registerObjectGroupServiceExtension`, which reads
+  /// `objectGroup` behind a null check, so `groupName` comes back as
+  /// `(-32000) Server error: Null check operator used on a null value` —
+  /// which reads like a broken app rather than a misspelled argument.
+  Future<String?> _rootId(String group) async {
+    try {
+      var response = await _service.callServiceExtension(
+        'ext.flutter.inspector.getRootWidget',
+        isolateId: connection.isolateId,
+        args: {'objectGroup': group},
+      );
+      if ((response.json?['result'] as Map?)?['valueId'] case String id) {
+        return id;
+      }
+    } on Object catch (e) {
+      _logger.fine('Could not read a root id on its own: $e');
+    }
+    // The whole tree for the one field on it, rather than no picture: this is
+    // what the service path pays anyway, so the fallback is the old cost and
+    // not a new failure.
+    return (await _readTree(group, summary: true, withPreviews: false)).rootId;
+  }
+
+  Future<InspectTree?> _askGuest() async {
+    var response = await _service.callServiceExtension(
+      guestTreeExtension,
+      isolateId: connection.isolateId,
+    );
+    var json = response.json;
+    if (json == null) return null;
+    var read = InspectTree.fromJson(json.cast<String, Object?>());
+    // A guest that has not built a frame yet has nothing to prefer: the
+    // service tree says the same thing and comes with the id a picture needs.
+    return read.root == null ? null : read;
+  }
 
   /// The widget tree, as of the app's last build.
   ///
@@ -320,7 +441,7 @@ class RunInspector {
 /// returns, and the caller that wanted only liveness got it from the
 /// connection succeeding.
 class InspectRead {
-  const InspectRead({this.tree, this.image});
+  const InspectRead({this.tree, this.image, this.fromGuest = false});
 
   /// Null when the tree was not asked for. `InspectTree.empty` — non-null with
   /// a null root — when it was and the app has not built a frame yet. The
@@ -330,4 +451,13 @@ class InspectRead {
 
   /// A PNG, when one was asked for.
   final Uint8List? image;
+
+  /// [tree] came from the app's own walk rather than from the service
+  /// extension.
+  ///
+  /// Which is what decides how to read a *missing* field. A guest tree with no
+  /// box on a node means that node lays nothing out; a service tree with no
+  /// box on a node means nothing looked. `ElementsView.readsWidgets` is this
+  /// flag, and the sentence it draws is the difference between those two.
+  final bool fromGuest;
 }

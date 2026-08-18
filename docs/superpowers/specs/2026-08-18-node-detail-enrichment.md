@@ -15,7 +15,7 @@ Everything below is measured on the `.fvmrc` pin (Flutter 3.47.0-0.1.pre),
 in `flutter test` on this machine. The probes were throwaway and are deleted;
 each measurement says how to reproduce it.
 
-## Status: A, B, C and A′ are built. D through I are not.
+## Status: A, B, C, A′ and F are built. D, E, G, H, I are not.
 
 The resolved text style ships — `InspectNode.textStyle`, read in
 `GuestInspector._textStyleOf`, so previews, scenarios and drive all carry it.
@@ -36,8 +36,51 @@ reasoning:
   carries all three, so they were a row each on every text node. Seen in the
   pane, not predicted.
 
-Everything from §4 down — render-object properties, the constraint chain, the
-cockpit — is still analysis.
+**F shipped by the other route, and the route mattered.** §5 below costs out
+filling the cockpit's detail pane through `getDetailsSubtree` — a `valueId`
+side map, a round trip per selection, and a pane that has boxes on selection
+and none in the walk. None of that was built, because a run launched through
+flutterware already contains a reader that has all of it: the guest registers
+`ext.flutterware.tree`, and it answers with the same walk previews and
+scenarios are answered from. `RunInspector.read(preferGuest: true)` asks it
+first and falls back to the service extension, so the cockpit's Screen tab
+draws boxes, constraints, the widget's own properties, the resolved style, the
+merge card — the whole pane, identical to the other two surfaces — on a run it
+launched, and goes on saying *"structure and source only"* on one it merely
+attached to. `InspectRead.fromGuest` is what the pane's `readsWidgets` reads.
+
+Measured on the studio inspecting its own 835-node tree, ten reads a run,
+three runs:
+
+```
+tree only        service 123–149ms     guest 253–303ms
+tree + picture   service 424–464ms     guest 576–614ms
+```
+
+So the guest walk costs about twice the service tree, and a refresh costs about
+30% more than it did. Two things about that number are worth keeping:
+
+- **The picture is what makes it affordable.** A screenshot is ~300ms of the
+  read either way, so the walk's extra ~150ms lands on a total that was never
+  going to feel instant. This is a button, not a mirror.
+- **It would have been ~730ms without `_rootId`.** The screenshot RPC takes an
+  inspector id, so the first version paid for the whole service summary tree
+  purely to read one field off it and throw the rest away. `getRootWidget`
+  serializes the root node alone — **2.7ms against 122ms** — and that one call
+  is the difference between +30% and +60%. Note its argument is `objectGroup`,
+  not `groupName`; the wrong spelling answers `(-32000) Server error: Null
+  check operator used on a null value`, which reads like a broken app.
+
+What F did *not* take from §5: `parentRenderElement` — which ancestor actually
+laid this node out — is in `getLayoutExplorerNode` and in no guest field, so it
+stays an open item on either route.
+
+Deliberately not extended to the `inspect` action. Its whole selling point is
+answering about an app that never heard of flutterware, and a caller that wants
+the richer tree already has `act`.
+
+Everything from §4 down — render-object properties, the constraint chain — is
+still analysis.
 
 ---
 
@@ -253,6 +296,11 @@ Two more things worth doing on-selection, which are wrong to do on a walk:
 
 ## 5. The run cockpit can be filled without the guest — the SL3 note is narrower than it reads
 
+> **Route not taken.** F shipped by preferring the guest's own walk (see the
+> status section). Everything below stands as the answer for a run that has no
+> guest in it — an app somebody else launched and the cockpit attached to —
+> which is still the only way that pane will ever have a box in it.
+
 `2026-07-31-sl3-inspect-surface-findings.md` says "**No offset, no global rect,
 anywhere in the inspector surface**" and "`getDetailsSubtree` at depth 100
 answers `(-32000) Server error`". Both are true. Read as "the cockpit's detail
@@ -326,7 +374,7 @@ for the same reason.**
 | A′ | ✅ fix `InspectTree.styles()` to bucket on the resolved style | the type ramp, correctly | same + every agent using `styles` | free with A | **XS**, but it changes a shipped answer |
 | D | render-object properties **on selection** | opacity, transform, clip, elevation, computed flex | same | one guest round trip | **M** — new extension beside `renderObjectFor` |
 | E | constraint chain (N ancestors: type, constraints, size) | *who made this unbounded* | same | walks `render.parent` | **M** |
-| F | fill the cockpit detail pane via `getDetailsSubtree` | ends "structure and source only" | run cockpit | 0.66ms + one round trip, on selection | **M** — needs the `valueId` side map |
+| F | ✅ fill the cockpit detail pane — *from the guest, not `getDetailsSubtree`* | ends "structure and source only" on a run flutterware launched | run cockpit | +150ms a read, whole tree, no per-selection cost | **S** — `preferGuest` on one read, no `valueId` side map |
 | G | expand nested property values instead of truncating | a `BoxDecoration` you can read | all four | on-selection only | **S** |
 | H | effective paint chain (nearest painting ancestor, opacity, clip) | *what is this actually sitting on* | guest | walk | **M/L** — needs a rule for "which ancestor counts" |
 | I | colour → theme role (`colorScheme.primary`) | *is this the brand blue or a literal* | guest | lookup | **L** — `guest_inspect.dart` deliberately imports `widgets` and not `material`; reaching `ThemeData` means a dynamic ancestor lookup or a second, optional guest file. `debugLabel` already gives the text half for free, so this is the least urgent of the lot. |

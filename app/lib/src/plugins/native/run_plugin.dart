@@ -789,6 +789,12 @@ class _ScreenTabState extends State<_ScreenTab> {
   ui.Image? _picture;
   var _undecodable = false;
   InspectTree? _tree;
+
+  /// Whether [_tree] came from the app's own walk — see
+  /// [InspectRead.fromGuest]. It decides what an empty field in the detail
+  /// pane is allowed to mean, which is why it is carried rather than guessed
+  /// at from whether some node happens to have a box.
+  var _fromGuest = false;
   String? _error;
   var _loading = false;
 
@@ -805,11 +811,15 @@ class _ScreenTabState extends State<_ScreenTab> {
 
   /// What the tree hovers, for a box drawn over the picture.
   ///
-  /// Nothing draws one yet and that is not an oversight: the inspector surface
-  /// carries **no position at all** — `getLayoutExplorerNode` gives size and
-  /// constraints, `parentData` is `<none>` — so global rects wait for the
-  /// Devbar installer. [ElementsView] requires the notifier, so it gets a real
-  /// one rather than a widget bent around the gap.
+  /// Nothing draws one yet. On the service-extension path it cannot: that
+  /// surface carries **no position at all** — `getLayoutExplorerNode` gives
+  /// size and constraints, `parentData` is `<none>`. A guest tree does carry
+  /// global rects, so on a run launched through flutterware the box is now
+  /// only unbuilt rather than impossible — and the thing to settle first is
+  /// that the picture and the tree are two RPCs apart, so a rect and a frame
+  /// of the same read are not quite the same moment. [ElementsView] requires
+  /// the notifier, so it gets a real one rather than a widget bent around the
+  /// gap.
   final _highlight = ValueNotifier<String?>(null);
 
   @override
@@ -829,6 +839,7 @@ class _ScreenTabState extends State<_ScreenTab> {
       _picture = null;
       _undecodable = false;
       _tree = null;
+      _fromGuest = false;
       _error = null;
       _read();
     }
@@ -867,6 +878,7 @@ class _ScreenTabState extends State<_ScreenTab> {
         _picture = picture;
         _undecodable = read.image != null && picture == null;
         _tree = read.tree;
+        _fromGuest = read.fromGuest;
         _error = null;
       });
     } on Object catch (e) {
@@ -947,10 +959,13 @@ class _ScreenTabState extends State<_ScreenTab> {
                 // detail pane rather than on every row — which is what the
                 // shared view does and what the run panel's own tree did not.
                 displayRoot: widget.core.host.worktree.path,
-                // The VM service hands out structure and creation locations;
-                // a box or a widget's own diagnostics need to be inside the
-                // app. Said here rather than inferred from empty fields.
-                readsWidgets: false,
+                // Per read, because this pane has two sources. The VM
+                // service hands out structure and creation locations and
+                // nothing else; the guest walks the app's own elements, so on
+                // a run launched through flutterware a node with no box
+                // really has none. Said here rather than inferred from empty
+                // fields.
+                readsWidgets: _fromGuest,
               ),
             ),
           ],
