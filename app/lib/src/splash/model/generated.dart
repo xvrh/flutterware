@@ -156,6 +156,21 @@ const _pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 String androidResFolder(String? flavor) =>
     p.join('android', 'app', 'src', flavor ?? 'main', 'res');
 
+/// What a flavor is spelled as inside the iOS asset catalog.
+///
+/// The generator's `_FlavorHelper` builds every iOS name as
+/// `LaunchImage$_iOSFlavorName`, and `_iOSFlavorName` is `flavor.capitalize()` —
+/// its own extension, which upper-cases the first character and **lower-cases
+/// the rest**. So `devQA` writes `LaunchImageDevqa.imageset`.
+///
+/// That last part is why this only ever runs forwards. The transform is lossy,
+/// so a directory listing cannot be read back into the flavor that produced it;
+/// the flavor has to come from the config file, which is where the splash scan
+/// already gets it.
+String iosFlavorName(String? flavor) => flavor == null || flavor.isEmpty
+    ? ''
+    : '${flavor[0].toUpperCase()}${flavor.substring(1).toLowerCase()}';
+
 /// Everything the generator wrote under [packageRoot], newest information
 /// first.
 ///
@@ -243,14 +258,21 @@ List<SplashArtifact> findSplashArtifacts(String packageRoot, {String? flavor}) {
   //
   // `LaunchBackground.imageset` is the honest marker: `_createiOSSplash` writes
   // its `Contents.json` unconditionally, and nothing else creates it.
+  //
+  // Under a flavor every one of these three moves — `LaunchImageDev.imageset`
+  // and so on — and the stock set stays where it is. Reading the unsuffixed
+  // names for a flavor therefore did not come back empty, which would at least
+  // have been visible: it came back with the *default* flavor's files, reported
+  // as the flavor's own.
   var iosAssets = p.join(packageRoot, 'ios', 'Runner', 'Assets.xcassets');
+  var suffix = iosFlavorName(flavor);
   var iosGenerated = Directory(
-    p.join(iosAssets, 'LaunchBackground.imageset'),
+    p.join(iosAssets, 'LaunchBackground$suffix.imageset'),
   ).existsSync();
 
   for (var set in ['LaunchImage', 'BrandingImage', 'LaunchBackground']) {
     if (!iosGenerated) break;
-    var dir = Directory(p.join(iosAssets, '$set.imageset'));
+    var dir = Directory(p.join(iosAssets, '$set$suffix.imageset'));
     if (!dir.existsSync()) continue;
     for (var file in dir.listSync().whereType<File>()) {
       if (p.extension(file.path) != '.png') continue;

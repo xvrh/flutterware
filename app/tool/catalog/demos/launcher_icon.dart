@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutterware_app/src/launcher_icon/model/role.dart';
+import 'package:flutterware_app/src/launcher_icon/model/scan.dart';
+import 'package:flutterware_app/src/launcher_icon/ui/flavor_chips.dart';
 import 'package:flutterware_app/src/launcher_icon/ui/plate.dart';
 import 'package:flutterware_app/src/launcher_icon/ui/situ.dart';
 import 'package:flutterware_app/src/ui/design/design.dart';
@@ -31,6 +33,9 @@ Widget launcherIconPlates() => const _Plates();
 
 @Preview(name: 'Side by side', group: 'Launcher icon', wrapper: wrapInAppTheme)
 Widget launcherIconComparison() => const _Comparison();
+
+@Preview(name: 'Flavors', group: 'Launcher icon', wrapper: wrapInAppTheme)
+Widget launcherIconFlavors() => const _Flavors();
 
 // ---- The ambitious direction ----------------------------------------------
 
@@ -296,6 +301,82 @@ class _Comparison extends StatelessWidget {
     );
   }
 }
+
+// ---- Flavors ---------------------------------------------------------------
+
+/// The flavor row in every state it has.
+///
+/// The states are the reason this is an entry: three chips that differ only in
+/// a border alpha and a text colour is exactly the kind of distinction that
+/// reads fine in the source and vanishes on screen.
+class _Flavors extends StatelessWidget {
+  const _Flavors();
+
+  @override
+  Widget build(BuildContext context) {
+    return _Page(
+      title: 'Flavors — and what is behind each one',
+      subtitle:
+          'A flavor is whatever named it: a config, an Android source set, an '
+          'iOS catalog, or all three. The chip has to show which, because '
+          '"configured" and "generated" send you to different places.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: FwSpacing.xxl,
+        children: [
+          for (var (caption, flavors, selected) in _states)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FlavorChips(flavors: flavors, selected: selected),
+                const Gap(FwSpacing.md),
+                Text(
+                  caption,
+                  style: context.type.caption.copyWith(
+                    color: context.colors.mut,
+                  ),
+                ),
+              ],
+            ),
+          const Gap(FwSpacing.lg),
+          Text('The tooltips, spelled out', style: context.type.sectionLabel),
+          const Gap(FwSpacing.md),
+          for (var flavor in _every)
+            Padding(
+              padding: const EdgeInsets.only(bottom: FwSpacing.sm),
+              child: Text(
+                '${flavor.name} — ${flavorHint(flavor) ?? 'no tooltip'}',
+                style: context.type.caption.copyWith(color: context.colors.mut),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+IconFlavor _flavor(String name, Set<IconFlavorSource> sources) =>
+    IconFlavor(name, sources);
+
+final _every = [
+  _flavor('complete', IconFlavorSource.values.toSet()),
+  _flavor('unbuilt', {IconFlavorSource.config}),
+  _flavor('androidOnly', {
+    IconFlavorSource.config,
+    IconFlavorSource.androidSourceSet,
+  }),
+  _flavor('iosOnly', {IconFlavorSource.config, IconFlavorSource.iosCatalog}),
+];
+
+final _states = <(String, List<IconFlavor>, String?)>[
+  ('The default selected, one flavor fully generated', [_every.first], null),
+  (
+    'A flavor selected, beside one that has never been generated',
+    [_every[0], _every[1]],
+    'complete',
+  ),
+  ('Every state at once, which is the width test', _every, 'androidOnly'),
+];
 
 // ---- Page chrome -----------------------------------------------------------
 

@@ -33,11 +33,11 @@ class IconInventoryResult implements PluginResult {
   /// The address of this package, pasteable back into the shell.
   final String address;
 
-  /// Which Android source set this reports on, or null for `main`.
+  /// Which flavor this reports on, or null for the default.
   final String? flavor;
 
-  /// The other source sets that exist.
-  final List<String> flavors;
+  /// Every flavor the package has, and what says so.
+  final List<IconFlavorEntry> flavors;
 
   /// `none`, `appIconSet`, `iconComposer` or `both`. Three-valued because a
   /// project can legitimately have no per-size PNGs — Xcode generates them from
@@ -58,6 +58,28 @@ class IconInventoryResult implements PluginResult {
 
   @override
   Map<String, Object?> toJson() => _$IconInventoryResultToJson(this);
+}
+
+/// A flavor, and the evidence for it.
+///
+/// [sources] rather than a bare name because "configured but never generated"
+/// and "generated for Android only" are the two states worth acting on, and a
+/// list of strings can express neither.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class IconFlavorEntry {
+  IconFlavorEntry({required this.name, this.sources = const []});
+
+  final String name;
+
+  /// Some of `config`, `androidSourceSet`, `iosCatalog`. Never empty — a flavor
+  /// is here because something on disk named it.
+  final List<String> sources;
+
+  Map<String, Object?> toJson() => _$IconFlavorEntryToJson(this);
 }
 
 /// One role, and every file that plays it.
