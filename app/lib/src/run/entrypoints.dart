@@ -146,6 +146,7 @@ List<Knob> _knobsOf(Object? raw) => [
               if (option is String) option,
           ],
           from: ValueSource.fromJson(entry['from']),
+          required: entry['required'] == true,
         ),
 ];
 

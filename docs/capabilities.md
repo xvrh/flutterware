@@ -398,6 +398,7 @@ packages: List<RunEntrypointPackage>
       defaultSource: String?   # How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.
       options: List<String>   # Everything worth offering — an enum's constants, this machine's addresses, a list a project script printed, or what the config wrote.
       problem: String?   # What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.
+      required: bool   # True when a launch that sets no value for this knob is refused — see [Knob.required].
 note: String?
 ```
 

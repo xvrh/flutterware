@@ -277,6 +277,7 @@ class RunKnobEntry {
     this.defaultSource,
     this.options = const [],
     this.problem,
+    this.required = false,
   });
 
   /// The parameter's name — what `launch` takes as a key.
@@ -316,6 +317,18 @@ class RunKnobEntry {
   /// What is wrong with this knob, when something is: a source that could not
   /// answer, or a declaration naming a parameter that is not there.
   final String? problem;
+
+  /// True when a launch that sets no value for this knob is refused — see
+  /// [Knob.required].
+  ///
+  /// **Absent rather than false**, which is why it goes through a converter: an
+  /// entry point's knobs are the longest thing in this reply and almost none of
+  /// them are required, so a `"required": false` on every line would be paid
+  /// for on every listing to say nothing.
+  @JsonKey(toJson: _ifRequired)
+  final bool required;
+
+  static bool? _ifRequired(bool value) => value ? true : null;
 
   Map<String, Object?> toJson() => _$RunKnobEntryToJson(this);
 }

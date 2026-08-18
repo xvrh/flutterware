@@ -41,7 +41,14 @@ final _logger = Logger('main_dev');
 /// same environment is stripped, so nothing in this process can see which
 /// `flutter` launched it — and flutterware does not guess: the SDK is whichever
 /// one the invocation names, and here the invocation is `flutter run`, which
-/// this side cannot read. So it is said out loud, as a knob or a define.
+/// this side cannot read. So it is said out loud.
+///
+/// Launched through flutterware, saying it is not your job: `tool/flutterware.dart`
+/// declares the knob `from: ValueSource.flutterSdk`, so the launcher hands over
+/// the SDK it is building with, and `required: true` refuses the launch before
+/// the build if it ever cannot. The throw below is therefore reachable only
+/// from a hand launch that forgot the define — which is why it prints that
+/// command rather than describing the studio's own form.
 void main({
   String appRoot = const String.fromEnvironment('FLUTTERWARE_APP_ROOT'),
   String project = '..',
@@ -54,8 +61,9 @@ void main({
   );
   if (flutterSdkRoot.isEmpty) {
     throw StateError(
-      'main_dev needs the Flutter SDK it should use. Set the flutterSdkRoot '
-      'knob on the run Knobs tab, or pass it when launching by hand:\n\n'
+      'main_dev needs the Flutter SDK it should use, and a `flutter run` '
+      'cannot see which flutter started it. Launched through flutterware this '
+      'arrives on its own; by hand, pass it:\n\n'
       r'    --dart-define=FLUTTER_SDK_ROOT="$(cd "$(dirname "$(which flutter)")/.." && pwd)"',
     );
   }
