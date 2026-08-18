@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'mini_markdown.dart';
 import 'shop_app.dart';
 
 /// Leaves whatever you are on and lands on the menu, as the root.
@@ -344,7 +345,7 @@ class ConfirmationScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              Text(
+              MiniMarkdown(
                 strings.thanks(name),
                 textAlign: TextAlign.center,
                 style: const TextStyle(

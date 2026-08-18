@@ -10,6 +10,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
+import '../translations/index.dart';
 import 'node.dart';
 import 'semantics.dart';
 import 'semantics_capture.dart';
@@ -196,6 +197,15 @@ class GuestInspector {
     var byRenderObject = <RenderObject, String>{};
     // One entry per distinct style rather than per text — see [_describeStyle].
     var styles = <TextStyle, Map<String, String>>{};
+    // One paragraph, one set of keys. Several widget nodes share a
+    // `RenderParagraph` — a `Text` builds a `RichText` and both report it — so
+    // without this the same key is recorded two or three times per screen,
+    // each with a different box. Found by the gate run: 19 939 spans where the
+    // screen had 6 750. Outermost wins, the same rule `byRenderObject` uses,
+    // because the outermost node is the one a click means.
+    var claimedParagraphs = <RenderObject>{};
+    // Before the conversion, and for a reason — see [_sourceClaims].
+    var sources = _sourceClaims(rootOf());
     // A group name of our own: the inspector refcounts these and the panel or
     // DevTools may be holding others against the same isolate.
     const group = 'flutterware.inspect';
@@ -223,7 +233,17 @@ class GuestInspector {
       return (
         tree: InspectTree(
           entryId: entryId,
-          root: _convert(demo, '', byRenderObject, styles, null, false),
+          root: _convert(
+            demo,
+            '',
+            byRenderObject,
+            styles,
+            claimedParagraphs,
+            sources,
+            null,
+            false,
+            false,
+          ),
         ),
         byRenderObject: byRenderObject,
       );
@@ -330,8 +350,11 @@ class GuestInspector {
     String path,
     Map<RenderObject, String> byRenderObject,
     Map<TextStyle, Map<String, String>> styles,
+    Set<RenderObject> claimedParagraphs,
+    ({Map<Element, InspectKey> claims, Set<RenderObject> paragraphs}) sources,
     RenderObject? ancestorRender,
     bool ancestorOffstage,
+    bool ancestorClaimed,
   ) {
     var children = json['children'] as List? ?? const [];
     var description = json['description'] as String?;
@@ -341,6 +364,23 @@ class GuestInspector {
     var element = _elementOf(json);
     var render = element?.renderObject;
     var textStyle = _textStyleOf(render, styles);
+    // **The widget's own property, for anything that renders text its own way.**
+    // A markdown renderer builds its spans out of substrings and a chart paints
+    // its labels with no paragraph at all, so identity finds nothing below
+    // here — but the string the catalogue handed out is still sitting on the
+    // widget, and reading it there is exact rather than inferred.
+    var claimed = element == null ? null : sources.claims[element];
+    var spans = _keysOf(
+      render,
+      claimedParagraphs,
+      sources.paragraphs,
+      isSource: claimed != null,
+    );
+    // A source with more than one paragraph under it — which any real markdown
+    // block has — is only partly covered by the paragraph set above, so the
+    // rest are silenced on the way down. Keys are *not* silenced: a resolved
+    // key under here came from a second read and is a fact of its own.
+    var underClaim = ancestorClaimed || claimed != null;
     if (render != null) {
       // First writer wins. Several widgets in a summary tree can share one
       // render object — a `Padding` under a `Semantics` under a builder all
@@ -370,6 +410,9 @@ class GuestInspector {
       styleReplacesInherited: textStyle.isEmpty
           ? null
           : _replacesInherited(element?.widget),
+      keys: claimed == null ? spans.keys : [claimed, ...spans.keys],
+      unkeyedText: underClaim ? const [] : spans.unkeyed,
+      textOverflowed: spans.overflowed,
       source: switch (json['creationLocation']) {
         Map location => InspectSource.fromJson(
           location.cast<String, Object?>(),
@@ -387,8 +430,11 @@ class GuestInspector {
               path.isEmpty ? '$index' : '$path/$index',
               byRenderObject,
               styles,
+              claimedParagraphs,
+              sources,
               render ?? ancestorRender,
               offstage,
+              underClaim,
             ),
       ],
     );
@@ -551,6 +597,151 @@ class GuestInspector {
     var style = _paragraphOf(render)?.text.style;
     return style == null ? const {} : _describeStyle(style, styles);
   }
+
+  /// Which translation keys this node's glyphs came from, and how many of its
+  /// spans came from no catalogue at all.
+  ///
+  /// **Per span, not per `Text`.** A first version read `Text.data` and
+  /// flattened a `Text.rich` with `toPlainText()`, which destroyed exactly the
+  /// case worth resolving — a sentence assembled from a translated fragment and
+  /// a name. The paragraph's own span tree keeps the pieces apart, and `Text`
+  /// passes its `data` straight into its span, so reading the paragraph is
+  /// every glyph exactly once either way.
+  ///
+  /// Offsets are over the paragraph's plain text, so a range lines up with what
+  /// a reader sees. A placeholder — a `WidgetSpan` — occupies one code unit
+  /// there, and is counted as such rather than skipped, or every range after an
+  /// inline icon would be off by one.
+  ///
+  /// Free when nothing registered: [TranslationIndex.recording] is false under
+  /// a bare `flutter test`, and this returns before touching the render tree.
+  static ({List<InspectKey> keys, List<String> unkeyed, bool overflowed})
+  _keysOf(
+    RenderObject? render,
+    Set<RenderObject> claimed,
+    Set<RenderObject> fromSource, {
+    required bool isSource,
+  }) {
+    const none = (keys: <InspectKey>[], unkeyed: <String>[], overflowed: false);
+    if (!TranslationIndex.recording) return none;
+    var paragraph = _paragraphOf(render);
+    if (paragraph == null) return none;
+    // Every span in here is one widget's string, reparsed into substrings by
+    // the widget itself — debris rather than text anybody wrote. The key comes
+    // off the property instead. Checked before the claim so a wrapper above
+    // does not consume the paragraph and leave the source with nothing: the
+    // source is the one node still worth asking whether it fits.
+    if (fromSource.contains(paragraph)) {
+      return isSource
+          ? (
+              keys: <InspectKey>[],
+              unkeyed: <String>[],
+              overflowed: paragraph.didExceedMaxLines,
+            )
+          : none;
+    }
+    if (!claimed.add(paragraph)) return none;
+    var root = paragraph.text;
+
+    var keys = <InspectKey>[];
+    var unkeyed = <String>[];
+    var offset = 0;
+    void visit(InlineSpan span) {
+      if (span is! TextSpan) {
+        offset += 1;
+        return;
+      }
+      if (span.text case var text?) {
+        // An `Icon` is a `RichText` over an icon font, so it arrives here as a
+        // one-glyph span in the Private Use Area. Not text, and counting it
+        // would put every icon in the app in the unkeyed pile — measured at
+        // 1146 of 7896 spans on one real suite, 17%.
+        if (!_isIconGlyph(text)) {
+          if (TranslationIndex.keyOf(text) case var found?) {
+            keys.add(
+              InspectKey(
+                catalogue: found.catalogue,
+                key: found.key,
+                start: offset,
+                end: offset + text.length,
+              ),
+            );
+          } else {
+            unkeyed.add(text);
+          }
+        }
+        offset += text.length;
+      }
+      for (var child in span.children ?? const <InlineSpan>[]) {
+        visit(child);
+      }
+    }
+
+    visit(root);
+    return (
+      keys: keys,
+      unkeyed: unkeyed,
+      // Free: the paragraph is already in hand, and this is the whole of "does
+      // it still fit in the other language".
+      overflowed: paragraph.didExceedMaxLines,
+    );
+  }
+
+  /// Every key a registered widget property names, found *before* the walk.
+  ///
+  /// A pre-pass rather than a lookup during the conversion, because of who
+  /// reaches the paragraph first. [_paragraphOf] descends a single-child render
+  /// chain, so a `Center` three levels *above* a markdown block arrives at its
+  /// paragraph too — and the walk being top-down, it claims those fragments as
+  /// unkeyed before the widget still holding the original string is converted
+  /// at all. Suppression that only flows downward cannot reach it. Knowing the
+  /// paragraphs up front is what lets every node above one decline it.
+  ///
+  /// Free when nothing registered, which is every project that has not asked
+  /// for it: the element tree is not walked.
+  static ({Map<Element, InspectKey> claims, Set<RenderObject> paragraphs})
+  _sourceClaims(Element? root) {
+    var claims = <Element, InspectKey>{};
+    var paragraphs = <RenderObject>{};
+    if (root == null ||
+        !TranslationIndex.recording ||
+        TranslationIndex.sources.isEmpty) {
+      return (claims: claims, paragraphs: paragraphs);
+    }
+    void visit(Element element) {
+      if (_sourceKeyOf(element.widget) case var key?) {
+        claims[element] = key;
+        if (_paragraphOf(element.renderObject) case var paragraph?) {
+          paragraphs.add(paragraph);
+        }
+      }
+      element.visitChildren(visit);
+    }
+
+    visit(root);
+    return (claims: claims, paragraphs: paragraphs);
+  }
+
+  /// The key a registered widget property names, or null.
+  ///
+  /// First source that both matches the widget *and* resolves wins. A source
+  /// whose property holds a string no catalogue minted does not stop the next
+  /// one being tried, so registering two for one widget is safe.
+  static InspectKey? _sourceKeyOf(Widget? widget) {
+    if (!TranslationIndex.recording || widget == null) return null;
+    for (var source in TranslationIndex.sources) {
+      if (source(widget) case var text?) {
+        if (TranslationIndex.keyOf(text) case var found?) {
+          return InspectKey(catalogue: found.catalogue, key: found.key);
+        }
+      }
+    }
+    return null;
+  }
+
+  static bool _isIconGlyph(String text) =>
+      text.runes.isNotEmpty &&
+      text.runes.every((rune) => rune >= 0xE000 && rune <= 0xF8FF);
 
   /// One style as rows — **memoised across the walk**, which is most of what
   /// it costs.

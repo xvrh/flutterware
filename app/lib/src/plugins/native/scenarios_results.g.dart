@@ -93,6 +93,9 @@ ScenarioRunOutcome _$ScenarioRunOutcomeFromJson(Map<String, dynamic> json) =>
               ?.map((e) => ScenarioRunError.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      translations: (json['translations'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, Map<String, String>.from(e as Map)),
+      ),
     );
 
 Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
@@ -105,6 +108,7 @@ Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
       'steps': instance.steps.map((e) => e.toJson()).toList(),
       'stepCount': instance.stepCount,
       'errors': instance.errors.map((e) => e.toJson()).toList(),
+      'translations': ?instance.translations,
     };
 
 ScenarioRunStep _$ScenarioRunStepFromJson(Map<String, dynamic> json) =>
@@ -117,6 +121,7 @@ ScenarioRunStep _$ScenarioRunStepFromJson(Map<String, dynamic> json) =>
       width: (json['width'] as num).toInt(),
       height: (json['height'] as num).toInt(),
       tree: json['tree'] as String,
+      keys: json['keys'] as String?,
       texts: (json['texts'] as List<dynamic>).map((e) => e as String).toList(),
       address: json['address'] as String,
       semantics: json['semantics'] as String?,
@@ -177,6 +182,7 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
       'width': instance.width,
       'height': instance.height,
       'tree': instance.tree,
+      'keys': ?instance.keys,
       'semantics': ?instance.semantics,
       'texts': instance.texts,
       'verb': ?instance.verb,

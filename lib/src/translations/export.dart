@@ -1,0 +1,552 @@
+/// The export format, typed — written by the exporter, read by whatever
+/// pushes it somewhere.
+///
+/// Plain Dart, and this is the point of it: a project's `tool/` script runs
+/// under `dart run` with no Flutter, exactly like `tool/flutterware.dart`
+/// does. Talking to a translation service is a few lines over these types, and
+/// the alternative — every consumer digging through the same nested maps — is
+/// the same fragile code written once per project.
+///
+/// **This is published API.** A field renamed here breaks somebody's script,
+/// which is why [translationExportVersion] exists and why [TranslationExport.read]
+/// refuses a major it does not know rather than handing back a half-decoded
+/// object.
+///
+/// Design: `2026-08-18-translation-index-design.md`.
+library;
+
+import 'dart:convert';
+import 'dart:io';
+
+/// The format `keys.json` is written in.
+///
+/// Bumped only when a reader of the previous version would get something
+/// wrong. Added fields do not bump it — an older reader ignoring a new key is
+/// the behaviour that makes adding one cheap.
+const translationExportVersion = 1;
+
+/// The file an export's index is written to, inside its directory.
+const translationExportFile = 'keys.json';
+
+/// A box on a captured frame, **in the image's own pixels**.
+///
+/// Not logical pixels: the capture scale is already applied. A consumer
+/// cropping, drawing, or handing this to a service that draws it should never
+/// have to know what the run was captured at, and the one that has to ask is
+/// the one that gets it wrong at 3x.
+class ExportedRect {
+  const ExportedRect({
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  final int x;
+  final int y;
+  final int width;
+  final int height;
+
+  int get area => width * height;
+
+  /// Parses the `x,y w×h` spelling the capture records.
+  ///
+  /// [scale] multiplies logical pixels into the image's. Null when the string
+  /// is not a rect — a missing box is ordinary (a key can be recorded without
+  /// one) and should not take the whole export down.
+  static ExportedRect? parse(String? rect, {double scale = 1}) {
+    if (rect == null) return null;
+    var parts = rect.split(' ');
+    if (parts.length != 2) return null;
+    var origin = parts.first.split(',');
+    var size = parts.last.split('×');
+    if (origin.length != 2 || size.length != 2) return null;
+    var x = double.tryParse(origin.first);
+    var y = double.tryParse(origin.last);
+    var width = double.tryParse(size.first);
+    var height = double.tryParse(size.last);
+    if (x == null || y == null || width == null || height == null) return null;
+    return ExportedRect(
+      x: (x * scale).round(),
+      y: (y * scale).round(),
+      width: (width * scale).round(),
+      height: (height * scale).round(),
+    );
+  }
+
+  Map<String, Object?> toJson() => {
+    'x': x,
+    'y': y,
+    'width': width,
+    'height': height,
+  };
+
+  static ExportedRect? fromJson(Object? json) => switch (json) {
+    Map json => ExportedRect(
+      x: _int(json['x']),
+      y: _int(json['y']),
+      width: _int(json['width']),
+      height: _int(json['height']),
+    ),
+    _ => null,
+  };
+
+  @override
+  String toString() => '$x,$y $width×$height';
+}
+
+/// One place a key was seen, on one captured frame.
+///
+/// [image] is the **whole frame**, not a crop, and the same file is shared by
+/// every key on it. Cropping was considered and dropped: the services this
+/// feeds all take an image plus a rectangle, so a crop would mean recomputing
+/// every box against it and throwing away the context the box exists to point
+/// into.
+class ExportedShot {
+  const ExportedShot({
+    required this.image,
+    required this.scenario,
+    required this.step,
+    required this.stepIndex,
+    this.rect,
+    this.charStart,
+    this.charEnd,
+    this.locale,
+    this.device,
+    this.offstage = false,
+    this.overflowed = false,
+  });
+
+  /// The frame, relative to the export directory. [TranslationExport.file]
+  /// turns it into something openable.
+  final String image;
+
+  /// `file/name`, as a run reports a scenario.
+  final String scenario;
+  final String step;
+  final int stepIndex;
+
+  /// Where the words are on [image], or null when the capture recorded no box.
+  final ExportedRect? rect;
+
+  /// The span inside its paragraph, so a key sharing a `Text` with two others
+  /// can still be pointed at exactly.
+  final int? charStart;
+  final int? charEnd;
+
+  final String? locale;
+  final String? device;
+
+  /// Built, but not on screen — kept because "declared, reached, never shown"
+  /// is a different answer from "never reached".
+  final bool offstage;
+
+  /// The words did not fit. The localisation bug, in one flag.
+  final bool overflowed;
+
+  Map<String, Object?> toJson() => {
+    'image': image,
+    'scenario': scenario,
+    'step': step,
+    'stepIndex': stepIndex,
+    if (rect case var rect?) 'rect': rect.toJson(),
+    if (charStart != null) 'charStart': charStart,
+    if (charEnd != null) 'charEnd': charEnd,
+    if (locale != null) 'locale': locale,
+    if (device != null) 'device': device,
+    if (offstage) 'offstage': true,
+    if (overflowed) 'overflowed': true,
+  };
+
+  static ExportedShot fromJson(Map<String, Object?> json) => ExportedShot(
+    image: json['image'] as String? ?? '',
+    scenario: json['scenario'] as String? ?? '',
+    step: json['step'] as String? ?? '',
+    stepIndex: _int(json['stepIndex']),
+    rect: ExportedRect.fromJson(json['rect']),
+    charStart: json['charStart'] as int?,
+    charEnd: json['charEnd'] as int?,
+    locale: json['locale'] as String?,
+    device: json['device'] as String?,
+    offstage: json['offstage'] as bool? ?? false,
+    overflowed: json['overflowed'] as bool? ?? false,
+  );
+}
+
+/// One key, everything the run learned about it.
+class ExportedKey {
+  const ExportedKey({
+    required this.catalogue,
+    required this.key,
+    this.values = const {},
+    this.representative,
+    this.occurrences = const [],
+  });
+
+  final String catalogue;
+  final String key;
+
+  /// `catalogue/key` — what a service knows the string as, and how
+  /// [TranslationExport.operator []] addresses it.
+  String get id => '$catalogue/$key';
+
+  /// What the catalogue files say, per locale.
+  final Map<String, String> values;
+
+  /// The one shot worth showing a translator, or null when the key was
+  /// declared and never seen. Ranked, not first-found — see the design.
+  final ExportedShot? representative;
+
+  /// Everywhere else it was seen, [representative] included.
+  final List<ExportedShot> occurrences;
+
+  Map<String, Object?> toJson() => {
+    'catalogue': catalogue,
+    'key': key,
+    if (values.isNotEmpty) 'values': values,
+    if (representative case var shot?) 'representative': shot.toJson(),
+    if (occurrences.isNotEmpty)
+      'occurrences': [for (var shot in occurrences) shot.toJson()],
+  };
+
+  static ExportedKey fromJson(Map<String, Object?> json) => ExportedKey(
+    catalogue: json['catalogue'] as String? ?? '',
+    key: json['key'] as String? ?? '',
+    values: _strings(json['values']),
+    representative: switch (json['representative']) {
+      Map shot => ExportedShot.fromJson(shot.cast<String, Object?>()),
+      _ => null,
+    },
+    occurrences: [
+      for (var shot in json['occurrences'] as List? ?? const [])
+        if (shot is Map) ExportedShot.fromJson(shot.cast<String, Object?>()),
+    ],
+  );
+}
+
+/// A declared catalogue, as the export found it.
+class ExportedCatalogue {
+  const ExportedCatalogue({
+    required this.name,
+    required this.template,
+    this.locales = const [],
+    this.keys = 0,
+  });
+
+  final String name;
+
+  /// The locale the source text is written in.
+  final String template;
+
+  final List<String> locales;
+
+  /// How many keys the files define — the denominator behind
+  /// [ExportFindings.notReached].
+  final int keys;
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'template': template,
+    'locales': locales,
+    'keys': keys,
+  };
+
+  static ExportedCatalogue fromJson(Map<String, Object?> json) =>
+      ExportedCatalogue(
+        name: json['name'] as String? ?? '',
+        template: json['template'] as String? ?? 'en',
+        locales: [
+          for (var locale in json['locales'] as List? ?? const [])
+            if (locale is String) locale,
+        ],
+        keys: _int(json['keys']),
+      );
+}
+
+/// A key whose rendered words were not what its locale's file says.
+class ExportedLocaleFinding {
+  const ExportedLocaleFinding({
+    required this.catalogue,
+    required this.key,
+    required this.locale,
+    required this.rendered,
+    this.expected,
+  });
+
+  final String catalogue;
+  final String key;
+  final String locale;
+
+  /// What the app actually put on screen.
+  final String rendered;
+
+  /// What the files say it should have been, or null when they say nothing —
+  /// which is what makes this a fallback rather than a disagreement.
+  final String? expected;
+
+  Map<String, Object?> toJson() => {
+    'catalogue': catalogue,
+    'key': key,
+    'locale': locale,
+    'rendered': rendered,
+    if (expected != null) 'expected': expected,
+  };
+
+  static ExportedLocaleFinding fromJson(Map<String, Object?> json) =>
+      ExportedLocaleFinding(
+        catalogue: json['catalogue'] as String? ?? '',
+        key: json['key'] as String? ?? '',
+        locale: json['locale'] as String? ?? '',
+        rendered: json['rendered'] as String? ?? '',
+        expected: json['expected'] as String?,
+      );
+}
+
+/// A key named by one of the two coverage lists.
+class ExportedKeyRef {
+  const ExportedKeyRef({required this.catalogue, required this.key});
+
+  final String catalogue;
+  final String key;
+
+  String get id => '$catalogue/$key';
+
+  Map<String, Object?> toJson() => {'catalogue': catalogue, 'key': key};
+
+  static ExportedKeyRef fromJson(Map<String, Object?> json) => ExportedKeyRef(
+    catalogue: json['catalogue'] as String? ?? '',
+    key: json['key'] as String? ?? '',
+  );
+}
+
+/// Words on a screen that belonged to no catalogue.
+class ExportedUnkeyed {
+  const ExportedUnkeyed({
+    required this.text,
+    required this.scenario,
+    required this.step,
+    this.source,
+    this.locale,
+  });
+
+  final String text;
+  final String scenario;
+  final String step;
+
+  /// `home.dart:42:7` — where the widget was built, which is what turns this
+  /// from a list into somewhere to go.
+  final String? source;
+
+  final String? locale;
+
+  Map<String, Object?> toJson() => {
+    'text': text,
+    'scenario': scenario,
+    'step': step,
+    if (source != null) 'source': source,
+    if (locale != null) 'locale': locale,
+  };
+
+  static ExportedUnkeyed fromJson(Map<String, Object?> json) => ExportedUnkeyed(
+    text: json['text'] as String? ?? '',
+    scenario: json['scenario'] as String? ?? '',
+    step: json['step'] as String? ?? '',
+    source: json['source'] as String?,
+    locale: json['locale'] as String?,
+  );
+}
+
+/// Everything the export noticed that is worth acting on.
+///
+/// Findings, deliberately not failures: a run that produced them is still a
+/// good export, and the reason to look at it.
+class ExportFindings {
+  const ExportFindings({
+    this.fallingBack = const [],
+    this.disagrees = const [],
+    this.notReached = const [],
+    this.absentFromCatalogue = const [],
+    this.overflowing = const [],
+    this.unkeyed = const [],
+  });
+
+  /// Every place the app showed the source language to somebody who asked for
+  /// another one. The most valuable list here.
+  final List<ExportedLocaleFinding> fallingBack;
+
+  /// The files and what ran disagree — a stale build, or a value overridden
+  /// somewhere the files do not know about.
+  final List<ExportedLocaleFinding> disagrees;
+
+  /// Declared, and this run never asked for it. **A statement about the
+  /// suite's coverage as much as the product's** — never call it unused.
+  final List<ExportedKeyRef> notReached;
+
+  /// Read, and no declared catalogue defines it.
+  final List<ExportedKeyRef> absentFromCatalogue;
+
+  final List<ExportedShot> overflowing;
+
+  final List<ExportedUnkeyed> unkeyed;
+
+  bool get isEmpty =>
+      fallingBack.isEmpty &&
+      disagrees.isEmpty &&
+      notReached.isEmpty &&
+      absentFromCatalogue.isEmpty &&
+      overflowing.isEmpty &&
+      unkeyed.isEmpty;
+
+  Map<String, Object?> toJson() => {
+    'fallingBack': [for (var it in fallingBack) it.toJson()],
+    'disagrees': [for (var it in disagrees) it.toJson()],
+    'notReached': [for (var it in notReached) it.toJson()],
+    'absentFromCatalogue': [for (var it in absentFromCatalogue) it.toJson()],
+    'overflowing': [for (var it in overflowing) it.toJson()],
+    'unkeyed': [for (var it in unkeyed) it.toJson()],
+  };
+
+  static ExportFindings fromJson(Map<String, Object?> json) => ExportFindings(
+    fallingBack: _list(json['fallingBack'], ExportedLocaleFinding.fromJson),
+    disagrees: _list(json['disagrees'], ExportedLocaleFinding.fromJson),
+    notReached: _list(json['notReached'], ExportedKeyRef.fromJson),
+    absentFromCatalogue: _list(
+      json['absentFromCatalogue'],
+      ExportedKeyRef.fromJson,
+    ),
+    overflowing: _list(json['overflowing'], ExportedShot.fromJson),
+    unkeyed: _list(json['unkeyed'], ExportedUnkeyed.fromJson),
+  );
+}
+
+/// A written export, read back.
+///
+/// ```dart
+/// var export = await TranslationExport.read('build/translations');
+/// for (var key in export.keys) {
+///   var shot = key.representative;
+///   if (shot == null) continue;
+///   await service.attach(export.file(shot.image), key.id, shot.rect);
+/// }
+/// ```
+class TranslationExport {
+  const TranslationExport({
+    this.version = translationExportVersion,
+    this.directory = '.',
+    this.catalogues = const [],
+    this.keys = const [],
+    this.findings = const ExportFindings(),
+  });
+
+  final int version;
+
+  /// Where it was read from — what [file] resolves against. Not serialized:
+  /// an export is movable, and a path baked into it would survive the move and
+  /// be wrong.
+  final String directory;
+
+  final List<ExportedCatalogue> catalogues;
+
+  /// Every key, most-seen first, then declared-but-unseen.
+  final List<ExportedKey> keys;
+
+  final ExportFindings findings;
+
+  /// The key with this `catalogue/key` id, or null.
+  ExportedKey? operator [](String id) {
+    for (var key in keys) {
+      if (key.id == id) return key;
+    }
+    return null;
+  }
+
+  /// Every key that was actually seen on a screen.
+  Iterable<ExportedKey> get seen =>
+      keys.where((key) => key.representative != null);
+
+  /// Turns an export-relative path — [ExportedShot.image] — into a file.
+  File file(String exportRelative) => File(
+    '$directory${Platform.pathSeparator}'
+    '${exportRelative.replaceAll('/', Platform.pathSeparator)}',
+  );
+
+  /// Reads the `keys.json` in [directory].
+  ///
+  /// Throws [FormatException] when the directory holds no export, or holds one
+  /// this version cannot read. Both name what was found and what was expected:
+  /// the reader of this message is looking at somebody else's build output.
+  static Future<TranslationExport> read(String directory) async {
+    var file = File(
+      '$directory${Platform.pathSeparator}$translationExportFile',
+    );
+    if (!file.existsSync()) {
+      throw FormatException(
+        'No $translationExportFile in "$directory". '
+        'Run the translations export first.',
+      );
+    }
+    return fromJson(switch (jsonDecode(await file.readAsString())) {
+      Map json => json.cast<String, Object?>(),
+      var other => throw FormatException(
+        '${file.path} is ${other.runtimeType}, not an object.',
+      ),
+    }, directory: directory);
+  }
+
+  /// Decodes an already-parsed `keys.json`.
+  ///
+  /// [directory] is what [file] will resolve shots against; the default only
+  /// suits a caller that will not open one.
+  static TranslationExport fromJson(
+    Map<String, Object?> json, {
+    String directory = '.',
+  }) {
+    var version = _int(json['version']);
+    if (version > translationExportVersion) {
+      throw FormatException(
+        'This export is version $version and this is a reader for '
+        '$translationExportVersion. Upgrade the flutterware dependency of '
+        'whatever reads it.',
+      );
+    }
+    return TranslationExport(
+      version: version,
+      directory: directory,
+      catalogues: _list(json['catalogues'], ExportedCatalogue.fromJson),
+      keys: _list(json['keys'], ExportedKey.fromJson),
+      findings: switch (json['findings']) {
+        Map findings => ExportFindings.fromJson(
+          findings.cast<String, Object?>(),
+        ),
+        _ => const ExportFindings(),
+      },
+    );
+  }
+
+  Map<String, Object?> toJson() => {
+    'version': version,
+    'catalogues': [for (var it in catalogues) it.toJson()],
+    'keys': [for (var it in keys) it.toJson()],
+    'findings': findings.toJson(),
+  };
+}
+
+int _int(Object? value) => switch (value) {
+  int value => value,
+  num value => value.round(),
+  String value => int.tryParse(value) ?? 0,
+  _ => 0,
+};
+
+Map<String, String> _strings(Object? value) => switch (value) {
+  Map value => {
+    for (var entry in value.entries)
+      if (entry.value is String) '${entry.key}': entry.value as String,
+  },
+  _ => const {},
+};
+
+List<T> _list<T>(Object? value, T Function(Map<String, Object?>) decode) => [
+  for (var entry in value as List? ?? const [])
+    if (entry is Map) decode(entry.cast<String, Object?>()),
+];

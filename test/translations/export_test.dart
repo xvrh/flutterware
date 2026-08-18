@@ -1,0 +1,196 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutterware/translations.dart';
+import 'package:test/test.dart';
+
+TranslationExport export({
+  List<ExportedKey> keys = const [],
+  ExportFindings findings = const ExportFindings(),
+  String directory = '.',
+}) => TranslationExport(
+  directory: directory,
+  catalogues: const [
+    ExportedCatalogue(
+      name: 'app',
+      template: 'en',
+      locales: ['en', 'nl'],
+      keys: 2,
+    ),
+  ],
+  keys: keys,
+  findings: findings,
+);
+
+void main() {
+  group('a rectangle', () {
+    test('is parsed out of the capture spelling', () {
+      var rect = ExportedRect.parse('10,20 100×40');
+
+      expect(rect?.x, 10);
+      expect(rect?.y, 20);
+      expect(rect?.width, 100);
+      expect(rect?.height, 40);
+    });
+
+    test('is scaled into the image own pixels', () {
+      // The whole reason the scale is applied here: a consumer cropping or
+      // drawing this must never have to know what the run captured at.
+      var rect = ExportedRect.parse('10,20 100×40', scale: 3);
+
+      expect(rect?.x, 30);
+      expect(rect?.width, 300);
+    });
+
+    test('that is not a rectangle is null, not a throw', () {
+      // A key recorded without a box is ordinary. Taking the whole export down
+      // for one would be the wrong trade by a wide margin.
+      expect(ExportedRect.parse(null), isNull);
+      expect(ExportedRect.parse('nonsense'), isNull);
+      expect(ExportedRect.parse('10,20'), isNull);
+    });
+  });
+
+  group('the format', () {
+    test('survives a round trip', () {
+      var original = export(
+        keys: [
+          const ExportedKey(
+            catalogue: 'app',
+            key: 'save',
+            values: {'en': 'Save', 'nl': 'Opslaan'},
+            representative: ExportedShot(
+              image: 'shots/en/home/1.png',
+              scenario: 'home_test.dart/Home',
+              step: 'Home',
+              stepIndex: 1,
+              rect: ExportedRect(x: 1, y: 2, width: 3, height: 4),
+              charStart: 0,
+              charEnd: 4,
+              locale: 'en',
+              device: 'iphone-16',
+            ),
+          ),
+        ],
+        findings: const ExportFindings(
+          fallingBack: [
+            ExportedLocaleFinding(
+              catalogue: 'app',
+              key: 'save',
+              locale: 'nl',
+              rendered: 'Save',
+            ),
+          ],
+          unkeyed: [
+            ExportedUnkeyed(
+              text: 'Fri, Dec 15',
+              scenario: 'home_test.dart/Home',
+              step: 'Home',
+              source: 'home.dart:42:7',
+            ),
+          ],
+        ),
+      );
+
+      var back = TranslationExport.fromJson(original.toJson());
+
+      expect(back['app/save']?.values['nl'], 'Opslaan');
+      expect(back['app/save']?.representative?.rect?.width, 3);
+      expect(back['app/save']?.representative?.charEnd, 4);
+      expect(back.findings.fallingBack.single.rendered, 'Save');
+      expect(back.findings.fallingBack.single.expected, isNull);
+      expect(back.findings.unkeyed.single.source, 'home.dart:42:7');
+      expect(back.catalogues.single.locales, ['en', 'nl']);
+    });
+
+    test('a newer version is refused rather than half-decoded', () {
+      // The message names both numbers, because whoever reads it is looking at
+      // somebody else's build output and needs to know which half to move.
+      expect(
+        () => TranslationExport.fromJson({
+          'version': translationExportVersion + 1,
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('${translationExportVersion + 1}'),
+              contains('$translationExportVersion'),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('an older version still reads', () {
+      // Added fields do not bump the version, so an older writer must stay
+      // readable — otherwise nobody can add a field.
+      var back = TranslationExport.fromJson({
+        'version': 1,
+        'keys': [
+          {'catalogue': 'app', 'key': 'save'},
+        ],
+      });
+
+      expect(back['app/save'], isNotNull);
+    });
+
+    test('seen is the keys that were photographed', () {
+      var it = export(
+        keys: [
+          const ExportedKey(
+            catalogue: 'app',
+            key: 'save',
+            representative: ExportedShot(
+              image: 'a.png',
+              scenario: 's',
+              step: 'x',
+              stepIndex: 1,
+            ),
+          ),
+          const ExportedKey(catalogue: 'app', key: 'never'),
+        ],
+      );
+
+      expect(it.seen.map((k) => k.key), ['save']);
+    });
+  });
+
+  group('reading one back', () {
+    late Directory directory;
+
+    setUp(() => directory = Directory.systemTemp.createTempSync('fw-export'));
+    tearDown(() => directory.deleteSync(recursive: true));
+
+    test('finds the index and resolves a shot against it', () async {
+      File(
+        '${directory.path}${Platform.pathSeparator}$translationExportFile',
+      ).writeAsStringSync(jsonEncode(export().toJson()));
+
+      var read = await TranslationExport.read(directory.path);
+
+      expect(read.version, translationExportVersion);
+      // The path in the JSON is relative and url-spelled; what a script needs
+      // is a file it can open on this machine.
+      expect(read.file('shots/en/home/1.png').path, contains(directory.path));
+      expect(
+        read.file('shots/en/home/1.png').path,
+        endsWith(['shots', 'en', 'home', '1.png'].join(Platform.pathSeparator)),
+      );
+    });
+
+    test('a directory with no export says what to run', () async {
+      await expectLater(
+        TranslationExport.read(directory.path),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('export'),
+          ),
+        ),
+      );
+    });
+  });
+}

@@ -105,6 +105,130 @@ class InspectSource {
   };
 }
 
+/// A translation key, and which characters of this node's text it produced.
+///
+/// Resolved by **object identity**, not by comparing words: the catalogue's
+/// funnel hands out a distinct string per key, and the walk asks which key a
+/// span's exact object came from. So two keys reading `Cancel` stay apart, and
+/// a `'Cancel'` written inline in the UI is correctly not attributed to either.
+///
+/// One node can carry several — a `Text.rich` assembled from two keys, or from
+/// a key and a name — which is why this records a range rather than claiming
+/// the whole node.
+class InspectKey {
+  const InspectKey({
+    required this.catalogue,
+    required this.key,
+    this.start,
+    this.end,
+  });
+
+  factory InspectKey.fromJson(Map<String, Object?> json) => InspectKey(
+    catalogue: json['catalogue'] as String? ?? '',
+    key: json['key'] as String? ?? '',
+    start: json['start'] as int?,
+    end: json['end'] as int?,
+  );
+
+  /// Which catalogue, as `indexTranslations` was told. Recorded per key rather
+  /// than per project: several catalogues in one UI is ordinary.
+  final String catalogue;
+
+  final String key;
+
+  /// Half-open range over the paragraph's plain text — what to highlight when
+  /// showing a translator where their string is.
+  ///
+  /// **Absent when the key was read off a widget property rather than a span.**
+  /// A markdown source carries `**` that never reaches a glyph, so an offset
+  /// into it would point at the wrong character; the whole node is the
+  /// occurrence instead, which is the right crop for a paragraph anyway.
+  final int? start;
+  final int? end;
+
+  Map<String, Object?> toJson() => {
+    'catalogue': catalogue,
+    'key': key,
+    if (start != null) 'start': start,
+    if (end != null) 'end': end,
+  };
+
+  @override
+  String toString() => '$catalogue/$key';
+}
+
+/// One key, on one screen, in one place — what an export is a list of.
+class TranslationOccurrence {
+  const TranslationOccurrence({
+    required this.key,
+    required this.node,
+    this.layout,
+    this.offstage = false,
+    this.overflowed = false,
+  });
+
+  final InspectKey key;
+
+  /// The node that drew it, so a reader can go back to the tree for context.
+  final String node;
+
+  /// Where on the screen, for the crop. Null for a node with no box of its own,
+  /// which a paragraph always has — kept nullable because the type it comes
+  /// from is.
+  final InspectLayout? layout;
+
+  /// Present in the tree but not on the screen. Kept rather than filtered: a
+  /// key that only ever appears offstage is a finding, and a ranking that had
+  /// silently dropped it could not say so.
+  final bool offstage;
+
+  /// The words did not fit. A ranking prefers an occurrence where they did,
+  /// and a report of these is the localisation bug list.
+  final bool overflowed;
+
+  Map<String, Object?> toJson() => {
+    ...key.toJson(),
+    'node': node,
+    if (layout case var layout?)
+      'rect':
+          '${layout.x.round()},${layout.y.round()} '
+          '${layout.width.round()}×${layout.height.round()}',
+    if (offstage) 'offstage': true,
+    if (overflowed) 'overflowed': true,
+  };
+}
+
+/// Words on a screen that belong to no catalogue.
+class UnkeyedText {
+  const UnkeyedText({
+    required this.text,
+    required this.node,
+    this.layout,
+    this.source,
+    this.offstage = false,
+  });
+
+  final String text;
+  final String node;
+  final InspectLayout? layout;
+
+  /// Where the widget was built, which is what turns "this is not translated"
+  /// into somewhere to go.
+  final InspectSource? source;
+  final bool offstage;
+
+  Map<String, Object?> toJson() => {
+    'text': text,
+    'node': node,
+    if (layout case var layout?)
+      'rect':
+          '${layout.x.round()},${layout.y.round()} '
+          '${layout.width.round()}×${layout.height.round()}',
+    if (source case var source?) 'source': source.toJson(),
+    if (offstage) 'offstage': true,
+  };
+}
+
 /// Where a widget ended up and what it was allowed.
 ///
 /// This is the half the inspector cannot answer. Its tree carries no geometry
@@ -324,6 +448,9 @@ class InspectNode {
     this.textStyle = const {},
     this.inheritedStyle = const {},
     this.styleReplacesInherited,
+    this.keys = const [],
+    this.unkeyedText = const [],
+    this.textOverflowed = false,
     this.layout,
     this.label,
     this.selected,
@@ -369,6 +496,14 @@ class InspectNode {
       textStyle: textStyle,
       inheritedStyle: _readInherited(json['inherited'], textStyle),
       styleReplacesInherited: json['styleReplaces'] as bool?,
+      keys: [
+        for (var key in json['keys'] as List? ?? const [])
+          InspectKey.fromJson((key as Map).cast<String, Object?>()),
+      ],
+      unkeyedText: [
+        for (var text in json['unkeyed'] as List? ?? const []) '$text',
+      ],
+      textOverflowed: json['overflowed'] as bool? ?? false,
       layout: switch (json['layout']) {
         Map layout => InspectLayout.fromJson(layout.cast<String, Object?>()),
         _ => null,
@@ -506,6 +641,37 @@ class InspectNode {
       inheritedStyle.length == textStyle.length &&
       inheritedStyle.entries.every((e) => textStyle[e.key] == e.value);
 
+  /// Which translation keys produced this node's words, and where.
+  ///
+  /// Empty for a node that draws no text, for text that came from somewhere
+  /// other than a catalogue — a date, a name, a hardcoded literal — and for
+  /// every node when no catalogue was wired up. Absence is never a claim that
+  /// the text *should* have had a key; see [unkeyedSpans] for the other half.
+  final List<InspectKey> keys;
+
+  /// This node's text spans that no catalogue claimed — the words themselves.
+  ///
+  /// The counterpart to [keys], and what makes "text nobody translated"
+  /// answerable rather than merely countable. Most of it is text that has no
+  /// key by construction — a formatted date, a person's name, a number — so
+  /// this is a *list to classify*, never a list of defects.
+  ///
+  /// Spans rather than whole paragraphs, because a span is the unit a key
+  /// attaches to: a `Text.rich` of a key plus a name contributes one of each.
+  final List<String> unkeyedText;
+
+  int get unkeyedSpans => unkeyedText.length;
+
+  /// Whether this node's paragraph ran out of room — `maxLines` exceeded, so
+  /// the words are ellipsised or clipped.
+  ///
+  /// Read off the paragraph while it is already in hand. It is the whole of the
+  /// classic localisation bug: a label that fits in the language it was
+  /// designed in and does not fit in the next one. The matrix already runs the
+  /// language axis, so with this the question "which strings break in German"
+  /// is a query rather than a feature.
+  final bool textOverflowed;
+
   /// The style in one line — `14/400 #1D1B20 Roboto` — or null when this node
   /// draws no text.
   ///
@@ -608,6 +774,9 @@ class InspectNode {
     if (inheritedStyle.isNotEmpty)
       'inherited': _sameAsResolved ? 'same' : inheritedStyle,
     if (styleReplacesInherited != null) 'styleReplaces': styleReplacesInherited,
+    if (keys.isNotEmpty) 'keys': [for (var key in keys) key.toJson()],
+    if (unkeyedText.isNotEmpty) 'unkeyed': unkeyedText,
+    if (textOverflowed) 'overflowed': true,
     if (layout != null) 'layout': layout!.toJson(),
     if (label != null) 'label': label,
     if (selected != null) 'selected': selected,
@@ -1135,6 +1304,67 @@ class InspectTree {
   ///
   /// The fallback to `properties` is for stored readings, not for live ones:
   /// scenario artifacts and comparison caches written before the resolved
+  /// Every translation key on this screen, with where it is.
+  ///
+  /// Flattened out of the tree so a reader — the export, the panel — does not
+  /// have to walk 120KB of nodes to answer "which keys are here". The node id
+  /// and box ride along, because the next question is always where to crop.
+  ///
+  /// A key appearing twice on a screen appears twice here: two occurrences are
+  /// two places to photograph, and collapsing them would throw away the choice
+  /// between them.
+  List<TranslationOccurrence> translationKeys() {
+    var found = <TranslationOccurrence>[];
+    void visit(InspectNode node) {
+      for (var key in node.keys) {
+        found.add(
+          TranslationOccurrence(
+            key: key,
+            node: node.id,
+            layout: node.layout,
+            offstage: node.offstage,
+            overflowed: node.textOverflowed,
+          ),
+        );
+      }
+      for (var child in node.children) {
+        visit(child);
+      }
+    }
+
+    if (root case var root?) visit(root);
+    return found;
+  }
+
+  /// Every span on this screen that no catalogue claimed, with where it is.
+  ///
+  /// The other half of [translationKeys], and deliberately *not* called a list
+  /// of untranslated strings: most of it has no key by construction — a
+  /// formatted date, a name, a number read off a fixture. Classifying it is the
+  /// reader's job, and the source location is there so the reader can do it.
+  List<UnkeyedText> unkeyedText() {
+    var found = <UnkeyedText>[];
+    void visit(InspectNode node) {
+      for (var text in node.unkeyedText) {
+        found.add(
+          UnkeyedText(
+            text: text,
+            node: node.id,
+            layout: node.layout,
+            source: node.source,
+            offstage: node.offstage,
+          ),
+        );
+      }
+      for (var child in node.children) {
+        visit(child);
+      }
+    }
+
+    if (root case var root?) visit(root);
+    return found;
+  }
+
   /// style existed have only the old keys, and a ramp of the exceptions still
   /// beats an empty table when reopening an old run.
   List<InspectStyle> styles() {

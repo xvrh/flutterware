@@ -1343,6 +1343,7 @@ packages: List<ScenarioRunPackage>
       width: int
       height: int
       tree: String   # The widget-tree JSON captured at the same moment, relative like [image].
+      keys: String?   # The translation keys on this screen, and the words that belonged to no catalogue — relative like [image].
       semantics: String?   # The semantics-tree JSON — what a screen reader gets — relative like [image].
       texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
       verb: String?   # The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.
@@ -1374,6 +1375,7 @@ packages: List<ScenarioRunPackage>
     errors: List<ScenarioRunError>   # The failure, when [ok] is false.
       error: String
       stack: String?
+    translations: Map<String, Map<String, String>>?   # Every key each catalogue was asked for on the way through this scenario, and what it answered: `catalogue -> key -> value`.
   error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
 ok: bool
 axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
@@ -2303,3 +2305,50 @@ Returns `StackReading`:
 Shape not published: `StackReading` writes its own `toJson`, so its fields are not its keys.
 
 Takes no parameters.
+
+
+### `flutterware.translations`
+
+#### `export` — Export
+
+Runs the scenarios across every locale the catalogues have, and writes a directory a translator can read: the screenshots, a `keys.json` of key to where it was seen, and a page that draws the box. Nothing is cropped and nothing is drawn into the pixels — the rectangle rides in the JSON, so the same file serves this page and a translation service. Read it back typed with `package:flutterware/translations.dart`.
+
+```sh
+fw run translations export [--package=…] [--output=…] [--languages=…] [--device=…] [--file=…] [--capture-scale=…]
+```
+
+Returns `TranslationExportResult`:
+
+```
+output: String   # The directory, worktree-relative where it sits inside one.
+keysJson: String   # The index a script reads.
+indexHtml: String   # The page a person reads.
+catalogues: int
+locales: int   # How many languages the run covered.
+keys: int   # Every key the catalogues define.
+keysSeen: int   # How many of them this run put on a screen.
+occurrences: int   # Every place a key was seen — the sum over all keys, and roughly what a service push will cost in calls.
+shots: int   # Frames written, deduplicated: several keys on one screen cost one file.
+missingShots: int   # Frames a step named that were not on disk.
+fallingBack: int   # Places the app showed the source language to somebody who asked for another one.
+disagrees: int   # Places the files and the run disagree — usually a stale build.
+notReached: int   # Declared keys this run never asked for.
+absentFromCatalogue: int   # Keys the app read that no declared catalogue defines.
+overflowing: int   # Sightings where the words did not fit.
+unkeyed: int   # Distinct strings on screen that belonged to no catalogue.
+scenariosFailed: int   # Scenarios that came back red.
+durationMs: int
+open: String   # How to look at it.
+ok: bool
+```
+
+Exits 1 when `ok` is false, so a job can gate on this action.
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the only one when there is one |
+| `output` | string | no | — | Where the directory goes. Defaults to `build/translations` in the package, and is emptied first. |
+| `languages` | string | no | — | A matrix — `en,nl,fr`. Defaults to the source language alone, because that is the one a translator is shown: a service attaches the picture to the string id, not to a locale. Which locales are missing a key is read off the catalogue files and needs no run. Name languages here when you want the target screens themselves — what German does to a button. |
+| `device` | string | no | — | What the screens are captured on — `iphone-16`. One device, because a translator wants one picture per key and a second device only doubles the candidates. |
+| `file` | string | no | — | Narrow to one scenario file, package-relative. The export is only as complete as what it runs. |
+| `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. Defaults to 2 — these are read on a retina screen and zoomed into, which is the one place the bytes are worth it. |

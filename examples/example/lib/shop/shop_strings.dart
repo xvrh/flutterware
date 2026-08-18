@@ -1,63 +1,105 @@
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-/// The demo shop's copy, in the app's two languages — a hand-rolled
-/// `Localizations` entry, because a demo should show localized scenarios
-/// without dragging in a codegen pipeline.
+/// The demo shop's copy — **a loader-based catalogue**, which is the shape
+/// this repository's translation tooling is built for.
+///
+/// The words live in `assets/i18n/<locale>.json` rather than in this file, and
+/// every read goes through [read]. That one funnel is the whole integration
+/// surface: hand it a wrapper and the words a screen renders can be traced
+/// back to the keys they came from, by object identity, with nothing inserted
+/// into the text and no pixel moved. See
+/// `docs/superpowers/specs/2026-08-18-translation-index-design.md`, and
+/// `test/scenarios/mobile/flutter_test_config.dart` for the two lines that
+/// wire it.
+///
+/// Deliberately hand-rolled rather than codegen: a demo should show localized
+/// scenarios without dragging in a pipeline, and a hand-rolled catalogue is
+/// also what most projects with a funnel actually have.
 class ShopStrings {
-  ShopStrings(this.locale);
+  const ShopStrings(this.locale, this._values, this._fallback);
 
-  final Locale locale;
+  /// The language the source text is written in — what a translator works
+  /// *from*, and what a locale with nothing to say falls back to.
+  static const template = 'en';
+
+  static const supported = ['en', 'fr'];
+
+  /// Wraps every value on its way out of the catalogue.
+  ///
+  /// **The seam, and the only thing a project has to add.** Null in
+  /// production, so this costs nothing there. A scenario run sets it to
+  /// `indexTranslations('shop')`, and from then on each key renders a distinct
+  /// string object that the capture can name.
+  static String Function(String key, String value)? wrapValue;
+
+  /// Wraps a value this class *built* rather than stored — see [thanks].
+  ///
+  /// The second half of the seam, and null in production like the first. A
+  /// substitution allocates a new string, so the token [wrapValue] handed out
+  /// is not what renders; this hands the key back at the one place that still
+  /// knows it. A scenario sets it to `indexExpansions('shop')`.
+  static String Function(String key, String expanded)? wrapExpanded;
 
   static const LocalizationsDelegate<ShopStrings> delegate = _Delegate();
 
   static ShopStrings of(BuildContext context) =>
       Localizations.of<ShopStrings>(context, ShopStrings)!;
 
-  bool get _fr => locale.languageCode == 'fr';
+  final Locale locale;
+  final Map<String, String> _values;
 
-  String get title => 'Brewline';
-  String get tagline => _fr
-      ? 'Votre café, prêt avant vous.'
-      : 'Your coffee, ready before you are.';
-  String get getStarted => _fr ? 'Commencer' : 'Get started';
-  String get menuTitle => _fr ? 'La carte' : 'The menu';
-  String get addToCart => _fr ? 'Ajouter au panier' : 'Add to cart';
-  String get size => _fr ? 'Taille' : 'Size';
-  String get sizeSmall => _fr ? 'Petit' : 'Small';
-  String get sizeMedium => _fr ? 'Moyen' : 'Medium';
-  String get sizeLarge => _fr ? 'Grand' : 'Large';
-  String get yourOrder => _fr ? 'Votre commande' : 'Your order';
-  String get total => 'Total';
-  String get nameOnCup => _fr ? 'Nom sur le gobelet' : 'Name on the cup';
-  String get placeOrder => _fr ? 'Commander' : 'Place order';
-  String get emptyCart => _fr ? 'Le panier est vide.' : 'Your cart is empty.';
-  String thanks(String name) => _fr ? 'Merci, $name !' : 'Thanks, $name!';
-  String get onItsWay =>
-      _fr ? 'Votre commande est en préparation.' : 'Your order is on its way.';
-  String get backToMenu => _fr ? 'Retour à la carte' : 'Back to menu';
+  /// The template's words, for keys this locale has none for. Falling back is
+  /// ordinary and worth showing: `fr.json` omits two keys on purpose, so the
+  /// demo has something for the translations panel to report.
+  final Map<String, String> _fallback;
 
-  String describe(String drinkId) => switch (drinkId) {
-    'cappuccino' =>
-      _fr
-          ? 'Espresso, lait vapeur, mousse soyeuse.'
-          : 'Espresso, steamed milk, silky foam.',
-    'flat-white' =>
-      _fr
-          ? 'Double espresso sous un voile de lait.'
-          : 'Double espresso under a thin veil of milk.',
-    'matcha' =>
-      _fr
-          ? 'Thé vert fouetté, doux et végétal.'
-          : 'Whisked green tea, soft and grassy.',
-    'chai' =>
-      _fr ? 'Épices chaudes, lait onctueux.' : 'Warm spices, creamy milk.',
-    'cold-brew' =>
-      _fr
-          ? 'Infusé à froid pendant seize heures.'
-          : 'Steeped cold for sixteen hours.',
-    _ => '',
-  };
+  String read(String key) {
+    var value = _values[key] ?? _fallback[key] ?? '';
+    var wrap = wrapValue;
+    return wrap == null ? value : wrap(key, value);
+  }
+
+  String get title => read('title');
+  String get tagline => read('tagline');
+  String get getStarted => read('getStarted');
+  String get menuTitle => read('menuTitle');
+  String get addToCart => read('addToCart');
+  String get size => read('size');
+  String get sizeSmall => read('sizeSmall');
+  String get sizeMedium => read('sizeMedium');
+  String get sizeLarge => read('sizeLarge');
+  String get yourOrder => read('yourOrder');
+  String get total => read('total');
+  String get nameOnCup => read('nameOnCup');
+  String get placeOrder => read('placeOrder');
+  String get emptyCart => read('emptyCart');
+  String get onItsWay => read('onItsWay');
+  String get backToMenu => read('backToMenu');
+
+  /// **The string that goes through a placeholder, and still resolves.**
+  ///
+  /// Substituting allocates a new object, so identity alone loses it here. The
+  /// key is not gone though — this method knew it one line ago — so it is
+  /// routed rather than inferred: [wrapExpanded] takes the built string and
+  /// says which key built it, which is exact where reading the words back
+  /// would be a guess.
+  ///
+  /// Note where this lives. It is one method on the catalogue, not a call
+  /// site, which is what makes the hook cheap in a real project: a loader-based
+  /// catalogue substitutes in one place per key however many screens use it.
+  ///
+  /// The value carries `**` besides, so what renders it is [MiniMarkdown] —
+  /// see there for the other half.
+  String thanks(String name) =>
+      _expand('thanks', read('thanks').replaceAll('{name}', name));
+
+  String _expand(String key, String expanded) =>
+      wrapExpanded?.call(key, expanded) ?? expanded;
+
+  String describe(String drinkId) => read('drink.$drinkId');
 }
 
 class _Delegate extends LocalizationsDelegate<ShopStrings> {
@@ -65,11 +107,35 @@ class _Delegate extends LocalizationsDelegate<ShopStrings> {
 
   @override
   bool isSupported(Locale locale) =>
-      const ['en', 'fr'].contains(locale.languageCode);
+      ShopStrings.supported.contains(locale.languageCode);
 
+  /// Reads this locale's file and the template's, once per locale.
+  ///
+  /// Asynchronous because that is what reading an asset is, and because
+  /// `Localizations` is built for exactly this — no caller has to know the
+  /// catalogue is loaded rather than compiled in.
   @override
-  Future<ShopStrings> load(Locale locale) =>
-      SynchronousFuture(ShopStrings(locale));
+  Future<ShopStrings> load(Locale locale) async {
+    var values = await _read(locale.languageCode);
+    return ShopStrings(
+      locale,
+      values,
+      locale.languageCode == ShopStrings.template
+          ? values
+          : await _read(ShopStrings.template),
+    );
+  }
+
+  static final _cache = <String, Map<String, String>>{};
+
+  static Future<Map<String, String>> _read(String locale) async {
+    if (_cache[locale] case var cached?) return cached;
+    var source = await rootBundle.loadString('assets/i18n/$locale.json');
+    return _cache[locale] = {
+      for (var entry in (jsonDecode(source) as Map).entries)
+        if (entry.value is String) '${entry.key}': entry.value as String,
+    };
+  }
 
   @override
   bool shouldReload(_Delegate old) => false;

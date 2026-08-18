@@ -256,6 +256,89 @@ class ScenariosPackage extends PluginPackage {
   ];
 }
 
+/// Translations — which key is on which screen, and a picture of it.
+///
+/// Two halves that have to agree on a name. In the app, a test hands
+/// `indexTranslations('app')` to whatever the catalogue funnels its reads
+/// through; here, a catalogue called `app` says where that catalogue's files
+/// live. Neither half can produce an export alone — the run knows where a key
+/// appeared, only the files know which keys exist and what each locale says —
+/// which is why the files are declared rather than discovered. Guessing at a
+/// translations directory would be a claim about a project's layout that only
+/// the project can make.
+///
+/// See `docs/superpowers/specs/2026-08-18-translation-index-design.md`.
+class Translations extends Plugin {
+  Translations({this.packages = const [], String? label})
+    : super('flutterware.translations', label: label ?? 'Translations');
+
+  final List<TranslationsPackage> packages;
+
+  @override
+  Map<String, Object?> get config => {
+    'packages': [for (var p in packages) p.toJson()],
+  };
+}
+
+class TranslationsPackage extends PluginPackage {
+  const TranslationsPackage(super.pkg, {this.catalogues = const []});
+
+  /// Where this package's translations live.
+  ///
+  /// **A list, never a single catalogue with a special case.** Several in one
+  /// UI is ordinary — a product's own strings beside a shared package's, or
+  /// two halves of a migration — and a shape that makes the second one awkward
+  /// is a shape that gets worked around.
+  final List<TranslationCatalogue> catalogues;
+
+  @override
+  Map<String, Object?> toJson() => {
+    ...super.toJson(),
+    'catalogues': [for (var c in catalogues) c.toJson()],
+  };
+}
+
+/// One catalogue, as `tool/flutterware.dart` declares it.
+class TranslationCatalogue {
+  const TranslationCatalogue({
+    required this.name,
+    required this.files,
+    this.template = 'en',
+  });
+
+  /// What the seam calls it — `indexTranslations('app')` and this must agree.
+  ///
+  /// Free-form, and this is the only place the two names have to meet. A name
+  /// the index reports and nothing declares is refused with the declared list,
+  /// rather than quietly producing an export that attributes half its keys.
+  final String name;
+
+  /// A glob of the catalogue's files, one per locale, each a flat JSON object
+  /// of key to string. Package-relative, like every other path in this file.
+  ///
+  /// The locale is the file's base name: `en.json` is `en`. That is a
+  /// convention rather than a parse, and a file whose name is not a locale tag
+  /// is skipped rather than loaded as a locale called `schema`.
+  final String files;
+
+  /// The locale the source text is written in — what a translator is
+  /// translating *from*, and what a target locale falling back reads as.
+  final String template;
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'files': files,
+    'template': template,
+  };
+
+  static TranslationCatalogue fromJson(Map<String, Object?> json) =>
+      TranslationCatalogue(
+        name: json['name']! as String,
+        files: json['files']! as String,
+        template: json['template'] as String? ?? 'en',
+      );
+}
+
 /// Motion — timelines scrubbed against a live screen, with the tuned numbers in
 /// a file no human writes. See
 /// `docs/superpowers/specs/2026-07-31-motion-design.md`.

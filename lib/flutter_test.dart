@@ -19,3 +19,10 @@ export 'src/scenarios/scenario.dart';
 export 'src/scenarios/settle.dart';
 export 'src/scenarios/staging.dart' show DeviceStaging;
 export 'src/scenarios/target.dart' show Target;
+export 'src/translations/index.dart'
+    show
+        TranslationIndex,
+        TranslationKey,
+        indexExpansions,
+        indexTranslations,
+        indexTranslationsIn;
