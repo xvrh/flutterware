@@ -3415,6 +3415,13 @@ final resultShapes = <String, ResultShape>{
                   'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
             },
             <String, Object?>{
+              'name': 'defaultSource',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
+            },
+            <String, Object?>{
               'name': 'options',
               'type': 'List<String>',
               'doc':
@@ -3528,6 +3535,13 @@ final resultShapes = <String, ResultShape>{
                     'optional': true,
                     'doc':
                         'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
+                  },
+                  <String, Object?>{
+                    'name': 'defaultSource',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
                   },
                   <String, Object?>{
                     'name': 'options',
@@ -3652,6 +3666,13 @@ final resultShapes = <String, ResultShape>{
                           'optional': true,
                           'doc':
                               'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
+                        },
+                        <String, Object?>{
+                          'name': 'defaultSource',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
                         },
                         <String, Object?>{
                           'name': 'options',
@@ -3874,6 +3895,13 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc':
             'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
+      },
+      <String, Object?>{
+        'name': 'defaultSource',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
       },
       <String, Object?>{
         'name': 'options',

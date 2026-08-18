@@ -65,6 +65,7 @@ List<ParameterKnob> knobsFromParameters(
             value: _literal(defaultValue),
             defaultValue: _literal(defaultValue),
           ),
+          defaultSource: _unevaluatedSource(defaultValue),
         ),
       );
       continue;
@@ -115,6 +116,13 @@ List<ParameterKnob> knobsFromParameters(
         // in front of the constant, and it only compiles if it is spelled the
         // way the entry point spells it.
         enumType: type.toSource(),
+        // A picker reads its default off the *end* of whatever was written
+        // (`_enumConstant`), so `Backend.dev` and a constant that happens to
+        // hold one are indistinguishable here — both end in a name. Only the
+        // ones that came back with nothing carry their source.
+        defaultSource: _enumConstant(defaultValue) == null
+            ? _unevaluatedSource(defaultValue)
+            : null,
       ),
     );
   }
@@ -127,13 +135,42 @@ List<ParameterKnob> knobsFromParameters(
 /// never leaves this process: a picker's value is a bare constant name, and
 /// turning `staging` back into `m.Backend.staging` is the wrapper's job alone.
 class ParameterKnob {
-  const ParameterKnob(this.knob, {this.enumType});
+  const ParameterKnob(this.knob, {this.enumType, this.defaultSource});
 
   final KnobDescriptor knob;
 
   /// The parameter's type as written — `Backend`, `m.Backend`. Null unless the
   /// knob is a picker.
   final String? enumType;
+
+  /// The default clause **as written**, for a default this cannot evaluate —
+  /// `ServerUrls.localPort`, `_port`, `defaultTimeout`.
+  ///
+  /// **Set only when there is a default and no value for it**, which is what
+  /// keeps it from being source text where a value belongs. A knob with a
+  /// literal default has [KnobDescriptor.defaultValue] and this is null; a
+  /// knob with no default at all has neither. The pair says the third thing:
+  /// there *is* a default, here is how it is spelled, and nothing here can
+  /// tell you what it comes to.
+  ///
+  /// **A blank was the wrong answer to that**, and reported by a consumer
+  /// whose entry points look like the common case rather than an exotic one:
+  /// the values knobs replace are usually already `String.fromEnvironment`
+  /// constants, because that is what a `--dart-define` build reads, and a
+  /// constant is a reference rather than a literal. Their form showed nothing
+  /// for a parameter that plainly had a default two lines away.
+  ///
+  /// Deliberately not evaluated. Following `ServerUrls.localPort` to its
+  /// declaration is a lookup this could do — [EnumLookup] already walks
+  /// first-party files for enums — but an enum is a closed question (find the
+  /// declaration, list the names) where a const initialiser is an open one:
+  /// `int.fromEnvironment(…, defaultValue: 8086)` today, then `a + b`, then a
+  /// const constructor, then a getter, each a new branch in something that is
+  /// not a compiler. Resolution answers all of it and costs 5.5s on an entry
+  /// point that imports Flutter — see [scanEntrypointKnobs], and note that
+  /// this scan runs on every knob change, where the whole feature is 262ms.
+  /// A project that needs the *value* has `from:` for it.
+  final String? defaultSource;
 
   String get name => knob.name;
 }
@@ -182,6 +219,20 @@ Object? _literal(Expression? expression) => switch (expression) {
   DoubleLiteral(:var value) => value,
   _ => null,
 };
+
+/// How a default is written, for the ones [_literal] cannot turn into a value.
+///
+/// Null when there is no default at all, and null when there is one this could
+/// read — a caller that has the value does not want the spelling as well, and
+/// putting the source anywhere the value belongs is the thing this is careful
+/// not to do. See [ParameterKnob.defaultSource].
+///
+/// Trimmed of nothing and interpreted in no way: whatever the author wrote is
+/// exactly what they will recognise.
+String? _unevaluatedSource(Expression? expression) =>
+    expression == null || _literal(expression) != null
+    ? null
+    : expression.toSource();
 
 /// The constant name out of `Backend.dev`, `m.Backend.dev` or a bare `dev`.
 ///
