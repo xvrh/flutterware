@@ -695,6 +695,66 @@ TargetError? refusalWhenNothingScrolls(
         );
 }
 
+/// The element `scrollTo` should jump to rather than walk toward: [target]'s
+/// one match once scrolled-away children are counted, provided it lives under
+/// a scrollable [scrollables] matches.
+///
+/// The walk cannot reach a target the viewport has already scrolled past: a
+/// finder skips what `debugVisitOnstageChildren` does not visit, and a child
+/// behind the viewport is exactly that, so the drag loop never sees it coming
+/// and marches to the far end of the list — measured on a consumer suite as a
+/// four-pill filter row that tapped the last pill and could no longer reach
+/// the first. The element itself is still in the tree (a short list keeps
+/// everything built), and `Scrollable.ensureVisible` reads its own position,
+/// so the jump covers both directions and both axes without being told
+/// either.
+///
+/// Null when the walk is the right tool after all: nothing built matches (a
+/// lazy list disposes what it scrolled past), several match, or the one match
+/// lives somewhere scrolling these scrollables cannot reveal — an inactive
+/// route, mostly, which is the other thing `skipOffstage` was hiding and a
+/// jump must not silently "reach".
+Element? scrolledPastTarget(Finder target, Finder scrollables) {
+  var matches = _IncludingScrolledAway(target).evaluate();
+  if (matches.length != 1) return null;
+  var element = matches.single;
+  var roots = scrollables.evaluate().toSet();
+  if (roots.isEmpty) return null;
+  Element? inside;
+  element.visitAncestorElements((ancestor) {
+    if (roots.contains(ancestor)) {
+      inside = element;
+      return false;
+    }
+    return true;
+  });
+  return inside;
+}
+
+/// The inner finder's matching rules over the whole element tree —
+/// `skipOffstage` off, so children the viewport has scrolled past are
+/// candidates too.
+class _IncludingScrolledAway extends Finder {
+  _IncludingScrolledAway(this._inner) : super(skipOffstage: false);
+
+  final Finder _inner;
+
+  @override
+  String describeMatch(Plurality plurality) => _inner.describeMatch(plurality);
+
+  // Abstract on `Finder` for legacy reasons; never read, since
+  // [describeMatch] above is the one refusals go through.
+  @override
+  String get description => describeMatch(Plurality.many);
+
+  @override
+  Iterable<Element> findInCandidates(Iterable<Element> candidates) =>
+      // A compound target (`within:`, whose inner halves evaluate on their
+      // own) keeps its onstage view of the tree and simply never matches
+      // here, which sends the verb back to the walk — degraded, never wrong.
+      _inner.findInCandidates(candidates);
+}
+
 /// The `EditableText` a text-entering verb means, given the [finder] its
 /// target resolved to.
 ///

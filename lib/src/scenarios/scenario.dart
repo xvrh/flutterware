@@ -421,7 +421,7 @@ class ScenarioTester {
     this.tester,
     this._description,
     this.shots,
-    this.settle,
+    this._settle,
     this._state,
     this.assignment,
     this._source,
@@ -449,7 +449,7 @@ class ScenarioTester {
   final Shots shots;
 
   /// How every verb waits before it captures — overridable per call.
-  final Settle settle;
+  final Settle _settle;
 
   final String _description;
 
@@ -635,8 +635,10 @@ class ScenarioTester {
   /// Scrolls until [target] is on screen, then captures it there.
   ///
   /// The scrollable is the first one on screen unless [within] names one — a
-  /// widget that *is* a `Scrollable` or contains one. [step] is how far each
-  /// drag travels toward the end of the list; make it negative to walk back
+  /// widget that *is* a `Scrollable` or contains one. A target that is built
+  /// but behind the viewport is jumped to directly, whichever direction and
+  /// axis that is. [step] is how far each drag travels toward the end of the
+  /// list when the target is not built yet; make it negative to walk back
   /// toward the start.
   ///
   /// A target already on screen is a no-op, whether or not anything scrolls
@@ -676,9 +678,25 @@ class ScenarioTester {
         if (refusal == null) return;
         throw ScenarioTargetError(refusal.message);
       }
+      var finder = finderForTarget(target);
+      // Built but behind the viewport: the walk only drags one way, so a
+      // target the list has already scrolled past is unreachable however
+      // long it walks. `Scrollable.ensureVisible` reads the target's own
+      // position and jumps — both directions, both axes. The walk stays for
+      // what it was built for: a lazy list whose target is not built yet.
+      if (finder.evaluate().isEmpty) {
+        if (scrolledPastTarget(finder, scrollable) case var behind?) {
+          await Scrollable.ensureVisible(behind);
+          await tester.pump();
+          // Not revealed means it was never in this viewport's reach — an
+          // `Offstage` under the list, say. The walk's own exhaustion
+          // message below is the one that says what to try.
+          if (finder.evaluate().isNotEmpty) return;
+        }
+      }
       try {
         await tester.scrollUntilVisible(
-          finderForTarget(target),
+          finder,
           step,
           // The first, as `flutter_test` itself defaults to: nested scrollables
           // are ordinary, and `within` is how a scenario says which one.
@@ -725,6 +743,18 @@ class ScenarioTester {
     verb: 'wait',
     target: '$duration',
   );
+
+  /// Waits per the scenario's [Settle] policy — or [policy] — and captures
+  /// nothing.
+  ///
+  /// The wait without the step: what a bridge maps a legacy `pumpAndSettle()`
+  /// onto, and what a scenario wants after work it pumped itself through
+  /// [tester]. Same budget, same "give up quietly on a screen that never
+  /// stops animating" as every verb — where a raw `tester.pumpAndSettle`
+  /// throws on the first spinner and leaves the budget to be re-derived by
+  /// hand.
+  Future<void> settle([Settle? policy]) =>
+      _step(Shot.skip, policy, () async {}, verb: 'settle');
 
   /// Captures a named screen without performing an action.
   Future<void> screen(
@@ -796,7 +826,7 @@ class ScenarioTester {
       // "before" is nowhere in it.
       _recorder?.capture(tester);
       await action();
-      var policy = settle ?? this.settle;
+      var policy = settle ?? _settle;
       // One purse for the whole step: the policy's frames draw whatever has
       // announced itself as they go — otherwise fake time runs the transition
       // out in a few real milliseconds and every frame of the movie behind the

@@ -20,11 +20,11 @@ cd app && dart run bin/fw.dart <command>
 
 | command | what it does |
 |---|---|
-| `status [--json]` | what every plugin says about itself |
+| `status [<plugin>] [--brief] [--json]` | what every plugin says about itself |
 | `worktrees [--refresh] [--json]` | every checkout of this repo, and what is going on in each |
 | `changes [<worktree>] [--file=<path>] [--json]` | what a checkout has changed, ranked |
 | `review [--all] [--json] \| review resolve <id> [--message=<text>] \| review unresolve <id>` | the notes a human left on this checkout, and answering them |
-| `actions [--json]` | what can be invoked, and with what |
+| `actions [<plugin> [<action>]] [--json]` | what can be invoked, and with what |
 | `run <plugin> <action> [--k=v]` | invoke one action |
 | `init` | write the two files this project needs |
 | `app [--release] [--json]` | open the flutterware GUI |

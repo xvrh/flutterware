@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +32,74 @@ List<String>? _loaded;
 void resetScenarioFontsForTest() {
   _loading = null;
   _loaded = null;
+  _loadingDefaults = null;
+}
+
+/// Registers real Roboto under the platform-default family names — the text
+/// that names **no** family, which is most of an app.
+///
+/// **The `flutter test` lane only**, called from `runScenarios` after the
+/// probe returns, which is the one path the flutterware harness never takes.
+/// That lane's tester runs with `--use-test-fonts`, hardcoded, so a family
+/// nobody loads real bytes for draws every glyph as a filled box *and
+/// measures it at the box's width* — [loadScenarioFonts] closes that for the
+/// families the project bundles, and this closes it for the defaults, which
+/// ship with the platform and are in no `FontManifest.json`. Measured: a
+/// default-family label went from 213.8 to 111.6 logical pixels when real
+/// bytes took over.
+///
+/// The bytes come from the SDK's own cache
+/// (`$FLUTTER_ROOT/bin/cache/artifacts/material_fonts`), so nothing ships in
+/// the package. The Apple and Windows default families get the same Roboto —
+/// approximate metrics, against the box font's roughly double ones — so a
+/// pixel-exact question about an iOS profile still belongs to the flutterware
+/// runner, whose tester has no test-font flag and renders the real thing.
+///
+/// A family the manifest already declared is left alone: a project bundling
+/// its own `Roboto` means it. Quietly a no-op where the cache is not there —
+/// this is best-effort repair of a lane whose fonts the SDK took away, not a
+/// contract the suite depends on.
+///
+/// The harness lane must never come through here: its fonts are real already,
+/// and registering Roboto over `CupertinoSystemText` there would *replace*
+/// the genuine platform resolution with the approximation.
+Future<void> loadDefaultScenarioFonts() => _loadingDefaults ??= _loadDefaults();
+
+Future<void>? _loadingDefaults;
+
+/// Every family the SDK's own themes fall back to when a style names none —
+/// material and cupertino typography across the platforms a device profile
+/// can put a scenario on.
+const _defaultFamilies = [
+  'Roboto',
+  '.AppleSystemUIFont',
+  'CupertinoSystemDisplay',
+  'CupertinoSystemText',
+  'Segoe UI',
+];
+
+Future<void> _loadDefaults() async {
+  var declared = (await loadScenarioFonts()).toSet();
+  var root = Platform.environment['FLUTTER_ROOT'];
+  if (root == null) return;
+  var dir = Directory('$root/bin/cache/artifacts/material_fonts');
+  if (!dir.existsSync()) return;
+  var files = dir.listSync().whereType<File>().where((file) {
+    var name = file.uri.pathSegments.last;
+    // Not `RobotoCondensed-*`: a different family, and nothing's
+    // default.
+    return name.startsWith('Roboto-') && name.endsWith('.ttf');
+  }).toList()..sort((a, b) => a.path.compareTo(b.path));
+  if (files.isEmpty) return;
+  var faces = [for (var file in files) file.readAsBytesSync()];
+  for (var family in _defaultFamilies) {
+    if (declared.contains(family)) continue;
+    var loader = FontLoader(family);
+    for (var face in faces) {
+      loader.addFont(Future.value(ByteData.sublistView(face)));
+    }
+    await loader.load();
+  }
 }
 
 Future<List<String>> _load() async {

@@ -158,7 +158,13 @@ Future<void> runScenarios(
   // Before the first declaration and after the probe returns: the harness
   // loads its own, and a scenario laid out in the fallback font reports itself
   // as `RenderFlex overflowed by 3.5 pixels` rather than as a font problem.
+  //
+  // The defaults too, and only here: this line runs under bare `flutter test`
+  // alone — the harness probes and returns above — which is exactly the lane
+  // whose `--use-test-fonts` boxes every family nobody loads bytes for. See
+  // [loadDefaultScenarioFonts] for why the harness must not do this.
   await loadScenarioFonts();
+  await loadDefaultScenarioFonts();
 
   var assignments = scenarioAssignments(profile);
   try {

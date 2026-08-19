@@ -18,7 +18,7 @@ export 'src/scenarios/profile.dart'
 export 'src/scenarios/scenario.dart';
 export 'src/scenarios/settle.dart';
 export 'src/scenarios/staging.dart' show DeviceStaging;
-export 'src/scenarios/target.dart' show Target;
+export 'src/scenarios/target.dart' show Target, describeTarget, finderForTarget;
 export 'src/translations/index.dart'
     show
         TranslationIndex,

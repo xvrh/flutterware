@@ -58,7 +58,7 @@ class FwCommand {
 const fwCommands = [
   FwCommand(
     'status',
-    usage: 'status [--json]',
+    usage: 'status [<plugin>] [--brief] [--json]',
     summary: 'what every plugin says about itself',
     details:
         'Loads what each plugin has not loaded yet, then reports. A `fw` '
@@ -66,7 +66,11 @@ const fwCommands = [
         'state would\nsay "not computed" for everything, every time.\n\n'
         'Loading is parsing — pubspecs, demo files. Nothing here compiles, '
         'spawns\na daemon or touches the network; that work lives behind '
-        '`fw run`.',
+        '`fw run`.\n\n'
+        'Name a plugin — a full id or its last dotted segment — and only '
+        'that\none is loaded and reported. `--brief` keeps the status line '
+        'and the\nper-package entries and drops the panel projection, which '
+        'is nine\ntenths of the reply.',
   ),
   FwCommand(
     'worktrees',
@@ -129,11 +133,14 @@ const fwCommands = [
   ),
   FwCommand(
     'actions',
-    usage: 'actions [--json]',
+    usage: 'actions [<plugin> [<action>]] [--json]',
     summary: 'what can be invoked, and with what',
     details:
         'The same list the GUI draws buttons from and an agent reads over '
-        'MCP.\nThere is no second source for it.',
+        'MCP.\nThere is no second source for it.\n\n'
+        'Name a plugin for that one alone; name an action too for that '
+        'action\nin full — parameters documented, and the shape of what '
+        'comes back.',
   ),
   FwCommand(
     'run',
@@ -505,14 +512,14 @@ class FwCli {
       return switch (command) {
         'init' => await _init(),
         'version' || '--version' => _version(json: json),
-        'status' => await _status(json: json),
+        'status' => await _status(rest, json: json),
         'worktrees' => await _worktrees(
           json: json,
           refresh: rest.remove('--refresh'),
         ),
         'changes' => await _changes(rest, json: json),
         'review' => await _review(rest, json: json),
-        'actions' => await _actions(json: json),
+        'actions' => await _actions(rest, json: json),
         'run' => await _run(rest, json: json),
         'app' => await _app(
           forceBuild: rest.remove('--$forceCompileOption'),
@@ -978,11 +985,44 @@ class FwCli {
   /// no such history: it opens a session, reads, and exits. Reporting only
   /// cached state here would print "not computed" for every package on every
   /// run, which is the config file read back rather than a status.
-  Future<int> _status({required bool json}) async {
+  Future<int> _status(List<String> arguments, {required bool json}) async {
+    // The narrowing the MCP tool has had all along, on the command line: a
+    // plugin name loads and reports that one, `--brief` drops the panel
+    // projection. Anything unrecognised is refused — a flag accepted and
+    // ignored reads as "the flag did nothing useful" rather than "the flag
+    // does not exist", which is the more expensive misreading.
+    var brief = arguments.remove('--brief');
+    String? only;
+    for (var argument in arguments) {
+      if (argument.startsWith('-')) {
+        return fail('unknown option "$argument". Try `fw help status`.');
+      }
+      if (only != null) {
+        return fail(
+          'status reports one plugin or all of them — got "$only" and '
+          '"$argument".',
+        );
+      }
+      only = argument;
+    }
+
     var session = await openSession();
     try {
-      for (var core in session.cores) {
+      List<PluginReport> reports;
+      if (only != null) {
+        PluginCore core;
+        try {
+          core = session.requireCore(only);
+        } on SessionException catch (e) {
+          return fail('$e');
+        }
         await core.computeAll();
+        reports = [core.report];
+      } else {
+        for (var core in session.cores) {
+          await core.computeAll();
+        }
+        reports = session.reports;
       }
 
       if (json) {
@@ -992,7 +1032,9 @@ class FwCli {
           // See the same line in the MCP server: notes are a shell feature, so
           // no plugin report would ever mention them.
           'review': reviewStatusJson(session.worktree.path),
-          'plugins': [for (var report in session.reports) report.toJson()],
+          'plugins': [
+            for (var report in reports) report.toJson(includeView: !brief),
+          ],
         });
         return 0;
       }
@@ -1011,8 +1053,8 @@ class FwCli {
         out.writeln('No plugins declared in tool/flutterware.dart.');
         return 0;
       }
-      for (var report in session.reports) {
-        out.writeln(report.toText());
+      for (var report in reports) {
+        out.writeln(report.toText(includeView: !brief));
         out.writeln();
       }
       return 0;
@@ -1263,9 +1305,62 @@ class FwCli {
   ///
   /// The same list the GUI draws buttons from and an agent reads — there is no
   /// second source for it.
-  Future<int> _actions({required bool json}) async {
+  Future<int> _actions(List<String> arguments, {required bool json}) async {
+    // The MCP tool's narrowing, spelled the way `fw run` already spells it:
+    // `fw actions scenarios` for one plugin, `fw actions scenarios run` for
+    // one action. Unknown options are refused rather than ignored.
+    var positional = <String>[];
+    for (var argument in arguments) {
+      if (argument.startsWith('-')) {
+        return fail('unknown option "$argument". Try `fw help actions`.');
+      }
+      positional.add(argument);
+    }
+    if (positional.length > 2) {
+      return fail(
+        'actions takes a plugin and optionally one of its actions — '
+        'got ${positional.length} arguments. Try `fw help actions`.',
+      );
+    }
+
     var session = await openSession();
     try {
+      if (positional.isNotEmpty) {
+        PluginCore core;
+        try {
+          core = session.requireCore(positional.first);
+        } on SessionException catch (e) {
+          return fail('$e');
+        }
+        var actions = core.report.actions;
+        if (positional.length == 2) {
+          var declared = actions
+              .where((action) => action.id == positional[1])
+              .firstOrNull;
+          if (declared == null) {
+            return fail(
+              'no action "${positional[1]}" on ${core.id}. It has: '
+              '${actions.map((a) => a.id).join(', ')}.',
+            );
+          }
+          actions = [declared];
+        }
+        if (json) {
+          _printJson({
+            'plugins': [
+              {
+                'id': core.report.id,
+                'actions': [for (var a in actions) a.toJson()],
+              },
+            ],
+          });
+          return 0;
+        }
+        return positional.length == 2
+            ? _describeAction(core, actions.single)
+            : _describePlugin(core);
+      }
+
       if (json) {
         _printJson({
           'plugins': [
