@@ -35,9 +35,11 @@ const _maxOutput = 8000;
 class DevStackCore extends PluginCore {
   DevStackCore(super.host) {
     var config = host.config;
-    _probe = config['probe'] is Map
-        ? Probe.fromJson((config['probe']! as Map).cast<String, Object?>())
+    var declaredProbe = config['probe'];
+    _probe = declaredProbe is Map
+        ? Probe.fromJson(declaredProbe.cast<String, Object?>())
         : null;
+    _probeDeclared = declaredProbe != null;
     _start = StackRun.fromJson(config['start']);
     _stop = StackRun.fromJson(config['stop']);
     _relativeDirectory = config['workingDirectory'] as String?;
@@ -77,6 +79,13 @@ class DevStackCore extends PluginCore {
   runProcess = defaultRunProcess;
 
   Probe? _probe;
+
+  /// Whether the config carried a `probe:` entry at all — even one whose
+  /// shape [Probe.fromJson] could not read. The difference between "the
+  /// project declared nothing" and "this build cannot read what it
+  /// declared", which are different sentences with different fixes.
+  late final bool _probeDeclared;
+
   StackRun? _start;
   StackRun? _stop;
   String? _relativeDirectory;
@@ -354,15 +363,26 @@ class DevStackCore extends PluginCore {
     if (_inFlight case var inFlight?) return inFlight;
     var probe = _probe;
     if (probe == null) {
+      // Not cached: the cache file is shared by every process on this
+      // worktree, and this sentence is a fact about *this build's* reading
+      // of the config, not a fact about the stack. Persisted, one process
+      // that could not read the probe poisons the reading for all of them —
+      // seen in the field as a status surface saying "No probe is declared"
+      // 22 seconds after another process probed the same config fine.
       return Future.value(
         _adopt(
           StackReading(
             state: StackState.unavailable,
             at: DateTime.now(),
-            failure:
-                'No probe is declared, so nothing can say what state this '
-                'stack is in.',
+            failure: _probeDeclared
+                ? 'The config declares a probe, but not in a shape this '
+                      'build can read — a newer flutterware may have written '
+                      'it. `dart run flutterware` again, or loosen the '
+                      'declaration.'
+                : 'No probe is declared, so nothing can say what state this '
+                      'stack is in.',
           ),
+          cache: false,
         ),
       );
     }
@@ -488,10 +508,10 @@ class DevStackCore extends PluginCore {
     );
   }
 
-  StackReading _adopt(StackReading reading) {
+  StackReading _adopt(StackReading reading, {bool cache = true}) {
     if (isDisposed) return reading;
     _reading = reading;
-    _writeCache(reading);
+    if (cache) _writeCache(reading);
     notifyChanged();
     return reading;
   }

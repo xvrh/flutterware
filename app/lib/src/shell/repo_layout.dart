@@ -42,20 +42,11 @@ String? findRepoRoot(String start) {
 /// pubspec.
 List<String> discoverPackages(String root, {int maxDepth = 3}) {
   var found = <String>[];
-  var rootPubspec = File(p.join(root, 'pubspec.yaml'));
-  if (rootPubspec.existsSync()) {
+  if (File(p.join(root, 'pubspec.yaml')).existsSync()) {
     found.add('.');
-    try {
-      var yaml = loadYaml(rootPubspec.readAsStringSync());
-      if (yaml is YamlMap && yaml['workspace'] is YamlList) {
-        for (var member in yaml['workspace'] as YamlList) {
-          found.add('$member');
-        }
-        return found;
-      }
-    } on YamlException {
-      // A malformed root pubspec is the project's problem, not a reason to
-      // fail discovery — fall through to the scan.
+    if (workspaceMembers(root) case var members?) {
+      found.addAll(members);
+      return found;
     }
   }
 
@@ -80,4 +71,23 @@ List<String> discoverPackages(String root, {int maxDepth = 3}) {
     // Unreadable directory — return whatever was found.
   }
   return found;
+}
+
+/// The root pubspec's `workspace:` members, or null when it declares none —
+/// which is also the difference between "a declared monorepo" and "whatever a
+/// scan turned up", a difference `init`'s scaffold cares about and a caller
+/// of [discoverPackages] cannot recover from its flat list.
+List<String>? workspaceMembers(String root) {
+  var rootPubspec = File(p.join(root, 'pubspec.yaml'));
+  if (!rootPubspec.existsSync()) return null;
+  try {
+    var yaml = loadYaml(rootPubspec.readAsStringSync());
+    if (yaml is YamlMap && yaml['workspace'] is YamlList) {
+      return [for (var member in yaml['workspace'] as YamlList) '$member'];
+    }
+  } on YamlException {
+    // A malformed root pubspec is the project's problem, not a reason to
+    // fail discovery.
+  }
+  return null;
 }

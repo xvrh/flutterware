@@ -1310,7 +1310,7 @@ packages: List<ScenarioListPackage>
 Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured **at** the failure, whatever the capture policy.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--orientation=…] [--language=…] [--devices=…] [--languages=…] [--orientations=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--orientation=…] [--language=…] [--devices=…] [--languages=…] [--orientations=…] [--matrix=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -1320,6 +1320,7 @@ packages: List<ScenarioRunPackage>
   path: String
   output: String   # Where this run's artifacts were written.
   report: String?   # The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.
+  log: String?   # The harness process's console, whole, on disk — engine noise, and anything printed outside a test zone.
   axes: Map<String, String>?   # The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].
   ms: int   # Whole-run wall time inside the harness.
   scenarios: List<ScenarioRunOutcome>
@@ -1399,6 +1400,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `devices` | string | no | — | A comma-separated matrix — `iphone-se,android-tall`. Runs everything once per device, each into its own `<output>/<device>-<language>/` directory with an `index.json` beside them. The same plural vocabulary as `flutter test --dart-define=fw.devices=`. Overrides `device`. |
 | `languages` | string | no | — | The other half of the matrix — `en,fr,de`. Crossed with `devices`, and overrides `language`. |
 | `orientations` | string | no | — | The third axis — `portrait,landscape`. Crossed with the other two, and overrides `orientation`. A device that cannot turn contributes one point rather than two identical ones, so mixing a desktop into the devices does not double the run. |
+| `matrix` | choice | no | — | `declared` runs every point the folder profiles declare — the union of their devices, languages and orientations, crossed exactly as explicit lists are. What CI wants instead of restating the declaration in `devices=` and watching the two drift. Instead of the axis lists, not beside them. |
 | `tag` | string | no | — | Run only scenarios carrying this tag — the same tag `scenario(tags: [...])` declares and `flutter test --tags` filters on |
 | `steps` | choice | no | failing | How many steps ride back in the answer. Every run writes all of them to `run.json` in its output directory either way and each package names that file, so this is about what arrives without asking: `failing` (default) is the frame each red scenario died on, `all` is every step of every scenario — a matrix suite is hundreds — and `none` is the summary alone. Every scenario reports its `stepCount` whatever this says. |
 | `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
@@ -2210,6 +2212,7 @@ Returns `CatalogAuditResult`:
 
 ```
 checked: int   # How many entries were looked at.
+network: int   # How many entries had a network fetch fail — which under `flutter_test` is every network fetch, the binding answering 400 to all of them.
 broken: int   # How many of them are broken — the number the whole thing exists to produce, so that a caller has an answer before it has read a list.
 entries: List<CatalogAuditEntry>   # Only the ones with something to say.
   id: String

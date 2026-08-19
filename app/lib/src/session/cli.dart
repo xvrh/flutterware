@@ -715,6 +715,22 @@ class FwCli {
   /// request rather than to the process — which is also what makes a tool call
   /// describe the project as it is now rather than as it was at startup.
   Future<int> _mcp() async {
+    // Checked once at startup, purely so a machine where no session can open
+    // — an fw running under a bare Dart, the one seen in the field — says so
+    // in the client's server log at connect time. It used to say nothing
+    // anywhere and exit 0, which reads as "connected" right up until the
+    // first tool call fails. Checked directly rather than by opening a
+    // session: a session load logs to stdout, which from here on is the
+    // wire. And serve regardless — every tool call opens its own session and
+    // answers the same sentence, shaped, so a half-set-up machine gets an
+    // MCP that explains itself rather than a dead one.
+    if (await FlutterSdkPath.findSdk() == null) {
+      err.writeln(
+        'fw mcp: no Flutter SDK above the dart running flutterware — every '
+        'tool call will answer this until fw is started with the dart from a '
+        'Flutter SDK.',
+      );
+    }
     if (serveMcp case var serve?) {
       await serve();
     } else {

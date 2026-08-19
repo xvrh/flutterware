@@ -135,6 +135,41 @@ void main() {
     });
   });
 
+  group('a probe the core does not hold', () {
+    test('the refusal is not written into the shared cache', () async {
+      var config = localEnvConfig()..remove('probe');
+      var blind = coreWith(config);
+      var refused = await blind.refresh();
+      expect(refused.state, StackState.unavailable);
+      expect(refused.failure, contains('No probe is declared'));
+      blind.dispose();
+
+      // The refusal is a fact about that build's reading of the config, not
+      // about the stack — and the cache file is shared by every process on
+      // the worktree. A process that could read the probe must not inherit
+      // "no probe is declared" from one that could not.
+      var sighted = coreWith(localEnvConfig());
+      await sighted.computeAll();
+      expect(sighted.reading.state, StackState.unknown);
+      sighted.dispose();
+    });
+
+    test('a declared probe this build cannot read is named as such', () async {
+      var config = localEnvConfig();
+      config['probe'] = {
+        'run': {'exec': 'a-shape-from-the-future'},
+        'shape': 'exitCode',
+      };
+      var core = coreWith(config);
+      var refused = await core.refresh();
+      expect(refused.state, StackState.unavailable);
+      // Not "no probe is declared": one *is*, and the sentence saying
+      // otherwise about a working config was the consumer-reported symptom.
+      expect(refused.failure, contains('shape this build can read'));
+      core.dispose();
+    });
+  });
+
   group('the exit-code probe', () {
     test('zero is up, and the last line becomes the detail', () async {
       var core = coreWith(localEnvConfig());

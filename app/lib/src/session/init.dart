@@ -323,6 +323,25 @@ class ProjectInit {
     var file = File(p.join(root, configFileName));
     if (file.existsSync()) return false;
 
+    // A declared monorepo scaffolds as one: the root pubspec's `workspace:`
+    // list is right there and machine-readable, and a single-package config
+    // written into it hands every tool the workspace shell — a package with
+    // no lib, no tests and no previews — while the real ones go unserved.
+    // Only the declared list, deliberately: promoting whatever a
+    // directory scan turned up would write claims nobody made.
+    var members = workspaceMembers(root);
+    var consts = members == null || members.isEmpty
+        ? {'app': '.'}
+        : _memberConsts(members);
+    var declarations = [
+      for (var entry in consts.entries)
+        "const ${entry.key} = Pkg('${entry.value}');",
+    ].join('\n');
+    var uses = consts.keys.map((name) => '.new($name)').join(', ');
+    var perPackage = members == null || members.isEmpty
+        ? '; the default is the single\n// package here'
+        : " — started as the root pubspec's\n// `workspace:` members";
+
     file.parent.createSync(recursive: true);
     file.writeAsStringSync('''
 import 'package:flutterware/plugins.dart';
@@ -333,26 +352,57 @@ import 'package:flutterware/plugins.dart';
 // Every plugin listed here is available from the GUI, the CLI and MCP — they
 // are three renderings of this file.
 
-// One Pkg per package you want a tool to work on; the default is the single
-// package here. Hand each tool the ones it applies to.
-const app = Pkg('.');
+// One Pkg per package you want a tool to work on$perPackage. Hand each tool the ones it applies to.
+$declarations
 
 void main() => Flutterware.configure((fw) {
 ${_identityLine(root)}
-  fw.use(Dependencies(packages: [.new(app)]));
+  fw.use(Dependencies(packages: [$uses]));
 
   // Renders the widgets you have annotated with `@Preview`, found anywhere in
   // the package — add `directory: 'demo'` to bound the scan.
   // `fw run previews new --name="Buttons"` writes your first one.
-  fw.use(Previews(packages: [.new(app)]));
+  fw.use(Previews(packages: [$uses]));
 
   // Widget tests that screenshot every step, found anywhere under `test/`.
   // `fw run scenarios new --name="Onboarding"` writes your first one.
-  fw.use(Scenarios(packages: [.new(app)]));
+  fw.use(Scenarios(packages: [$uses]));
 });
 ''');
     return true;
   }
+}
+
+/// A Dart identifier per workspace member, keyed name → path.
+///
+/// The directory's basename, camelCased — `packages/design_system` reads
+/// better as `designSystem` than as its whole path — falling back to the
+/// full path (then a counter) when two members share one.
+Map<String, String> _memberConsts(List<String> members) {
+  String camel(String path) {
+    var parts = path
+        .split(RegExp(r'[^A-Za-z0-9]+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'pkg';
+    var name = [
+      parts.first.toLowerCase(),
+      for (var part in parts.skip(1)) part[0].toUpperCase() + part.substring(1),
+    ].join();
+    return RegExp(r'^[0-9]').hasMatch(name) ? 'pkg$name' : name;
+  }
+
+  var consts = <String, String>{};
+  for (var member in members) {
+    var name = camel(p.basename(member));
+    if (consts.containsKey(name)) name = camel(member);
+    var base = name;
+    for (var n = 2; consts.containsKey(name); n++) {
+      name = '$base$n';
+    }
+    consts[name] = member;
+  }
+  return consts;
 }
 
 /// The `fw.identity(...)` the scaffold writes, with a guess already filled in.

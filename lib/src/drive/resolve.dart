@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../scenarios/target.dart';
+import 'human_actions.dart' show nameHit;
 
 /// The four ways the actionability ladder refuses a target.
 ///
@@ -175,10 +176,18 @@ class TargetMessages {
       '${where.isEmpty ? '. ' : ':\n${where.join('\n')}\n'}'
       '$narrowHint';
 
-  String covered(String verb, String described) =>
+  /// [landsOn] names what the pointer actually reaches, when the hit test
+  /// could name it. It comes from the hit path the reachability check already
+  /// ran — a fact, not a guess. Without it the sentence falls back to the two
+  /// usual causes, both of which can be wrong at once: an `OverflowBox` that
+  /// pushes a target's centre over a neighbour covers nothing and absorbs
+  /// nothing.
+  String covered(String verb, String described, {String? landsOn}) =>
       '$described is on screen, but `$prefix$verb` at its center would not '
-      'reach it — another widget covers it, or an IgnorePointer/'
-      'AbsorbPointer swallows the pointer.$coveredEscapeHatch';
+      'reach it — '
+      '${landsOn == null ? 'another widget covers it, or an IgnorePointer/'
+                'AbsorbPointer swallows the pointer' : 'the pointer there lands on $landsOn instead'}'
+      '.$coveredEscapeHatch';
 
   /// The covered refusal for the one covering that is not a mistake: a text
   /// field's own decoration.
@@ -544,7 +553,11 @@ class TargetResolver {
       throw TargetError(
         TargetFailure.covered,
         _decorationRefusal(finder, described, verb) ??
-            messages.covered(verb, described),
+            messages.covered(
+              verb,
+              described,
+              landsOn: nameHit(center, viewId: view?.flutterView.viewId),
+            ),
       );
     }
     throw TargetError(

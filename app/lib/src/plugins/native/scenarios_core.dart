@@ -660,6 +660,20 @@ class ScenariosCore extends PluginCore {
                   'not double the run.',
             ),
             const ActionParameter(
+              'matrix',
+              'Matrix',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  '`declared` runs every point the folder profiles declare — '
+                  'the union of their devices, languages and orientations, '
+                  'crossed exactly as explicit lists are. What CI wants '
+                  'instead of restating the declaration in `devices=` and '
+                  'watching the two drift. Instead of the axis lists, not '
+                  'beside them.',
+              options: [ActionOption('declared')],
+            ),
+            const ActionParameter(
               'tag',
               'Tag',
               kind: ActionParameterKind.string,
@@ -2137,7 +2151,29 @@ class ScenariosCore extends PluginCore {
     // One point when nothing fanned out, which is every panel run and every
     // `fw run scenarios run` that names at most one of each.
     var orientations = _orientationList(arguments['orientations']);
-    var assignments = <ScenarioAxes>[
+    var matrix = arguments['matrix'];
+    if (matrix != null && matrix != 'declared') {
+      throw ArgumentError.value(
+        matrix,
+        'matrix',
+        'accepted: declared — every point the folder profiles declare',
+      );
+    }
+    if (matrix != null &&
+        (devices.isNotEmpty ||
+            languages.isNotEmpty ||
+            orientations.isNotEmpty)) {
+      throw ArgumentError(
+        '`matrix=declared` reads devices, languages and orientations from '
+        'the declaration — drop the explicit lists, or keep them and drop '
+        '`matrix`.',
+      );
+    }
+    List<ScenarioAxes> cross(
+      List<String> devices,
+      List<String> orientations,
+      List<String> languages,
+    ) => [
       for (var device in devices.isEmpty ? [axes.device] : devices)
         for (var orientation in _orientationsFor(
           device,
@@ -2156,7 +2192,7 @@ class ScenariosCore extends PluginCore {
               invertColors: axes.invertColors,
             ),
     ];
-    var fannedOut = assignments.length > 1;
+    var assignments = cross(devices, orientations, languages);
     double? captureScale;
     if (arguments['capture-scale'] case var raw?) {
       captureScale = switch (raw) {
@@ -2190,9 +2226,51 @@ class ScenariosCore extends PluginCore {
     }
 
     var results = <ScenarioRunPackage>[];
-    var points = paths.length * assignments.length;
+    var assignmentsFor = <String, List<ScenarioAxes>>{};
+    for (var path in paths) {
+      if (matrix == null) {
+        assignmentsFor[path] = assignments;
+        continue;
+      }
+      // The declared matrix, read from the harness's own listing — the same
+      // probe that fills the panel's pickers, and the run is about to pay
+      // for the compiled harness anyway. The union across the package's
+      // folders, crossed exactly as explicit lists are: CI stops restating
+      // in `devices=` what `flutter_test_config.dart` already says, so
+      // adding a device to the declaration adds it to CI.
+      _setBusy(path, const Status.info('reading the declared matrix…'));
+      try {
+        var declaredDevices = <String>{};
+        var declaredOrientations = <String>{};
+        var declaredLanguages = <String>{};
+        for (var listing in await _runnerFor(path).list()) {
+          declaredDevices.addAll(listing.devices);
+          declaredOrientations.addAll(listing.orientations);
+          declaredLanguages.addAll(listing.languages);
+        }
+        assignmentsFor[path] = cross(
+          declaredDevices.toList(),
+          declaredOrientations.toList(),
+          declaredLanguages.toList(),
+        );
+      } catch (_) {
+        // A harness that cannot even list will not run either; one point is
+        // enough for the run below to fail with the real error, in the
+        // per-package shape everything downstream knows.
+        assignmentsFor[path] = assignments;
+      } finally {
+        _setBusy(path, null);
+      }
+    }
+    var points = assignmentsFor.values.fold(
+      0,
+      (sum, list) => sum + list.length,
+    );
+    var anyFannedOut = assignmentsFor.values.any((list) => list.length > 1);
     var point = 0;
     for (var path in paths) {
+      var pathAssignments = assignmentsFor[path]!;
+      var fannedOut = pathAssignments.length > 1;
       var packageRoot = host.workspace.packageFor(path).directory.path;
       var base =
           output ??
@@ -2203,7 +2281,7 @@ class ScenariosCore extends PluginCore {
             'scenario_runs',
             '${DateTime.now().millisecondsSinceEpoch}',
           );
-      for (var assignment in assignments) {
+      for (var assignment in pathAssignments) {
         // One directory per point of the matrix. Without it the second
         // assignment overwrites the first — same file, same scenario, same
         // step names — and only the last language survives on disk.
@@ -2237,6 +2315,7 @@ class ScenariosCore extends PluginCore {
             report,
             axes: assignment,
             recordAxes: fannedOut,
+            log: _harnessLog(path),
           );
           // A selector that matched nothing used to come back as an empty list
           // and exit 0 — a typo reading as a green run. The harness compiled
@@ -2266,6 +2345,7 @@ class ScenariosCore extends PluginCore {
               path: path,
               output: outDir,
               axes: fannedOut ? assignment.toParams() : null,
+              log: _harnessLog(path),
               error: '$error',
             ),
           );
@@ -2277,7 +2357,7 @@ class ScenariosCore extends PluginCore {
     }
     var whole = ScenarioRunResult(
       packages: [for (var run in results) _withReportOnDisk(run)],
-      axes: fannedOut || axes.isEmpty ? null : axes.toParams(),
+      axes: anyFannedOut || axes.isEmpty ? null : axes.toParams(),
     );
     return _carrying(whole, steps);
   }
@@ -2308,6 +2388,7 @@ class ScenariosCore extends PluginCore {
       ms: run.ms,
       scenarios: run.scenarios,
       report: file,
+      log: run.log,
       error: run.error,
     );
   }
@@ -2327,6 +2408,7 @@ class ScenariosCore extends PluginCore {
             axes: run.axes,
             ms: run.ms,
             report: run.report,
+            log: run.log,
             error: run.error,
             scenarios: [
               for (var outcome in run.scenarios)
@@ -2717,6 +2799,12 @@ class ScenariosCore extends PluginCore {
     );
   }
 
+  /// The harness console file for [path], when a run has left one behind.
+  String? _harnessLog(String path) {
+    var log = _runnerFor(path).logPath;
+    return File(log).existsSync() ? log : null;
+  }
+
   /// The harness's report, in the declared result shape.
   ScenarioRunPackage _describeRun(
     String path,
@@ -2724,11 +2812,13 @@ class ScenariosCore extends PluginCore {
     Map<String, Object?> report, {
     ScenarioAxes axes = const ScenarioAxes(),
     bool recordAxes = false,
+    String? log,
   }) {
     return ScenarioRunPackage(
       path: path,
       output: outDir,
       axes: recordAxes ? axes.toParams() : null,
+      log: log,
       ms: report['ms'] as int? ?? 0,
       scenarios: [
         for (var outcome

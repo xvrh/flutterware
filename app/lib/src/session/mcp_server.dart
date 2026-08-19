@@ -171,18 +171,31 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
   /// session is what makes "the two agree" a checked claim rather than a hope.
   final Future<Session> Function()? openSession;
 
-  Future<T> _withSession<T>(FutureOr<T> Function(Session) body) async {
-    var session =
-        await (openSession?.call() ??
-            Session.open(
-              workingDirectory,
-              registry: registry,
-              // Sessions log, and the default sink is stdout — which here is
-              // the wire. A plugin that logs while loading would not be noisy,
-              // it would be a corrupt frame, so the sink is part of opening a
-              // session on this surface rather than something to remember.
-              logger: LogClient.writeTo(stderr),
-            ));
+  Future<CallToolResult> _withSession(
+    FutureOr<CallToolResult> Function(Session) body,
+  ) async {
+    Session session;
+    try {
+      session =
+          await (openSession?.call() ??
+              Session.open(
+                workingDirectory,
+                registry: registry,
+                // Sessions log, and the default sink is stdout — which here is
+                // the wire. A plugin that logs while loading would not be
+                // noisy, it would be a corrupt frame, so the sink is part of
+                // opening a session on this surface rather than something to
+                // remember.
+                logger: LogClient.writeTo(stderr),
+              ));
+    } on SessionException catch (e) {
+      // A session that cannot open — no SDK above the running dart, no
+      // project — used to escape here as an unshaped exception, which a
+      // client renders as a protocol-level failure with the cause nowhere on
+      // screen. It is an answer like any other: the message already says
+      // what to fix.
+      return _error('$e');
+    }
     try {
       return await body(session);
     } finally {
@@ -613,6 +626,14 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
       return _error('$e');
     }
 
+    // The report attached below is a pure read of cached state — and this
+    // session is seconds old, built for this one call, so without a load
+    // first that read is of a core that has seen nothing. That is how a
+    // `logs` action came back carrying 200 real lines beside a report saying
+    // `Checked: never`: the result was the action's, the report was the
+    // fresh core's. Loaded before the job rather than after it, so the
+    // action's own updates land on top.
+    await core.computeAll();
     var stopFollowing = _followProgress(core, request.meta?.progressToken);
     var job = session.invoke(pluginName, actionId, arguments: arguments);
     var result = await job.done;

@@ -1284,6 +1284,15 @@ class Probe {
   /// as the reason there as well, because one sentence explaining what is wrong
   /// is one sentence whichever key it arrives under.
   ///
+  /// **A partly-up stack is `up`, with `services` saying which parts are
+  /// not.** Four of five services serving fits no single word above, and the
+  /// word is not asked to carry it: report each service's own state and the
+  /// surfaces render the fraction — `up 3/4`, washed amber rather than
+  /// green. A probe that answers `down` there paints a working stack red and
+  /// buries the whole truth in `detail`; `unavailable` is wrong twice, since
+  /// it means the *probe* failed and this one just delivered its most useful
+  /// answer.
+  ///
   /// Read from **stdout only**. Almost nothing that prints structured output
   /// has stderr to itself — `dart` announces `Running build hooks...` there,
   /// docker writes deprecation warnings, a wrapper's `set -x` writes every line

@@ -322,6 +322,27 @@ void main() {
       },
     );
 
+    test('an invoke warms the core its report is read from', () async {
+      var runDir = Directory.systemTemp.createTempSync('fw-mcp-invoke-');
+      RunCore.runDirProvider = () => runDir.path;
+      addTearDown(() {
+        RunCore.runDirProvider = flutterwareRunDir;
+        runDir.deleteSync(recursive: true);
+      });
+      var payload = _decode(
+        await connection.callTool(
+          CallToolRequest(
+            name: 'flutterware_invoke',
+            arguments: {'plugin': 'run', 'action': 'apps'},
+          ),
+        ),
+      );
+      // The consumer symptom: a correct result beside a report still saying
+      // "Not scanned yet." — every MCP call builds a fresh session, so a
+      // report read without a load first is of a core that has seen nothing.
+      expect('${payload['report']}', isNot(contains('Not scanned yet.')));
+    });
+
     test('and the declarations are still one tool away', () async {
       var payload = _decode(
         await connection.callTool(CallToolRequest(name: 'flutterware_actions')),
