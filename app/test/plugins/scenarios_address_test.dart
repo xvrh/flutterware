@@ -51,6 +51,25 @@ void main() {
     expect(scenarioPlace(segments), place);
   });
 
+  test('round-trips an attachment', () {
+    var place = const ScenarioPlace(
+      'examples/example',
+      file: 'test/scenarios/counter_test.dart',
+      scenario: 'Counter',
+      step: 3,
+      attachment: 1,
+    );
+    var segments = scenarioSegments(
+      place.package,
+      file: place.file,
+      scenario: place.scenario,
+      step: place.step,
+      attachment: place.attachment,
+    );
+    expect(segments.sublist(segments.length - 2), ['3', '1']);
+    expect(scenarioPlace(segments), place);
+  });
+
   test('round-trips the help page', () {
     var segments = scenarioSegments('examples/example', help: true);
     expect(segments, ['examples/example', 'help']);

@@ -13,6 +13,7 @@ export 'src/scenarios/asset_bundle.dart' show ScenarioAssetBundle;
 export 'src/scenarios/fonts.dart' show loadScenarioFonts, loadedScenarioFonts;
 export 'src/scenarios/events.dart'
     show ScenarioChannel, ScenarioEvent, recordScenarioEvent;
+export 'src/scenarios/notification.dart' show ScenarioNotification;
 export 'src/scenarios/profile.dart'
     show ScenarioAssignment, ScenarioProfile, runScenarios;
 export 'src/scenarios/scenario.dart';

@@ -107,21 +107,42 @@ void main() {
       ];
       expect(carrying, hasLength(1), reason: 'only the step after the attach');
       expect(carrying.single['name'], 'Exported');
-      var attachment =
-          (carrying.single['attachments']! as List).single
-              as Map<String, dynamic>;
+      var attachments = (carrying.single['attachments']! as List)
+          .cast<Map<String, dynamic>>();
+      expect(attachments, hasLength(3));
+      var attachment = attachments.first;
       expect(attachment['name'], 'receipt');
       expect(attachment['mimeType'], 'application/json');
       var file = File(attachment['file']! as String);
       expect(file.existsSync(), isTrue);
       // The declared file name, beside the step's own stem — so a directory
-      // reads as "the frame, and what the flow produced to reach it".
-      expect(p.basename(file.path), endsWith('.receipt.json'));
+      // reads as "the frame, and what the flow produced to reach it". The
+      // ordinal in front because this step carries more than one.
+      expect(p.basename(file.path), endsWith('.1-receipt.json'));
       expect(attachment['bytes'], file.lengthSync());
       expect(
         jsonDecode(file.readAsStringSync()),
         containsPair('currency', 'EUR'),
       );
+      // `s.notification` is an ordinary attachment whose mimeType marks it.
+      var notification = attachments[1];
+      expect(notification['name'], 'notification');
+      expect(notification['mimeType'], 'application/x-notification+json');
+      expect(
+        jsonDecode(File(notification['file']! as String).readAsStringSync()),
+        containsPair('title', 'Receipts'),
+      );
+      // Attached after the last capture: it lands on that step, marked as
+      // arriving after it, its file beside the others under the same stem.
+      var summary = attachments.last;
+      expect(summary['name'], 'summary');
+      expect(summary['after'], isTrue);
+      var summaryFile = File(summary['file']! as String);
+      expect(p.basename(summaryFile.path), endsWith('.after.summary.txt'));
+      expect(summaryFile.readAsStringSync(), contains('Total 12.50 EUR'));
+      // The riding two say nothing about `after` — absent, not false, so a
+      // normal attachment's record stays the size it was.
+      expect(attachment.containsKey('after'), isFalse);
 
       // Recording on: the sixth leg, a directory of numbered frames beside
       // the pixels. The panel's settings, so this is the real cost too.

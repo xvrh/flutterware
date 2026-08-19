@@ -239,6 +239,43 @@ IconScan scanIcons({
   return scan;
 }
 
+/// The one file that best stands for the app — what a surface outside the
+/// launcher-icon panel shows when it needs "the app's icon" and not a role:
+/// the scenario flow's notification banner. Absolute path, or null when the
+/// project has nothing usable.
+///
+/// Built on [scanIcons] rather than its own directory walk, so the flavor
+/// union and every platform quirk stay discovered in exactly one place.
+/// Preference order is "full artwork, squarest, biggest": the iOS icon is
+/// complete art with no transparency, where an adaptive foreground is a logo
+/// floating on nothing. Formats Flutter cannot decode (`.ico`, `.svg`) are
+/// skipped rather than handed to an `Image` that would throw.
+String? representativeIconPath({required String packageRoot, String? flavor}) {
+  const preferred = [
+    IconRole.iosApp,
+    IconRole.macosApp,
+    IconRole.androidPlayStore,
+    IconRole.androidLegacy,
+    IconRole.androidRound,
+    IconRole.webIcon,
+    IconRole.webMaskable,
+  ];
+  var scan = scanIcons(
+    packageRoot: packageRoot,
+    packagePath: '',
+    flavor: flavor,
+  );
+  bool decodable(IconFile file) => switch (p.extension(file.path)) {
+    '.png' || '.jpg' || '.jpeg' || '.webp' => true,
+    _ => false,
+  };
+  for (var role in preferred) {
+    var files = scan.forRole(role)?.files.where(decodable);
+    if (files != null && files.isNotEmpty) return files.last.absolutePath;
+  }
+  return null;
+}
+
 // ---- Flavors ---------------------------------------------------------------
 
 /// Where the evidence for a flavor came from.

@@ -196,7 +196,13 @@ class ScenariosCore extends PluginCore {
     );
     // Parsing runs off-isolate, as the catalog's scan does.
     _scans[path] = Isolate.run(scanner.scan)
-        .then<void>((result) => _results[path] = result)
+        .then<void>((result) {
+          _results[path] = result;
+          // A scan that lands clears the failure it recovers from — a save
+          // caught mid-write fails one rescan, and that error may not outlive
+          // the next scan that read the finished file.
+          _errors.remove(path);
+        })
         .catchError((Object error) => _errors[path] = error)
         .whenComplete(notifyChanged);
     notifyChanged();
@@ -484,7 +490,13 @@ class ScenariosCore extends PluginCore {
       directory: scanRootFor(path),
     );
     _scans[path] = Isolate.run(scanner.scan)
-        .then<void>((result) => _results[path] = result)
+        .then<void>((result) {
+          _results[path] = result;
+          // Same recovery rule as [track]: the watcher rescans on every
+          // save, and the one that read a half-written file must not brand
+          // the suite "scan failed" after the next one read it whole.
+          _errors.remove(path);
+        })
         .catchError((Object error) => _errors[path] = error)
         .whenComplete(notifyChanged);
   }

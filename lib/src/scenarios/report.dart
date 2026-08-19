@@ -737,6 +737,7 @@ class ScenarioRunStep {
           file: path(attachment.file),
           mimeType: attachment.mimeType,
           bytes: attachment.bytes,
+          after: attachment.after,
         ),
     ],
   );
@@ -798,6 +799,7 @@ class ScenarioRunAttachment {
         file: json['file'] as String? ?? '',
         mimeType: json['mimeType'] as String?,
         bytes: _int(json['bytes'], 0),
+        after: json['after'] == true,
       );
 
   ScenarioRunAttachment({
@@ -805,6 +807,7 @@ class ScenarioRunAttachment {
     required this.file,
     required this.bytes,
     this.mimeType,
+    this.after = false,
   });
 
   /// What the scenario called it — `'report'`.
@@ -820,11 +823,17 @@ class ScenarioRunAttachment {
   /// How big it is, so a reader knows before opening it.
   final int bytes;
 
+  /// True when it arrived *after* the step's capture — the scenario ended
+  /// with it, and a viewer places it after the step rather than on the way
+  /// in.
+  final bool after;
+
   Map<String, Object?> toJson() => {
     'name': name,
     'file': file,
     if (mimeType != null) 'mimeType': mimeType,
     'bytes': bytes,
+    if (after) 'after': after,
   };
 }
 

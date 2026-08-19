@@ -18,7 +18,19 @@ void main() {
       fileName: 'receipt.json',
       mimeType: 'application/json',
     );
+    // The push the backend would have sent when the export landed. The
+    // viewer draws it the way the recipient's phone would: a banner over
+    // the screen it arrived on.
+    s.notification('Receipt #1042 is ready to download', title: 'Receipts');
     await s.screen('Exported');
+    // Fetched after the final screen: it lands on that step, marked as
+    // arriving after it, and the story ends with the document.
+    s.attach(
+      'summary',
+      utf8.encode('Receipt #1042\nTotal 12.50 EUR\nPaid by card'),
+      fileName: 'summary.txt',
+      mimeType: 'text/plain',
+    );
   });
 }
 
