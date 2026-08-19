@@ -12,12 +12,13 @@ import 'package:flutter/widgets.dart';
 /// still fits without scrolling inside itself. The height is what leaves the
 /// plugin rail room for its entries and their sub-entries without scrolling.
 ///
-/// **A window minimum is this plus whatever chrome is in the flow beside it** —
-/// the rail's 232 when the rail is drawn, nothing when it is not. Only the
-/// shell knows which, so the sum is made there: `shellMinimumSize` in
-/// `shell_view.dart`. Counting the rail while it is hidden is what used to make
-/// ⌘B, and the whole worktrees space that never draws a rail at all, scale at a
-/// width they had the room for.
+/// **A window minimum is this plus whatever chrome the user keeps beside it** —
+/// the rail's 232 while the sidebar preference is on, nothing once ⌘B turns it
+/// off. Only the shell knows which, so the sum is made there: `shellMinimumSize`
+/// in `shell_view.dart`. Counting the rail while it is hidden is what used to
+/// make ⌘B scale the window at a width it had the room for — but the sum
+/// follows the *preference*, not the frame's layout: the worktrees space drops
+/// the rail and keeps the minimum, or crossing into it would zoom the window.
 ///
 /// Narrow the table's columns and this can narrow with it. It is one number,
 /// and it is deliberately the only one.
@@ -51,8 +52,8 @@ const shellPaneMinimumSize = Size(848, 700);
 /// to the screen — would be measured against a box it is not in.
 ///
 /// [minimumSize] may change while the app is running — the shell drops the
-/// rail's share of it whenever the rail leaves the layout — so a change is
-/// animated over [duration]. Hiding the rail at a 900px window takes the scale
+/// rail's share of it when ⌘B hides the rail — so a change is animated over
+/// [duration]. Hiding the rail at a 900px window takes the scale
 /// from 0.83 to 1.0, and 20% arriving in one frame reads as a glitch where a
 /// short zoom reads as the room you just asked for. Above the minimum both ends
 /// scale at 1.0, so the tween is invisible in the ordinary case rather than

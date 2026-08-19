@@ -80,13 +80,19 @@ const _railToggleSize = 20.0;
 const _railPeekWidth = 20.0;
 
 /// The smallest window this layout lays out for: the pane's floor, plus the
-/// rail as it is currently drawn.
+/// rail the user has asked to see.
 ///
 /// **A sum, not a constant.** The pane is what has a minimum — the dependencies
 /// table is the thing that stops fitting — and the rail is chrome that happens
 /// to sit next to it. Charging for a rail either way is what made ⌘B stop
 /// short: it gave the panel 232px of room and then went on scaling the window
 /// as if it had not.
+///
+/// [railWidth] follows the sidebar *preference*, not whether a rail is drawn
+/// this frame. The worktrees space drops the rail from the layout, but the
+/// minimum holding still through that is what keeps navigation from zooming
+/// the window; the freed width shows up as extra room for the explorer
+/// instead.
 Size shellMinimumSize({required double railWidth}) =>
     Size(shellPaneMinimumSize.width + railWidth, shellPaneMinimumSize.height);
 
@@ -127,8 +133,12 @@ class ShellApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: shell,
       builder: (context, child) => FittedApp(
+        // By preference, not by presence: the worktrees space takes the rail
+        // out of the flow, but charging for that here would rescale the whole
+        // window on every navigation across its boundary. Only ⌘B — the user
+        // asking for room — may move the minimum.
         minimumSize: shellMinimumSize(
-          railWidth: shell.railInFlow ? shell.sidebarWidth : 0,
+          railWidth: shell.sidebarVisible ? shell.sidebarWidth : 0,
         ),
         // A drag is its own animation; see [ShellController.sidebarResizing].
         duration: shell.sidebarResizing

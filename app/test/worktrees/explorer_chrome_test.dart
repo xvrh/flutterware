@@ -253,7 +253,7 @@ void main() {
     expect(find.byKey(sidebarKey), findsOneWidget);
   });
 
-  testWidgets('and the window stops being scaled for it', (tester) async {
+  testWidgets('and the window keeps its scale', (tester) async {
     tester.view.physicalSize = const Size(900, 700);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -269,10 +269,21 @@ void main() {
     expect(shell.isExplorer, isTrue);
     expect(
       tester.getSize(find.byType(MaterialApp)).width,
-      900,
+      moreOrLessEquals(1080, epsilon: 0.01),
       reason:
-          'the explorer never draws a rail, so it was paying 232px of rent on '
-          'a strip that is not on the screen',
+          'the minimum follows the sidebar preference, not the frame: '
+          'crossing into the explorer must not zoom the window, so the '
+          "rail's share stays charged and arrives as room for the explorer",
+    );
+
+    // ⌘B is the one thing that may move the minimum, and it still does —
+    // from the explorer too.
+    shell.toggleSidebar();
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byType(MaterialApp)).width,
+      900,
+      reason: 'the preference is off, so the pane stands alone and fits',
     );
   });
 
