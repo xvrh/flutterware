@@ -103,7 +103,19 @@ class PreviewAuditRow {
   /// `InspectErrors.toJson` wrote it.
   final List<Map<String, Object?>> errors;
 
-  bool get ok => compileError == null && failure == null && errors.isEmpty;
+  /// [errors] minus the ones that indict the lane rather than the entry.
+  ///
+  /// `flutter_test` answers **every** HTTP request with 400, so a preview of
+  /// a widget that renders a remote image can never be anything but "broken"
+  /// here — permanently, correct code and all. Its failure is marked
+  /// `network` at the guest and set aside: two false positives out of ninety
+  /// is enough to stop anybody reading the audit.
+  List<Map<String, Object?>> get indicting => [
+    for (var error in errors)
+      if (error['network'] != true) error,
+  ];
+
+  bool get ok => compileError == null && failure == null && indicting.isEmpty;
 }
 
 /// Renders a package's whole catalog under `flutter_tester` and reports what

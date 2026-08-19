@@ -683,11 +683,20 @@ class CatalogAuditResult implements PluginResult, ReportsFailure {
     required this.checked,
     required this.broken,
     required this.entries,
+    this.network = 0,
     this.unreachable = const [],
   });
 
   /// How many entries were looked at.
   final int checked;
+
+  /// How many entries had a network fetch fail — which under `flutter_test`
+  /// is every network fetch, the binding answering 400 to all of them. Those
+  /// failures do not count an entry [broken], because they are the lane's and
+  /// not the code's; the count is here so setting them aside is never silent.
+  /// An entry that renders a remote image is checked for everything *except*
+  /// that image, in this lane, forever.
+  final int network;
 
   /// How many of them are broken — the number the whole thing exists to
   /// produce, so that a caller has an answer before it has read a list.

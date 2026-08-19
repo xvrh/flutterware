@@ -302,6 +302,82 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
     });
   });
 
+  group('matrix=declared', () {
+    test('runs every point the declaration offers', () async {
+      writeScenarios('a_test.dart', ['A']);
+      var runner = _FakeRunner()
+        ..listings = [
+          ScenarioListing(
+            file: 'test/scenarios/a_test.dart',
+            name: 'A',
+            profile: 'phones',
+            devices: ['iphone-se', 'android-tall'],
+            languages: ['fr', 'en'],
+          ),
+        ];
+      var subject = core(runner);
+
+      var result =
+          (await subject.invoke('run', arguments: {'matrix': 'declared'}))!
+              as ScenarioRunResult;
+
+      // The declaration, crossed exactly as explicit `devices=`/`languages=`
+      // lists are — so CI stops restating what the config already says.
+      expect(runner.axesSeen.map((a) => '${a.device}/${a.language}').toSet(), {
+        'iphone-se/fr',
+        'iphone-se/en',
+        'android-tall/fr',
+        'android-tall/en',
+      });
+      expect(result.packages, hasLength(4));
+      expect(result.packages.map((run) => '${run.axes}').toSet(), hasLength(4));
+    });
+
+    test('a declaration with one point stays one quiet run', () async {
+      writeScenarios('a_test.dart', ['A']);
+      var runner = _FakeRunner()
+        ..listings = [
+          ScenarioListing(
+            file: 'test/scenarios/a_test.dart',
+            name: 'A',
+            profile: 'phones',
+            devices: ['iphone-se'],
+          ),
+        ];
+      var subject = core(runner);
+
+      var result =
+          (await subject.invoke('run', arguments: {'matrix': 'declared'}))!
+              as ScenarioRunResult;
+
+      expect(runner.axesSeen.single.device, 'iphone-se');
+      // No fan-out, no per-point directories, no recorded axes — the same
+      // shape a plain run has.
+      expect(result.packages.single.axes, isNull);
+    });
+
+    test('refuses to sit beside explicit axis lists', () async {
+      writeScenarios('a_test.dart', ['A']);
+      var subject = core(_FakeRunner());
+      await expectLater(
+        subject.invoke(
+          'run',
+          arguments: {'matrix': 'declared', 'devices': 'iphone-se'},
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('any other value is refused with the vocabulary', () async {
+      writeScenarios('a_test.dart', ['A']);
+      var subject = core(_FakeRunner());
+      await expectLater(
+        subject.invoke('run', arguments: {'matrix': 'all'}),
+        throwsArgumentError,
+      );
+    });
+  });
+
   group('ok', () {
     test('is false when a scenario came back red', () async {
       var result = await run(core(_FakeRunner(ok: false)));
@@ -350,6 +426,15 @@ class _FakeRunner extends ScenarioRunner {
   /// selector named — what a misspelling actually produces.
   final bool matches;
 
+  /// What `list()` answers — the declaration `matrix=declared` fans out from.
+  List<ScenarioListing> listings = const [];
+
+  /// The axes every `run` call arrived with, in order.
+  final axesSeen = <ScenarioAxes>[];
+
+  @override
+  Future<List<ScenarioListing>> list() async => listings;
+
   @override
   Future<Map<String, Object?>> run({
     required String outDir,
@@ -366,6 +451,7 @@ class _FakeRunner extends ScenarioRunner {
     int recordMaxFrames = 90,
     DateTime? clock,
   }) async {
+    axesSeen.add(axes);
     if (failure case var failure?) throw StateError(failure);
     if (!matches) return {'ms': 1, 'scenarios': <Object?>[]};
     return {

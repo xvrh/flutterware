@@ -46,6 +46,59 @@ void main() {
     expect(config.readAsStringSync(), contains('Flutterware.configure'));
   });
 
+  test('scaffolds a declared monorepo as one', () async {
+    // A seven-member `workspace:` used to get the single-package form — every
+    // tool pointed at the workspace shell, a package with no lib and no
+    // tests, while the members went unserved. The list is right there.
+    File(p.join(root.path, 'pubspec.yaml')).writeAsStringSync('''
+name: everything
+environment:
+  sdk: ^3.10.0
+workspace:
+  - packages/app
+  - packages/design_system
+  - server
+''');
+    await initWith().run();
+
+    var config = File(
+      p.join(root.path, 'tool', 'flutterware.dart'),
+    ).readAsStringSync();
+    expect(config, contains("const app = Pkg('packages/app');"));
+    expect(
+      config,
+      contains("const designSystem = Pkg('packages/design_system');"),
+    );
+    expect(config, contains("const server = Pkg('server');"));
+    expect(
+      config,
+      contains(
+        'Scenarios(packages: [.new(app), .new(designSystem), '
+        '.new(server)])',
+      ),
+    );
+    // The shell itself gets no tool: it is the one package with nothing in
+    // it, and the scaffold is a starting point somebody trims, not grows.
+    expect(config, isNot(contains("= Pkg('.');")));
+  });
+
+  test('two members sharing a basename still get distinct names', () async {
+    File(p.join(root.path, 'pubspec.yaml')).writeAsStringSync('''
+name: everything
+workspace:
+  - apps/mobile/app
+  - apps/desktop/app
+''');
+    await initWith().run();
+
+    var config = File(
+      p.join(root.path, 'tool', 'flutterware.dart'),
+    ).readAsStringSync();
+    expect(config, contains("Pkg('apps/mobile/app')"));
+    expect(config, contains("Pkg('apps/desktop/app')"));
+    expect(config, contains('const appsDesktopApp ='));
+  });
+
   test('never overwrites an existing config', () async {
     File(p.join(root.path, 'tool', 'flutterware.dart'))
       ..createSync(recursive: true)

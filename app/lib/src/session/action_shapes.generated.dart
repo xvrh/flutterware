@@ -594,6 +594,12 @@ final resultShapes = <String, ResultShape>{
         'doc': 'How many entries were looked at.',
       },
       <String, Object?>{
+        'name': 'network',
+        'type': 'int',
+        'doc':
+            'How many entries had a network fetch fail — which under `flutter_test` is every network fetch, the binding answering 400 to all of them.',
+      },
+      <String, Object?>{
         'name': 'broken',
         'type': 'int',
         'doc':
@@ -4879,6 +4885,13 @@ final resultShapes = <String, ResultShape>{
             'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
       },
       <String, Object?>{
+        'name': 'log',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The harness process\'s console, whole, on disk — engine noise, and anything printed outside a test zone.',
+      },
+      <String, Object?>{
         'name': 'axes',
         'type': 'Map<String, String>',
         'optional': true,
@@ -5248,6 +5261,13 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
               'doc':
                   'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
+            },
+            <String, Object?>{
+              'name': 'log',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The harness process\'s console, whole, on disk — engine noise, and anything printed outside a test zone.',
             },
             <String, Object?>{
               'name': 'axes',

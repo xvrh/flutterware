@@ -22,6 +22,44 @@ void main() {
     expect('$error', isNot(contains('tester')));
   });
 
+  testWidgets('a covered refusal names what the pointer lands on', (
+    tester,
+  ) async {
+    // The consumer case behind this: neither of the generic sentence's two
+    // causes was true — nothing covered the target and nothing absorbed the
+    // pointer, an `OverflowBox` had simply pushed its centre over a
+    // neighbour. The hit test already knows what the pointer reaches; the
+    // refusal says it.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Stack(
+          children: [
+            Center(
+              child: TextButton(onPressed: () {}, child: const Text('Buy')),
+            ),
+            Positioned.fill(
+              child: Material(
+                child: InkWell(
+                  onTap: () {},
+                  child: const Center(child: Text('Blocking sheet')),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    var resolver = TargetResolver(tester);
+
+    var error = await _refusal(() => resolver.resolve('Buy', 'tap'));
+
+    expect(error.failure, TargetFailure.covered);
+    expect('$error', contains('lands on "Blocking sheet"'));
+    // The two-guess sentence is the fallback for a nameless hit, not a
+    // preamble to this one.
+    expect('$error', isNot(contains('IgnorePointer')));
+  });
+
   testWidgets('nothing matching is refused with the notFound kind and the '
       'screen description when one is wired', (tester) async {
     await tester.pumpWidget(_covered());

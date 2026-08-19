@@ -17,6 +17,7 @@ class ScenarioListing {
     this.profile,
     this.devices = const [],
     this.languages = const [],
+    this.orientations = const [],
     this.tags = const [],
   });
 
@@ -31,6 +32,7 @@ class ScenarioListing {
   /// what a run takes when nobody chose.
   final List<String> devices;
   final List<String> languages;
+  final List<String> orientations;
 
   /// What `scenario(tags: [...])` declared — the vocabulary `run --tag` and
   /// `shots --tag` filter on. Only the live harness can see these; the
@@ -129,6 +131,9 @@ class ScenarioRunner {
 
   final TesterHost _host;
 
+  /// Where the harness process's console is teed — see [TesterHost.logPath].
+  String get logPath => _host.logPath;
+
   /// Called for every step the harness announces **mid-run**. The blocking
   /// [run] response remains the complete report; this is the streaming half.
   ///
@@ -154,6 +159,8 @@ class ScenarioRunner {
           profile: entry['profile'] as String?,
           devices: (entry['devices'] as List?)?.cast<String>() ?? const [],
           languages: (entry['languages'] as List?)?.cast<String>() ?? const [],
+          orientations:
+              (entry['orientations'] as List?)?.cast<String>() ?? const [],
           tags: (entry['tags'] as List?)?.cast<String>() ?? const [],
         ),
     ];

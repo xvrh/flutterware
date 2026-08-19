@@ -386,6 +386,7 @@ List<Map<String, Object?>> _list(
               'profile': profile.name,
               'devices': [for (var d in profile.devices) d.id],
               'languages': profile.languages,
+              'orientations': [for (var o in profile.orientations) o.name],
             },
           });
         case Group():
@@ -762,8 +763,23 @@ Future<Map<String, Object?>?> _runHook(
   var error = live.errors.firstOrNull;
   return {
     'error': '${hook.name}: ${escaped ?? error?.error ?? 'failed'}',
-    'stack': '${escapedStack ?? error?.stackTrace}',
+    'stack': ?(escapedStack ?? error?.stackTrace)?.toString(),
   };
+}
+
+/// Whether the binding's manufactured "Multiple exceptions (N)…" details is
+/// fully covered by what the scenario buffered — by count when the sentence
+/// carries one, by identity for anything else the binding hands over without
+/// a stack.
+bool _accountsFor(
+  FlutterErrorDetails details,
+  List<ScenarioCaughtError> caught,
+) {
+  var counted = RegExp(
+    r'^Multiple exceptions \((\d+)\) were detected',
+  ).firstMatch(details.exceptionAsString());
+  if (counted != null) return int.parse(counted.group(1)!) <= caught.length;
+  return caught.any((c) => identical(c.exception, details.exception));
 }
 
 Future<Map<String, Object?>> _runOne(
@@ -976,10 +992,30 @@ Future<Map<String, Object?>> _runOne(
   var failures = <Map<String, Object?>>[];
   var priorReporter = reportTestException;
   reportTestException = (details, testDescription) {
-    failures.add({
-      'error': details.exceptionAsString(),
-      'stack': '${details.stack}',
-    });
+    var caught = scenarioCaughtErrors ?? const [];
+    if (details.stack == null && caught.isNotEmpty) {
+      // A details with no stack is the binding's own manufacture — "Multiple
+      // exceptions (2) were detected…", a count of what it declined to show.
+      // The scenario buffered the real ones as they were reported; each gets
+      // its own entry, message and stack intact. The manufactured sentence
+      // survives only when the buffer cannot account for it — an exception
+      // raised outside the body proper — because dropping an error the run
+      // knows happened is worse than one vague line.
+      for (var error in caught) {
+        failures.add({
+          'error': error.description,
+          'stack': ?error.stack?.toString(),
+        });
+      }
+      if (!_accountsFor(details, caught)) {
+        failures.add({'error': details.exceptionAsString()});
+      }
+    } else {
+      failures.add({
+        'error': details.exceptionAsString(),
+        'stack': ?details.stack?.toString(),
+      });
+    }
   };
 
   // The three automatic lanes, installed **here** and not around the scenario
@@ -990,6 +1026,7 @@ Future<Map<String, Object?>> _runOne(
   // queue. That hangs the whole run, silently, including scenarios that log
   // nothing (`2026-08-11-scenario-events-spike-findings.md`).
   scenarioEventBuffer = ScenarioEventBuffer();
+  scenarioCaughtErrors = [];
   var records = Logger.root.onRecord.listen(
     (record) => recordScenarioEvent(
       ScenarioEvent.log(
@@ -1032,6 +1069,7 @@ Future<Map<String, Object?>> _runOne(
     // step for it to belong to, and inventing one would put teardown —
     // `TextInput.clearClient` and its like — on the flow.
     scenarioEventBuffer = null;
+    scenarioCaughtErrors = null;
     reportTestException = priorReporter;
     scenarioRunListener = null;
   }

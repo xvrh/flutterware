@@ -1898,6 +1898,7 @@ class PreviewsCore extends PluginCore {
     }
 
     var checked = 0;
+    var network = 0;
     var rows = <CatalogAuditEntry>[];
     var unreachable = <CatalogAuditFailure>[];
     // One package at a time: each brings up a tester of its own, and two cold
@@ -1932,7 +1933,12 @@ class PreviewsCore extends PluginCore {
           entry.id: entry,
       };
       for (var row in audited) {
+        // Counted even on a green row: an audit that quietly set failures
+        // aside would read as "covered everything" when the network half of
+        // those entries was never checkable in this lane at all.
+        if (row.errors.length != row.indicting.length) network++;
         if (row.ok) continue;
+        var indicting = row.indicting;
         rows.add(
           CatalogAuditEntry(
             id: row.id,
@@ -1951,10 +1957,10 @@ class PreviewsCore extends PluginCore {
               // entry usually has both — the framework's error, and the test
               // runner's restatement of it — and listing the pair reports one
               // overflow twice under two spellings.
-              if (row.errors.isEmpty)
+              if (indicting.isEmpty)
                 if (row.failure case var failure?)
                   CatalogRenderError(exception: failure, count: 1),
-              for (var error in row.errors)
+              for (var error in indicting)
                 _asRenderError(InspectError.fromJson(error)),
             ],
           ),
@@ -1965,6 +1971,7 @@ class PreviewsCore extends PluginCore {
     return CatalogAuditResult(
       checked: checked,
       broken: rows.length,
+      network: network,
       entries: rows,
       unreachable: unreachable,
     );

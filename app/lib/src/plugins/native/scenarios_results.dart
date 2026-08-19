@@ -181,6 +181,7 @@ class ScenarioRunPackage {
     this.ms = 0,
     this.scenarios = const [],
     this.report,
+    this.log,
     this.error,
   });
 
@@ -199,6 +200,13 @@ class ScenarioRunPackage {
   /// wants a step it was not given, and no read at all in the ordinary case
   /// where the answer is "20 scenarios, all green".
   final String? report;
+
+  /// The harness process's console, whole, on disk — engine noise, and
+  /// anything printed outside a test zone. Not where a scenario's own prints
+  /// or exceptions go: those ride the steps' events and the outcome's
+  /// `errors`. This file is for the failure mode nothing structured has a
+  /// slot for yet. One file per harness process, truncated when it starts.
+  final String? log;
 
   /// The assignment **this** entry ran under, when the request asked for a
   /// matrix (`devices=` / `languages=`): one entry per package per point of

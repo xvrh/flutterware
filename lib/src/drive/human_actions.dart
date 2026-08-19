@@ -118,14 +118,19 @@ class HumanActions {
 /// Names what a pointer at [position] would land on: hit test, then walk from
 /// the leaf element upward for the first widget a drive target could spell —
 /// visible text, a string key, a tooltip, a semantics label.
-String describeHit(Offset position, {int? viewId}) {
+String describeHit(Offset position, {int? viewId}) =>
+    nameHit(position, viewId: viewId) ?? _at(position);
+
+/// [describeHit] when the walk found a name, null when it did not — for a
+/// caller with a better fallback sentence than the bare position.
+String? nameHit(Offset position, {int? viewId}) {
   var binding = WidgetsBinding.instance;
   var view = viewId != null
       ? binding.renderViews
             .where((v) => v.flutterView.viewId == viewId)
             .firstOrNull
       : binding.renderViews.firstOrNull;
-  if (view == null) return _at(position);
+  if (view == null) return null;
   var result = HitTestResult();
   binding.hitTestInView(result, position, view.flutterView.viewId);
   for (var entry in result.path) {
@@ -139,7 +144,7 @@ String describeHit(Offset position, {int? viewId}) {
     // visits every ancestor, and later path entries are those ancestors.
     break;
   }
-  return _at(position);
+  return null;
 }
 
 String _at(Offset position) =>

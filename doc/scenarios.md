@@ -212,6 +212,12 @@ That declares one real test per combination — `Counter [iPhone SE · en]` … 
 from a single invocation and a single compile. `FW_DEVICES` / `FW_LANGUAGES`
 do the same for a CI job that would rather set an environment block.
 
+Under the runner, don't restate the lists at all: `fw run scenarios run
+matrix=declared` reads the folder profiles and runs every point they declare
+— the union of their devices, languages and orientations, crossed the same
+way explicit lists are. Adding a device to the declaration then adds it to
+CI, instead of silently not.
+
 Inside a body, `s.assignment` reports what this pass is running as, so an
 expectation can adapt to the screen it is on.
 
@@ -255,7 +261,10 @@ with an `index.json` beside them mapping each assignment to its directory and
 result. Each step leaves a PNG, a `.tree.json`, a `.semantics.json` — the
 merged semantics tree in reading order, labels and flags and actions by name —
 and its texts; a failing scenario reports the error **with the frame captured
-at the failure**, not the one before it.
+at the failure**, not the one before it. A scenario that raised more than one
+exception reports each with its own message and its own stack — never
+`flutter_test`'s "Multiple exceptions (2)" counter, which is the sentence it
+prints after discarding both.
 
 Content that is in the tree but not on the screen — the route you navigated
 away from, an `Offstage` — is marked `offstage` in the `.tree.json`, and the

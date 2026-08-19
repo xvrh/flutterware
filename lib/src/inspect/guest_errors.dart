@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 
 import 'error.dart';
 
@@ -79,6 +80,7 @@ class GuestErrors {
       exception: details.exceptionAsString(),
       library: details.library,
       context: details.context?.toDescription(),
+      network: details.exception is NetworkImageLoadException,
     );
     var existing = _errors[error.key];
     if (existing != null) {
@@ -87,6 +89,7 @@ class GuestErrors {
         library: existing.library,
         context: existing.context,
         count: existing.count + 1,
+        network: existing.network,
       );
       return false;
     }

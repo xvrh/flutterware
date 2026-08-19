@@ -138,6 +138,16 @@ class TesterHost {
 
   String get _buildDir => p.join(packageRoot, 'build', 'flutterware');
 
+  /// Where the guest's console goes, whole. The live pipes feed a one-line
+  /// narration (`onLog`), which is the right size for a spinner caption and
+  /// the wrong size for a diagnosis — before this file the process's output
+  /// was read once for the VM-service URI and discarded. What lands here is
+  /// what escapes the harness's structured lanes: engine noise, a crash on
+  /// the way up, a print from outside any test zone.
+  String get logPath => p.join(_buildDir, '${program.name}.log');
+
+  RandomAccessFile? _logFile;
+
   /// Builds everything and leaves a warm guest behind: sources → generated
   /// entrypoint → asset bundle → compile → spawn → connect. Idempotent, and
   /// concurrent callers share the one startup.
@@ -211,6 +221,21 @@ class TesterHost {
 
   Future<void> _spawnGuest(String dill) async {
     _guestAlive = true;
+    _logFile?.closeSync();
+    // Truncated per process, so the file is the current guest's life — and
+    // written synchronously line by line, because the lines that matter most
+    // arrive right before a run report is read and a buffered sink would
+    // still be holding them.
+    var log = File(logPath)..parent.createSync(recursive: true);
+    var logSink = _logFile = log.openSync(mode: FileMode.write);
+    void tee(String line) {
+      try {
+        logSink.writeStringSync('$line\n');
+      } on FileSystemException {
+        // The guest outlived its log: teardown closed the file first.
+      }
+    }
+
     var guest = _guest = await Process.start(
       _cache.flutterTester,
       [
@@ -242,15 +267,18 @@ class TesterHost {
       workingDirectory: packageRoot,
     );
 
-    guest.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) => onLog?.call('[tester] $line'));
+    guest.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen(
+      (line) {
+        tee(line);
+        onLog?.call('[tester] $line');
+      },
+    );
 
     var vmServiceUri = Completer<String>();
     var ready = Completer<void>();
     guest.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen(
       (line) {
+        tee(line);
         onLog?.call('[tester] $line');
         var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
         if (match != null && !vmServiceUri.isCompleted) {
@@ -453,6 +481,8 @@ class TesterHost {
     }
     _guest = null;
     _guestAlive = false;
+    _logFile?.closeSync();
+    _logFile = null;
     if (_compiler case var compiler?) await compiler.shutdown();
     _compiler = null;
   }

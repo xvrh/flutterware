@@ -537,6 +537,40 @@ void main() {
         brokenHook.deleteSync();
       }
 
+      // Two exceptions in one scenario: the binding aggregates them into
+      // "Multiple exceptions (2) were detected…" with no stack — a count of
+      // what it declined to show, and all a consumer's red suite had to go
+      // on. The report now carries each real exception with its own message
+      // and its own stack.
+      var doubly = File(
+        p.join(packageRoot, 'test', 'scenarios', 'doubly_broken_test.dart'),
+      )..writeAsStringSync(_doublyBrokenSource);
+      try {
+        await runner.refresh();
+        var report = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/doubly_broken_test.dart',
+        );
+        var outcome =
+            (report['scenarios']! as List).single as Map<String, dynamic>;
+        expect(outcome['ok'], isFalse);
+        var errors = (outcome['errors']! as List).cast<Map<String, dynamic>>();
+        expect('$errors', isNot(contains('Multiple exceptions')));
+        expect(errors, hasLength(2));
+        expect('${errors[0]['error']}', contains('the first exception'));
+        expect('${errors[1]['error']}', contains('the second exception'));
+        for (var error in errors) {
+          expect('${error['stack']}', contains('doubly_broken_test.dart'));
+        }
+        // And the process's own console — engine noise, anything printed
+        // outside a test zone — is on disk beside it, named by the report.
+        var log = File(runner.logPath);
+        expect(log.existsSync(), isTrue);
+        expect(log.readAsStringSync(), contains('scenarios harness ready'));
+      } finally {
+        doubly.deleteSync();
+      }
+
       // A folder with its own `flutter_test_config.dart`: the harness runs it
       // — the same file `flutter test` would run — and reports what it says
       // the folder is for. Executed, never parsed, so a profile imported from
@@ -562,6 +596,10 @@ void main() {
         expect(profiled.profile, 'phones');
         expect(profiled.devices, ['iphone-se', 'android-tall']);
         expect(profiled.languages, ['fr', 'en']);
+        // What `matrix=declared` fans out from: the declaration, whole, on
+        // the listing — orientations included, the axis the listing used to
+        // drop.
+        expect(profiled.orientations, ['portrait', 'landscape']);
         // A scenario outside that folder is not governed by it.
         expect(listed.firstWhere((s) => s.name == 'Counter').profile, isNull);
 
@@ -1103,6 +1141,29 @@ void main() {
 }
 ''';
 
+/// One scenario, two exceptions: one reported to the framework mid-body, one
+/// thrown — the smallest recipe for the binding's "Multiple exceptions"
+/// aggregate.
+const _doublyBrokenSource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Doubly broken', (s) async {
+    await s.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('about to break'))),
+    );
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: StateError('the first exception'),
+        stack: StackTrace.current,
+      ),
+    );
+    throw StateError('the second exception');
+  });
+}
+''';
+
 /// A folder that declares what it is for. The profile is imported rather than
 /// written inline, which is the case a syntactic scan could not have read.
 const _folderConfigSource = '''
@@ -1114,6 +1175,7 @@ const phones = ScenarioProfile(
   'phones',
   devices: [Devices.iphoneSe, Devices.androidTall],
   languages: ['fr', 'en'],
+  orientations: [ScreenOrientation.portrait, ScreenOrientation.landscape],
 );
 
 Future<void> testExecutable(FutureOr<void> Function() testMain) =>

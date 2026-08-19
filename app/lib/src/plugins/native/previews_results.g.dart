@@ -146,6 +146,7 @@ Map<String, dynamic> _$CatalogInspectResultToJson(
 Map<String, dynamic> _$CatalogAuditResultToJson(CatalogAuditResult instance) =>
     <String, dynamic>{
       'checked': instance.checked,
+      'network': instance.network,
       'broken': instance.broken,
       'entries': instance.entries.map((e) => e.toJson()).toList(),
       'unreachable': instance.unreachable.map((e) => e.toJson()).toList(),

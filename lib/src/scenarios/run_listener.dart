@@ -204,3 +204,27 @@ class ScenarioStepCapture {
 /// it is the seam between the authoring API and the runner, not part of the
 /// authoring API.
 void Function(ScenarioStepCapture capture)? scenarioRunListener;
+
+/// One exception the running scenario saw, kept whole.
+///
+/// [exception] is the thrown object itself — identity is what lets a report
+/// tell whether an error it holds elsewhere is already in this list.
+class ScenarioCaughtError {
+  ScenarioCaughtError(this.exception, this.description, this.stack);
+
+  final Object exception;
+  final String description;
+  final StackTrace? stack;
+}
+
+/// Set by the flutterware harness around one scenario; null under a bare
+/// `flutter test`.
+///
+/// Exists because the test binding aggregates: a test with two exceptions
+/// reports the single sentence "Multiple exceptions (2) were detected…" — no
+/// stack, no exceptions, just the count — and dumps the real ones to a
+/// console the runner does not show. So the scenario body chains
+/// `FlutterError.onError` into this buffer while it runs, and the harness
+/// reports each exception with its own message and its own stack instead of
+/// the counter.
+List<ScenarioCaughtError>? scenarioCaughtErrors;

@@ -198,6 +198,26 @@ Future<void> _runScenario(
   var assets = ScenarioAssetBundle();
   _countFrames(tester);
   var state = _ReplayState();
+  // Under the runner only: every exception the binding sees goes into the
+  // harness's buffer *before* the binding aggregates. Two exceptions in one
+  // test otherwise reach the report as the sentence "Multiple exceptions (2)
+  // were detected…" with no stack — the real ones exist only as console
+  // dumps. Chained, not replaced: the binding's handler is what fails the
+  // test, and it asserts at the end that it got its handler back.
+  var caught = scenarioCaughtErrors;
+  var priorOnError = FlutterError.onError;
+  if (caught != null) {
+    FlutterError.onError = (details) {
+      caught.add(
+        ScenarioCaughtError(
+          details.exception,
+          details.exceptionAsString(),
+          details.stack,
+        ),
+      );
+      priorOnError?.call(details);
+    };
+  }
   try {
     // The split-replay loop: the body runs once per path through its
     // `split`s, depth-first — a body with none runs once. Every replay
@@ -227,6 +247,15 @@ Future<void> _runScenario(
       try {
         await body(s);
       } catch (error, stack) {
+        var inContext = s._inContext(error);
+        // The binding reports this rethrow only after the body — after the
+        // `finally` below has unchained the handler — so it has to be
+        // buffered here, with the stack it actually broke on. Skipped when
+        // the chain already saw this same object reported mid-body.
+        if (caught != null &&
+            !caught.any((c) => identical(c.exception, error))) {
+          caught.add(ScenarioCaughtError(inContext, '$inContext', stack));
+        }
         // One catch for the whole body, so every failure has a picture of
         // the frame it broke on — whatever raised it: a verb, a bare
         // `expect`, the app's own build. A capture that fails in turn is
@@ -236,10 +265,11 @@ Future<void> _runScenario(
         } catch (_) {}
         // Rethrown with the original stack, so the report still points at
         // the user's line; only the message gains its split branch.
-        Error.throwWithStackTrace(s._inContext(error), stack);
+        Error.throwWithStackTrace(inContext, stack);
       }
     } while (state.plan.advance());
   } finally {
+    if (caught != null) FlutterError.onError = priorOnError;
     // Both before the body ends, not in a tearDown: the binding checks its
     // debug variables — and complains about a live semantics handle — at
     // the end of the body, before tearDowns run.
