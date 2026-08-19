@@ -251,6 +251,43 @@ void main() {
 
     expect(keys, isEmpty);
   });
+
+  testWidgets('a route below an opaque one has no layout, and is read anyway', (
+    tester,
+  ) async {
+    // `RenderTheatre` lays out its onstage children only, so the page under an
+    // opaque route is mounted with **no size** — ordinary, and what an app
+    // deep-linking straight past its first screen has on its very first
+    // capture. Asking such a paragraph `didExceedMaxLines` trips an assertion
+    // and takes the whole read down.
+    var below = t('greeting');
+    var above = t('common_cancel');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Navigator(
+          pages: [
+            MaterialPage(child: Scaffold(body: Text(below))),
+            MaterialPage(child: Scaffold(body: Text(above))),
+          ],
+          onDidRemovePage: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    var keys = read(tester).translationKeys();
+
+    // Both are found — the walk goes through offstage subtrees on purpose —
+    // and the one with no layout simply has nothing to say about overflowing.
+    expect(
+      keys.map((k) => k.key.key),
+      containsAll(['greeting', 'common_cancel']),
+    );
+    expect(
+      _anyNode(read(tester), (node) => node.textOverflowed == true),
+      isFalse,
+    );
+  });
 }
 
 bool _anyNode(InspectTree tree, bool Function(InspectNode) test) {

@@ -636,7 +636,7 @@ class GuestInspector {
           ? (
               keys: <InspectKey>[],
               unkeyed: <String>[],
-              overflowed: paragraph.didExceedMaxLines,
+              overflowed: _overflowed(paragraph),
             )
           : none;
     }
@@ -683,9 +683,26 @@ class GuestInspector {
       unkeyed: unkeyed,
       // Free: the paragraph is already in hand, and this is the whole of "does
       // it still fit in the other language".
-      overflowed: paragraph.didExceedMaxLines,
+      overflowed: _overflowed(paragraph),
     );
   }
+
+  /// Whether this paragraph ran out of room — **false where it has not been
+  /// laid out**, because that is not a fact about the text.
+  ///
+  /// `didExceedMaxLines` asserts `!debugNeedsLayout`, and a mounted paragraph
+  /// with no layout is ordinary rather than exotic: `RenderTheatre` lays out
+  /// only its onstage children, so **every route kept below an opaque one is
+  /// in the tree with no size**, and this walk goes through offstage subtrees
+  /// on purpose. An app that deep-links straight past its first screen has
+  /// two of them on the very first capture, which is where this was found —
+  /// the assertion took the whole scenario down before it captured a step.
+  ///
+  /// `hasSize` rather than `debugNeedsLayout`: it is the guard the rest of
+  /// this file already uses, and it is the one that means the same thing in
+  /// release.
+  static bool _overflowed(RenderParagraph paragraph) =>
+      paragraph.hasSize && paragraph.didExceedMaxLines;
 
   /// Every key a registered widget property names, found *before* the walk.
   ///
