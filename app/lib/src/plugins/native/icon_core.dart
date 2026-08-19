@@ -186,10 +186,7 @@ class LauncherIconCore extends PluginCore {
   /// every sidebar paint draws the eye to nothing. So this speaks only for
   /// things that are the plugin's rather than a package's, and the counts live
   /// on the package rows where they belong.
-  Status get _status {
-    if (packages.isEmpty) return const Status.warn('No packages configured');
-    return Status.none;
-  }
+  Status get _status => Status.none;
 
   /// The worst thing any package has to say, as a mark rather than a sentence.
   StatusBadge get _badge {

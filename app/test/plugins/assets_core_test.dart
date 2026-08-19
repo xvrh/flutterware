@@ -262,10 +262,13 @@ flutter:
     expect(plugin.report.view.toText(), contains('package_config.json'));
   });
 
-  test('a plugin with no packages says how to fix it', () {
-    var plugin = core(packages: const []);
+  test(
+    'a plugin with no packages stays quiet; the panel says how to fix it',
+    () {
+      var plugin = core(packages: const []);
 
-    expect(plugin.report.status, const Status.warn('no packages'));
-    expect(plugin.report.view.toText(), contains('tool/flutterware.dart'));
-  });
+      expect(plugin.report.status, Status.none);
+      expect(plugin.report.view.toText(), contains('tool/flutterware.dart'));
+    },
+  );
 }

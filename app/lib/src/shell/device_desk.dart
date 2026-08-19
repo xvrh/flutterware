@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../plugins/native/run_core.dart' show runPluginId;
 import '../run/handle.dart';
 import '../run/inventory.dart';
+import '../ui/badged_icon.dart';
 import '../ui/theme.dart';
 import '../utils/daemon/device.dart';
 import '../utils/run_dir.dart';
@@ -45,10 +46,38 @@ class _DeskButtonState extends State<DeskButton> {
   var _handles = <RunHandle>[];
   Timer? _refresh;
 
+  /// Devices some run is holding right now — the number on the badge.
+  ///
+  /// Polled at rest, unlike everything else here, because the badge is the
+  /// button's whole story while the menu is closed: *N devices are busy* is
+  /// the fact that makes the desk worth opening, and a badge that only
+  /// updated on open would be describing the last visit. One directory
+  /// listing every few seconds, and a `setState` only when the number moves.
+  var _busy = 0;
+  Timer? _badgeTick;
+
+  @override
+  void initState() {
+    super.initState();
+    _readBadge();
+    _badgeTick = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _readBadge(),
+    );
+  }
+
   @override
   void dispose() {
     _refresh?.cancel();
+    _badgeTick?.cancel();
     super.dispose();
+  }
+
+  void _readBadge() {
+    var handles = scanRunHandles(DeskButton.runDirProvider());
+    var busy = {for (var handle in handles) handle.device}.length;
+    if (busy == _busy) return;
+    setState(() => _busy = busy);
   }
 
   /// Two file reads, repeated while the menu is up so a launch or a stop in
@@ -59,6 +88,7 @@ class _DeskButtonState extends State<DeskButton> {
     setState(() {
       _cache = DeviceCache.read(runDir);
       _handles = scanRunHandles(runDir);
+      _busy = {for (var handle in _handles) handle.device}.length;
     });
   }
 
@@ -115,11 +145,14 @@ class _DeskButtonState extends State<DeskButton> {
       ),
       menuChildren: [_menu(context)],
       builder: (context, controller, child) => Tooltip(
-        message: 'Devices — what is on this machine, and who has it',
+        message: _busy == 0
+            ? 'Devices — what is on this machine, and who has it'
+            : '$_busy device${_busy == 1 ? '' : 's'} busy — who has what',
         child: IconButton(
           onPressed: () => controller.isOpen ? controller.close() : _open(),
-          icon: Icon(
+          icon: BadgedIcon(
             Icons.devices_outlined,
+            count: _busy,
             size: FwIconSize.md,
             color: colors.mut,
           ),

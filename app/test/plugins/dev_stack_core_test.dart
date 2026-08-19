@@ -113,7 +113,8 @@ void main() {
       var core = coreWith(localEnvConfig());
       await core.computeAll();
       expect(ran, isEmpty);
-      expect(core.report.status.message, 'not checked');
+      // And says nothing about it: unknown is silence, not "not checked".
+      expect(core.report.status, Status.none);
       core.dispose();
     });
 

@@ -1235,7 +1235,7 @@ class PreviewsCore extends PluginCore {
   /// be known until something asks for a scan — and a row that fills in a
   /// number the moment you look at it is worse than an empty one.
   Status get _status {
-    if (packages.isEmpty) return const Status.warn('no packages declared');
+    if (packages.isEmpty) return Status.none;
     if (_failures.isNotEmpty) {
       return Status.error('${_failures.length} failed to scan');
     }

@@ -7,18 +7,22 @@ import 'package:flutterware_app/src/ui/theme.dart';
 
 import 'command_palette.dart' show wrapInAppTheme;
 
-/// A package row in the shell's sidebar, in the states it is actually seen in.
+/// The shell's sidebar rows — a plugin's own and a package's — in the states
+/// they are actually seen in.
 ///
-/// The row it draws is `name · status · ⋮`, and the arrangement is the whole
-/// point of having a demo for something this small: the name and the status sit
-/// together on the left, and the ⋮ is pinned to the right edge so the dots form
-/// a column down the sidebar whatever the statuses say. Both have been wrong —
-/// the ⋮ used to follow the status text, and fixing that pushed the status into
-/// the middle of the row.
+/// The arrangement is the whole point of having a demo for something this
+/// small: the name takes the slack on the left and the status is pinned to the
+/// right edge, so down the rail the statuses form one column whatever the
+/// names say; a package row's ⋮ sits past its status at the far edge. All of
+/// it has been wrong — the ⋮ used to follow the status text, fixing that
+/// pushed the status into the middle of the row, and the plugin rows' flex
+/// arrangement parked every status at whatever point two-thirds of the row
+/// happened to be, truncating "5 devices…" beside three empty centimetres of
+/// rail.
 ///
 /// Stacked rather than one state per entry: the alignment claims above are
 /// about rows *relative to each other*, and a gallery that showed them one at a
-/// time could not have caught either bug.
+/// time could not have caught any of those bugs.
 ///
 /// No Figma behind this — it is flutterware's own chrome, and the arrangement
 /// was specified in review rather than drawn.
@@ -114,6 +118,71 @@ Widget sidebarRowStates() => const _Rail(
         label: 'packages/design_system_foundations',
         status: Status.info('building'),
         selected: true,
+      ),
+    ),
+  ],
+);
+
+@Preview(name: 'Plugin rows', group: 'Sidebar row', wrapper: wrapInAppTheme)
+Widget sidebarPluginRows() => _Rail(
+  children: [
+    const _Labelled(
+      'the statuses form a column down the right edge',
+      Column(
+        children: [
+          SidebarRow(
+            label: 'Overview',
+            icon: Icons.home_outlined,
+            selected: false,
+            onTap: _noop,
+          ),
+          SidebarRow(label: 'Dependencies', selected: false, onTap: _noop),
+          SidebarRow(
+            label: 'Example server',
+            status: Status.neutral('down'),
+            selected: false,
+            onTap: _noop,
+          ),
+          SidebarRow(
+            label: 'Previews',
+            status: Status.warn('2 warnings'),
+            selected: false,
+            onTap: _noop,
+          ),
+          SidebarRow(
+            label: 'Scenarios',
+            status: Status.error('scan failed'),
+            selected: false,
+            onTap: _noop,
+          ),
+        ],
+      ),
+    ),
+    const _Labelled(
+      'selected',
+      SidebarRow(
+        label: 'Run',
+        status: Status.good('live'),
+        selected: true,
+        onTap: _noop,
+      ),
+    ),
+    const _Labelled(
+      'a long label yields before the status does',
+      SidebarRow(
+        label: 'A plugin with a name too long for the rail',
+        status: Status.neutral('down'),
+        selected: false,
+        onTap: _noop,
+      ),
+    ),
+    const _Labelled(
+      'a long status ellipsises and the label keeps the rest',
+      SidebarRow(
+        label: 'Run',
+        status: Status.info('Syncing files to device macOS...'),
+        selected: false,
+        onTap: _noop,
       ),
     ),
   ],

@@ -260,7 +260,7 @@ class SplashCore extends PluginCore {
   /// on the package rows, and [_badge] still carries the tone, so nothing is
   /// lost — the sidebar signals without narrating.
   Status get _status {
-    if (packages.isEmpty) return const Status.warn('No packages configured');
+    if (packages.isEmpty) return Status.none;
 
     // A file that looks like a config and is not one outranks everything else:
     // the generator refuses to run at all, so counting problems in the configs

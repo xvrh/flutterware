@@ -153,7 +153,7 @@ class DependenciesCore extends PluginCore {
   /// and the per-package number is already a click away in the panel. The row
   /// speaks only while it is working or when something went wrong.
   Status _status(Map<String, Snapshot<Dependencies>> known) {
-    if (packages.isEmpty) return const Status.warn('no packages');
+    if (packages.isEmpty) return Status.none;
     if (known.values.any((s) => s.error != null)) {
       return const Status.error('failed to load');
     }

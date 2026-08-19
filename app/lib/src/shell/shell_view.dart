@@ -12,6 +12,7 @@ import '../comparison/ui/comparison_tabs.dart';
 import '../capture/capture_mode.dart';
 import '../capture/capture_request.dart';
 import '../plugins/native_plugin.dart';
+import '../ui/badged_icon.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import '../worktrees/explorer_screen.dart';
@@ -837,38 +838,11 @@ class _ExplorerTab extends StatelessWidget {
             border: Border(top: edge, left: edge, right: edge),
           ),
           child: Center(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  Icons.account_tree_outlined,
-                  size: FwIconSize.md,
-                  color: selected ? colors.accent : colors.mut,
-                ),
-                if (needsYou > 0)
-                  Positioned(
-                    right: -5,
-                    top: -4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      constraints: const BoxConstraints(minWidth: 11),
-                      decoration: BoxDecoration(
-                        color: colors.accent,
-                        borderRadius: BorderRadius.circular(
-                          context.radii.radiusSmall,
-                        ),
-                      ),
-                      child: Text(
-                        '$needsYou',
-                        textAlign: TextAlign.center,
-                        style: context.type.micro.copyWith(
-                          color: colors.onPrimary,
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+            child: BadgedIcon(
+              Icons.account_tree_outlined,
+              count: needsYou,
+              size: FwIconSize.md,
+              color: selected ? colors.accent : colors.mut,
             ),
           ),
         ),
@@ -1371,7 +1345,7 @@ class _Sidebar extends StatelessWidget {
           : ListView(
               padding: const EdgeInsets.symmetric(vertical: FwSpacing.lg),
               children: [
-                _Row(
+                SidebarRow(
                   // Not the worktree's name: the tab above already says that,
                   // and this row is a destination, not a label.
                   label: 'Overview',
@@ -1387,7 +1361,7 @@ class _Sidebar extends StatelessWidget {
                 // Above the plugin list, because it is not one: it reads git
                 // rather than the project, and it is the one destination here
                 // that works before a config has resolved.
-                _Row(
+                SidebarRow(
                   label: 'Changes',
                   selected: shell.isChangesScreen,
                   onTap: shell.selectChanges,
@@ -1578,110 +1552,6 @@ class _SidebarSkeleton extends StatelessWidget {
   }
 }
 
-/// The one row shape the sidebar uses: a filled selection, no border, so
-/// selecting never changes anyone's size.
-class _Row extends StatelessWidget {
-  const _Row({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.icon,
-    this.status = Status.none,
-    this.actions = const [],
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  final IconData? icon;
-  final Status status;
-
-  /// Shown on hover, between the label and the status — a plugin's own
-  /// openings. See [PluginRowCommand].
-  final List<({String label, IconData icon, VoidCallback onTap})> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Tappable.builder(
-      onTap: onTap,
-      // The wash is the primitive's; the flag still reveals the row's actions.
-      feedback: TapFeedback.overlay,
-      builder: (context, hovered) => Container(
-        margin: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.md,
-          vertical: 1,
-        ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.lg,
-          vertical: FwSpacing.md,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? colors.accentSoft : Colors.transparent,
-          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-        ),
-        child: Row(
-          children: [
-            if (icon != null) ...[
-              Icon(
-                icon,
-                size: FwIconSize.sm,
-                color: selected ? colors.accent : colors.mut,
-              ),
-              const Gap(FwSpacing.md),
-            ],
-            Expanded(
-              flex: 2,
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: selected
-                    ? context.type.bodyStrong.copyWith(color: colors.accent)
-                    : context.type.body,
-              ),
-            ),
-            // Only on hover, and only then: a row that always carried its
-            // buttons would put a `+` beside every plugin that has one, which
-            // is a rail of controls rather than a list of places.
-            if (hovered)
-              for (var action in actions)
-                Tooltip(
-                  message: action.label,
-                  child: Tappable.builder(
-                    onTap: action.onTap,
-                    builder: (context, over) => Padding(
-                      padding: const EdgeInsets.only(left: FwSpacing.xs),
-                      child: Icon(
-                        action.icon,
-                        size: FwIconSize.md,
-                        color: over ? colors.accent : colors.mut,
-                      ),
-                    ),
-                  ),
-                ),
-            if (!status.isEmpty) ...[
-              const Gap(FwSpacing.sm),
-              // Capped, and shrinking before the label does. A run that failed
-              // carries its reason here, and an unbounded one ate the name of
-              // the thing it had failed to build.
-              Flexible(
-                child: Text(
-                  status.message,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: context.type.micro.copyWith(
-                    color: toneColor(colors, status.tone),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _PluginRow extends StatelessWidget {
   const _PluginRow(this.shell, this.plugin);
 
@@ -1705,7 +1575,7 @@ class _PluginRow extends StatelessWidget {
     var echoed =
         expanded &&
         report.children.any((child) => child.status == report.status);
-    return _Row(
+    return SidebarRow(
       label: report.label,
       selected: expanded,
       onTap: () => shell.selectPlugin(plugin.id),
