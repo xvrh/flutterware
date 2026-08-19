@@ -31,6 +31,14 @@ file that mixes both, wherever. `test/scenarios/` is only the convention `new`
 writes to, and a `directory:` in `tool/flutterware.dart` narrows discovery to
 one folder if you want the fence back.
 
+Discovery is **syntactic**: it matches a literal `scenario('name', …)` call,
+in the file, with a literal string name — it never runs the file. A name built
+at runtime is reported ("scenario name is not a string literal"), but a
+helper that calls `scenario` *internally* — `runScenario(name, body)`, a
+registry walked in a loop — leaves no `scenario(` call in the file and is
+invisible with nothing said. If you wrap, keep the call and its name in the
+scenario file.
+
 ## The verbs
 
 Each one acts, waits for the screen to settle, and captures.
@@ -98,6 +106,11 @@ matters: a screen with a spinner on it **never** settles, and
 `pumpAndSettle` throws on one. A scenario that reaches a loading state records
 `settled: false` on that step — the GUI says *"still animating"* — and carries
 on.
+
+`s.settle()` is the wait without a step: the same policy (or the one you
+pass), no capture. It is what a suite ported from raw widget tests maps a
+legacy `pumpAndSettle()` onto, and the wait to reach for after work you
+pumped through `s.tester` yourself.
 
 ## Shots
 
@@ -178,6 +191,15 @@ opening a scenario from either folder frames it the way that folder says — the
 GUI remembers a device *per folder*, so picking an iPhone on a phone scenario
 never follows you to a desktop one.
 
+The folder is the unit, and that is structural, not a preference: devices are
+selected **per folder**, never per scenario. A suite whose phone and desktop
+scenarios interleave in one directory has to split into folders before it can
+say so. `orientations` is likewise an axis, **crossed** with `devices` — two
+devices × two orientations declares four matrix points, not two — so a suite
+that used to name `iPadLandscape` as its own device names the device once and
+the orientation beside it. (A device that cannot rotate contributes one point,
+not two.)
+
 `flutter test` runs one pass at the head of each list. CI brings its own:
 
 ```sh
@@ -192,6 +214,29 @@ do the same for a CI job that would rather set an environment block.
 
 Inside a body, `s.assignment` reports what this pass is running as, so an
 expectation can adapt to the screen it is on.
+
+## Fonts: the lane decides how text measures
+
+`flutter test` launches its tester with `--use-test-fonts
+--disable-asset-fonts`, hardcoded — no flag turns it off. Any family nobody
+loads real bytes for draws every glyph as an identical filled box **and
+measures at the box's width**, roughly double a real glyph. That is the wrong
+kind of wrong: the suite still passes, layouts still resolve, and every
+screenshot is lying about where text ends. Headings that name a bundled
+family look fine while the body text beside them lies.
+
+Flutterware closes this in both lanes. Every family in your
+`FontManifest.json` is loaded before anything runs — under the runner and
+under bare `flutter test` alike — and under `flutter test` the
+platform-default families (`Roboto`, the Apple and Windows system names) get
+real Roboto from the SDK's own cache, so text that names *no* family measures
+real too. A family you bundle yourself is always left to your bytes.
+
+The residue is why the runner is the lane for pictures: under `flutter test`
+an iOS-profile scenario measures its default text as Roboto — close, not SF.
+`fw run scenarios run` spawns the tester without those flags, so it renders
+and measures the real thing; treat its captures as the authoritative ones,
+and bare `flutter test` as the assertion lane it is.
 
 ## Running them
 

@@ -80,7 +80,11 @@ class PluginReport {
   };
 
   /// The whole plugin as plain text — the shape `fw` prints and an agent reads.
-  String toText() {
+  ///
+  /// [includeView] off drops the panel projection, as [toJson]'s does and for
+  /// the same measured reason: the view is the inventory, and a reader asking
+  /// which plugins are unhappy is asking about the rest.
+  String toText({bool includeView = true}) {
     var out = StringBuffer();
     out.write(label);
     if (!status.isEmpty) out.write('  ${status.message}');
@@ -90,10 +94,12 @@ class PluginReport {
       if (!child.status.isEmpty) out.write('  ${child.status.message}');
       out.writeln();
     }
-    var body = view.toText();
-    if (body.isNotEmpty) {
-      for (var line in body.split('\n')) {
-        out.writeln('  $line');
+    if (includeView) {
+      var body = view.toText();
+      if (body.isNotEmpty) {
+        for (var line in body.split('\n')) {
+          out.writeln('  $line');
+        }
       }
     }
     return out.toString().trimRight();

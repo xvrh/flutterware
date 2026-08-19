@@ -178,9 +178,27 @@ class Drive {
         elapsed: watch.elapsed,
       );
     }
+    var finder = finderForTarget(target);
+    // Built but behind the viewport: the walk only drags one way, so jump —
+    // same reasoning, same helper as the scenario verb. The recheck waits
+    // for a frame first, since the reveal is only geometry after layout.
+    if (finder.evaluate().isEmpty) {
+      if (scrolledPastTarget(finder, scrollable) case var behind?) {
+        await Scrollable.ensureVisible(behind);
+        var settled = await settleLive(budget: settle ?? settleBudget);
+        if (finder.evaluate().isNotEmpty) {
+          return DriveStep(
+            verb: 'scrollTo',
+            target: describeTarget(target),
+            settle: settled,
+            elapsed: watch.elapsed,
+          );
+        }
+      }
+    }
     try {
       await controller.scrollUntilVisible(
-        finderForTarget(target),
+        finder,
         step,
         scrollable: scrollable.first,
         maxScrolls: maxScrolls,

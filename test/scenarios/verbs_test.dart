@@ -30,6 +30,44 @@ void main() {
     expect(find.text('Item 0'), findsOneWidget);
   });
 
+  // Reported by a consumer suite: a horizontal filter row taps the last pill,
+  // then asks for the first — which the viewport has scrolled past. The walk
+  // only drags toward the end, so it could never come back; a target still in
+  // the tree is jumped to instead, both directions, both axes.
+  scenario('scrollTo reaches a target the viewport has scrolled past', (
+    s,
+  ) async {
+    await s.pumpWidget(const _PillsApp());
+    await s.scrollTo('Pill 4');
+    expect(find.text('Pill 1'), findsNothing);
+
+    await s.scrollTo('Pill 1');
+
+    expect(find.text('Pill 1'), findsOneWidget);
+  });
+
+  scenario('scrollTo does not jump to a target on an inactive route', (
+    s,
+  ) async {
+    await s.pumpWidget(const _RoutedListsApp());
+    await s.tap('Open details');
+    expect(find.text('Home item'), findsNothing);
+
+    // 'Home item' is still in the tree — on the route behind this one. A
+    // jump there would scroll a hidden list and capture a screen without the
+    // target; the honest answer is the walk's own exhaustion.
+    await expectLater(
+      () => s.scrollTo('Home item', maxScrolls: 2),
+      throwsA(
+        isA<ScenarioTargetError>().having(
+          (e) => '$e',
+          'message',
+          contains('scrolled 2 times'),
+        ),
+      ),
+    );
+  });
+
   scenario('scrollTo says so when the item never turns up', (s) async {
     await s.pumpWidget(const _ListApp());
 
@@ -103,6 +141,19 @@ void main() {
 
     await s.drag('Swipe me', const Offset(-500, 0));
     expect(find.text('Swipe me'), findsNothing);
+  });
+
+  scenario('settle waits per the policy and captures nothing', (s) async {
+    await s.pumpWidget(const _SplashApp());
+    var count = captures.length;
+
+    // The wait without the step — what a bridge maps a legacy
+    // `pumpAndSettle()` onto. `elapse` here, because this splash waits on a
+    // timer, which no frame-following policy can see.
+    await s.settle(const Settle.elapse(Duration(seconds: 3)));
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(captures.length, count);
   });
 
   scenario('wait moves the clock a settle would not', (s) async {
@@ -244,6 +295,64 @@ class _ListApp extends StatelessWidget {
           for (var i = 0; i < 60; i++)
             SizedBox(height: 80, child: Text('Item $i')),
         ],
+      ),
+    ),
+  );
+}
+
+/// A horizontal filter row wider than the screen — the consumer shape whose
+/// first pill ends up *behind* the viewport after the last one is reached.
+/// Four pills of 300 on an 800-wide surface: everything stays built (well
+/// inside cache extent), so the scrolled-past one is in the tree, invisible.
+class _PillsApp extends StatelessWidget {
+  const _PillsApp();
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: Scaffold(
+      body: SizedBox(
+        height: 60,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: 4,
+          itemBuilder: (_, i) =>
+              SizedBox(width: 300, child: Center(child: Text('Pill ${i + 1}'))),
+          separatorBuilder: (_, _) => const SizedBox(width: 20),
+        ),
+      ),
+    ),
+  );
+}
+
+/// A scrollable page behind a scrollable page: what the previous route shows
+/// stays in the tree, and must not count as reachable.
+class _RoutedListsApp extends StatelessWidget {
+  const _RoutedListsApp();
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: Builder(
+      builder: (context) => Scaffold(
+        body: ListView(
+          children: [
+            const SizedBox(height: 40, child: Text('Home item')),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => Scaffold(
+                    body: ListView(
+                      children: [
+                        for (var i = 0; i < 3; i++)
+                          SizedBox(height: 40, child: Text('Detail $i')),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              child: const Text('Open details'),
+            ),
+          ],
+        ),
       ),
     ),
   );
