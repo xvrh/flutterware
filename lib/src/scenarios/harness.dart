@@ -791,8 +791,9 @@ Future<Map<String, Object?>> _runOne(
   String? device,
 }) async {
   var steps = <Map<String, Object?>>[];
-  var directory = Directory('$outDir/${scenarioFileSafe(file)}/${scenarioFileSafe(name)}')
-    ..createSync(recursive: true);
+  var directory = Directory(
+    '$outDir/${scenarioFileSafe(file)}/${scenarioFileSafe(name)}',
+  )..createSync(recursive: true);
   // Each step's tree as written, kept for one comparison: a verb whose tree
   // is byte-identical to its parent's changed nothing on screen, which is
   // what a stalled walk looks like from the inside — no exception, no failed
