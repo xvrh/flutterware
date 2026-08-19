@@ -382,6 +382,7 @@ List<Map<String, Object?>> _list(
             'name': _leafName(entry, group),
             if (entry.metadata.tags.isNotEmpty)
               'tags': entry.metadata.tags.toList()..sort(),
+            if (entry.metadata.skip) 'skip': true,
             if (profile != null) ...{
               'profile': profile.name,
               'devices': [for (var d in profile.devices) d.id],
@@ -567,6 +568,43 @@ Future<Map<String, Object?>> _run(
   /// says the run stopped rather than that the rest passed.
   var abandoned = false;
 
+  Map<String, Object?> skippedOutcome(Test entry, Group group, String? file) {
+    var (_, framedDevice) = framingFor(file ?? '');
+    return {
+      'file': file ?? '',
+      'name': _leafName(entry, group),
+      'device': ?framedDevice,
+      // Not a failure — `flutter test` exits 0 on a skipped test — but not
+      // silently green either: the flag is what every surface above renders
+      // as its own third state.
+      'ok': true,
+      'skipped': true,
+      'skipReason': ?entry.metadata.skipReason,
+      'ms': 0,
+      'steps': <Map<String, Object?>>[],
+    };
+  }
+
+  /// The selected skipped scenarios of a group nothing in will run — so a
+  /// request that names one still finds it in the answer, saying skipped,
+  /// rather than reading as a selector that matched nothing.
+  void reportSkipped(Group group, String? groupFile) {
+    for (var entry in group.entries) {
+      switch (entry) {
+        case Test():
+          if (!_isScenario(declared.scenarios, groupFile, entry, group)) break;
+          if (!_selects(entry, group, scenario, tag)) break;
+          if (entry.metadata.skip) {
+            outcomes.add(skippedOutcome(entry, group, groupFile));
+          }
+        case Group():
+          reportSkipped(entry, groupFile ?? entry.name);
+        case GroupEntry():
+          break;
+      }
+    }
+  }
+
   /// Mirrors `test_core`'s engine (`runner/engine.dart`, `_runGroup`): the
   /// group's `setUpAll` before its entries, its entries only if that passed,
   /// and its `tearDownAll` afterwards **whatever happened** — cleanup a
@@ -582,8 +620,10 @@ Future<Map<String, Object?>> _run(
     // run at all. `test_core` never has to: it filters by rebuilding the group
     // tree, so an empty group never reaches the engine. We filter as we walk,
     // and the panel runs one scenario at a time — without this, running one
-    // scenario would start every other file's fixtures.
+    // scenario would start every other file's fixtures. Skipped scenarios do
+    // not count as running — but they still answer.
     if (!_runsAnything(declared.scenarios, group, groupFile, scenario, tag)) {
+      reportSkipped(group, groupFile);
       return;
     }
     var scope = [...parents, group];
@@ -605,6 +645,17 @@ Future<Map<String, Object?>> _run(
           if (!_isScenario(declared.scenarios, groupFile, entry, group)) break;
           if (!_selects(entry, group, scenario, tag)) break;
           var (framedArgs, framedDevice) = framingFor(groupFile ?? '');
+          // `scenario(skip: true)` reaches `testWidgets` and stops in the
+          // test's metadata: enforcing it is the *engine*'s job
+          // (`test_core`'s `_runSkippedTest`), and this harness walks the
+          // declared tree itself. `LiveTest.run()` would execute the body of
+          // a test `flutter test` reports as skipped — the two lanes
+          // answering differently about the same file, with the runner red
+          // on a body its author already declared broken.
+          if (entry.metadata.skip) {
+            outcomes.add(skippedOutcome(entry, group, groupFile));
+            break;
+          }
           if (setUpAllError != null) {
             // Reported against each scenario that would have run, not once
             // against the group: a caller who asked for one scenario must find
@@ -699,8 +750,11 @@ bool _runsAnything(
   for (var entry in group.entries) {
     switch (entry) {
       case Test():
+        // A skipped scenario never runs, so it alone is not worth a group's
+        // fixtures — asking for it must not start every sibling's `setUpAll`.
         if (_isScenario(scenarios, file, entry, group) &&
-            _selects(entry, group, scenario, tag)) {
+            _selects(entry, group, scenario, tag) &&
+            !entry.metadata.skip) {
           return true;
         }
       case Group():
@@ -1045,8 +1099,10 @@ Future<Map<String, Object?>> _runOne(
   // see nothing — and republishes each line on this stream. Nobody used to
   // listen, which is why a `print` inside a scenario went nowhere at all.
   var messages = live.onMessage.listen((message) {
-    // The stream also carries `skip` — the reason a skipped test gives — which
-    // is a fact about the test, not something the app printed.
+    // The stream's other type is `skip` — the reason a skipped test gives.
+    // The walk answers a skipped scenario without loading it, so none should
+    // arrive; filtered anyway, because it is a fact about the test, not
+    // something the app printed.
     if (message.type != MessageType.print) return;
     recordScenarioEvent(
       ScenarioEvent.custom(channel: ScenarioChannel.print, title: message.text),

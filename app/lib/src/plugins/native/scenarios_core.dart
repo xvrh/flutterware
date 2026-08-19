@@ -541,7 +541,9 @@ class ScenariosCore extends PluginCore {
               'flutter_tester, capturing a PNG, a widget tree and the visible '
               'texts per step. The paths in the result point at the '
               'artifacts; a failing scenario reports its error with the frame '
-              'captured **at** the failure, whatever the capture policy.',
+              'captured **at** the failure, whatever the capture policy. The '
+              'answer summarises the steps (see `steps=`); `run.json` in the '
+              'output directory always carries every one.',
           parameters: [
             ActionParameter(
               'package',
@@ -578,8 +580,10 @@ class ScenariosCore extends PluginCore {
               kind: ActionParameterKind.string,
               required: false,
               description:
-                  'Where step artifacts are written; a fresh directory under '
-                  "the package's build/ when omitted",
+                  'Where step artifacts are written, worktree-relative '
+                  'unless absolute; a fresh directory under the package\'s '
+                  'build/ when omitted. run.json lands in the same '
+                  'directory as the images it names.',
             ),
             // The axes. Declared because they change the pixels, and anything
             // that changes the pixels is recorded on the artifact's address.
@@ -1022,9 +1026,9 @@ class ScenariosCore extends PluginCore {
               kind: ActionParameterKind.string,
               required: false,
               description:
-                  'Where the page goes; defaults to '
-                  '`${ScenarioWebExporter.defaultOutput}` under the package. '
-                  'Emptied before writing.',
+                  'Where the page goes, worktree-relative unless absolute; '
+                  'defaults to `${ScenarioWebExporter.defaultOutput}` under '
+                  'the package. Emptied before writing.',
             ),
             const ActionParameter(
               'base-href',
@@ -1191,10 +1195,10 @@ class ScenariosCore extends PluginCore {
               kind: ActionParameterKind.string,
               required: false,
               description:
-                  'Where the tree is written; '
-                  '`build/flutterware/screenshots` '
-                  'under the package when omitted. Emptied first, so what is '
-                  'there afterwards is exactly this run.',
+                  'Where the tree is written, worktree-relative unless '
+                  'absolute; `build/flutterware/screenshots` under the '
+                  'package when omitted. Emptied first, so what is there '
+                  'afterwards is exactly this run.',
             ),
             const ActionParameter(
               'devices',
@@ -1779,7 +1783,11 @@ class ScenariosCore extends PluginCore {
               '${outcome.stepCount} steps',
               if (outcome.unchangedCount > 0)
                 '${outcome.unchangedCount} unchanged',
-              outcome.ok ? 'ok' : 'FAILED',
+              outcome.skipped
+                  ? 'skipped'
+                  : outcome.ok
+                  ? 'ok'
+                  : 'FAILED',
               ?outcome.steps.lastOrNull?.tree,
             ].join(' · '),
       ];
@@ -1841,9 +1849,11 @@ class ScenariosCore extends PluginCore {
     var total = 0;
     for (var path in paths) {
       var packageRoot = host.workspace.packageFor(path).directory.path;
-      var output =
-          arguments['output'] as String? ??
-          p.join(packageRoot, 'build', 'flutterware', 'screenshots');
+      // Same base as `run`'s `output`: the worktree, unless absolute.
+      var output = switch (arguments['output'] as String?) {
+        var given? when given.isNotEmpty => _absolute(given),
+        _ => p.join(packageRoot, 'build', 'flutterware', 'screenshots'),
+      };
       var root = Directory(output);
       // Emptied first: a store tree is a statement about the app as it is
       // now, and yesterday's screenshot of a screen that no longer exists
@@ -2118,7 +2128,18 @@ class ScenariosCore extends PluginCore {
         'not per package.',
       );
     }
-    var output = arguments['output'] as String?;
+    // Resolved here, once, worktree-relative unless absolute — because a
+    // relative path handed through verbatim reaches two writers with
+    // different working directories: `fw` writes `run.json` from wherever it
+    // was invoked, the tester writes the PNGs from the package root.
+    // Measured on a real suite as an index in one directory pointing at
+    // artifacts in another, with `image` paths that every worktree-relative
+    // reader — `read`, MCP artifacts, the web export, `shots` — resolved to
+    // files that were not there.
+    var output = switch (arguments['output'] as String?) {
+      var given? when given.isNotEmpty => _absolute(given),
+      _ => null,
+    };
     var axes = _axesFrom(arguments);
     var rawTag = arguments['tag'];
     if (rawTag != null && rawTag is! String) {
@@ -2468,14 +2489,15 @@ class ScenariosCore extends PluginCore {
       {...arguments, 'steps': 'all'}..remove('output'),
     );
 
-    var page =
-        (arguments['output'] as String?) ??
-        ScenarioWebExporter.defaultOutputIn(
-          packageRootFor(_requested(arguments).first),
-        );
-    if (!p.isAbsolute(page)) {
-      page = p.join(packageRootFor(_requested(arguments).first), page);
-    }
+    // Same base as `run`'s `output`: the worktree, unless absolute. This was
+    // the third answer — package-relative — and three bases for one flag
+    // name is how a consumer lost an afternoon to an empty directory.
+    var page = switch (arguments['output'] as String?) {
+      var given? when given.isNotEmpty => _absolute(given),
+      _ => ScenarioWebExporter.defaultOutputIn(
+        packageRootFor(_requested(arguments).first),
+      ),
+    };
 
     var exporter = _export = ScenarioWebExporter(
       flutterExecutable: host.workspace.flutterSdk.flutter,
@@ -2652,6 +2674,9 @@ class ScenariosCore extends PluginCore {
             'ok': run.error == null && run.scenarios.every((s) => s.ok),
             'scenarios': run.scenarios.length,
             'failed': run.scenarios.where((s) => !s.ok).length,
+            if (run.scenarios.where((s) => s.skipped).length case var n
+                when n > 0)
+              'skipped': n,
             'error': ?run.error,
           },
       ],
@@ -2827,6 +2852,8 @@ class ScenariosCore extends PluginCore {
             file: outcome['file']! as String,
             name: outcome['name']! as String,
             ok: outcome['ok'] == true,
+            skipped: outcome['skipped'] == true,
+            skipReason: outcome['skipReason'] as String?,
             device: outcome['device'] as String?,
             ms: outcome['ms'] as int? ?? 0,
             // What every catalog was asked for on the way through this

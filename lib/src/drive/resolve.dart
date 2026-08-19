@@ -71,18 +71,31 @@ class TargetMessages {
   /// joining it: told the exact string is on screen, a reader does not also
   /// need to be told to scroll. [prelude] goes in front of either, for the
   /// part of a composed target that failed before the miss itself matters.
+  ///
+  /// [scrolls] is whether the screen holds a `Scrollable` at all. The
+  /// lazy-list guess was once unconditional, and "nothing matches" has two
+  /// very different causes: on a real suite it sent a reader hunting scroll
+  /// positions when the list the target should have been in was *empty* — the
+  /// screenshot said so, the message pointed away from it. So the guess only
+  /// offers `scrollTo` where scrolling exists, and names the empty-list cause
+  /// beside it either way.
   String notFound(
     String verb,
     String described,
     String? screen, {
     bool blank = false,
+    bool scrolls = true,
     String? hint,
     String prelude = '',
   }) {
     var guess = blank && blankScreenHint.isNotEmpty
         ? blankScreenHint
-        : 'A widget further down a lazy list is not built yet — '
-              '`${prefix}scrollTo` walks to it.';
+        : scrolls
+        ? 'Either a widget further down a lazy list is not built yet — '
+              '`${prefix}scrollTo` walks to it — or the list that would hold '
+              'it is empty; the visible text says which.'
+        : 'Nothing on this screen scrolls, so it is not hiding further down '
+              '— it was never built. The visible text is the whole screen.';
     return 'nothing matches $described, which `$prefix$verb` needs. '
         '$prelude${hint ?? guess}'
         '${screen == null ? '' : '\nVisible text: $screen'}';
@@ -284,6 +297,7 @@ class TargetResolver {
           described,
           describeScreen?.call(),
           blank: _screenIsBlank,
+          scrolls: _screenScrolls,
           hint: _diagnose(target),
         ),
       );
@@ -344,6 +358,7 @@ class TargetResolver {
             describeTarget(offender),
             describeScreen?.call(),
             blank: _screenIsBlank,
+            scrolls: _screenScrolls,
             hint: _diagnose(inner),
             prelude: messages.nthOverNothing(innerDescribed),
           ),
@@ -363,6 +378,7 @@ class TargetResolver {
         described,
         describeScreen?.call(),
         blank: _screenIsBlank,
+        scrolls: _screenScrolls,
       ),
     );
   }
@@ -519,6 +535,11 @@ class TargetResolver {
   bool get _screenIsBlank =>
       !visibleTextsOf(controller).any((text) => text.isNotEmpty);
 
+  /// Whether the refused screen can scroll at all — what decides if the
+  /// refusal may honestly suggest `scrollTo`.
+  bool get _screenScrolls =>
+      controller.widgetList(find.byType(Scrollable)).isNotEmpty;
+
   Future<void> _ensureReachable(
     Finder finder,
     String described,
@@ -541,6 +562,7 @@ class TargetResolver {
           described,
           describeScreen?.call(),
           blank: _screenIsBlank,
+          scrolls: _screenScrolls,
         ),
       );
     }

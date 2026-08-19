@@ -235,6 +235,8 @@ class ScenarioRunOutcome {
     required this.file,
     required this.name,
     required this.ok,
+    this.skipped = false,
+    this.skipReason,
     this.device,
     this.ms = 0,
     this.steps = const [],
@@ -248,6 +250,15 @@ class ScenarioRunOutcome {
   final String name;
   final bool ok;
 
+  /// True when the scenario declared `skip: true` and its body never ran —
+  /// the same answer `flutter test` gives the same file. [ok] is true, so a
+  /// skipped scenario does not fail the run, but green it is not: zero
+  /// steps, zero milliseconds, and this flag saying why.
+  final bool skipped;
+
+  /// The reason the declaration gave, when it gave one.
+  final String? skipReason;
+
   /// The device it actually ran as. Worth saying because a run that named no
   /// device gets one per folder — whatever profile the scenario's
   /// `flutter_test_config.dart` declares — so two scenarios of the same run
@@ -255,6 +266,10 @@ class ScenarioRunOutcome {
   final String? device;
 
   final int ms;
+
+  /// Trimmed in an action's answer per its `steps=` mode; whole in the file
+  /// `ScenarioRunPackage.report` names. Count them with [stepCount], never
+  /// with this list's length.
   final List<ScenarioRunStep> steps;
 
   /// How many steps the scenario captured — which is [steps]`.length` unless
@@ -297,6 +312,8 @@ class ScenarioRunOutcome {
     file: file,
     name: name,
     ok: ok,
+    skipped: skipped,
+    skipReason: skipReason,
     device: device,
     ms: ms,
     steps: keep,

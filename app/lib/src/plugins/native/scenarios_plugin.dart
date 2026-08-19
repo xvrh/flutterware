@@ -1038,13 +1038,21 @@ class _ScenarioPageState extends State<_ScenarioPage> {
             )
           else if (outcome != null) ...[
             Icon(
-              outcome.ok ? Icons.check_circle_outline : Icons.error_outline,
+              outcome.skipped
+                  ? Icons.remove_circle_outline
+                  : outcome.ok
+                  ? Icons.check_circle_outline
+                  : Icons.error_outline,
               size: FwIconSize.md,
-              color: outcome.ok ? colors.grn : colors.red,
+              color: outcome.skipped
+                  ? colors.mut2
+                  : outcome.ok
+                  ? colors.grn
+                  : colors.red,
             ),
             const Gap(FwSpacing.xs),
             Text(
-              '${outcome.ms} ms',
+              outcome.skipped ? 'skipped' : '${outcome.ms} ms',
               style: context.type.caption.copyWith(color: colors.mut2),
             ),
           ],

@@ -82,6 +82,8 @@ ScenarioRunOutcome _$ScenarioRunOutcomeFromJson(Map<String, dynamic> json) =>
       file: json['file'] as String,
       name: json['name'] as String,
       ok: json['ok'] as bool,
+      skipped: json['skipped'] as bool? ?? false,
+      skipReason: json['skipReason'] as String?,
       device: json['device'] as String?,
       ms: (json['ms'] as num?)?.toInt() ?? 0,
       steps:
@@ -106,6 +108,8 @@ Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
       'file': instance.file,
       'name': instance.name,
       'ok': instance.ok,
+      'skipped': instance.skipped,
+      'skipReason': ?instance.skipReason,
       'device': ?instance.device,
       'ms': instance.ms,
       'steps': instance.steps.map((e) => e.toJson()).toList(),

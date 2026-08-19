@@ -266,6 +266,17 @@ exception reports each with its own message and its own stack — never
 `flutter_test`'s "Multiple exceptions (2)" counter, which is the sentence it
 prints after discarding both.
 
+Beside the artifacts sits `run.json`: the whole run in the result's own
+shape, every step of every scenario. The reply the action hands back
+summarises — by default only each failure's frame rides along (`steps=`
+chooses) — so a script that counts steps reads `stepCount`, or the file. A
+relative `--output` resolves against the worktree root, and `run.json` lands
+in the same directory as the images it names.
+
+`scenario(skip: true)` is honoured the way `flutter test` honours it: the
+body never runs, the run stays green, and the outcome says `skipped` instead
+of pretending it passed — the same file answers the same way on both lanes.
+
 Content that is in the tree but not on the screen — the route you navigated
 away from, an `Offstage` — is marked `offstage` in the `.tree.json`, and the
 Elements tab folds it away so what you read is what the screenshot shows.

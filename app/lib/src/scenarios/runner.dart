@@ -19,6 +19,7 @@ class ScenarioListing {
     this.languages = const [],
     this.orientations = const [],
     this.tags = const [],
+    this.skip = false,
   });
 
   final String file;
@@ -38,6 +39,11 @@ class ScenarioListing {
   /// `shots --tag` filter on. Only the live harness can see these; the
   /// syntactic scan does not evaluate arguments.
   final List<String> tags;
+
+  /// Whether `scenario(skip: …)` declared it skipped — same reason as [tags]:
+  /// only the harness evaluates the argument, so only this listing can say a
+  /// run will report the scenario skipped rather than run it.
+  final bool skip;
 }
 
 /// Runs a package's scenarios in a directly-spawned `flutter_tester`, exactly
@@ -162,6 +168,7 @@ class ScenarioRunner {
           orientations:
               (entry['orientations'] as List?)?.cast<String>() ?? const [],
           tags: (entry['tags'] as List?)?.cast<String>() ?? const [],
+          skip: entry['skip'] == true,
         ),
     ];
   });
