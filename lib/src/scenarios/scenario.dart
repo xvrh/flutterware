@@ -1263,7 +1263,6 @@ class ScenarioTester {
   /// `TextField` would be pixels only.
   List<String> visibleTexts() => visibleTextsOf(tester);
 
-
   static String? get _screenshotsDestination {
     const define = String.fromEnvironment('screenshots-destination');
     if (define.isNotEmpty) return define;

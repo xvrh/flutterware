@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:meta/meta.dart';
 
+import '../utils/run_git.dart' as git_process;
+
 /// Removing the checkout itself — the one step the shell owns rather than a
 /// plugin, and the one that always runs last.
 ///
@@ -21,7 +23,7 @@ import 'package:meta/meta.dart';
 /// button being pressed is not in the cached count, and there git's refusal is
 /// the only thing that notices.
 class WorktreeRemover {
-  const WorktreeRemover({this.runGit = _runGit});
+  const WorktreeRemover({this.runGit = git_process.runGit});
 
   /// A seam for tests, which must not have a real repository to delete.
   @visibleForTesting
@@ -91,8 +93,3 @@ class GitStepResult {
   final bool ok;
   final String output;
 }
-
-Future<ProcessResult> _runGit(
-  List<String> arguments, {
-  String? workingDirectory,
-}) => Process.run('git', arguments, workingDirectory: workingDirectory);

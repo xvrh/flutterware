@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import '../utils/run_git.dart';
+
 /// Which commit a worktree is compared against.
 ///
 /// The **merge base**, not the tip: comparing against the tip of master shows
@@ -79,7 +81,7 @@ class BaseRef {
   }
 
   static Future<String?> _git(String worktree, List<String> arguments) async {
-    var result = await Process.run('git', [
+    var result = await runGit([
       '-C',
       worktree,
       ...arguments,
