@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:collection/collection.dart';
 
 /// Where something *is* — the one identifier the GUI, `fw`, MCP and an artifact
@@ -240,8 +242,10 @@ class Address {
         if (pair.isEmpty) continue;
         var eq = pair.indexOf('=');
         if (eq < 0) return null;
-        parsed[Uri.decodeComponent(pair.substring(0, eq))] =
-            Uri.decodeComponent(pair.substring(eq + 1));
+        var key = _decode(pair.substring(0, eq));
+        var value = _decode(pair.substring(eq + 1));
+        if (key == null || value == null) return null;
+        parsed[key] = value;
       }
       axes = parsed;
     }
@@ -260,18 +264,28 @@ class Address {
     if (path.isNotEmpty && path.last.isEmpty) path.removeLast();
     if (path.any((s) => s.isEmpty)) return null;
 
+    var decoded = <String>[];
+    for (var part in [project, ...path]) {
+      var value = _decode(part);
+      if (value == null) return null;
+      decoded.add(value);
+    }
+    var decodedProject = decoded.first;
+    var decodedPath = decoded.skip(1).toList();
+
+    // The constructor asserts what the grammar cannot — that a worktree lives
+    // in the worktrees space, and so on — and those refusals are this
+    // function's `null` rather than its caller's exception.
     try {
       return Address(
-        project: project.isEmpty ? null : Uri.decodeComponent(project),
-        space: path.isEmpty ? null : Uri.decodeComponent(path.first),
-        worktree: path.length < 2 ? null : Uri.decodeComponent(path[1]),
-        plugin: path.length < 3 ? null : Uri.decodeComponent(path[2]),
-        segments: [for (var s in path.skip(3)) Uri.decodeComponent(s)],
+        project: decodedProject.isEmpty ? null : decodedProject,
+        space: decodedPath.isEmpty ? null : decodedPath.first,
+        worktree: decodedPath.length < 2 ? null : decodedPath[1],
+        plugin: decodedPath.length < 3 ? null : decodedPath[2],
+        segments: decodedPath.skip(3).toList(),
         axes: axes,
       );
     } on ArgumentError {
-      return null;
-    } on FormatException {
       return null;
     }
   }
@@ -311,6 +325,50 @@ class Address {
       );
     }
     return out.toString();
+  }
+
+  /// The inverse of [_encode], and the reason it is written by hand.
+  ///
+  /// `Uri.decodeComponent` refuses **any** character above 127 — an em dash, an
+  /// accent, a CJK title — because it expects the input to have arrived
+  /// percent-encoded. [_encode] deliberately does not encode those: escaping
+  /// only what would be read as structure is what keeps an address legible. So
+  /// the two disagreed, and `toString` produced addresses `tryParse` refused.
+  ///
+  /// Null rather than throwing, and null for a malformed escape rather than a
+  /// literal `%`: `_encode` escapes `%` on the way out, so a bare one coming
+  /// back means the address was corrupted in transit, and reading it as text
+  /// would quietly hand back the wrong identity.
+  static String? _decode(String source) {
+    if (!source.contains('%')) return source;
+
+    var out = StringBuffer();
+    var bytes = <int>[];
+
+    bool flush() {
+      if (bytes.isEmpty) return true;
+      try {
+        out.write(const Utf8Decoder().convert(bytes));
+      } on FormatException {
+        return false;
+      }
+      bytes.clear();
+      return true;
+    }
+
+    for (var i = 0; i < source.length; i++) {
+      if (source[i] != '%') {
+        if (!flush()) return null;
+        out.write(source[i]);
+        continue;
+      }
+      if (i + 2 >= source.length) return null;
+      var byte = int.tryParse(source.substring(i + 1, i + 3), radix: 16);
+      if (byte == null) return null;
+      bytes.add(byte);
+      i += 2;
+    }
+    return flush() ? out.toString() : null;
   }
 
   /// Percent-encodes only what would otherwise be read as structure. A catalog

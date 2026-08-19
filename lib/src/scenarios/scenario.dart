@@ -22,6 +22,7 @@ import 'run_listener.dart';
 import 'settle.dart';
 import 'staging.dart';
 import 'target.dart';
+import 'harness.dart' show scenarioFileSafe, scenarioNameMax;
 
 /// A scenario: a widget test with per-step screenshots.
 ///
@@ -1238,11 +1239,14 @@ class ScenarioTester {
       var slug = assignment?.slug ?? '';
       var directory = Directory(
         '$destination/'
-        '${slug.isEmpty ? '' : '${_fileSafe(slug)}/'}'
-        '${_source == null ? '' : '${_fileSafe(_source)}/'}'
-        '${_fileSafe(_description)}',
+        '${slug.isEmpty ? '' : '${scenarioFileSafe(slug)}/'}'
+        '${_source == null ? '' : '${scenarioFileSafe(_source)}/'}'
+        '${scenarioFileSafe(_description)}',
       )..createSync(recursive: true);
-      var base = '${directory.path}/$index-${_fileSafe(label)}';
+      var prefix = '$index-';
+      var base =
+          '${directory.path}/$prefix'
+          '${scenarioFileSafe(label, max: scenarioNameMax - prefix.length - '.png'.length)}';
       File('$base.png').writeAsBytesSync(bytes);
       // Beside the picture, under the same stem, so a destination directory
       // stays readable as "one step, its frame and whatever it produced".
@@ -1259,8 +1263,6 @@ class ScenarioTester {
   /// `TextField` would be pixels only.
   List<String> visibleTexts() => visibleTextsOf(tester);
 
-  static String _fileSafe(String name) =>
-      name.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
 
   static String? get _screenshotsDestination {
     const define = String.fromEnvironment('screenshots-destination');

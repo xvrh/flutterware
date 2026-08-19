@@ -113,6 +113,12 @@ void main() {
         'fw:///worktrees/main/p//e', // empty segment
         'fw:///worktrees/main/p?novalue',
         'fw:///ports/main/p', // only the worktrees space has worktrees
+        // `_encode` escapes `%`, so a bare one coming back is a corrupted
+        // address rather than a literal.
+        'fw:///worktrees/main/p/half%2',
+        'fw:///worktrees/main/p/not%ZZhex',
+        // A percent sequence that is not valid UTF-8 is not a segment.
+        'fw:///worktrees/main/p/%FF%FE',
       ]) {
         expect(Address.tryParse(source), isNull, reason: source);
       }
@@ -137,8 +143,39 @@ void main() {
         encoded,
         'fw://acme/worktrees/main/p',
         'fw:///worktrees/~/flutterware.dependencies/app/packages/collection',
+        // Characters above 127 travel raw — encoding them would cost the
+        // legibility the sparse escaping is for.
+        'fw:///worktrees/main/p/Signup — self path',
+        'fw:///worktrees/main/p/Créer un patient',
+        'fw:///worktrees/main/p/日本語のシナリオ',
+        'fw:///worktrees/main/p/e?device=iPhone%2015&locale=fran%C3%A7ais',
       ]) {
         expect(Address.parse(source).toString(), source, reason: source);
+      }
+    });
+
+    test('a segment that is not ASCII survives being built and read back', () {
+      // The regression this guards: `toString` produced these and `tryParse`
+      // refused them, so a scenario named with an em dash killed the run that
+      // had just executed it.
+      for (var segment in [
+        'Signup — self path',
+        'Wound & case',
+        "What's new recap",
+        'Órgão — não vazio',
+        '日本語',
+      ]) {
+        var address = Address(
+          space: 'worktrees',
+          worktree: 'main',
+          plugin: 'flutterware.scenarios',
+          segments: ['a.dart', segment, '1'],
+          axes: {'device': 'iphone-13-mini'},
+        );
+        var parsed = Address.tryParse(address.toString());
+        expect(parsed, isNotNull, reason: address.toString());
+        expect(parsed!.segments[1], segment);
+        expect(parsed, address);
       }
     });
 
