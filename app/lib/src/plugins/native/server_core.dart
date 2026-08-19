@@ -145,12 +145,10 @@ class ServerCore extends PluginCore {
   PluginReport get report {
     var servers = this.servers;
     var live = servers.where((s) => !s.stopped).length;
-    var status = !_scanned
+    // Nothing running is the resting state, not news — the row only speaks
+    // when servers are actually up.
+    var status = !_scanned || live == 0
         ? Status.none
-        : servers.isEmpty
-        ? Status.neutral('no servers running')
-        : live == 0
-        ? Status.neutral('no servers running')
         : Status.good('$live running');
     return PluginReport(
       id: host.id,

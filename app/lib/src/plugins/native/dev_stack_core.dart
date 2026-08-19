@@ -706,10 +706,11 @@ class DevStackCore extends PluginCore {
   /// plus a space and by saying the thing you would otherwise have to open the
   /// panel to learn.
   Status _statusFor(StackReading reading) => switch (reading.state) {
-    // Not `checking`: a status is read by `fw` and by a cold sidebar, and
-    // neither of those has started a probe. The block says `checking` because
-    // the block is the surface that actually goes and looks.
-    StackState.unknown => const Status.neutral('not checked'),
+    // Silent, not `not checked`: nothing has looked yet, and a row narrating
+    // its own ignorance on every cold sidebar is noise. The block says
+    // `checking` because the block is the surface that actually goes and
+    // looks.
+    StackState.unknown => Status.none,
     StackState.down => const Status.neutral('down'),
     StackState.starting => const Status.info('bringing up'),
     StackState.up when reading.isPartial => Status.warn(

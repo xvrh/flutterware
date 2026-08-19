@@ -1331,7 +1331,7 @@ class ScenariosCore extends PluginCore {
   }
 
   Status _status() {
-    if (packages.isEmpty) return const Status.warn('no packages');
+    if (packages.isEmpty) return Status.none;
     if (_errors.isNotEmpty) return const Status.error('scan failed');
     for (var path in packages) {
       if (_busy[path] case var busy?) return busy;

@@ -616,12 +616,11 @@ class RunCore extends PluginCore {
 
   @override
   PluginReport get report {
-    var devices = this.devices;
-    var busy = _busyDeviceIds();
+    var busy = {for (var handle in _handles) handle.device};
     return PluginReport(
       id: host.id,
       label: host.label,
-      status: _status(devices, busy),
+      status: _status,
       badge: _daemonError != null
           ? const StatusBadge.dot(Tone.error)
           : ownHandles.isNotEmpty
@@ -633,8 +632,8 @@ class RunCore extends PluginCore {
       // device list in the rail would have been a row of links to nowhere.
       //
       // Devices have not gone anywhere: they are the desk, which the panel
-      // renders when nothing is running and which belongs in the shell's
-      // chrome. The status line below still counts them.
+      // renders when nothing is running and whose button in the shell's
+      // chrome carries the busy count.
       //
       // **This worktree's runs, not the machine's.** The unfiltered ledger
       // put every checkout's runs in every rail, indistinguishable at a
@@ -1514,17 +1513,14 @@ class RunCore extends PluginCore {
     notifyChanged();
   }
 
-  Status _status(List<DaemonDevice> devices, Set<String> busy) {
+  /// The rail's line while something is happening — a launch narrating, or a
+  /// daemon that died. The device count that used to fill the quiet state is
+  /// a fact about the machine, not this worktree, and it lives on the desk
+  /// button in the shell's chrome now.
+  Status get _status {
     if (_launching.values.firstOrNull case var launching?) return launching;
     if (_daemonError != null) return Status.error('no device list');
-    if (!_scanned) return Status.none;
-    if (devices.isEmpty) {
-      return Status.neutral(isLive ? 'no devices' : 'no device list yet');
-    }
-    var count = '${devices.length} device${devices.length == 1 ? '' : 's'}';
-    var freshness = isLive ? '' : ', ${_cache?.ageDescription ?? 'cached'}';
-    if (busy.isEmpty) return Status.neutral('$count$freshness');
-    return Status.good('$count, ${busy.length} busy$freshness');
+    return Status.none;
   }
 
   /// What a run says about itself in the rail — capability, not liveness.
@@ -1570,8 +1566,6 @@ class RunCore extends PluginCore {
         'starting',
     ].join(' · ');
   }
-
-  Set<String> _busyDeviceIds() => {for (var handle in _handles) handle.device};
 
   ActionParameter get _packageParameter => ActionParameter(
     'package',

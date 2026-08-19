@@ -235,7 +235,11 @@ class TranslationsCore extends PluginCore {
   PluginReport get report => PluginReport(
     id: host.id,
     label: host.label,
-    status: _status,
+    // Quiet when unconfigured. A project with no catalogs is not in trouble,
+    // it just does not use the feature — the panel is where the setup
+    // instructions live, and a permanent warning in the rail taught people to
+    // stop reading the slot. Same policy as every other plugin's row.
+    status: Status.none,
     badge: _badge,
     children: [
       for (var path in packages)
@@ -248,15 +252,6 @@ class TranslationsCore extends PluginCore {
     actions: _actions,
     view: _view,
   );
-
-  Status get _status {
-    if (packages.isEmpty) return const Status.warn('No packages configured');
-    var declared = [for (var path in packages) ...declaredFor(path)];
-    if (declared.isEmpty) {
-      return const Status.warn('No catalogs declared');
-    }
-    return Status.none;
-  }
 
   StatusBadge get _badge {
     for (var path in packages) {

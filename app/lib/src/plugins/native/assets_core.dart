@@ -265,7 +265,9 @@ class AssetsCore extends PluginCore {
       _scans.values.fold(0, (sum, scan) => sum + scan.problems.length);
 
   Status get _status {
-    if (packages.isEmpty) return const Status.warn('no packages');
+    // Silent when unconfigured, too: a project that does not use the feature
+    // is not in trouble, and the panel is where the setup instructions live.
+    if (packages.isEmpty) return Status.none;
     if (_failures.isNotEmpty) return const Status.error('failed to scan');
     if (_scanning.isNotEmpty) return const Status.info('scanning…');
     var problems = _problemCount;

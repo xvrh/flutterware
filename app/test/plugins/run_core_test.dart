@@ -166,12 +166,12 @@ void main() {
       await core.computeAll();
       var report = core.report;
 
-      expect(report.status.message, contains('2 devices'));
-      expect(report.status.message, contains('1 busy'));
+      // The rail says nothing at rest — the device count is the desk
+      // button's business, not this worktree's.
+      expect(report.status, Status.none);
       // **The children are runs, not devices.** A child's id becomes the first
       // address segment, and since the panel became run-centric those are the
-      // only things it can be pointed at. Devices are counted in the status
-      // line above and listed in the desk.
+      // only things it can be pointed at. Devices are listed in the desk.
       expect(
         [for (var c in report.children) c.id],
         [runHandleKey(worktree.path, 'phone', 'lib/main.dart')],
@@ -188,7 +188,8 @@ void main() {
       DeviceCache.write(runDir.path, [const DaemonDevice(id: 'phone')]);
       await core.computeAll();
       expect(core.isLive, isFalse);
-      expect(core.report.status.message, contains('just now'));
+      // The age moved off the rail with the count; the panel still says it.
+      expect(core.report.view.toText(), contains('just now'));
     });
 
     test("the rail lists this worktree's runs, not the machine's", () async {
@@ -220,13 +221,6 @@ void main() {
       // The badge counts the rows, so it cannot claim runs the rail will not
       // show.
       expect(core.report.badge.count, 1);
-      // And the device occupancy still sees both.
-      DeviceCache.write(runDir.path, [
-        const DaemonDevice(id: 'phone'),
-        const DaemonDevice(id: 'sim'),
-      ]);
-      await core.computeAll();
-      expect(core.report.status.message, contains('2 busy'));
     });
 
     test("another worktree's cold build does not hold this window", () async {
