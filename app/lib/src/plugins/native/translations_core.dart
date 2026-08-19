@@ -11,6 +11,7 @@ import '../../translations/row.dart';
 import '../../translations/survey.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
+import '../scan_cache.dart';
 import 'scenarios_core.dart';
 import 'scenarios_results.dart';
 import 'translations_address.dart';
@@ -44,9 +45,14 @@ class TranslationsCore extends PluginCore {
       if (host.workspace.exists(path)) path,
   ];
 
-  final _catalogs = <String, Map<String, LoadedCatalog>>{};
-  final _failures = <String, String>{};
-  final _pending = <String, Future<void>>{};
+  /// Retries a failed load on the next look, deliberately: the panel has no
+  /// refresh button, so a fixed ARB file coming back on remount is the only
+  /// recovery it offers.
+  late final _cache = ScanCache<String, Map<String, LoadedCatalog>>(
+    scan: _scan,
+    onChanged: notifyChanged,
+    retryAfterFailure: true,
+  );
 
   /// The last export, **read back off disk** rather than kept from the run
   /// that produced it.
@@ -85,9 +91,9 @@ class TranslationsCore extends PluginCore {
   }
 
   /// The loaded catalogs for [path], or null when nothing has read them yet.
-  Map<String, LoadedCatalog>? catalogsFor(String path) => _catalogs[path];
+  Map<String, LoadedCatalog>? catalogsFor(String path) => _cache[path];
 
-  String? failureFor(String path) => _failures[path];
+  String? failureFor(String path) => _cache.failureFor(path);
 
   /// The last export for [path], or null when none has been written.
   TranslationExport? exportFor(String path) => _exports[path]?.export;
@@ -126,47 +132,31 @@ class TranslationsCore extends PluginCore {
   /// "this locale is falling back" is a statement worth making.
   List<String> localesFor(String path) {
     var found = <String>{};
-    for (var catalog in _catalogs[path]?.values ?? const <LoadedCatalog>[]) {
+    for (var catalog in _cache[path]?.values ?? const <LoadedCatalog>[]) {
       found.addAll(catalog.byLocale.keys);
     }
     return found.toList()..sort();
   }
 
-  void track(String path) => unawaited(_load(path));
+  void track(String path) => _cache.track(path);
 
   /// Drops the cached catalogs so the next read re-parses. What the panel
   /// calls when a translation file changes underneath it.
-  void invalidate(String path) {
-    _catalogs.remove(path);
-    _failures.remove(path);
-    _pending.remove(path);
-    notifyChanged();
-  }
+  void invalidate(String path) => _cache.invalidate(path);
 
   @override
   Future<void> computeAll() async {
-    await Future.wait([for (var path in packages) _load(path)]);
+    await Future.wait([for (var path in packages) _cache.load(path)]);
   }
 
-  Future<void> _load(String path) {
-    if (_catalogs.containsKey(path)) return Future.value();
-    if (_pending[path] case var pending?) return pending;
-    return _pending[path] = () async {
-      try {
-        var root = host.workspace.packageFor(path).directory.path;
-        _catalogs[path] = await loadCatalogs(
-          declaredFor(path),
-          read: catalogFilesUnder(root),
-        );
-        await _loadExport(path);
-        _failures.remove(path);
-      } catch (error) {
-        _failures[path] = '$error';
-      } finally {
-        _pending.remove(path)?.ignore();
-        notifyChanged();
-      }
-    }();
+  Future<Map<String, LoadedCatalog>> _scan(String path) async {
+    var root = host.workspace.packageFor(path).directory.path;
+    var catalogs = await loadCatalogs(
+      declaredFor(path),
+      read: catalogFilesUnder(root),
+    );
+    await _loadExport(path);
+    return catalogs;
   }
 
   /// Reads the export beside [path], if there is one.
@@ -200,7 +190,7 @@ class TranslationsCore extends PluginCore {
   /// row whose text disagrees with its picture is the honest rendering of a
   /// stale export.
   List<TranslationRow> rowsFor(String path) {
-    var catalogs = _catalogs[path];
+    var catalogs = _cache[path];
     if (catalogs == null) return const [];
     var export = _exports[path]?.export;
     var rows = <TranslationRow>[];
@@ -229,7 +219,7 @@ class TranslationsCore extends PluginCore {
   /// The template locale of [path]'s first catalog — what a switch starts on
   /// and what stays pinned beside whatever it switches to.
   String templateFor(String path) =>
-      _catalogs[path]?.values.firstOrNull?.template ?? 'en';
+      _cache[path]?.values.firstOrNull?.template ?? 'en';
 
   @override
   PluginReport get report => PluginReport(
@@ -255,7 +245,7 @@ class TranslationsCore extends PluginCore {
 
   StatusBadge get _badge {
     for (var path in packages) {
-      if (_failures.containsKey(path)) {
+      if (_cache.failureFor(path) != null) {
         return const StatusBadge.dot(Tone.error);
       }
     }
@@ -291,10 +281,10 @@ class TranslationsCore extends PluginCore {
 
   Status _childStatus(String path) {
     if (_busy[path] case var message?) return Status.info(message);
-    if (_failures[path] case var failure?) return Status.error(failure);
+    if (_cache.failureFor(path) case var failure?) return Status.error(failure);
     var declared = declaredFor(path);
     if (declared.isEmpty) return const Status.warn('No catalogs declared');
-    var loaded = _catalogs[path];
+    var loaded = _cache[path];
     if (loaded == null) return Status.none;
     // A catalog whose glob matched nothing is the mistake worth shouting
     // about: everything downstream still works, and quietly attributes
@@ -327,11 +317,10 @@ class TranslationsCore extends PluginCore {
       ),
     for (var path in packages)
       ViewSection(path == '.' ? 'root' : path, [
-        if (_failures[path] case var failure?)
+        if (_cache.failureFor(path) case var failure?)
           ViewText(failure)
         else ...[
-          for (var catalog
-              in _catalogs[path]?.values ?? const <LoadedCatalog>[])
+          for (var catalog in _cache[path]?.values ?? const <LoadedCatalog>[])
             ViewField(
               catalog.name,
               '${catalog.keys.length} keys · '
@@ -449,10 +438,10 @@ class TranslationsCore extends PluginCore {
   Future<TranslationExportResult> export(Map<String, Object?> arguments) async {
     var stopwatch = Stopwatch()..start();
     var path = _requested(arguments);
-    await _load(path);
-    if (_failures[path] case var failure?) throw StateError(failure);
+    await _cache.load(path);
+    if (_cache.failureFor(path) case var failure?) throw StateError(failure);
 
-    var catalogs = _catalogs[path] ?? const <String, LoadedCatalog>{};
+    var catalogs = _cache[path] ?? const <String, LoadedCatalog>{};
     if (catalogs.isEmpty) {
       throw StateError(
         'Package "$path" declares no translation catalogs. Add them to its '

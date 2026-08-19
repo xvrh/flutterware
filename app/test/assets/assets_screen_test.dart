@@ -8,7 +8,7 @@ import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/assets/screen.dart';
 import 'package:flutterware_app/src/context.dart';
-import 'package:flutterware_app/src/plugins/native/assets_core.dart';
+import 'package:flutterware_app/src/plugins/native/assets_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
@@ -89,6 +89,29 @@ void main() {
               address.value = next;
             },
             child: AddressScope(child: AssetsScreen(plugin, package: '.')),
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+  }
+
+  /// Mounts the real panel rather than the bare screen, because reload is a
+  /// round trip: the tap invalidates the core, and only the panel's own
+  /// subscription rebuilds the screen when the new scan lands.
+  Future<void> pumpPanel(WidgetTester tester, AssetsCore subject) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AddressRoot(
+            address: address,
+            onChanged: (next) {
+              written.add(next);
+              address.value = next;
+            },
+            child: AddressScope(
+              child: Builder(builder: AssetsPlugin(subject).buildPanel),
+            ),
           ),
         ),
       ),
@@ -204,6 +227,61 @@ flutter:
     await pump(tester, plugin);
 
     expect(find.textContaining('Could not read this file'), findsOneWidget);
+  });
+
+  testWidgets('the refresh button picks up an asset added after the scan', (
+    tester,
+  ) async {
+    var plugin = core();
+    await tester.runAsync(plugin.computeAll);
+    await pumpPanel(tester, plugin);
+    expect(find.text('logo.png'), findsOneWidget);
+
+    // A designer drops a file in and declares it — outside this process, so
+    // nothing tells the panel.
+    write('assets/banner.png', _png);
+    write(
+      'pubspec.yaml',
+      '''
+name: app
+flutter:
+  assets:
+    - assets/logo.png
+    - assets/notes.txt
+    - assets/banner.png
+'''
+          .codeUnits,
+    );
+    await tester.pump();
+    expect(find.text('banner.png'), findsNothing);
+
+    await tester.tap(find.byTooltip('Read the assets again'));
+    await settle(tester);
+    expect(find.text('banner.png'), findsOneWidget);
+  });
+
+  testWidgets('a scan failure offers a retry, and the retry recovers', (
+    tester,
+  ) async {
+    // The classic first-run failure: no resolution yet.
+    File(p.join(root.path, '.dart_tool', 'package_config.json')).deleteSync();
+
+    var plugin = core();
+    await tester.runAsync(plugin.computeAll);
+    await pumpPanel(tester, plugin);
+    expect(find.text('Could not read the assets'), findsOneWidget);
+    expect(find.textContaining('flutter pub get'), findsOneWidget);
+
+    // The user runs pub get, as the message told them to.
+    write(
+      '.dart_tool/package_config.json',
+      '{"configVersion":2,"packages":[]}'.codeUnits,
+    );
+    await tester.tap(find.text('Try again'));
+    await settle(tester);
+
+    expect(find.text('Could not read the assets'), findsNothing);
+    expect(find.text('logo.png'), findsOneWidget);
   });
 }
 

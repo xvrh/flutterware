@@ -13,6 +13,7 @@ import '../../utils/list_files.dart';
 import '../../utils/string/plural.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
+import '../scan_cache.dart';
 import 'assets_address.dart';
 import 'assets_results.dart';
 
@@ -51,16 +52,18 @@ class AssetsCore extends PluginCore {
       if (host.workspace.exists(path)) path,
   ];
 
-  final _scans = <String, AssetScan>{};
-  final _failures = <String, String>{};
-  final _scanning = <String>{};
-  final _pending = <String, Future<void>>{};
+  late final _cache = ScanCache<String, AssetScan>(
+    scan: _scan,
+    onChanged: notifyChanged,
+  );
 
   /// The scan for [path], or null when nothing has looked at it yet.
-  AssetScan? scanFor(String path) => _scans[path];
+  AssetScan? scanFor(String path) => _cache[path];
 
   /// The scan failure for [path], for a panel that wants to show it directly.
-  String? failureFor(String path) => _failures[path];
+  String? failureFor(String path) => _cache.failureFor(path);
+
+  bool isScanning(String path) => _cache.isScanning(path);
 
   /// Where an asset *is*.
   ///
@@ -80,44 +83,34 @@ class AssetsCore extends PluginCore {
   );
 
   /// Scans [path], unless it already has been. Idempotent.
-  void track(String path) => unawaited(_load(path));
+  void track(String path) => _cache.track(path);
+
+  /// Drops the cached scan so the next [track] re-reads.
+  void invalidate(String path) => _cache.invalidate(path);
+
+  /// Reads the bundle again, and **completes when the new scan is in** — what
+  /// the panel's refresh awaits. Also the way out of a failure: the pub-get
+  /// hint below is only useful if running pub get can be followed by this.
+  Future<void> reload(String path) => _cache.reload(path);
 
   /// Scans every declared package and waits — what `fw` and MCP do for the
   /// duration of one request, where there is no panel to subscribe on their
   /// behalf.
   @override
   Future<void> computeAll() async {
-    await Future.wait([for (var path in packages) _load(path)]);
+    await Future.wait([for (var path in packages) _cache.load(path)]);
   }
 
-  Future<void> _load(String path) {
-    if (_scans.containsKey(path) || _failures.containsKey(path)) {
-      return Future.value();
+  Future<AssetScan> _scan(String path) async {
+    var root = host.workspace.packageFor(path).absolutePath;
+    var config = findPackageConfig(root);
+    if (config == null) {
+      throw ScanFailure(
+        'No .dart_tool/package_config.json above "$root". '
+        'Run `flutter pub get` in that project first.',
+      );
     }
-    return _pending.putIfAbsent(path, () => _scan(path));
-  }
-
-  Future<void> _scan(String path) async {
-    _scanning.add(path);
-    notifyChanged();
-    try {
-      var root = host.workspace.packageFor(path).absolutePath;
-      var config = findPackageConfig(root);
-      if (config == null) {
-        _failures[path] =
-            'No .dart_tool/package_config.json above "$root". '
-            'Run `flutter pub get` in that project first.';
-      } else {
-        _scans[path] = await _resolve(root, config);
-      }
-    } catch (e) {
-      _failures[path] = '$e';
-    } finally {
-      _scanning.remove(path);
-      // The removed value is this very future; dropping it is the point.
-      unawaited(_pending.remove(path));
-      notifyChanged();
-    }
+    return _resolve(root, config);
   }
 
   /// Off the main isolate because a scan is a few thousand `stat`s on a real
@@ -262,14 +255,14 @@ class AssetsCore extends PluginCore {
   ];
 
   int get _problemCount =>
-      _scans.values.fold(0, (sum, scan) => sum + scan.problems.length);
+      _cache.values.fold(0, (sum, scan) => sum + scan.problems.length);
 
   Status get _status {
     // Silent when unconfigured, too: a project that does not use the feature
     // is not in trouble, and the panel is where the setup instructions live.
     if (packages.isEmpty) return Status.none;
-    if (_failures.isNotEmpty) return const Status.error('failed to scan');
-    if (_scanning.isNotEmpty) return const Status.info('scanning…');
+    if (_cache.anyFailed) return const Status.error('failed to scan');
+    if (_cache.anyScanning) return const Status.info('scanning…');
     var problems = _problemCount;
     // Silent when there is nothing wrong. A total across packages would be
     // meaningless anyway — every package's bundle contains its dependencies',
@@ -280,16 +273,16 @@ class AssetsCore extends PluginCore {
   }
 
   StatusBadge get _badge {
-    if (_failures.isNotEmpty) return const StatusBadge.dot(Tone.error);
+    if (_cache.anyFailed) return const StatusBadge.dot(Tone.error);
     return _problemCount > 0
         ? const StatusBadge.dot(Tone.warn)
         : StatusBadge.none;
   }
 
   Status _childStatus(String path) {
-    if (_failures.containsKey(path)) return const Status.error('failed');
-    if (_scanning.contains(path)) return const Status.info('scanning…');
-    var scan = _scans[path];
+    if (_cache.failureFor(path) != null) return const Status.error('failed');
+    if (_cache.isScanning(path)) return const Status.info('scanning…');
+    var scan = _cache[path];
     if (scan == null) return Status.none;
     // Deliberately short. This shares a sidebar row with the package's name,
     // and the count of problems is already on the plugin's own row above —
@@ -316,16 +309,14 @@ class AssetsCore extends PluginCore {
   }
 
   List<ViewNode> _packageNodes(String path) {
-    if (_failures[path] case var failure?) {
+    if (_cache.failureFor(path) case var failure?) {
       return [ViewField('Error', failure, tone: Tone.error)];
     }
-    var scan = _scans[path];
+    var scan = _cache[path];
     // Honest: nothing has looked at this package, so nothing was computed.
     // That is not the same as "no assets".
     if (scan == null) {
-      return [
-        ViewText(_scanning.contains(path) ? 'scanning…' : 'not computed'),
-      ];
+      return [ViewText(_cache.isScanning(path) ? 'scanning…' : 'not computed')];
     }
 
     return [
@@ -459,7 +450,7 @@ class AssetsCore extends PluginCore {
         );
       }
     }
-    await Future.wait([for (var path in paths) _load(path)]);
+    await Future.wait([for (var path in paths) _cache.load(path)]);
     return paths;
   }
 
@@ -470,9 +461,9 @@ class AssetsCore extends PluginCore {
     return AssetListResult(
       packages: [
         for (var path in paths)
-          if (_failures[path] case var failure?)
+          if (_cache.failureFor(path) case var failure?)
             AssetListPackage(path: path, error: failure)
-          else if (_scans[path] case var scan?)
+          else if (_cache[path] case var scan?)
             AssetListPackage(
               path: path,
               own: scan.own.length,
@@ -509,7 +500,7 @@ class AssetsCore extends PluginCore {
     var paths = await _requested(arguments);
 
     for (var path in paths) {
-      var asset = _scans[path]?.catalog.byKey[key];
+      var asset = _cache[path]?.catalog.byKey[key];
       if (asset == null) continue;
       return _describeAsset(path, asset);
     }
@@ -520,7 +511,7 @@ class AssetsCore extends PluginCore {
     var near = [
       for (var path in paths)
         for (var candidate
-            in _scans[path]?.catalog.assets ?? const <ResolvedAsset>[])
+            in _cache[path]?.catalog.assets ?? const <ResolvedAsset>[])
           if (fuzzyMatch(p.basename(key), candidate.key) != null) candidate.key,
     ].take(5);
     throw ArgumentError.value(
@@ -622,11 +613,11 @@ class AssetsCore extends PluginCore {
     var unreadable = <String>[];
 
     for (var path in paths) {
-      if (_failures.containsKey(path)) {
+      if (_cache.failureFor(path) != null) {
         unreadable.add(path);
         continue;
       }
-      var scan = _scans[path];
+      var scan = _cache[path];
       if (scan == null) continue;
 
       checked += scan.totalCount;
@@ -774,7 +765,7 @@ class AssetsCore extends PluginCore {
   /// The `fonts:` entry that named [key], if one did. A font file is an asset
   /// like any other, and this is the half of it the pubspec knows.
   FontFactsResult? _fontFor(String path, String key) {
-    for (var family in _scans[path]?.fonts ?? const <FontFamily>[]) {
+    for (var family in _cache[path]?.fonts ?? const <FontFamily>[]) {
       for (var font in family.fonts) {
         if (font.key == key) {
           return FontFactsResult(
@@ -804,7 +795,7 @@ class AssetsCore extends PluginCore {
     var hits = <SearchHit>[];
     var seen = <String>{};
     for (var path in packages) {
-      var scan = _scans[path];
+      var scan = _cache[path];
       if (scan == null) continue;
       for (var asset in scan.catalog.assets) {
         var match = fuzzyMatch(trimmed, asset.key);

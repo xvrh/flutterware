@@ -20,6 +20,8 @@ class AssetListView extends StatefulWidget {
     required this.problems,
     required this.selected,
     required this.onSelect,
+    this.onReload,
+    this.scanning = false,
     this.initialQuery = '',
   });
 
@@ -31,6 +33,13 @@ class AssetListView extends StatefulWidget {
   final String? selected;
 
   final ValueChanged<String> onSelect;
+
+  /// Re-reads the bundle off disk. Absent in a catalog demo, where there is no
+  /// core behind the data and a dead button would only mislead.
+  final VoidCallback? onReload;
+
+  /// Whether a scan is in flight, so the reload button can say so.
+  final bool scanning;
 
   /// What the filter starts with. Empty in the app; a catalog demo sets it so
   /// the matched-character highlighting is on screen rather than one keystroke
@@ -156,24 +165,49 @@ class _AssetListViewState extends State<AssetListView> {
       child: Column(
         spacing: FwSpacing.md,
         children: [
-          TextField(
-            controller: _search,
-            style: context.type.body,
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: 'Filter by key',
-              prefixIcon: const Icon(Icons.search, size: FwIconSize.md),
-              prefixIconConstraints: const BoxConstraints(minWidth: 32),
-              suffixIcon: _search.text.isEmpty
-                  ? null
-                  : IconButton(
-                      padding: EdgeInsets.zero,
-                      iconSize: FwIconSize.sm,
-                      onPressed: () => setState(_search.clear),
-                      icon: const Icon(Icons.clear),
-                    ),
-            ),
-            onChanged: (_) => setState(() {}),
+          Row(
+            spacing: FwSpacing.xs,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _search,
+                  style: context.type.body,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Filter by key',
+                    prefixIcon: const Icon(Icons.search, size: FwIconSize.md),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 32),
+                    suffixIcon: _search.text.isEmpty
+                        ? null
+                        : IconButton(
+                            padding: EdgeInsets.zero,
+                            iconSize: FwIconSize.sm,
+                            onPressed: () => setState(_search.clear),
+                            icon: const Icon(Icons.clear),
+                          ),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              // The bundle is written by things outside this process — a
+              // designer dropping a PNG in, a pubspec edit, a pub get — so
+              // there has to be a way to look again without reopening the
+              // panel.
+              if (widget.onReload != null)
+                IconButton(
+                  onPressed: widget.scanning ? null : widget.onReload,
+                  iconSize: FwIconSize.md,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Read the assets again',
+                  icon: widget.scanning
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                ),
+            ],
           ),
           Row(
             spacing: FwSpacing.xs,
