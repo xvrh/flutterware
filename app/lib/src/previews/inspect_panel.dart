@@ -5,6 +5,7 @@ import '../inspect/elements_view.dart';
 import '../inspect/inspect_dock.dart';
 import '../inspect/semantics_node.dart';
 import '../inspect/semantics_view.dart';
+import '../inspect/transcript.dart';
 import '../ui/design/design.dart';
 import 'catalog_session.dart';
 import '../ui/empty_state.dart';
@@ -74,15 +75,19 @@ class _InspectPanelState extends State<InspectPanel> {
   ///
   /// Parsed in the build it would hand [SemanticsView] a *fresh* root on
   /// every rebuild — and the view keeps its selection by identity, so any
-  /// session notify would silently clear what you had selected.
+  /// session notify would silently clear what you had selected. The
+  /// transcript rides the same memo: the tab's badge wants the finding count
+  /// on every build, whichever tab is showing.
   Map<String, Object?>? _semanticsRaw;
   SemanticsSnapshotNode? _semanticsParsed;
+  SemanticsTranscript? _transcript;
 
   SemanticsSnapshotNode? _parsedSemantics(Map<String, Object?>? raw) {
     if (raw == null) return null;
     if (!identical(raw, _semanticsRaw)) {
       _semanticsRaw = raw;
       _semanticsParsed = SemanticsSnapshotNode.fromJson(raw);
+      _transcript = SemanticsTranscript.of(_semanticsParsed!);
     }
     return _semanticsParsed;
   }
@@ -206,8 +211,15 @@ class _InspectPanelState extends State<InspectPanel> {
         InspectDockTab(
           id: InspectTab.semantics.name,
           label: InspectTab.semantics.label,
+          // The label audits' findings on the current read — the reason to
+          // open the tab, said without opening it. Parsing here keeps the
+          // badge honest whichever tab is showing; the memo makes it free.
+          badge: _parsedSemantics(session.semanticsForSelection?.root) == null
+              ? 0
+              : _transcript?.findingCount ?? 0,
           body: (context) => SemanticsView(
             root: _parsedSemantics(session.semanticsForSelection?.root),
+            transcript: _transcript,
             placeholder: session.selected == null
                 ? 'No entry selected'
                 : 'Reading what a screen reader gets…',

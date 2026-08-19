@@ -285,6 +285,13 @@ void main() {
         ..semantics = InspectSemantics(entryId: beta.id, root: aTree());
       await pump(tester, session);
 
+      // Opens on the script lens — the reading itself, nothing structural.
+      expect(find.text('“Add to cart”'), findsOneWidget);
+
+      // The tree lens is the structural half: roles badged, actions listed,
+      // a detail pane waiting for a selection.
+      await tester.tap(find.text('Tree'));
+      await tester.pump();
       expect(find.text('"Add to cart"'), findsOneWidget);
       expect(find.text('button'), findsOneWidget);
       expect(find.text('tap'), findsOneWidget);
@@ -299,6 +306,8 @@ void main() {
         ..semantics = InspectSemantics(entryId: beta.id, root: aTree());
       await pump(tester, session);
 
+      await tester.tap(find.text('Tree'));
+      await tester.pump();
       await tester.tap(find.text('"Add to cart"'));
       await tester.pump();
 

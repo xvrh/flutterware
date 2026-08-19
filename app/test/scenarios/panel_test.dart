@@ -37,6 +37,11 @@ void main() {
   testWidgets('runs on open, draws the flow, selects by address', (
     tester,
   ) async {
+    // Wider than the default surface: the inspect dock now carries five tabs,
+    // and at 800 logical pixels the last one sits under the window's edge.
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     var core = ScenariosCore(
       PluginHost(
         id: scenariosPluginId,
@@ -124,9 +129,16 @@ void main() {
     expect(address.value.axes['node'], '0');
     expect(find.text('Select a widget'), findsNothing);
 
-    // The Semantics tab: the reader's words, with the role badged and the
-    // actions listed, read from the file the fake wrote.
+    // The Semantics tab opens on the script lens: the capture read as what a
+    // screen reader speaks — the labeled button utters cleanly, no findings.
     await tester.tap(find.text('Semantics'));
+    await tester.pump();
+    expect(find.text('“Add to cart”'), findsOneWidget);
+    expect(find.text('1 utterance'), findsOneWidget);
+
+    // The tree lens is the same capture's structural half: the reader's
+    // words with the role badged and the actions listed.
+    await tester.tap(find.text('Tree'));
     await tester.pump();
     expect(find.text('"Add to cart"'), findsOneWidget);
     expect(find.text('button'), findsOneWidget);
@@ -249,6 +261,19 @@ void main() {
     await tester.tap(find.byTooltip('Previous frame'));
     await tester.pump();
     expect(find.text('66 / 99 ms'), findsOneWidget);
+
+    // Walking the links rebuilds the player on the same State — a new
+    // controller and a new ticker per framed step. This threw on the second
+    // ticker for as long as the State vended only one (it was a
+    // SingleTickerProviderStateMixin), which made Next a crash on every
+    // motion-recording run.
+    await tester.tap(find.text('0 · shot'));
+    await tester.pump();
+    expect(find.textContaining(' ms'), findsNothing);
+    await tester.tap(find.text('1 · end'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('99 / 99 ms'), findsOneWidget);
 
     // The first step is a `pumpWidget` the fake recorded nothing for, so its
     // page has no transport at all rather than an empty one.
