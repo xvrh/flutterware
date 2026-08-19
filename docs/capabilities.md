@@ -1367,6 +1367,7 @@ packages: List<ScenarioRunPackage>
       settled: bool   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
       landed: bool   # False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.
       strayFrames: int   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
+      unchanged: bool   # True when this step's captured tree is byte-identical to its parent's: the verb acted and nothing on screen changed.
       failure: String?   # The error, when this is the step a scenario broke on.
       attachments: List<ScenarioRunAttachment>   # What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.
         name: String   # What the scenario called it — `'report'`.
@@ -1374,6 +1375,7 @@ packages: List<ScenarioRunPackage>
         mimeType: String?   # What it is, when the scenario said — `application/pdf`.
         bytes: int   # How big it is, so a reader knows before opening it.
     stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
+    unchangedCount: int   # How many of those steps a verb acted for nothing on — captured trees byte-identical to their parent's.
     errors: List<ScenarioRunError>   # The failure, when [ok] is false.
       error: String
       stack: String?
@@ -1393,7 +1395,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `output` | string | no | — | Where step artifacts are written; a fresh directory under the package's build/ when omitted |
 | `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted lets each scenario run as its own folder says — the first device of the profile its `flutter_test_config.dart` declares, or iphone-13 where a folder declares none. `fit` means the bare 800×600 test surface. The same vocabulary Previews frames with. |
 | `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height and the safe areas become the ones that device declares for landscape, which is not a permutation of the portrait four — a phone loses its status bar rather than moving it. Ignored by anything that cannot turn, which is every desktop size and `fit`. Applies to whatever device the run ends up as, including one a folder's profile chose rather than this call. |
-| `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale for the whole run |
+| `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale and as the scenario's own assignment (`s.assignment?.language`), the same pair `FW_LANGUAGES` sets under `flutter test` |
 | `devices` | string | no | — | A comma-separated matrix — `iphone-se,android-tall`. Runs everything once per device, each into its own `<output>/<device>-<language>/` directory with an `index.json` beside them. The same plural vocabulary as `flutter test --dart-define=fw.devices=`. Overrides `device`. |
 | `languages` | string | no | — | The other half of the matrix — `en,fr,de`. Crossed with `devices`, and overrides `language`. |
 | `orientations` | string | no | — | The third axis — `portrait,landscape`. Crossed with the other two, and overrides `orientation`. A device that cannot turn contributes one point rather than two identical ones, so mixing a desktop into the devices does not double the run. |
@@ -1442,7 +1444,7 @@ steps: List<String>   # The other captures of the same scenario, as bare file na
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package the run belongs to; the only one when there is one |
 | `step` | string | no | — | Which capture. Any leg of it as `run` reported it — the `tree` path, the `image` path, either works — or a plain index into the run. Omitted takes the failing step when exactly one scenario went red, which is the read that happens most. Naming a directory instead lists what is in it, so browsing costs a refusal rather than a guess. |
-| `output` | string | no | — | The run to read, when `step` is an index or omitted. The newest under the package when omitted — which is the run you just did. |
+| `output` | string | no | — | The run to read, when `step` is an index or omitted. The newest completed run under the package when omitted — the one you just did, never a panel session, which writes captures but no run.json to count into. |
 | `lens` | choice | no | act | How much to hand back, as one word. `act` is the screen alone; `look` adds the archived picture; `design` adds every distinct text style; `raw` adds the whole tree and costs about 20,000 tokens. The same four words `run` uses. A flag you set explicitly always beats the lens. |
 | `screen` | boolean | no | true | The nested list of what is on the step — the default answer. `false` when you only want a query. |
 | `find` | string | no | — | Report only the nodes matching this, case-insensitively against each node's type, its description and the words it puts on screen. What to reach for instead of `tree` when the question is "is the error message in there". |

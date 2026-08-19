@@ -24,6 +24,7 @@ class ScenarioRunArgs {
     this.captureNative = false,
     this.record,
     this.clockOrigin,
+    this.assignment,
   });
 
   /// The assignment a `flutter_test_config.dart` set, as the binding's test
@@ -50,6 +51,7 @@ class ScenarioRunArgs {
               : Locale(parts[0]);
         }(),
       },
+      assignment: assignment,
     );
   }
 
@@ -80,6 +82,15 @@ class ScenarioRunArgs {
       captureNative: captureNative,
       record: record,
       clockOrigin: clockOrigin,
+      // The scenario reads its axes off the assignment, so the device the
+      // folder's profile just chose has to land there too — otherwise a body
+      // adapting to `s.assignment?.device` sees the one axis the request did
+      // not name as missing rather than as resolved.
+      assignment: ScenarioAssignment(
+        device: device,
+        orientation: orientation,
+        language: assignment?.language,
+      ),
     );
   }
 
@@ -155,6 +166,17 @@ class ScenarioRunArgs {
   /// step ended on — which is what a bare `flutter test` and every CLI run
   /// do, and what costs nothing.
   final MotionRecording? record;
+
+  /// The axes above, in the vocabulary a scenario body reads —
+  /// `ScenarioTester.assignment`.
+  ///
+  /// The numbers in this object are what the harness *applies*; this is what
+  /// the request *named*, and it exists because a body adapting to its axes
+  /// (`s.assignment?.language`) must see the same answer under the runner as
+  /// under `flutter test` with `FW_LANGUAGES` — a run in Dutch that reads as
+  /// no assignment at all was measured on a consumer suite as scenarios
+  /// silently passing in English.
+  final ScenarioAssignment? assignment;
 }
 
 /// The accessibility features a run can turn on — the platform switches a

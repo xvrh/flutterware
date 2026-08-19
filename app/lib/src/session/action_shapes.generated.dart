@@ -4776,6 +4776,12 @@ final resultShapes = <String, ResultShape>{
                   'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
             },
             <String, Object?>{
+              'name': 'unchanged',
+              'type': 'bool',
+              'doc':
+                  'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+            },
+            <String, Object?>{
               'name': 'failure',
               'type': 'String',
               'optional': true,
@@ -4824,6 +4830,12 @@ final resultShapes = <String, ResultShape>{
         'type': 'int',
         'doc':
             'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
+      },
+      <String, Object?>{
+        'name': 'unchangedCount',
+        'type': 'int',
+        'doc':
+            'How many of those steps a verb acted for nothing on — captured trees byte-identical to their parent\'s.',
       },
       <String, Object?>{
         'name': 'errors',
@@ -5118,6 +5130,12 @@ final resultShapes = <String, ResultShape>{
                         'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
                   },
                   <String, Object?>{
+                    'name': 'unchanged',
+                    'type': 'bool',
+                    'doc':
+                        'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+                  },
+                  <String, Object?>{
                     'name': 'failure',
                     'type': 'String',
                     'optional': true,
@@ -5167,6 +5185,12 @@ final resultShapes = <String, ResultShape>{
               'type': 'int',
               'doc':
                   'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
+            },
+            <String, Object?>{
+              'name': 'unchangedCount',
+              'type': 'int',
+              'doc':
+                  'How many of those steps a verb acted for nothing on — captured trees byte-identical to their parent\'s.',
             },
             <String, Object?>{
               'name': 'errors',
@@ -5484,6 +5508,12 @@ final resultShapes = <String, ResultShape>{
                               'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
                         },
                         <String, Object?>{
+                          'name': 'unchanged',
+                          'type': 'bool',
+                          'doc':
+                              'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+                        },
+                        <String, Object?>{
                           'name': 'failure',
                           'type': 'String',
                           'optional': true,
@@ -5534,6 +5564,12 @@ final resultShapes = <String, ResultShape>{
                     'type': 'int',
                     'doc':
                         'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
+                  },
+                  <String, Object?>{
+                    'name': 'unchangedCount',
+                    'type': 'int',
+                    'doc':
+                        'How many of those steps a verb acted for nothing on — captured trees byte-identical to their parent\'s.',
                   },
                   <String, Object?>{
                     'name': 'errors',
@@ -5782,6 +5818,12 @@ final resultShapes = <String, ResultShape>{
         'type': 'int',
         'doc':
             'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+      },
+      <String, Object?>{
+        'name': 'unchanged',
+        'type': 'bool',
+        'doc':
+            'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
       },
       <String, Object?>{
         'name': 'failure',

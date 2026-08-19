@@ -231,6 +231,7 @@ class ScenarioRunOutcome {
     this.ms = 0,
     this.steps = const [],
     this.stepCount = 0,
+    this.unchangedCount = 0,
     this.errors = const [],
     this.translations,
   });
@@ -255,6 +256,15 @@ class ScenarioRunOutcome {
   /// green scenario whose steps went to the file on disk still says it took
   /// five pictures. See `ScenarioRunPackage.report`.
   final int stepCount;
+
+  /// How many of those steps a verb acted for nothing on — captured trees
+  /// byte-identical to their parent's. A green run with most of its steps
+  /// here is the signature of a stalled walk: a loop tapping `Continue` on a
+  /// page that never completed passes every assertion and photographs the
+  /// same screen until its bound. Carried beside [stepCount] for the same
+  /// reason: the summary is the copy a reader gets, and this is the number
+  /// that makes a stall visible in it.
+  final int unchangedCount;
 
   /// The failure, when [ok] is false. The last captured step is the frame
   /// just before it.
@@ -283,6 +293,7 @@ class ScenarioRunOutcome {
     ms: ms,
     steps: keep,
     stepCount: stepCount,
+    unchangedCount: unchangedCount,
     errors: errors,
     translations: translations,
   );
@@ -340,6 +351,7 @@ class ScenarioRunStep {
     this.settled = true,
     this.landed = true,
     this.strayFrames = 0,
+    this.unchanged = false,
     this.failure,
     this.attachments = const [],
   });
@@ -532,6 +544,15 @@ class ScenarioRunStep {
   /// the scenario reached for the raw `tester`, and whatever the app did in
   /// those frames is not in the flow. Zero is the healthy case.
   final int strayFrames;
+
+  /// True when this step's captured tree is byte-identical to its parent's:
+  /// the verb acted and nothing on screen changed. A fact, not a verdict — a
+  /// capture parked mid-flight with `Settle.none` is legitimately unchanged —
+  /// but a run of these in a walking scenario is a stalled flow passing
+  /// quietly, which is what the flag exists to make visible. Never set on a
+  /// `screen` (a deliberate second picture of the same frame) or on the step
+  /// a scenario failed at.
+  final bool unchanged;
 
   /// The error, when this is the step a scenario broke on. The frame is the
   /// state at the failure, and the message carries the `split` branch that

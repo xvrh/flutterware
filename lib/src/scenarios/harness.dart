@@ -444,6 +444,21 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       return parts.length > 1 ? Locale(parts[0], parts[1]) : Locale(parts[0]);
     }(),
   };
+  // What the request *named*, kept beside the numbers it resolved to: the
+  // body reads its axes off `s.assignment`, and both lanes have to answer the
+  // same there. An unspecified device stays out — the geometry that arrived
+  // with it is only the host's fallback, and the folder's profile may yet
+  // speak (see `ScenarioRunArgs.withDevice`).
+  var assignment = ScenarioAssignment(
+    device: args['deviceUnspecified'] == 'true'
+        ? null
+        : deviceById(args['device'] ?? ''),
+    orientation: switch (args['orientation']) {
+      null => null,
+      var name => orientationById(name),
+    },
+    language: args['language'],
+  );
   var runArgs = ScenarioRunArgs(
     size: size,
     pixelRatio: number('pixelRatio'),
@@ -482,6 +497,7 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       null => null,
       var raw => DateTime.parse(raw),
     },
+    assignment: assignment.isEmpty ? null : assignment,
   );
   var untouched =
       runArgs.size == null &&
@@ -496,7 +512,8 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       !runArgs.captureRaw &&
       !runArgs.captureNative &&
       runArgs.record == null &&
-      runArgs.clockOrigin == null;
+      runArgs.clockOrigin == null &&
+      runArgs.assignment == null;
   return untouched ? null : runArgs;
 }
 
@@ -760,6 +777,13 @@ Future<Map<String, Object?>> _runOne(
   var steps = <Map<String, Object?>>[];
   var directory = Directory('$outDir/${_fileSafe(file)}/${_fileSafe(name)}')
     ..createSync(recursive: true);
+  // Each step's tree as written, kept for one comparison: a verb whose tree
+  // is byte-identical to its parent's changed nothing on screen, which is
+  // what a stalled walk looks like from the inside — no exception, no failed
+  // matcher, and (measured on a consumer suite) seven identical captures
+  // passing as seven pages. By parent rather than by predecessor, so a
+  // `split`'s branches each compare against the step they actually follow.
+  var treeByIndex = <int, String>{};
   // Per scenario, so the read set below belongs to *one* assignment. A matrix
   // runs its locales sequentially in one process, and an index carried across
   // them would report the last locale's value for every key — which is exactly
@@ -781,7 +805,18 @@ Future<Map<String, Object?>> _runOne(
     // is fetched per step by whoever wants it.
     var read = inspector.read();
     var tree = read.toJson();
-    File('$base.tree.json').writeAsStringSync(jsonEncode(tree));
+    var treeJson = jsonEncode(tree);
+    File('$base.tree.json').writeAsStringSync(treeJson);
+    // Only a verb that acts can be told it acted for nothing: a `screen` is
+    // a deliberate second picture of the same frame, and a failure's capture
+    // already says everything. The flag is a fact, not a verdict — a capture
+    // parked mid-flight with `Settle.none` is legitimately unchanged.
+    var unchanged =
+        capture.verb != null &&
+        capture.verb != 'screen' &&
+        capture.failure == null &&
+        treeByIndex[capture.parent] == treeJson;
+    treeByIndex[capture.index] = treeJson;
     // The seventh, and only when a catalog was wired up: which translation
     // keys this screen shows and where. Flattened out of the tree it was just
     // read from — an export asking "which screens show this key" should not
@@ -914,6 +949,7 @@ Future<Map<String, Object?>> _runOne(
       if (!capture.settled) 'settled': false,
       if (!capture.landed) 'landed': false,
       if (capture.strayFrames > 0) 'strayFrames': capture.strayFrames,
+      if (unchanged) 'unchanged': true,
       'failure': ?capture.failure,
     };
     steps.add(step);

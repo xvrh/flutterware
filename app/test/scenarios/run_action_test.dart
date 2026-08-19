@@ -210,6 +210,96 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
         ),
       );
     });
+
+    test('stalled steps are counted in the summary, and flagged', () async {
+      var result = await run(
+        core(_FakeRunner(steps: 3, unchangedSteps: {2, 3})),
+        steps: 'all',
+      );
+
+      var outcome = result.packages.single.scenarios.single;
+      // The count survives a trimmed answer the way `stepCount` does — a
+      // green run whose walk stalled must say so in the copy a reader gets.
+      expect(outcome.unchangedCount, 2);
+      expect(
+        [for (var step in outcome.steps) step.unchanged],
+        [false, true, true],
+      );
+    });
+  });
+
+  group('read picks its run', () {
+    // The default is "the newest run under the package", and a panel session
+    // — which writes captures but no run.json — used to *always* win it:
+    // `panel-` sorts after every millisecond stamp.
+
+    Directory runsDir() =>
+        Directory(p.join(root.path, 'build', 'flutterware', 'scenario_runs'))
+          ..createSync(recursive: true);
+
+    void writeReport(Directory dir) {
+      dir.createSync(recursive: true);
+      File(p.join(dir.path, scenarioRunReportFile)).writeAsStringSync(
+        jsonEncode({
+          'packages': [
+            {
+              'path': '.',
+              'output': dir.path,
+              'ms': 1,
+              'scenarios': [
+                {
+                  'file': 'test/scenarios/a_test.dart',
+                  'name': 'from-cli',
+                  'ok': true,
+                  'ms': 1,
+                  'steps': <Object?>[],
+                  'stepCount': 2,
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    }
+
+    test('prefers the newest directory that holds a run.json', () async {
+      var runs = runsDir();
+      writeReport(Directory(p.join(runs.path, '1000')));
+      // Newer by both name and clock, but not a completed run.
+      Directory(p.join(runs.path, 'panel-9999')).createSync();
+
+      // The refusal is about the *content* of the completed run — proof the
+      // panel directory was never picked, which used to answer "no run.json
+      // in that directory" instead.
+      expect(
+        () => core(_FakeRunner()).invoke('read'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '${e.message}',
+            'message',
+            allOf(contains('nothing failed'), contains('from-cli')),
+          ),
+        ),
+      );
+    });
+
+    test('says so when only panel captures exist', () async {
+      Directory(p.join(runsDir().path, 'panel-9999')).createSync();
+
+      expect(
+        () => core(_FakeRunner()).invoke('read'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '${e.message}',
+            'message',
+            allOf(
+              contains('none holds a $scenarioRunReportFile'),
+              contains('scenarios run'),
+            ),
+          ),
+        ),
+      );
+    });
   });
 
   group('ok', () {
@@ -242,6 +332,7 @@ class _FakeRunner extends ScenarioRunner {
     this.failure,
     this.matches = true,
     this.steps = 0,
+    this.unchangedSteps = const {},
   }) : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
 
   final bool ok;
@@ -250,6 +341,10 @@ class _FakeRunner extends ScenarioRunner {
   /// How many steps each scenario captured — the thing the answer decides
   /// whether to carry.
   final int steps;
+
+  /// The indices the harness flagged as `unchanged` — verbs that acted and
+  /// changed nothing on screen.
+  final Set<int> unchangedSteps;
 
   /// False stands for the harness running the suite and finding nothing the
   /// selector named — what a misspelling actually produces.
@@ -293,6 +388,7 @@ class _FakeRunner extends ScenarioRunner {
                 'height': 844,
                 'tree': p.join(outDir, 'step$i.tree.json'),
                 'texts': ['step $i'],
+                if (unchangedSteps.contains(i)) 'unchanged': true,
               },
           ],
           'errors': [

@@ -64,6 +64,35 @@ void main() {
     );
   });
 
+  // Reported by a consumer walking a flow whose pages vary in length: which
+  // pages scroll depends on the device, so a scenario cannot know statically,
+  // and the old unconditional refusal made every walking scenario carry a
+  // guard around the verb.
+  scenario('scrollTo on a target already on screen is a no-op', (s) async {
+    await s.pumpWidget(const _StaticApp());
+
+    await s.scrollTo('nothing to scroll', shot: Shot('short page'));
+
+    expect(captures.last.texts, contains('nothing to scroll'));
+  });
+
+  scenario('scrollTo still refuses a target off screen that nothing scrolls', (
+    s,
+  ) async {
+    await s.pumpWidget(const _OffstageApp());
+
+    await expectLater(
+      () => s.scrollTo('parked off canvas'),
+      throwsA(
+        isA<ScenarioTargetError>().having(
+          (e) => '$e',
+          'message',
+          contains('sits off screen'),
+        ),
+      ),
+    );
+  });
+
   scenario('drag dismisses, and longPress opens what a tap does not', (
     s,
   ) async {
@@ -184,6 +213,24 @@ class _StaticApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const MaterialApp(home: Scaffold(body: Text('nothing to scroll')));
+}
+
+/// A widget laid out past the screen's edge, with nothing that scrolls — the
+/// dead end the refusal is kept for.
+class _OffstageApp extends StatelessWidget {
+  const _OffstageApp();
+
+  @override
+  Widget build(BuildContext context) => const MaterialApp(
+    home: Scaffold(
+      body: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(left: -2000, top: 0, child: Text('parked off canvas')),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ListApp extends StatelessWidget {

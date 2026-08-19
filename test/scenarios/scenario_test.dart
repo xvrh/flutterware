@@ -25,6 +25,25 @@ void main() {
     expect(captures.last.settled, isFalse);
   });
 
+  // The runner's axes, through the same seam it sets them: the assignment the
+  // request named has to reach the body, because a consumer base class keys
+  // its locale off `s.assignment?.language` — and under the runner that used
+  // to be null, so every `--language=nl` run silently ran in the default
+  // language while `FW_LANGUAGES=nl` under `flutter test` did not.
+  group("with the runner's assignment", () {
+    setUp(
+      () => scenarioRunArgs = const ScenarioRunArgs(
+        locale: Locale('nl'),
+        assignment: ScenarioAssignment(language: 'nl'),
+      ),
+    );
+    tearDown(() => scenarioRunArgs = null);
+
+    scenario('the body reads the language the request named', (s) async {
+      expect(s.assignment?.language, 'nl');
+    });
+  });
+
   // The clock knob, through the same seam the runner sets: pinned at the
   // origin, and still advancing with FakeAsync — a `wait` moves it.
   group('with a pinned clock', () {
