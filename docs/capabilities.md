@@ -2361,3 +2361,68 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `device` | string | no | — | What the screens are captured on — `iphone-16`. One device, because a translator wants one picture per key and a second device only doubles the candidates. |
 | `file` | string | no | — | Narrow to one scenario file, package-relative. The export is only as complete as what it runs. |
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. Defaults to 2 — these are read on a retina screen and zoomed into, which is the one place the bytes are worth it. |
+
+
+### `flutterware.lints`
+
+#### `status` — Status
+
+Every rule the SDK offers this project, classified against every analysis_options.yaml in the repo: enabled, dismissed, mentioned in a comment, or never evaluated
+
+```sh
+fw run lints status
+```
+
+Returns `LintsStatusResult`:
+
+```
+dartVersion: String?   # The project SDK's Dart version — the tag the rule catalog was fetched at.
+catalogAvailable: bool   # False when no catalog could be loaded (first run offline): the local buckets still stand, but nothing can be called unevaluated.
+universe: int   # How many rules the catalog offers this SDK (stable + experimental).
+files: List<LintsFileSummary>
+  path: String
+  includeChain: List<String>
+  inheritsNothing: bool   # True for a file with no `include:` — it severs inheritance, so every rule an ancestor enabled is off underneath it.
+  includeErrors: List<String>
+  configured: int   # Rules this file configures itself.
+  enabled: int   # Rules effectively on under this file.
+rules: List<LintsRuleEntry>
+  name: String
+  bucket: String   # `enabled`, `dismissed`, `mentioned` or `unevaluated`.
+  since: String?
+  state: String?
+  fix: String?
+  description: String?
+  enabledVia: String?   # For enabled rules: the file in the chain that turned it on.
+  comment: String?   # For dismissed rules: the comment next to the `false`, when there is one.
+  files: List<String>   # Options files that mention or decide this rule.
+  incompatible: List<String>
+  price: int?   # Diagnostics this rule would add today — from the last pricing run, only for unevaluated rules, absent until one ran.
+unknownNames: List<String>   # Configured names the catalog does not know — typos or removed rules.
+pricing: LintsPricingSummary?
+  at: String
+  elapsedMs: int
+  freeWins: int   # Unevaluated rules that would add zero diagnostics today.
+  stale: bool   # True when the unevaluated set changed since this run — prices still shown, but a re-run would cover the current candidates.
+```
+
+Takes no parameters.
+
+#### `price` — Price rules
+
+One dart analyze run with every unevaluated rule enabled — reports how many diagnostics each would add today. Costs a full analysis of the repo (seconds to minutes)
+
+```sh
+fw run lints price
+```
+
+Returns `LintsPriceResult`:
+
+```
+candidates: int
+freeWins: int
+elapsedMs: int
+counts: Map<String, int>   # Rule → diagnostics it would add today.
+```
+
+Takes no parameters.

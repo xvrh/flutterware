@@ -280,6 +280,17 @@ class Translations extends Plugin {
   };
 }
 
+/// Lints — which analyzer rules this repo evaluated, and which it never did.
+///
+/// Repo-scoped rather than package-scoped, deliberately: `analysis_options.yaml`
+/// files inherit across package boundaries (a member includes the root), so
+/// "this rule is mentioned nowhere" is only a truthful sentence about the
+/// union. The plugin discovers every options file itself; there is nothing to
+/// declare.
+class Lints extends Plugin {
+  Lints({String? label}) : super('flutterware.lints', label: label ?? 'Lints');
+}
+
 class TranslationsPackage extends PluginPackage {
   const TranslationsPackage(super.pkg, {this.catalogs = const []});
 

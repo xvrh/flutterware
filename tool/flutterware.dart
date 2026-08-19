@@ -126,6 +126,10 @@ void main() => Flutterware.configure((fw) {
   // has launcher icons to look at.
   fw.use(LauncherIcon(packages: [.new(example)]));
   fw.use(ServerInspection());
+  // Repo-scoped, nothing to declare: the plugin discovers every
+  // analysis_options.yaml itself, because "this rule is evaluated nowhere" is
+  // only a truthful sentence about all of them at once.
+  fw.use(Lints());
   // The same stack `examples/example/tool/flutterware.dart` declares, from the
   // root of the monorepo it lives in — which is the whole job of
   // `workingDirectory:`. The commands are written as that package writes them

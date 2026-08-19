@@ -2372,6 +2372,249 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'LintsFileSummary': ResultShape.fromJson(<String, Object?>{
+    'type': 'LintsFileSummary',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'path', 'type': 'String'},
+      <String, Object?>{'name': 'includeChain', 'type': 'List<String>'},
+      <String, Object?>{
+        'name': 'inheritsNothing',
+        'type': 'bool',
+        'doc':
+            'True for a file with no `include:` — it severs inheritance, so every rule an ancestor enabled is off underneath it.',
+      },
+      <String, Object?>{'name': 'includeErrors', 'type': 'List<String>'},
+      <String, Object?>{
+        'name': 'configured',
+        'type': 'int',
+        'doc': 'Rules this file configures itself.',
+      },
+      <String, Object?>{
+        'name': 'enabled',
+        'type': 'int',
+        'doc': 'Rules effectively on under this file.',
+      },
+    ],
+  }),
+  'LintsPriceResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'LintsPriceResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'candidates', 'type': 'int'},
+      <String, Object?>{'name': 'freeWins', 'type': 'int'},
+      <String, Object?>{'name': 'elapsedMs', 'type': 'int'},
+      <String, Object?>{
+        'name': 'counts',
+        'type': 'Map<String, int>',
+        'doc': 'Rule → diagnostics it would add today.',
+      },
+    ],
+  }),
+  'LintsPricingSummary': ResultShape.fromJson(<String, Object?>{
+    'type': 'LintsPricingSummary',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'at', 'type': 'String'},
+      <String, Object?>{'name': 'elapsedMs', 'type': 'int'},
+      <String, Object?>{
+        'name': 'freeWins',
+        'type': 'int',
+        'doc': 'Unevaluated rules that would add zero diagnostics today.',
+      },
+      <String, Object?>{
+        'name': 'stale',
+        'type': 'bool',
+        'doc':
+            'True when the unevaluated set changed since this run — prices still shown, but a re-run would cover the current candidates.',
+      },
+    ],
+  }),
+  'LintsRuleEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'LintsRuleEntry',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'bucket',
+        'type': 'String',
+        'doc': '`enabled`, `dismissed`, `mentioned` or `unevaluated`.',
+      },
+      <String, Object?>{'name': 'since', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'state', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'fix', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'description',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'enabledVia',
+        'type': 'String',
+        'optional': true,
+        'doc': 'For enabled rules: the file in the chain that turned it on.',
+      },
+      <String, Object?>{
+        'name': 'comment',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'For dismissed rules: the comment next to the `false`, when there is one.',
+      },
+      <String, Object?>{
+        'name': 'files',
+        'type': 'List<String>',
+        'doc': 'Options files that mention or decide this rule.',
+      },
+      <String, Object?>{'name': 'incompatible', 'type': 'List<String>'},
+      <String, Object?>{
+        'name': 'price',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'Diagnostics this rule would add today — from the last pricing run, only for unevaluated rules, absent until one ran.',
+      },
+    ],
+  }),
+  'LintsStatusResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'LintsStatusResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'dartVersion',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The project SDK\'s Dart version — the tag the rule catalog was fetched at.',
+      },
+      <String, Object?>{
+        'name': 'catalogAvailable',
+        'type': 'bool',
+        'doc':
+            'False when no catalog could be loaded (first run offline): the local buckets still stand, but nothing can be called unevaluated.',
+      },
+      <String, Object?>{
+        'name': 'universe',
+        'type': 'int',
+        'doc':
+            'How many rules the catalog offers this SDK (stable + experimental).',
+      },
+      <String, Object?>{
+        'name': 'files',
+        'type': 'List<LintsFileSummary>',
+        'shape': <String, Object?>{
+          'type': 'LintsFileSummary',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'path', 'type': 'String'},
+            <String, Object?>{'name': 'includeChain', 'type': 'List<String>'},
+            <String, Object?>{
+              'name': 'inheritsNothing',
+              'type': 'bool',
+              'doc':
+                  'True for a file with no `include:` — it severs inheritance, so every rule an ancestor enabled is off underneath it.',
+            },
+            <String, Object?>{'name': 'includeErrors', 'type': 'List<String>'},
+            <String, Object?>{
+              'name': 'configured',
+              'type': 'int',
+              'doc': 'Rules this file configures itself.',
+            },
+            <String, Object?>{
+              'name': 'enabled',
+              'type': 'int',
+              'doc': 'Rules effectively on under this file.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'rules',
+        'type': 'List<LintsRuleEntry>',
+        'shape': <String, Object?>{
+          'type': 'LintsRuleEntry',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'bucket',
+              'type': 'String',
+              'doc': '`enabled`, `dismissed`, `mentioned` or `unevaluated`.',
+            },
+            <String, Object?>{
+              'name': 'since',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'state',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'fix',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'description',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'enabledVia',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'For enabled rules: the file in the chain that turned it on.',
+            },
+            <String, Object?>{
+              'name': 'comment',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'For dismissed rules: the comment next to the `false`, when there is one.',
+            },
+            <String, Object?>{
+              'name': 'files',
+              'type': 'List<String>',
+              'doc': 'Options files that mention or decide this rule.',
+            },
+            <String, Object?>{'name': 'incompatible', 'type': 'List<String>'},
+            <String, Object?>{
+              'name': 'price',
+              'type': 'int',
+              'optional': true,
+              'doc':
+                  'Diagnostics this rule would add today — from the last pricing run, only for unevaluated rules, absent until one ran.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'unknownNames',
+        'type': 'List<String>',
+        'doc':
+            'Configured names the catalog does not know — typos or removed rules.',
+      },
+      <String, Object?>{
+        'name': 'pricing',
+        'type': 'LintsPricingSummary',
+        'optional': true,
+        'shape': <String, Object?>{
+          'type': 'LintsPricingSummary',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'at', 'type': 'String'},
+            <String, Object?>{'name': 'elapsedMs', 'type': 'int'},
+            <String, Object?>{
+              'name': 'freeWins',
+              'type': 'int',
+              'doc': 'Unevaluated rules that would add zero diagnostics today.',
+            },
+            <String, Object?>{
+              'name': 'stale',
+              'type': 'bool',
+              'doc':
+                  'True when the unevaluated set changed since this run — prices still shown, but a re-run would cover the current candidates.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
   'MotionListMotion': ResultShape.fromJson(<String, Object?>{
     'type': 'MotionListMotion',
     'fields': <Object?>[
