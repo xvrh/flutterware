@@ -4537,6 +4537,13 @@ final resultShapes = <String, ResultShape>{
         'type': 'int',
         'doc': 'How big it is, so a reader knows before opening it.',
       },
+      <String, Object?>{
+        'name': 'after',
+        'type': 'bool',
+        'optional': true,
+        'doc':
+            'True when it arrived *after* the step\'s capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.',
+      },
     ],
   }),
   'ScenarioRunError': ResultShape.fromJson(<String, Object?>{
@@ -4827,6 +4834,13 @@ final resultShapes = <String, ResultShape>{
                     'type': 'int',
                     'doc':
                         'How big it is, so a reader knows before opening it.',
+                  },
+                  <String, Object?>{
+                    'name': 'after',
+                    'type': 'bool',
+                    'optional': true,
+                    'doc':
+                        'True when it arrived *after* the step\'s capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.',
                   },
                 ],
               },
@@ -5179,6 +5193,13 @@ final resultShapes = <String, ResultShape>{
                           'type': 'int',
                           'doc':
                               'How big it is, so a reader knows before opening it.',
+                        },
+                        <String, Object?>{
+                          'name': 'after',
+                          'type': 'bool',
+                          'optional': true,
+                          'doc':
+                              'True when it arrived *after* the step\'s capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.',
                         },
                       ],
                     },
@@ -5573,6 +5594,13 @@ final resultShapes = <String, ResultShape>{
                                 'doc':
                                     'How big it is, so a reader knows before opening it.',
                               },
+                              <String, Object?>{
+                                'name': 'after',
+                                'type': 'bool',
+                                'optional': true,
+                                'doc':
+                                    'True when it arrived *after* the step\'s capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.',
+                              },
                             ],
                           },
                         },
@@ -5875,6 +5903,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'bytes',
               'type': 'int',
               'doc': 'How big it is, so a reader knows before opening it.',
+            },
+            <String, Object?>{
+              'name': 'after',
+              'type': 'bool',
+              'optional': true,
+              'doc':
+                  'True when it arrived *after* the step\'s capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.',
             },
           ],
         },

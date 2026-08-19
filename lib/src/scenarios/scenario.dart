@@ -15,6 +15,7 @@ import 'asset_bundle.dart';
 import 'async_watchdog.dart';
 import 'events.dart';
 import 'motion.dart';
+import 'notification.dart';
 import 'profile.dart';
 import 'real_work.dart';
 import 'run_args.dart';
@@ -247,6 +248,7 @@ Future<void> _runScenario(
       );
       try {
         await body(s);
+        s._flushTrailingAttachments();
       } catch (error, stack) {
         var inContext = s._inContext(error);
         // The binding reports this rethrow only after the body — after the
@@ -812,9 +814,13 @@ class ScenarioTester {
   /// and prove nothing about what it made. Deliberately one verb rather than
   /// one per format — the format is [mimeType]'s job.
   ///
-  /// Attached after the last capture of a scenario, it goes nowhere, which is
-  /// the same bargain [events] strike and for the same reason: there is no
-  /// step for it to belong to.
+  /// Attached after the last capture, it lands on that capture, marked as
+  /// arriving after it — the story is allowed to end with the document, and
+  /// a flow that fetches its receipt once the final screen is up need not
+  /// invent a trailing `screen()` to carry it. (Trailing [events] still go
+  /// nowhere: an attachment is a beat of the story, an event only ever
+  /// describes the edge into a step.) Only a scenario that captured nothing
+  /// at all drops it — there is no story for the document to end.
   void attach(
     String name,
     List<int> bytes, {
@@ -832,8 +838,66 @@ class ScenarioTester {
     );
   }
 
+  /// A push notification the flow's backend would have sent — typed sugar
+  /// over [attach], so a viewer can draw the real thing: a banner dropped
+  /// over the screen it arrived on, the way the recipient's phone would show
+  /// it.
+  ///
+  /// ```dart
+  /// await s.tap('Pay');
+  /// s.notification("Your cappuccino is ready — counter 3",
+  ///     title: "Barista's");
+  /// await s.screen('Order confirmed');
+  /// ```
+  ///
+  /// Everything [attach] says holds here — it rides the next capture, or
+  /// lands on the last one when the flow ends with it. The viewer supplies
+  /// what the payload leaves out: the project's own launcher icon, the
+  /// banner's "now", the brightness the scenario ran under.
+  void notification(String body, {String? title, String? appName}) {
+    attach(
+      'notification',
+      ScenarioNotification(title: title, body: body, appName: appName).encode(),
+      fileName: 'notification.json',
+      mimeType: ScenarioNotification.mimeType,
+    );
+  }
+
   /// What [attach] has collected since the last capture drained it.
   final _pendingAttachments = <ScenarioAttachment>[];
+
+  /// Whether the last capture this replay saw was emitted by this replay —
+  /// false when it was recognised from an earlier pass over a shared `split`
+  /// prefix. Trailing attachments follow the same discard rule mid-flow ones
+  /// do: they belong to the replay that actually emitted their step.
+  var _lastCaptureFresh = false;
+
+  /// The standalone lane's file stem for the last capture — where a trailing
+  /// attachment's file goes, there being no listener to hand it to.
+  String? _lastStandaloneBase;
+
+  /// Hands whatever [attach] collected after the last capture to the step
+  /// that capture produced. Called once the body has run to its end — a
+  /// failure never gets here, its own capture having drained the list.
+  void _flushTrailingAttachments() {
+    if (_pendingAttachments.isEmpty) return;
+    var attachments = List.of(_pendingAttachments);
+    _pendingAttachments.clear();
+    // A replay that ended on a shared prefix: the step these would land on
+    // was emitted by an earlier pass, with that pass's artifacts.
+    if (!_lastCaptureFresh) return;
+    if (scenarioRunListener != null) {
+      scenarioTrailingAttachmentsListener?.call(attachments);
+      return;
+    }
+    if (_lastStandaloneBase case var base?) {
+      for (var (i, attachment) in attachments.indexed) {
+        File(
+          '$base.after.${scenarioAttachmentFileName(attachments, i)}',
+        ).writeAsBytesSync(attachment.bytes);
+      }
+    }
+  }
 
   /// One verb: act, wait per the policy, capture. The settle result rides the
   /// step, so a screen that never stopped animating says so instead of
@@ -1073,6 +1137,7 @@ class ScenarioTester {
       // pass's artifacts, and appending these would multiply a shared prefix
       // once per branch.
       _pendingAttachments.clear();
+      _lastCaptureFresh = false;
       _lastPosition = position;
       _pendingBranch = null;
       return;
@@ -1094,6 +1159,7 @@ class ScenarioTester {
       target: target,
       position: position,
     );
+    _lastCaptureFresh = true;
   }
 
   /// The frame the scenario broke on.
@@ -1248,6 +1314,7 @@ class ScenarioTester {
           '${directory.path}/$prefix'
           '${scenarioFileSafe(label, max: scenarioNameMax - prefix.length - '.png'.length)}';
       File('$base.png').writeAsBytesSync(bytes);
+      _lastStandaloneBase = base;
       // Beside the picture, under the same stem, so a destination directory
       // stays readable as "one step, its frame and whatever it produced".
       for (var (i, attachment) in attachments.indexed) {

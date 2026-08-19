@@ -860,6 +860,13 @@ Future<Map<String, Object?>> _runOne(
   // the value the falling-back-to-the-template report has to compare against.
   TranslationIndex.reset();
 
+  // The last step's attachment list and file stem, kept for the attachments
+  // that arrive after the scenario's final capture — they land on that step,
+  // marked as following it. The list is the very one the step record holds,
+  // so appending here is appending to the report.
+  List<ScenarioRunAttachment>? lastAttachments;
+  String? lastBase;
+
   scenarioRunListener = (capture) {
     // The verb and what it was aimed at, which is what an automatic capture
     // is called now that it is not called `step 3`.
@@ -1027,6 +1034,8 @@ Future<Map<String, Object?>> _runOne(
       failure: capture.failure,
     );
     steps.add(step);
+    lastAttachments = attachments;
+    lastBase = base;
     // Announced the moment it exists — the artifacts are already on disk —
     // so a host drawing the flow can fill it in while the scenario still
     // runs. The response at the end stays the complete report: streaming is
@@ -1040,6 +1049,29 @@ Future<Map<String, Object?>> _runOne(
       'device': ?device,
       'step': step.toJson(),
     });
+  };
+
+  // What `s.attach` handed over after the scenario's last capture: it lands
+  // on that capture's step, marked as arriving after it, so a flow may end
+  // with its document. With no step recorded there is nothing to land on,
+  // and the drop is `attach`'s documented residual.
+  scenarioTrailingAttachmentsListener = (attachments) {
+    var (into, base) = (lastAttachments, lastBase);
+    if (into == null || base == null) return;
+    for (var (index, attachment) in attachments.indexed) {
+      var path =
+          '$base.after.${scenarioAttachmentFileName(attachments, index)}';
+      File(path).writeAsBytesSync(attachment.bytes);
+      into.add(
+        ScenarioRunAttachment(
+          name: attachment.name,
+          file: path,
+          mimeType: attachment.mimeType,
+          bytes: attachment.bytes.length,
+          after: true,
+        ),
+      );
+    }
   };
 
   // The binding's failure path bypasses the LiveTest: `reportTestException`
@@ -1136,6 +1168,7 @@ Future<Map<String, Object?>> _runOne(
     scenarioCaughtErrors = null;
     reportTestException = priorReporter;
     scenarioRunListener = null;
+    scenarioTrailingAttachmentsListener = null;
   }
 
   var errors = [

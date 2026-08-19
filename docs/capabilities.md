@@ -1374,6 +1374,7 @@ packages: List<ScenarioRunPackage>
         file: String   # The file, **relative to the worktree root**, like the step's own image.
         mimeType: String?   # What it is, when the scenario said — `application/pdf`.
         bytes: int   # How big it is, so a reader knows before opening it.
+        after: bool?   # True when it arrived *after* the step's capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.
     stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
     unchangedCount: int   # How many of those steps a verb acted for nothing on — captured trees byte-identical to their parent's.
     errors: List<ScenarioRunError>?   # The failure, when [ok] is false.

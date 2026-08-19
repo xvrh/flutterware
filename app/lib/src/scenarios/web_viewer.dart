@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
+import 'package:path/path.dart' as p;
 
 import '../address/address_scope.dart';
 import '../plugins/native/scenarios_results.dart';
@@ -12,6 +13,7 @@ import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import 'artifacts.dart';
 import 'artifacts_http.dart';
+import 'attachment_view.dart';
 import 'flow_view.dart';
 import 'step_page.dart';
 import 'web_report.dart';
@@ -76,6 +78,9 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
   /// The step pushed over the flow, by its index within the scenario.
   int? _step;
 
+  /// The attachment pushed over the flow, by its position in [_step]'s list.
+  int? _attachment;
+
   @override
   void initState() {
     super.initState();
@@ -117,6 +122,7 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
   void _open(int index) => setState(() {
     _selected = index;
     _step = null;
+    _attachment = null;
     _transform.value = ScenarioFlowView.initialTransform();
   });
 
@@ -193,12 +199,34 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
     if (_step case var index?) {
       var step = outcome.steps.firstWhereOrNull((s) => s.index == index);
       if (step != null) {
+        if (_attachment case var attachment?
+            when attachment >= 0 && attachment < step.attachments.length) {
+          return ScenarioAttachmentPage(
+            step: step,
+            index: attachment,
+            background: scenarioAttachmentBackground(
+              outcome.steps,
+              step,
+              step.attachments[attachment],
+            ),
+            device: device,
+            onBack: () => setState(() {
+              _step = null;
+              _attachment = null;
+            }),
+            statusFallback: statusFallback,
+            appLabel: p.basename(package.path),
+          );
+        }
         return ScenarioStepPage(
           steps: outcome.steps,
           step: step,
           device: device,
           onBack: () => setState(() => _step = null),
-          onOpenStep: (step) => setState(() => _step = step.index),
+          onOpenStep: (step) => setState(() {
+            _step = step.index;
+            _attachment = null;
+          }),
           statusFallback: statusFallback,
           // Nothing to shorten against: the page has no checkout behind it, so
           // a node's source path is shown as the run recorded it.
@@ -226,6 +254,11 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
               device: device,
               transform: _transform,
               onOpenStep: (step) => setState(() => _step = step.index),
+              onOpenAttachment: (step, attachment) => setState(() {
+                _step = step.index;
+                _attachment = attachment;
+              }),
+              appLabel: p.basename(package.path),
               statusFallback: statusFallback,
             ),
           ),

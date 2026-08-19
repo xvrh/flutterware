@@ -205,6 +205,16 @@ class ScenarioStepCapture {
 /// authoring API.
 void Function(ScenarioStepCapture capture)? scenarioRunListener;
 
+/// Set beside [scenarioRunListener]: receives what `s.attach` handed over
+/// *after* the scenario's last capture — the receipt a flow fetches once its
+/// final screen is up. They belong to the step that capture produced, marked
+/// as arriving after it, so the story is allowed to end with the document.
+///
+/// The same seam status as the listener above: the runner's, not the
+/// authoring API's.
+void Function(List<ScenarioAttachment> attachments)?
+scenarioTrailingAttachmentsListener;
+
 /// One exception the running scenario saw, kept whole.
 ///
 /// [exception] is the thrown object itself — identity is what lets a report

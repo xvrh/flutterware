@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -6,11 +7,13 @@ import 'package:flutterware/plugins.dart' show fuzzyMatch;
 import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
+import '../../launcher_icon/model/scan.dart' show representativeIconPath;
 import '../../previews/devices.dart';
 import '../../previews/web_server.dart';
 import '../../scenarios/web_export_dialog.dart';
 import '../../scenarios/artifacts.dart';
 import '../../scenarios/artifacts_io.dart';
+import '../../scenarios/attachment_view.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';
@@ -316,6 +319,7 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
             file: file,
             scenario: scenario,
             step: place.step,
+            attachment: place.attachment,
             axes: axes,
             key: ValueKey('${place.package}/$file#$scenario'),
           );
@@ -850,6 +854,7 @@ class _ScenarioPage extends StatefulWidget {
     required this.scenario,
     required this.axes,
     this.step,
+    this.attachment,
     super.key,
   });
 
@@ -863,6 +868,9 @@ class _ScenarioPage extends StatefulWidget {
 
   /// The step the address pushes, or null for the flow.
   final int? step;
+
+  /// The attachment of [step] the address pushes, or null for the step.
+  final int? attachment;
 
   @override
   State<_ScenarioPage> createState() => _ScenarioPageState();
@@ -936,6 +944,32 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     );
   }
 
+  void _openAttachment(ScenarioRunStep step, int attachment) {
+    AddressScope.write(context).setSegments(
+      scenarioSegments(
+        widget.package,
+        file: widget.file,
+        scenario: widget.scenario,
+        step: step.index,
+        attachment: attachment,
+      ),
+    );
+  }
+
+  /// What the banner names the app when a notification payload does not —
+  /// the package is the closest thing to the project's own name here.
+  String get _appLabel => p.basename(widget.package);
+
+  /// The project's own launcher icon for the banner tile, found the way the
+  /// icon plugin finds it. Once per page: a directory listing plus image
+  /// headers, and the page is already keyed by scenario.
+  late final ImageProvider? _appIcon = switch (representativeIconPath(
+    packageRoot: widget.core.packageRootFor(widget.package),
+  )) {
+    var path? => FileImage(File(path)),
+    null => null,
+  };
+
   @override
   Widget build(BuildContext context) {
     var run = _run;
@@ -953,7 +987,26 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     var steps = run?.steps ?? const <ScenarioRunStep>[];
     if (widget.step != null) {
       var step = steps.firstWhereOrNull((s) => s.index == widget.step);
+      // The attachment's page over the step's, the way the step's sits over
+      // the flow — its card lives on the canvas, so back goes there.
       if (step != null) {
+        if (widget.attachment case var index?
+            when index >= 0 && index < step.attachments.length) {
+          return ScenarioAttachmentPage(
+            step: step,
+            index: index,
+            background: scenarioAttachmentBackground(
+              steps,
+              step,
+              step.attachments[index],
+            ),
+            device: device,
+            onBack: _closeStep,
+            statusFallback: statusFallback,
+            appLabel: _appLabel,
+            appIcon: _appIcon,
+          );
+        }
         return ScenarioStepPage(
           steps: steps,
           step: step,
@@ -1132,6 +1185,9 @@ class _ScenarioPageState extends State<_ScenarioPage> {
             device: device,
             transform: _flowTransform,
             onOpenStep: _openStep,
+            onOpenAttachment: _openAttachment,
+            appLabel: _appLabel,
+            appIcon: _appIcon,
             statusFallback: statusFallback,
           ),
         ),
