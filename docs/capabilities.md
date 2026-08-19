@@ -2397,32 +2397,33 @@ rules: List<LintsRuleEntry>
   comment: String?   # For dismissed rules: the comment next to the `false`, when there is one.
   files: List<String>   # Options files that mention or decide this rule.
   incompatible: List<String>
-  price: int?   # Diagnostics this rule would add today — from the last pricing run, only for unevaluated rules, absent until one ran.
+  issues: int?   # How many issues this rule would flag today — from the last counting run, for every rule that is not already on, absent until one ran.
 unknownNames: List<String>   # Configured names the catalog does not know — typos or removed rules.
-pricing: LintsPricingSummary?
+issueCounts: LintsCountsSummary?
   at: String
   elapsedMs: int
-  freeWins: int   # Unevaluated rules that would add zero diagnostics today.
-  stale: bool   # True when the unevaluated set changed since this run — prices still shown, but a re-run would cover the current candidates.
+  unevaluatedWithoutIssues: int   # Unevaluated rules that would flag nothing today — the ones that can be enabled and nothing changes.
+  stale: bool   # True when the candidate set changed since this run — counts still shown, but a re-run would cover the current rules.
 ```
 
 Takes no parameters.
 
-#### `price` — Price rules
+#### `count` — Count issues
 
-One dart analyze run with every unevaluated rule enabled — reports how many diagnostics each would add today. Costs a full analysis of the repo (seconds to minutes)
+One dart analyze run with every unevaluated, dismissed and commented-out rule enabled — reports how many issues each would flag today, with sample locations. Costs a full analysis of the repo (seconds to minutes)
 
 ```sh
-fw run lints price
+fw run lints count
 ```
 
-Returns `LintsPriceResult`:
+Returns `LintsCountResult`:
 
 ```
 candidates: int
-freeWins: int
+unevaluatedWithoutIssues: int
 elapsedMs: int
-counts: Map<String, int>   # Rule → diagnostics it would add today.
+counts: Map<String, int>   # Rule → issues it would flag today.
+samples: Map<String, List<String>>   # Up to three concrete findings per rule, as `path:line — message`, so a reader can see what a rule is like in this repo without another run.
 ```
 
 Takes no parameters.

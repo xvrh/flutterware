@@ -2372,6 +2372,44 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'LintsCountResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'LintsCountResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'candidates', 'type': 'int'},
+      <String, Object?>{'name': 'unevaluatedWithoutIssues', 'type': 'int'},
+      <String, Object?>{'name': 'elapsedMs', 'type': 'int'},
+      <String, Object?>{
+        'name': 'counts',
+        'type': 'Map<String, int>',
+        'doc': 'Rule → issues it would flag today.',
+      },
+      <String, Object?>{
+        'name': 'samples',
+        'type': 'Map<String, List<String>>',
+        'doc':
+            'Up to three concrete findings per rule, as `path:line — message`, so a reader can see what a rule is like in this repo without another run.',
+      },
+    ],
+  }),
+  'LintsCountsSummary': ResultShape.fromJson(<String, Object?>{
+    'type': 'LintsCountsSummary',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'at', 'type': 'String'},
+      <String, Object?>{'name': 'elapsedMs', 'type': 'int'},
+      <String, Object?>{
+        'name': 'unevaluatedWithoutIssues',
+        'type': 'int',
+        'doc':
+            'Unevaluated rules that would flag nothing today — the ones that can be enabled and nothing changes.',
+      },
+      <String, Object?>{
+        'name': 'stale',
+        'type': 'bool',
+        'doc':
+            'True when the candidate set changed since this run — counts still shown, but a re-run would cover the current rules.',
+      },
+    ],
+  }),
   'LintsFileSummary': ResultShape.fromJson(<String, Object?>{
     'type': 'LintsFileSummary',
     'fields': <Object?>[
@@ -2393,37 +2431,6 @@ final resultShapes = <String, ResultShape>{
         'name': 'enabled',
         'type': 'int',
         'doc': 'Rules effectively on under this file.',
-      },
-    ],
-  }),
-  'LintsPriceResult': ResultShape.fromJson(<String, Object?>{
-    'type': 'LintsPriceResult',
-    'fields': <Object?>[
-      <String, Object?>{'name': 'candidates', 'type': 'int'},
-      <String, Object?>{'name': 'freeWins', 'type': 'int'},
-      <String, Object?>{'name': 'elapsedMs', 'type': 'int'},
-      <String, Object?>{
-        'name': 'counts',
-        'type': 'Map<String, int>',
-        'doc': 'Rule → diagnostics it would add today.',
-      },
-    ],
-  }),
-  'LintsPricingSummary': ResultShape.fromJson(<String, Object?>{
-    'type': 'LintsPricingSummary',
-    'fields': <Object?>[
-      <String, Object?>{'name': 'at', 'type': 'String'},
-      <String, Object?>{'name': 'elapsedMs', 'type': 'int'},
-      <String, Object?>{
-        'name': 'freeWins',
-        'type': 'int',
-        'doc': 'Unevaluated rules that would add zero diagnostics today.',
-      },
-      <String, Object?>{
-        'name': 'stale',
-        'type': 'bool',
-        'doc':
-            'True when the unevaluated set changed since this run — prices still shown, but a re-run would cover the current candidates.',
       },
     ],
   }),
@@ -2464,11 +2471,11 @@ final resultShapes = <String, ResultShape>{
       },
       <String, Object?>{'name': 'incompatible', 'type': 'List<String>'},
       <String, Object?>{
-        'name': 'price',
+        'name': 'issues',
         'type': 'int',
         'optional': true,
         'doc':
-            'Diagnostics this rule would add today — from the last pricing run, only for unevaluated rules, absent until one ran.',
+            'How many issues this rule would flag today — from the last counting run, for every rule that is not already on, absent until one ran.',
       },
     ],
   }),
@@ -2575,11 +2582,11 @@ final resultShapes = <String, ResultShape>{
             },
             <String, Object?>{'name': 'incompatible', 'type': 'List<String>'},
             <String, Object?>{
-              'name': 'price',
+              'name': 'issues',
               'type': 'int',
               'optional': true,
               'doc':
-                  'Diagnostics this rule would add today — from the last pricing run, only for unevaluated rules, absent until one ran.',
+                  'How many issues this rule would flag today — from the last counting run, for every rule that is not already on, absent until one ran.',
             },
           ],
         },
@@ -2591,24 +2598,25 @@ final resultShapes = <String, ResultShape>{
             'Configured names the catalog does not know — typos or removed rules.',
       },
       <String, Object?>{
-        'name': 'pricing',
-        'type': 'LintsPricingSummary',
+        'name': 'issueCounts',
+        'type': 'LintsCountsSummary',
         'optional': true,
         'shape': <String, Object?>{
-          'type': 'LintsPricingSummary',
+          'type': 'LintsCountsSummary',
           'fields': <Object?>[
             <String, Object?>{'name': 'at', 'type': 'String'},
             <String, Object?>{'name': 'elapsedMs', 'type': 'int'},
             <String, Object?>{
-              'name': 'freeWins',
+              'name': 'unevaluatedWithoutIssues',
               'type': 'int',
-              'doc': 'Unevaluated rules that would add zero diagnostics today.',
+              'doc':
+                  'Unevaluated rules that would flag nothing today — the ones that can be enabled and nothing changes.',
             },
             <String, Object?>{
               'name': 'stale',
               'type': 'bool',
               'doc':
-                  'True when the unevaluated set changed since this run — prices still shown, but a re-run would cover the current candidates.',
+                  'True when the candidate set changed since this run — counts still shown, but a re-run would cover the current rules.',
             },
           ],
         },

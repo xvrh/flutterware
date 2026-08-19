@@ -1,15 +1,18 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart' show Tone;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../inspect/inspect_dock.dart';
 import '../../lints/model/classification.dart';
+import '../../lints/model/issue_counts.dart';
 import '../../lints/model/options_scan.dart';
 import '../../lints/model/rule_catalog.dart';
 import '../../ui/action_button.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/error_state.dart';
 import '../../ui/loading_state.dart';
+import '../../ui/menu.dart';
 import '../../ui/panel_header.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
@@ -18,13 +21,16 @@ import 'lints_core.dart';
 
 const _controlHeight = 32.0;
 const _rowHeight = 48.0;
+const _fixColumn = 44.0;
+const _issuesColumn = 76.0;
+const _whyColumn = 320.0;
 
 class LintsPlugin extends NativePlugin<LintsCore> {
   LintsPlugin(super.core);
 
   @override
   String? get busyWith {
-    if (core.isPricing) return 'pricing lint rules';
+    if (core.isCounting) return 'counting lint issues';
     if (core.classification == null && core.error == null) {
       return 'scanning lint options';
     }
@@ -112,21 +118,21 @@ class _LintsPanelState extends State<_LintsPanel> {
                 child: const Text('Rescan'),
               ),
               FwActionButton(
-                label: 'Price rules',
+                label: 'Count issues',
                 primary: true,
                 tooltip:
-                    'One dart analyze run with every unevaluated rule on — '
-                    'counts what each would flag today',
-                onPressed: classification.hasCatalog && !_core.isPricing
+                    'One dart analyze run with every rule that is off '
+                    'enabled — counts what each would flag today',
+                onPressed: classification.hasCatalog && !_core.isCounting
                     ? () async {
-                        await _core.price();
+                        await _core.countIssues();
                       }
                     : null,
               ),
             ],
           ),
         ),
-        if (_core.pricingError case var error?) _ErrorBar(message: error),
+        if (_core.countError case var error?) _ErrorBar(message: error),
         if (!classification.hasCatalog)
           _Advisory(
             message:
@@ -140,6 +146,7 @@ class _LintsPanelState extends State<_LintsPanel> {
           selected: _scope,
           onSelect: (path) => setState(() => _scope = path),
         ),
+        if (scope != null) _FileDetailLine(file: scope),
         InspectTabStrip(
           tabs: [
             for (var bucket in LintBucket.values)
@@ -166,17 +173,14 @@ class _LintsPanelState extends State<_LintsPanel> {
             spacing: FwSpacing.md,
             children: [
               _SearchField(
-                value: _query,
                 onChanged: (value) => setState(() => _query = value),
               ),
               const Spacer(),
               if (_tab == LintBucket.unevaluated)
-                for (var sort in _Sort.values)
-                  _SortChip(
-                    sort: sort,
-                    selected: _sort == sort,
-                    onTap: () => setState(() => _sort = sort),
-                  ),
+                _SortMenu(
+                  current: _sort,
+                  onSelect: (sort) => setState(() => _sort = sort),
+                ),
             ],
           ),
         ),
@@ -187,14 +191,25 @@ class _LintsPanelState extends State<_LintsPanel> {
                       ? _emptyTitle(_tab)
                       : 'Nothing matches "$_query"',
                 )
-              : _RuleList(
-                  rows: rows,
-                  bucket: _tab,
-                  prices: _core.pricing?.counts,
-                  onOpen: (row) => _openDialog(context, row),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _ColumnHeader(
+                      bucket: _tab,
+                      counted: _core.issueCounts != null,
+                    ),
+                    Expanded(
+                      child: _RuleList(
+                        rows: rows,
+                        bucket: _tab,
+                        counts: _core.issueCounts?.counts,
+                        onOpen: (row) => _openDialog(context, row),
+                      ),
+                    ),
+                  ],
                 ),
         ),
-        _PricingFoot(core: _core),
+        _CountsFoot(core: _core),
       ],
     );
   }
@@ -231,18 +246,18 @@ class _LintsPanelState extends State<_LintsPanel> {
           row,
     ];
     if (_tab == LintBucket.unevaluated) {
-      var pricing = _core.pricing;
+      var counts = _core.issueCounts?.counts;
       switch (_sort) {
         case _Sort.newest:
           visible.sort(compareBySinceDesc);
-        case _Sort.price:
+        case _Sort.fewestIssues:
           visible.sort((a, b) {
-            var pa = pricing?.counts[a.name];
-            var pb = pricing?.counts[b.name];
-            if (pa != pb) {
-              if (pa == null) return 1;
-              if (pb == null) return -1;
-              return pa.compareTo(pb);
+            var issuesA = counts?[a.name];
+            var issuesB = counts?[b.name];
+            if (issuesA != issuesB) {
+              if (issuesA == null) return 1;
+              if (issuesB == null) return -1;
+              return issuesA.compareTo(issuesB);
             }
             return compareBySinceDesc(a, b);
           });
@@ -264,8 +279,8 @@ class _LintsPanelState extends State<_LintsPanel> {
 }
 
 enum _Sort {
-  newest('Newest'),
-  price('Cheapest'),
+  newest('Newest first'),
+  fewestIssues('Fewest issues'),
   az('A–Z');
 
   const _Sort(this.label);
@@ -333,7 +348,6 @@ class _Stats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var pricing = core.pricing;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         FwSpacing.xl,
@@ -362,8 +376,11 @@ class _Stats extends StatelessWidget {
             label: 'Mentioned',
             value: '${classification.count(LintBucket.mentioned)}',
           ),
-          if (pricing != null)
-            _StatTile(label: 'Free wins', value: '${pricing.freeWins}'),
+          if (core.issueCounts != null)
+            _StatTile(
+              label: 'No issues',
+              value: '${core.unevaluatedWithoutIssues}',
+            ),
         ],
       ),
     );
@@ -427,9 +444,11 @@ class _FilesStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: FwSpacing.xl,
-        vertical: FwSpacing.lg,
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.xl,
+        FwSpacing.lg,
+        FwSpacing.xl,
+        FwSpacing.sm,
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -449,6 +468,10 @@ class _FilesStrip extends StatelessWidget {
                 detail: file.hasInclude
                     ? '→ ${file.includeChain.join(' → ')}'
                     : 'no include',
+                tooltip: file.hasInclude
+                    ? 'includes ${file.includeChain.join(' → ')}'
+                    : 'No include: this file inherits nothing — every rule an '
+                          'ancestor enabled is off underneath it.',
                 warn: !file.hasInclude ? 'inherits nothing' : null,
                 error: file.includeErrors.isNotEmpty
                     ? 'unresolved include'
@@ -463,6 +486,51 @@ class _FilesStrip extends StatelessWidget {
   }
 }
 
+/// The selected file's chain, whole — the cards truncate it, and a chain that
+/// is only ever visible truncated is a chain nobody can actually read.
+class _FileDetailLine extends StatelessWidget {
+  const _FileDetailLine({required this.file});
+
+  final LintOptionsFile file;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var parts = <InlineSpan>[
+      TextSpan(
+        text: file.path,
+        style: context.type.mono.copyWith(fontWeight: FontWeight.w600),
+      ),
+      TextSpan(
+        text: file.hasInclude
+            ? '  →  ${file.includeChain.join('  →  ')}'
+            : '  ·  no include — inherits nothing',
+        style: context.type.caption,
+      ),
+      TextSpan(
+        text:
+            '  ·  ${file.mentions.length} configured here · '
+            '${file.enabled.length} effectively on',
+        style: context.type.caption.copyWith(color: colors.mut2),
+      ),
+      for (var error in file.includeErrors)
+        TextSpan(
+          text: '  ·  could not resolve $error',
+          style: context.type.caption.copyWith(color: colors.red),
+        ),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.xl,
+        0,
+        FwSpacing.xl,
+        FwSpacing.md,
+      ),
+      child: SelectableText.rich(TextSpan(children: parts)),
+    );
+  }
+}
+
 class _FileCard extends StatelessWidget {
   const _FileCard({
     required this.title,
@@ -470,6 +538,7 @@ class _FileCard extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.mono = false,
+    this.tooltip,
     this.warn,
     this.error,
   });
@@ -479,13 +548,14 @@ class _FileCard extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   final bool mono;
+  final String? tooltip;
   final String? warn;
   final String? error;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Tappable(
+    var card = Tappable(
       onTap: onTap,
       borderRadius: BorderRadius.circular(context.radii.radius),
       child: Container(
@@ -534,6 +604,12 @@ class _FileCard extends StatelessWidget {
         ),
       ),
     );
+    if (tooltip == null) return card;
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 500),
+      child: card,
+    );
   }
 }
 
@@ -558,17 +634,93 @@ class _WarnChip extends StatelessWidget {
   }
 }
 
+/// The list's column captions — which columns exist depends on the bucket,
+/// and the fixed widths here are the same constants the rows use, which is
+/// what keeps a caption over its column.
+class _ColumnHeader extends StatelessWidget {
+  const _ColumnHeader({required this.bucket, required this.counted});
+
+  final LintBucket bucket;
+  final bool counted;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var style = context.type.micro.copyWith(color: colors.mut2);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.xl,
+        vertical: FwSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.line)),
+      ),
+      child: Row(
+        spacing: FwSpacing.lg,
+        children: [
+          SizedBox(width: 36, child: Text('SINCE', style: style)),
+          Expanded(child: Text('RULE', style: style)),
+          ...switch (bucket) {
+            LintBucket.unevaluated => [
+              SizedBox(
+                width: _fixColumn,
+                child: Text('FIX', style: style),
+              ),
+              if (counted)
+                SizedBox(
+                  width: _issuesColumn,
+                  child: Text(
+                    'ISSUES',
+                    style: style,
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+            ],
+            LintBucket.enabled => [Text('FROM', style: style)],
+            LintBucket.dismissed => [
+              SizedBox(
+                width: _whyColumn,
+                child: Text('WHY', style: style),
+              ),
+              if (counted)
+                SizedBox(
+                  width: _issuesColumn,
+                  child: Text(
+                    'HIDING',
+                    style: style,
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+            ],
+            LintBucket.mentioned => [
+              if (counted)
+                SizedBox(
+                  width: _issuesColumn,
+                  child: Text(
+                    'ISSUES',
+                    style: style,
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+            ],
+          },
+        ],
+      ),
+    );
+  }
+}
+
 class _RuleList extends StatelessWidget {
   const _RuleList({
     required this.rows,
     required this.bucket,
-    required this.prices,
+    required this.counts,
     required this.onOpen,
   });
 
   final List<ClassifiedLint> rows;
   final LintBucket bucket;
-  final Map<String, int>? prices;
+  final Map<String, int>? counts;
   final void Function(ClassifiedLint row) onOpen;
 
   @override
@@ -579,7 +731,7 @@ class _RuleList extends StatelessWidget {
       itemBuilder: (context, index) => _RuleRow(
         row: rows[index],
         bucket: bucket,
-        prices: prices,
+        counts: counts,
         onOpen: onOpen,
       ),
     );
@@ -590,20 +742,18 @@ class _RuleRow extends StatelessWidget {
   const _RuleRow({
     required this.row,
     required this.bucket,
-    required this.prices,
+    required this.counts,
     required this.onOpen,
   });
 
   final ClassifiedLint row;
   final LintBucket bucket;
-  final Map<String, int>? prices;
+  final Map<String, int>? counts;
   final void Function(ClassifiedLint row) onOpen;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    int? price;
-    if (bucket == LintBucket.unevaluated) price = prices?[row.name];
     var rule = row.rule;
     return Tappable(
       onTap: () => onOpen(row),
@@ -662,24 +812,44 @@ class _RuleRow extends StatelessWidget {
                 ],
               ),
             ),
-            ..._trailing(context, price),
+            ..._trailing(context),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _trailing(BuildContext context, int? price) {
+  List<Widget> _trailing(BuildContext context) {
     var colors = context.colors;
+    var counted = counts != null;
+    var issues = counts?[row.name];
+    var issuesCell = counted
+        ? SizedBox(
+            width: _issuesColumn,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: issues == null
+                  ? Text(
+                      '—',
+                      style: context.type.caption.copyWith(color: colors.mut3),
+                    )
+                  : _IssuesPill(issues: issues),
+            ),
+          )
+        : null;
     switch (bucket) {
       case LintBucket.unevaluated:
         return [
-          if (row.rule?.fixStatus == 'hasFix')
-            Text(
-              'fix',
-              style: context.type.caption.copyWith(color: colors.grn),
-            ),
-          if (price != null) _PricePill(price: price),
+          SizedBox(
+            width: _fixColumn,
+            child: row.rule?.fixStatus == 'hasFix'
+                ? Text(
+                    'fix',
+                    style: context.type.caption.copyWith(color: colors.grn),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          ?issuesCell,
         ];
       case LintBucket.enabled:
         return [
@@ -691,8 +861,8 @@ class _RuleRow extends StatelessWidget {
         ];
       case LintBucket.dismissed:
         return [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
+          SizedBox(
+            width: _whyColumn,
             child: Text(
               row.comment != null
                   ? '# ${row.comment}'
@@ -701,22 +871,23 @@ class _RuleRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          ?issuesCell,
         ];
       case LintBucket.mentioned:
-        return [Text('commented out', style: context.type.caption)];
+        return [?issuesCell];
     }
   }
 }
 
-class _PricePill extends StatelessWidget {
-  const _PricePill({required this.price});
+class _IssuesPill extends StatelessWidget {
+  const _IssuesPill({required this.issues});
 
-  final int price;
+  final int issues;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var color = price == 0 ? colors.grn : colors.warningText;
+    var color = issues == 0 ? colors.grn : colors.warningText;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
       decoration: BoxDecoration(
@@ -724,7 +895,7 @@ class _PricePill extends StatelessWidget {
         borderRadius: BorderRadius.circular(context.radii.pill),
       ),
       child: Text(
-        price == 0 ? '0 · free' : '$price',
+        '$issues',
         style: context.type.caption.copyWith(
           color: color,
           fontWeight: FontWeight.w600,
@@ -735,28 +906,29 @@ class _PricePill extends StatelessWidget {
   }
 }
 
-class _PricingFoot extends StatelessWidget {
-  const _PricingFoot({required this.core});
+class _CountsFoot extends StatelessWidget {
+  const _CountsFoot({required this.core});
 
   final LintsCore core;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var pricing = core.pricing;
+    var counts = core.issueCounts;
     String text;
-    if (core.isPricing) {
-      text = 'Pricing — one dart analyze run over the repo…';
-    } else if (pricing == null) {
+    if (core.isCounting) {
+      text = 'Counting — one dart analyze run over the repo…';
+    } else if (counts == null) {
       text =
-          'Not priced yet — "Price rules" reports what every unevaluated '
-          'rule would flag today, in one analyzer run.';
+          'Not counted yet — "Count issues" reports what every rule that is '
+          'off would flag today, in one analyzer run.';
     } else {
-      var elapsed = (pricing.elapsed.inMilliseconds / 1000).toStringAsFixed(1);
+      var elapsed = (counts.elapsed.inMilliseconds / 1000).toStringAsFixed(1);
       text =
-          'Priced ${_ago(pricing.at)} · ${elapsed}s · '
-          '${pricing.freeWins} free wins'
-          '${core.pricingIsStale ? ' · stale — the rule set changed' : ''}';
+          'Counted ${_ago(counts.at)} · ${elapsed}s · '
+          '${core.unevaluatedWithoutIssues} unevaluated rules report nothing '
+          'today'
+          '${core.countsAreStale ? ' · stale — the rule set changed' : ''}';
     }
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -770,7 +942,7 @@ class _PricingFoot extends StatelessWidget {
       child: Row(
         spacing: FwSpacing.sm,
         children: [
-          if (core.isPricing)
+          if (core.isCounting)
             SizedBox(
               width: FwIconSize.xs,
               height: FwIconSize.xs,
@@ -854,9 +1026,8 @@ class _Advisory extends StatelessWidget {
 /// `inputDecorationTheme` sets `enabledBorder`/`focusedBorder`, which beat
 /// `border`, so the wrapping container owns the whole look.
 class _SearchField extends StatelessWidget {
-  const _SearchField({required this.value, required this.onChanged});
+  const _SearchField({required this.onChanged});
 
-  final String value;
   final void Function(String value) onChanged;
 
   @override
@@ -896,39 +1067,49 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-class _SortChip extends StatelessWidget {
-  const _SortChip({
-    required this.sort,
-    required this.selected,
-    required this.onTap,
-  });
+/// One dropdown, not a row of chips — a chip row beside a filter field reads
+/// as more filters.
+class _SortMenu extends StatelessWidget {
+  const _SortMenu({required this.current, required this.onSelect});
 
-  final _Sort sort;
-  final bool selected;
-  final VoidCallback onTap;
+  final _Sort current;
+  final void Function(_Sort sort) onSelect;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Tappable(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(context.radii.pill),
-      child: Container(
-        height: 24,
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
-        decoration: BoxDecoration(
-          color: selected ? colors.accentSoft : null,
-          border: Border.all(
-            color: selected ? Colors.transparent : colors.line,
+    return Menu(
+      entries: [
+        for (var sort in _Sort.values)
+          MenuItem(sort.label, onSelected: () => onSelect(sort)),
+      ],
+      builder: (context, controller) => Tappable(
+        onTap: controller.toggle,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        child: Container(
+          height: _controlHeight,
+          padding: const EdgeInsets.only(
+            left: FwSpacing.lg,
+            right: FwSpacing.sm,
           ),
-          borderRadius: BorderRadius.circular(context.radii.pill),
-        ),
-        child: Text(
-          sort.label,
-          style: context.type.caption.copyWith(
-            color: selected ? colors.accent : colors.mut,
-            fontWeight: selected ? FontWeight.w600 : null,
+          decoration: BoxDecoration(
+            color: colors.bg,
+            border: Border.all(color: colors.line),
+            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Sort: ${current.label}',
+                style: context.type.bodySmall.copyWith(color: colors.ink2),
+              ),
+              Icon(
+                Icons.arrow_drop_down,
+                size: FwIconSize.lg,
+                color: colors.mut,
+              ),
+            ],
           ),
         ),
       ),
@@ -946,14 +1127,22 @@ class _RuleDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var rule = row.rule;
-    var price = core.pricing?.counts[row.name];
+    var issues = row.bucket == LintBucket.enabled
+        ? null
+        : core.issueCounts?.counts[row.name];
+    var samples = core.issueCounts?.samples[row.name] ?? const [];
     return Dialog(
       backgroundColor: colors.bg,
-      insetPadding: const EdgeInsets.all(FwSpacing.xxl),
+      insetPadding: const EdgeInsets.all(FwSpacing.xxxl),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 640),
+        constraints: const BoxConstraints(maxWidth: 680, maxHeight: 680),
         child: Padding(
-          padding: const EdgeInsets.all(FwSpacing.xl),
+          padding: const EdgeInsets.fromLTRB(
+            FwSpacing.xxl,
+            FwSpacing.xxl,
+            FwSpacing.xxl,
+            FwSpacing.xl,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -961,7 +1150,7 @@ class _RuleDialog extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
+                    child: SelectableText(
                       row.name,
                       style: context.type.mono.copyWith(
                         fontSize: 15,
@@ -969,6 +1158,13 @@ class _RuleDialog extends StatelessWidget {
                       ),
                     ),
                   ),
+                  TextButton.icon(
+                    onPressed: () =>
+                        launchUrl(Uri.https('dart.dev', '/lints/${row.name}')),
+                    icon: Icon(Icons.open_in_new, size: FwIconSize.sm),
+                    label: const Text('dart.dev'),
+                  ),
+                  const Gap(FwSpacing.md),
                   Tappable(
                     onTap: () => Navigator.of(context).pop(),
                     child: Icon(
@@ -979,7 +1175,7 @@ class _RuleDialog extends StatelessWidget {
                   ),
                 ],
               ),
-              const Gap(FwSpacing.sm),
+              const Gap(FwSpacing.md),
               Wrap(
                 spacing: FwSpacing.sm,
                 runSpacing: FwSpacing.xs,
@@ -992,35 +1188,44 @@ class _RuleDialog extends StatelessWidget {
                     for (var category in rule.categories)
                       _Chip(label: category),
                   ],
-                  if (price != null)
+                  if (issues != null)
                     _Chip(
-                      label: price == 0
-                          ? '0 issues today — free win'
-                          : '$price issues today',
-                      tone: price == 0 ? Tone.good : Tone.warn,
+                      label: issues == 0
+                          ? 'no issues in this repo today'
+                          : issues == 1
+                          ? 'flags 1 issue today'
+                          : 'flags $issues issues today',
+                      tone: issues == 0 ? Tone.good : Tone.warn,
                     ),
                 ],
               ),
-              const Gap(FwSpacing.lg),
+              const Gap(FwSpacing.xl),
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (rule != null && rule.details.isNotEmpty)
-                        ..._renderDetails(context, rule.details)
+                        ..._LintDoc.render(context, rule.details)
                       else if (rule != null)
                         Text(rule.description, style: context.type.body),
+                      if (samples.isNotEmpty) ...[
+                        const Gap(FwSpacing.xl),
+                        _sectionLabel(context, 'Seen in this repo'),
+                        const Gap(FwSpacing.sm),
+                        _Samples(samples: samples, issues: issues ?? 0),
+                      ],
                       if (rule != null && rule.incompatible.isNotEmpty) ...[
-                        const Gap(FwSpacing.lg),
+                        const Gap(FwSpacing.xl),
                         _sectionLabel(context, 'Incompatible with'),
-                        const Gap(FwSpacing.xs),
+                        const Gap(FwSpacing.sm),
                         _Incompatible(rule: rule, core: core),
                       ],
-                      const Gap(FwSpacing.lg),
+                      const Gap(FwSpacing.xl),
                       _sectionLabel(context, 'Where it stands'),
-                      const Gap(FwSpacing.xs),
+                      const Gap(FwSpacing.sm),
                       _WhereItStands(row: row, core: core),
+                      const Gap(FwSpacing.lg),
                     ],
                   ),
                 ),
@@ -1043,24 +1248,45 @@ class _RuleDialog extends StatelessWidget {
     label.toUpperCase(),
     style: context.type.micro.copyWith(color: context.colors.mut2),
   );
+}
 
-  /// The `details` field is markdown with fenced code examples. This renders
-  /// the two shapes that matter — paragraphs and code fences — and leaves the
-  /// rest as text; it is documentation to read, not to typeset.
-  List<Widget> _renderDetails(BuildContext context, String details) {
+/// Renders a rule's `details` — markdown with fenced code examples — into the
+/// shapes that matter: headings, paragraphs with inline `code` and **bold**,
+/// and code fences. Links keep their text and lose their URL; the dialog's
+/// dart.dev button is the way out.
+abstract final class _LintDoc {
+  static final _fence = RegExp(r'```\w*\n([\s\S]*?)```');
+  static final _inline = RegExp(r'\*\*(.+?)\*\*|`([^`]+)`');
+  static final _link = RegExp(r'\[([^\]]+)\]\([^)]*\)');
+
+  static List<Widget> render(BuildContext context, String details) {
     var colors = context.colors;
     var widgets = <Widget>[];
-    var fence = RegExp(r'```\w*\n([\s\S]*?)```');
-    var cursor = 0;
+
     void addText(String text) {
       var trimmed = text.trim();
       if (trimmed.isEmpty) return;
       for (var paragraph in trimmed.split(RegExp(r'\n{2,}'))) {
+        var flat = _link.hasMatch(paragraph)
+            ? paragraph.replaceAllMapped(_link, (m) => m.group(1)!)
+            : paragraph;
+        if (flat.startsWith('#')) {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: FwSpacing.md),
+              child: Text(
+                flat.replaceFirst(RegExp(r'^#+\s*'), ''),
+                style: context.type.bodyStrong,
+              ),
+            ),
+          );
+          continue;
+        }
         widgets.add(
           Padding(
             padding: const EdgeInsets.only(bottom: FwSpacing.md),
-            child: Text(
-              paragraph.replaceAll(RegExp(r'\*\*|`'), ''),
+            child: Text.rich(
+              TextSpan(children: _spans(context, flat)),
               style: context.type.body,
             ),
           ),
@@ -1068,25 +1294,101 @@ class _RuleDialog extends StatelessWidget {
       }
     }
 
-    for (var match in fence.allMatches(details)) {
+    var cursor = 0;
+    for (var match in _fence.allMatches(details)) {
       addText(details.substring(cursor, match.start));
       widgets.add(
         Container(
           width: double.infinity,
           margin: const EdgeInsets.only(bottom: FwSpacing.md),
-          padding: const EdgeInsets.all(FwSpacing.md),
+          padding: const EdgeInsets.all(FwSpacing.lg),
           decoration: BoxDecoration(
             color: colors.panel,
             border: Border.all(color: colors.line),
             borderRadius: BorderRadius.circular(context.radii.radiusSmall),
           ),
-          child: Text(match.group(1)!.trimRight(), style: context.type.mono),
+          child: SelectableText(
+            match.group(1)!.trimRight(),
+            style: context.type.mono,
+          ),
         ),
       );
       cursor = match.end;
     }
     addText(details.substring(cursor));
     return widgets;
+  }
+
+  static List<InlineSpan> _spans(BuildContext context, String text) {
+    var colors = context.colors;
+    var spans = <InlineSpan>[];
+    var cursor = 0;
+    for (var match in _inline.allMatches(text)) {
+      if (match.start > cursor) {
+        spans.add(TextSpan(text: text.substring(cursor, match.start)));
+      }
+      if (match.group(1) case var bold?) {
+        spans.add(
+          TextSpan(
+            text: bold,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        );
+      } else if (match.group(2) case var code?) {
+        spans.add(
+          TextSpan(
+            text: code,
+            style: context.type.mono.copyWith(backgroundColor: colors.panel2),
+          ),
+        );
+      }
+      cursor = match.end;
+    }
+    if (cursor < text.length) spans.add(TextSpan(text: text.substring(cursor)));
+    return spans;
+  }
+}
+
+/// Concrete findings from the last counting run — what the rule is actually
+/// about in this repo's own code.
+class _Samples extends StatelessWidget {
+  const _Samples({required this.samples, required this.issues});
+
+  final List<LintIssueSample> samples;
+  final int issues;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var sample in samples)
+          Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+            child: SelectableText.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '${sample.file}:${sample.line}',
+                    style: context.type.mono.copyWith(color: colors.accent),
+                  ),
+                  TextSpan(
+                    text: '  ${sample.message}',
+                    style: context.type.caption,
+                  ),
+                ],
+              ),
+              style: context.type.bodySmall,
+            ),
+          ),
+        if (issues > samples.length)
+          Text(
+            'and ${issues - samples.length} more',
+            style: context.type.caption.copyWith(color: colors.mut2),
+          ),
+      ],
+    );
   }
 }
 

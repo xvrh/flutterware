@@ -9,8 +9,8 @@ import 'package:package_config/package_config.dart' hide findPackageConfig;
 import 'package:path/path.dart' as p;
 
 import '../../lints/model/classification.dart';
+import '../../lints/model/issue_counts.dart';
 import '../../lints/model/options_scan.dart';
-import '../../lints/model/pricing.dart';
 import '../../lints/model/rule_catalog.dart';
 import '../../previews/package_config_locator.dart';
 import '../../utils/run_dir.dart';
@@ -42,12 +42,15 @@ PluginCore lintsCoreFactory(PluginHost host) => LintsCore(host);
 /// budget — so the first-ever look at a new SDK version happens through the
 /// panel or an action.
 class LintsCore extends PluginCore {
-  LintsCore(super.host, {LintCatalogStore? catalogStore, LintPricer? pricer})
-    : _catalogStore = catalogStore ?? LintCatalogStore(),
-      _pricer = pricer ?? LintPricer();
+  LintsCore(
+    super.host, {
+    LintCatalogStore? catalogStore,
+    LintIssueCounter? counter,
+  }) : _catalogStore = catalogStore ?? LintCatalogStore(),
+       _counter = counter ?? LintIssueCounter();
 
   final LintCatalogStore _catalogStore;
-  final LintPricer _pricer;
+  final LintIssueCounter _counter;
 
   LintOptionsScan? _scan;
   LintsClassification? _classification;
@@ -56,9 +59,9 @@ class LintsCore extends PluginCore {
   Future<void>? _pending;
   var _loadedWithNetwork = false;
 
-  LintPricing? _pricing;
-  String? _pricingError;
-  var _pricingRunning = false;
+  LintIssueCounts? _counts;
+  String? _countError;
+  var _counting = false;
 
   String get _root => host.workspace.root;
 
@@ -66,18 +69,30 @@ class LintsCore extends PluginCore {
   LintsClassification? get classification => _classification;
   String? get dartVersion => _dartVersion;
   String? get error => _error;
-  LintPricing? get pricing => _pricing;
-  String? get pricingError => _pricingError;
-  bool get isPricing => _pricingRunning;
+  LintIssueCounts? get issueCounts => _counts;
+  String? get countError => _countError;
+  bool get isCounting => _counting;
 
-  /// True when the persisted pricing was computed for a different unevaluated
+  /// True when the persisted counts were computed for a different candidate
   /// set than today's — still worth showing, worth re-running.
-  bool get pricingIsStale {
-    var pricing = _pricing;
+  bool get countsAreStale {
+    var counts = _counts;
     var classification = _classification;
-    if (pricing == null || classification == null) return false;
-    return pricing.candidatesSignature !=
-        LintPricing.signatureOf(_candidates(classification));
+    if (counts == null || classification == null) return false;
+    return counts.candidatesSignature !=
+        LintIssueCounts.signatureOf(_candidates(classification));
+  }
+
+  /// Unevaluated rules the last run found nothing for — the ones that can be
+  /// enabled today and nothing changes.
+  int get unevaluatedWithoutIssues {
+    var counts = _counts;
+    var classification = _classification;
+    if (counts == null || classification == null) return 0;
+    return classification
+        .inBucket(LintBucket.unevaluated)
+        .where((rule) => counts.counts[rule.name] == 0)
+        .length;
   }
 
   /// Scans and classifies, unless it already has. Idempotent; the panel calls
@@ -112,7 +127,7 @@ class LintsCore extends PluginCore {
 
   Future<void> _doLoad({required bool allowNetwork}) async {
     try {
-      LintPricer.recoverLeftovers(_root);
+      LintIssueCounter.recoverLeftovers(_root);
 
       var scanner = LintOptionsScanner(
         repoRoot: _root,
@@ -136,7 +151,7 @@ class LintsCore extends PluginCore {
       _classification = LintsClassification.build(scan: scan, catalog: catalog);
       _loadedWithNetwork = allowNetwork;
       _error = null;
-      _pricing ??= _readPersistedPricing();
+      _counts ??= _readPersistedCounts();
     } catch (e) {
       if (isDisposed) return;
       _error = '$e';
@@ -157,14 +172,30 @@ class LintsCore extends PluginCore {
     }
   }
 
-  List<String> _candidates(LintsClassification classification) => [
-    for (var rule in classification.inBucket(LintBucket.unevaluated)) rule.name,
-  ];
+  /// Every rule an analyzer run can say something new about: unevaluated ones,
+  /// and dismissed or commented-out ones — how many findings a dismissal is
+  /// hiding is part of the record. A rule dismissed through `analyzer: errors:
+  /// ignore` stays out: the overlay cannot undo a severity override, so its
+  /// count would come back zero and read as clean.
+  List<String> _candidates(LintsClassification classification) {
+    var scan = _scan;
+    var ignored = <String>{
+      if (scan != null)
+        for (var file in scan.files)
+          for (var entry in file.severityOverrides.entries)
+            if (entry.value == 'ignore') entry.key,
+    };
+    return [
+      for (var rule in classification.rules)
+        if (rule.bucket != LintBucket.enabled && !ignored.contains(rule.name))
+          rule.name,
+    ];
+  }
 
-  /// Runs one analyzer pass with every unevaluated rule enabled and records
-  /// what each would cost. Slow by nature — seconds to minutes — which is why
-  /// it is an action and never runs on its own.
-  Future<LintsPriceResult> price() async {
+  /// Runs one analyzer pass with every candidate rule enabled and records what
+  /// each would report. Slow by nature — seconds to minutes — which is why it
+  /// is an action and never runs on its own.
+  Future<LintsCountResult> countIssues() async {
     await _load(allowNetwork: true);
     var classification = _classification;
     if (classification == null) {
@@ -173,54 +204,58 @@ class LintsCore extends PluginCore {
     if (!classification.hasCatalog) {
       throw StateError(
         'No rule catalog for Dart $_dartVersion — the first fetch needs the '
-        'network. Nothing to price without a universe to compare to.',
+        'network. Nothing to count without a universe to compare to.',
       );
     }
-    if (_pricingRunning) {
-      throw StateError('A pricing run is already in progress.');
+    if (_counting) {
+      throw StateError('A counting run is already in progress.');
     }
 
     var candidates = _candidates(classification);
-    _pricingRunning = true;
-    _pricingError = null;
+    _counting = true;
+    _countError = null;
     notifyChanged();
     try {
-      var pricing = await _pricer.price(
+      var counts = await _counter.count(
         repoRoot: _root,
         dartExecutable: host.workspace.flutterSdk.dart,
         candidates: candidates,
       );
       if (!isDisposed) {
-        _pricing = pricing;
-        _persistPricing(pricing);
+        _counts = counts;
+        _persistCounts(counts);
       }
-      return LintsPriceResult(
+      return LintsCountResult(
         candidates: candidates.length,
-        freeWins: pricing.freeWins,
-        elapsedMs: pricing.elapsed.inMilliseconds,
-        counts: pricing.counts,
+        unevaluatedWithoutIssues: unevaluatedWithoutIssues,
+        elapsedMs: counts.elapsed.inMilliseconds,
+        counts: counts.counts,
+        samples: {
+          for (var entry in counts.samples.entries)
+            entry.key: [for (var sample in entry.value) '$sample'],
+        },
       );
     } catch (e) {
-      if (!isDisposed) _pricingError = '$e';
+      if (!isDisposed) _countError = '$e';
       rethrow;
     } finally {
       if (!isDisposed) {
-        _pricingRunning = false;
+        _counting = false;
         notifyChanged();
       }
     }
   }
 
-  File get _pricingFile {
+  File get _countsFile {
     var key = sha1.convert(utf8.encode(p.canonicalize(_root))).toString();
-    return File(p.join(flutterwareDir(), key, 'lints-pricing.json'));
+    return File(p.join(flutterwareDir(), key, 'lints-issue-counts.json'));
   }
 
-  LintPricing? _readPersistedPricing() {
+  LintIssueCounts? _readPersistedCounts() {
     try {
-      var file = _pricingFile;
+      var file = _countsFile;
       if (!file.existsSync()) return null;
-      return LintPricing.fromJson(
+      return LintIssueCounts.fromJson(
         (jsonDecode(file.readAsStringSync()) as Map).cast<String, Object?>(),
       );
     } catch (e) {
@@ -228,13 +263,13 @@ class LintsCore extends PluginCore {
     }
   }
 
-  void _persistPricing(LintPricing pricing) {
+  void _persistCounts(LintIssueCounts counts) {
     try {
-      var file = _pricingFile;
+      var file = _countsFile;
       file.parent.createSync(recursive: true);
-      file.writeAsStringSync(jsonEncode(pricing.toJson()));
+      file.writeAsStringSync(jsonEncode(counts.toJson()));
     } catch (e) {
-      // A price that does not survive a restart only costs a re-run.
+      // A count that does not survive a restart only costs a re-run.
     }
   }
 
@@ -244,7 +279,7 @@ class LintsCore extends PluginCore {
     Map<String, Object?> arguments = const {},
   }) async => switch (actionId) {
     'status' => _status(),
-    'price' => price(),
+    'count' => countIssues(),
     _ => super.invoke(actionId, arguments: arguments),
   };
 
@@ -255,7 +290,7 @@ class LintsCore extends PluginCore {
     if (scan == null || classification == null) {
       throw StateError(_error ?? 'The scan has not run.');
     }
-    var pricing = _pricing;
+    var counts = _counts;
     return LintsStatusResult(
       dartVersion: _dartVersion,
       catalogAvailable: classification.hasCatalog,
@@ -284,19 +319,19 @@ class LintsCore extends PluginCore {
             comment: rule.comment,
             files: rule.files,
             incompatible: rule.rule?.incompatible ?? const [],
-            price: rule.bucket == LintBucket.unevaluated
-                ? pricing?.counts[rule.name]
-                : null,
+            issues: rule.bucket == LintBucket.enabled
+                ? null
+                : counts?.counts[rule.name],
           ),
       ],
       unknownNames: classification.unknownNames,
-      pricing: pricing == null
+      issueCounts: counts == null
           ? null
-          : LintsPricingSummary(
-              at: pricing.at.toIso8601String(),
-              elapsedMs: pricing.elapsed.inMilliseconds,
-              freeWins: pricing.freeWins,
-              stale: pricingIsStale,
+          : LintsCountsSummary(
+              at: counts.at.toIso8601String(),
+              elapsedMs: counts.elapsed.inMilliseconds,
+              unevaluatedWithoutIssues: unevaluatedWithoutIssues,
+              stale: countsAreStale,
             ),
     );
   }
@@ -323,30 +358,31 @@ class LintsCore extends PluginCore {
               'mentioned in a comment, or never evaluated',
         ),
         PluginAction(
-          'price',
-          'Price rules',
-          returns: LintsPriceResult,
+          'count',
+          'Count issues',
+          returns: LintsCountResult,
           description:
-              'One dart analyze run with every unevaluated rule enabled — '
-              'reports how many diagnostics each would add today. Costs a '
-              'full analysis of the repo (seconds to minutes)',
+              'One dart analyze run with every unevaluated, dismissed and '
+              'commented-out rule enabled — reports how many issues each '
+              'would flag today, with sample locations. Costs a full '
+              'analysis of the repo (seconds to minutes)',
         ),
       ],
       view: _view(classification),
     );
   }
 
-  String? _itemDetail(ClassifiedLint rule, LintPricing? pricing) {
+  String? _itemDetail(ClassifiedLint rule, LintIssueCounts? counts) {
     var parts = [
       if (rule.rule?.sinceDartSdk case var since?) 'since $since',
-      if (pricing?.counts[rule.name] case var price?)
-        price == 0 ? 'free' : '$price issues',
+      if (counts?.counts[rule.name] case var issues?)
+        issues == 1 ? '1 issue' : '$issues issues',
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
 
   Status _statusLine(LintsClassification? classification) {
-    if (_pricingRunning) return const Status.info('pricing…');
+    if (_counting) return const Status.info('counting issues…');
     if (_error != null) return Status.error(_error!);
     if (classification == null) {
       return _pending != null ? const Status.info('scanning…') : Status.none;
@@ -364,7 +400,7 @@ class LintsCore extends PluginCore {
   PluginView _view(LintsClassification? classification) {
     if (classification == null) return PluginView.empty;
     var scan = _scan;
-    var pricing = _pricing;
+    var counts = _counts;
     var newest = classification
         .inBucket(LintBucket.unevaluated)
         .sorted(compareBySinceDesc)
@@ -383,11 +419,11 @@ class LintsCore extends PluginCore {
             : Tone.good,
       ),
       if (scan != null) ViewField('Options files', '${scan.files.length}'),
-      if (pricing != null)
+      if (counts != null)
         ViewField(
-          'Priced',
-          '${pricing.freeWins} free wins'
-              '${pricingIsStale ? ' (stale — set changed)' : ''}',
+          'Issue counts',
+          '$unevaluatedWithoutIssues unevaluated rules report nothing'
+              '${countsAreStale ? ' (stale — the rule set changed)' : ''}',
         ),
       if (classification.unknownNames.isNotEmpty)
         ViewField(
@@ -398,7 +434,7 @@ class LintsCore extends PluginCore {
       if (newest.isNotEmpty)
         ViewItems([
           for (var rule in newest)
-            ViewItem(rule.name, detail: _itemDetail(rule, pricing)),
+            ViewItem(rule.name, detail: _itemDetail(rule, counts)),
         ]),
     ]);
   }

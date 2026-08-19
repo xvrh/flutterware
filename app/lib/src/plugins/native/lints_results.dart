@@ -18,7 +18,7 @@ class LintsStatusResult implements PluginResult {
     required this.files,
     required this.rules,
     this.unknownNames = const [],
-    this.pricing,
+    this.issueCounts,
   });
 
   /// The project SDK's Dart version — the tag the rule catalog was fetched at.
@@ -37,7 +37,7 @@ class LintsStatusResult implements PluginResult {
   /// Configured names the catalog does not know — typos or removed rules.
   final List<String> unknownNames;
 
-  final LintsPricingSummary? pricing;
+  final LintsCountsSummary? issueCounts;
 
   @override
   Map<String, Object?> toJson() => _$LintsStatusResultToJson(this);
@@ -93,7 +93,7 @@ class LintsRuleEntry {
     this.comment,
     this.files = const [],
     this.incompatible = const [],
-    this.price,
+    this.issues,
   });
 
   final String name;
@@ -117,9 +117,9 @@ class LintsRuleEntry {
 
   final List<String> incompatible;
 
-  /// Diagnostics this rule would add today — from the last pricing run, only
-  /// for unevaluated rules, absent until one ran.
-  final int? price;
+  /// How many issues this rule would flag today — from the last counting run,
+  /// for every rule that is not already on, absent until one ran.
+  final int? issues;
 
   Map<String, Object?> toJson() => _$LintsRuleEntryToJson(this);
 }
@@ -129,48 +129,54 @@ class LintsRuleEntry {
   includeIfNull: false,
   createFactory: false,
 )
-class LintsPricingSummary {
-  LintsPricingSummary({
+class LintsCountsSummary {
+  LintsCountsSummary({
     required this.at,
     required this.elapsedMs,
-    required this.freeWins,
+    required this.unevaluatedWithoutIssues,
     required this.stale,
   });
 
   final String at;
   final int elapsedMs;
 
-  /// Unevaluated rules that would add zero diagnostics today.
-  final int freeWins;
+  /// Unevaluated rules that would flag nothing today — the ones that can be
+  /// enabled and nothing changes.
+  final int unevaluatedWithoutIssues;
 
-  /// True when the unevaluated set changed since this run — prices still
-  /// shown, but a re-run would cover the current candidates.
+  /// True when the candidate set changed since this run — counts still shown,
+  /// but a re-run would cover the current rules.
   final bool stale;
 
-  Map<String, Object?> toJson() => _$LintsPricingSummaryToJson(this);
+  Map<String, Object?> toJson() => _$LintsCountsSummaryToJson(this);
 }
 
-/// `price` — one analyzer run, every unevaluated rule priced.
+/// `count` — one analyzer run, every candidate rule's issues counted.
 @JsonSerializable(
   explicitToJson: true,
   includeIfNull: false,
   createFactory: false,
 )
-class LintsPriceResult implements PluginResult {
-  LintsPriceResult({
+class LintsCountResult implements PluginResult {
+  LintsCountResult({
     required this.candidates,
-    required this.freeWins,
+    required this.unevaluatedWithoutIssues,
     required this.elapsedMs,
     required this.counts,
+    this.samples = const {},
   });
 
   final int candidates;
-  final int freeWins;
+  final int unevaluatedWithoutIssues;
   final int elapsedMs;
 
-  /// Rule → diagnostics it would add today. Zero is the interesting value.
+  /// Rule → issues it would flag today. Zero is the interesting value.
   final Map<String, int> counts;
 
+  /// Up to three concrete findings per rule, as `path:line — message`, so a
+  /// reader can see what a rule is like in this repo without another run.
+  final Map<String, List<String>> samples;
+
   @override
-  Map<String, Object?> toJson() => _$LintsPriceResultToJson(this);
+  Map<String, Object?> toJson() => _$LintsCountResultToJson(this);
 }

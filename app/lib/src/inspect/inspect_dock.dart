@@ -318,6 +318,7 @@ class _Tab extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      hoverColor: context.colors.hoverOverlay,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
         alignment: Alignment.center,

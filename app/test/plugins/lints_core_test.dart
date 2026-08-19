@@ -6,7 +6,7 @@ import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/context.dart';
-import 'package:flutterware_app/src/lints/model/pricing.dart';
+import 'package:flutterware_app/src/lints/model/issue_counts.dart';
 import 'package:flutterware_app/src/lints/model/rule_catalog.dart';
 import 'package:flutterware_app/src/plugins/native/lints_core.dart';
 import 'package:flutterware_app/src/plugins/native/lints_results.dart';
@@ -68,7 +68,7 @@ void main() {
       catalogStore: LintCatalogStore(
         cacheDirectory: catalogCache ?? seedCatalog([]),
       ),
-      pricer: LintPricer(runProcess: runProcess),
+      counter: LintIssueCounter(runProcess: runProcess),
     );
   }
 
@@ -128,7 +128,7 @@ linter:
     expect(lints.report.badge, const StatusBadge.count(1));
   });
 
-  test('price runs one analyzer pass and remembers it across cores', () async {
+  test('count runs one analyzer pass and remembers it across cores', () async {
     write('analysis_options.yaml', 'linter:\n  rules:\n    on_rule: true\n');
     var cache = seedCatalog([rule('on_rule'), rule('fresh_rule')]);
     var analyzeRuns = 0;
@@ -153,26 +153,26 @@ linter:
       },
     );
 
-    var result = (await lints.invoke('price'))! as LintsPriceResult;
+    var result = (await lints.invoke('count'))! as LintsCountResult;
     expect(analyzeRuns, 1);
     expect(result.counts, {'fresh_rule': 2});
-    expect(result.freeWins, 0);
+    expect(result.unevaluatedWithoutIssues, 0);
 
-    // A new core over the same repo reads the persisted pricing — a price
+    // A new core over the same repo reads the persisted counts — a run
     // that costs seconds to minutes should survive a restart.
     var reborn = core(catalogCache: cache);
     var status = (await reborn.invoke('status'))! as LintsStatusResult;
-    expect(status.pricing, isNotNull);
-    expect(status.rules.singleWhere((r) => r.name == 'fresh_rule').price, 2);
+    expect(status.issueCounts, isNotNull);
+    expect(status.rules.singleWhere((r) => r.name == 'fresh_rule').issues, 2);
   });
 
-  test('price without a catalog refuses with the reason', () async {
+  test('count without a catalog refuses with the reason', () async {
     write('analysis_options.yaml', 'linter:\n');
     var lints = core(
       catalogCache: Directory(p.join(scratch.path, 'empty-cache'))
         ..createSync(),
     );
-    await expectLater(lints.invoke('price'), throwsStateError);
+    await expectLater(lints.invoke('count'), throwsStateError);
   });
 
   test('an unknown action names what is declared', () async {

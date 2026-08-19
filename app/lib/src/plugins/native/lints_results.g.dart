@@ -14,7 +14,7 @@ Map<String, dynamic> _$LintsStatusResultToJson(LintsStatusResult instance) =>
       'files': instance.files.map((e) => e.toJson()).toList(),
       'rules': instance.rules.map((e) => e.toJson()).toList(),
       'unknownNames': instance.unknownNames,
-      'pricing': ?instance.pricing?.toJson(),
+      'issueCounts': ?instance.issueCounts?.toJson(),
     };
 
 Map<String, dynamic> _$LintsFileSummaryToJson(LintsFileSummary instance) =>
@@ -39,22 +39,22 @@ Map<String, dynamic> _$LintsRuleEntryToJson(LintsRuleEntry instance) =>
       'comment': ?instance.comment,
       'files': instance.files,
       'incompatible': instance.incompatible,
-      'price': ?instance.price,
+      'issues': ?instance.issues,
     };
 
-Map<String, dynamic> _$LintsPricingSummaryToJson(
-  LintsPricingSummary instance,
-) => <String, dynamic>{
-  'at': instance.at,
-  'elapsedMs': instance.elapsedMs,
-  'freeWins': instance.freeWins,
-  'stale': instance.stale,
-};
+Map<String, dynamic> _$LintsCountsSummaryToJson(LintsCountsSummary instance) =>
+    <String, dynamic>{
+      'at': instance.at,
+      'elapsedMs': instance.elapsedMs,
+      'unevaluatedWithoutIssues': instance.unevaluatedWithoutIssues,
+      'stale': instance.stale,
+    };
 
-Map<String, dynamic> _$LintsPriceResultToJson(LintsPriceResult instance) =>
+Map<String, dynamic> _$LintsCountResultToJson(LintsCountResult instance) =>
     <String, dynamic>{
       'candidates': instance.candidates,
-      'freeWins': instance.freeWins,
+      'unevaluatedWithoutIssues': instance.unevaluatedWithoutIssues,
       'elapsedMs': instance.elapsedMs,
       'counts': instance.counts,
+      'samples': instance.samples,
     };
