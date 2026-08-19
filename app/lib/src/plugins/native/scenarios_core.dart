@@ -621,7 +621,9 @@ class ScenariosCore extends PluginCore {
               required: false,
               description:
                   'A locale tag — `fr`, `fr-CA` — applied as the platform '
-                  'locale for the whole run',
+                  "locale and as the scenario's own assignment "
+                  '(`s.assignment?.language`), the same pair `FW_LANGUAGES` '
+                  'sets under `flutter test`',
             ),
             const ActionParameter(
               'devices',
@@ -823,8 +825,9 @@ class ScenariosCore extends PluginCore {
               required: false,
               description:
                   'The run to read, when `step` is an index or omitted. The '
-                  'newest under the package when omitted — which is the run '
-                  'you just did.',
+                  'newest completed run under the package when omitted — the '
+                  'one you just did, never a panel session, which writes '
+                  'captures but no run.json to count into.',
             ),
             ActionParameter(
               'lens',
@@ -1649,11 +1652,32 @@ class ScenariosCore extends PluginCore {
             '$scenarioRunReportFile.',
       );
     }
+    // Only directories that can answer. A panel session writes captures but
+    // no report — and its `panel-` prefix sorts *after* every millisecond
+    // stamp, so without this the "newest" default named a panel directory on
+    // every read once one existed, forever.
+    var runs = [
+      for (var candidate in candidates)
+        if (File(p.join(candidate.path, scenarioRunReportFile)).existsSync())
+          candidate,
+    ];
     // Newest by name, which is the millisecond stamp `run` writes. Reading it
     // off the directory name rather than off the filesystem keeps a checkout
     // or a copy from reordering a run history.
     candidates.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
-    return candidates.last.path;
+    if (runs.isEmpty) {
+      throw ArgumentError.value(
+        _relative(candidates.last.path),
+        'output',
+        '${candidates.length} capture '
+            'director${candidates.length == 1 ? 'y' : 'ies'} on disk, but '
+            'none holds a $scenarioRunReportFile — panel sessions write '
+            'captures without one. Run `run scenarios run` first, or name a '
+            'capture directly with `step`.',
+      );
+    }
+    runs.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    return runs.last.path;
   }
 
   ScenarioRunResult? _reportIn(String runDir) {
@@ -1739,6 +1763,8 @@ class ScenariosCore extends PluginCore {
               outcome.file,
               outcome.name,
               '${outcome.stepCount} steps',
+              if (outcome.unchangedCount > 0)
+                '${outcome.unchangedCount} unchanged',
               outcome.ok ? 'ok' : 'FAILED',
               ?outcome.steps.lastOrNull?.tree,
             ].join(' · '),
@@ -2669,6 +2695,7 @@ class ScenariosCore extends PluginCore {
       settled: step['settled'] as bool? ?? true,
       landed: step['landed'] as bool? ?? true,
       strayFrames: step['strayFrames'] as int? ?? 0,
+      unchanged: step['unchanged'] == true,
       failure: step['failure'] as String?,
       attachments: [
         for (var attachment
@@ -2729,6 +2756,9 @@ class ScenariosCore extends PluginCore {
               _ => null,
             },
             stepCount: (outcome['steps']! as List).length,
+            unchangedCount: (outcome['steps']! as List)
+                .where((step) => (step as Map)['unchanged'] == true)
+                .length,
             steps: [
               for (var step
                   in (outcome['steps']! as List).cast<Map<String, dynamic>>())

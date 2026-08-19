@@ -307,7 +307,10 @@ void main() {
         );
         expect(
           _scratchTexts(framed),
-          contains('375x667 2.0 20.0 fr-CA Brightness.dark 13.0 true'),
+          contains(
+            '375x667 2.0 20.0 fr-CA Brightness.dark 13.0 true '
+            'iphone-se-fr-CA',
+          ),
         );
         // Logical pixels by default — the measured cost of physical capture
         // (10× the time and bytes) is not a good default; `captureScale`
@@ -322,7 +325,7 @@ void main() {
         var text = _scratchTexts(bare).single;
         expect(text, startsWith('800x600 3.0 0.0'));
         expect(text, contains('Brightness.light'));
-        expect(text, endsWith('10.0 false'));
+        expect(text, endsWith('10.0 false unassigned'));
         expect(_pngSize(_lastPng(bare)), (800, 600));
 
         // The knob back up: the device's own ratio is a true screenshot.
@@ -405,6 +408,32 @@ void main() {
         expect({for (var t in tails) t['parent']}, leaves);
       } finally {
         forked.deleteSync();
+      }
+
+      // A stalled walk: verbs that act and change nothing carry
+      // `unchanged: true`, so seven identical captures cannot pass as seven
+      // pages — the consumer failure this flag exists for. The `screen` at
+      // the end is a deliberate second picture of the same frame and stays
+      // unflagged.
+      var stalled = File(
+        p.join(packageRoot, 'test', 'scenarios', 'stalled_test.dart'),
+      );
+      stalled.writeAsStringSync(_stalledSource);
+      try {
+        var report = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/stalled_test.dart',
+          scenario: 'Stalled',
+        );
+        var outcome = (report['scenarios']! as List).single as Map;
+        expect(outcome['ok'], isTrue, reason: '${outcome['errors']}');
+        var steps = (outcome['steps']! as List).cast<Map<String, dynamic>>();
+        expect(
+          [for (var step in steps) step['unchanged']],
+          [null, true, true, null],
+        );
+      } finally {
+        stalled.deleteSync();
       }
 
       // A scenario the author wrapped in a `group()` — listed by its own
@@ -1270,6 +1299,34 @@ void main() {
 /// Prints the app's own view of the axes: logical size, pixel ratio, the top
 /// safe area, the platform locale, brightness, and 10 through the text
 /// scaler.
+/// A page whose `Continue` ignores every tap — the shape of a flow that
+/// stalls without an exception or a failed matcher.
+const _stalledSource = r'''
+import 'package:flutter/widgets.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Stalled', (s) async {
+    await s.pumpWidget(const _DeadEnd());
+    await s.tap('Continue');
+    await s.tap('Continue');
+    await s.screen('end');
+  });
+}
+
+class _DeadEnd extends StatelessWidget {
+  const _DeadEnd();
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+    textDirection: TextDirection.ltr,
+    child: Center(
+      child: GestureDetector(onTap: () {}, child: const Text('Continue')),
+    ),
+  );
+}
+''';
+
 const _probeSource = r'''
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
@@ -1290,7 +1347,10 @@ void main() {
                 '${locale.toLanguageTag()} '
                 '${media.platformBrightness} '
                 '${media.textScaler.scale(10)} '
-                '${media.boldText}',
+                '${media.boldText} '
+                // The axes as the *body* reads them — the consumer seam: a
+                // base class keys its locale off `s.assignment?.language`.
+                '${s.assignment?.slug ?? 'unassigned'}',
               );
             },
           ),

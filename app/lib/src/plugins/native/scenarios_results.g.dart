@@ -88,6 +88,7 @@ ScenarioRunOutcome _$ScenarioRunOutcomeFromJson(Map<String, dynamic> json) =>
               .toList() ??
           const [],
       stepCount: (json['stepCount'] as num?)?.toInt() ?? 0,
+      unchangedCount: (json['unchangedCount'] as num?)?.toInt() ?? 0,
       errors:
           (json['errors'] as List<dynamic>?)
               ?.map((e) => ScenarioRunError.fromJson(e as Map<String, dynamic>))
@@ -107,6 +108,7 @@ Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
       'ms': instance.ms,
       'steps': instance.steps.map((e) => e.toJson()).toList(),
       'stepCount': instance.stepCount,
+      'unchangedCount': instance.unchangedCount,
       'errors': instance.errors.map((e) => e.toJson()).toList(),
       'translations': ?instance.translations,
     };
@@ -156,6 +158,7 @@ ScenarioRunStep _$ScenarioRunStepFromJson(Map<String, dynamic> json) =>
       settled: json['settled'] as bool? ?? true,
       landed: json['landed'] as bool? ?? true,
       strayFrames: (json['strayFrames'] as num?)?.toInt() ?? 0,
+      unchanged: json['unchanged'] as bool? ?? false,
       failure: json['failure'] as String?,
       attachments:
           (json['attachments'] as List<dynamic>?)
@@ -204,6 +207,7 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
       'settled': instance.settled,
       'landed': instance.landed,
       'strayFrames': instance.strayFrames,
+      'unchanged': instance.unchanged,
       'failure': ?instance.failure,
       'attachments': instance.attachments.map((e) => e.toJson()).toList(),
     };

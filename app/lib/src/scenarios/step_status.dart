@@ -31,7 +31,7 @@ String? scenarioStepTransition(ScenarioRunStep step) {
 Color scenarioStepTone(BuildContext context, ScenarioRunStep step) {
   var colors = context.colors;
   if (step.failure != null) return colors.red;
-  if (!step.settled || !step.landed) return colors.amber;
+  if (!step.settled || !step.landed || step.unchanged) return colors.amber;
   return colors.mut;
 }
 
@@ -66,6 +66,15 @@ class ScenarioStepNotice extends StatelessWidget {
             'read had not finished after a second of real time. Whatever this '
             'picture is missing turns up on the next step; the app is the one '
             'taking its time, not the shutter.',
+      ),
+      ScenarioRunStep(unchanged: true) => (
+        colors.amber,
+        Icons.copy_all_outlined,
+        'Identical to the step before it — the verb ran and nothing on '
+            'screen changed. In a walking scenario that is usually a stalled '
+            'flow: a tap that landed on a control that ignored it, repeated '
+            "until the loop's bound. A capture deliberately parked "
+            'mid-flight is the innocent case.',
       ),
       ScenarioRunStep(:var strayFrames) when strayFrames > 0 => (
         colors.mut2,

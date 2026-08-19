@@ -182,6 +182,11 @@ Future<void> _runScenario(
   ScenarioAssignment? assignment,
   String? source,
 ) async {
+  // The runner's assignment wins, like its args do below: the declaration
+  // captured the ambient one, which under the runner is null — and a body
+  // reading `s.assignment?.language` has to see the language the request
+  // named, the same as it would under `flutter test` with `FW_LANGUAGES`.
+  assignment = scenarioRunArgs?.assignment ?? assignment;
   var restore = _applyRunArgs(tester, assignment);
   // Whatever the scenario before this one left memoized on `rootBundle`
   // belongs to *its* FakeAsync zone. A read still in flight when that scenario
@@ -453,11 +458,16 @@ class ScenarioTester {
   /// that two files naming the same screen do not write into each other.
   final String? _source;
 
-  /// The axes this scenario is running under, when a folder profile or a CI
-  /// list assigned any — what keeps a matrix's captures out of each other's
-  /// directories, and what a body reads to adapt an expectation to the screen
-  /// it is on. Null under the flutterware runner, which assigns axes per
-  /// request rather than per declaration.
+  /// The axes this scenario is running under, when anything assigned any —
+  /// what keeps a matrix's captures out of each other's directories, and what
+  /// a body reads to adapt an expectation to the screen it is on.
+  ///
+  /// Both lanes answer here: a folder profile or a CI list (`FW_LANGUAGES`)
+  /// under `flutter test`, and the request's own axes (`--language`,
+  /// `--device`) under the flutterware runner. That agreement is the point —
+  /// a base class keying its locale off `assignment.language` was silently
+  /// running every `scenarios run --language=nl` in English, because the
+  /// runner used to leave this null.
   final ScenarioAssignment? assignment;
 
   /// Shared across replays; everything below is this replay's alone.
@@ -629,9 +639,12 @@ class ScenarioTester {
   /// drag travels toward the end of the list; make it negative to walk back
   /// toward the start.
   ///
-  /// Unlike the other verbs this one starts with a target that matches
-  /// nothing — being off screen is the whole point — so it says so itself
-  /// when the scrolling never finds it.
+  /// A target already on screen is a no-op, whether or not anything scrolls
+  /// — so the verb is safe inside a loop over pages of varying length, where
+  /// which pages scroll depends on the device. Unlike the other verbs this
+  /// one may start with a target that matches nothing — being off screen is
+  /// the whole point — so it says so itself when the scrolling never finds
+  /// it, and when nothing scrolls and the target is absent or off screen.
   Future<void> scrollTo(
     dynamic target, {
     dynamic within,
@@ -651,7 +664,17 @@ class ScenarioTester {
               matchRoot: true,
             );
       if (scrollable.evaluate().isEmpty) {
-        throw ScenarioTargetError(_messages.nothingScrolls(within));
+        var refusal = refusalWhenNothingScrolls(
+          finderForTarget(target),
+          describeTarget(target),
+          within,
+          _messages,
+        );
+        // A target already on screen is the step's whole point achieved:
+        // capture it there, scroll nothing. Which pages scroll varies with
+        // the device, so a walking scenario cannot know statically.
+        if (refusal == null) return;
+        throw ScenarioTargetError(refusal.message);
       }
       try {
         await tester.scrollUntilVisible(

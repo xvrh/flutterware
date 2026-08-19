@@ -265,11 +265,15 @@ a second dialect.
 
 - **`scrollTo`** is the one with judgement in it. The scrollable defaults to
   the first on screen, as `flutter_test` itself defaults, and `within:` names
-  another — a widget that *is* a `Scrollable` or contains one. Its two
-  failures say what to do: nothing on screen scrolls, or *scrolled 50 times by
-  200 without reaching "Item 500" — wrong direction, wrong scrollable, or not
-  in this list at all*. It is the one verb whose target legitimately matches
-  nothing at the start, so it skips the exactly-one check the others make.
+  another — a widget that *is* a `Scrollable` or contains one. A target
+  already on screen is a no-op whether or not anything scrolls — a consumer
+  walking pages of varying length found the earlier unconditional refusal made
+  every walking scenario carry a guard, since which pages scroll depends on
+  the device. Its failures say what to do: nothing on screen scrolls (target
+  absent or laid out off screen), or *scrolled 50 times by 200 without
+  reaching "Item 500" — wrong direction, wrong scrollable, or not in this
+  list at all*. It is the one verb whose target legitimately matches nothing
+  at the start, so it skips the exactly-one check the others make.
 - **`back`** sends `popRoute` down `flutter/navigation` rather than calling
   the binding's `handlePopRoute`, which is `@protected @visibleForTesting` and
   analyzes as a violation from here. The message is the sanctioned route and

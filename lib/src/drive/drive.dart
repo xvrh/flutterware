@@ -141,7 +141,9 @@ class Drive {
   }
 
   /// Scrolls until [target] is on screen. Same contract as the scenario verb:
-  /// the target may match nothing yet — being off screen is the whole point.
+  /// the target may match nothing yet — being off screen is the whole point —
+  /// and a target already on screen is a no-op, whether or not anything
+  /// scrolls.
   Future<DriveStep> scrollTo(
     dynamic target, {
     dynamic within,
@@ -158,9 +160,22 @@ class Drive {
             matchRoot: true,
           );
     if (scrollable.evaluate().isEmpty) {
-      throw TargetError(
-        TargetFailure.notFound,
-        _resolver.messages.nothingScrolls(within),
+      var refusal = refusalWhenNothingScrolls(
+        finderForTarget(target),
+        describeTarget(target),
+        within,
+        _resolver.messages,
+      );
+      if (refusal != null) throw refusal;
+      // Already on screen: nothing to walk, nothing to do — the same no-op
+      // the scenario verb makes, so a flow ported between the two engines
+      // keeps working on its short pages.
+      var settled = await settleLive(budget: settle ?? settleBudget);
+      return DriveStep(
+        verb: 'scrollTo',
+        target: describeTarget(target),
+        settle: settled,
+        elapsed: watch.elapsed,
       );
     }
     try {

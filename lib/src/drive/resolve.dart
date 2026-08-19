@@ -660,6 +660,41 @@ class TargetResolver {
   }
 }
 
+/// The refusal `scrollTo` owes when nothing on screen scrolls, or null when
+/// it owes none: a target already on screen has nowhere to be walked to, and
+/// a page too short to scroll is the normal case in a flow whose pages vary
+/// in length — a consumer suite measured the old unconditional refusal as a
+/// guard every walking scenario had to carry.
+///
+/// The refusal stays for the two real dead ends: [target] matches nothing
+/// (and nothing scrolls, so it can never be reached), and it is built but
+/// off screen with nothing to walk it into view.
+TargetError? refusalWhenNothingScrolls(
+  Finder target,
+  String described,
+  Object? within,
+  TargetMessages messages,
+) {
+  Offset? offCenter;
+  for (var element in target.evaluate()) {
+    var render = element.renderObject;
+    if (render is! RenderBox || !render.hasSize) continue;
+    var center = render.localToGlobal(render.size.center(Offset.zero));
+    var view = TargetResolver._viewOf(render);
+    // Unattached goes to the verb, as [TargetResolver._reaches] leaves it.
+    if (view == null || (Offset.zero & view.size).contains(center)) {
+      return null;
+    }
+    offCenter = center;
+  }
+  return offCenter == null
+      ? TargetError(TargetFailure.notFound, messages.nothingScrolls(within))
+      : TargetError(
+          TargetFailure.offscreen,
+          messages.offscreen(described, offCenter),
+        );
+}
+
 /// The `EditableText` a text-entering verb means, given the [finder] its
 /// target resolved to.
 ///
