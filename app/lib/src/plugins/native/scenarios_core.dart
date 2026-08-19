@@ -581,7 +581,7 @@ class ScenariosCore extends PluginCore {
               required: false,
               description:
                   'Where step artifacts are written, worktree-relative '
-                  'unless absolute; a fresh directory under the package\'s '
+                  "unless absolute; a fresh directory under the package's "
                   'build/ when omitted. run.json lands in the same '
                   'directory as the images it names.',
             ),
