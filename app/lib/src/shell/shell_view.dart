@@ -1780,8 +1780,17 @@ class _Panel extends StatelessWidget {
       body = plugin == null
           ? WorktreeHome(
               worktree,
+              // Keyed by checkout so switching worktrees resets the run watch
+              // rather than leaving one screen's timer reading another's
+              // ledger.
+              key: ValueKey('home::${worktree.path}'),
               session: session,
               onOpenPlugin: shell.selectPlugin,
+              facts:
+                  shell.worktreeFacts?.factsFor(worktree) ??
+                  const WorktreeFacts(),
+              onRefreshFacts: () => unawaited(shell.refreshWorktreeFacts()),
+              onOpenChanges: () => shell.selectChanges(worktree),
             )
           : KeyedSubtree(
               // Rebuild the panel from scratch when the worktree or the plugin
