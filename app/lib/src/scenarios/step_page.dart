@@ -24,8 +24,10 @@ import 'artifacts.dart';
 import 'events_view.dart';
 import 'framed_shot.dart';
 import 'motion_player.dart';
+import '../inspect/focus_order.dart';
 import '../inspect/semantics_node.dart';
 import '../inspect/semantics_view.dart';
+import '../inspect/transcript.dart';
 import 'step_status.dart';
 
 /// One step, pushed over the flow: the frame big, the inspect dock under it —
@@ -67,8 +69,13 @@ class ScenarioStepPage extends StatefulWidget {
   State<ScenarioStepPage> createState() => _ScenarioStepPageState();
 }
 
+// Plural on purpose: the motion player is rebuilt — new controller, new
+// ticker — every time the previous/next links change the step under this same
+// State, and the single-ticker mixin vends exactly one ticker per State
+// *lifetime*, disposed or not. With it, the second step of any walk through a
+// frames-recording run threw during build.
 class _ScenarioStepPageState extends State<ScenarioStepPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   /// The node the pointer is over — set from the tree's rows and from the
   /// picker's sweep, drawn once over the screenshot. One rectangle, pointed
   /// at from either end, as the catalog does it.
@@ -78,6 +85,10 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   /// only the elements one round-trips through the picker.
   final _semanticsHighlight = ValueNotifier<SemanticsSnapshotNode?>(null);
   final _picking = ValueNotifier<bool>(false);
+
+  /// The Semantics tab's reading-order switch: on, the overlay numbers every
+  /// utterance on the screenshot, matching the script's row indices.
+  final _focusOrder = ValueNotifier<bool>(false);
 
   var _tab = 'elements';
   var _collapsed = false;
@@ -97,6 +108,10 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   SemanticsSnapshotNode? _semantics;
   String? _semanticsError;
 
+  /// The same capture read as a script, with the label audits' findings —
+  /// derived from [_semantics] in the same setState that parses it.
+  SemanticsTranscript? _transcript;
+
   /// The transition's events, read from its `.events.json`. Empty for a quiet
   /// transition and for a run that predates the capture; [_eventsPlaceholder]
   /// tells the two apart.
@@ -111,13 +126,19 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   /// does not write its answer over the step now on screen.
   var _generation = 0;
 
+  /// What the player on hand was built for — `didChangeDependencies` fires on
+  /// any inherited change (theme, scopes), and rebuilding the player for one
+  /// of those would throw away the frame the person had scrubbed to.
+  var _motionLoaded = false;
+  String? _motionFrames;
+
   // `didChangeDependencies`, not `initState`: the artifacts come from an
   // inherited widget, which cannot be depended on before the first build.
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _loadTree();
-    _loadMotion();
+    if (!_motionLoaded || _motionFrames != widget.step.frames) _loadMotion();
   }
 
   @override
@@ -138,6 +159,7 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
     _highlight.dispose();
     _semanticsHighlight.dispose();
     _picking.dispose();
+    _focusOrder.dispose();
     super.dispose();
   }
 
@@ -146,6 +168,8 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   /// recording existed. Walking to the next step with the previous/next links
   /// rebuilds it for the new transition.
   void _loadMotion() {
+    _motionLoaded = true;
+    _motionFrames = widget.step.frames;
     _motion?.dispose();
     _motion = ScenarioMotionController.forStep(widget.step, this)
       ?..rest()
@@ -211,6 +235,7 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
       }
 
       _semantics = null;
+      _transcript = null;
       if (step.semantics == null) {
         // Absence has two honest readings and only one file to tell them by.
         _semanticsError =
@@ -224,6 +249,7 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
           _semantics = SemanticsSnapshotNode.fromJson(
             (jsonDecode(semantics) as Map).cast<String, Object?>(),
           );
+          _transcript = SemanticsTranscript.of(_semantics!);
           _semanticsError = null;
         } catch (error) {
           _semanticsError = 'The semantics tree could not be read:\n$error';
@@ -381,6 +407,15 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
                                 semanticsHighlight: _semanticsHighlight,
                                 picking: _picking,
                                 onPick: _select,
+                                focusOrder: _focusOrder,
+                                // Only while the Semantics tab is the one
+                                // showing — its toggle is the only way to turn
+                                // the numbers off, so they must not outlive it.
+                                focusNodes: _tab == 'semantics'
+                                    ? _transcript?.utterances
+                                          .map((u) => u.node)
+                                          .toList()
+                                    : null,
                               ),
                       ),
                     ),
@@ -456,10 +491,13 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
               InspectDockTab(
                 id: 'semantics',
                 label: 'Semantics',
+                badge: _transcript?.findingCount ?? 0,
                 body: (context) => SemanticsView(
                   root: _semantics,
+                  transcript: _transcript,
                   placeholder: _semanticsError ?? 'No semantics captured.',
                   highlight: _semanticsHighlight,
+                  focusOrder: _focusOrder,
                 ),
               ),
               InspectDockTab(
@@ -686,6 +724,8 @@ class _ScreenOverlay extends StatelessWidget {
     required this.semanticsHighlight,
     required this.picking,
     required this.onPick,
+    required this.focusOrder,
+    required this.focusNodes,
   });
 
   final InspectTree? tree;
@@ -693,6 +733,14 @@ class _ScreenOverlay extends StatelessWidget {
   final ValueNotifier<SemanticsSnapshotNode?> semanticsHighlight;
   final ValueNotifier<bool> picking;
   final ValueChanged<String> onPick;
+
+  /// The Semantics tab's reading-order switch.
+  final ValueNotifier<bool> focusOrder;
+
+  /// The utterances to number when the switch is on, in reading order — null
+  /// while another tab is showing, which is what keeps the discs from
+  /// outliving the toggle that controls them.
+  final List<SemanticsSnapshotNode>? focusNodes;
 
   @override
   Widget build(BuildContext context) {
@@ -732,10 +780,36 @@ class _ScreenOverlay extends StatelessWidget {
       ),
     );
 
+    // The reading-order discs sit under the highlight rectangle, so hovering
+    // a row still points at one box even while the whole order is numbered.
+    var layered = ValueListenableBuilder(
+      valueListenable: focusOrder,
+      builder: (context, numbered, child) {
+        var nodes = focusNodes;
+        if (!numbered || nodes == null || nodes.isEmpty) return child!;
+        var colors = context.colors;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            CustomPaint(
+              painter: FocusOrderPainter(
+                rects: [for (var node in nodes) node.rect],
+                color: colors.accent,
+                onColor: colors.onPrimary,
+                haloColor: colors.bg,
+              ),
+            ),
+            child!,
+          ],
+        );
+      },
+      child: box,
+    );
+
     return ValueListenableBuilder(
       valueListenable: picking,
       builder: (context, on, _) {
-        if (!on) return IgnorePointer(child: box);
+        if (!on) return IgnorePointer(child: layered);
         return InspectPickRegion(
           onSweep: (point) =>
               highlight.value = tree?.nodeAtPoint(point.dx, point.dy)?.id,
@@ -749,7 +823,7 @@ class _ScreenOverlay extends StatelessWidget {
             if (hit != null) onPick(hit.id);
           },
           onDisarm: () => picking.value = false,
-          child: box,
+          child: layered,
         );
       },
     );
