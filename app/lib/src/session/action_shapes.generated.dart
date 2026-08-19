@@ -4553,6 +4553,18 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'name', 'type': 'String'},
       <String, Object?>{'name': 'ok', 'type': 'bool'},
       <String, Object?>{
+        'name': 'skipped',
+        'type': 'bool',
+        'doc':
+            'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
+      },
+      <String, Object?>{
+        'name': 'skipReason',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The reason the declaration gave, when it gave one.',
+      },
+      <String, Object?>{
         'name': 'device',
         'type': 'String',
         'optional': true,
@@ -4562,6 +4574,8 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'steps',
         'type': 'List<ScenarioRunStep>',
+        'doc':
+            'Trimmed in an action\'s answer per its `steps=` mode; whole in the file `ScenarioRunPackage.report` names.',
         'shape': <String, Object?>{
           'type': 'ScenarioRunStep',
           'fields': <Object?>[
@@ -4913,6 +4927,18 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{'name': 'name', 'type': 'String'},
             <String, Object?>{'name': 'ok', 'type': 'bool'},
             <String, Object?>{
+              'name': 'skipped',
+              'type': 'bool',
+              'doc':
+                  'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
+            },
+            <String, Object?>{
+              'name': 'skipReason',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The reason the declaration gave, when it gave one.',
+            },
+            <String, Object?>{
               'name': 'device',
               'type': 'String',
               'optional': true,
@@ -4922,6 +4948,8 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'steps',
               'type': 'List<ScenarioRunStep>',
+              'doc':
+                  'Trimmed in an action\'s answer per its `steps=` mode; whole in the file `ScenarioRunPackage.report` names.',
               'shape': <String, Object?>{
                 'type': 'ScenarioRunStep',
                 'fields': <Object?>[
@@ -5291,6 +5319,18 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{'name': 'name', 'type': 'String'},
                   <String, Object?>{'name': 'ok', 'type': 'bool'},
                   <String, Object?>{
+                    'name': 'skipped',
+                    'type': 'bool',
+                    'doc':
+                        'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
+                  },
+                  <String, Object?>{
+                    'name': 'skipReason',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'The reason the declaration gave, when it gave one.',
+                  },
+                  <String, Object?>{
                     'name': 'device',
                     'type': 'String',
                     'optional': true,
@@ -5300,6 +5340,8 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'steps',
                     'type': 'List<ScenarioRunStep>',
+                    'doc':
+                        'Trimmed in an action\'s answer per its `steps=` mode; whole in the file `ScenarioRunPackage.report` names.',
                     'shape': <String, Object?>{
                       'type': 'ScenarioRunStep',
                       'fields': <Object?>[

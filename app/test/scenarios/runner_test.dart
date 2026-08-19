@@ -571,6 +571,57 @@ void main() {
         doubly.deleteSync();
       }
 
+      // `scenario(skip: true)` reaches `testWidgets`, so `flutter test`
+      // reports it skipped — and the harness used to run the body anyway,
+      // the two lanes answering differently about the same file. A consumer
+      // suite was green on CI and red on the runner with nothing connecting
+      // the two.
+      var skipped = File(
+        p.join(packageRoot, 'test', 'scenarios', 'partly_skipped_test.dart'),
+      )..writeAsStringSync(_partlySkippedSource);
+      try {
+        await runner.refresh();
+        var listed = await runner.list();
+        expect(
+          listed.singleWhere((entry) => entry.name == 'Declared broken').skip,
+          isTrue,
+        );
+        expect(
+          listed.singleWhere((entry) => entry.name == 'Still runs').skip,
+          isFalse,
+        );
+        var report = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/partly_skipped_test.dart',
+        );
+        var outcomes = (report['scenarios']! as List)
+            .cast<Map<String, dynamic>>();
+        var skippedOutcome = outcomes.singleWhere(
+          (outcome) => outcome['name'] == 'Declared broken',
+        );
+        // Green the way `flutter test` is green on it — but saying why.
+        expect(skippedOutcome['ok'], isTrue);
+        expect(skippedOutcome['skipped'], isTrue);
+        expect(skippedOutcome['steps'], isEmpty);
+        var ran = outcomes.singleWhere(
+          (outcome) => outcome['name'] == 'Still runs',
+        );
+        expect(ran['ok'], isTrue);
+        expect(ran['skipped'], isNull);
+        expect(ran['steps'], isNotEmpty);
+        // Naming the skipped scenario alone still answers — skipped, not
+        // "selector matched nothing".
+        var alone = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/partly_skipped_test.dart',
+          scenario: 'Declared broken',
+        );
+        var only = (alone['scenarios']! as List).single as Map<String, dynamic>;
+        expect(only['skipped'], isTrue);
+      } finally {
+        skipped.deleteSync();
+      }
+
       // A folder with its own `flutter_test_config.dart`: the harness runs it
       // — the same file `flutter test` would run — and reports what it says
       // the folder is for. Executed, never parsed, so a profile imported from
@@ -1136,6 +1187,25 @@ void main() {
   scenario('never runs', (s) async {
     await s.pumpWidget(
       const MaterialApp(home: Scaffold(body: Text('unreachable'))),
+    );
+  });
+}
+''';
+
+/// A skipped scenario whose body would fail, beside one that runs — skipped
+/// the way an author skips: because the body is known broken.
+const _partlySkippedSource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Declared broken', (s) async {
+    fail('the body of a skipped scenario ran');
+  }, skip: true);
+
+  scenario('Still runs', (s) async {
+    await s.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('alive'))),
     );
   });
 }

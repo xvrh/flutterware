@@ -79,6 +79,30 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
 
   tearDown(() => root.deleteSync(recursive: true));
 
+  test('a relative output resolves against the worktree, and run.json lands '
+      'beside the artifacts', () async {
+    // A relative path handed through verbatim reached two writers with two
+    // working directories — `fw` put `run.json` under its own CWD while the
+    // tester put the PNGs under the package — so the index and the images it
+    // named ended up in different trees.
+    writeScenarios('shop_test.dart', ['Around the shop']);
+    var runner = _FakeRunner(steps: 2);
+    var subject = core(runner);
+
+    var result =
+        (await subject.invoke(
+              'run',
+              arguments: {'output': p.join('build', 'doc_run')},
+            ))!
+            as ScenarioRunResult;
+
+    var expected = p.join(root.path, 'build', 'doc_run');
+    expect(runner.outDirsSeen.single, expected);
+    var report = result.packages.single.report!;
+    expect(p.dirname(report), expected);
+    expect(File(report).existsSync(), isTrue);
+  });
+
   group('a selector that matched nothing', () {
     test('names the scenarios the file does declare', () async {
       writeScenarios('shop_test.dart', ['Around the shop', 'Order a coffee']);
@@ -432,6 +456,9 @@ class _FakeRunner extends ScenarioRunner {
   /// The axes every `run` call arrived with, in order.
   final axesSeen = <ScenarioAxes>[];
 
+  /// The output directory every `run` call arrived with, in order.
+  final outDirsSeen = <String>[];
+
   @override
   Future<List<ScenarioListing>> list() async => listings;
 
@@ -452,6 +479,7 @@ class _FakeRunner extends ScenarioRunner {
     DateTime? clock,
   }) async {
     axesSeen.add(axes);
+    outDirsSeen.add(outDir);
     if (failure case var failure?) throw StateError(failure);
     if (!matches) return {'ms': 1, 'scenarios': <Object?>[]};
     return {

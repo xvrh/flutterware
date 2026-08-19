@@ -1307,7 +1307,7 @@ packages: List<ScenarioListPackage>
 
 #### `run` — Run
 
-Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured **at** the failure, whatever the capture policy.
+Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured **at** the failure, whatever the capture policy. The answer summarises the steps (see `steps=`); `run.json` in the output directory always carries every one.
 
 ```sh
 fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--orientation=…] [--language=…] [--devices=…] [--languages=…] [--orientations=…] [--matrix=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
@@ -1327,9 +1327,11 @@ packages: List<ScenarioRunPackage>
     file: String
     name: String
     ok: bool
+    skipped: bool   # True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.
+    skipReason: String?   # The reason the declaration gave, when it gave one.
     device: String?   # The device it actually ran as.
     ms: int
-    steps: List<ScenarioRunStep>
+    steps: List<ScenarioRunStep>   # Trimmed in an action's answer per its `steps=` mode; whole in the file `ScenarioRunPackage.report` names.
       index: int   # 1-based position in the scenario's capture sequence.
       position: String   # Where the step sits in the scenario's *shape* — the `split` choices taken to reach it by index, then the count since the last one: `'#2'` on the trunk, `'0.1#3'` two splits deep.
       parent: int?   # The [index] of the step this one follows; null for the scenario's first.
@@ -1393,7 +1395,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 | `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it |
 | `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
-| `output` | string | no | — | Where step artifacts are written; a fresh directory under the package's build/ when omitted |
+| `output` | string | no | — | Where step artifacts are written, worktree-relative unless absolute; a fresh directory under the package's build/ when omitted. run.json lands in the same directory as the images it names. |
 | `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted lets each scenario run as its own folder says — the first device of the profile its `flutter_test_config.dart` declares, or iphone-13 where a folder declares none. `fit` means the bare 800×600 test surface. The same vocabulary Previews frames with. |
 | `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height and the safe areas become the ones that device declares for landscape, which is not a permutation of the portrait four — a phone loses its status bar rather than moving it. Ignored by anything that cannot turn, which is every desktop size and `fit`. Applies to whatever device the run ends up as, including one a folder's profile chose rather than this call. |
 | `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale and as the scenario's own assignment (`s.assignment?.language`), the same pair `FW_LANGUAGES` sets under `flutter test` |
@@ -1489,7 +1491,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `file` | string | no | — | Export only this scenario file, package-relative — as `list` reports it |
 | `scenario` | string | no | — | Export only this scenario, by name. Needs `file` too. |
 | `tag` | string | no | — | Export only scenarios carrying this tag |
-| `output` | string | no | — | Where the page goes; defaults to `build/scenarios/web` under the package. Emptied before writing. |
+| `output` | string | no | — | Where the page goes, worktree-relative unless absolute; defaults to `build/scenarios/web` under the package. Emptied before writing. |
 | `base-href` | string | no | — | What the page is mounted under when it is not the root — `/scenarios/`. Leading and trailing slash. |
 | `offline` | choice | no | — | Bundle CanvasKit into the page instead of fetching it from Google's CDN. Bigger, and the only form that works behind a firewall or after the engine revision stops being hosted. |
 | `device` | choice | no | — | Run as a device before capturing the page |
@@ -1550,7 +1552,7 @@ count: int   # How many images were written, over every package and assignment.
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
-| `output` | string | no | — | Where the tree is written; `build/flutterware/screenshots` under the package when omitted. Emptied first, so what is there afterwards is exactly this run. |
+| `output` | string | no | — | Where the tree is written, worktree-relative unless absolute; `build/flutterware/screenshots` under the package when omitted. Emptied first, so what is there afterwards is exactly this run. |
 | `devices` | string | no | — | A comma-separated list — one directory per device. Omitted runs each scenario on its folder profile's first device. |
 | `languages` | string | no | — | A comma-separated list — one directory per language, crossed with `devices` |
 | `tag` | string | no | — | Keep only shots carrying this tag — `Shot('Home', tags: ['store'])`. Omitted keeps every named shot, which is what a project that tags nothing wants. |

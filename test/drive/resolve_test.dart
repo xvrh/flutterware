@@ -72,7 +72,10 @@ void main() {
 
     expect(error.failure, TargetFailure.notFound);
     expect('$error', contains('nothing matches "Pay"'));
-    expect('$error', contains('`scrollTo` walks to it'));
+    // Nothing on this screen scrolls, so the refusal must not send the
+    // reader hunting scroll positions.
+    expect('$error', contains('Nothing on this screen scrolls'));
+    expect('$error', isNot(contains('scrollTo')));
     expect('$error', contains('Visible text: Buy'));
   });
 
@@ -91,9 +94,8 @@ void main() {
     expect('$error', isNot(contains('lazy list')));
   });
 
-  testWidgets('a screen that has content keeps the lazy-list hint', (
-    tester,
-  ) async {
+  testWidgets('a screen that has content keeps the guess instead of the '
+      'blank hint', (tester) async {
     await tester.pumpWidget(_covered());
     var resolver = TargetResolver(
       tester,
@@ -102,7 +104,7 @@ void main() {
 
     var error = await _refusal(() => resolver.resolve('Pay', 'tap'));
 
-    expect('$error', contains('lazy list'));
+    expect('$error', contains('never built'));
     expect('$error', isNot(contains('Nothing has rendered.')));
   });
 
@@ -350,6 +352,35 @@ void main() {
     expect('$error', contains('`scrollTo` walks to it'));
   });
 
+  testWidgets('a scrollable screen names the empty-list cause beside the '
+      'lazy-list one', (tester) async {
+    // The other reason "nothing matches" on a list screen: the list is empty
+    // — a seeding bug, an unpinned clock — and no amount of scrolling will
+    // build the row. The visible text beside the guess is what says which.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Column(
+          children: [
+            const Text('Bookings'),
+            Expanded(child: ListView(children: const [])),
+          ],
+        ),
+      ),
+    );
+    var resolver = TargetResolver(
+      tester,
+      describeScreen: () => visibleTextsOf(tester).join(', '),
+    );
+
+    var error = await _refusal(
+      () => resolver.resolve('Visit Dr. Aubrey', 'tap'),
+    );
+
+    expect('$error', contains('`scrollTo` walks to it'));
+    expect('$error', contains('or the list that would hold it is empty'));
+    expect('$error', contains('Visible text: Bookings'));
+  });
+
   testWidgets('a trailing invisible character is still a near miss', (
     tester,
   ) async {
@@ -371,7 +402,7 @@ void main() {
     var error = await _refusal(() => resolver.resolve('Back', 'tap'));
 
     expect('$error', isNot(contains('differs from yours')));
-    expect('$error', contains('lazy list'));
+    expect('$error', contains('Nothing on this screen scrolls'));
   });
 
   testWidgets('a miss on words the semantics tree carries names label', (
@@ -445,7 +476,7 @@ void main() {
       var error = await _refusal(() => resolver.resolve('Add to cart', 'tap'));
 
       expect('$error', isNot(contains('semantics label')));
-      expect('$error', contains('lazy list'));
+      expect('$error', contains('Nothing on this screen scrolls'));
     },
     semanticsEnabled: false,
   );

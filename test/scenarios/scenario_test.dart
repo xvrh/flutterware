@@ -86,8 +86,10 @@ void main() {
   }, settle: Settle.full);
 
   // `skip`, `tags` and `timeout` are `testWidgets`'s own, passed straight
-  // through — the last dent in the superset. Only `skip` shows itself without
-  // a runner configuration to go with it.
+  // through — the last dent in the superset. The flutterware runner honours
+  // `skip` too: the walk answers it without loading the body
+  // (`runner_test.dart` pins that), so this file reads the same on both
+  // lanes.
   scenario('a skipped scenario never runs its body', (s) async {
     fail('the body of a skipped scenario ran');
   }, skip: true);

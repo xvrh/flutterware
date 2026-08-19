@@ -337,9 +337,17 @@ class _ScenarioList extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  outcome.ok ? Icons.check_circle_outline : Icons.error_outline,
+                  outcome.skipped
+                      ? Icons.remove_circle_outline
+                      : outcome.ok
+                      ? Icons.check_circle_outline
+                      : Icons.error_outline,
                   size: FwIconSize.sm,
-                  color: outcome.ok ? colors.grn : colors.red,
+                  color: outcome.skipped
+                      ? colors.mut2
+                      : outcome.ok
+                      ? colors.grn
+                      : colors.red,
                 ),
                 const Gap(FwSpacing.sm),
                 Expanded(
