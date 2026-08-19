@@ -11,6 +11,7 @@ library;
 
 import 'dart:io';
 
+import '../../utils/run_git.dart';
 import '../facts.dart';
 
 /// Where a branch is, from the one call that reports every branch at once.
@@ -210,7 +211,7 @@ class GitProbe {
       String? workingDirectory,
     })?
     runProcess,
-  }) : _run = runProcess ?? Process.run;
+  }) : _run = runProcess ?? runGitTool;
 
   final Future<ProcessResult> Function(
     String executable,

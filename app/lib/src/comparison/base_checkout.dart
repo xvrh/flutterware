@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../utils/run_dir.dart';
+import '../utils/run_git.dart';
 
 /// The other side of a comparison, on disk.
 ///
@@ -125,7 +126,7 @@ class BaseCheckout {
       await _remove(repoRoot: repoRoot, path: path);
     }
 
-    var added = await Process.run('git', [
+    var added = await runGit([
       '-C',
       repoRoot,
       'worktree',
@@ -138,8 +139,8 @@ class BaseCheckout {
       // The commonest failure is a registration left behind by a checkout
       // somebody deleted by hand, which makes git refuse a path it still
       // believes in. Pruning costs a stat per registered worktree.
-      await Process.run('git', ['-C', repoRoot, 'worktree', 'prune']);
-      added = await Process.run('git', [
+      await runGit(['-C', repoRoot, 'worktree', 'prune']);
+      added = await runGit([
         '-C',
         repoRoot,
         'worktree',
@@ -181,7 +182,7 @@ class BaseCheckout {
     required String repoRoot,
     required String path,
   }) async {
-    var removed = await Process.run('git', [
+    var removed = await runGit([
       '-C',
       repoRoot,
       'worktree',
@@ -194,7 +195,7 @@ class BaseCheckout {
     // half-created checkout is in. The directory still has to go.
     var directory = Directory(path);
     if (directory.existsSync()) directory.deleteSync(recursive: true);
-    await Process.run('git', ['-C', repoRoot, 'worktree', 'prune']);
+    await runGit(['-C', repoRoot, 'worktree', 'prune']);
   }
 
   /// Named with a leading dot so it cannot be mistaken for the project's own

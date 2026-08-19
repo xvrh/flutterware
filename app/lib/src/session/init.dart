@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../identity/face_guess.dart';
 import '../shell/repo_layout.dart';
+import '../utils/run_git.dart';
 
 /// Where an agent looks for the servers a project offers.
 ///
@@ -37,7 +38,7 @@ class ProjectInit {
       String? workingDirectory,
     })?
     runProcess,
-  }) : _run = runProcess ?? Process.run;
+  }) : _run = runProcess ?? runGitTool;
 
   /// The repo root, as [findRepoRoot] resolves it — so `fw` from a
   /// subdirectory and `fw` from the top initialize the same place.

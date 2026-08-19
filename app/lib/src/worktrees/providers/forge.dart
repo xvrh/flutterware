@@ -15,6 +15,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../../utils/run_git.dart';
 import '../facts.dart';
 
 typedef RunProcess =
@@ -66,7 +67,7 @@ class RemoteForgeProbe implements ForgeProbe {
     RunProcess? runProcess,
     ForgeProbe? github,
     ForgeProbe? gitlab,
-  }) : _run = runProcess ?? Process.run,
+  }) : _run = runProcess ?? runGitTool,
        github = github ?? GitHubForgeProbe(runProcess: runProcess),
        gitlab = gitlab ?? GitLabForgeProbe(runProcess: runProcess);
 
@@ -106,7 +107,7 @@ class RemoteForgeProbe implements ForgeProbe {
 
 /// GitHub, via `gh pr list`.
 class GitHubForgeProbe implements ForgeProbe {
-  GitHubForgeProbe({RunProcess? runProcess}) : _run = runProcess ?? Process.run;
+  GitHubForgeProbe({RunProcess? runProcess}) : _run = runProcess ?? runGitTool;
 
   final RunProcess _run;
 
@@ -212,7 +213,7 @@ class GitHubForgeProbe implements ForgeProbe {
 /// would be one request per merge request, which is the thing this design
 /// refuses to do.
 class GitLabForgeProbe implements ForgeProbe {
-  GitLabForgeProbe({RunProcess? runProcess}) : _run = runProcess ?? Process.run;
+  GitLabForgeProbe({RunProcess? runProcess}) : _run = runProcess ?? runGitTool;
 
   final RunProcess _run;
 

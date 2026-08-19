@@ -11,6 +11,7 @@ import 'dart:typed_data';
 
 import 'package:flutterware/plugins.dart';
 
+import '../utils/run_git.dart';
 import '../worktrees/providers/git.dart';
 import 'change_set.dart';
 import 'changes_config_cache.dart';
@@ -340,8 +341,7 @@ class ChangesProbe {
     List<String> arguments,
   ) async {
     try {
-      var result = await Process.run(
-        'git',
+      var result = await runGit(
         arguments,
         workingDirectory: directory,
         stdoutEncoding: null,

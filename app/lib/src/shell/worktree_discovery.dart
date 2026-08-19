@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../comparison/base_checkout.dart';
+import '../utils/run_git.dart';
 import 'worktree.dart';
 
 /// Lists the project's worktrees by asking git.
@@ -21,7 +22,7 @@ class WorktreeDiscovery {
        // formal would name the parameter `_readGitPointer` at every call site.
        // ignore: prefer_initializing_formals
        _readGitPointer = readGitPointer,
-       _run = runProcess ?? Process.run;
+       _run = runProcess ?? runGitTool;
 
   /// Reads a linked worktree's `.git` file, which is where git records the
   /// worktree's real name. A file read rather than a `git rev-parse` per
