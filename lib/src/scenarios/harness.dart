@@ -775,7 +775,7 @@ Future<Map<String, Object?>> _runOne(
   String? device,
 }) async {
   var steps = <Map<String, Object?>>[];
-  var directory = Directory('$outDir/${_fileSafe(file)}/${_fileSafe(name)}')
+  var directory = Directory('$outDir/${scenarioFileSafe(file)}/${scenarioFileSafe(name)}')
     ..createSync(recursive: true);
   // Each step's tree as written, kept for one comparison: a verb whose tree
   // is byte-identical to its parent's changed nothing on screen, which is
@@ -795,9 +795,12 @@ Future<Map<String, Object?>> _runOne(
     // is called now that it is not called `step 3`.
     var did = [?capture.verb, ?capture.target].join(' ').trim();
     var label = capture.name ?? (did.isEmpty ? 'step ${capture.index}' : did);
+    // The stem shares its component with the index that precedes it and the
+    // suffix that follows, so what is left over is what the label may use.
+    var prefix = '${capture.index}-';
     var base =
-        '${directory.path}/${capture.index}-'
-        '${_fileSafe(capture.failure != null ? 'failed' : label)}';
+        '${directory.path}/$prefix'
+        '${scenarioFileSafe(capture.failure != null ? 'failed' : label, max: scenarioNameMax - prefix.length - _longestStepSuffix.length)}';
     var imagePath = '$base.${capture.format == 'raw' ? 'raw' : 'png'}';
     File(imagePath).writeAsBytesSync(capture.bytes);
     // The tree next to the pixels — the step triple's third leg. Written to a
@@ -1094,5 +1097,24 @@ String _timedOutMessage(Duration deadline) {
       'opt out, with `scenario(timeout: …)`.';
 }
 
-String _fileSafe(String name) =>
-    name.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+/// `NAME_MAX` — 255 bytes on APFS, ext4 and NTFS alike, and per path
+/// *component* rather than per path.
+const scenarioNameMax = 255;
+
+/// The longest suffix a step writes under its own stem, so a label can be
+/// budgeted against it. Attachments add a name the scenario chose and are not
+/// budgeted for: nothing here can bound what a caller passes.
+const _longestStepSuffix = '.semantics.json';
+
+/// Sanitises [name] into one path component, and **caps it**.
+///
+/// The cap is why this exists rather than a bare `replaceAll`. An automatic
+/// capture is labelled by its verb and its target, and a target given as a
+/// `Finder` describes itself with the matched widget's whole `toString()` —
+/// `TextStyle` dump included. That ran past `NAME_MAX` and threw
+/// `FileSystemException`, failing a scenario that had in fact run: the work
+/// was done, and only writing it down was impossible.
+String scenarioFileSafe(String name, {int max = scenarioNameMax}) {
+  var safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+  return safe.length <= max ? safe : safe.substring(0, max);
+}
