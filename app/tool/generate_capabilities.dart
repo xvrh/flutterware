@@ -67,6 +67,10 @@ List<String> get shapeSources => [
   // Not for its actions — it declares none — but for its hand-written
   // `toJson`, which is read as the shape of every artifact any action returns.
   '../lib/src/plugins/artifact.dart',
+  // Same reason: the run report moved into the published package (a consumer
+  // script reads `run.json` through it), and its hand-written `toJson`s are
+  // what the `run` action's shape is read from.
+  '../lib/src/scenarios/report.dart',
 ];
 
 /// Relative to the `app/` package, which is where the generator and both tests

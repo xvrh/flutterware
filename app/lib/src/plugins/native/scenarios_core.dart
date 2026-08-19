@@ -337,7 +337,7 @@ class ScenariosCore extends PluginCore {
       // phone when the run ends.
       var device = event['device'] as String? ?? state.axes.device;
       var step = _stepFrom(
-        (event['step']! as Map).cast<String, dynamic>(),
+        (event['step']! as Map).cast<String, Object?>(),
         package,
         file: file,
         scenario: scenario,
@@ -696,7 +696,9 @@ class ScenariosCore extends PluginCore {
               description:
                   'How many steps ride back in the answer. Every run writes '
                   'all of them to `run.json` in its output directory either '
-                  'way and each package names that file, so this is about what '
+                  'way and each package names that file — a script reads it '
+                  'back typed with `package:flutterware/scenarios_report.dart` '
+                  '— so this is about what '
                   'arrives without asking: `failing` (default) is the frame '
                   'each red scenario died on, `all` is every step of every '
                   'scenario — a matrix suite is hundreds — and `none` is the '
@@ -1703,7 +1705,7 @@ class ScenariosCore extends PluginCore {
     if (!file.existsSync()) return null;
     try {
       return ScenarioRunResult.fromJson(
-        (jsonDecode(file.readAsStringSync()) as Map).cast<String, dynamic>(),
+        (jsonDecode(file.readAsStringSync()) as Map).cast<String, Object?>(),
       );
     } on FormatException {
       return null;
@@ -2664,27 +2666,25 @@ class ScenariosCore extends PluginCore {
   /// the upload step runs. Paths are relative to the index, which is what
   /// makes the whole directory movable.
   void _writeIndex(String base, Iterable<ScenarioRunPackage> runs) {
-    var index = {
-      'runs': [
+    var index = ScenarioRunIndex(
+      runs: [
         for (var run in runs)
-          {
-            'package': run.path,
-            'axes': ?run.axes,
-            'output': p.relative(run.output, from: base),
-            'ok': run.error == null && run.scenarios.every((s) => s.ok),
-            'scenarios': run.scenarios.length,
-            'failed': run.scenarios.where((s) => !s.ok).length,
-            if (run.scenarios.where((s) => s.skipped).length case var n
-                when n > 0)
-              'skipped': n,
-            'error': ?run.error,
-          },
+          ScenarioRunIndexEntry(
+            package: run.path,
+            axes: run.axes,
+            output: p.relative(run.output, from: base),
+            ok: run.error == null && run.scenarios.every((s) => s.ok),
+            scenarios: run.scenarios.length,
+            failed: run.scenarios.where((s) => !s.ok).length,
+            skipped: run.scenarios.where((s) => s.skipped).length,
+            error: run.error,
+          ),
       ],
-    };
+    );
     Directory(base).createSync(recursive: true);
-    File(
-      p.join(base, 'index.json'),
-    ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(index));
+    File(p.join(base, scenarioRunIndexFile)).writeAsStringSync(
+      const JsonEncoder.withIndent('  ').convert(index.toJson()),
+    );
   }
 
   /// The escape hatch: drops [path]'s warm harness, so the next run
@@ -2732,95 +2732,40 @@ class ScenariosCore extends PluginCore {
     return p.isWithin(root, path) ? p.relative(path, from: root) : path;
   }
 
-  /// One step of the harness's vocabulary — the same map whether it arrived
-  /// in the final report or as a mid-run event — with its `fw://` address,
-  /// carrying [axes] as query parameters since the picture depends on them.
+  /// One step of the harness's vocabulary — the same record whether it
+  /// arrived in the final report or as a mid-run event — located: paths made
+  /// worktree-relative, and its `fw://` address assigned, carrying [axes] as
+  /// query parameters since the picture depends on them.
   ScenarioRunStep _stepFrom(
-    Map<String, dynamic> step,
+    Map<String, Object?> step,
+    String path, {
+    required String file,
+    required String scenario,
+    required ScenarioAxes axes,
+  }) => _locate(
+    ScenarioRunStep.fromJson(step),
+    path,
+    file: file,
+    scenario: scenario,
+    axes: axes,
+  );
+
+  ScenarioRunStep _locate(
+    ScenarioRunStep step,
     String path, {
     required String file,
     required String scenario,
     required ScenarioAxes axes,
   }) {
-    return ScenarioRunStep(
-      index: step['index']! as int,
-      position: step['position'] as String? ?? '',
-      parent: step['parent'] as int?,
-      branch: step['branch'] as String?,
-      name: step['name'] as String?,
-      action: switch (step['action']) {
-        Map<String, Object?> action => ScenarioStepAction(
-          verb: action['verb']! as String,
-          target: action['target'] as String?,
-          kind: action['kind'] as String?,
-        ),
-        _ => null,
-      },
-      auto: step['auto'] == true,
-      tags: (step['tags'] as List?)?.cast<String>() ?? const [],
+    return step.locate(
       root: host.worktree.path,
-      image: _relative(step['image']! as String),
-      format: step['format'] as String? ?? 'png',
-      width: step['width'] as int? ?? 0,
-      height: step['height'] as int? ?? 0,
-      tree: _relative(step['tree']! as String),
-      // The translation keys on this screen. Absent for every project that has
-      // not wired a catalog, which is why it is read rather than required.
-      keys: switch (step['keys']) {
-        String path => _relative(path),
-        _ => null,
-      },
-      semantics: switch (step['semantics']) {
-        String path => _relative(path),
-        _ => null,
-      },
-      texts: (step['texts']! as List).cast<String>(),
-      statusBrightness: step['statusBrightness'] as String?,
-      navBrightness: step['navBrightness'] as String?,
-      verb: step['verb'] as String?,
-      target: step['target'] as String?,
-      events: switch (step['events']) {
-        String path => _relative(path),
-        _ => null,
-      },
-      eventCount: step['eventCount'] as int? ?? 0,
-      eventChannels:
-          (step['eventChannels'] as Map?)?.cast<String, int>() ?? const {},
-      eventTitles: (step['eventTitles'] as List?)?.cast<String>() ?? const [],
-      eventsDropped: step['eventsDropped'] as int? ?? 0,
-      frames: switch (step['frames']) {
-        String path => _relative(path),
-        _ => null,
-      },
-      frameCount: step['frameCount'] as int?,
-      frameWidth: step['frameWidth'] as int?,
-      frameHeight: step['frameHeight'] as int?,
-      frameIntervalMs: step['frameIntervalMs'] as int?,
-      framesDropped: step['framesDropped'] as int?,
-      // Absent means settled: the harness writes the field only when it is
-      // not, so a healthy step's record stays the size it was.
-      settled: step['settled'] as bool? ?? true,
-      landed: step['landed'] as bool? ?? true,
-      strayFrames: step['strayFrames'] as int? ?? 0,
-      unchanged: step['unchanged'] == true,
-      failure: step['failure'] as String?,
-      attachments: [
-        for (var attachment
-            in (step['attachments'] as List?)?.cast<Map<String, Object?>>() ??
-                const <Map<String, Object?>>[])
-          ScenarioRunAttachment(
-            name: attachment['name']! as String,
-            file: _relative(attachment['file']! as String),
-            mimeType: attachment['mimeType'] as String?,
-            bytes: attachment['bytes'] as int? ?? 0,
-          ),
-      ],
+      path: _relative,
       address: Address(
         worktree: host.worktree.name,
         plugin: host.id,
         segments: scenarioSegments(path, file: file, scenario: scenario),
         axes: axes.toParams(),
-      ).child('${step['index']}').toString(),
+      ).child('${step.index}').toString(),
     );
   }
 
@@ -2846,60 +2791,24 @@ class ScenariosCore extends PluginCore {
       log: log,
       ms: report['ms'] as int? ?? 0,
       scenarios: [
-        for (var outcome
-            in (report['scenarios']! as List).cast<Map<String, dynamic>>())
-          ScenarioRunOutcome(
-            file: outcome['file']! as String,
-            name: outcome['name']! as String,
-            ok: outcome['ok'] == true,
-            skipped: outcome['skipped'] == true,
-            skipReason: outcome['skipReason'] as String?,
-            device: outcome['device'] as String?,
-            ms: outcome['ms'] as int? ?? 0,
-            // What every catalog was asked for on the way through this
-            // scenario — a larger set than what any screen *showed*, and the
-            // only thing that can say a key was reached at all.
-            translations: switch (outcome['translations']) {
-              Map read => {
-                for (var entry in read.entries)
-                  '${entry.key}': switch (entry.value) {
-                    Map values => {
-                      for (var value in values.entries)
-                        '${value.key}': '${value.value}',
-                    },
-                    _ => <String, String>{},
-                  },
-              },
-              _ => null,
-            },
-            stepCount: (outcome['steps']! as List).length,
-            unchangedCount: (outcome['steps']! as List)
-                .where((step) => (step as Map)['unchanged'] == true)
-                .length,
-            steps: [
-              for (var step
-                  in (outcome['steps']! as List).cast<Map<String, dynamic>>())
-                _stepFrom(
+        for (var entry
+            in (report['scenarios']! as List).cast<Map<String, Object?>>())
+          () {
+            var outcome = ScenarioRunOutcome.fromJson(entry);
+            return outcome.carrying([
+              for (var step in outcome.steps)
+                _locate(
                   step,
                   path,
-                  file: outcome['file']! as String,
-                  scenario: outcome['name']! as String,
+                  file: outcome.file,
+                  scenario: outcome.name,
                   // The address on an artifact says what produced it, so an
                   // unspecified device is filled in with what the folder
                   // resolved it to — a link that reopens the same picture.
-                  axes: axes.copyWith(device: outcome['device'] as String?),
+                  axes: axes.copyWith(device: outcome.device),
                 ),
-            ],
-            errors: [
-              for (var error
-                  in (outcome['errors'] as List? ?? const [])
-                      .cast<Map<String, dynamic>>())
-                ScenarioRunError(
-                  error: error['error']! as String,
-                  stack: error['stack'] as String?,
-                ),
-            ],
-          ),
+            ]);
+          }(),
       ],
     );
   }

@@ -24,6 +24,7 @@ import 'events.dart';
 import 'fonts.dart';
 import 'motion.dart';
 import 'profile.dart';
+import 'report.dart';
 import 'run_args.dart';
 import 'scenario.dart';
 import 'run_listener.dart';
@@ -570,19 +571,17 @@ Future<Map<String, Object?>> _run(
 
   Map<String, Object?> skippedOutcome(Test entry, Group group, String? file) {
     var (_, framedDevice) = framingFor(file ?? '');
-    return {
-      'file': file ?? '',
-      'name': _leafName(entry, group),
-      'device': ?framedDevice,
+    return ScenarioRunOutcome(
+      file: file ?? '',
+      name: _leafName(entry, group),
+      device: framedDevice,
       // Not a failure — `flutter test` exits 0 on a skipped test — but not
       // silently green either: the flag is what every surface above renders
       // as its own third state.
-      'ok': true,
-      'skipped': true,
-      'skipReason': ?entry.metadata.skipReason,
-      'ms': 0,
-      'steps': <Map<String, Object?>>[],
-    };
+      ok: true,
+      skipped: true,
+      skipReason: entry.metadata.skipReason,
+    ).toJson();
   }
 
   /// The selected skipped scenarios of a group nothing in will run — so a
@@ -660,15 +659,15 @@ Future<Map<String, Object?>> _run(
             // Reported against each scenario that would have run, not once
             // against the group: a caller who asked for one scenario must find
             // that scenario in the answer, failed and saying why.
-            outcomes.add({
-              'file': groupFile ?? '',
-              'name': name,
-              'device': ?framedDevice,
-              'ok': false,
-              'ms': 0,
-              'steps': <Map<String, Object?>>[],
-              'errors': [setUpAllError],
-            });
+            outcomes.add(
+              ScenarioRunOutcome(
+                file: groupFile ?? '',
+                name: name,
+                device: framedDevice,
+                ok: false,
+                errors: [setUpAllError],
+              ).toJson(),
+            );
             break;
           }
           // Read by `scenario()` inside the test body, applied through the
@@ -710,14 +709,14 @@ Future<Map<String, Object?>> _run(
       if (await _runHook(hook, suite, scope) case var error?) {
         // Its own outcome: a cleanup failure belongs to nobody's scenario, and
         // marking a scenario that passed as failed would be a lie.
-        outcomes.add({
-          'file': groupFile ?? '',
-          'name': 'tearDownAll',
-          'ok': false,
-          'ms': 0,
-          'steps': <Map<String, Object?>>[],
-          'errors': [error],
-        });
+        outcomes.add(
+          ScenarioRunOutcome(
+            file: groupFile ?? '',
+            name: 'tearDownAll',
+            ok: false,
+            errors: [error],
+          ).toJson(),
+        );
       }
     }
   }
@@ -790,7 +789,7 @@ bool _selects(Test test, Group group, String? scenario, String? tag) {
 /// why a walk over `entries` alone never ran them.
 ///
 /// Returns the failure, or null when it passed.
-Future<Map<String, Object?>?> _runHook(
+Future<ScenarioRunError?> _runHook(
   Test hook,
   Suite suite,
   List<Group> scope,
@@ -815,10 +814,10 @@ Future<Map<String, Object?>?> _runHook(
     return null;
   }
   var error = live.errors.firstOrNull;
-  return {
-    'error': '${hook.name}: ${escaped ?? error?.error ?? 'failed'}',
-    'stack': ?(escapedStack ?? error?.stackTrace)?.toString(),
-  };
+  return ScenarioRunError(
+    error: '${hook.name}: ${escaped ?? error?.error ?? 'failed'}',
+    stack: (escapedStack ?? error?.stackTrace)?.toString(),
+  );
 }
 
 /// Whether the binding's manufactured "Multiple exceptions (N)…" details is
@@ -844,7 +843,7 @@ Future<Map<String, Object?>> _runOne(
   required String outDir,
   String? device,
 }) async {
-  var steps = <Map<String, Object?>>[];
+  var steps = <ScenarioRunStep>[];
   var directory = Directory(
     '$outDir/${scenarioFileSafe(file)}/${scenarioFileSafe(name)}',
   )..createSync(recursive: true);
@@ -956,76 +955,77 @@ Future<Map<String, Object?>> _runOne(
           var path =
               '$base.${scenarioAttachmentFileName(capture.attachments, index)}';
           File(path).writeAsBytesSync(attachment.bytes);
-          return {
-            'name': attachment.name,
-            'file': path,
-            'mimeType': ?attachment.mimeType,
-            'bytes': attachment.bytes.length,
-          };
+          return ScenarioRunAttachment(
+            name: attachment.name,
+            file: path,
+            mimeType: attachment.mimeType,
+            bytes: attachment.bytes.length,
+          );
         }(),
     ];
     var counts = <String, int>{};
     for (var event in capture.events) {
       counts[event.channel] = (counts[event.channel] ?? 0) + 1;
     }
-    var step = {
-      'index': capture.index,
-      'position': capture.position,
-      'parent': ?capture.parent,
-      'branch': ?capture.branch,
-      if (capture.name != null) 'name': capture.name,
-      // How the target was named, beside the name itself: a comparison reads
-      // it to know how far the label can be trusted, since visible text is
-      // translated where a key is the author's own word.
-      'auto': capture.name == null,
-      if (capture.tags.isNotEmpty) 'tags': capture.tags,
-      'image': imagePath,
-      'format': capture.format,
-      'width': capture.width,
-      'height': capture.height,
-      'tree': '$base.tree.json',
-      if (keys.isNotEmpty) 'keys': '$base.keys.json',
-      if (semantics != null) 'semantics': '$base.semantics.json',
-      'texts': capture.texts,
-      'statusBrightness': ?capture.statusBrightness,
-      'navBrightness': ?capture.navBrightness,
+    // The record every surface reads back, built as the published model so
+    // the writer here and the readers everywhere cannot drift a field apart.
+    // The paths are this machine's own; the host that knows the worktree
+    // relativizes them and assigns the `fw://` address.
+    var step = ScenarioRunStep(
+      index: capture.index,
+      position: capture.position,
+      parent: capture.parent,
+      branch: capture.branch,
+      name: capture.name,
+      auto: capture.name == null,
+      tags: capture.tags,
+      image: imagePath,
+      format: capture.format,
+      width: capture.width,
+      height: capture.height,
+      tree: '$base.tree.json',
+      keys: keys.isNotEmpty ? '$base.keys.json' : null,
+      semantics: semantics != null ? '$base.semantics.json' : null,
+      texts: capture.texts,
+      statusBrightness: capture.statusBrightness,
+      navBrightness: capture.navBrightness,
       // The transition into this step: the verb that caused it, and what the
       // app did on the way.
-      'verb': ?capture.verb,
-      'target': ?capture.target,
-      if (capture.events.isNotEmpty) ...{
-        'events': '$base.events.json',
-        'eventCount': capture.events.length,
-        'eventChannels': counts,
-        // The one-line summaries, inline and capped: the part an agent
-        // reasons about without opening a file. `system` is left out — it is
-        // the channel a reader filters away, and it is most of the volume.
-        'eventTitles': [
-          for (var event in capture.events)
-            if (event.channel != ScenarioChannel.system)
-              '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
-        ].take(_maxInlineTitles).toList(),
-      },
-      if (capture.eventsDropped > 0) 'eventsDropped': capture.eventsDropped,
-      if (attachments.isNotEmpty) 'attachments': attachments,
-      if (framesDir != null) ...{
-        'frames': framesDir,
-        'frameCount': capture.motion.bytes.length,
-        'frameWidth': capture.motion.width,
-        'frameHeight': capture.motion.height,
-        // The fake milliseconds between two frames — what a player runs at to
-        // show the animation at the speed the app would have played it.
-        'frameIntervalMs': capture.motionInterval!.inMilliseconds,
-        if (capture.motion.dropped > 0) 'framesDropped': capture.motion.dropped,
-      },
-      // All omitted in the healthy case, so a normal step's record stays the
-      // size it was.
-      if (!capture.settled) 'settled': false,
-      if (!capture.landed) 'landed': false,
-      if (capture.strayFrames > 0) 'strayFrames': capture.strayFrames,
-      if (unchanged) 'unchanged': true,
-      'failure': ?capture.failure,
-    };
+      verb: capture.verb,
+      target: capture.target,
+      events: capture.events.isNotEmpty ? '$base.events.json' : null,
+      eventCount: capture.events.isNotEmpty ? capture.events.length : null,
+      eventChannels: capture.events.isNotEmpty ? counts : null,
+      // The one-line summaries, inline and capped: the part an agent
+      // reasons about without opening a file. `system` is left out — it is
+      // the channel a reader filters away, and it is most of the volume.
+      eventTitles: capture.events.isEmpty
+          ? null
+          : [
+              for (var event in capture.events)
+                if (event.channel != ScenarioChannel.system)
+                  '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
+            ].take(_maxInlineTitles).toList(),
+      eventsDropped: capture.eventsDropped > 0 ? capture.eventsDropped : null,
+      attachments: attachments,
+      frames: framesDir,
+      frameCount: framesDir != null ? capture.motion.bytes.length : null,
+      frameWidth: framesDir != null ? capture.motion.width : null,
+      frameHeight: framesDir != null ? capture.motion.height : null,
+      // The fake milliseconds between two frames — what a player runs at to
+      // show the animation at the speed the app would have played it.
+      frameIntervalMs: framesDir != null
+          ? capture.motionInterval!.inMilliseconds
+          : null,
+      framesDropped: framesDir != null && capture.motion.dropped > 0
+          ? capture.motion.dropped
+          : null,
+      settled: capture.settled,
+      landed: capture.landed,
+      strayFrames: capture.strayFrames,
+      unchanged: unchanged,
+      failure: capture.failure,
+    );
     steps.add(step);
     // Announced the moment it exists — the artifacts are already on disk —
     // so a host drawing the flow can fill it in while the scenario still
@@ -1038,7 +1038,7 @@ Future<Map<String, Object?>> _runOne(
       // flow live has to frame the first picture, and by then the answer is
       // already known.
       'device': ?device,
-      'step': step,
+      'step': step.toJson(),
     });
   };
 
@@ -1047,7 +1047,7 @@ Future<Map<String, Object?>> _runOne(
   // stays green and the error surfaces as an uncaught zone error. Intercepting
   // the reporter is how the failure lands in the outcome — the same hook
   // `flutter test`'s own bootstrap uses.
-  var failures = <Map<String, Object?>>[];
+  var failures = <ScenarioRunError>[];
   var priorReporter = reportTestException;
   reportTestException = (details, testDescription) {
     var caught = scenarioCaughtErrors ?? const [];
@@ -1060,19 +1060,23 @@ Future<Map<String, Object?>> _runOne(
       // raised outside the body proper — because dropping an error the run
       // knows happened is worse than one vague line.
       for (var error in caught) {
-        failures.add({
-          'error': error.description,
-          'stack': ?error.stack?.toString(),
-        });
+        failures.add(
+          ScenarioRunError(
+            error: error.description,
+            stack: error.stack?.toString(),
+          ),
+        );
       }
       if (!_accountsFor(details, caught)) {
-        failures.add({'error': details.exceptionAsString()});
+        failures.add(ScenarioRunError(error: details.exceptionAsString()));
       }
     } else {
-      failures.add({
-        'error': details.exceptionAsString(),
-        'stack': ?details.stack?.toString(),
-      });
+      failures.add(
+        ScenarioRunError(
+          error: details.exceptionAsString(),
+          stack: details.stack?.toString(),
+        ),
+      );
     }
   };
 
@@ -1135,31 +1139,36 @@ Future<Map<String, Object?>> _runOne(
   }
 
   var errors = [
-    if (timedOut) {'error': _timedOutMessage(deadline!)},
+    if (timedOut) ScenarioRunError(error: _timedOutMessage(deadline!)),
     ...failures,
     for (var error in live.errors)
-      {'error': '${error.error}', 'stack': '${error.stackTrace}'},
+      ScenarioRunError(error: '${error.error}', stack: '${error.stackTrace}'),
   ];
   var passed = !timedOut && live.state.result.isPassing && errors.isEmpty;
-  return {
-    'file': file,
-    'name': name,
+  // Every key every catalog was asked for on the way through this
+  // scenario, and what it answered — **including the keys whose value never
+  // reached a glyph.** The steps say where a key was *seen*; only this says
+  // it was read at all, which is the difference between "not on this screen"
+  // and "this product never asks for it". Written per scenario, merged
+  // across the run by whoever reads them, because a key reached by one
+  // scenario is reached.
+  var read = TranslationIndex.read;
+  var outcome = ScenarioRunOutcome(
+    file: file,
+    name: name,
     // What it actually ran as — which the caller may not have said, having
     // left the folder's profile to answer.
-    'device': ?device,
-    'ok': passed,
-    'ms': watch.elapsedMilliseconds,
-    'steps': steps,
-    if (!passed) 'errors': errors,
-    // Every key every catalog was asked for on the way through this
-    // scenario, and what it answered — **including the keys whose value never
-    // reached a glyph.** The steps say where a key was *seen*; only this says
-    // it was read at all, which is the difference between "not on this screen"
-    // and "this product never asks for it". Written per scenario, merged
-    // across the run by whoever reads them, because a key reached by one
-    // scenario is reached.
-    if (TranslationIndex.read case var read when read.isNotEmpty)
-      'translations': read,
+    device: device,
+    ok: passed,
+    ms: watch.elapsedMilliseconds,
+    steps: steps,
+    stepCount: steps.length,
+    unchangedCount: steps.where((step) => step.unchanged).length,
+    errors: passed ? const [] : errors,
+    translations: read.isNotEmpty ? read : null,
+  );
+  return {
+    ...outcome.toJson(),
     // Read by the host, not by a reader: the body is still running in there,
     // so this harness is spent and the next run needs a fresh one.
     if (timedOut) 'timedOut': true,
