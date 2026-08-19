@@ -12,6 +12,7 @@ import '../../splash/model/surface.dart';
 import '../../splash/model/validation.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
+import '../scan_cache.dart';
 import 'splash_address.dart';
 import 'splash_results.dart';
 
@@ -48,10 +49,14 @@ class SplashCore extends PluginCore {
       if (host.workspace.exists(path)) path,
   ];
 
-  final _scans = <String, SplashScan>{};
-  final _failures = <String, String>{};
-  final _scanning = <String>{};
-  final _pending = <String, Future<void>>{};
+  late final _cache = ScanCache<String, SplashScan>(
+    scan: (path) async => scanSplash(
+      packageRoot: host.workspace.packageFor(path).absolutePath,
+      packagePath: path,
+    ),
+    onChanged: notifyChanged,
+    onSettled: _stamp,
+  );
 
   /// The state each scan was made against, so a poll can tell whether it still
   /// holds. See `model/fingerprint.dart` for why this is polled rather than
@@ -64,12 +69,23 @@ class SplashCore extends PluginCore {
   /// that reads the clock is a model whose tests need one.
   final _scannedAt = <String, DateTime>{};
 
+  /// Fingerprinted on the failure path too, so a broken config that is fixed
+  /// recovers on the next poll instead of staying broken until something else
+  /// invalidates it.
+  void _stamp(String path) {
+    _fingerprints[path] = splashFingerprint(
+      packageRoot: host.workspace.packageFor(path).absolutePath,
+      scan: _cache[path],
+    );
+    _scannedAt[path] = DateTime.now();
+  }
+
   /// The scan for [path], or null when nothing has looked at it yet.
-  SplashScan? scanFor(String path) => _scans[path];
+  SplashScan? scanFor(String path) => _cache[path];
 
-  String? failureFor(String path) => _failures[path];
+  String? failureFor(String path) => _cache.failureFor(path);
 
-  bool isScanning(String path) => _scanning.contains(path);
+  bool isScanning(String path) => _cache.isScanning(path);
 
   /// When [path] was last read off disk, or null when it never has been.
   DateTime? scannedAt(String path) => _scannedAt[path];
@@ -98,71 +114,15 @@ class SplashCore extends PluginCore {
   );
 
   /// Scans [path], unless it already has been. Idempotent.
-  void track(String path) => unawaited(_load(path));
+  void track(String path) => _cache.track(path);
 
   /// Drops the cached scan so the next [track] re-reads. What the panel calls
   /// when the config file changes underneath it.
-  void invalidate(String path) {
-    _scans.remove(path);
-    _failures.remove(path);
-    // Without this, the next [_load] hands back the scan this just threw away.
-    _pending.remove(path);
-    notifyChanged();
-  }
+  void invalidate(String path) => _cache.invalidate(path);
 
   @override
   Future<void> computeAll() async {
-    await Future.wait([for (var path in packages) _load(path)]);
-  }
-
-  /// Scans [path] unless a scan is already cached or in flight.
-  ///
-  /// **The de-duplication cannot be `_pending.putIfAbsent(path, () =>
-  /// _scan(path))`**, which is what it was. `_scan` has no `await` before its
-  /// `finally`, so an `async` body runs start to finish synchronously — the
-  /// clean-up inside it therefore ran *during* `putIfAbsent`'s callback, before
-  /// the entry it was trying to remove had been inserted. The entry then stayed
-  /// forever, and every later load after an [invalidate] returned that completed
-  /// future instead of reading the disk.
-  ///
-  /// It was invisible while `invalidate` was only ever called by `generate`,
-  /// whose result nothing asserted. Registering the entry first and clearing it
-  /// through `whenComplete` fixes it whether or not `_scan` yields.
-  ///
-  /// The clean-up must be a **block**, not `() => _pending.remove(path)`.
-  /// `Map.remove` returns the value it removed — here, the very future
-  /// `whenComplete` is completing — and `whenComplete` waits on any future its
-  /// callback returns. An arrow body therefore makes the future wait for
-  /// itself, and every load hangs.
-  Future<void> _load(String path) {
-    if (_scans.containsKey(path) || _failures.containsKey(path)) {
-      return Future.value();
-    }
-    return _pending[path] ??= _scan(path).whenComplete(() {
-      _pending.remove(path);
-    });
-  }
-
-  Future<void> _scan(String path) async {
-    _scanning.add(path);
-    notifyChanged();
-    var root = host.workspace.packageFor(path).absolutePath;
-    try {
-      _scans[path] = scanSplash(packageRoot: root, packagePath: path);
-    } catch (e) {
-      _failures[path] = '$e';
-    } finally {
-      // Fingerprinted on the failure path too, so a broken config that is fixed
-      // recovers on the next poll instead of staying broken until something
-      // else invalidates it.
-      _fingerprints[path] = splashFingerprint(
-        packageRoot: root,
-        scan: _scans[path],
-      );
-      _scannedAt[path] = DateTime.now();
-      _scanning.remove(path);
-      notifyChanged();
-    }
+    await Future.wait([for (var path in packages) _cache.load(path)]);
   }
 
   // ---- Polling -----------------------------------------------------------
@@ -206,14 +166,14 @@ class SplashCore extends PluginCore {
     if (_checking || isDisposed) return;
     _checking = true;
     try {
-      // Snapshotted: the loop invalidates, which mutates what it is iterating.
-      for (var path in {..._scans.keys, ..._failures.keys}) {
-        if (_scanning.contains(path)) continue;
+      // `settledKeys` is a fresh set, so the loop invalidating cannot mutate
+      // what it is iterating.
+      for (var path in _cache.settledKeys) {
+        if (_cache.isScanning(path)) continue;
         var root = host.workspace.packageFor(path).absolutePath;
-        var current = splashFingerprint(packageRoot: root, scan: _scans[path]);
+        var current = splashFingerprint(packageRoot: root, scan: _cache[path]);
         if (current == _fingerprints[path]) continue;
-        invalidate(path);
-        await _load(path);
+        await _cache.reload(path);
       }
     } finally {
       _checking = false;
@@ -265,7 +225,7 @@ class SplashCore extends PluginCore {
     // A file that looks like a config and is not one outranks everything else:
     // the generator refuses to run at all, so counting problems in the configs
     // that *did* parse would describe a run that never happens.
-    var scanned = [for (var path in packages) _scans[path]].nonNulls.toList();
+    var scanned = [for (var path in packages) _cache[path]].nonNulls.toList();
     var broken = scanned.expand((s) => s.configErrors).toList();
     if (broken.isNotEmpty) {
       return Status.error(
@@ -283,8 +243,10 @@ class SplashCore extends PluginCore {
   StatusBadge get _badge {
     var worst = Tone.neutral;
     for (var path in packages) {
-      if (_failures.containsKey(path)) return const StatusBadge.dot(Tone.error);
-      var scan = _scans[path];
+      if (_cache.failureFor(path) != null) {
+        return const StatusBadge.dot(Tone.error);
+      }
+      var scan = _cache[path];
       if (scan == null) continue;
       if (scan.configErrors.isNotEmpty) {
         return const StatusBadge.dot(Tone.error);
@@ -304,13 +266,13 @@ class SplashCore extends PluginCore {
   }
 
   Status _childStatus(String path) {
-    var failure = _failures[path];
+    var failure = _cache.failureFor(path);
     if (failure != null) return Status.error(failure);
-    var scan = _scans[path];
+    var scan = _cache[path];
     if (scan == null) {
       // Silent until it has been looked at, for the same reason the plugin row
       // is: "not computed" is the resting state, not news.
-      return _scanning.contains(path)
+      return _cache.isScanning(path)
           ? const Status.info('Reading…')
           : Status.none;
     }
@@ -332,7 +294,7 @@ class SplashCore extends PluginCore {
   PluginView get _view {
     var nodes = <ViewNode>[];
     for (var path in packages) {
-      var scan = _scans[path];
+      var scan = _cache[path];
       if (scan == null) continue;
       nodes.add(
         ViewSection(path == '.' ? 'root' : path, [
@@ -560,8 +522,8 @@ class SplashCore extends PluginCore {
     // leave a project whose config was fixed with no way back.
     if (actionId == 'reload') return await _reload(path);
 
-    await _load(path);
-    var failure = _failures[path];
+    await _cache.load(path);
+    var failure = _cache.failureFor(path);
     if (failure != null) throw StateError(failure);
 
     return switch (actionId) {
@@ -596,7 +558,7 @@ class SplashCore extends PluginCore {
     String path,
     Map<String, Object?> arguments,
   ) {
-    var scan = _scans[path]!;
+    var scan = _cache[path]!;
     var flavor = arguments['flavor'];
     var wanted = flavor is String && flavor.isNotEmpty ? flavor : null;
     var config = scan.forFlavor(wanted);
@@ -668,13 +630,12 @@ class SplashCore extends PluginCore {
   /// is what lets a button hold a running state and then report. `fw` and MCP
   /// reach the same work through the action, which wraps this for the wire.
   Future<bool> reload(String path) async {
-    await _load(path);
+    await _cache.load(path);
     var before = _fingerprints[path];
 
-    invalidate(path);
-    await _load(path);
+    await _cache.reload(path);
 
-    var failure = _failures[path];
+    var failure = _cache.failureFor(path);
     if (failure != null) throw StateError(failure);
     return before != _fingerprints[path];
   }
@@ -689,7 +650,7 @@ class SplashCore extends PluginCore {
 
     return SplashReloadResult(
       package: path,
-      configPath: _scans[path]?.main?.config.path,
+      configPath: _cache[path]?.main?.config.path,
       scannedAt: (_scannedAt[path] ?? DateTime.now()).toIso8601String(),
       changed: changed,
     );
@@ -735,10 +696,9 @@ class SplashCore extends PluginCore {
 
     // The scan is now wrong about what is on disk in every case — a failed run
     // still writes some of the files before it exits.
-    invalidate(path);
-    await _load(path);
+    await _cache.reload(path);
 
-    var refreshed = _scans[path]?.forFlavor(config.config.flavor);
+    var refreshed = _cache[path]?.forFlavor(config.config.flavor);
 
     return SplashGenerateResult(
       package: path,

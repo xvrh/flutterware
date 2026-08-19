@@ -7,6 +7,7 @@ import '../../launcher_icon/model/role.dart';
 import '../../launcher_icon/model/scan.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
+import '../scan_cache.dart';
 import 'icon_address.dart';
 import 'icon_results.dart';
 
@@ -41,21 +42,26 @@ class LauncherIconCore extends PluginCore {
       if (host.workspace.exists(path)) path,
   ];
 
-  final _scans = <String, IconScan>{};
-  final _failures = <String, String>{};
-  final _scanning = <String>{};
-  final _pending = <String, Future<void>>{};
+  /// Keyed by package *and* source set: a flavour is a different set of files
+  /// in the same package, so it cannot share one scan.
+  late final _cache = ScanCache<(String path, String? flavor), IconScan>(
+    scan: (key) async => scanIcons(
+      packageRoot: host.workspace.packageFor(key.$1).absolutePath,
+      packagePath: key.$1,
+      flavor: key.$2,
+    ),
+    onChanged: notifyChanged,
+  );
 
   /// The scan for one package and source set, or null when nothing has looked
   /// at it yet.
-  IconScan? scanFor(String path, {String? flavor}) =>
-      _scans[_key(path, flavor)];
+  IconScan? scanFor(String path, {String? flavor}) => _cache[(path, flavor)];
 
   String? failureFor(String path, {String? flavor}) =>
-      _failures[_key(path, flavor)];
+      _cache.failureFor((path, flavor));
 
   bool isScanning(String path, {String? flavor}) =>
-      _scanning.contains(_key(path, flavor));
+      _cache.isScanning((path, flavor));
 
   /// Where a cell *is*.
   ///
@@ -73,26 +79,12 @@ class LauncherIconCore extends PluginCore {
     axes: iconAxes(role: role, mask: mask),
   );
 
-  /// The key a scan caches under. A flavour is a different set of files in the
-  /// same package, so it cannot share one.
-  ///
-  /// Joined with an escaped NUL, which cannot occur in a path or a directory
-  /// name — so no pair can collide with another. Written as `\u0000` rather
-  /// than pasted: a raw NUL in the source makes git call the file binary and
-  /// stop showing its diff.
-  String _key(String path, String? flavor) =>
-      flavor == null ? path : '$path\u0000$flavor';
-
   /// Scans [path], unless it already has been. Idempotent.
-  void track(String path, {String? flavor}) =>
-      unawaited(_load(path, flavor: flavor));
+  void track(String path, {String? flavor}) => _cache.track((path, flavor));
 
   /// Drops the cached scan so the next [track] re-reads.
-  void invalidate(String path, {String? flavor}) {
-    _scans.remove(_key(path, flavor));
-    _failures.remove(_key(path, flavor));
-    notifyChanged();
-  }
+  void invalidate(String path, {String? flavor}) =>
+      _cache.invalidate((path, flavor));
 
   /// Reads the tree again, and **completes when the new scan is in**.
   ///
@@ -100,63 +92,12 @@ class LauncherIconCore extends PluginCore {
   /// waiting — and wrong for a button, where the thing that pressed it wants to
   /// show the result. Returning the future lets the caller await rather than
   /// depend on some ancestor happening to listen for the change.
-  Future<void> reload(String path, {String? flavor}) {
-    invalidate(path, flavor: flavor);
-    return _load(path, flavor: flavor);
-  }
+  Future<void> reload(String path, {String? flavor}) =>
+      _cache.reload((path, flavor));
 
   @override
   Future<void> computeAll() async {
-    await Future.wait([for (var path in packages) _load(path)]);
-  }
-
-  Future<void> _load(String path, {String? flavor}) {
-    var key = _key(path, flavor);
-    if (_scans.containsKey(key) || _failures.containsKey(key)) {
-      return Future.value();
-    }
-
-    var pending = _pending[key];
-    if (pending != null) return pending;
-
-    // Deliberately not `putIfAbsent`. Scanning is `async` but never awaits, so
-    // it runs to completion *synchronously* inside the callback — its cleanup
-    // would try to remove a key `putIfAbsent` has not inserted yet, leaving a
-    // completed future cached under it forever. The next load after an
-    // `invalidate` would then return that stale future and never re-read.
-    // Clearing through `whenComplete` cannot run before the insertion below.
-    //
-    // The clean-up is a block on purpose: `Map.remove` returns the value it
-    // removed — the very future being completed — and `whenComplete` waits on
-    // any future its callback returns. `SplashCore._load` carries the same
-    // warning.
-    var future = _scan(path, flavor);
-    _pending[key] = future;
-    unawaited(
-      future.whenComplete(() {
-        _pending.remove(key);
-      }),
-    );
-    return future;
-  }
-
-  Future<void> _scan(String path, String? flavor) async {
-    var key = _key(path, flavor);
-    _scanning.add(key);
-    notifyChanged();
-    try {
-      var root = host.workspace.packageFor(path).absolutePath;
-      _scans[key] = scanIcons(
-        packageRoot: root,
-        packagePath: path,
-        flavor: flavor,
-      );
-    } catch (e) {
-      _failures[key] = '$e';
-    } finally {
-      _scanning.remove(key);
-      notifyChanged();
-    }
+    await Future.wait([for (var path in packages) _cache.load((path, null))]);
   }
 
   // ---- Report ------------------------------------------------------------
@@ -192,10 +133,10 @@ class LauncherIconCore extends PluginCore {
   StatusBadge get _badge {
     var worst = Tone.neutral;
     for (var path in packages) {
-      if (_failures.containsKey(_key(path, null))) {
+      if (_cache.failureFor((path, null)) != null) {
         return const StatusBadge.dot(Tone.error);
       }
-      var scan = _scans[_key(path, null)];
+      var scan = _cache[(path, null)];
       if (scan == null) continue;
       for (var finding in scan.findings) {
         if (finding.tone == Tone.error) {
@@ -210,13 +151,13 @@ class LauncherIconCore extends PluginCore {
   }
 
   Status _childStatus(String path) {
-    var failure = _failures[_key(path, null)];
+    var failure = _cache.failureFor((path, null));
     if (failure != null) return Status.error(failure);
 
-    var scan = _scans[_key(path, null)];
+    var scan = _cache[(path, null)];
     if (scan == null) {
       // Silent until it has been looked at: the resting state is not news.
-      return _scanning.contains(_key(path, null))
+      return _cache.isScanning((path, null))
           ? const Status.info('Reading…')
           : Status.none;
     }
@@ -237,7 +178,7 @@ class LauncherIconCore extends PluginCore {
   PluginView get _view {
     var nodes = <ViewNode>[];
     for (var path in packages) {
-      var scan = _scans[_key(path, null)];
+      var scan = _cache[(path, null)];
       if (scan == null) continue;
       nodes.add(
         ViewSection(path == '.' ? 'root' : path, [
@@ -391,8 +332,8 @@ class LauncherIconCore extends PluginCore {
     var flavor = arguments['flavor'];
     var wanted = flavor is String && flavor.isNotEmpty ? flavor : null;
 
-    await _load(path, flavor: wanted);
-    var failure = _failures[_key(path, wanted)];
+    await _cache.load((path, wanted));
+    var failure = _cache.failureFor((path, wanted));
     if (failure != null) throw StateError(failure);
 
     return switch (actionId) {
@@ -440,7 +381,7 @@ class LauncherIconCore extends PluginCore {
   }
 
   IconInventoryResult _inventory(String path, String? flavor) {
-    var scan = _scans[_key(path, flavor)]!;
+    var scan = _cache[(path, flavor)]!;
     var packageRoot = host.workspace.packageFor(path).absolutePath;
 
     if (flavor != null && !scan.flavors.any((f) => f.name == flavor)) {

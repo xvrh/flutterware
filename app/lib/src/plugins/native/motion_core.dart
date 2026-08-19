@@ -134,7 +134,12 @@ class MotionCore extends PluginCore {
     );
     // Parsing runs off-isolate, as the catalog's and scenarios' scans do.
     _scans[path] = Isolate.run(scanner.scan)
-        .then<void>((result) => _results[path] = result)
+        .then<void>((result) {
+          _results[path] = result;
+          // A success outlives any earlier failure — a save caught mid-write
+          // must not brand the package "scan failed" forever.
+          _errors.remove(path);
+        })
         .catchError((Object error) => _errors[path] = error)
         .whenComplete(notifyChanged);
     notifyChanged();

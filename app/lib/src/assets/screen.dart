@@ -149,7 +149,13 @@ class _AssetsScreenState extends State<AssetsScreen> {
   @override
   Widget build(BuildContext context) {
     if (widget.core.failureFor(widget.package) case var failure?) {
-      return ErrorState(title: 'Could not read the assets', message: failure);
+      return ErrorState(
+        title: 'Could not read the assets',
+        message: failure,
+        // The failure names its own fix — run pub get — and this is how coming
+        // back from it lands without restarting the app.
+        onRetry: () => unawaited(widget.core.reload(widget.package)),
+      );
     }
     var scan = _scan;
     if (scan == null) {
@@ -171,6 +177,8 @@ class _AssetsScreenState extends State<AssetsScreen> {
             problems: scan.problems,
             selected: _asset?.key,
             onSelect: _select,
+            onReload: () => unawaited(widget.core.reload(widget.package)),
+            scanning: widget.core.isScanning(widget.package),
           ),
         ),
         const VerticalDivider(width: 1),
