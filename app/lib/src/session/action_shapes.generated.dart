@@ -4555,6 +4555,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'skipped',
         'type': 'bool',
+        'optional': true,
         'doc':
             'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
       },
@@ -4617,28 +4618,10 @@ final resultShapes = <String, ResultShape>{
                   'True when nothing named this capture — a collapsible detail step.',
             },
             <String, Object?>{
-              'name': 'action',
-              'type': 'ScenarioStepAction',
+              'name': 'tags',
+              'type': 'List<String>',
               'optional': true,
-              'doc': 'The verb that produced this capture.',
-              'shape': <String, Object?>{
-                'type': 'ScenarioStepAction',
-                'fields': <Object?>[
-                  <String, Object?>{'name': 'verb', 'type': 'String'},
-                  <String, Object?>{
-                    'name': 'target',
-                    'type': 'String',
-                    'optional': true,
-                  },
-                  <String, Object?>{
-                    'name': 'kind',
-                    'type': 'String',
-                    'optional': true,
-                  },
-                ],
-              },
             },
-            <String, Object?>{'name': 'tags', 'type': 'List<String>'},
             <String, Object?>{
               'name': 'image',
               'type': 'String',
@@ -4678,6 +4661,24 @@ final resultShapes = <String, ResultShape>{
               'type': 'List<String>',
               'doc':
                   'The visible texts — the projection an agent reads next to the pixels.',
+            },
+            <String, Object?>{
+              'name': 'address',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The step\'s `fw://` address.',
+            },
+            <String, Object?>{
+              'name': 'statusBrightness',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+            },
+            <String, Object?>{
+              'name': 'navBrightness',
+              'type': 'String',
+              'optional': true,
             },
             <String, Object?>{
               'name': 'verb',
@@ -4761,43 +4762,30 @@ final resultShapes = <String, ResultShape>{
                   'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
             },
             <String, Object?>{
-              'name': 'address',
-              'type': 'String',
-              'doc': 'The step\'s `fw://` address.',
-            },
-            <String, Object?>{
-              'name': 'statusBrightness',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
-            },
-            <String, Object?>{
-              'name': 'navBrightness',
-              'type': 'String',
-              'optional': true,
-            },
-            <String, Object?>{
               'name': 'settled',
               'type': 'bool',
+              'optional': true,
               'doc':
                   'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
             },
             <String, Object?>{
               'name': 'landed',
               'type': 'bool',
+              'optional': true,
               'doc':
                   'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
             },
             <String, Object?>{
               'name': 'strayFrames',
               'type': 'int',
+              'optional': true,
               'doc':
                   'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
             },
             <String, Object?>{
               'name': 'unchanged',
               'type': 'bool',
+              'optional': true,
               'doc':
                   'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
             },
@@ -4810,6 +4798,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'attachments',
               'type': 'List<ScenarioRunAttachment>',
+              'optional': true,
               'doc':
                   'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
               'shape': <String, Object?>{
@@ -4860,6 +4849,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'errors',
         'type': 'List<ScenarioRunError>',
+        'optional': true,
         'doc': 'The failure, when [ok] is false.',
         'shape': <String, Object?>{
           'type': 'ScenarioRunError',
@@ -4892,20 +4882,6 @@ final resultShapes = <String, ResultShape>{
         'doc': 'Where this run\'s artifacts were written.',
       },
       <String, Object?>{
-        'name': 'report',
-        'type': 'String',
-        'optional': true,
-        'doc':
-            'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
-      },
-      <String, Object?>{
-        'name': 'log',
-        'type': 'String',
-        'optional': true,
-        'doc':
-            'The harness process\'s console, whole, on disk — engine noise, and anything printed outside a test zone.',
-      },
-      <String, Object?>{
         'name': 'axes',
         'type': 'Map<String, String>',
         'optional': true,
@@ -4929,6 +4905,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'skipped',
               'type': 'bool',
+              'optional': true,
               'doc':
                   'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
             },
@@ -4992,28 +4969,10 @@ final resultShapes = <String, ResultShape>{
                         'True when nothing named this capture — a collapsible detail step.',
                   },
                   <String, Object?>{
-                    'name': 'action',
-                    'type': 'ScenarioStepAction',
+                    'name': 'tags',
+                    'type': 'List<String>',
                     'optional': true,
-                    'doc': 'The verb that produced this capture.',
-                    'shape': <String, Object?>{
-                      'type': 'ScenarioStepAction',
-                      'fields': <Object?>[
-                        <String, Object?>{'name': 'verb', 'type': 'String'},
-                        <String, Object?>{
-                          'name': 'target',
-                          'type': 'String',
-                          'optional': true,
-                        },
-                        <String, Object?>{
-                          'name': 'kind',
-                          'type': 'String',
-                          'optional': true,
-                        },
-                      ],
-                    },
                   },
-                  <String, Object?>{'name': 'tags', 'type': 'List<String>'},
                   <String, Object?>{
                     'name': 'image',
                     'type': 'String',
@@ -5053,6 +5012,24 @@ final resultShapes = <String, ResultShape>{
                     'type': 'List<String>',
                     'doc':
                         'The visible texts — the projection an agent reads next to the pixels.',
+                  },
+                  <String, Object?>{
+                    'name': 'address',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'The step\'s `fw://` address.',
+                  },
+                  <String, Object?>{
+                    'name': 'statusBrightness',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+                  },
+                  <String, Object?>{
+                    'name': 'navBrightness',
+                    'type': 'String',
+                    'optional': true,
                   },
                   <String, Object?>{
                     'name': 'verb',
@@ -5136,43 +5113,30 @@ final resultShapes = <String, ResultShape>{
                         'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
                   },
                   <String, Object?>{
-                    'name': 'address',
-                    'type': 'String',
-                    'doc': 'The step\'s `fw://` address.',
-                  },
-                  <String, Object?>{
-                    'name': 'statusBrightness',
-                    'type': 'String',
-                    'optional': true,
-                    'doc':
-                        'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
-                  },
-                  <String, Object?>{
-                    'name': 'navBrightness',
-                    'type': 'String',
-                    'optional': true,
-                  },
-                  <String, Object?>{
                     'name': 'settled',
                     'type': 'bool',
+                    'optional': true,
                     'doc':
                         'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
                   },
                   <String, Object?>{
                     'name': 'landed',
                     'type': 'bool',
+                    'optional': true,
                     'doc':
                         'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
                   },
                   <String, Object?>{
                     'name': 'strayFrames',
                     'type': 'int',
+                    'optional': true,
                     'doc':
                         'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
                   },
                   <String, Object?>{
                     'name': 'unchanged',
                     'type': 'bool',
+                    'optional': true,
                     'doc':
                         'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
                   },
@@ -5186,6 +5150,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'attachments',
                     'type': 'List<ScenarioRunAttachment>',
+                    'optional': true,
                     'doc':
                         'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
                     'shape': <String, Object?>{
@@ -5236,6 +5201,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'errors',
               'type': 'List<ScenarioRunError>',
+              'optional': true,
               'doc': 'The failure, when [ok] is false.',
               'shape': <String, Object?>{
                 'type': 'ScenarioRunError',
@@ -5260,6 +5226,20 @@ final resultShapes = <String, ResultShape>{
         },
       },
       <String, Object?>{
+        'name': 'report',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
+      },
+      <String, Object?>{
+        'name': 'log',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The harness process\'s console, whole, on disk — engine noise, and anything printed outside a test zone.',
+      },
+      <String, Object?>{
         'name': 'error',
         'type': 'String',
         'optional': true,
@@ -5271,6 +5251,15 @@ final resultShapes = <String, ResultShape>{
   'ScenarioRunResult': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioRunResult',
     'fields': <Object?>[
+      <String, Object?>{'name': 'version', 'type': 'int'},
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
+      <String, Object?>{
+        'name': 'axes',
+        'type': 'Map<String, String>',
+        'optional': true,
+        'doc':
+            'The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.',
+      },
       <String, Object?>{
         'name': 'packages',
         'type': 'List<ScenarioRunPackage>',
@@ -5282,20 +5271,6 @@ final resultShapes = <String, ResultShape>{
               'name': 'output',
               'type': 'String',
               'doc': 'Where this run\'s artifacts were written.',
-            },
-            <String, Object?>{
-              'name': 'report',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
-            },
-            <String, Object?>{
-              'name': 'log',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  'The harness process\'s console, whole, on disk — engine noise, and anything printed outside a test zone.',
             },
             <String, Object?>{
               'name': 'axes',
@@ -5321,6 +5296,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'skipped',
                     'type': 'bool',
+                    'optional': true,
                     'doc':
                         'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
                   },
@@ -5385,33 +5361,9 @@ final resultShapes = <String, ResultShape>{
                               'True when nothing named this capture — a collapsible detail step.',
                         },
                         <String, Object?>{
-                          'name': 'action',
-                          'type': 'ScenarioStepAction',
-                          'optional': true,
-                          'doc': 'The verb that produced this capture.',
-                          'shape': <String, Object?>{
-                            'type': 'ScenarioStepAction',
-                            'fields': <Object?>[
-                              <String, Object?>{
-                                'name': 'verb',
-                                'type': 'String',
-                              },
-                              <String, Object?>{
-                                'name': 'target',
-                                'type': 'String',
-                                'optional': true,
-                              },
-                              <String, Object?>{
-                                'name': 'kind',
-                                'type': 'String',
-                                'optional': true,
-                              },
-                            ],
-                          },
-                        },
-                        <String, Object?>{
                           'name': 'tags',
                           'type': 'List<String>',
+                          'optional': true,
                         },
                         <String, Object?>{
                           'name': 'image',
@@ -5452,6 +5404,24 @@ final resultShapes = <String, ResultShape>{
                           'type': 'List<String>',
                           'doc':
                               'The visible texts — the projection an agent reads next to the pixels.',
+                        },
+                        <String, Object?>{
+                          'name': 'address',
+                          'type': 'String',
+                          'optional': true,
+                          'doc': 'The step\'s `fw://` address.',
+                        },
+                        <String, Object?>{
+                          'name': 'statusBrightness',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+                        },
+                        <String, Object?>{
+                          'name': 'navBrightness',
+                          'type': 'String',
+                          'optional': true,
                         },
                         <String, Object?>{
                           'name': 'verb',
@@ -5535,43 +5505,30 @@ final resultShapes = <String, ResultShape>{
                               'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
                         },
                         <String, Object?>{
-                          'name': 'address',
-                          'type': 'String',
-                          'doc': 'The step\'s `fw://` address.',
-                        },
-                        <String, Object?>{
-                          'name': 'statusBrightness',
-                          'type': 'String',
-                          'optional': true,
-                          'doc':
-                              'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
-                        },
-                        <String, Object?>{
-                          'name': 'navBrightness',
-                          'type': 'String',
-                          'optional': true,
-                        },
-                        <String, Object?>{
                           'name': 'settled',
                           'type': 'bool',
+                          'optional': true,
                           'doc':
                               'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
                         },
                         <String, Object?>{
                           'name': 'landed',
                           'type': 'bool',
+                          'optional': true,
                           'doc':
                               'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
                         },
                         <String, Object?>{
                           'name': 'strayFrames',
                           'type': 'int',
+                          'optional': true,
                           'doc':
                               'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
                         },
                         <String, Object?>{
                           'name': 'unchanged',
                           'type': 'bool',
+                          'optional': true,
                           'doc':
                               'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
                         },
@@ -5585,6 +5542,7 @@ final resultShapes = <String, ResultShape>{
                         <String, Object?>{
                           'name': 'attachments',
                           'type': 'List<ScenarioRunAttachment>',
+                          'optional': true,
                           'doc':
                               'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
                           'shape': <String, Object?>{
@@ -5636,6 +5594,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'errors',
                     'type': 'List<ScenarioRunError>',
+                    'optional': true,
                     'doc': 'The failure, when [ok] is false.',
                     'shape': <String, Object?>{
                       'type': 'ScenarioRunError',
@@ -5660,6 +5619,20 @@ final resultShapes = <String, ResultShape>{
               },
             },
             <String, Object?>{
+              'name': 'report',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
+            },
+            <String, Object?>{
+              'name': 'log',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The harness process\'s console, whole, on disk — engine noise, and anything printed outside a test zone.',
+            },
+            <String, Object?>{
               'name': 'error',
               'type': 'String',
               'optional': true,
@@ -5668,14 +5641,6 @@ final resultShapes = <String, ResultShape>{
             },
           ],
         },
-      },
-      <String, Object?>{'name': 'ok', 'type': 'bool'},
-      <String, Object?>{
-        'name': 'axes',
-        'type': 'Map<String, String>',
-        'optional': true,
-        'doc':
-            'The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.',
       },
     ],
     'gates': true,
@@ -5721,28 +5686,10 @@ final resultShapes = <String, ResultShape>{
             'True when nothing named this capture — a collapsible detail step.',
       },
       <String, Object?>{
-        'name': 'action',
-        'type': 'ScenarioStepAction',
+        'name': 'tags',
+        'type': 'List<String>',
         'optional': true,
-        'doc': 'The verb that produced this capture.',
-        'shape': <String, Object?>{
-          'type': 'ScenarioStepAction',
-          'fields': <Object?>[
-            <String, Object?>{'name': 'verb', 'type': 'String'},
-            <String, Object?>{
-              'name': 'target',
-              'type': 'String',
-              'optional': true,
-            },
-            <String, Object?>{
-              'name': 'kind',
-              'type': 'String',
-              'optional': true,
-            },
-          ],
-        },
       },
-      <String, Object?>{'name': 'tags', 'type': 'List<String>'},
       <String, Object?>{
         'name': 'image',
         'type': 'String',
@@ -5782,6 +5729,24 @@ final resultShapes = <String, ResultShape>{
         'type': 'List<String>',
         'doc':
             'The visible texts — the projection an agent reads next to the pixels.',
+      },
+      <String, Object?>{
+        'name': 'address',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The step\'s `fw://` address.',
+      },
+      <String, Object?>{
+        'name': 'statusBrightness',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+      },
+      <String, Object?>{
+        'name': 'navBrightness',
+        'type': 'String',
+        'optional': true,
       },
       <String, Object?>{
         'name': 'verb',
@@ -5847,43 +5812,30 @@ final resultShapes = <String, ResultShape>{
             'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
       },
       <String, Object?>{
-        'name': 'address',
-        'type': 'String',
-        'doc': 'The step\'s `fw://` address.',
-      },
-      <String, Object?>{
-        'name': 'statusBrightness',
-        'type': 'String',
-        'optional': true,
-        'doc':
-            'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
-      },
-      <String, Object?>{
-        'name': 'navBrightness',
-        'type': 'String',
-        'optional': true,
-      },
-      <String, Object?>{
         'name': 'settled',
         'type': 'bool',
+        'optional': true,
         'doc':
             'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
       },
       <String, Object?>{
         'name': 'landed',
         'type': 'bool',
+        'optional': true,
         'doc':
             'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
       },
       <String, Object?>{
         'name': 'strayFrames',
         'type': 'int',
+        'optional': true,
         'doc':
             'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
       },
       <String, Object?>{
         'name': 'unchanged',
         'type': 'bool',
+        'optional': true,
         'doc':
             'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
       },
@@ -5896,6 +5848,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'attachments',
         'type': 'List<ScenarioRunAttachment>',
+        'optional': true,
         'doc':
             'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
         'shape': <String, Object?>{
@@ -6056,14 +6009,6 @@ final resultShapes = <String, ResultShape>{
         'doc':
             'How many images were written, over every package and assignment.',
       },
-    ],
-  }),
-  'ScenarioStepAction': ResultShape.fromJson(<String, Object?>{
-    'type': 'ScenarioStepAction',
-    'fields': <Object?>[
-      <String, Object?>{'name': 'verb', 'type': 'String'},
-      <String, Object?>{'name': 'target', 'type': 'String', 'optional': true},
-      <String, Object?>{'name': 'kind', 'type': 'String', 'optional': true},
     ],
   }),
   'ScenarioWebExportResult': ResultShape.fromJson(<String, Object?>{

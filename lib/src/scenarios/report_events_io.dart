@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'scenarios_results.dart';
+import 'report.dart';
 
 /// The transition's events, read from the file the harness wrote beside the
 /// pixels — empty when there were none, and empty rather than throwing when

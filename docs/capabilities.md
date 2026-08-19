@@ -1316,18 +1316,19 @@ fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…
 Returns `ScenarioRunResult`:
 
 ```
+version: int
+ok: bool
+axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
 packages: List<ScenarioRunPackage>
   path: String
   output: String   # Where this run's artifacts were written.
-  report: String?   # The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.
-  log: String?   # The harness process's console, whole, on disk — engine noise, and anything printed outside a test zone.
   axes: Map<String, String>?   # The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].
   ms: int   # Whole-run wall time inside the harness.
   scenarios: List<ScenarioRunOutcome>
     file: String
     name: String
     ok: bool
-    skipped: bool   # True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.
+    skipped: bool?   # True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.
     skipReason: String?   # The reason the declaration gave, when it gave one.
     device: String?   # The device it actually ran as.
     ms: int
@@ -1338,11 +1339,7 @@ packages: List<ScenarioRunPackage>
       branch: String?   # The `split` branch label when this step is a branch's first capture.
       name: String?   # The `Shot`'s name; null for an automatic capture.
       auto: bool   # True when nothing named this capture — a collapsible detail step.
-      action: ScenarioStepAction?   # The verb that produced this capture.
-        verb: String
-        target: String?
-        kind: String?
-      tags: List<String>
+      tags: List<String>?
       image: String   # The captured image, in [format], **relative to the worktree root** — the same convention the catalog's artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.
       format: String   # `png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.
       width: int
@@ -1351,6 +1348,9 @@ packages: List<ScenarioRunPackage>
       keys: String?   # The translation keys on this screen, and the words that belonged to no catalog — relative like [image].
       semantics: String?   # The semantics-tree JSON — what a screen reader gets — relative like [image].
       texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
+      address: String?   # The step's `fw://` address.
+      statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
+      navBrightness: String?
       verb: String?   # The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.
       target: String?
       events: String?   # What the app did on the way here — logs, prints, platform channel messages, and whatever the project's fakes reported through `recordScenarioEvent`.
@@ -1364,28 +1364,25 @@ packages: List<ScenarioRunPackage>
       frameHeight: int?
       frameIntervalMs: int?   # Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.
       framesDropped: int?   # Frames refused by the recorder's cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.
-      address: String   # The step's `fw://` address.
-      statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
-      navBrightness: String?
-      settled: bool   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
-      landed: bool   # False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.
-      strayFrames: int   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
-      unchanged: bool   # True when this step's captured tree is byte-identical to its parent's: the verb acted and nothing on screen changed.
+      settled: bool?   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
+      landed: bool?   # False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.
+      strayFrames: int?   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
+      unchanged: bool?   # True when this step's captured tree is byte-identical to its parent's: the verb acted and nothing on screen changed.
       failure: String?   # The error, when this is the step a scenario broke on.
-      attachments: List<ScenarioRunAttachment>   # What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.
+      attachments: List<ScenarioRunAttachment>?   # What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.
         name: String   # What the scenario called it — `'report'`.
         file: String   # The file, **relative to the worktree root**, like the step's own image.
         mimeType: String?   # What it is, when the scenario said — `application/pdf`.
         bytes: int   # How big it is, so a reader knows before opening it.
     stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
     unchangedCount: int   # How many of those steps a verb acted for nothing on — captured trees byte-identical to their parent's.
-    errors: List<ScenarioRunError>   # The failure, when [ok] is false.
+    errors: List<ScenarioRunError>?   # The failure, when [ok] is false.
       error: String
       stack: String?
     translations: Map<String, Map<String, String>>?   # Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.
+  report: String?   # The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.
+  log: String?   # The harness process's console, whole, on disk — engine noise, and anything printed outside a test zone.
   error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
-ok: bool
-axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
 ```
 
 Exits 1 when `ok` is false, so a job can gate on this action.
@@ -1404,7 +1401,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `orientations` | string | no | — | The third axis — `portrait,landscape`. Crossed with the other two, and overrides `orientation`. A device that cannot turn contributes one point rather than two identical ones, so mixing a desktop into the devices does not double the run. |
 | `matrix` | choice | no | — | `declared` runs every point the folder profiles declare — the union of their devices, languages and orientations, crossed exactly as explicit lists are. What CI wants instead of restating the declaration in `devices=` and watching the two drift. Instead of the axis lists, not beside them. |
 | `tag` | string | no | — | Run only scenarios carrying this tag — the same tag `scenario(tags: [...])` declares and `flutter test --tags` filters on |
-| `steps` | choice | no | failing | How many steps ride back in the answer. Every run writes all of them to `run.json` in its output directory either way and each package names that file, so this is about what arrives without asking: `failing` (default) is the frame each red scenario died on, `all` is every step of every scenario — a matrix suite is hundreds — and `none` is the summary alone. Every scenario reports its `stepCount` whatever this says. |
+| `steps` | choice | no | failing | How many steps ride back in the answer. Every run writes all of them to `run.json` in its output directory either way and each package names that file — a script reads it back typed with `package:flutterware/scenarios_report.dart` — so this is about what arrives without asking: `failing` (default) is the frame each red scenario died on, `all` is every step of every scenario — a matrix suite is hundreds — and `none` is the summary alone. Every scenario reports its `stepCount` whatever this says. |
 | `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
 | `brightness` | choice | no | — | The platform brightness the app sees |
 | `bold-text` | choice | no | — | The bold-text accessibility switch |

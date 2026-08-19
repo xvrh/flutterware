@@ -93,6 +93,26 @@ class ScenarioEvent {
       body = null,
       error = level == 'SEVERE' || level == 'SHOUT';
 
+  /// Decodes what [toJson] wrote — an entry of a step's `.events.json`.
+  ///
+  /// Lenient like every published reader here: an event a fake reported with
+  /// a channel of its own still decodes, and a field this version does not
+  /// know is ignored. The caps [toJson] applies are already in the text, so a
+  /// round-tripped title reads exactly as the panel showed it.
+  factory ScenarioEvent.fromJson(Map<String, Object?> json) =>
+      ScenarioEvent.custom(
+        channel: json['channel'] as String? ?? '',
+        title: json['title'] as String? ?? '',
+        detail: json['detail'] as String?,
+        data: switch (json['data']) {
+          Map data => data.cast<String, Object?>(),
+          _ => const {},
+        },
+        body: json['body'] as String?,
+        error: json['error'] == true,
+        level: json['level'] as String?,
+      );
+
   /// One of [ScenarioChannel]'s constants, or a name of the reporter's own.
   final String channel;
 

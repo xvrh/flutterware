@@ -87,7 +87,8 @@ void main() {
     var relative = p.join('build', 'runs', 'A', base);
     return ScenarioRunStep(
       position: '#$index',
-      action: ScenarioStepAction(verb: 'tap', target: '"Add"', kind: 'text'),
+      verb: 'tap',
+      target: '"Add"',
       frames: frames > 0 ? '$relative.frames' : null,
       frameCount: frames > 0 ? frames : null,
       frameWidth: frames > 0 ? 195 : null,
@@ -205,11 +206,9 @@ void main() {
     expect(step0.position, '#1');
     expect(step0.name, 'shot');
     // The transition that produced the step, which is what labels the arrow
-    // into it. A nested object rather than a string, so it is also the one
-    // field of a step that a report could parse back as null without anything
-    // else looking wrong — a page of unlabelled arrows.
-    expect(step0.action?.label, 'tap "Add"');
-    expect(step0.action?.kind, 'text');
+    // into it — a page that could not parse the verb back would be a page of
+    // unlabelled arrows.
+    expect(step0.action, 'tap "Add"');
     expect(step0.width, 390);
     expect(step0.texts, ['hello']);
     expect(step0.hasEvents, isTrue);

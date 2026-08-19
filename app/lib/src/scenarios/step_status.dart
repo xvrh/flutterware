@@ -10,7 +10,7 @@ import '../ui/theme.dart';
 /// The bare `step` is the last resort, for an artifact written before steps
 /// carried their action.
 String scenarioStepLabel(ScenarioRunStep step) =>
-    step.failure != null ? 'failed' : step.name ?? step.action?.label ?? 'step';
+    step.failure != null ? 'failed' : step.name ?? step.action ?? 'step';
 
 /// The transition *into* a step, as a sentence: `tap "Pay"`, `screen`,
 /// `pumpWidget MyApp`. Null on a run captured before the verb was recorded,

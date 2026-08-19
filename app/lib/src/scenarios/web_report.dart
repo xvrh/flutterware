@@ -24,7 +24,7 @@ class ScenarioWebReport {
             DateTime.tryParse(json['generated'] as String? ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0),
         run: ScenarioRunResult.fromJson(
-          (json['run']! as Map).cast<String, dynamic>(),
+          (json['run']! as Map).cast<String, Object?>(),
         ),
       );
 

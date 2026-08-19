@@ -90,7 +90,10 @@ class ScenarioWebExporter {
     if (baseHref != null) _setBaseHref(p.join(output, 'index.html'), baseHref);
 
     onOutput?.call('[export] collecting the artifacts');
-    var json = report.toJson();
+    // Through the encoder and back rather than `toJson()` alone: the model's
+    // literals hand nested objects to `jsonEncode`'s `toEncodable`, and the
+    // path rewriting below walks plain maps.
+    var json = (jsonDecode(jsonEncode(report)) as Map).cast<String, Object?>();
     var copied = _collect(
       (json['run']! as Map).cast<String, Object?>(),
       output,

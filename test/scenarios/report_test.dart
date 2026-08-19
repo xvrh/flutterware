@@ -1,0 +1,471 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutterware/scenarios_report.dart';
+import 'package:test/test.dart';
+
+/// The published `run.json` reader: what a consumer's `tool/` script compiles
+/// against. A field that stops round-tripping here breaks somebody's script,
+/// which is the reason this suite exists.
+void main() {
+  ScenarioRunStep step({
+    int index = 1,
+    String? verb,
+    String? target,
+    bool unchanged = false,
+  }) => ScenarioRunStep(
+    index: index,
+    position: '#$index',
+    auto: true,
+    image: 'build/runs/1/f/s/$index-shot.png',
+    format: 'png',
+    width: 390,
+    height: 844,
+    tree: 'build/runs/1/f/s/$index-shot.tree.json',
+    texts: const ['Pay', '€ 12'],
+    verb: verb,
+    target: target,
+    unchanged: unchanged,
+  );
+
+  group('a step', () {
+    test('round-trips whole', () {
+      var full = ScenarioRunStep(
+        index: 3,
+        position: '0.1#2',
+        parent: 2,
+        branch: 'by card',
+        name: 'Checkout',
+        auto: false,
+        tags: const ['store'],
+        image: 'a.png',
+        format: 'png',
+        width: 390,
+        height: 844,
+        tree: 'a.tree.json',
+        keys: 'a.keys.json',
+        semantics: 'a.semantics.json',
+        texts: const ['Pay'],
+        address: 'fw://main/scenarios/f/s/3',
+        statusBrightness: 'light',
+        navBrightness: 'dark',
+        verb: 'tap',
+        target: '"Pay"',
+        events: 'a.events.json',
+        eventCount: 2,
+        eventChannels: const {'network': 1, 'system': 1},
+        eventTitles: const ['POST /login → 401'],
+        eventsDropped: 5,
+        frames: 'a.frames',
+        frameCount: 4,
+        frameWidth: 195,
+        frameHeight: 422,
+        frameIntervalMs: 33,
+        framesDropped: 2,
+        settled: false,
+        landed: false,
+        strayFrames: 1,
+        unchanged: true,
+        failure: 'boom',
+        attachments: [
+          ScenarioRunAttachment(
+            name: 'invoice',
+            file: 'a.invoice.pdf',
+            mimeType: 'application/pdf',
+            bytes: 12,
+          ),
+        ],
+      );
+
+      var back = ScenarioRunStep.fromJson(
+        (jsonDecode(jsonEncode(full.toJson())) as Map).cast<String, Object?>(),
+      );
+
+      expect(back.index, 3);
+      expect(back.position, '0.1#2');
+      expect(back.parent, 2);
+      expect(back.branch, 'by card');
+      expect(back.name, 'Checkout');
+      expect(back.auto, isFalse);
+      expect(back.tags, ['store']);
+      expect(back.image, 'a.png');
+      expect(back.keys, 'a.keys.json');
+      expect(back.semantics, 'a.semantics.json');
+      expect(back.texts, ['Pay']);
+      expect(back.address, 'fw://main/scenarios/f/s/3');
+      expect(back.statusBrightness, 'light');
+      expect(back.navBrightness, 'dark');
+      expect(back.action, 'tap "Pay"');
+      expect(back.events, 'a.events.json');
+      expect(back.eventCount, 2);
+      expect(back.eventChannels, {'network': 1, 'system': 1});
+      expect(back.notableEventCount, 1);
+      expect(back.eventTitles, ['POST /login → 401']);
+      expect(back.eventsDropped, 5);
+      expect(back.frames, 'a.frames');
+      expect(back.hasMotion, isTrue);
+      expect(back.framePaths, [
+        'a.frames/0000.png',
+        'a.frames/0001.png',
+        'a.frames/0002.png',
+        'a.frames/0003.png',
+      ]);
+      expect(back.frameIntervalMs, 33);
+      expect(back.framesDropped, 2);
+      expect(back.settled, isFalse);
+      expect(back.landed, isFalse);
+      expect(back.strayFrames, 1);
+      expect(back.unchanged, isTrue);
+      expect(back.failure, 'boom');
+      expect(back.attachments, hasLength(1));
+      expect(back.attachments.first.file, 'a.invoice.pdf');
+      expect(back.attachments.first.mimeType, 'application/pdf');
+    });
+
+    test('a healthy record stays the size it was', () {
+      var json = step().toJson();
+
+      // The flags whose healthy value is the default ride only when they have
+      // something to say — a fifty-step run must not pay for fifty "fine"s.
+      expect(json.keys, isNot(contains('settled')));
+      expect(json.keys, isNot(contains('landed')));
+      expect(json.keys, isNot(contains('unchanged')));
+      expect(json.keys, isNot(contains('strayFrames')));
+      expect(json.keys, isNot(contains('eventCount')));
+      expect(json.keys, isNot(contains('attachments')));
+      expect(json.keys, isNot(contains('address')));
+    });
+
+    test('locate rewrites every path and only the paths', () {
+      var located =
+          ScenarioRunStep(
+            index: 1,
+            position: '#1',
+            auto: true,
+            image: '/abs/out/1-a.png',
+            format: 'png',
+            width: 1,
+            height: 1,
+            tree: '/abs/out/1-a.tree.json',
+            keys: '/abs/out/1-a.keys.json',
+            semantics: '/abs/out/1-a.semantics.json',
+            events: '/abs/out/1-a.events.json',
+            frames: '/abs/out/1-a.frames',
+            frameCount: 2,
+            texts: const ['x'],
+            verb: 'tap',
+            attachments: [
+              ScenarioRunAttachment(
+                name: 'doc',
+                file: '/abs/out/1-a.doc.pdf',
+                bytes: 1,
+              ),
+            ],
+          ).locate(
+            root: '/worktree',
+            address: 'fw://main/scenarios/f/s/1',
+            path: (path) => path.replaceFirst('/abs/out/', 'out/'),
+          );
+
+      expect(located.image, 'out/1-a.png');
+      expect(located.tree, 'out/1-a.tree.json');
+      expect(located.keys, 'out/1-a.keys.json');
+      expect(located.semantics, 'out/1-a.semantics.json');
+      expect(located.events, 'out/1-a.events.json');
+      expect(located.frames, 'out/1-a.frames');
+      expect(located.attachments.first.file, 'out/1-a.doc.pdf');
+      expect(located.root, '/worktree');
+      expect(located.address, 'fw://main/scenarios/f/s/1');
+      expect(located.verb, 'tap');
+      expect(located.texts, ['x']);
+    });
+  });
+
+  group('an outcome', () {
+    test('counts its own steps on the harness record', () {
+      var wire =
+          (jsonDecode(
+                    jsonEncode(
+                      ScenarioRunOutcome(
+                        file: 'f',
+                        name: 's',
+                        ok: true,
+                        steps: [
+                          step(index: 1),
+                          step(index: 2, unchanged: true),
+                        ],
+                      ),
+                    ),
+                  )
+                  as Map)
+              .cast<String, Object?>()
+            ..remove('stepCount')
+            ..remove('unchangedCount');
+      var back = ScenarioRunOutcome.fromJson(wire);
+
+      expect(back.stepCount, 2);
+      expect(back.unchangedCount, 1);
+    });
+
+    test('trusts the counts on a trimmed copy', () {
+      var trimmed = ScenarioRunOutcome(
+        file: 'f',
+        name: 's',
+        ok: true,
+        steps: [step(index: 1), step(index: 2)],
+        stepCount: 2,
+        unchangedCount: 1,
+      ).withoutSteps();
+
+      var back = ScenarioRunOutcome.fromJson(
+        (jsonDecode(jsonEncode(trimmed)) as Map).cast<String, Object?>(),
+      );
+
+      expect(back.steps, isEmpty);
+      expect(back.stepCount, 2);
+      expect(back.unchangedCount, 1);
+    });
+
+    test('carries its errors and translations', () {
+      var back = ScenarioRunOutcome.fromJson(
+        (jsonDecode(
+                  jsonEncode(
+                    ScenarioRunOutcome(
+                      file: 'f',
+                      name: 's',
+                      ok: false,
+                      errors: [
+                        ScenarioRunError(error: 'boom', stack: 'at main'),
+                      ],
+                      translations: const {
+                        'app': {'cart.title': 'Panier'},
+                      },
+                    ),
+                  ),
+                )
+                as Map)
+            .cast<String, Object?>(),
+      );
+
+      expect(back.errors.single.error, 'boom');
+      expect(back.errors.single.stack, 'at main');
+      expect(back.translations, {
+        'app': {'cart.title': 'Panier'},
+      });
+    });
+  });
+
+  group('a run report', () {
+    ScenarioRunResult result() => ScenarioRunResult(
+      axes: const {'language': 'fr'},
+      packages: [
+        ScenarioRunPackage(
+          path: 'app',
+          output: '/abs/out',
+          ms: 1200,
+          scenarios: [
+            ScenarioRunOutcome(
+              file: 'f',
+              name: 's',
+              ok: false,
+              steps: [step(index: 1)],
+              stepCount: 1,
+              errors: [ScenarioRunError(error: 'boom')],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    test('is stamped with the version it was written by', () {
+      expect(result().toJson()['version'], scenarioRunReportVersion);
+    });
+
+    test('encodes whole through jsonEncode, nested objects and all', () {
+      // The literals hand nested objects to `jsonEncode`'s `toEncodable`, as
+      // the plugin contract documents — this is the round trip every writer
+      // actually takes.
+      var back = ScenarioRunResult.fromJson(
+        (jsonDecode(jsonEncode(result())) as Map).cast<String, Object?>(),
+      );
+
+      expect(back.ok, isFalse);
+      expect(back.axes, {'language': 'fr'});
+      expect(back.packages.single.ms, 1200);
+      expect(back.packages.single.scenarios.single.steps.single.index, 1);
+    });
+
+    test('a file with no version reads as the first version', () {
+      var json = result().toJson()..remove('version');
+
+      var back = ScenarioRunResult.fromJson(
+        (jsonDecode(jsonEncode(json)) as Map).cast<String, Object?>(),
+      );
+
+      expect(back.version, 1);
+    });
+
+    test('refuses a version from the future, naming both sides', () {
+      var json = (jsonDecode(jsonEncode(result())) as Map)
+          .cast<String, Object?>();
+      json['version'] = scenarioRunReportVersion + 1;
+
+      expect(
+        () => ScenarioRunResult.fromJson(json),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('${scenarioRunReportVersion + 1}'),
+              contains('Upgrade the flutterware dependency'),
+            ),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('reading a run off disk', () {
+    late Directory temp;
+
+    setUp(() {
+      temp = Directory.systemTemp.createTempSync('report_test');
+    });
+
+    tearDown(() {
+      temp.deleteSync(recursive: true);
+    });
+
+    test('finds run.json, resolves artifacts, types the events', () async {
+      var out = Directory('${temp.path}/out')..createSync();
+      var events = [
+        ScenarioEvent.request(method: 'POST', url: '/login', status: 401),
+      ];
+      File('${temp.path}/build/runs/1/f/s/1-shot.events.json')
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync(jsonEncode(events));
+      var run = ScenarioRunResult(
+        packages: [
+          ScenarioRunPackage(
+            path: 'app',
+            output: out.path,
+            scenarios: [
+              ScenarioRunOutcome(
+                file: 'f',
+                name: 's',
+                ok: true,
+                steps: [
+                  ScenarioRunStep(
+                    index: 1,
+                    position: '#1',
+                    auto: true,
+                    image: 'build/runs/1/f/s/1-shot.png',
+                    format: 'png',
+                    width: 1,
+                    height: 1,
+                    tree: 'build/runs/1/f/s/1-shot.tree.json',
+                    events: 'build/runs/1/f/s/1-shot.events.json',
+                    eventCount: 1,
+                    texts: const [],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      File(
+        '${out.path}/$scenarioRunReportFile',
+      ).writeAsStringSync(jsonEncode(run));
+
+      var report = await ScenarioRunReport.read(out.path, root: temp.path);
+
+      var read = report.run.packages.single.scenarios.single.steps.single;
+      expect(report.file(read.events!).existsSync(), isTrue);
+      var typed = report.events(read);
+      expect(typed.single.channel, ScenarioChannel.network);
+      expect(typed.single.title, 'POST /login');
+      expect(typed.single.detail, '401');
+      expect(typed.single.error, isTrue);
+    });
+
+    test('a directory with no report says what to run', () {
+      expect(
+        () => ScenarioRunReport.read(temp.path),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains(scenarioRunReportFile),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('a matrix index', () {
+    test('round-trips, version stamped', () async {
+      var temp = Directory.systemTemp.createTempSync('index_test');
+      addTearDown(() => temp.deleteSync(recursive: true));
+      var index = ScenarioRunIndex(
+        runs: [
+          ScenarioRunIndexEntry(
+            package: 'app',
+            axes: const {'device': 'iphone-se', 'language': 'fr'},
+            output: 'device-iphone-se_language-fr',
+            ok: false,
+            scenarios: 12,
+            failed: 2,
+          ),
+        ],
+      );
+      File(
+        '${temp.path}/$scenarioRunIndexFile',
+      ).writeAsStringSync(jsonEncode(index));
+
+      var back = await readScenarioRunIndex(temp.path);
+
+      expect(back.version, scenarioRunReportVersion);
+      expect(back.runs.single.output, 'device-iphone-se_language-fr');
+      expect(back.runs.single.axes, {'device': 'iphone-se', 'language': 'fr'});
+      expect(back.runs.single.ok, isFalse);
+      expect(back.runs.single.scenarios, 12);
+      expect(back.runs.single.failed, 2);
+    });
+
+    test('refuses a version from the future', () {
+      expect(
+        () => ScenarioRunIndex.fromJson({
+          'version': scenarioRunReportVersion + 1,
+        }),
+        throwsFormatException,
+      );
+    });
+  });
+
+  test('an event round-trips through its file spelling', () {
+    var back = ScenarioEvent.fromJson(
+      (jsonDecode(
+                jsonEncode(
+                  ScenarioEvent.query(
+                    sql: 'SELECT 1\nFROM t',
+                    args: [1],
+                    rows: 3,
+                  ),
+                ),
+              )
+              as Map)
+          .cast<String, Object?>(),
+    );
+
+    expect(back.channel, ScenarioChannel.db);
+    expect(back.title, 'SELECT 1 …');
+    expect(back.detail, '3 rows');
+    expect(back.data, {
+      'args': [1],
+    });
+    expect(back.body, 'SELECT 1\nFROM t');
+    expect(back.error, isFalse);
+  });
+}
