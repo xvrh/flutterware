@@ -156,7 +156,116 @@ void main() {
     expect(captures.last.landed, isFalse);
     expect(captures.last.settled, isTrue);
   });
+
+  // **A screen that is still animating lands its work too.**
+  //
+  // `settled: false` used to skip the landing entirely, and the reasoning was
+  // that such a step is of a moving picture anyway. But a moving picture is
+  // exactly where the artwork goes missing: a spinner, a ripple or any other
+  // indefinite animation keeps a frame scheduled, so the flag says nothing at
+  // all about whether the decode finished — and every one of those steps was
+  // photographed with a hole in it and reported `landed: true`.
+  //
+  // What makes the tree busy is deliberately mundane in the first two: a
+  // `TextButton`'s ink ripple is still running when a `Settle.none` step reads
+  // `hasScheduledFrame`, which is enough on its own. Nobody writing that step
+  // thinks of it as animating.
+  group('an unsettled tree', () {
+    // Pixels are the question here, so the captures have to be raw: what the
+    // file records by default is PNG, and nothing about a step that lost its
+    // artwork is visible in the encoded bytes without decoding them back.
+    setUp(() {
+      scenarioRunArgs = const ScenarioRunArgs(captureRaw: true);
+    });
+    tearDown(() => scenarioRunArgs = null);
+
+    for (var (label, busy) in [
+      ('a ripple is running', _Busy.ripple),
+      ('a spinner is on screen', _Busy.spinner),
+    ]) {
+      scenario('lands an announced decode while $label', (s) async {
+        await s.pumpWidget(_ImageApp(solidRed(400, 400), busy: busy));
+        await s.tap('Show', settle: Settle.none);
+
+        var step = captures.last;
+        expect(step.settled, isFalse, reason: 'the fixture must be busy');
+        expect(step.landed, isTrue);
+        expect(_redPixels(step.bytes), greaterThan(0));
+      });
+
+      scenario('lands a guessed decode while $label', (s) async {
+        await s.pumpWidget(_ImageApp.art(busy: busy));
+        await s.tap('Show', settle: Settle.none);
+
+        var step = captures.last;
+        expect(step.settled, isFalse, reason: 'the fixture must be busy');
+        expect(_redPixels(step.bytes), greaterThan(0));
+      });
+    }
+
+    // **The links are what a fix here is measured against.** A decode that
+    // announces nothing arrives in links — a read completes, the app builds,
+    // the build starts the next read — and on a busy tree there is no signal
+    // that says a link landed, so the turns have to be spent flat. A fix that
+    // merely re-applies the caller's policy once buys exactly one of them:
+    // measured, it carries this fixture at one link and loses it at six —
+    // shallower than the deepest decode a real suite has produced here, which
+    // is the whole reason `realWorkTurns` is not one.
+    scenario('carries a decode six links deep', (s) async {
+      await s.pumpWidget(const _ImageApp.art(busy: _Busy.spinner, links: 6));
+      await s.tap('Show', settle: Settle.none);
+
+      expect(_redPixels(captures.last.bytes), greaterThan(0));
+    });
+
+    // The honesty half. Skipping the landing reported `landed: true` on a step
+    // that had not tried, so the flag could not be read at all; now it says
+    // what it always meant.
+    scenario('still reports a decode that never arrives', (s) async {
+      await s.pumpWidget(
+        const _ImageApp.provider(_NeverDecodes(), busy: _Busy.spinner),
+      );
+      await s.tap('Show', settle: Settle.none);
+
+      expect(captures.last.landed, isFalse);
+      expect(captures.last.settled, isFalse);
+    });
+
+    // The movie has to end where the still is. The turns above all draw the
+    // same fake instant, so the recording takes one frame from them and not a
+    // dozen — but it has to take that one: measured without it, the still came
+    // out with the artwork and the last frame behind it did not, which is the
+    // same hole one step further in.
+    group('recorded', () {
+      setUp(() {
+        scenarioRunArgs = const ScenarioRunArgs(
+          captureRaw: true,
+          record: MotionRecording(
+            interval: Duration(milliseconds: 33),
+            scale: 0.5,
+          ),
+        );
+      });
+
+      scenario('ends on the frame the still was taken from', (s) async {
+        await s.pumpWidget(_ImageApp(solidRed(400, 400), busy: _Busy.spinner));
+        await s.tap('Show', settle: Settle.none);
+
+        var step = captures.last;
+        expect(_redPixels(step.bytes), greaterThan(0));
+        expect(_redPixels(step.motion.bytes.last), greaterThan(0));
+      });
+    });
+  });
 }
+
+/// What keeps a fixture's tree asking for frames when a step declines to pump
+/// it out — the two shapes that make a step report `settled: false` without
+/// anybody having written an animation.
+///
+/// [ripple] is the button's own ink splash and needs nothing added; [spinner]
+/// puts a `CircularProgressIndicator` beside it, which never stops.
+enum _Busy { ripple, spinner }
 
 /// Pixels close to pure red in an rgba8888 frame — "is the artwork in this
 /// picture", asked of a fixture chosen so that counting answers it.
@@ -226,11 +335,21 @@ class _AppState extends State<_App> {
 /// after `pumpWidget`, because `pumpWidget` already takes a real turn for boot
 /// and lands whatever the first frame asked for.
 class _ImageApp extends StatefulWidget {
-  _ImageApp(Uint8List bytes) : image = MemoryImage(bytes);
+  _ImageApp(Uint8List bytes, {this.busy = _Busy.ripple})
+    : image = MemoryImage(bytes),
+      links = 1;
 
-  const _ImageApp.provider(this.image);
+  const _ImageApp.provider(ImageProvider this.image, {this.busy = _Busy.ripple})
+    : links = 1;
 
-  final ImageProvider image;
+  /// [_Art] in the image's place — the same shape with work that announces
+  /// nothing on the end of it, [links] deep.
+  const _ImageApp.art({this.busy = _Busy.ripple, this.links = 1})
+    : image = null;
+
+  final ImageProvider? image;
+  final _Busy busy;
+  final int links;
 
   @override
   State<_ImageApp> createState() => _ImageAppState();
@@ -248,16 +367,33 @@ class _ImageAppState extends State<_ImageApp> {
             onPressed: () => setState(() => _shown = true),
             child: const Text('Show'),
           ),
-          if (_shown) Image(image: widget.image, width: 200, height: 200),
+          if (widget.busy == _Busy.spinner) const CircularProgressIndicator(),
+          if (_shown)
+            SizedBox(
+              width: 200,
+              height: 200,
+              child: switch (widget.image) {
+                var image? => Image(image: image),
+                null => _Art(links: widget.links),
+              },
+            ),
         ],
       ),
     ),
   );
 }
 
-/// Paints nothing until a real-loop future hands it something to paint.
+/// Paints nothing until a real-loop future hands it something to paint —
+/// [links] of them in a chain, each started by the build the previous one
+/// caused, which is the shape a decode actually arrives in.
+///
+/// Pure red rather than `Colors.red`, so `_redPixels` can count it: the
+/// question these fixtures answer is whether the artwork is in the picture at
+/// all, and material red is not far enough from the background to ask it with.
 class _Art extends StatefulWidget {
-  const _Art();
+  const _Art({this.links = 1});
+
+  final int links;
 
   @override
   State<_Art> createState() => _ArtState();
@@ -265,20 +401,30 @@ class _Art extends StatefulWidget {
 
 class _ArtState extends State<_Art> {
   Color? _decoded;
+  var _link = 0;
 
   @override
   void initState() {
     super.initState();
+    _next(0);
+  }
+
+  void _next(int i) {
     // Root zone, so the timer is a real one: nothing FakeAsync flushes can
     // complete it, and it schedules no frame while it is in flight.
-    Zone.root
-        .run(() => Future<Color>.delayed(Duration.zero, () => Colors.red))
-        .then((color) {
-          if (mounted) setState(() => _decoded = color);
-        });
+    Zone.root.run(() => Future<void>.delayed(Duration.zero)).then((_) {
+      if (!mounted) return;
+      if (i < widget.links - 1) {
+        setState(() => _link = i + 1);
+        _next(i + 1);
+      } else {
+        setState(() => _decoded = const Color(0xFFFF0000));
+      }
+    });
   }
 
   @override
-  Widget build(BuildContext context) =>
-      _decoded == null ? const SizedBox.expand() : ColoredBox(color: _decoded!);
+  Widget build(BuildContext context) => _decoded == null
+      ? SizedBox.expand(child: Text('$_link'))
+      : ColoredBox(color: _decoded!);
 }
