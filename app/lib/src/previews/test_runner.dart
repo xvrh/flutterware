@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:path/path.dart' as p;
+
 import '../embedder/tester_host.dart';
 import 'catalog_entry.dart';
 import 'compile_blame.dart';
@@ -118,6 +120,47 @@ class PreviewAuditRow {
   bool get ok => compileError == null && failure == null && indicting.isEmpty;
 }
 
+/// One entry rendered and photographed, as [PreviewTestRunner.capture] hands
+/// it over.
+///
+/// The picture and the tree are **paths**, not bytes: a frame is megabytes,
+/// the service protocol is JSON, and the caller is going to hash and file the
+/// pixels rather than look at them — the same transport the scenario
+/// comparison uses.
+class PreviewCaptureRow {
+  const PreviewCaptureRow({
+    required this.id,
+    this.compileError,
+    this.failure,
+    this.errors = const [],
+    this.image,
+    this.width = 0,
+    this.height = 0,
+    this.tree,
+  });
+
+  final String id;
+
+  /// Set when the compiler refused it, in which case nothing rendered.
+  final String? compileError;
+
+  /// Set when the entry's test did not come out clean — the builder threw,
+  /// a timer outlived the audit clock. A frame may still exist beside it.
+  final String? failure;
+
+  /// What the framework reported, as `InspectErrors.toJson` wrote it.
+  final List<Map<String, Object?>> errors;
+
+  /// The settled screen as raw rgba on disk, or null when nothing rendered.
+  final String? image;
+
+  final int width;
+  final int height;
+
+  /// `InspectTree.toJson` on disk, beside the image.
+  final String? tree;
+}
+
 /// Renders a package's whole catalog under `flutter_tester` and reports what
 /// each entry said.
 ///
@@ -189,6 +232,78 @@ class PreviewTestRunner {
             ],
           ),
     ];
+  });
+
+  /// Renders and photographs [entryIds], handing each row over as it lands.
+  ///
+  /// One extension call per entry rather than one for the batch, because the
+  /// caller is a comparison and a comparison answers rows as they become
+  /// answerable — a batch reply would hold every verdict until the last
+  /// render. The harness is brought up **once**: quarantine survives the
+  /// loop, so one broken entry costs one blame pass rather than a recompile
+  /// per row.
+  ///
+  /// Frames land under `<outDir>/<index>/`, one directory per entry so the
+  /// harness's own within-call numbering cannot collide across calls.
+  Future<void> capture({
+    required List<String> entryIds,
+    required String outDir,
+    required Future<void> Function(PreviewCaptureRow row) onRow,
+  }) => _host.exclusive(() async {
+    _program.quarantined.clear();
+    await _bringUp();
+
+    for (var (index, id) in entryIds.indexed) {
+      if (_program.quarantined[id] case var error?) {
+        await onRow(PreviewCaptureRow(id: id, compileError: error));
+        continue;
+      }
+      var response = await _host.vm.requireExtension(
+        'ext.flutterware.previews.audit',
+        args: {'entries': id, 'output': p.join(outDir, '$index')},
+      );
+      if (response!['error'] case String error) {
+        throw StateError('the previews harness failed:\n$error');
+      }
+      var reported = (response['entries'] as Map).cast<String, Object?>();
+      if (reported[id] case Map fields) {
+        var row = fields.cast<String, Object?>();
+        var failure = row['failure'] as String?;
+        // Rendered, no failure, and yet no picture: this harness does not
+        // know the `output` argument. That is version skew, not a broken
+        // entry — a comparison's base side resolves the base commit's own
+        // `package:flutterware`, and one from before capture ignores the
+        // request silently. Name it, or every row reads "did not render"
+        // against a checkout where nothing is wrong.
+        if (failure == null && row['image'] == null) {
+          failure =
+              "this checkout's package:flutterware predates preview "
+              'capture: the harness rendered the entry but handed back no '
+              'picture';
+        }
+        await onRow(
+          PreviewCaptureRow(
+            id: id,
+            failure: failure,
+            errors: [
+              for (var error in (row['errors'] as List? ?? const []))
+                if (error case Map found) found.cast<String, Object?>(),
+            ],
+            image: row['image'] as String?,
+            width: row['width'] as int? ?? 0,
+            height: row['height'] as int? ?? 0,
+            tree: row['tree'] as String?,
+          ),
+        );
+      } else {
+        await onRow(
+          PreviewCaptureRow(
+            id: id,
+            failure: 'the harness returned nothing for this entry',
+          ),
+        );
+      }
+    }
   });
 
   /// A live harness, dropping whatever will not compile until one exists.

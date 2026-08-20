@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
+import 'dart:ui' as ui;
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 // The declarer, so one generated file can serve both lanes — see
 // [runPreviewHarness] for how its presence is the thing that tells them apart.
 // ignore: implementation_imports
@@ -23,6 +26,7 @@ import '../canvases.dart';
 import '../devices.dart';
 import '../inspect/error.dart';
 import '../inspect/guest_errors.dart';
+import '../inspect/guest_inspect.dart';
 import '../scenarios/asset_bundle.dart';
 import '../scenarios/fonts.dart';
 import '../scenarios/real_work.dart';
@@ -47,8 +51,11 @@ const auditBudget = Duration(seconds: 5);
 /// widens what the error buffer sees, since every frame in between is still
 /// built and still reported.
 ///
-/// What this policy gives up, a capture would mind and an audit does not: the
-/// screen at `budget` rather than the screen as it settled.
+/// What this policy gives up is the screen *as it settled*: what a capture
+/// photographs is the screen at `budget`. The comparison rides that on
+/// purpose — under a fake clock the screen at `budget` is the same picture
+/// every run, animations and all, and a diff wants reproducible pixels more
+/// than it wants the prettiest frame.
 const auditSettle = Settle.elapse(auditBudget);
 
 /// One preview, as the generated harness hands it over.
@@ -168,6 +175,11 @@ Future<void> _serve(
           null => null,
           var name => orientationById(name),
         },
+        // A directory to photograph into. Pixels stay out of the response —
+        // a frame is megabytes and the service protocol is JSON — so what
+        // travels back is the paths, the way a scenario run reports its
+        // captures.
+        output: args['output'],
       );
       return developer.ServiceExtensionResponse.result(jsonEncode(report));
     } catch (error, stack) {
@@ -193,12 +205,14 @@ Future<Map<String, Object?>> _audit(
   Set<String>? only,
   Device? device,
   ScreenOrientation? orientation,
+  String? output,
 }) async {
   var wanted = [
     for (var entry in entries)
       if (only == null || only.contains(entry.id)) entry,
   ];
   var collected = <String, InspectErrors>{};
+  var captured = <String, Map<String, Object?>>{};
   var declarer = Declarer();
   declarer.declare(
     () => _declare(
@@ -207,6 +221,8 @@ Future<Map<String, Object?>> _audit(
       collect: collected,
       device: device,
       orientation: orientation,
+      output: output,
+      captured: captured,
     ),
   );
   // Flat by construction — one `testWidgets` per entry, no groups — so the
@@ -241,6 +257,7 @@ Future<Map<String, Object?>> _audit(
       for (var entry in wanted)
         entry.id: {
           ...?collected[entry.id]?.toJson(),
+          ...?captured[entry.id],
           // Something went wrong that is not a framework error the build
           // reported — the builder threw outright, a test timed out. Reported
           // separately because it is a different kind of broken: the entry did
@@ -274,14 +291,21 @@ String auditFailureMessage(String failure) {
 /// [collect] is where each entry's report lands in the driven lane. Null in the
 /// `flutter test` lane, where nobody is going to read it and the test's own
 /// pass or fail is the whole answer.
+///
+/// [output] asks for pictures: each entry's settled screen and its tree are
+/// written under it and their paths land in [captured]. Only the driven lane
+/// passes it — the comparison is the caller — so an ordinary audit pays
+/// nothing for the capability.
 void _declare(
   List<PreviewEntry> entries,
   List<PreviewCanvas> canvases, {
   required Map<String, InspectErrors>? collect,
   Device? device,
   ScreenOrientation? orientation,
+  String? output,
+  Map<String, Map<String, Object?>>? captured,
 }) {
-  for (var entry in entries) {
+  for (var (index, entry) in entries.indexed) {
     testWidgets(entry.id, (tester) async {
       // Not `install()`: the binding owns `FlutterError.onError` for the length
       // of a test, and that ownership is what makes a reported error fail it.
@@ -366,6 +390,13 @@ void _declare(
           budget: budget,
           assets: assets,
         );
+        // After the settle, so the picture is of the same screen the errors
+        // are about. An entry whose build threw is photographed anyway — the
+        // ErrorWidget is what is there — and the host decides whether that
+        // picture is worth comparing.
+        if (output != null) {
+          captured?[entry.id] = await _capture(tester, entry, output, index);
+        }
       } finally {
         FlutterError.onError = previous;
         // Inside the body, never a tearDown: the binding verifies its debug
@@ -380,4 +411,54 @@ void _declare(
       // more way of saying it in the driven one.
     });
   }
+}
+
+/// Photographs the settled screen into [output] and reads the tree it drew,
+/// answering with the paths and the picture's dimensions.
+///
+/// Raw rgba, never PNG — the comparison reads pixels and encoding is ~80% of
+/// what a capture costs, the same measurement the scenario capture cites. The
+/// rect is physical and the output logical, which is also the scenario rule:
+/// the root layer's coordinates have the device-pixel-ratio transform inside
+/// them, so a 3× canvas captured at face value saves its top-left ninth.
+Future<Map<String, Object?>> _capture(
+  WidgetTester tester,
+  PreviewEntry entry,
+  String output,
+  int index,
+) async {
+  var directory = Directory(output)..createSync(recursive: true);
+  var imagePath = p.join(directory.path, '$index.raw');
+  var treePath = p.join(directory.path, '$index.tree.json');
+  var width = 0;
+  var height = 0;
+  // A real-async turn, like the scenario capture: `toImage` completes on the
+  // real event loop, which fake time never runs.
+  await tester.runAsync(() async {
+    var view = tester.binding.renderViews.single;
+    var layer = view.debugLayer! as OffsetLayer;
+    var dpr = view.flutterView.devicePixelRatio;
+    var image = await layer.toImage(
+      Offset.zero & (view.size * dpr),
+      pixelRatio: 1 / dpr,
+    );
+    var data = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+    width = image.width;
+    height = image.height;
+    image.dispose();
+    File(imagePath).writeAsBytesSync(data.buffer.asUint8List());
+  });
+  // The same walk every other surface answers with, so the comparison's tree
+  // diff reads the identical shape a live guest or a scenario step reports.
+  var tree = GuestInspector(
+    rootOf: () => CatalogGuest.demoRoot,
+    entryIdOf: () => entry.id,
+  ).read();
+  File(treePath).writeAsStringSync(jsonEncode(tree.toJson()));
+  return {
+    'image': imagePath,
+    'width': width,
+    'height': height,
+    'tree': treePath,
+  };
 }

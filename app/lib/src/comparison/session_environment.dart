@@ -268,12 +268,11 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
       onProgress: onProgress,
       cancel: cancel,
       side: PreviewsSide(
-        dartExecutable: p.join(flutterSdk.root, 'bin', 'dart'),
         flutterSdkRoot: flutterSdk.root,
-        appToolDirectory: appToolDirectory,
         packagePath: _relative(package),
         root: core.rootFor(package),
         previewAnnotations: core.previewAnnotationsFor(package),
+        canvases: core.canvasesFor(package),
       ),
     );
   }

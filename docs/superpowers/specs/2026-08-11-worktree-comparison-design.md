@@ -220,6 +220,26 @@ and a raw `DateTime.now()` cannot be intercepted by anything, in any test.
 Worth doing regardless of comparison: it makes every preview screenshot
 reproducible.
 
+### 6a. Corrected (2026-08-20) — the render lane is `flutter_tester`
+
+As built, and as this doc originally assumed, the previews half rendered both
+sides through the embedder (`HeadlessCatalog.captureAll`, since deleted): real
+engine, real time, the settle waiting on a wall clock. Switched to the audit's
+`flutter_tester` lane (`PreviewTestRunner.capture`, riding the
+`2026-08-15-previews-audit-on-flutter-tester.md` harness) for the property a
+pixel diff actually needs: under FakeAsync the shutter falls on the same fake
+instant every run, so the same entry is **byte-identical** across renders —
+animations, spinners and all — and the *still animating when captured*
+complaint the embedder lane had to carry is structurally gone. The speed
+argument rides along (an entry that animates for ever costs fake clock, not
+real seconds), and §10's daemon numbers now describe only the single-entry
+`previews screenshot` path.
+
+What the lane gives up: `flutter_test` answers every HTTP request with 400, so
+a preview of a remote image renders its error state on both sides — identical,
+so it cancels, but a change to the remote half of such a preview is invisible
+here. The audit has the same blind spot and sets it aside the same way.
+
 ### Identity and renames
 
 Entries are keyed by id, and **a moved file reads as removed + added. That is
@@ -660,14 +680,15 @@ handles SDK management.
 
 ### What a comparison of *this* repository still reports, and why
 
-Four teardown-dialog previews come back `changed` with the note *on base: this
-side cannot tell whether anything was still animating*. That is §11a at full
-strength and it is **self-resolving**: the base's `package:flutterware` predates
-the animation-settling fix, so its guest settles for images alone while head's
-waits for tickers, and the two sides are photographed by different rules. It
-disappears the moment this lands. Proof the fix itself is sound: two
-`fw run previews screenshot` renders of one entry are byte-identical, where
-before they were not.
+The shape changes with the tooling, and it is §11a every time. The embedder
+era's version: four teardown-dialog previews `changed` with *on base: this
+side cannot tell whether anything was still animating*, because the base's
+`package:flutterware` predated the animation-settling fix. The tester-lane
+switch (§6a) replaced that with its own: every re-rendered entry `wasBroken`
+with *this checkout's package:flutterware predates preview capture*, because
+the base's harness does not know the `output` argument and renders without
+photographing. Both self-resolve the moment the change lands on the base
+branch; the row's job is to name the skew rather than read as a broken entry.
 
 ## 13. Decided — do not relitigate
 
