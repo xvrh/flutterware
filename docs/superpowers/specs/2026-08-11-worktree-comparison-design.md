@@ -240,6 +240,31 @@ a preview of a remote image renders its error state on both sides — identical,
 so it cancels, but a change to the remote half of such a preview is invisible
 here. The audit has the same blind spot and sets it aside the same way.
 
+### 6b. Corrected (2026-08-20) — a comparison runner builds in a claimed directory
+
+Sharing the audit's lane surfaced what the scenario half had carried since the
+start: a `TesterHost`'s artifacts — generated entrypoint, wrapper directory,
+dill, asset bundle, log — are named by program under one `build/flutterware`,
+and `exclusive` serializes nothing across *hosts*. The comparison's head
+checkout **is** the worktree the panel's warm runners live on, so the two
+collide by construction, and for previews destructively: the comparison
+generates a *subset* harness whose wrapper indices are assigned within its own
+list, so writing it into the shared directory renumbers — and prunes — the
+warm harness's wrappers, which the warm compiler then picks up as an edit and
+hot-reloads the wrong program into the panel's guest. Two `frontend_server`s
+on one output dill can tear the file outright.
+
+A constant second name (`previews_compare`) is not enough, because the base
+checkout is shared machine-wide per sha (§ `BaseCheckout`) and only its
+creation is locked — two comparisons against the same base render in it
+concurrently on purpose. So each runner a comparison spawns builds in a
+**claimed** directory, `build/flutterware/comparison/<pid>-<n>` inside its
+checkout (`build_directory.dart`), released when the runner is disposed;
+claiming sweeps day-old claims a crashed run left behind. Both halves,
+both sides, GUI and `fw compare` — everything goes through
+`PreviewsSide.render` and `ScenariosSide.runnerFor`, which is where the claim
+lives.
+
 ### Identity and renames
 
 Entries are keyed by id, and **a moved file reads as removed + added. That is

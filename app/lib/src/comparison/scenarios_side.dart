@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutterware/src/inspect/node.dart';
 
 import '../scenarios/runner.dart';
+import 'build_directory.dart';
 import 'frame_ref.dart';
 import 'scenario_alignment.dart';
 import 'scenario_comparison.dart';
@@ -69,11 +70,22 @@ class ScenariosSide {
       idFor(file: listing.file, scenario: listing.name),
   ];
 
-  ScenarioRunner runnerFor(String checkout) => ScenarioRunner(
-    packageRoot: p.normalize(p.join(checkout, packagePath)),
-    directory: directory,
-    flutterSdkRoot: flutterSdkRoot,
-  );
+  /// A runner for [checkout], building in a claimed directory of its own.
+  ///
+  /// Never the default `build/flutterware`: the head checkout is the very
+  /// worktree the panel's warm runner lives on, the base checkout is shared
+  /// by every comparison on the machine, and `TesterHost.exclusive`
+  /// serializes nothing across hosts. Whoever disposes the runner releases
+  /// the claim — `LiveScenarioSource.dispose` does.
+  ScenarioRunner runnerFor(String checkout) {
+    var packageRoot = p.normalize(p.join(checkout, packagePath));
+    return ScenarioRunner(
+      packageRoot: packageRoot,
+      directory: directory,
+      flutterSdkRoot: flutterSdkRoot,
+      buildDirectory: claimComparisonBuildDirectory(packageRoot),
+    );
+  }
 
   /// Runs [id] and reads back every step it captured.
   ///

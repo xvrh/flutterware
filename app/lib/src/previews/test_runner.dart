@@ -21,9 +21,17 @@ typedef PreviewCatalog = ({
 
 /// The previews half of a [TesterHost].
 class PreviewProgram extends TesterProgram {
-  PreviewProgram({required this.packageRoot, required this.read});
+  PreviewProgram({
+    required this.packageRoot,
+    required this.read,
+    this.buildDirectory = TesterHost.defaultBuildDirectory,
+  });
 
   final String packageRoot;
+
+  /// Where the generated harness goes — the host's own directory, so an
+  /// isolated runner never renumbers or prunes the warm lane's wrappers.
+  final String buildDirectory;
 
   /// Re-read on every sync, so a preview written while the harness is warm
   /// restarts it rather than staying invisible until somebody reopens the
@@ -74,6 +82,7 @@ class PreviewProgram extends TesterProgram {
       packageRoot,
       _servable(catalog),
       canvases: catalog.canvases,
+      directory: buildDirectory,
     );
   }
 
@@ -177,12 +186,18 @@ class PreviewTestRunner {
     required String packageRoot,
     required String flutterSdkRoot,
     required PreviewCatalog Function() read,
+    String buildDirectory = TesterHost.defaultBuildDirectory,
     void Function(String line)? onLog,
-  }) : _program = PreviewProgram(packageRoot: packageRoot, read: read) {
+  }) : _program = PreviewProgram(
+         packageRoot: packageRoot,
+         read: read,
+         buildDirectory: buildDirectory,
+       ) {
     _host = TesterHost(
       packageRoot: packageRoot,
       flutterSdkRoot: flutterSdkRoot,
       program: _program,
+      buildDirectory: buildDirectory,
       onLog: onLog,
     );
   }

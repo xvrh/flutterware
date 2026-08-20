@@ -11,21 +11,27 @@ const harnessEntrypointPath = 'build/flutterware/scenarios_harness.dart';
 /// Scenario files live under `test/`, outside `lib/`, so they have no
 /// `package:` URI — imports are relative to the entrypoint's own location,
 /// exactly as the catalog's per-entry wrappers re-relativise theirs.
+/// [directory] is that location relative to the package, which is what the
+/// climb out of it is computed from — a comparison's entrypoint sits two
+/// levels deeper than the default, and a hardcoded `../../` there imports
+/// nothing.
 String generateHarnessEntrypoint(
   List<String> files, {
   List<String> configs = const [],
+  String directory = 'build/flutterware',
 }) {
   var sorted = [...files]..sort();
   var sortedConfigs = [...configs]..sort();
+  String import(String file) => p.url.relative(file, from: directory);
   var buffer = StringBuffer()
     ..writeln('// GENERATED — flutterware scenarios harness. Do not edit.')
     ..writeln("import 'package:flutterware/src/scenarios/harness.dart'")
     ..writeln('    as harness;');
   for (var (index, file) in sorted.indexed) {
-    buffer.writeln("import '../../$file' as s$index;");
+    buffer.writeln("import '${import(file)}' as s$index;");
   }
   for (var (index, config) in sortedConfigs.indexed) {
-    buffer.writeln("import '../../$config' as c$index;");
+    buffer.writeln("import '${import(config)}' as c$index;");
   }
   buffer
     ..writeln()
@@ -91,11 +97,20 @@ String? testConfigFolderFor(String packageRoot, String file) {
 /// Left alone when the content is already right: the entrypoint is a compiled
 /// source, and an untouched mtime is what keeps a refresh from invalidating —
 /// and recompiling — it for nothing.
-String writeHarnessEntrypoint(String packageRoot, List<String> files) {
-  var path = p.join(packageRoot, harnessEntrypointPath);
+///
+/// [directory] is where it goes, relative to the package — the runner's
+/// `buildDirectory`, so the entrypoint lives beside the dill it compiles to
+/// and an isolated runner never rewrites the warm lane's copy.
+String writeHarnessEntrypoint(
+  String packageRoot,
+  List<String> files, {
+  String directory = 'build/flutterware',
+}) {
+  var path = p.join(packageRoot, directory, 'scenarios_harness.dart');
   var source = generateHarnessEntrypoint(
     files,
     configs: findTestConfigs(packageRoot, files),
+    directory: directory,
   );
   var file = File(path);
   if (!file.existsSync() || file.readAsStringSync() != source) {

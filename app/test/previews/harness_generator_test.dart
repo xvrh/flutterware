@@ -183,4 +183,36 @@ Widget ${entry.symbol}() => const Placeholder();
     expect(harness(), contains('flutter test $previewHarnessPath'));
     expect(harness(), contains('--use-test-fonts'));
   });
+
+  test('two directories are two harnesses that never touch each other', () {
+    // The comparison generates a *subset* harness on the same package the
+    // panel's warm runner holds the full catalog on. Indices are assigned
+    // within each list, so in one shared directory the subset would renumber
+    // — and prune — the full harness's wrappers under the warm compiler.
+    writePreviewHarness(root.path, [members, wide], canvases: const []);
+    var full = harness();
+    var fullWrapper = wrapper(0).readAsStringSync();
+
+    const claimed = 'build/flutterware/comparison/123-0';
+    var path = writePreviewHarness(
+      root.path,
+      [wide],
+      canvases: const [],
+      directory: claimed,
+    );
+
+    expect(p.isWithin(p.join(root.path, claimed), path), isTrue);
+    expect(File(path).existsSync(), isTrue);
+    expect(
+      File(path).readAsStringSync(),
+      contains('flutter test $claimed/previews_harness.dart'),
+    );
+    expect(harness(), full);
+    expect(wrapper(0).readAsStringSync(), fullWrapper);
+    expect(
+      wrapper(1).existsSync(),
+      isTrue,
+      reason: "the subset's prune only reaches its own wrapper directory",
+    );
+  });
 }
