@@ -319,6 +319,10 @@ void _declare(
       // `CatalogGuest` resets on a *change* of entry, so re-running the same one
       // would otherwise still be holding the last run's errors.
       GuestErrors.instance.clear();
+      // The other buffer nothing empties between bodies, and the expensive
+      // one: an entry left holding a pending decode makes every entry after
+      // it wait out the whole real-work allowance on it.
+      resetAnnouncedWork();
       // A device named for the whole run wins over every canvas; absent, each
       // entry is framed as its own subtree declared. `canvasFor` rather than a
       // prefix match written out again here, because a rule applied twice is a

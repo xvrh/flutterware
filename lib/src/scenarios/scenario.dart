@@ -197,6 +197,11 @@ Future<void> _runScenario(
   // the bottom, so a run also survives whatever ran before the first scenario:
   // the harness loads the app's fonts through `rootBundle` at startup.
   rootBundle.clear();
+  // The same shape one counter further out: the image cache is process-wide
+  // and `testWidgets` never empties it, so a scenario that ended with a decode
+  // still in flight would have this one waiting out its whole allowance on
+  // work that is not its own.
+  resetAnnouncedWork();
   var assets = ScenarioAssetBundle();
   _countFrames(tester);
   var state = _ReplayState();

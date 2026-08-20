@@ -1,5 +1,28 @@
 ## Unreleased
 
+- **One preview that leaves a decode in flight no longer slows every preview
+  after it.** The image cache is `PaintingBinding`'s and process-wide, and
+  nothing in `flutter_test` empties it between test bodies — so an entry that
+  ended with `pendingImageCount > 0` handed that count to every entry after it,
+  each of which then waited out the whole real-work allowance on work that was
+  not its own and would never land. Measured on a 126-entry catalog with one
+  such entry sixth: every one of the 117 after it went from ~50ms to a flat
+  ~2.4s, and the whole capture took **287s**. It now takes **18s**. Both
+  harnesses reset the cache at the top of every body, the scenario lane
+  included — a scenario leaking a pending image had exactly the same shape.
+- **The real-work allowance is a second of clock, which is what it always
+  said.** It was spent by counting waiting turns and charging each one the
+  millisecond it asked to sleep — against the ~2.4ms a turn of the real loop
+  actually costs under `runAsync` — so the one-second deadlock ceiling took two
+  and a half seconds to reach, and longer on a slower machine. It reads a
+  stopwatch now, so the ceiling is the same wherever it runs.
+- **An asset preview of an image that will not decode no longer leaves the key
+  pending for ever.** `MemoryImage` is the one provider that does not evict on a
+  failed decode, the way `NetworkImage`, `FileImage` and `ResizeImage` all do;
+  the asset inspector does it for itself. Everything reading
+  `pendingImageCount` as "work is in flight" — the drive settle included — was
+  waiting on an image the app already knew about.
+
 - **`run inspect --native` reads the platform's own log — the half `flutter
   run` structurally cannot show you.** Its device-log filter admits a line only
   from the app's main executable, the engine or `libswiftCore`, and a plugin

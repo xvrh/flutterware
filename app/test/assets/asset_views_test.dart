@@ -371,6 +371,38 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('an image that will not decode leaves the cache empty', (
+      tester,
+    ) async {
+      PaintingBinding.instance.imageCache.clear();
+      await pump(
+        tester,
+        AssetPreview(
+          bytes: Uint8List.fromList(utf8.encode('{"not":"a png"}')),
+          kind: AssetKind.image,
+          name: 'assets/images/truncated.png',
+        ),
+      );
+      // The decode fails on the *real* event loop, which fake time never runs.
+      for (var i = 0; i < 5; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 1)),
+        );
+        await tester.pump();
+      }
+
+      expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+      // `MemoryImage` does not evict a failed decode, so without the preview
+      // doing it the key sits in `_pendingImages` for the life of the process
+      // — and everything that reads `pendingImageCount` to mean "work is in
+      // flight" then waits out its budget on an image that will never land.
+      expect(
+        PaintingBinding.instance.imageCache.pendingImageCount,
+        0,
+        reason: 'a decode that failed is not work still in flight',
+      );
+    });
+
     testWidgets('reports a font it cannot load', (tester) async {
       await pump(
         tester,
