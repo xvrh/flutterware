@@ -225,6 +225,15 @@ skipped otherwise.
   scenario — only named `Shot`s and `screen()` capture. Default is
   `Shots.auto`. This revives the owner's earlier opt-in experiment for long
   scenarios with noisy steps.
+- **Per-folder default** (2026-08-20): `runScenarios(testMain, shots: ...)` in
+  a folder's `flutter_test_config.dart` sets the policy for every scenario
+  under it, beaten by any `scenario()` that names its own. The policy is a
+  fact about the folder in the same way the device and language profile
+  already is — a folder whose captures feed a document generator wants every
+  picture named and nothing else rendered. Measured by a consumer: **65 of
+  that folder's 197 steps (33%), 41 MB a pass**, rendered, written and then
+  discarded wholesale by the exporter, because the alternative was saying
+  `shots:` on every one of sixty scenarios.
 - **Named shots and `screen()` are primary flow-graph nodes**; anonymous
   auto-shots fold into their predecessor as collapsible detail. This merges the
   ancestors' philosophies — dev_studio's curated graph, the port's
@@ -294,6 +303,37 @@ skipped otherwise.
   were invisible to a diff entirely.
 - On failure, the dev_studio post-mortem pair: the frame before the error, then
   the rendered error, then the stack. This is the artifact an agent reads.
+
+## Determinism — is it the same suite twice? (2026-08-20)
+
+A suite can be entirely green while a third of its screenshots move every
+pass. Every scenario passes, every assertion holds, and the pictures
+underneath are different pictures — and nothing in the report said so. A
+consumer reached byte-reproducibility on a 125-scenario suite only after three
+fixes of their own (a fixture chosen by hashing a freshly-minted id, generated
+ids drawn on screen as text, and two production writes taking `DateTime.now()`
+instead of the injectable clock), and finding them by eye took a day.
+
+So every step that captures bytes records a **digest** of them —
+`ScenarioRunStep.digest`, the pixels for a screen and the payload for a
+document — and `compareScenarioRuns(before, after)` answers which steps moved.
+The `run` action reads the previous run's report *before* it starts (a fixed
+`output` is about to be overwritten; otherwise the newest earlier run of the
+same matrix point) and reports the answer as `ScenarioRunPackage.drift`.
+
+Three rules keep it from crying wolf:
+
+- **Matched by `position`, never by index.** An inserted step shifts every
+  index below it and no position but its own siblings'.
+- **Only scenarios both runs captured bytes for.** One of them may have been a
+  selective run, and a scenario the other never executed did not move.
+- **A run with no digests anywhere is a run with nothing to compare**, not a
+  suite that moved entirely — which is what a report written before this
+  existed looks like.
+
+It matters beyond tidiness: a comparison against a base checkout is only as
+useful as the suite's determinism, because a suite that moves on its own
+drowns the change that was actually asked about.
 
 ## Discovery
 

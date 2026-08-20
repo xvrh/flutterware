@@ -1426,6 +1426,12 @@ class ScenariosCore extends PluginCore {
     return Status.none;
   }
 
+  /// What each package's last full run moved against the run before it.
+  ///
+  /// Kept rather than derived: the comparison needs the *previous* report,
+  /// which the run that produced this one has since overwritten.
+  final _lastDrift = <String, ScenarioRunDrift>{};
+
   PluginView _view() {
     if (packages.isEmpty) {
       return const PluginView([
@@ -1443,6 +1449,12 @@ class ScenariosCore extends PluginCore {
             ViewField('Error', '$error', tone: Tone.error)
           else if (_results[path] case var result?) ...[
             ViewField('Scenarios', '${result.scenarios.length}'),
+            // What the last run of this package moved that nobody asked it
+            // to. Sticky until the next run replaces it, because that is the
+            // question it answers: not "is the suite green" — it was — but
+            // "is it the same suite twice".
+            if (_lastDrift[path]?.summary case var drift?)
+              ViewText('$drift from the previous run', tone: Tone.warn),
             for (var diagnostic in result.diagnostics)
               ViewText(diagnostic, tone: Tone.warn),
             ViewItems([
@@ -1753,6 +1765,38 @@ class ScenariosCore extends PluginCore {
     }
     runs.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
     return runs.last.path;
+  }
+
+  /// The run this one should be compared against — see [compareScenarioRuns].
+  ///
+  /// Read **before** the run, because the caller that named a fixed `output`
+  /// is about to overwrite the report sitting in it. Where the directory is
+  /// one of ours, the answer is instead the newest earlier run of the *same
+  /// point*: `<runs>/<stamp>` for a plain run and `<runs>/<stamp>/<slug>` for
+  /// one point of a matrix, so a French iPhone is never compared against an
+  /// English one.
+  ScenarioRunResult? _previousRun(String outDir, String packageRoot) {
+    if (_reportIn(outDir) case var here?) return here;
+    var runs = Directory(
+      p.join(packageRoot, 'build', 'flutterware', 'scenario_runs'),
+    );
+    if (!runs.existsSync() || !p.isWithin(runs.path, outDir)) return null;
+    var parts = p.split(p.relative(outDir, from: runs.path));
+    var stamp = parts.first;
+    var suffix = parts.skip(1);
+    var names = [
+      for (var entry in runs.listSync().whereType<Directory>())
+        p.basename(entry.path),
+    ]..sort();
+    for (var name in names.reversed) {
+      // A panel session captures one scenario and writes no report, and its
+      // prefix sorts after every millisecond stamp — the same trap
+      // `_runDirectory` names.
+      if (name == stamp || name.startsWith('panel-')) continue;
+      var dir = p.joinAll([runs.path, name, ...suffix]);
+      if (_reportIn(dir) case var previous?) return previous;
+    }
+    return null;
   }
 
   ScenarioRunResult? _reportIn(String runDir) {
@@ -2311,6 +2355,9 @@ class ScenariosCore extends PluginCore {
     }
 
     var results = <ScenarioRunPackage>[];
+    // Keyed by output directory, which is one per point of the matrix and so
+    // the one thing that separates two entries of the same package.
+    var drifts = <String, ScenarioRunDrift>{};
     var assignmentsFor = <String, List<ScenarioAxes>>{};
     for (var path in paths) {
       if (matrix == null) {
@@ -2366,6 +2413,9 @@ class ScenariosCore extends PluginCore {
             'scenario_runs',
             '${DateTime.now().millisecondsSinceEpoch}',
           );
+      // This run replaces whatever the last one had to say about drift,
+      // including having had nothing to say.
+      _lastDrift.remove(path);
       for (var assignment in pathAssignments) {
         // One directory per point of the matrix. Without it the second
         // assignment overwrites the first — same file, same scenario, same
@@ -2382,6 +2432,9 @@ class ScenariosCore extends PluginCore {
                 : 'running…',
           ),
         );
+        // Before the run, not after: a caller that named a fixed `output` is
+        // about to overwrite the report sitting in it.
+        var previous = _previousRun(outDir, packageRoot);
         try {
           var report = await _runnerFor(path).run(
             outDir: outDir,
@@ -2422,6 +2475,19 @@ class ScenariosCore extends PluginCore {
               ),
             );
           } else {
+            if (previous != null) {
+              var drift = compareScenarioRuns(
+                previous,
+                ScenarioRunResult(packages: [described]),
+              );
+              drifts[outDir] = drift;
+              // One point of a matrix is as good a witness as the whole of
+              // it: a suite that moves moves on every point, and the panel
+              // has one line to say so in.
+              if (!drift.isEmpty || !_lastDrift.containsKey(path)) {
+                _lastDrift[path] = drift;
+              }
+            }
             results.add(described);
           }
         } catch (error) {
@@ -2441,7 +2507,9 @@ class ScenariosCore extends PluginCore {
       if (fannedOut) _writeIndex(base, results.where((r) => r.path == path));
     }
     var whole = ScenarioRunResult(
-      packages: [for (var run in results) _withReportOnDisk(run)],
+      packages: [
+        for (var run in results) _withReportOnDisk(run, drifts[run.output]),
+      ],
       axes: anyFannedOut || axes.isEmpty ? null : axes.toParams(),
     );
     return _carrying(whole, steps);
@@ -2453,20 +2521,11 @@ class ScenariosCore extends PluginCore {
   /// matter what the caller asked to be handed. Best effort: a run that
   /// produced pictures is not a failure because the directory turned
   /// read-only between writing them and writing this.
-  ScenarioRunPackage _withReportOnDisk(ScenarioRunPackage run) {
-    if (run.scenarios.isEmpty) return run;
-    var file = p.join(run.output, scenarioRunReportFile);
-    try {
-      Directory(run.output).createSync(recursive: true);
-      File(file).writeAsStringSync(
-        const JsonEncoder.withIndent(
-          '  ',
-        ).convert(ScenarioRunResult(packages: [run]).toJson()),
-      );
-    } catch (_) {
-      return run;
-    }
-    return ScenarioRunPackage(
+  ScenarioRunPackage _withReportOnDisk(
+    ScenarioRunPackage run,
+    ScenarioRunDrift? drift,
+  ) {
+    ScenarioRunPackage carrying(String? file) => ScenarioRunPackage(
       path: run.path,
       output: run.output,
       axes: run.axes,
@@ -2475,7 +2534,24 @@ class ScenariosCore extends PluginCore {
       report: file,
       log: run.log,
       error: run.error,
+      drift: drift,
     );
+    if (run.scenarios.isEmpty) return carrying(run.report);
+    var file = p.join(run.output, scenarioRunReportFile);
+    try {
+      Directory(run.output).createSync(recursive: true);
+      // Written from `run` rather than from what this returns, so the file
+      // stays a record of its own run: which run came before it is the
+      // caller's knowledge, not the report's.
+      File(file).writeAsStringSync(
+        const JsonEncoder.withIndent(
+          '  ',
+        ).convert(ScenarioRunResult(packages: [run]).toJson()),
+      );
+    } catch (_) {
+      return carrying(run.report);
+    }
+    return carrying(file);
   }
 
   /// [whole] with the steps [mode] asks for — the rest are in the file each
@@ -2495,6 +2571,7 @@ class ScenariosCore extends PluginCore {
             report: run.report,
             log: run.log,
             error: run.error,
+            drift: run.drift,
             scenarios: [
               for (var outcome in run.scenarios)
                 if (keepFailing && !outcome.ok)

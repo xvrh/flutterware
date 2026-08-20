@@ -22,6 +22,10 @@ library;
 import '../plugins/address.dart';
 import '../plugins/artifact.dart';
 import '../plugins/plugin_result.dart';
+import 'drift.dart';
+// The drift types are part of this model's surface — `ScenarioRunPackage`
+// carries one — so whoever has the model has them.
+export 'drift.dart';
 // The one thing near this model that needs a filesystem, behind the one seam
 // that lets the rest of it compile for the web. The exported scenario page
 // renders these very classes in a browser, where there is no `dart:io` to
@@ -158,6 +162,7 @@ class ScenarioRunPackage {
     this.report,
     this.log,
     this.error,
+    this.drift,
   });
 
   factory ScenarioRunPackage.fromJson(Map<String, Object?> json) =>
@@ -170,6 +175,10 @@ class ScenarioRunPackage {
         report: json['report'] as String?,
         log: json['log'] as String?,
         error: json['error'] as String?,
+        drift: switch (json['drift']) {
+          Map<String, Object?> drift => ScenarioRunDrift.fromJson(drift),
+          _ => null,
+        },
       );
 
   final String path;
@@ -210,6 +219,18 @@ class ScenarioRunPackage {
   /// compile, the tester did not start — in which case [scenarios] is empty.
   final String? error;
 
+  /// How this run's pictures compare with the previous run of the same
+  /// package: `compared`, and a count plus a capped list of steps under
+  /// `changed`, `added` and `removed` — a suite that is green every pass and
+  /// draws different pixels every pass says so here and nowhere else. Null
+  /// when there was no previous run to compare against. See
+  /// [compareScenarioRuns].
+  ///
+  /// Not part of what the harness writes to `run.json`: a report is about the
+  /// run it belongs to, and only the caller that chose the output directory
+  /// knows which run came before it.
+  final ScenarioRunDrift? drift;
+
   Map<String, Object?> toJson() => {
     'path': path,
     'output': output,
@@ -219,6 +240,7 @@ class ScenarioRunPackage {
     if (report != null) 'report': report,
     if (log != null) 'log': log,
     if (error != null) 'error': error,
+    if (drift != null) 'drift': drift!.toJson(),
   };
 }
 
@@ -455,6 +477,7 @@ class ScenarioRunStep {
         framesDropped: json['framesDropped'] as int?,
         settled: json['settled'] as bool? ?? true,
         landed: json['landed'] as bool? ?? true,
+        digest: json['digest'] as String?,
         strayFrames: _int(json['strayFrames'], 0),
         unchanged: json['unchanged'] == true,
         failure: json['failure'] as String?,
@@ -500,6 +523,7 @@ class ScenarioRunStep {
     this.framesDropped,
     this.settled = true,
     this.landed = true,
+    this.digest,
     this.strayFrames = 0,
     this.unchanged = false,
     this.failure,
@@ -712,11 +736,36 @@ class ScenarioRunStep {
   final bool settled;
 
   /// False when the shutter fell with an image decode or an asset read still
-  /// in flight: the picture is of a screen that was still filling in, and the
-  /// artwork it is missing turns up on the next step. Not a failure, and not
-  /// the same thing as [settled] — a screen can be perfectly still and still
-  /// be waiting for its illustration.
+  /// in flight — the picture is of a screen that was still filling in, and
+  /// the artwork it is missing turns up on the next step; `true` is the
+  /// absence of a report rather than a claim that everything the screen
+  /// wanted has arrived, and a step that is not a `screen` has nothing to
+  /// land and reads `true` vacuously.
+  ///
+  /// Not a failure, and not the same thing as [settled] — a screen can be
+  /// perfectly still and still be waiting for its illustration.
+  ///
+  /// Only work that *announced* itself is counted, because nothing can tell a
+  /// decode that has not arrived from one that was never coming: a
+  /// `FutureBuilder` on a real future is invisible to this, and a step whose
+  /// landing ran out of turns to guess with says `true` as well. The wire
+  /// omits the field entirely on the `true` side, which is why that is the
+  /// default here.
   final bool landed;
+
+  /// What this step captured, hashed — the pixels for a screen, the payload
+  /// for a document. Null where the step wrote no bytes.
+  ///
+  /// The whole reason it is recorded: two runs of one suite are comparable
+  /// without keeping either run's images. A suite can be entirely green while
+  /// a third of its screenshots move every pass — a fixture chosen by hashing
+  /// a freshly-minted id, a generated id drawn on screen, a production write
+  /// that reached for `DateTime.now()` instead of the injectable clock — and
+  /// nothing else in this report would say so. See [compareScenarioRuns].
+  ///
+  /// Short and hex, and no promise about which function made it: it is
+  /// compared against another digest from the same flutterware, never parsed.
+  final String? digest;
 
   /// Frames drawn before this step that none of the scenario's verbs drew —
   /// the scenario reached for the raw `tester`, and whatever the app did in
@@ -809,6 +858,7 @@ class ScenarioRunStep {
     framesDropped: framesDropped,
     settled: settled,
     landed: landed,
+    digest: digest,
     strayFrames: strayFrames,
     unchanged: unchanged,
     failure: failure,
@@ -864,6 +914,7 @@ class ScenarioRunStep {
     // extractor carries the field's doc into `docs/capabilities.md`.
     if (!settled) 'settled': settled,
     if (!landed) 'landed': landed,
+    if (digest != null) 'digest': digest,
     if (strayFrames > 0) 'strayFrames': strayFrames,
     if (unchanged) 'unchanged': unchanged,
     if (failure != null) 'failure': failure,
@@ -1018,3 +1069,121 @@ List<T> _listOf<T>(Object? value, T Function(Map<String, Object?>) decode) => [
   for (var entry in value as List? ?? const [])
     if (entry is Map) decode(entry.cast<String, Object?>()),
 ];
+
+/// Two runs of the same suite, compared by what their steps captured.
+///
+/// **A suite can be entirely green while a third of its screenshots move every
+/// pass.** Nothing else in a run report says so: every scenario passes, every
+/// assertion holds, and the pictures underneath are different pictures. On a
+/// real 125-scenario suite the causes were a fixture chosen by hashing a
+/// freshly-minted id, generated ids drawn on screen as text, and two
+/// production writes reaching for `DateTime.now()` instead of the injectable
+/// clock — a day to find by eye, an afternoon with this.
+///
+/// It matters beyond tidiness: a comparison against a base checkout is only as
+/// useful as the suite's determinism, because a suite that moves on its own
+/// drowns the change that was actually asked about.
+///
+/// Steps are matched by package, axis point, file, scenario and
+/// [ScenarioRunStep.position] — never by index, which shifts under any
+/// insertion. A step with no digest is not compared, and a scenario with no
+/// digested step at all is not looked at: a notification beat captured no
+/// bytes, and a run written by a flutterware that predates digests carries
+/// none anywhere, which answers here as two runs with nothing to compare
+/// rather than as a suite that moved entirely.
+///
+/// **Only scenarios both runs contain are looked at.** One of them may have
+/// been a selective run — one file, one name, one tag — and a scenario the
+/// other never executed is not a scenario that moved. A scenario genuinely
+/// added or deleted between the two is a change to the suite, which the suite
+/// already knows about; what this function is for is the change nobody made.
+ScenarioRunDrift compareScenarioRuns(
+  ScenarioRunResult before,
+  ScenarioRunResult after,
+) {
+  var changed = <ScenarioStepDrift>[];
+  var added = <ScenarioStepDrift>[];
+  var removed = <ScenarioStepDrift>[];
+  var compared = 0;
+
+  var shared = _scenarios(before).intersection(_scenarios(after));
+
+  var old = <String, String>{};
+  for (var (scenario, key, _, digest) in _walk(before)) {
+    if (digest != null && shared.contains(scenario)) old[key] = digest;
+  }
+
+  var seen = <String>{};
+  for (var (scenario, key, step, digest) in _walk(after)) {
+    if (digest == null || !shared.contains(scenario)) continue;
+    seen.add(key);
+    var was = old[key];
+    if (was == null) {
+      added.add(step);
+      continue;
+    }
+    compared++;
+    if (was != digest) changed.add(step);
+  }
+
+  for (var (scenario, key, step, digest) in _walk(before)) {
+    if (digest != null && shared.contains(scenario) && !seen.contains(key)) {
+      removed.add(step);
+    }
+  }
+
+  return ScenarioRunDrift(
+    compared: compared,
+    changed: changed,
+    added: added,
+    removed: removed,
+  );
+}
+
+/// Every scenario a run captured *bytes* for, keyed the way two runs agree on
+/// one.
+///
+/// Digest-carrying, and that is the whole subtlety: a run written by a
+/// flutterware that predates digests carries none, and reading its scenarios
+/// as present would report every step of the newer run as added. A scenario
+/// with nothing to compare is a scenario neither run says anything about.
+Set<String> _scenarios(ScenarioRunResult run) => {
+  for (var (scenario, _, _, digest) in _walk(run))
+    if (digest != null) scenario,
+};
+
+/// Every step of a run as (which scenario, which step, what to call it, what
+/// it captured).
+Iterable<(String, String, ScenarioStepDrift, String?)> _walk(
+  ScenarioRunResult run,
+) sync* {
+  for (var package in run.packages) {
+    var axes = package.axes == null ? null : _slug(package.axes!);
+    for (var scenario in package.scenarios) {
+      var id =
+          '${package.path} ${axes ?? ''} ${scenario.file} ${scenario.name}';
+      for (var step in scenario.steps) {
+        yield (
+          id,
+          '$id ${step.position}',
+          ScenarioStepDrift(
+            package: package.path,
+            axes: axes,
+            file: scenario.file,
+            scenario: scenario.name,
+            position: step.position,
+            name: step.name,
+          ),
+          step.digest,
+        );
+      }
+    }
+  }
+}
+
+/// The axis map as one comparable string, ordered so that two runs spell the
+/// same point the same way.
+String _slug(Map<String, String> axes) =>
+    (axes.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))
+        .map((e) => '${e.key}=${e.value}')
+        .join(',');
