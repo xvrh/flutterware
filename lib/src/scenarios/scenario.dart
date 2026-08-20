@@ -1519,6 +1519,10 @@ class ScenarioTester {
         width: width,
         height: height,
         texts: visibleTexts(),
+        // Read here, beside the texts and the overlay style, for the reason
+        // written on all three: this capture waits a step before it is handed
+        // over, and by then the app has moved on.
+        screen: scenarioScreenReader?.call(),
         statusBrightness: style?.statusBarIconBrightness?.name,
         navBrightness: style?.systemNavigationBarIconBrightness?.name,
         verb: verb,
@@ -1589,6 +1593,7 @@ class _PendingEmit {
     this.width,
     this.height,
     this.texts = const [],
+    this.screen,
     this.statusBrightness,
     this.navBrightness,
     this.payload,
@@ -1621,6 +1626,10 @@ class _PendingEmit {
   final int? width;
   final int? height;
   final List<String> texts;
+
+  /// The tree and the semantics behind [bytes], read at the shutter — see
+  /// [ScenarioScreenRead] for why they cannot wait for the hand-over below.
+  final ScenarioScreenRead? screen;
   final Uint8List? payload;
   final String? fileName;
   final String? mimeType;
@@ -1651,6 +1660,7 @@ class _PendingEmit {
     width: width,
     height: height,
     texts: texts,
+    screen: screen,
     payload: payload,
     fileName: fileName,
     mimeType: mimeType,

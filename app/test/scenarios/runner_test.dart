@@ -79,6 +79,22 @@ void main() {
         expect(semantics['rect'], isNotNull);
         expect(semantics['children'], isNotEmpty);
       }
+      // Nothing here stalled: the count moved on every tap and the last step
+      // typed into a field. Both used to be flagged, the tree being blind to
+      // typed text and — until the read moved to the shutter — a step behind
+      // the picture besides.
+      expect(steps.every((s) => s['unchanged'] == null), isTrue);
+      // The tree beside the picture is the picture's own: `pumpWidget`
+      // photographed `Count: 0`, whatever the two taps after it did.
+      expect(
+        File(steps.first['tree']! as String).readAsStringSync(),
+        contains(r'Count: 0'),
+      );
+      expect(
+        (steps.first['texts']! as List).cast<String>(),
+        contains('Count: 0'),
+      );
+
       var last = steps.last;
       expect((last['texts']! as List).cast<String>(), contains('a label'));
       // The adopted name, on the step whose verb produced the frame.
@@ -442,7 +458,9 @@ void main() {
 
       // A stalled walk: verbs that act and change nothing carry
       // `unchanged: true`, so seven identical captures cannot pass as seven
-      // pages — the consumer failure this flag exists for.
+      // pages — the consumer failure this flag exists for. Identical is the
+      // *picture* being identical: the tree used to stand in for it and said
+      // so on a quarter of a real suite's steps, four fifths of them wrongly.
       //
       // `screen` used to be excluded, on the grounds that it was a deliberate
       // second picture. It is not one any more: the first here names the

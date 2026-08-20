@@ -872,18 +872,34 @@ Future<Map<String, Object?>> _runOne(
   var directory = Directory(
     '$outDir/${scenarioFileSafe(file)}/${scenarioFileSafe(name)}',
   )..createSync(recursive: true);
-  // Each step's tree as written, kept for one comparison: a verb whose tree
+  // Each step's pixels, hashed, kept for one comparison: a verb whose picture
   // is byte-identical to its parent's changed nothing on screen, which is
   // what a stalled walk looks like from the inside — no exception, no failed
   // matcher, and (measured on a consumer suite) seven identical captures
   // passing as seven pages. By parent rather than by predecessor, so a
   // `split`'s branches each compare against the step they actually follow.
-  var treeByIndex = <int, String>{};
+  //
+  // The pixels rather than the tree, because the picture is what the flag is
+  // about and the tree is not a projection of it. Measured on the same
+  // consumer suite: of 297 steps the tree called unchanged, 275 had moved —
+  // every `enterText` among them, the typed text being plainly on screen and
+  // nowhere in the dump — while 102 genuine repeats went unflagged. A digest
+  // per step also costs 16 characters where a tree costs its whole JSON.
+  var digestByIndex = <int, String>{};
   // Per scenario, so the read set below belongs to *one* assignment. A matrix
   // runs its locales sequentially in one process, and an index carried across
   // them would report the last locale's value for every key — which is exactly
   // the value the falling-back-to-the-template report has to compare against.
   TranslationIndex.reset();
+
+  // What a capture photographs, read at the shutter rather than when the
+  // capture reaches the listener below — see [ScenarioScreenRead]. The tree,
+  // the semantics and the translation keys all come out of this one read, so
+  // all three describe the frame in the picture.
+  scenarioScreenReader = () => ScenarioScreenRead(
+    tree: inspector.read(),
+    semantics: captureSemanticsTree(),
+  );
 
   scenarioRunListener = (capture) {
     // The verb and what it was aimed at, which is what an automatic capture
@@ -974,6 +990,16 @@ Future<Map<String, Object?>> _runOne(
     // A beat with no frame. There is no picture to write, no tree to read, no
     // semantics and no movie — what it has is its own content, and the record
     // says which kind of content that is.
+    //
+    // Nothing was drawn here, so the picture in force is still whatever the
+    // step before it photographed: the beat passes that digest on rather than
+    // its own payload's, and a flow that stalls across a `document` is still
+    // seen to have stalled.
+    if (capture.kind != ScenarioCaptureKind.screen) {
+      if (digestByIndex[capture.parent] case var inherited?) {
+        digestByIndex[capture.index] = inherited;
+      }
+    }
     switch (capture.kind) {
       case ScenarioCaptureKind.document:
         var fileName = scenarioFileSafe(
@@ -1008,10 +1034,16 @@ Future<Map<String, Object?>> _runOne(
     // The tree next to the pixels — the step triple's third leg. Written to a
     // file rather than inlined: a run's response stays readable, and the tree
     // is fetched per step by whoever wants it.
-    var read = inspector.read();
-    var tree = read.toJson();
-    var treeJson = jsonEncode(tree);
-    File('$base.tree.json').writeAsStringSync(treeJson);
+    //
+    // Read where the picture was taken and carried here, never read off the
+    // live app: this capture waited a step to see whether a `screen` would
+    // name it, and the app acted again in the meantime. Non-null because the
+    // reader is installed beside the listener above, for every screen the
+    // listener can be handed.
+    var screen = capture.screen!;
+    var read = screen.tree;
+    File('$base.tree.json').writeAsStringSync(jsonEncode(read.toJson()));
+    var digest = _digest(capture.bytes!);
     // Only a verb that acts can be told it acted for nothing, and a failure's
     // capture already says everything. The flag is a fact, not a verdict — a
     // capture parked mid-flight with `Settle.none` is legitimately unchanged.
@@ -1025,11 +1057,11 @@ Future<Map<String, Object?>> _runOne(
     var unchanged =
         capture.verb != null &&
         capture.failure == null &&
-        treeByIndex[capture.parent] == treeJson;
-    treeByIndex[capture.index] = treeJson;
+        digestByIndex[capture.parent] == digest;
+    digestByIndex[capture.index] = digest;
     // The seventh, and only when a catalog was wired up: which translation
-    // keys this screen shows and where. Flattened out of the tree it was just
-    // read from — an export asking "which screens show this key" should not
+    // keys this screen shows and where. Flattened out of the same read as the
+    // tree — an export asking "which screens show this key" should not
     // have to parse every node of every step to find out.
     var keys = read.translationKeys();
     var unkeyed = read.unkeyedText();
@@ -1045,7 +1077,7 @@ Future<Map<String, Object?>> _runOne(
     // And the fourth: what a screen reader gets. Absent rather than empty
     // when there is no semantics tree to read — which under `testWidgets`'s
     // default handle is never, but a capture must not invent a screen.
-    var semantics = captureSemanticsTree();
+    var semantics = screen.semantics;
     if (semantics != null) {
       File('$base.semantics.json').writeAsStringSync(jsonEncode(semantics));
     }
@@ -1119,7 +1151,7 @@ Future<Map<String, Object?>> _runOne(
           : null,
       settled: capture.settled,
       landed: capture.landed,
-      digest: _digest(capture.bytes!),
+      digest: digest,
       strayFrames: capture.strayFrames,
       unchanged: unchanged,
       failure: capture.failure,
@@ -1221,6 +1253,7 @@ Future<Map<String, Object?>> _runOne(
     scenarioCaughtErrors = null;
     reportTestException = priorReporter;
     scenarioRunListener = null;
+    scenarioScreenReader = null;
   }
 
   var errors = [

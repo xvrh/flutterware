@@ -5058,7 +5058,7 @@ final resultShapes = <String, ResultShape>{
               'type': 'bool',
               'optional': true,
               'doc':
-                  'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+                  'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
             },
             <String, Object?>{
               'name': 'failure',
@@ -5079,7 +5079,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'unchangedCount',
         'type': 'int',
         'doc':
-            'How many of those steps a verb acted for nothing on — captured trees byte-identical to their parent\'s.',
+            'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
       },
       <String, Object?>{
         'name': 'errors',
@@ -5425,7 +5425,7 @@ final resultShapes = <String, ResultShape>{
                     'type': 'bool',
                     'optional': true,
                     'doc':
-                        'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+                        'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
                   },
                   <String, Object?>{
                     'name': 'failure',
@@ -5447,7 +5447,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'unchangedCount',
               'type': 'int',
               'doc':
-                  'How many of those steps a verb acted for nothing on — captured trees byte-identical to their parent\'s.',
+                  'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
             },
             <String, Object?>{
               'name': 'errors',
@@ -5840,7 +5840,7 @@ final resultShapes = <String, ResultShape>{
                           'type': 'bool',
                           'optional': true,
                           'doc':
-                              'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+                              'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
                         },
                         <String, Object?>{
                           'name': 'failure',
@@ -5862,7 +5862,7 @@ final resultShapes = <String, ResultShape>{
                     'name': 'unchangedCount',
                     'type': 'int',
                     'doc':
-                        'How many of those steps a verb acted for nothing on — captured trees byte-identical to their parent\'s.',
+                        'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
                   },
                   <String, Object?>{
                     'name': 'errors',
@@ -6160,7 +6160,7 @@ final resultShapes = <String, ResultShape>{
         'type': 'bool',
         'optional': true,
         'doc':
-            'True when this step\'s captured tree is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+            'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
       },
       <String, Object?>{
         'name': 'failure',
