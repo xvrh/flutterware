@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutterware_app/src/comparison/cancel.dart';
 import 'package:flutterware_app/src/comparison/channels.dart';
 import 'package:flutterware_app/src/comparison/runner.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
@@ -368,6 +369,96 @@ void main() {
     await compare(base: base, head: checkout('head2', {'demo/card.dart': '3'}));
 
     expect(side.renderedFor.map((r) => r.$2), everyElement(endsWith('head2')));
+  });
+
+  group('the run streams', () {
+    // The design promise this repays: the interesting rows must not arrive in
+    // one burst at the end. Once an entry's head frame lands, its verdict is
+    // answerable — and said — while its neighbours are still rendering.
+    test('a verdict lands before the next entry renders', () async {
+      side.declared['*'] = ['demo/a.dart#a', 'demo/b.dart#b'];
+      var events = <String>[];
+      var inner = side.frame;
+      side.frame = (entry, checkout) {
+        events.add('render $entry ${p.basename(checkout)}');
+        return inner(entry, checkout);
+      };
+
+      await ComparisonRunner(
+        headRoot: checkout('head', {'demo/a.dart': '2', 'demo/b.dart': '2'}),
+        baseRoot: checkout('base', {'demo/a.dart': '1', 'demo/b.dart': '1'}),
+        baseSha: 'abc123',
+        side: side,
+        cache: cache,
+        onItem: (item) => events.add('item ${item.id}'),
+      ).run();
+
+      expect(
+        events.indexOf('item demo/a.dart#a'),
+        lessThan(events.indexOf('render demo/b.dart#b head')),
+      );
+    });
+
+    test('the plan is handed over before anything renders', () async {
+      side.declared['*'] = ['demo/a.dart#a', 'demo/b.dart#b'];
+      ComparisonPlan? seen;
+
+      await ComparisonRunner(
+        headRoot: checkout('head', {'demo/a.dart': '2', 'demo/b.dart': 'x'}),
+        baseRoot: checkout('base', {'demo/a.dart': '1', 'demo/b.dart': 'x'}),
+        baseSha: 'abc123',
+        side: side,
+        cache: cache,
+        onPlan: (plan) {
+          seen = plan;
+          expect(side.renderedFor, isEmpty);
+        },
+      ).run();
+
+      expect(seen!.total, 2);
+      expect(seen!.toRender, ['demo/a.dart#a']);
+    });
+
+    test('progress counts each side as it renders', () async {
+      side.declared['*'] = ['demo/a.dart#a'];
+      var lines = <String>[];
+
+      await ComparisonRunner(
+        headRoot: checkout('head', {'demo/a.dart': '2'}),
+        baseRoot: checkout('base', {'demo/a.dart': '1'}),
+        baseSha: 'abc123',
+        side: side,
+        cache: cache,
+        onProgress: lines.add,
+      ).run();
+
+      expect(lines, contains('rendering the base side · 1 of 1'));
+      expect(lines, contains('rendering this side · 1 of 1'));
+    });
+
+    // Stopping is not an error: what was answered stays answered, and the
+    // caller hears [ComparisonCancelled] rather than a refusal.
+    test('a cancel stops at the next frame and keeps what landed', () async {
+      side.declared['*'] = ['demo/a.dart#a', 'demo/b.dart#b'];
+      var cancel = CancelToken();
+      var reported = <String>[];
+
+      var run = ComparisonRunner(
+        headRoot: checkout('head', {'demo/a.dart': '2', 'demo/b.dart': '2'}),
+        baseRoot: checkout('base', {'demo/a.dart': '1', 'demo/b.dart': '1'}),
+        baseSha: 'abc123',
+        side: side,
+        cache: cache,
+        cancel: cancel,
+        onItem: (item) {
+          reported.add(item.id);
+          cancel.cancel();
+        },
+      ).run();
+
+      await expectLater(run, throwsA(isA<ComparisonCancelled>()));
+      expect(reported, isNotEmpty);
+    });
   });
 
   test('the half reports what it did and did not do', () async {

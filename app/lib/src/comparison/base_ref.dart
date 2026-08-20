@@ -61,6 +61,13 @@ class BaseRef {
     );
   }
 
+  /// Where HEAD sits in [worktree], or null when git will not say.
+  ///
+  /// Recorded beside a kept comparison so a later visit can tell "this is
+  /// still the same code" from "the worktree has moved since".
+  static Future<String?> headOf(String worktree) =>
+      _git(worktree, ['rev-parse', 'HEAD']);
+
   /// The top of the checkout [dir] is in — what a base checkout mirrors.
   ///
   /// Not the same as the directory a command was typed in, and not the same as

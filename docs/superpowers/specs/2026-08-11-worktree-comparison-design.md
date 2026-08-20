@@ -485,19 +485,34 @@ every worktree leaves empty.
 
 ### The screens
 
-**Entering a tab runs that tab**, which narrows §13.11 rather than reversing it.
-No Run button — the skip rule usually makes a comparison seconds, and a tool
-that asks permission to do the only thing it does is a tool nobody opens. But
-*per tab*: opening the panel must not spawn two compilers and a `flutter_tester`
-for a half you did not want. Files runs nothing. The tab carries its own
-estimate, so the cost arrives before the work does, and a run already in flight
-is joined rather than restarted.
+~~**Entering a tab runs that tab.**~~ **Reversed 2026-08-20 — nothing runs on
+its own; one explicit Compare per half.** The original said no Run button
+because "a tool that asks permission to do the only thing it does is a tool
+nobody opens" — but that argument leaned on the other half of the pair, the
+per-tab estimate that made the cost visible before the click, and the estimate
+was built, measured at four minutes on a real catalog, and removed. What
+shipped was the worst of both: a tab tap (reachable four ways, drive `navigate`
+included) started git checkouts, `pub get` and compilers behind one line of
+centred text, with no way to watch, stop or aim it. The measured effect was
+reluctance to open the panel at all — a tool nobody opens, by the other road.
 
-**The header** names both sides, the scope and the elapsed time, and carries the
-counts (broke · changed · added · removed · skipped). Lists are sorted by
-**severity**, not by name — head-broke, then scenario failed, then branch
-removed, then percent changed. The top row should be the thing most likely to be
-a mistake.
+The model now: **the tab always shows for free** (the last run, kept on disk
+per half under the worktree's comparisons directory, marked *moved since* when
+HEAD or the base has), and one **Compare** press per half starts the machinery
+— the same button is the re-run, the retry and the refresh. While it runs, a
+strip narrates the phase (checkout, pub get, hashing, *rendering n of m*) with
+an elapsed counter and a **Stop**; the plan's totals drive a determinate bar,
+ghost rows hold the place of every verdict still owed, and each verdict lands
+the moment it is answerable rather than in one burst at the end. The base is a
+control on the strip (default · HEAD~1 · any ref), not a caption. Files still
+runs nothing and needs no button; a run already in flight is joined, never
+restarted.
+
+**The header** names both sides and carries the counts (broke · changed ·
+added · removed · skipped) and, once a half has run, its receipt — wall clock
+and recency. Lists are sorted by **severity**, not by name — head-broke, then
+scenario failed, then branch removed, then percent changed. The top row should
+be the thing most likely to be a mistake.
 
 **Getting there from the live panels.** Previews and scenarios each offer
 *compare against base* on the entry you are looking at, and a comparison row
@@ -629,15 +644,16 @@ handles SDK management.
 
 ### What is left, in the order it would bite
 
-1. **A refresh control.** `ComparisonController.refresh` exists and nothing
-   calls it, so a panel visit is one run.
-2. **A base selector.** §9's `checkout-redesign..master` grammar assumes one;
-   today the base is the project's `fw.changes(base:)` or an inference, with no
-   way to override from the screen (`fw compare --base=` and the action's
-   `base` parameter exist). It is also what would let somebody photograph the
-   stage on a repository whose base does not build.
+1. ✅ **A refresh control** — subsumed by the explicit-start reversal
+   (2026-08-20): the Compare button re-runs a finished half, retries a refused
+   one, and `refresh()` is gone.
+2. ✅ **A base selector** — built 2026-08-20 as the strip's base control
+   (project default · HEAD~1 · any ref), which rebuilds the environment so the
+   one-definition rule holds.
 3. **Two live revisions** (§8's *previous · running*), which nothing needs until
-   a comparison is slow enough to browse the old one during.
+   a comparison is slow enough to browse the old one during. The kept last run
+   (2026-08-20) is the between-runs half of this; browsing it *while* the next
+   run works is still not built — Compare clears the rows.
 4. **Serving the exported page from `fw`.** The scenario page has
    `CatalogWebServer` in front of it in the GUI; the comparison page is
    export-only and says "serve it over HTTP" without offering to.
@@ -667,8 +683,11 @@ before they were not.
    two-worktree case. See §9.
 9. Latest revision is enough, plus the running one while it runs.
 10. SDK mismatch hard-fails until `fw` owns the SDK.
-11. Entering a **tab** runs that half; there is no Run button. Narrowed
-    2026-08-11 from "entering the space" — see §9.
+11. ~~Entering a **tab** runs that half; there is no Run button.~~ **Reversed
+    2026-08-20** — nothing runs on its own; each half runs on its own explicit
+    Compare, the tab shows the kept last run for free, and Stop exists. The
+    original was argued from a per-tab estimate that had already been removed;
+    see §9's *The screens* for the full reasoning.
 12. Scenario axes are the profile's first of each — never the last manual run's.
 13. A renamed preview entry reads as removed + added. No rename pairing.
 14. The static viewer ships in v1 and stays a dumb reader of `index.json`.

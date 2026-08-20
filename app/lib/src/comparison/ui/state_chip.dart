@@ -34,12 +34,6 @@ extension ComparedStateLook on ComparedState {
     ComparedState.same => 'same',
     ComparedState.skipped => 'skipped',
   };
-
-  /// True for the states worth drawing attention to. [ComparedState.same] and
-  /// [ComparedState.skipped] are the answer "nothing to see", and a list that
-  /// shouts it is a list nobody reads to the end.
-  bool get isFinding =>
-      this != ComparedState.same && this != ComparedState.skipped;
 }
 
 /// A verdict, as a small filled label.

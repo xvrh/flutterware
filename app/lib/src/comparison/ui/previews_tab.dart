@@ -194,6 +194,23 @@ class _Index extends StatelessWidget {
               style: context.type.body.copyWith(color: context.colors.mut),
             ),
           ),
+        // The rows still owed a verdict, so the list has its full shape from
+        // the moment the plan lands and only the answers arrive late.
+        if (half.pending.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.xl,
+              FwSpacing.lg,
+              FwSpacing.xl,
+              FwSpacing.sm,
+            ),
+            child: Text(
+              'STILL RENDERING · ${half.pending.length}',
+              style: context.type.micro.copyWith(color: context.colors.mut),
+            ),
+          ),
+          for (var id in half.pending) _PendingRow(id),
+        ],
         if (quiet.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -215,6 +232,57 @@ class _Index extends StatelessWidget {
             ),
         ],
       ],
+    );
+  }
+}
+
+/// A row whose verdict has not landed yet. Not tappable — there is nothing
+/// behind it until its diff arrives, and then it becomes a real row.
+class _PendingRow extends StatelessWidget {
+  const _PendingRow(this.id);
+
+  final String id;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var hash = id.indexOf('#');
+    var name = hash < 0 ? id : id.substring(hash + 1);
+    var file = hash < 0 ? '' : id.substring(0, hash);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.xl,
+        vertical: FwSpacing.sm,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: context.type.body.copyWith(color: colors.mut),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (file.isNotEmpty)
+                  Text(
+                    file,
+                    style: context.type.micro.copyWith(color: colors.mut2),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          const Gap(FwSpacing.sm),
+          Text(
+            'rendering…',
+            style: context.type.micro.copyWith(color: colors.mut2),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -325,21 +393,24 @@ class _Detail extends StatelessWidget {
           ),
         Expanded(
           flex: 3,
-          // The stage draws whatever there is, including nothing: it says
-          // "neither side rendered", which is a verdict. "Loading…" belongs
-          // only to the moment before a decode has answered.
-          child: shots.settled
-              ? ComparisonStage(
-                  shots: shots,
-                  mode: mode,
-                  onMode: onMode,
-                  diff: item.pixels?.diff,
-                )
-              : Center(
+          // The stage draws whatever there is — except a skipped entry with
+          // nothing in the cache, which is not a loading failure: nothing was
+          // rendered *on purpose*, and the pane owes the reader that sentence.
+          // "Loading…" belongs only to the moment before a decode answered.
+          child: !shots.settled
+              ? Center(
                   child: Text(
                     'Loading…',
                     style: context.type.body.copyWith(color: colors.mut),
                   ),
+                )
+              : item.state == ComparedState.skipped && !shots.hasFrames
+              ? const _NotRendered()
+              : ComparisonStage(
+                  shots: shots,
+                  mode: mode,
+                  onMode: onMode,
+                  diff: item.pixels?.diff,
                 ),
         ),
         if (_hasChannels) Expanded(flex: 2, child: ChannelLines(item)),
@@ -351,4 +422,37 @@ class _Detail extends StatelessWidget {
       (item.tree?.changed ?? false) ||
       item.texts != null ||
       item.events != null;
+}
+
+/// The skipped entry's pane — the same sentence the scenarios half earned for
+/// its "Not replayed" state, said for a render.
+class _NotRendered extends StatelessWidget {
+  const _NotRendered();
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.done_all, size: FwIconSize.lg, color: colors.mut2),
+            const Gap(FwSpacing.md),
+            Text('Not re-rendered', style: context.type.bodyStrong),
+            const Gap(FwSpacing.sm),
+            Text(
+              'Nothing that decides its pixels changed between the two sides '
+              '— not a file in its import closure, not an asset, not a '
+              'lockfile — so both sides would have drawn the same frame and '
+              'neither was rendered.',
+              textAlign: TextAlign.center,
+              style: context.type.caption.copyWith(color: colors.mut),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

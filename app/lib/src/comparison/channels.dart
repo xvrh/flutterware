@@ -192,7 +192,12 @@ enum ComparedState {
   /// Not compared, because nothing it reads differs between the two
   /// checkouts. Indistinguishable from [same] in truth, and worth its own name
   /// so a report can say how much work it did not do.
-  skipped,
+  skipped;
+
+  /// True for the states worth drawing attention to. [same] and [skipped] are
+  /// the answer "nothing to see", and a list that shouts it is a list nobody
+  /// reads to the end.
+  bool get isFinding => this != same && this != skipped;
 }
 
 class PixelChannel {
