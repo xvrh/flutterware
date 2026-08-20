@@ -54,6 +54,27 @@
   every `screen` on the grounds that it was a deliberate second picture of the
   same frame. It is not one any more, so the exclusion is gone and a named step
   that changed nothing says so — the case the flag was previously blind to.
+- **A step's tree, semantics and translation keys are read at the shutter.**
+  A capture waits one step to see whether a `screen` will name it rather than
+  photograph the same frame again — and everything read when it is finally
+  handed over was therefore read one verb late. On the example counter, step 1
+  reported `texts: ['Count: 0']` beside a `tree.json` that said
+  `Text("Count: 1")`: one record, two frames. The three reads now happen where
+  the picture is taken and ride on the capture, so `tree.json`,
+  `semantics.json` and `keys.json` describe the frame in the image beside them
+  — for `scenarios read`, the panel's inspector, the label audits and the
+  translation export alike. Nothing changes under a bare `flutter test`, which
+  writes none of them and now pays for none of them.
+- **`unchanged` compares the picture, not the tree.** A tree is not a
+  projection of the pixels in either direction: typed text, an animation, an
+  image and anything painted on a canvas move the picture without moving the
+  dump, while a value that changed harmlessly moves the dump without moving
+  the picture. Measured on a consumer suite of 1240 steps, the two agreed on
+  22 of the 297 steps the tree flagged — every `enterText` in the suite was
+  reported as a step where nothing happened — and 102 genuine repeats went
+  unflagged. It is the `digest` the same step already carries, so a stall now
+  reads as a stall. A `document` or `notification` beat draws nothing, so it
+  passes the picture in force through to the step after it.
 
 - **One preview that leaves a decode in flight no longer slows every preview
   after it.** The image cache is `PaintingBinding`'s and process-wide, and

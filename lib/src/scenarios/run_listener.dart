@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../inspect/node.dart';
 import 'events.dart';
 import 'motion.dart';
 import 'notification.dart';
@@ -25,6 +26,7 @@ class ScenarioStepCapture {
     this.width,
     this.height,
     this.texts = const [],
+    this.screen,
     this.statusBrightness,
     this.navBrightness,
     this.payload,
@@ -107,6 +109,11 @@ class ScenarioStepCapture {
   /// The visible `Text` widgets, in tree order — the text projection.
   final List<String> texts;
 
+  /// The widget tree and the semantics behind the picture, read where the
+  /// picture was taken. Null under a bare `flutter test`, where nobody asked
+  /// for either and nothing pays to read them.
+  final ScenarioScreenRead? screen;
+
   /// The verb that produced this step (`tap`, `enterText`, `screen`, …) and
   /// what it was aimed at, when it was aimed at anything. Together they say
   /// what the transition *into* this step was, which is what turns an edge in
@@ -170,6 +177,32 @@ class ScenarioStepCapture {
   /// its split branch. The frame is the state at the failure.
   final String? failure;
 }
+
+/// The tree behind one capture, and the semantics behind it.
+///
+/// Read at the shutter and carried on the capture rather than read off the
+/// live app when the capture is handed over. A capture is held for one step so
+/// that a `screen` can name it instead of taking a second picture of the same
+/// frame, and by hand-over the app has acted again: a read there describes the
+/// frame *after* this one. Measured on the example counter, where a step's own
+/// [texts] said `Count: 0` beside a tree that said `Count: 1`.
+class ScenarioScreenRead {
+  const ScenarioScreenRead({required this.tree, this.semantics});
+
+  final InspectTree tree;
+
+  /// What a screen reader gets, or null where there is no semantics tree to
+  /// read — which under `testWidgets`'s default handle is never, but a
+  /// capture must not invent a screen.
+  final Map<String, Object?>? semantics;
+}
+
+/// Set by the flutterware harness beside [scenarioRunListener]: reads the
+/// screen a capture is photographing, at the moment it is photographed.
+///
+/// Null under a bare `flutter test` — nothing there writes a tree, so nothing
+/// there pays the ~1.5ms a read costs.
+ScenarioScreenRead Function()? scenarioScreenReader;
 
 /// Set by the flutterware harness for the duration of one scenario run; null
 /// under a bare `flutter test`, where captures go to
