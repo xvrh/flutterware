@@ -14,12 +14,14 @@ void main() {
     double width = 10,
     double height = 10,
     bool laidOut = true,
+    bool offstage = false,
     List<InspectNode> children = const [],
   }) => InspectNode(
     id: '',
     type: type,
     description: description,
     createdByLocalProject: true,
+    offstage: offstage,
     layout: laidOut
         ? InspectLayout(
             x: x,
@@ -162,6 +164,59 @@ void main() {
     ).deltas;
 
     expect(deltas, isEmpty);
+  });
+
+  // A scenario that pushes a screen keeps the one beneath it alive in the
+  // tree, offstage. A change there belongs to the step that showed it — not
+  // to every step after the push.
+  test('a change under a route offstage on both sides says nothing', () {
+    var base = node(
+      'Navigator',
+      children: [
+        node(
+          'Scaffold',
+          offstage: true,
+          children: [node('Text', description: 'Text("Old label")')],
+        ),
+        node('Scaffold', children: [node('Text', description: 'Text("B")')]),
+      ],
+    );
+    var head = node(
+      'Navigator',
+      children: [
+        node(
+          'Scaffold',
+          offstage: true,
+          children: [node('Text', description: 'Text("New label")')],
+        ),
+        node('Scaffold', children: [node('Text', description: 'Text("B")')]),
+      ],
+    );
+
+    expect(TreeDiff.of(base, head).isEmpty, isTrue);
+  });
+
+  test('a subtree offstage on one side only reads as added or removed', () {
+    var visible = node(
+      'Stack',
+      children: [
+        node('Banner', children: [node('Text')]),
+      ],
+    );
+    var hidden = node(
+      'Stack',
+      children: [
+        node('Banner', offstage: true, children: [node('Text')]),
+      ],
+    );
+
+    var gone = TreeDiff.of(visible, hidden).deltas;
+    expect(gone.single.kind, TreeDeltaKind.removed);
+    expect(gone.single.path, contains('Banner'));
+
+    var appeared = TreeDiff.of(hidden, visible).deltas;
+    expect(appeared.single.kind, TreeDeltaKind.added);
+    expect(appeared.single.path, contains('Banner'));
   });
 
   test('additions and removals outrank property changes', () {

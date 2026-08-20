@@ -98,7 +98,7 @@ class TreeDiff {
       }
     }
 
-    for (var pair in _align(base.children, head.children)) {
+    for (var pair in _align(_onstage(base.children), _onstage(head.children))) {
       switch (pair) {
         case (var only?, null):
           deltas.add(TreeDelta.removed('$here › ${_label(only)}', only.type));
@@ -117,6 +117,17 @@ class TreeDiff {
       }
     }
   }
+
+  /// A change on a covered route is not a change to this step: a scenario
+  /// that pushes a screen keeps the one beneath it alive in the tree, so
+  /// diffing offstage subtrees flags every step after the push for a change
+  /// only the earlier step shows. Pruning each side independently keeps the
+  /// asymmetric case: a subtree offstage on one side only is unmatched, and
+  /// reads as the addition or removal it visibly is.
+  static List<InspectNode> _onstage(List<InspectNode> children) => [
+    for (var child in children)
+      if (!child.offstage) child,
+  ];
 
   /// Pairs children up, longest common subsequence over their signatures.
   ///
