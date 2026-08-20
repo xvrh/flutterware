@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -82,8 +84,10 @@ class AssetPreview extends StatelessWidget {
             bytes,
             fit: BoxFit.scaleDown,
             filterQuality: FilterQuality.none,
-            errorBuilder: (context, error, stack) =>
-                _Unreadable(message: '$error'),
+            errorBuilder: (context, error, stack) {
+              _evictFailedDecode(bytes);
+              return _Unreadable(message: '$error');
+            },
           ),
         );
       case AssetKind.vector:
@@ -125,6 +129,25 @@ class AssetPreview extends StatelessWidget {
 
   Widget _zoomed(Widget child) =>
       zoom == 1 ? child : _Zoomed(zoom: zoom, child: child);
+}
+
+/// Drops a decode that failed from the image cache.
+///
+/// `MemoryImage` is the one provider that does not do this for itself:
+/// `NetworkImage`, `FileImage` and `ResizeImage` each evict their key when the
+/// decode reports an error, and nothing else does — the listener the cache
+/// registers in `putIfAbsent` carries no `onError`, so a failed decode is
+/// simply never taken out of `_pendingImages`. It stays there for the life of
+/// the process, and `pendingImageCount` is read by more than the cache:
+/// flutterware's own settle and the scenario landing both treat a non-zero
+/// count as "work is still in flight" and wait for it. One unreadable asset
+/// looked at once would make every later drive step and every later preview
+/// pay the full wait — measured at 2.4s each, catalog-wide.
+///
+/// Out of build in a microtask, which is the same spelling `ResizeImage` uses
+/// for its own eviction.
+void _evictFailedDecode(Uint8List bytes) {
+  scheduleMicrotask(() => MemoryImage(bytes).evict());
 }
 
 /// A magnified preview you can drag around.

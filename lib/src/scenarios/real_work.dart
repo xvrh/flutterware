@@ -31,9 +31,15 @@ const realWorkTurns = 12;
 /// than a budget, and hitting it is reported on the step rather than swallowed.
 const realWorkWait = Duration(seconds: 1);
 
-/// What one waiting turn covers. Real milliseconds, because the thing being
+/// How often a wait looks again. Real milliseconds, because the thing being
 /// waited for is a decode on an engine thread and the only thing that advances
 /// it is the wall clock.
+///
+/// A polling interval, not the unit [realWorkWait] is spent in: a turn of the
+/// real loop under `runAsync` costs a good deal more than the millisecond it
+/// asks to sleep — measured at ~2.4ms — so counting turns charged 1ms for
+/// something like 2.4, and a one-second ceiling took two and a half seconds to
+/// reach. [RealWorkBudget] reads a stopwatch instead.
 const _waitingTurn = Duration(milliseconds: 1);
 
 /// Lets work that resolves on the **real** event loop land, and be drawn,
@@ -132,7 +138,10 @@ Future<({bool settled, bool landed})> landRealWork(
 /// after it; per *run* and one wedged read would spend the ceiling on the step
 /// that started it and leave nothing for the rest of the scenario.
 class RealWorkBudget {
-  var _spent = Duration.zero;
+  /// Running only across the awaits below, so what it holds is time this step
+  /// spent *waiting* and nothing else — a step whose settle takes a second
+  /// between two landings has spent none of its allowance.
+  final _spent = Stopwatch();
 
   /// Waits, on the real clock, while anything announced is still in flight.
   ///
@@ -142,9 +151,13 @@ class RealWorkBudget {
   /// the whole cost on the path almost every frame of almost every step takes.
   Future<bool> land(WidgetTester tester, ScenarioAssetBundle? assets) async {
     while (_announced(assets)) {
-      if (_spent >= realWorkWait) return false;
-      await tester.runAsync(() => Future<void>.delayed(_waitingTurn));
-      _spent += _waitingTurn;
+      if (_spent.elapsed >= realWorkWait) return false;
+      _spent.start();
+      try {
+        await tester.runAsync(() => Future<void>.delayed(_waitingTurn));
+      } finally {
+        _spent.stop();
+      }
     }
     return true;
   }
@@ -155,3 +168,40 @@ class RealWorkBudget {
 bool _announced(ScenarioAssetBundle? assets) =>
     PaintingBinding.instance.imageCache.pendingImageCount > 0 ||
     (assets?.readsInFlight ?? 0) > 0;
+
+/// Drops what a previous test body left the image cache holding, so the next
+/// one starts with [_announced] describing **it**.
+///
+/// `testWidgets` resets a great deal between bodies and the image cache is not
+/// in it — it is `PaintingBinding`'s, process-wide, and nothing in
+/// `flutter_test` touches it. A body that ends with a decode still in flight
+/// therefore hands `pendingImageCount > 0` to every body after it, for the
+/// life of the process, and each of them then waits out the whole of
+/// [realWorkWait] on work that is not theirs and will never land. It is not a
+/// rare shape: `MemoryImage` does not evict its key when a decode *fails*, the
+/// way `NetworkImage`, `FileImage` and `ResizeImage` all do, so one preview of
+/// an unreadable image is enough. Measured on this repo's own catalog — a
+/// single such entry at position 6 took each of the 117 entries after it from
+/// ~50ms to a flat ~2.4s, and the catalog from seconds to **287**.
+///
+/// Called at the top of a body rather than the bottom, so a run also survives
+/// whatever ran before the first one — which is the same reason
+/// `rootBundle.clear()` sits where it does, and the counters are the same kind
+/// of leak.
+///
+/// Only the framework's half needs this. [ScenarioAssetBundle.readsInFlight]
+/// is counted on a bundle each body makes for itself, so it starts at zero by
+/// construction.
+///
+/// Unconditional rather than only when something is pending, so what a body
+/// decodes it decodes itself. The cost is re-decoding an asset two entries
+/// share — invisible against the measurement above — and what it buys is the
+/// property the comparison rides on: a body's picture is a function of the
+/// body, not of what happened to run before it.
+void resetAnnouncedWork() {
+  var cache = PaintingBinding.instance.imageCache;
+  cache.clear();
+  // `clear` leaves the live set alone, and a live entry is a handle on the
+  // previous body's decoded pixels — held by a tree that no longer exists.
+  cache.clearLiveImages();
+}
