@@ -10,8 +10,11 @@ import '../utils/run_dir.dart';
 import 'artifact.dart';
 import 'base_checkout.dart';
 import 'base_ref.dart';
+import 'cancel.dart';
 import 'channels.dart';
 import 'comparison_controller.dart';
+import 'last_run.dart';
+import 'last_run_store.dart';
 import 'previews_side.dart';
 import 'runner.dart';
 import 'scenario_comparison.dart';
@@ -35,6 +38,7 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
     required this.appToolDirectory,
     required this.topLevel,
     required this.base,
+    this.headCommit,
     String? cacheRoot,
   }) : cacheRoot = cacheRoot ?? flutterwareDir();
 
@@ -49,9 +53,11 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
   }) async {
     String topLevel;
     BaseRef base;
+    String? headCommit;
     try {
       topLevel = await BaseRef.topLevelOf(session.worktree.path);
       base = await BaseRef.resolve(topLevel, ref: baseRef);
+      headCommit = await BaseRef.headOf(topLevel);
     } on Object {
       return null;
     }
@@ -61,6 +67,7 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
       appToolDirectory: appToolDirectory,
       topLevel: topLevel,
       base: base,
+      headCommit: headCommit,
     );
   }
 
@@ -81,6 +88,30 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
 
   @override
   String get baseLabel => base.against;
+
+  @override
+  String get baseSha => base.sha;
+
+  /// Where HEAD sat when this environment was built — the head half of the
+  /// "has anything moved since" check against a kept run.
+  @override
+  final String? headCommit;
+
+  @override
+  bool get baseCheckoutReady => BaseCheckout.isReady(base.sha);
+
+  late final LastRunStore _lastRuns = LastRunStore(
+    comparisonDirFor(cacheRoot, session.worktree),
+  );
+
+  @override
+  Future<LastComparison?> lastRun(ComparisonHalfKind kind) async =>
+      _lastRuns.read(kind);
+
+  @override
+  Future<void> saveLastRun(ComparisonHalfKind kind, LastComparison last) async {
+    _lastRuns.write(kind, last);
+  }
 
   PreviewsCore? get _previews =>
       session.session.coreById(uiCatalogPluginId) as PreviewsCore?;
@@ -110,7 +141,13 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
   ShotCache get _cache => shots;
 
   @override
-  Future<String> prepareBase() async {
+  Future<String> prepareBase({void Function(String phase)? onProgress}) async {
+    var sha7 = base.sha.length > 7 ? base.sha.substring(0, 7) : base.sha;
+    onProgress?.call(
+      baseCheckoutReady
+          ? 'reusing the base checkout of $sha7'
+          : 'checking out $sha7',
+    );
     var checkout = await BaseCheckout.ensure(
       repoRoot: topLevel,
       sha: base.sha,
@@ -128,6 +165,9 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
           Directory(p.dirname(link.path)).createSync(recursive: true);
           link.createSync(flutterSdk.root);
         }
+        onProgress?.call(
+          'resolving dependencies in the base checkout (flutter pub get)',
+        );
         var result = await Process.run(flutterSdk.flutter, [
           'pub',
           'get',
@@ -144,8 +184,19 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
   Future<ComparisonResult> runPreviews(
     String baseRoot, {
     required void Function(ComparedItem row) onRow,
+    void Function(int total, List<String> toAnswer)? onPlan,
+    void Function(String phase)? onProgress,
+    CancelToken? cancel,
   }) async {
-    var runner = _previewsRunner(baseRoot, onItem: onRow);
+    var runner = _previewsRunner(
+      baseRoot,
+      onItem: onRow,
+      onPlan: onPlan == null
+          ? null
+          : (plan) => onPlan(plan.total, plan.toRender),
+      onProgress: onProgress,
+      cancel: cancel,
+    );
     if (runner == null) {
       throw StateError('no package declares previews');
     }
@@ -156,9 +207,13 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
   Future<ScenarioResults> runScenarios(
     String baseRoot, {
     required void Function(ScenarioComparison scenario) onScenario,
+    void Function(int total, List<String> toAnswer)? onPlan,
+    void Function(String phase)? onProgress,
+    CancelToken? cancel,
   }) async {
     var side = _scenariosSide();
     if (side == null) throw StateError('no package declares scenarios');
+    onProgress?.call('building a scenario harness for each side');
     var source = LiveScenarioSource(
       side: side,
       headRoot: topLevel,
@@ -175,6 +230,11 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
           roots: [topLevel, baseRoot],
         ),
         onScenario: onScenario,
+        onPlan: onPlan == null
+            ? null
+            : (plan) => onPlan(plan.total, plan.toRun),
+        onProgress: onProgress,
+        cancel: cancel,
       ).run(
         outDir: p.join(
           comparisonDirFor(cacheRoot, session.worktree),
@@ -191,6 +251,9 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
   ComparisonRunner? _previewsRunner(
     String baseRoot, {
     void Function(ComparedItem)? onItem,
+    void Function(ComparisonPlan)? onPlan,
+    void Function(String)? onProgress,
+    CancelToken? cancel,
   }) {
     var core = _previews;
     var package = _previewsPackage;
@@ -201,6 +264,9 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
       baseSha: base.sha,
       cache: _cache,
       onItem: onItem,
+      onPlan: onPlan,
+      onProgress: onProgress,
+      cancel: cancel,
       side: PreviewsSide(
         dartExecutable: p.join(flutterSdk.root, 'bin', 'dart'),
         flutterSdkRoot: flutterSdk.root,

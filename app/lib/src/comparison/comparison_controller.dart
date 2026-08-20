@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 import 'artifact.dart';
+import 'cancel.dart';
 import 'channels.dart';
+import 'last_run.dart';
 import 'runner.dart';
 import 'scenario_comparison.dart';
 import 'shot_cache.dart';
@@ -16,17 +18,20 @@ enum ComparisonHalfKind {
 
 /// Where one half of a comparison has got to.
 ///
-/// Declared in the order a half moves through them, which is also the order a
-/// tab reads: it can only go forward, and [refused] is the one exit.
+/// Declared in the order a half moves through them. A run cycles
+/// idle → preparing → running → done and back to running on the next Compare;
+/// [refused] is the one exit, and even it is retryable.
 enum HalfStage {
   /// The plugin is not declared here, so the tab does not exist.
   undeclared,
 
+  /// Nothing is running. What the tab shows here is the last run — restored
+  /// from disk or just finished and stopped — or, before any first run, the
+  /// offer to make one.
+  idle,
+
   /// Waiting on the base checkout, which both halves share.
   preparing,
-
-  /// The base is ready. Nothing has run.
-  ready,
 
   /// Rendering or replaying. Rows arrive as they are decided.
   running,
@@ -40,7 +45,7 @@ enum HalfStage {
 
 /// One half of a comparison, as a tab draws it.
 class ComparisonHalf extends ChangeNotifier {
-  ComparisonHalf(this.kind, {HalfStage stage = HalfStage.preparing})
+  ComparisonHalf(this.kind, {HalfStage stage = HalfStage.idle})
     // ignore: prefer_initializing_formals
     : _stage = stage;
 
@@ -59,15 +64,46 @@ class ComparisonHalf extends ChangeNotifier {
   /// The scenario half's rows, which are trees rather than entries.
   final scenarios = <ScenarioComparison>[];
 
+  /// The ids still owed a verdict this run — what the list draws as ghost
+  /// rows. Set when the plan lands, drained as each verdict arrives.
+  final pending = <String>[];
+
+  /// Every entry this run will answer, once the plan has said. The progress
+  /// bar's denominator; null until the plan lands.
+  int? planTotal;
+
+  /// One sentence of what the run is doing right now. Null when nothing is.
+  String? progress;
+
+  /// When the current run started — what the elapsed counter ticks from.
+  DateTime? startedAt;
+
+  /// The receipt of the run the rows belong to: when it finished, what it was
+  /// against, how long it took. Set on completion, and on restore from disk.
+  LastComparison? lastRun;
+
+  /// True when [rows] came off disk rather than from a run this session.
+  var restored = false;
+
+  /// True when the current rows are a run somebody stopped partway.
+  var stopped = false;
+
   /// What the run concluded, once it has.
   ComparisonResult? previewsResult;
   ScenarioResults? scenarioResults;
 
   bool get isRunning => _stage == HalfStage.running;
 
-  /// True once this half has run at least once — a re-entry joins rather than
-  /// restarts.
+  /// Busy in any form — the states a Compare press should join, not restart.
+  bool get isBusy =>
+      _stage == HalfStage.preparing || _stage == HalfStage.running;
+
   bool get hasRun => previewsResult != null || scenarioResults != null;
+
+  /// Findings on this half alone — a tab badge's number.
+  int get findingCount =>
+      rows.where((row) => row.state.isFinding).length +
+      scenarios.where((scenario) => scenario.state.isFinding).length;
 
   void moveTo(HalfStage stage) {
     if (_stage == stage) return;
@@ -77,13 +113,63 @@ class ComparisonHalf extends ChangeNotifier {
 
   void refuse(String reason) {
     refusal = reason;
+    progress = null;
+    pending.clear();
     moveTo(HalfStage.refused);
     // moveTo returns early when the stage already matches, and a second
     // refusal with a new reason has to reach the panel.
     notifyListeners();
   }
 
+  /// Resets everything a fresh run replaces. Silent: the stage move that
+  /// follows is the notification.
+  void beginRun() {
+    refusal = null;
+    restored = false;
+    stopped = false;
+    lastRun = null;
+    previewsResult = null;
+    scenarioResults = null;
+    rows.clear();
+    scenarios.clear();
+    pending.clear();
+    planTotal = null;
+    progress = null;
+    startedAt = DateTime.now();
+  }
+
+  void setProgress(String phase) {
+    progress = phase;
+    notifyListeners();
+  }
+
+  /// The run's shape, the moment the plan lands: [total] entries, of which
+  /// [toAnswer] still owe a verdict.
+  void plan(int total, List<String> toAnswer) {
+    planTotal = total;
+    pending
+      ..clear()
+      ..addAll(toAnswer);
+    notifyListeners();
+  }
+
+  /// Fills the half back in from a previous session's run.
+  void restoreFrom(LastComparison last) {
+    lastRun = last;
+    restored = true;
+    rows
+      ..clear()
+      ..addAll(last.items ?? const [])
+      ..sort(_bySeverity);
+    scenarios
+      ..clear()
+      ..addAll(last.scenarios ?? const [])
+      ..sort(_scenariosBySeverity);
+    notifyListeners();
+  }
+
   void add(ComparedItem row) {
+    pending.remove(row.id);
     rows
       ..add(row)
       ..sort(_bySeverity);
@@ -91,19 +177,21 @@ class ComparisonHalf extends ChangeNotifier {
   }
 
   void addScenario(ScenarioComparison scenario) {
+    pending.remove(scenario.scenario);
     scenarios
       ..add(scenario)
-      ..sort(
-        (a, b) => a.state.index == b.state.index
-            ? a.scenario.compareTo(b.scenario)
-            : a.state.index.compareTo(b.state.index),
-      );
+      ..sort(_scenariosBySeverity);
     notifyListeners();
   }
 
   static int _bySeverity(ComparedItem a, ComparedItem b) =>
       a.state.index == b.state.index
       ? a.id.compareTo(b.id)
+      : a.state.index.compareTo(b.state.index);
+
+  static int _scenariosBySeverity(ScenarioComparison a, ScenarioComparison b) =>
+      a.state.index == b.state.index
+      ? a.scenario.compareTo(b.scenario)
       : a.state.index.compareTo(b.state.index);
 }
 
@@ -122,9 +210,23 @@ abstract interface class ComparisonEnvironment {
   /// What is being compared against, for the header.
   String get baseLabel;
 
+  /// The resolved base commit — what a stored run is checked against to say
+  /// "the base has moved since".
+  String get baseSha;
+
+  /// Where HEAD sat when the environment was built, or null when the
+  /// repository would not say. The other half of the staleness check.
+  String? get headCommit;
+
+  /// Whether the base checkout already exists resolved on disk — what lets
+  /// the offer to run say "ready" or "first run checks it out" before anything
+  /// is paid.
+  bool get baseCheckoutReady;
+
   /// Materialises the base and returns its path. Called once; both halves wait
-  /// on the same future.
-  Future<String> prepareBase();
+  /// on the same future. [onProgress] narrates the slow parts: the checkout,
+  /// then `pub get`.
+  Future<String> prepareBase({void Function(String phase)? onProgress});
 
   bool get hasPreviews;
   bool get hasScenarios;
@@ -135,48 +237,55 @@ abstract interface class ComparisonEnvironment {
   /// keys, and something has to be able to open them.
   ShotCache get shots;
 
+  /// The half's last finished run, if one was kept.
+  Future<LastComparison?> lastRun(ComparisonHalfKind kind);
+
+  /// Keeps [last] as the half's answer for the next visit.
+  Future<void> saveLastRun(ComparisonHalfKind kind, LastComparison last);
+
   Future<ComparisonResult> runPreviews(
     String baseRoot, {
     required void Function(ComparedItem row) onRow,
+    void Function(int total, List<String> toAnswer)? onPlan,
+    void Function(String phase)? onProgress,
+    CancelToken? cancel,
   });
 
   Future<ScenarioResults> runScenarios(
     String baseRoot, {
     required void Function(ScenarioComparison scenario) onScenario,
+    void Function(int total, List<String> toAnswer)? onPlan,
+    void Function(String phase)? onProgress,
+    CancelToken? cancel,
   });
 }
 
-/// Owns one worktree's comparison: nothing happens until a tab is opened, and
-/// then that tab prepares the base and runs its half.
+/// Owns one worktree's comparison. **Nothing runs on its own**: building the
+/// controller restores what the last run concluded, and everything past that —
+/// the base checkout included — waits for [compare].
 ///
-/// **Everything is behind the tab, the base checkout included.** It used to be
-/// prepared on arrival, so that each tab could carry an estimate of what
-/// clicking it would cost. Both are gone, and the estimate is why: pricing a
-/// click nobody had made meant that merely opening the Changes panel did a
-/// `git worktree add`, a `flutter pub get`, and a sha1 of every file every
-/// entry reads. Measured on a real catalog of 90 previews and 46 scenarios,
-/// that was **four minutes** of it — to put two numbers on two tabs.
-///
-/// So a tab nobody has opened now says nothing about itself, which is the
-/// honest version of what the estimate was approximating anyway. §13.11
-/// narrowed to its limit: there is still no Run button, and opening the pane
-/// *is* the ask.
+/// That is a reversal of the design's §13.11 ("entering a tab runs that
+/// half"), and it is deliberate. The auto-run was justified by a per-tab cost
+/// estimate that made the price visible before the click; the estimate was
+/// built, measured at four minutes on a real catalog, and removed — leaving a
+/// panel that started git checkouts, `pub get` and compilers as a side effect
+/// of a tab getting focus, with a one-line spinner for company. The honest
+/// contract is the opposite one: the tab always *shows* for free (the last
+/// run, kept on disk), and the machinery starts only when the button that
+/// names it is pressed.
 class ComparisonController extends ChangeNotifier {
   ComparisonController(this.environment)
     : previews = ComparisonHalf(
         ComparisonHalfKind.previews,
-        stage: environment.hasPreviews
-            ? HalfStage.preparing
-            : HalfStage.undeclared,
+        stage: environment.hasPreviews ? HalfStage.idle : HalfStage.undeclared,
       ),
       scenarios = ComparisonHalf(
         ComparisonHalfKind.scenarios,
-        stage: environment.hasScenarios
-            ? HalfStage.preparing
-            : HalfStage.undeclared,
+        stage: environment.hasScenarios ? HalfStage.idle : HalfStage.undeclared,
       ) {
     previews.addListener(notifyListeners);
     scenarios.addListener(notifyListeners);
+    _restored = _restore();
   }
 
   final ComparisonEnvironment environment;
@@ -191,7 +300,13 @@ class ComparisonController extends ChangeNotifier {
   String? refusal;
 
   Future<void>? _preparing;
+  final _cancels = <ComparisonHalfKind, CancelToken>{};
   var _disposed = false;
+  late final Future<void> _restored;
+
+  /// Restoring is loading two small JSON files; a test that wants the restored
+  /// state awaits this instead of pumping.
+  Future<void> get restored => _restored;
 
   ComparisonHalf halfFor(ComparisonHalfKind kind) =>
       kind == ComparisonHalfKind.previews ? previews : scenarios;
@@ -203,93 +318,170 @@ class ComparisonController extends ChangeNotifier {
       if (half.stage != HalfStage.undeclared) half,
   ];
 
-  /// Materialises the base checkout. Idempotent: two tabs opened one after the
-  /// other share one checkout, and the second waits out the first.
-  ///
-  /// Called by [open], never by the panel — see the class doc.
+  Future<void> _restore() async {
+    for (var half in declared) {
+      LastComparison? last;
+      try {
+        last = await environment.lastRun(half.kind);
+      } on Object {
+        last = null;
+      }
+      if (_disposed || last == null) continue;
+      // A run that started while the file was loading owns the half now.
+      if (half.stage != HalfStage.idle || half.hasRun) continue;
+      half.restoreFrom(last);
+    }
+  }
+
+  /// Materialises the base checkout. Idempotent: two halves compared one after
+  /// the other share one checkout, and the second waits out the first.
   Future<void> prepare() => _preparing ??= _prepare();
 
   Future<void> _prepare() async {
     String root;
     try {
-      root = await environment.prepareBase();
+      root = await environment.prepareBase(
+        onProgress: (phase) {
+          for (var half in declared) {
+            if (half.stage == HalfStage.preparing) half.setProgress(phase);
+          }
+        },
+      );
     } on Object catch (error) {
       var reason = _firstLine(error);
       refusal = reason;
       for (var half in declared) {
-        half.refuse(reason);
+        if (half.stage == HalfStage.preparing) half.refuse(reason);
       }
       notifyListeners();
       return;
     }
     if (_disposed) return;
     baseRoot = root;
-    // Both halves, not only the one being opened: the checkout they were
-    // waiting on is the same one, so the other stops saying it is preparing.
-    for (var half in declared) {
-      half.moveTo(HalfStage.ready);
-    }
   }
 
-  /// Runs [kind] if it has not run and is not running.
+  /// Runs [kind], from the start, whatever it concluded before.
   ///
-  /// **A run already in flight is joined, never restarted.** Clicking back and
-  /// forth between two tabs is a thing people do, and a comparison that
-  /// restarted on each visit would never finish one.
-  Future<void> open(ComparisonHalfKind kind) async {
-    await prepare();
+  /// **The one way anything runs.** A press while the half is busy joins the
+  /// run in flight rather than restarting it; a press on a finished, restored
+  /// or refused half runs it again — the button is also the refresh and the
+  /// retry.
+  Future<void> compare(ComparisonHalfKind kind) async {
     var half = halfFor(kind);
+    if (half.stage == HalfStage.undeclared || half.isBusy) return;
+
+    // A base that refused to check out is worth one retry per ask — the
+    // commonest cause is a ref that did not exist until a fetch a moment ago.
+    if (refusal != null) {
+      refusal = null;
+      _preparing = null;
+      baseRoot = null;
+    }
+
+    var cancel = _cancels[kind] = CancelToken();
+    half
+      ..beginRun()
+      ..progress = 'preparing the base checkout'
+      ..moveTo(HalfStage.preparing);
+
+    await prepare();
+    if (_disposed) return;
     var root = baseRoot;
-    if (root == null ||
-        half.stage == HalfStage.undeclared ||
-        half.stage == HalfStage.refused ||
-        half.isRunning ||
-        half.hasRun) {
+    if (root == null) return; // Refused; the half already says why.
+    if (cancel.cancelled) {
+      half
+        ..stopped = true
+        ..progress = null
+        ..moveTo(HalfStage.idle);
       return;
     }
 
-    half
-      ..rows.clear()
-      ..scenarios.clear()
-      ..moveTo(HalfStage.running);
+    half.moveTo(HalfStage.running);
+    var watch = Stopwatch()..start();
     try {
       switch (kind) {
         case ComparisonHalfKind.previews:
-          half.previewsResult = await environment.runPreviews(
+          var result = await environment.runPreviews(
             root,
             onRow: (row) {
               if (!_disposed) half.add(row);
             },
+            onPlan: (total, toAnswer) {
+              if (!_disposed) half.plan(total, toAnswer);
+            },
+            onProgress: (phase) {
+              if (!_disposed) half.setProgress(phase);
+            },
+            cancel: cancel,
+          );
+          if (_disposed) return;
+          half.previewsResult = result;
+          half.lastRun = LastComparison(
+            at: DateTime.now(),
+            baseSha: result.baseSha,
+            against: environment.baseLabel,
+            headCommit: environment.headCommit,
+            elapsed: watch.elapsed,
+            items: result.items,
+            rendered: result.rendered,
           );
         case ComparisonHalfKind.scenarios:
-          half.scenarioResults = await environment.runScenarios(
+          var results = await environment.runScenarios(
             root,
             onScenario: (scenario) {
               if (!_disposed) half.addScenario(scenario);
             },
+            onPlan: (total, toAnswer) {
+              if (!_disposed) half.plan(total, toAnswer);
+            },
+            onProgress: (phase) {
+              if (!_disposed) half.setProgress(phase);
+            },
+            cancel: cancel,
+          );
+          if (_disposed) return;
+          half.scenarioResults = results;
+          half.lastRun = LastComparison(
+            at: DateTime.now(),
+            baseSha: environment.baseSha,
+            against: environment.baseLabel,
+            headCommit: environment.headCommit,
+            elapsed: watch.elapsed,
+            scenarios: results.items,
+            ran: results.ran,
+            note: results.note,
           );
       }
+      half
+        ..progress = null
+        ..pending.clear()
+        ..moveTo(HalfStage.done);
+      if (half.lastRun case var last?) {
+        // Best effort: a run whose receipt cannot be written is still a run.
+        try {
+          await environment.saveLastRun(kind, last);
+        } on Object {
+          // Nothing to do with it — the rows are on screen either way.
+        }
+      }
+    } on ComparisonCancelled {
       if (_disposed) return;
-      half.moveTo(HalfStage.done);
+      // Deliberate, so the rows collected so far stay up — partial, marked as
+      // such, and not persisted: a receipt for half a run would read as the
+      // whole answer on the next visit.
+      half
+        ..stopped = true
+        ..progress = null
+        ..pending.clear()
+        ..moveTo(HalfStage.idle);
     } on Object catch (error) {
       if (_disposed) return;
       half.refuse(_firstLine(error));
     }
   }
 
-  /// Throws away what a half concluded so the next [open] runs it again.
-  Future<void> refresh(ComparisonHalfKind kind) async {
-    var half = halfFor(kind);
-    if (half.stage == HalfStage.undeclared || half.isRunning) return;
-    half
-      ..previewsResult = null
-      ..scenarioResults = null
-      ..refusal = null
-      ..rows.clear()
-      ..scenarios.clear()
-      ..moveTo(HalfStage.preparing);
-    await open(kind);
-  }
+  /// Asks [kind]'s run to stop at its next seam. The rows it has stay up.
+  void stop(ComparisonHalfKind kind) => _cancels[kind]?.cancel();
 
   /// Both halves as one file, once at least one of them has run.
   ComparisonArtifact? get artifact {
@@ -321,6 +513,11 @@ class ComparisonController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    // A panel navigating away should not leave two compilers rendering for
+    // nobody. The runs check the token at their next seam and unwind.
+    for (var cancel in _cancels.values) {
+      cancel.cancel();
+    }
     previews.dispose();
     scenarios.dispose();
     super.dispose();

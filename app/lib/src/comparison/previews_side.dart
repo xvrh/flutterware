@@ -6,6 +6,7 @@ import 'package:flutterware/src/inspect/error.dart';
 import '../previews/discovery.dart';
 import '../previews/headless_catalog.dart';
 import '../previews/protocol.dart';
+import 'cancel.dart';
 import 'runner.dart';
 
 /// The previews of a checkout, as the runner asks about them.
@@ -135,6 +136,11 @@ class PreviewsSide implements ComparisonSide {
           );
         },
       );
+    } on ComparisonCancelled {
+      // A stop is not a compile failure. The runner's cancel check throws
+      // from inside `onFrame`, which unwinds through `captureAll`'s finally —
+      // guest and daemon closed — and must reach the controller as itself.
+      rethrow;
     } on Object catch (error) {
       // **A side that cannot start is one finding.** The daemon refuses as a
       // whole when the generated entrypoint does not compile — one way that

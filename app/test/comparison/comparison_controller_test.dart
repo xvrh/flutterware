@@ -1,14 +1,16 @@
 import 'dart:async';
 
 import 'package:flutterware_app/src/comparison/artifact.dart';
+import 'package:flutterware_app/src/comparison/cancel.dart';
 import 'package:flutterware_app/src/comparison/channels.dart';
 import 'package:flutterware_app/src/comparison/comparison_controller.dart';
+import 'package:flutterware_app/src/comparison/last_run.dart';
 import 'package:flutterware_app/src/comparison/runner.dart';
 import 'package:flutterware_app/src/comparison/scenario_comparison.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
 import 'package:test/test.dart';
 
-/// The sequencing: the base is prepared on the panel, a half runs on its tab.
+/// The sequencing: nothing runs on its own, one explicit Compare per half.
 ///
 /// Driven through a fake environment, because none of this needs a compiler, a
 /// guest or a git worktree to be wrong.
@@ -22,11 +24,9 @@ void main() {
   });
   tearDown(() => controller.dispose());
 
-  group('preparing', () {
-    // **The panel builds this and then leaves it alone.** Opening the Changes
-    // screen used to prepare the base and price both tabs; on a real catalog
-    // that was minutes of git, `pub get` and sha1 charged to somebody who came
-    // to read a diff. Nothing is owed until a tab is opened.
+  group('nothing runs on its own', () {
+    // The whole reversal of §13.11: the machinery starts on the button, never
+    // on a mount, a tab focus or an address arrival.
     test('building it touches nothing', () async {
       await pumpEventQueue();
 
@@ -36,45 +36,9 @@ void main() {
       expect(controller.baseRoot, isNull);
     });
 
-    // The panel does not call this any more — `open` does, on its way to
-    // running one half. What it still has to guarantee is that materialising
-    // the base runs neither.
-    test('preparing readies both halves and runs neither', () async {
-      await controller.prepare();
-
-      expect(controller.previews.stage, HalfStage.ready);
-      expect(controller.scenarios.stage, HalfStage.ready);
-      expect(environment.ranPreviews, 0);
-      expect(environment.ranScenarios, 0);
-    });
-
-    test('arriving twice prepares once', () async {
-      await Future.wait([controller.prepare(), controller.prepare()]);
-      await controller.prepare();
-
-      expect(environment.prepared, 1);
-    });
-
-    test('a base that will not check out refuses both halves', () async {
-      environment.baseError = 'fatal: invalid reference: nope';
-
-      await controller.prepare();
-
-      expect(controller.refusal, contains('invalid reference'));
-      expect(controller.previews.stage, HalfStage.refused);
-      expect(controller.scenarios.stage, HalfStage.refused);
-    });
-
-    // An SDK mismatch refuses at plan time, and the plan is per half — so it
-    // should stop that tab rather than the panel.
-    test('one half refusing leaves the other alone', () async {
-      environment.previewsRunError = 'two checkouts on different SDKs';
-
-      await controller.open(ComparisonHalfKind.previews);
-
-      expect(controller.previews.stage, HalfStage.refused);
-      expect(controller.previews.refusal, contains('different SDKs'));
-      expect(controller.scenarios.stage, HalfStage.ready);
+    test('both halves rest at idle', () {
+      expect(controller.previews.stage, HalfStage.idle);
+      expect(controller.scenarios.stage, HalfStage.idle);
     });
 
     test('a half whose plugin is not declared has no tab', () {
@@ -86,66 +50,162 @@ void main() {
     });
   });
 
-  group('opening a tab', () {
-    test('opening runs only that half', () async {
-      await controller.open(ComparisonHalfKind.previews);
+  group('the kept run', () {
+    // The idle state is never blank: the last answer loads from disk, marked
+    // as restored, and the half stays idle — showing is not running.
+    test('restores into the half without running anything', () async {
+      environment.keptPreviews = LastComparison(
+        at: DateTime(2026, 8, 19),
+        baseSha: 'abc123',
+        against: 'origin/master',
+        elapsed: const Duration(seconds: 8),
+        items: const [
+          ComparedItem(id: 'demo/a.dart#a', state: ComparedState.changed),
+        ],
+      );
+      var restored = ComparisonController(environment);
+      addTearDown(restored.dispose);
+
+      await restored.restored;
+
+      expect(restored.previews.stage, HalfStage.idle);
+      expect(restored.previews.restored, isTrue);
+      expect(restored.previews.rows, hasLength(1));
+      expect(restored.previews.lastRun?.baseSha, 'abc123');
+      expect(environment.ranPreviews, 0);
+    });
+
+    test('a finished run is saved for the next visit', () async {
+      environment.streamRows = [
+        const ComparedItem(id: 'demo/a.dart#a', state: ComparedState.changed),
+      ];
+
+      await controller.compare(ComparisonHalfKind.previews);
+
+      var saved = environment.saved[ComparisonHalfKind.previews];
+      expect(saved, isNotNull);
+      expect(saved!.items, hasLength(1));
+      expect(saved.baseSha, 'abc123');
+      expect(saved.headCommit, environment.headCommit);
+    });
+
+    test('a restored answer is replaced by pressing Compare', () async {
+      environment.keptPreviews = LastComparison(
+        at: DateTime(2026, 8, 19),
+        baseSha: 'old',
+        against: 'origin/master',
+        elapsed: Duration.zero,
+        items: const [ComparedItem(id: 'gone', state: ComparedState.removed)],
+      );
+      var restored = ComparisonController(environment);
+      addTearDown(restored.dispose);
+      await restored.restored;
+
+      await restored.compare(ComparisonHalfKind.previews);
+
+      expect(restored.previews.restored, isFalse);
+      expect(restored.previews.rows.map((r) => r.id), isNot(contains('gone')));
+    });
+  });
+
+  group('compare', () {
+    test('runs only the half that was asked', () async {
+      await controller.compare(ComparisonHalfKind.previews);
 
       expect(environment.ranPreviews, 1);
       expect(environment.ranScenarios, 0);
       expect(controller.previews.stage, HalfStage.done);
-      expect(controller.scenarios.stage, HalfStage.ready);
+      expect(controller.scenarios.stage, HalfStage.idle);
     });
 
-    test('opening prepares first, so a tab is enough on its own', () async {
-      await controller.open(ComparisonHalfKind.scenarios);
+    test(
+      'prepares the base first, so the button is enough on its own',
+      () async {
+        await controller.compare(ComparisonHalfKind.scenarios);
+
+        expect(environment.prepared, 1);
+        expect(controller.scenarios.scenarioResults, isNotNull);
+      },
+    );
+
+    test('two halves share one base checkout', () async {
+      await controller.compare(ComparisonHalfKind.previews);
+      await controller.compare(ComparisonHalfKind.scenarios);
 
       expect(environment.prepared, 1);
-      expect(controller.scenarios.scenarioResults, isNotNull);
     });
 
-    // Clicking back and forth between two tabs is a thing people do, and a
-    // comparison that restarted on each visit would never finish one.
-    test('a run already in flight is joined, not restarted', () async {
+    // Double-clicking the button, or pressing it from two places, must not
+    // start two of anything.
+    test('a press while running joins the run in flight', () async {
       var gate = Completer<void>();
       environment.previewsGate = gate;
 
-      var first = controller.open(ComparisonHalfKind.previews);
-      var second = controller.open(ComparisonHalfKind.previews);
+      var first = controller.compare(ComparisonHalfKind.previews);
+      var second = controller.compare(ComparisonHalfKind.previews);
       gate.complete();
       await Future.wait([first, second]);
 
       expect(environment.ranPreviews, 1);
     });
 
-    test('a half that has run is not run again on the way back', () async {
-      await controller.open(ComparisonHalfKind.previews);
-      await controller.open(ComparisonHalfKind.previews);
+    // The button is also the refresh: a finished half runs again.
+    test('a press on a finished half runs it again', () async {
+      await controller.compare(ComparisonHalfKind.previews);
 
-      expect(environment.ranPreviews, 1);
+      await controller.compare(ComparisonHalfKind.previews);
+
+      expect(environment.ranPreviews, 2);
+      expect(controller.previews.stage, HalfStage.done);
     });
 
-    test('a half that refused is not attempted again', () async {
+    // And the retry: a refusal is not a terminal state any more, because the
+    // press that follows it is explicit.
+    test('a refused half is attempted again on the next press', () async {
       environment.previewsRunError = 'two checkouts on different SDKs';
-      await controller.open(ComparisonHalfKind.previews);
+      await controller.compare(ComparisonHalfKind.previews);
+      expect(controller.previews.stage, HalfStage.refused);
       environment.previewsRunError = null;
 
-      await controller.open(ComparisonHalfKind.previews);
+      await controller.compare(ComparisonHalfKind.previews);
 
-      expect(environment.ranPreviews, 1);
+      expect(environment.ranPreviews, 2);
+      expect(controller.previews.stage, HalfStage.done);
+    });
+
+    test('a base that will not check out refuses the asking half', () async {
+      environment.baseError = 'fatal: invalid reference: nope';
+
+      await controller.compare(ComparisonHalfKind.previews);
+
+      expect(controller.refusal, contains('invalid reference'));
       expect(controller.previews.stage, HalfStage.refused);
+      // The half nobody ran was never touched.
+      expect(controller.scenarios.stage, HalfStage.idle);
+    });
+
+    test('a failed base checkout is retried on the next press', () async {
+      environment.baseError = 'fatal: could not read from remote';
+      await controller.compare(ComparisonHalfKind.previews);
+      environment.baseError = null;
+
+      await controller.compare(ComparisonHalfKind.previews);
+
+      expect(environment.prepared, 2);
+      expect(controller.previews.stage, HalfStage.done);
     });
 
     test('a run that throws becomes the tab reason, not a crash', () async {
       environment.scenariosRunError = 'The scenario harness does not compile';
 
-      await controller.open(ComparisonHalfKind.scenarios);
+      await controller.compare(ComparisonHalfKind.scenarios);
 
       expect(controller.scenarios.stage, HalfStage.refused);
       expect(controller.scenarios.refusal, contains('does not compile'));
     });
   });
 
-  group('rows as they land', () {
+  group('the run as it moves', () {
     test('a row is visible before the run finishes', () async {
       var gate = Completer<void>();
       environment
@@ -154,7 +214,7 @@ void main() {
           const ComparedItem(id: 'demo/a.dart#a', state: ComparedState.changed),
         ];
 
-      var running = controller.open(ComparisonHalfKind.previews);
+      var running = controller.compare(ComparisonHalfKind.previews);
       await pumpEventQueue();
 
       expect(controller.previews.isRunning, isTrue);
@@ -172,7 +232,7 @@ void main() {
         const ComparedItem(id: 'm', state: ComparedState.broke),
       ];
 
-      await controller.open(ComparisonHalfKind.previews);
+      await controller.compare(ComparisonHalfKind.previews);
 
       expect(controller.previews.rows.map((r) => r.id), ['m', 'a', 'z']);
     });
@@ -183,38 +243,93 @@ void main() {
         _scenario('a', ComparedState.broke),
       ];
 
-      await controller.open(ComparisonHalfKind.scenarios);
+      await controller.compare(ComparisonHalfKind.scenarios);
 
       expect(controller.scenarios.scenarios.map((s) => s.scenario), ['a', 'z']);
     });
-  });
 
-  group('refresh', () {
-    // The reason you are refreshing is that the worktree moved, so whatever
-    // the half concluded last time is thrown away and the run happens again.
-    test('it runs again', () async {
-      await controller.open(ComparisonHalfKind.previews);
+    // The plan is what makes the progress honest: the denominator exists
+    // before the first render, and each arriving verdict drains the pending
+    // list the ghost rows draw from.
+    test('the plan sets the shape and rows drain it', () async {
+      var gate = Completer<void>();
+      environment
+        ..previewsGate = gate
+        ..planTotal = 3
+        ..planToAnswer = ['a', 'b']
+        ..streamRows = [
+          const ComparedItem(id: 'a', state: ComparedState.changed),
+        ];
 
-      await controller.refresh(ComparisonHalfKind.previews);
+      var running = controller.compare(ComparisonHalfKind.previews);
+      await pumpEventQueue();
 
-      expect(environment.ranPreviews, 2);
-      expect(controller.previews.stage, HalfStage.done);
+      expect(controller.previews.planTotal, 3);
+      expect(controller.previews.pending, ['b']);
+      gate.complete();
+      await running;
+      expect(controller.previews.pending, isEmpty);
     });
 
-    test('refreshing one half leaves the other where it was', () async {
-      await controller.open(ComparisonHalfKind.scenarios);
+    test('progress narration reaches the half', () async {
+      var gate = Completer<void>();
+      environment
+        ..previewsGate = gate
+        ..progressLine = 'rendering the base side · 1 of 2';
 
-      await controller.refresh(ComparisonHalfKind.scenarios);
+      var running = controller.compare(ComparisonHalfKind.previews);
+      await pumpEventQueue();
 
-      expect(environment.ranPreviews, 0);
+      expect(controller.previews.progress, 'rendering the base side · 1 of 2');
+      gate.complete();
+      await running;
+      expect(controller.previews.progress, isNull);
+    });
+  });
+
+  group('stop', () {
+    test('keeps the rows it has and lands idle, marked partial', () async {
+      var gate = Completer<void>();
+      environment
+        ..previewsGate = gate
+        ..cancelAtGate = true
+        ..streamRows = [
+          const ComparedItem(id: 'a', state: ComparedState.changed),
+        ];
+
+      var running = controller.compare(ComparisonHalfKind.previews);
+      await pumpEventQueue();
+      controller.stop(ComparisonHalfKind.previews);
+      gate.complete();
+      await running;
+
+      expect(controller.previews.stage, HalfStage.idle);
+      expect(controller.previews.stopped, isTrue);
+      expect(controller.previews.rows, hasLength(1));
+    });
+
+    // A receipt for half a run would read as the whole answer next visit.
+    test('a stopped run is not saved', () async {
+      var gate = Completer<void>();
+      environment
+        ..previewsGate = gate
+        ..cancelAtGate = true;
+
+      var running = controller.compare(ComparisonHalfKind.previews);
+      await pumpEventQueue();
+      controller.stop(ComparisonHalfKind.previews);
+      gate.complete();
+      await running;
+
+      expect(environment.saved, isEmpty);
     });
   });
 
   test('the artifact is both halves once the previews half has run', () async {
     expect(controller.artifact, isNull);
 
-    await controller.open(ComparisonHalfKind.previews);
-    await controller.open(ComparisonHalfKind.scenarios);
+    await controller.compare(ComparisonHalfKind.previews);
+    await controller.compare(ComparisonHalfKind.scenarios);
 
     expect(controller.artifact, isA<ComparisonArtifact>());
     expect(controller.artifact!.scenarios, isNotNull);
@@ -233,6 +348,15 @@ class _FakeEnvironment implements ComparisonEnvironment {
   String get baseLabel => 'master';
 
   @override
+  String get baseSha => 'abc123';
+
+  @override
+  String? get headCommit => 'def456';
+
+  @override
+  bool get baseCheckoutReady => false;
+
+  @override
   var hasPreviews = true;
 
   @override
@@ -245,37 +369,63 @@ class _FakeEnvironment implements ComparisonEnvironment {
   String? previewsRunError;
   String? scenariosRunError;
 
-  /// Held open so a test can look at a half mid-run.
+  /// Held open so a test can look at a half mid-run. With [cancelAtGate], the
+  /// run checks its token after the gate — how a Stop lands mid-render.
   Completer<void>? previewsGate;
+  var cancelAtGate = false;
 
   List<ComparedItem> streamRows = const [];
   List<ScenarioComparison> streamScenarios = const [];
+
+  int? planTotal;
+  List<String> planToAnswer = const [];
+  String? progressLine;
+
+  LastComparison? keptPreviews;
+  LastComparison? keptScenarios;
+  final saved = <ComparisonHalfKind, LastComparison>{};
 
   var prepared = 0;
   var ranPreviews = 0;
   var ranScenarios = 0;
 
   @override
-  Future<String> prepareBase() async {
+  Future<String> prepareBase({void Function(String phase)? onProgress}) async {
     prepared++;
+    onProgress?.call('checking out abc123');
     if (baseError case var error?) throw StateError(error);
     return '/work/base';
+  }
+
+  @override
+  Future<LastComparison?> lastRun(ComparisonHalfKind kind) async =>
+      kind == ComparisonHalfKind.previews ? keptPreviews : keptScenarios;
+
+  @override
+  Future<void> saveLastRun(ComparisonHalfKind kind, LastComparison last) async {
+    saved[kind] = last;
   }
 
   @override
   Future<ComparisonResult> runPreviews(
     String baseRoot, {
     required void Function(ComparedItem row) onRow,
+    void Function(int total, List<String> toAnswer)? onPlan,
+    void Function(String phase)? onProgress,
+    CancelToken? cancel,
   }) async {
     ranPreviews++;
     if (previewsRunError case var error?) throw StateError(error);
+    if (planTotal case var total?) onPlan?.call(total, planToAnswer);
+    if (progressLine case var line?) onProgress?.call(line);
     for (var row in streamRows) {
       onRow(row);
     }
     await previewsGate?.future;
+    if (cancelAtGate) cancel?.check();
     return ComparisonResult(
       items: streamRows,
-      baseSha: 'abc123',
+      baseSha: baseSha,
       headRoot: headRoot,
       elapsed: Duration.zero,
       rendered: 0,
@@ -286,6 +436,9 @@ class _FakeEnvironment implements ComparisonEnvironment {
   Future<ScenarioResults> runScenarios(
     String baseRoot, {
     required void Function(ScenarioComparison scenario) onScenario,
+    void Function(int total, List<String> toAnswer)? onPlan,
+    void Function(String phase)? onProgress,
+    CancelToken? cancel,
   }) async {
     ranScenarios++;
     if (scenariosRunError case var error?) throw StateError(error);

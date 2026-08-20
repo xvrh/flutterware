@@ -48,6 +48,13 @@ class BaseCheckout {
   static bool isBasePath(String path, {String? root}) =>
       p.isWithin(root ?? defaultRoot, p.canonicalize(path));
 
+  /// Whether [sha]'s checkout already exists resolved — the marker is written
+  /// only after `pub get` succeeded, so this is "reusable", not merely "there".
+  ///
+  /// A stat, so a panel can say what a run will cost before anything is paid.
+  static bool isReady(String sha, {String? cacheRoot}) =>
+      File(p.join(cacheRoot ?? defaultRoot, sha, _marker)).existsSync();
+
   /// The checkout of [sha], creating it if nothing has yet.
   ///
   /// [resolve] is called once per fresh checkout and is where `pub get` goes.

@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 
+import 'cancel.dart';
 import 'channels.dart';
 import 'closure.dart';
 import 'import_graph.dart';
@@ -188,6 +189,9 @@ class ComparisonRunner {
     this.packageConfig,
     this.only,
     this.onItem,
+    this.onPlan,
+    this.onProgress,
+    this.cancel,
   });
 
   /// The worktree as it sits on disk, uncommitted and untracked included.
@@ -212,6 +216,16 @@ class ComparisonRunner {
   /// Called as each verdict is reached, so a host can fill a list in rather
   /// than wait for the whole run.
   final void Function(ComparedItem item)? onItem;
+
+  /// Called once the plan is made — the moment the run's shape is known: how
+  /// many entries there are, and which of them still owe a verdict.
+  final void Function(ComparisonPlan plan)? onPlan;
+
+  /// One sentence of what the run is doing right now, replaced as it moves.
+  final void Function(String phase)? onProgress;
+
+  /// Checked between stages and between frames. See [CancelToken].
+  final CancelToken? cancel;
 
   /// Everything that can be decided without rendering anything.
   ///
@@ -248,8 +262,10 @@ class ComparisonRunner {
     // and reports SDK churn as change, unwarned.
     var sdkKey = (await FlutterSdkPath.findSdk())?.root ?? 'unknown';
 
+    onProgress?.call('listing the entries on both sides');
     var headEntries = await side.entries(headRoot);
     var baseEntries = await side.entries(baseRoot);
+    cancel?.check();
     if (only case var only?) {
       headEntries = [
         for (var id in headEntries)
@@ -280,6 +296,10 @@ class ComparisonRunner {
     // `side` and `cache` are live objects and stay here; what crosses is the
     // ids, the paths and the one file each entry starts from. A tear-off of
     // `decide` sends its receiver, which is why the receiver is plain data.
+    onProgress?.call(
+      'deciding what changed — hashing ${common.length} '
+      '${common.length == 1 ? 'closure' : 'closures'}',
+    );
     var decided = await Isolate.run(
       _PlanInputs(
         ids: common,
@@ -293,6 +313,7 @@ class ComparisonRunner {
       ).decide,
     );
 
+    cancel?.check();
     for (var id in decided.skipped) {
       settled.add(ComparedItem(id: id, state: ComparedState.skipped));
     }
@@ -308,9 +329,18 @@ class ComparisonRunner {
   ///
   /// Takes a plan when the caller already made one, since remaking it would
   /// hash every closure a second time to reach the same answer.
+  ///
+  /// **A verdict lands the moment it is answerable, not when the run ends.**
+  /// The settled rows come first, in a burst; an entry both sides already have
+  /// cached is diffed before any render starts; and during the head pass each
+  /// frame is diffed as it lands, because by then the base side is final. What
+  /// waits until the end is only what has to: entries whose head render
+  /// *failed* produce no frame, so their rows are the last to be said.
   Future<ComparisonResult> run({ComparisonPlan? from}) async {
     var watch = Stopwatch()..start();
+    cancel?.check();
     var plan = from ?? await this.plan();
+    onPlan?.call(plan);
 
     var items = <String, ComparedItem>{};
     void report(ComparedItem item) {
@@ -340,36 +370,14 @@ class ComparisonRunner {
     // A side that will not compile ends the half with one sentence. Which side
     // is the reader's first question and the side cannot answer it, so it is
     // answered here.
-    Map<String, String> baseFailures;
-    Map<String, String> headFailures;
-    try {
-      baseFailures = await _renderInto(
-        baseRoot,
-        wantedByBase,
-        keys,
-        isBase: true,
-      );
-    } on SideDidNotCompile catch (e) {
-      throw ComparisonRefused(
-        'the base checkout does not compile, so there is nothing to compare '
-        'against: ${e.reason}',
-      );
-    }
-    try {
-      headFailures = await _renderInto(
-        headRoot,
-        wantedByHead,
-        keys,
-        isBase: false,
-      );
-    } on SideDidNotCompile catch (e) {
-      throw ComparisonRefused(
-        'this worktree does not compile, so its previews cannot be '
-        'rendered: ${e.reason}',
-      );
-    }
+    var baseFailures = const <String, String>{};
+    var headFailures = const <String, String>{};
 
-    for (var id in toRender) {
+    /// Answers [id] from what is on hand, once — a failure on the side that
+    /// was asked, or the diff. Callers only invoke this when the sides it
+    /// reads are final for [id].
+    void resolve(String id) {
+      if (items.containsKey(id)) return;
       var key = keys[id]!;
       var baseOk = !baseFailures.containsKey(id) && cache.has(key.base);
       var headOk = !headFailures.containsKey(id) && cache.has(key.head);
@@ -386,9 +394,77 @@ class ComparisonRunner {
             shots: key,
           ),
         );
-        continue;
+        return;
       }
       report(_compare(id, key));
+    }
+
+    // Both frames already in the cache: answerable before anything renders.
+    for (var id in toRender) {
+      if (!wantedByBase.contains(id) && !wantedByHead.contains(id)) {
+        resolve(id);
+      }
+    }
+
+    try {
+      var done = 0;
+      baseFailures = await _renderInto(
+        baseRoot,
+        wantedByBase,
+        keys,
+        isBase: true,
+        onEntry: (id) {
+          cancel?.check();
+          done++;
+          onProgress?.call(
+            'rendering the base side · $done of ${wantedByBase.length}',
+          );
+        },
+      );
+    } on SideDidNotCompile catch (e) {
+      throw ComparisonRefused(
+        'the base checkout does not compile, so there is nothing to compare '
+        'against: ${e.reason}',
+      );
+    }
+    cancel?.check();
+
+    // The base pass is over, so entries whose head frame was already cached
+    // are final now — including the ones whose base render just failed.
+    for (var id in toRender) {
+      if (!wantedByHead.contains(id)) resolve(id);
+    }
+
+    try {
+      var done = 0;
+      headFailures = await _renderInto(
+        headRoot,
+        wantedByHead,
+        keys,
+        isBase: false,
+        onEntry: (id) {
+          cancel?.check();
+          done++;
+          onProgress?.call(
+            'rendering this side · $done of ${wantedByHead.length}',
+          );
+          // This entry's head frame just landed and the base side is final:
+          // the row is answerable while its neighbours are still rendering.
+          resolve(id);
+        },
+      );
+    } on SideDidNotCompile catch (e) {
+      throw ComparisonRefused(
+        'this worktree does not compile, so its previews cannot be '
+        'rendered: ${e.reason}',
+      );
+    }
+    cancel?.check();
+
+    // What is left is the entries a render pass refused: they produced no
+    // frame, so their failure is only known now the pass has returned.
+    for (var id in toRender) {
+      resolve(id);
     }
 
     var ordered = items.values.toList()
@@ -443,6 +519,7 @@ class ComparisonRunner {
     List<String> entryIds,
     Map<String, ({String base, String head})> keys, {
     required bool isBase,
+    void Function(String entryId)? onEntry,
   }) async {
     if (entryIds.isEmpty) return const {};
     return side.render(
@@ -465,6 +542,7 @@ class ComparisonRunner {
         if (frame.tree case var tree?) {
           cache.writeTree(isBase ? key.base : key.head, tree.toJson());
         }
+        onEntry?.call(frame.entryId);
       },
     );
   }

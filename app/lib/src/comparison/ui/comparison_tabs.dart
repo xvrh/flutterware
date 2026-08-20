@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../capture/settle.dart';
 import '../../shell/shell_controller.dart';
 import '../../shell/worktree.dart';
+import '../../ui/menu.dart';
+import '../../ui/popover.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../channels.dart';
@@ -20,6 +22,12 @@ import '../../ui/error_state.dart';
 const comparisonTabsKey = Key('comparison-tabs');
 
 Key comparisonTabKey(String id) => ValueKey('changes.tab.$id');
+
+/// The Compare button of one half — pressed in tests and by people.
+Key compareButtonKey(String id) => ValueKey('changes.compare.$id');
+
+/// The Stop button of a half mid-run.
+Key stopButtonKey(String id) => ValueKey('changes.stop.$id');
 
 /// The tab ids, which are also their first address segment.
 const filesTabId = 'files';
@@ -47,6 +55,11 @@ const comparisonTabIds = {filesTabId, 'previews', 'scenarios'};
 /// screen you already open to read a diff, the expensive halves get discovered.
 /// Somewhere else they would have to be remembered, and a feature that has to
 /// be remembered is used twice.
+///
+/// **Nothing runs on tab focus.** Selecting a tab shows what the last run
+/// concluded — kept on disk between sessions — and one explicit Compare press
+/// per half is what starts the machinery. See [ComparisonController] for why
+/// the auto-run was retired.
 ///
 /// **The file half renders without a session and these two cannot.** It reads
 /// git; they need the previews and scenarios cores, which need a resolved
@@ -83,6 +96,10 @@ class _ComparisonTabsState extends State<ComparisonTabs>
 
   var _loading = true;
 
+  /// A base the human picked from the strip, overriding the project's answer
+  /// for this panel. Null means the configured-or-inferred default.
+  String? _baseOverride;
+
   @override
   void initState() {
     super.initState();
@@ -104,14 +121,10 @@ class _ComparisonTabsState extends State<ComparisonTabs>
   void _onShell() {
     if (!mounted) return;
     if (_controller != null) {
-      // **The address moves the tab too, and only a tap used to run it.**
-      // `_select` is the click path; a pasted link, the back button and a
-      // drive `navigate` all change the address without going through it, so
-      // arriving at `changes/scenarios` from another tab lit the tab, drew its
-      // half — and left it on `Nothing to compare yet.` for ever, because
-      // nothing had asked the half to run. Idempotent: `open` joins a run in
-      // flight and returns at once for one that has finished.
-      _openSelectedTab();
+      // The address moves the tab — and nothing else: a pasted link, the back
+      // button and a drive `navigate` land on a tab that shows its kept
+      // results, exactly like a tap. Running is [compare]'s job alone.
+      setState(() {});
       return;
     }
     if (widget.shell.sessionFor(widget.worktree) != null) {
@@ -130,10 +143,9 @@ class _ComparisonTabsState extends State<ComparisonTabs>
   /// What a capture must not photograph through.
   ///
   /// Answered from the same state the screen draws from, as [SettleSource]
-  /// requires. **Busy includes [HalfStage.ready]**, which is the state between
-  /// the base landing and the tab's run starting: it is a microtask wide and it
-  /// is idle, so a settle check that fell in it would photograph a list that
-  /// has not begun filling.
+  /// requires. An idle half is *not* busy — its kept results are the screen —
+  /// so a capture waits only while a half somebody started is preparing or
+  /// running.
   @override
   String? get busyWith {
     if (_loading) return 'opening the comparison';
@@ -145,17 +157,12 @@ class _ComparisonTabsState extends State<ComparisonTabs>
     if (controller == null) {
       return _unavailable == null ? 'opening the comparison' : null;
     }
-    if (controller.refusal != null) return null;
     var half = _tabs.firstWhere((tab) => tab.id == _tab).half;
-    // **The files tab waits on nothing.** With the halves lazy, an unopened
-    // comparison has no base checkout and never will until somebody asks for
-    // one — so reading a null `baseRoot` as *preparing* would leave this screen
-    // permanently busy on the one tab that prepares nothing.
     if (half == null) return null;
-    if (controller.baseRoot == null) return 'preparing the base checkout';
     return switch (half.stage) {
-      HalfStage.done || HalfStage.refused => null,
-      _ => 'comparing ${half.kind.label}',
+      HalfStage.preparing => 'preparing the base checkout',
+      HalfStage.running => 'comparing ${half.kind.label}',
+      _ => null,
     };
   }
 
@@ -178,29 +185,48 @@ class _ComparisonTabsState extends State<ComparisonTabs>
       session: session,
       flutterSdk: widget.shell.flutterSdk,
       appToolDirectory: widget.shell.appContext.appToolDirectory.path,
-      // **The project's own answer, not a second one.** The file diff resolves
-      // its base as `fw.changes(base:)` first and inference after; a comparison
-      // that only ever inferred would compare against `master` on a screen
-      // whose other tab says `develop`, and the design's one-definition rule
-      // exists precisely to stop that.
-      baseRef: widget.shell.manifestFor(widget.worktree)?.changes?.base,
+      // **The project's own answer, not a second one** — unless the human
+      // picked a base from the strip, which outranks both. The file diff
+      // resolves its base as `fw.changes(base:)` first and inference after; a
+      // comparison that only ever inferred would compare against `master` on
+      // a screen whose other tab says `develop`, and the design's
+      // one-definition rule exists precisely to stop that.
+      baseRef:
+          _baseOverride ??
+          widget.shell.manifestFor(widget.worktree)?.changes?.base,
     );
     if (!mounted) return;
     setState(() {
       _loading = false;
       if (environment == null) {
-        _unavailable =
-            'This worktree is not in a git repository with a base to '
-            'compare against.';
+        _unavailable = _baseOverride == null
+            ? 'This worktree is not in a git repository with a base to '
+                  'compare against.'
+            : 'Nothing called "$_baseOverride" here — git cannot resolve it '
+                  'to a commit to compare against.';
         return;
       }
       _controller = ComparisonController(environment)..addListener(_onChange);
     });
-    // **Nothing is prepared here.** Building the environment is two git calls
-    // and answers what the strip needs — which halves this project declares,
-    // and what they would be against. Everything past that, the base checkout
-    // included, waits for a tab.
-    _openSelectedTab();
+  }
+
+  /// Tears the comparison down and reopens it against [ref].
+  ///
+  /// The environment resolves its base once, on construction — one definition,
+  /// no drift — so a different base is a different environment, and the kept
+  /// results reload against it.
+  void _rebase(String? ref) {
+    if (ref == _baseOverride) return;
+    _controller
+      ?..removeListener(_onChange)
+      ..dispose();
+    setState(() {
+      _controller = null;
+      _unavailable = null;
+      _loading = true;
+      _baseOverride = ref;
+    });
+    unawaited(_open());
   }
 
   void _onChange() {
@@ -227,37 +253,16 @@ class _ComparisonTabsState extends State<ComparisonTabs>
       _Tab(id: half.kind.name, label: half.kind.label, half: half),
   ];
 
-  void _select(String id) {
-    widget.shell.selectChangesTab(tab: id);
-    _openSelectedTab();
-  }
-
-  /// Findings only, and merged across both halves: one preview that broke and
-  /// one scenario that broke is two broken things, and which half they came
-  /// from is the second question.
-  Map<ComparedState, int> _counts(ComparisonController controller) {
-    var counts = <ComparedState, int>{};
-    for (var state in [
-      for (var row in controller.previews.rows) row.state,
-      for (var scenario in controller.scenarios.scenarios) scenario.state,
-    ]) {
-      if (state.isFinding) counts[state] = (counts[state] ?? 0) + 1;
-    }
-    return Map.fromEntries(
-      counts.entries.toList()
-        ..sort((a, b) => a.key.index.compareTo(b.key.index)),
-    );
-  }
-
-  void _openSelectedTab() {
-    var half = _tabs.firstWhere((tab) => tab.id == _tab).half;
-    if (half != null) unawaited(_controller?.open(half.kind));
-  }
+  void _select(String id) => widget.shell.selectChangesTab(tab: id);
 
   @override
   Widget build(BuildContext context) {
     // No comparison to be had — the files tab still is one, and it is the one
-    // that needs nothing from us.
+    // that needs nothing from us. A base override that would not resolve is
+    // the exception: it has to say so, or the picker looks broken.
+    if (_unavailable != null && _baseOverride != null) {
+      return _Refusal(_unavailable!, onRetry: () => _rebase(null));
+    }
     if (_loading || _unavailable != null || _controller == null) {
       return Builder(builder: (context) => widget.files(context, false));
     }
@@ -274,8 +279,9 @@ class _ComparisonTabsState extends State<ComparisonTabs>
           tabs: tabs,
           selected: selected.id,
           onSelect: _select,
-          base: controller.environment.baseLabel,
-          counts: _counts(controller),
+          controller: controller,
+          overridden: _baseOverride != null,
+          onRebase: _rebase,
         ),
         Expanded(
           child: selected.half == null
@@ -319,32 +325,31 @@ class _Tab {
   final ComparisonHalf? half;
 }
 
-/// `[ files ][ previews ][ scenarios ]`
+/// `[ files ][ previews · 3 ][ scenarios ]      worktree ↔ origin/master ▾`
 ///
-/// **A tab says what it is, and nothing about what it would cost.** It used to
-/// carry an estimate — *previews · 14 of 213* — on the reasoning that opening a
-/// tab runs its half, so the price should be readable from outside it. Working
-/// the price out turned out to cost about what the work costs, and it was paid
-/// on arrival by everyone who opened Changes to read a diff. See
+/// A tab carries its half's finding count once that half has an answer —
+/// which, with the last run kept on disk, it usually has for free. What it
+/// still does not carry is a *price*: pricing a click nobody made was tried,
+/// cost about what the work costs, and was removed. See
 /// [ComparisonController].
 class _TabStrip extends StatelessWidget {
   const _TabStrip({
     required this.tabs,
     required this.selected,
     required this.onSelect,
-    required this.base,
-    required this.counts,
+    required this.controller,
+    required this.overridden,
+    required this.onRebase,
   });
 
   final List<_Tab> tabs;
   final String selected;
   final void Function(String id) onSelect;
+  final ComparisonController controller;
 
-  /// What all three tabs are against.
-  final String base;
-
-  /// Findings across both halves, worst first.
-  final Map<ComparedState, int> counts;
+  /// Whether the base is a hand-picked one rather than the project's.
+  final bool overridden;
+  final ValueChanged<String?> onRebase;
 
   @override
   Widget build(BuildContext context) {
@@ -364,19 +369,14 @@ class _TabStrip extends StatelessWidget {
             ),
           const Spacer(),
           // **No title of its own.** The sidebar row says "Changes" and the
-          // file diff writes its own header inside its tab; a third one over
-          // the top of both said the same word twice on one screen. What is
-          // left is the two things the strip is the only place for: what all
-          // three tabs are against, and what they found between them.
-          for (var entry in counts.entries)
-            Padding(
-              padding: const EdgeInsets.only(left: FwSpacing.xs),
-              child: StateChip(entry.key, count: entry.value),
-            ),
-          const Gap(FwSpacing.md),
-          Text(
-            'against $base',
-            style: context.type.micro.copyWith(color: colors.mut),
+          // file diff writes its own header inside its tab; what is left is
+          // the one thing the strip is the only place for: what every tab is
+          // against — and, since the base is a choice now, the control that
+          // changes it.
+          _BaseControl(
+            environment: controller.environment,
+            overridden: overridden,
+            onRebase: onRebase,
           ),
         ],
       ),
@@ -399,9 +399,8 @@ class _TabButton extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var half = tab.half;
-    // The one thing a tab still says about its half, and it only says it once
-    // you have opened the thing that is running.
-    var note = half?.stage == HalfStage.running ? 'running…' : null;
+    var note = half?.isBusy == true ? 'running…' : null;
+    var findings = half?.findingCount ?? 0;
 
     return Tappable(
       key: comparisonTabKey(tab.id),
@@ -430,12 +429,19 @@ class _TabButton extends StatelessWidget {
             if (half?.stage == HalfStage.refused) ...[
               const Gap(FwSpacing.sm),
               Icon(Icons.error_outline, size: FwIconSize.xs, color: colors.red),
-            ],
-            if (note != null) ...[
+            ] else if (note != null) ...[
               const Gap(FwSpacing.sm),
               Text(
                 '· $note',
                 style: context.type.micro.copyWith(color: colors.mut),
+              ),
+            ] else if (findings > 0) ...[
+              // The other tab's answer, readable without visiting it — the
+              // kept run makes this free.
+              const Gap(FwSpacing.sm),
+              Text(
+                '· $findings',
+                style: context.type.micro.copyWith(color: colors.amber),
               ),
             ],
           ],
@@ -445,7 +451,191 @@ class _TabButton extends StatelessWidget {
   }
 }
 
+/// The contract, stated where every tab can see it: this worktree, against
+/// which commit — and the commit is a control, not a caption.
+class _BaseControl extends StatelessWidget {
+  const _BaseControl({
+    required this.environment,
+    required this.overridden,
+    required this.onRebase,
+  });
+
+  final ComparisonEnvironment environment;
+  final bool overridden;
+  final ValueChanged<String?> onRebase;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var sha = environment.baseSha;
+    var sha7 = sha.length > 7 ? sha.substring(0, 7) : sha;
+
+    return Menu(
+      align: PopoverAlign.end,
+      entries: [
+        const MenuHeader('compare against'),
+        MenuItem(
+          overridden
+              ? 'the project default'
+              : '${environment.baseLabel} (default)',
+          icon: overridden ? null : Icons.check,
+          onSelected: overridden ? () => onRebase(null) : null,
+        ),
+        MenuItem(
+          'HEAD~1 — the previous commit',
+          icon: overridden && _isPrevious ? Icons.check : null,
+          onSelected: () => onRebase('HEAD~1'),
+        ),
+        const MenuDivider(),
+        MenuItem(
+          'Another ref or commit…',
+          onSelected: () => unawaited(_askForRef(context)),
+        ),
+      ],
+      builder: (context, controller) => Tooltip(
+        message:
+            'This worktree as it sits on disk — uncommitted and untracked '
+            'included — against the merge base with ${environment.baseLabel}.',
+        child: Tappable(
+          onTap: controller.toggle,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.sm,
+              vertical: FwSpacing.sm,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'this worktree',
+                  style: context.type.micro.copyWith(color: colors.mut),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+                  child: Icon(
+                    Icons.sync_alt,
+                    size: FwIconSize.xs,
+                    color: colors.mut2,
+                  ),
+                ),
+                Text(
+                  '${environment.baseLabel} @$sha7',
+                  style: context.type.micro.copyWith(
+                    color: overridden ? colors.accent : colors.mut,
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: FwIconSize.sm,
+                  color: colors.mut,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool get _isPrevious => environment.baseLabel == 'HEAD~1';
+
+  Future<void> _askForRef(BuildContext context) async {
+    var ref = await showDialog<String>(
+      context: context,
+      builder: (context) => const _RefDialog(),
+    );
+    if (ref != null && ref.trim().isNotEmpty) onRebase(ref.trim());
+  }
+}
+
+/// One text field: anything git can name — a branch, a tag, a sha, `HEAD~3`.
+class _RefDialog extends StatefulWidget {
+  const _RefDialog();
+
+  @override
+  State<_RefDialog> createState() => _RefDialogState();
+}
+
+class _RefDialogState extends State<_RefDialog> {
+  final _ref = TextEditingController();
+
+  @override
+  void dispose() {
+    _ref.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    Navigator.of(context).pop(_ref.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Dialog(
+      backgroundColor: colors.bg,
+      child: Container(
+        width: 420,
+        padding: const EdgeInsets.all(FwSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Compare against', style: context.type.bodyStrong),
+            const Gap(FwSpacing.lg),
+            TextField(
+              controller: _ref,
+              autofocus: true,
+              style: context.type.body,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'any ref, tag or commit — origin/main, v2.1, HEAD~3',
+                hintStyle: context.type.body.copyWith(color: colors.mut2),
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(color: colors.line),
+                ),
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            const Gap(FwSpacing.md),
+            Text(
+              'The comparison runs against the merge base of HEAD and what '
+              'you name — the point where this branch left it.',
+              style: context.type.caption.copyWith(color: colors.mut),
+            ),
+            const Gap(FwSpacing.lg),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Tappable(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(FwSpacing.sm),
+                    child: Text(
+                      'Cancel',
+                      style: context.type.body.copyWith(color: colors.mut),
+                    ),
+                  ),
+                ),
+                const Gap(FwSpacing.md),
+                _CompareButton(label: 'Use it', onTap: _submit),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// One half, in whatever state it is in.
+///
+/// Every state but [HalfStage.undeclared] draws a strip over the content: the
+/// run's progress while it works, its receipt when it is done. **The strip is
+/// a ribbon and the rows are the canvas** — the two answer different questions
+/// ("is it working, can I stop it" against "what did it find") and the design
+/// that failed here before was the one that merged them: a full-screen
+/// "Comparing…" that became results all at once.
 class _HalfView extends StatelessWidget {
   const _HalfView({
     required this.controller,
@@ -463,53 +653,438 @@ class _HalfView extends StatelessWidget {
   final String? selected;
   final ValueChanged<String> onSelect;
 
+  void _compare() => unawaited(controller.compare(half.kind));
+
+  bool get _hasRows => half.rows.isNotEmpty || half.scenarios.isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
     switch (half.stage) {
       case HalfStage.undeclared:
         return const SizedBox.shrink();
       case HalfStage.refused:
-        return _Refusal(half.refusal ?? 'It cannot be compared.');
+        return _Refusal(
+          half.refusal ?? 'It cannot be compared.',
+          onRetry: _compare,
+        );
       case HalfStage.preparing:
-        return const _Working('Preparing the base checkout…');
-      case HalfStage.ready:
       case HalfStage.running:
-      case HalfStage.done:
-        // Nothing to point a stage at until the first verdict lands, and the
-        // list would be an empty column beside an empty pane.
-        if (half.rows.isEmpty && half.scenarios.isEmpty) {
-          return _Working(
-            half.isRunning ? 'Comparing…' : 'Nothing to compare yet.',
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _RunStrip(half: half, onStop: () => controller.stop(half.kind)),
+            Expanded(
+              child: _hasRows || half.pending.isNotEmpty
+                  ? _rows(context)
+                  : _Working(half.progress ?? 'Comparing…'),
+            ),
+          ],
+        );
+      case HalfStage.idle:
+        if (!_hasRows) {
+          return _ArmedView(
+            half: half,
+            environment: controller.environment,
+            onCompare: _compare,
           );
         }
-        return switch (half.kind) {
-          ComparisonHalfKind.previews => PreviewsTab(
-            half: half,
-            store: CacheShotStore(controller.environment.shots),
-            settle: settle,
-            selected: selected,
-            onSelect: onSelect,
-          ),
-          ComparisonHalfKind.scenarios => ScenariosTab(
-            half: half,
-            store: CacheShotStore(controller.environment.shots),
-            settle: settle,
-            selected: selected,
-            onSelect: onSelect,
-          ),
-        };
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ReceiptStrip(
+              half: half,
+              environment: controller.environment,
+              onCompare: _compare,
+            ),
+            Expanded(child: _rows(context)),
+          ],
+        );
+      case HalfStage.done:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ReceiptStrip(
+              half: half,
+              environment: controller.environment,
+              onCompare: _compare,
+            ),
+            Expanded(
+              child: _hasRows
+                  ? _rows(context)
+                  : const _Working('Nothing on either side to compare.'),
+            ),
+          ],
+        );
     }
+  }
+
+  Widget _rows(BuildContext context) => switch (half.kind) {
+    ComparisonHalfKind.previews => PreviewsTab(
+      half: half,
+      store: CacheShotStore(controller.environment.shots),
+      settle: settle,
+      selected: selected,
+      onSelect: onSelect,
+    ),
+    ComparisonHalfKind.scenarios => ScenariosTab(
+      half: half,
+      store: CacheShotStore(controller.environment.shots),
+      settle: settle,
+      selected: selected,
+      onSelect: onSelect,
+    ),
+  };
+}
+
+/// The offer, before a first run: what would be compared, against what, and
+/// what it will cost — from facts that are already free. No re-planning: the
+/// four-minute estimate is the mistake this panel is built not to repeat.
+class _ArmedView extends StatelessWidget {
+  const _ArmedView({
+    required this.half,
+    required this.environment,
+    required this.onCompare,
+  });
+
+  final ComparisonHalf half;
+  final ComparisonEnvironment environment;
+  final VoidCallback onCompare;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var sha = environment.baseSha;
+    var sha7 = sha.length > 7 ? sha.substring(0, 7) : sha;
+    var cost = environment.baseCheckoutReady
+        ? 'base checkout ready · only what changed is rendered'
+        : 'the first run checks out $sha7 and resolves its dependencies, '
+              'which can take a minute';
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Compare ${half.kind.label} against ${environment.baseLabel}',
+            style: context.type.bodyStrong,
+          ),
+          const Gap(FwSpacing.sm),
+          Text(
+            cost,
+            style: context.type.caption.copyWith(color: colors.mut),
+            textAlign: TextAlign.center,
+          ),
+          const Gap(FwSpacing.xl),
+          _CompareButton(
+            key: compareButtonKey(half.kind.name),
+            label: 'Compare',
+            onTap: onCompare,
+          ),
+          const Gap(FwSpacing.lg),
+          Text(
+            'never compared on this worktree',
+            style: context.type.micro.copyWith(color: colors.mut2),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The ribbon while a run works: what it is doing, how far along, for how
+/// long, and the way out. The bar's denominator is exact — the plan knows
+/// every entry before the first render — so its opening move is a leap to the
+/// fraction the skip rule answered for free, which is the skip rule made
+/// visible.
+class _RunStrip extends StatefulWidget {
+  const _RunStrip({required this.half, required this.onStop});
+
+  final ComparisonHalf half;
+  final VoidCallback onStop;
+
+  @override
+  State<_RunStrip> createState() => _RunStripState();
+}
+
+class _RunStripState extends State<_RunStrip> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // The counter is the liveness signal: a phase with no denominator — `pub
+    // get` on a cold cache — still visibly costs time rather than looking
+    // hung.
+    _tick = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var half = widget.half;
+    var total = half.planTotal;
+    var answered = half.rows.length + half.scenarios.length;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.line)),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.xl,
+        vertical: FwSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              half.progress ?? 'comparing…',
+              style: context.type.caption.copyWith(color: colors.mut),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (total != null && total > 0) ...[
+            const Gap(FwSpacing.lg),
+            SizedBox(
+              width: 160,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: answered / total,
+                  minHeight: 4,
+                  backgroundColor: colors.line,
+                  color: colors.accent,
+                ),
+              ),
+            ),
+            const Gap(FwSpacing.md),
+            Text(
+              '$answered of $total',
+              style: context.type.micro.copyWith(color: colors.mut),
+            ),
+          ],
+          const Gap(FwSpacing.lg),
+          Text(
+            _elapsed(half.startedAt),
+            style: context.type.micro.copyWith(color: colors.mut2),
+          ),
+          const Gap(FwSpacing.lg),
+          Tappable(
+            key: stopButtonKey(half.kind.name),
+            onTap: widget.onStop,
+            borderRadius: BorderRadius.circular(context.radii.radius),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: FwSpacing.md,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                border: Border.all(color: colors.line),
+                borderRadius: BorderRadius.circular(context.radii.radius),
+              ),
+              child: Text(
+                'Stop',
+                style: context.type.caption.copyWith(color: colors.ink),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _elapsed(DateTime? since) {
+    if (since == null) return '';
+    var seconds = DateTime.now().difference(since).inSeconds;
+    if (seconds < 60) return '${seconds}s';
+    return '${seconds ~/ 60}m ${(seconds % 60).toString().padLeft(2, '0')}s';
+  }
+}
+
+/// The ribbon once a run is done — or was stopped, or came off disk: the
+/// counts, the receipt, and the same button again. One control is the re-run,
+/// the retry and the refresh, because they were always the same act.
+class _ReceiptStrip extends StatelessWidget {
+  const _ReceiptStrip({
+    required this.half,
+    required this.environment,
+    required this.onCompare,
+  });
+
+  final ComparisonHalf half;
+  final ComparisonEnvironment environment;
+  final VoidCallback onCompare;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var counts = _counts;
+    var quiet =
+        half.rows.where((row) => !row.state.isFinding).length +
+        half.scenarios.where((scenario) => !scenario.state.isFinding).length;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.line)),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.xl,
+        vertical: FwSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          for (var entry in counts.entries)
+            Padding(
+              padding: const EdgeInsets.only(right: FwSpacing.xs),
+              child: StateChip(entry.key, count: entry.value),
+            ),
+          if (counts.isEmpty)
+            Text(
+              'nothing changed',
+              style: context.type.caption.copyWith(color: colors.mut),
+            )
+          else if (quiet > 0)
+            Text(
+              '· $quiet unchanged',
+              style: context.type.micro.copyWith(color: colors.mut),
+            ),
+          const Spacer(),
+          Text(_receipt, style: context.type.micro.copyWith(color: colors.mut)),
+          if (_movedSince) ...[
+            const Gap(FwSpacing.sm),
+            Tooltip(
+              message:
+                  'The worktree or its base has moved since this run — the '
+                  'rows may no longer describe the code on disk.',
+              child: Text(
+                '· moved since',
+                style: context.type.micro.copyWith(color: colors.amber),
+              ),
+            ),
+          ],
+          const Gap(FwSpacing.lg),
+          _CompareButton(
+            key: compareButtonKey(half.kind.name),
+            label: half.stopped ? 'Compare' : 'Compare again',
+            onTap: onCompare,
+            small: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Map<ComparedState, int> get _counts {
+    var counts = <ComparedState, int>{};
+    for (var state in [
+      for (var row in half.rows) row.state,
+      for (var scenario in half.scenarios) scenario.state,
+    ]) {
+      if (state.isFinding) counts[state] = (counts[state] ?? 0) + 1;
+    }
+    return Map.fromEntries(
+      counts.entries.toList()
+        ..sort((a, b) => a.key.index.compareTo(b.key.index)),
+    );
+  }
+
+  String get _receipt {
+    if (half.stopped) {
+      var started = half.startedAt;
+      var lasted = started == null
+          ? ''
+          : ' after ${DateTime.now().difference(started).inSeconds}s';
+      return 'stopped$lasted — partial';
+    }
+    var last = half.lastRun;
+    if (last == null) return '';
+    var took = last.elapsed.inMilliseconds >= 1000
+        ? '${(last.elapsed.inMilliseconds / 1000).toStringAsFixed(last.elapsed.inSeconds >= 10 ? 0 : 1)}s'
+        : '${last.elapsed.inMilliseconds}ms';
+    return 'ran in $took · ${_ago(last.at)}';
+  }
+
+  bool get _movedSince {
+    var last = half.lastRun;
+    if (last == null) return false;
+    if (last.baseSha != environment.baseSha) return true;
+    var head = environment.headCommit;
+    return last.headCommit != null && head != null && last.headCommit != head;
+  }
+}
+
+String _ago(DateTime then) {
+  var d = DateTime.now().difference(then);
+  if (d.inSeconds < 60) return 'just now';
+  if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+  if (d.inHours < 24) return '${d.inHours}h ago';
+  return '${d.inDays}d ago';
+}
+
+/// The one act this panel has, drawn the same wherever it appears.
+class _CompareButton extends StatelessWidget {
+  const _CompareButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.small = false,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final bool small;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tappable(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(context.radii.radius),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: small ? FwSpacing.lg : FwSpacing.xxl,
+          vertical: small ? 2 : FwSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: colors.accentSoft,
+          border: Border.all(color: colors.accent),
+          borderRadius: BorderRadius.circular(context.radii.radius),
+        ),
+        child: Text(
+          label,
+          style: (small ? context.type.caption : context.type.body).copyWith(
+            color: colors.accent,
+          ),
+        ),
+      ),
+    );
   }
 }
 
 class _Refusal extends StatelessWidget {
-  const _Refusal(this.message);
+  const _Refusal(this.message, {required this.onRetry});
 
   final String message;
+  final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) =>
-      ErrorState(title: 'Not compared', message: message);
+  Widget build(BuildContext context) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ErrorState(title: 'Not compared', message: message),
+        const Gap(FwSpacing.lg),
+        _CompareButton(label: 'Try again', onTap: onRetry),
+      ],
+    ),
+  );
 }
 
 class _Working extends StatelessWidget {

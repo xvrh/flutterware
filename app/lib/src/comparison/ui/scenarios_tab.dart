@@ -261,6 +261,23 @@ class _Index extends StatelessWidget {
               style: context.type.body.copyWith(color: context.colors.mut),
             ),
           ),
+        // The flows still owed a verdict — the list draws its full shape from
+        // the plan and only the answers arrive late.
+        if (half.pending.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.xl,
+              FwSpacing.lg,
+              FwSpacing.xl,
+              FwSpacing.sm,
+            ),
+            child: Text(
+              'STILL REPLAYING · ${half.pending.length}',
+              style: context.type.micro.copyWith(color: context.colors.mut),
+            ),
+          ),
+          for (var id in half.pending) _PendingRow(id),
+        ],
         if (quiet.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -282,6 +299,57 @@ class _Index extends StatelessWidget {
             ),
         ],
       ],
+    );
+  }
+}
+
+/// A flow whose verdict has not landed yet. Not tappable — there is nothing
+/// behind it until its replay finishes, and then it becomes a real row.
+class _PendingRow extends StatelessWidget {
+  const _PendingRow(this.id);
+
+  final String id;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var hash = id.indexOf('#');
+    var name = hash < 0 ? id : id.substring(hash + 1);
+    var file = hash < 0 ? '' : id.substring(0, hash);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.xl,
+        vertical: FwSpacing.sm,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: context.type.body.copyWith(color: colors.mut),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (file.isNotEmpty)
+                  Text(
+                    file,
+                    style: context.type.micro.copyWith(color: colors.mut2),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          const Gap(FwSpacing.sm),
+          Text(
+            'replaying…',
+            style: context.type.micro.copyWith(color: colors.mut2),
+          ),
+        ],
+      ),
     );
   }
 }

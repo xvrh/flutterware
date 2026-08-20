@@ -2,6 +2,7 @@ import 'package:path/path.dart' as p;
 
 import '../scenarios/runner.dart';
 import 'artifact.dart';
+import 'cancel.dart';
 import 'channels.dart';
 import 'import_graph.dart';
 import 'scenario_comparison.dart';
@@ -114,6 +115,9 @@ class ScenariosRunner {
     this.pixels,
     this.only,
     this.onScenario,
+    this.onPlan,
+    this.onProgress,
+    this.cancel,
   });
 
   final String headRoot;
@@ -133,9 +137,25 @@ class ScenariosRunner {
   /// than wait for the slowest replay.
   final void Function(ScenarioComparison scenario)? onScenario;
 
+  /// Called once the plan is made — how many scenarios there are, and which
+  /// still owe a replay.
+  final void Function(ScenariosPlan plan)? onPlan;
+
+  /// One sentence of what the run is doing right now, replaced as it moves.
+  final void Function(String phase)? onProgress;
+
+  /// Checked between replays — a scenario is a process, and stopping takes
+  /// effect at the next one.
+  final CancelToken? cancel;
+
   Future<ScenariosPlan> plan({ImportGraph? graph}) async {
+    // The listing is the expensive-looking part of a scenario plan: each side
+    // answers from a live harness, so the first ask builds and boots one.
+    onProgress?.call('listing the scenarios on both sides');
     var headIds = await source.list(base: false);
+    cancel?.check();
     var baseIds = await source.list(base: true);
+    cancel?.check();
     if (only case var only?) {
       headIds = [
         for (var id in headIds)
@@ -205,7 +225,9 @@ class ScenariosRunner {
     ImportGraph? graph,
   }) async {
     var watch = Stopwatch()..start();
+    cancel?.check();
     var plan = from ?? await this.plan(graph: graph);
+    onPlan?.call(plan);
 
     var items = <ScenarioComparison>[];
     void report(ScenarioComparison scenario) {
@@ -216,14 +238,18 @@ class ScenariosRunner {
     for (var settled in plan.settled) {
       report(settled);
     }
+    var done = 0;
     for (var id in plan.toRun) {
-      report(
-        ScenarioComparison.of(
-          scenario: id,
-          base: await source.shots(id, base: true, outDir: outDir),
-          head: await source.shots(id, base: false, outDir: outDir),
-        ),
-      );
+      cancel?.check();
+      done++;
+      var name = id.contains('#') ? id.substring(id.indexOf('#') + 1) : id;
+      var count = '$done of ${plan.toRun.length}';
+      onProgress?.call('replaying "$name" on the base side · $count');
+      var base = await source.shots(id, base: true, outDir: outDir);
+      cancel?.check();
+      onProgress?.call('replaying "$name" on this side · $count');
+      var head = await source.shots(id, base: false, outDir: outDir);
+      report(ScenarioComparison.of(scenario: id, base: base, head: head));
     }
 
     return ScenarioResults.of(
