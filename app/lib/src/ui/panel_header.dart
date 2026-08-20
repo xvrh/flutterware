@@ -89,19 +89,25 @@ class FwPanelHeader extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Flexible(
-                    child: Text(
-                      title,
-                      style: type.pageTitle,
-                      overflow: TextOverflow.ellipsis,
+                  // One Expanded holding title + badge, rather than a Flexible
+                  // title and a Spacer: two flex children split the free space
+                  // between them, which parked the trailing actions in the
+                  // middle of a wide panel with a phantom gap on their right.
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            style: type.pageTitle,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (badge != null) ...[const Gap(FwSpacing.lg), badge!],
+                      ],
                     ),
                   ),
-                  if (badge != null) ...[const Gap(FwSpacing.lg), badge!],
-                  if (trailing != null) ...[
-                    const Spacer(),
-                    const Gap(FwSpacing.lg),
-                    trailing!,
-                  ],
+                  if (trailing != null) ...[const Gap(FwSpacing.lg), trailing!],
                 ],
               ),
               if (subtitle.isNotEmpty) ...[

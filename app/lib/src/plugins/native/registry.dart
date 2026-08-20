@@ -5,6 +5,8 @@ import 'dependencies_plugin.dart';
 import 'dev_stack_core.dart';
 import 'dev_stack_plugin.dart';
 import 'icon_plugin.dart';
+import 'lints_core.dart';
+import 'lints_plugin.dart';
 import 'motion_plugin.dart';
 import 'run_plugin.dart';
 import 'server_plugin.dart';
@@ -35,4 +37,5 @@ PluginRegistry buildNativeRegistry() => PluginRegistry({
   uiCatalogPluginId: panelFor<PreviewsCore>(PreviewsPlugin.new),
   devStackPluginId: panelFor<DevStackCore>(DevStackPlugin.new),
   translationsPluginId: panelFor<TranslationsCore>(TranslationsPlugin.new),
+  lintsPluginId: panelFor<LintsCore>(LintsPlugin.new),
 });

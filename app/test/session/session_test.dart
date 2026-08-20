@@ -48,6 +48,7 @@ void main() {
       'flutterware.splash',
       'flutterware.launcher_icon',
       'flutterware.server',
+      'flutterware.lints',
       'flutterware.dev_stack',
       'flutterware.run',
       'flutterware.scenarios',
