@@ -6,6 +6,7 @@ import 'package:meta/meta.dart';
 import '../devices.dart';
 import '../translations/index.dart';
 import 'fonts.dart';
+import 'shots.dart';
 
 /// What a folder of scenarios is *for* — the devices and languages worth
 /// offering them in.
@@ -130,6 +131,21 @@ ScenarioAssignment? scenarioAmbientAssignment;
 /// process something", not two. The loop lives here rather than outside, so a
 /// matrix is one invocation and one compile.
 ///
+/// [shots] is the folder's screenshot policy, and it is a fact about the
+/// folder in the same way the devices and the languages are. A folder whose
+/// captures feed a document generator wants every picture named and nothing
+/// else rendered; measured on a real 125-scenario suite, saying it per
+/// scenario meant a third of one folder's steps — 65 of 197, 41 MB a pass —
+/// being rendered, written and then discarded wholesale by the exporter:
+///
+/// ```dart
+/// Future<void> testExecutable(FutureOr<void> Function() testMain) =>
+///     runScenarios(testMain, profile: documentation, shots: Shots.manual);
+/// ```
+///
+/// A `scenario()` that names its own `shots:` still wins, and a folder that
+/// says nothing is [Shots.auto] as it always was.
+///
 /// Also loads the project's fonts, once, before anything is declared — the
 /// step `flutter test` otherwise leaves to each project's own
 /// `flutter_test_config.dart`. Without it this lane measures text in the
@@ -138,6 +154,7 @@ ScenarioAssignment? scenarioAmbientAssignment;
 Future<void> runScenarios(
   FutureOr<void> Function() testMain, {
   ScenarioProfile? profile,
+  Shots? shots,
 }) async {
   // Under the flutterware runner this is called to *ask* what the folder is
   // for, not to declare anything: the harness reads the profile here and
@@ -152,6 +169,7 @@ Future<void> runScenarios(
 
   if (scenarioProbing) {
     scenarioProbedProfile = profile;
+    scenarioProbedShots = shots;
     return;
   }
 
@@ -167,6 +185,7 @@ Future<void> runScenarios(
   await loadDefaultScenarioFonts();
 
   var assignments = scenarioAssignments(profile);
+  scenarioAmbientShots = shots;
   try {
     for (var assignment in assignments) {
       scenarioAmbientAssignment = assignment;
@@ -179,8 +198,18 @@ Future<void> runScenarios(
   } finally {
     scenarioAmbientAssignment = null;
     scenarioAmbientIsMatrix = false;
+    scenarioAmbientShots = null;
   }
 }
+
+/// The shots policy the folder being declared right now asked for, or null
+/// where it asked for nothing.
+///
+/// Read by `scenario()` **as it declares**, the same way
+/// [scenarioAmbientAssignment] is, and for the same reason: a matrix declares
+/// one body once per assignment and each declaration must keep what it was
+/// made under. A scenario that names its own `shots:` still wins.
+Shots? scenarioAmbientShots;
 
 /// Whether more than one assignment is being declared — the switch that puts
 /// the axis in a scenario's name.
@@ -197,6 +226,9 @@ bool scenarioProbing = false;
 
 /// What the last probed config declared.
 ScenarioProfile? scenarioProbedProfile;
+
+/// The shots policy the last probed config declared, alongside its profile.
+Shots? scenarioProbedShots;
 
 /// The assignments one `flutter test` invocation should declare: the request's
 /// lists when it made any, and the profile's own heads when it did not.

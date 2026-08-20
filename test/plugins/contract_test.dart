@@ -107,6 +107,49 @@ Tests  3 failing
   Failing: 3 of 128''');
     });
 
+    test('a package named by both a child and a section prints once', () {
+      var scoped = PluginReport(
+        id: 'flutterware.scenarios',
+        label: 'Scenarios',
+        children: [
+          PluginChild(id: 'examples/example', label: 'examples/example'),
+          PluginChild(
+            id: 'app',
+            label: 'app',
+            status: Status.warn('no config'),
+          ),
+          PluginChild(id: '.', label: 'root', status: Status.info('4 assets')),
+          PluginChild(id: 'tools', label: 'tools'),
+        ],
+        view: PluginView([
+          ViewSection('examples/example', [ViewField('Scenarios', '8')]),
+          ViewSection('app', [ViewField('Scenarios', '0')]),
+          // Titled by id where the child spells it `root` — one package, and
+          // the child's spelling is the one worth keeping.
+          ViewSection('.', [ViewField('Scenarios', '2')]),
+        ]),
+      );
+
+      expect(scoped.toText(), '''
+Scenarios
+  tools
+  examples/example
+    Scenarios: 8
+  app  no config
+    Scenarios: 0
+  root  4 assets
+    Scenarios: 2''');
+
+      // `--brief` renders no projection, so nothing folds and every child is
+      // still its own line.
+      expect(scoped.toText(includeView: false), '''
+Scenarios
+  examples/example
+  app  no config
+  root  4 assets
+  tools''');
+    });
+
     test('serialises the whole contract', () {
       var json = report.toJson();
       expect(json['status'], {'tone': 'error', 'message': '3 failing'});

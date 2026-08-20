@@ -21,6 +21,7 @@ import 'real_work.dart';
 import 'run_args.dart';
 import 'run_listener.dart';
 import 'settle.dart';
+import 'shots.dart';
 import 'staging.dart';
 import 'target.dart';
 import 'harness.dart' show scenarioFileSafe, scenarioNameMax;
@@ -68,7 +69,7 @@ Timeout? scenarioDefaultTimeout;
 void scenario(
   String description,
   Future<void> Function(ScenarioTester s) body, {
-  Shots shots = Shots.auto,
+  Shots? shots,
   Settle settle = Settle.standard,
   bool? skip,
   Timeout? timeout,
@@ -78,6 +79,10 @@ void scenario(
   // declares this same body once per assignment, and each declaration keeps
   // the one it was made under.
   var assignment = scenarioAmbientAssignment;
+  // The folder's policy, where a `runScenarios(shots: ...)` set one — read
+  // here for the same reason, and beaten by anything this scenario said for
+  // itself. Nobody having spoken is `auto`, which is what it always was.
+  var policy = shots ?? scenarioAmbientShots ?? Shots.auto;
   var name =
       scenarioAmbientIsMatrix && assignment != null && !assignment.isEmpty
       ? '$description [${assignment.label}]'
@@ -104,7 +109,7 @@ void scenario(
           tester,
           description,
           body,
-          shots,
+          policy,
           settle,
           assignment,
           source,
@@ -121,7 +126,7 @@ void scenario(
           tester,
           description,
           body,
-          shots,
+          policy,
           settle,
           assignment,
           source,
@@ -425,27 +430,6 @@ VoidCallback? _applyRunArgs(WidgetTester tester, ScenarioAssignment? ambient) {
           : ScenarioRunArgs.forAssignment(ambient));
   if (args == null) return null;
   return applyScenarioRunArgs(tester, args);
-}
-
-/// Whether a scenario captures a screenshot after every high-level action, or
-/// only where a [Shot] or [ScenarioTester.screen] asks for one.
-enum Shots { auto, manual }
-
-/// Per-call override of a scenario's screenshot behaviour.
-///
-/// `Shot('Name')` captures and names the step — a named shot is a primary
-/// node in the flow graph, an automatic one is collapsible detail.
-/// [Shot.skip] suppresses the capture entirely.
-class Shot {
-  const Shot(String this.name, {this.tags = const []});
-
-  const Shot._skip() : name = null, tags = const [];
-
-  /// Suppresses the automatic screenshot for one call.
-  static const skip = Shot._skip();
-
-  final String? name;
-  final List<String> tags;
 }
 
 /// Drives one scenario. Wraps the real [WidgetTester] — every method here

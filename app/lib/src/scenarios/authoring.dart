@@ -56,7 +56,11 @@ const scenarioAuthoringPoints = <(String, String)>[
     'names a capture; `Shot.skip` suppresses one; `s.screen(name)` captures '
         'without acting.',
   ),
-  ('scenario(..., shots: Shots.manual)', 'captures only where a Shot asks.'),
+  (
+    'scenario(..., shots: Shots.manual)',
+    'captures only where a Shot asks — or `runScenarios(shots: ...)` in the '
+        "folder's `flutter_test_config.dart`, for every scenario under it.",
+  ),
   (
     "s.split({'pays': () async {…}, 'declines': () async {…}})",
     'forks: every branch runs, the shared prefix is captured once.',

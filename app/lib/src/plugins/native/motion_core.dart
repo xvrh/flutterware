@@ -534,24 +534,28 @@ class MotionCore extends PluginCore {
       ]);
     }
     return PluginView([
-      for (var path in packages) ...[
-        ViewText(path == '.' ? 'root' : path, tone: Tone.neutral),
-        if (_errors[path] case var error?)
-          ViewText('$error', tone: Tone.error)
-        else if (_results[path] case var result?) ...[
-          for (var motion in result.motions)
-            ViewText(
-              '${motion.values ?? '<expression>'} — '
-              '${motion.file}:${motion.line}, '
-              '${motion.targets.length} target'
-              '${motion.targets.length == 1 ? '' : 's'}',
-            ),
-          if (result.motions.isEmpty) const ViewText('No motions found.'),
-          for (var diagnostic in result.diagnostics)
-            ViewText(diagnostic, tone: Tone.warn),
-        ] else
-          const ViewText('Not scanned yet.', tone: Tone.neutral),
-      ],
+      // A section rather than a heading line and its siblings: a package's
+      // name is a section title everywhere else, and a text projection folds
+      // one into the child that already names the package rather than
+      // printing the package twice.
+      for (var path in packages)
+        ViewSection(path, [
+          if (_errors[path] case var error?)
+            ViewText('$error', tone: Tone.error)
+          else if (_results[path] case var result?) ...[
+            for (var motion in result.motions)
+              ViewText(
+                '${motion.values ?? '<expression>'} — '
+                '${motion.file}:${motion.line}, '
+                '${motion.targets.length} target'
+                '${motion.targets.length == 1 ? '' : 's'}',
+              ),
+            if (result.motions.isEmpty) const ViewText('No motions found.'),
+            for (var diagnostic in result.diagnostics)
+              ViewText(diagnostic, tone: Tone.warn),
+          ] else
+            const ViewText('Not scanned yet.', tone: Tone.neutral),
+        ]),
     ]);
   }
 }

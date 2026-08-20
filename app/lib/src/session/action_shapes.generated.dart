@@ -5037,7 +5037,14 @@ final resultShapes = <String, ResultShape>{
               'type': 'bool',
               'optional': true,
               'doc':
-                  'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
+                  'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
+            },
+            <String, Object?>{
+              'name': 'digest',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'What this step captured, hashed — the pixels for a screen, the payload for a document.',
             },
             <String, Object?>{
               'name': 'strayFrames',
@@ -5397,7 +5404,14 @@ final resultShapes = <String, ResultShape>{
                     'type': 'bool',
                     'optional': true,
                     'doc':
-                        'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
+                        'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
+                  },
+                  <String, Object?>{
+                    'name': 'digest',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'What this step captured, hashed — the pixels for a screen, the payload for a document.',
                   },
                   <String, Object?>{
                     'name': 'strayFrames',
@@ -5482,6 +5496,13 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc':
             'Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.',
+      },
+      <String, Object?>{
+        'name': 'drift',
+        'type': 'Map<String, Object?>',
+        'optional': true,
+        'doc':
+            'How this run\'s pictures compare with the previous run of the same package: `compared`, and a count plus a capped list of steps under `changed`, `added` and `removed` — a suite that is green every pass and draws different pixels every pass says so here and nowhere else.',
       },
     ],
   }),
@@ -5798,7 +5819,14 @@ final resultShapes = <String, ResultShape>{
                           'type': 'bool',
                           'optional': true,
                           'doc':
-                              'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
+                              'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
+                        },
+                        <String, Object?>{
+                          'name': 'digest',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'What this step captured, hashed — the pixels for a screen, the payload for a document.',
                         },
                         <String, Object?>{
                           'name': 'strayFrames',
@@ -5883,6 +5911,13 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
               'doc':
                   'Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.',
+            },
+            <String, Object?>{
+              'name': 'drift',
+              'type': 'Map<String, Object?>',
+              'optional': true,
+              'doc':
+                  'How this run\'s pictures compare with the previous run of the same package: `compared`, and a count plus a capped list of steps under `changed`, `added` and `removed` — a suite that is green every pass and draws different pixels every pass says so here and nowhere else.',
             },
           ],
         },
@@ -6104,7 +6139,14 @@ final resultShapes = <String, ResultShape>{
         'type': 'bool',
         'optional': true,
         'doc':
-            'False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.',
+            'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
+      },
+      <String, Object?>{
+        'name': 'digest',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What this step captured, hashed — the pixels for a screen, the payload for a document.',
       },
       <String, Object?>{
         'name': 'strayFrames',

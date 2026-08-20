@@ -89,13 +89,47 @@ class PluginReport {
     out.write(label);
     if (!status.isEmpty) out.write('  ${status.message}');
     out.writeln();
+
+    // A package-scoped plugin names each package twice: once as a child, once
+    // as the title of the section its projection gives that package. Printed
+    // straight through that is the package on two adjacent lines with nothing
+    // between them — sometimes spelled two ways, `root` over `.`, which reads
+    // as two packages rather than one said twice. So a section that belongs
+    // to a child is retitled with the child's own label and status, and the
+    // standalone line goes: one line per package, and nothing lost. Children
+    // the projection has no section for still print; `--brief` renders no
+    // view at all and is untouched.
+    var byName = {
+      for (var child in children) ...{child.label: child, child.id: child},
+    };
+    var folded = <String>{};
+    var nodes = <ViewNode>[];
+    if (includeView) {
+      for (var node in view.nodes) {
+        if (node is ViewSection) {
+          var child = byName[node.title];
+          if (child != null && !folded.contains(child.id)) {
+            folded.add(child.id);
+            node = ViewSection(
+              child.status.isEmpty
+                  ? child.label
+                  : '${child.label}  ${child.status.message}',
+              node.children,
+            );
+          }
+        }
+        nodes.add(node);
+      }
+    }
+
     for (var child in children) {
+      if (folded.contains(child.id)) continue;
       out.write('  ${child.label}');
       if (!child.status.isEmpty) out.write('  ${child.status.message}');
       out.writeln();
     }
     if (includeView) {
-      var body = view.toText();
+      var body = PluginView(nodes).toText();
       if (body.isNotEmpty) {
         for (var line in body.split('\n')) {
           out.writeln('  $line');

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,7 @@ import 'profile.dart';
 import 'report.dart';
 import 'run_args.dart';
 import 'scenario.dart';
+import 'shots.dart';
 import 'run_listener.dart';
 import '../inspect/semantics_capture.dart';
 import '../translations/index.dart';
@@ -108,7 +110,7 @@ Future<void> _runHarness(
   // returns — which is why it is on here rather than behind a request field.
   TranslationIndex.recording = true;
 
-  var profiles = await _probeProfiles(configs);
+  var (:profiles, shots: folderShots) = await _probeFolders(configs);
 
   var inspector = GuestInspector(
     rootOf: () => binding.rootElement,
@@ -132,6 +134,7 @@ Future<void> _runHarness(
         tag: args['tag'],
         runArgs: _parseRunArgs(args),
         profiles: profiles,
+        shots: folderShots,
         // The host resolved a device id to geometry, or said it had nobody's
         // choice to resolve — in which case the folder's profile speaks and
         // the geometry that did arrive is only the host's fallback.
@@ -300,8 +303,9 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
 /// announces itself as it declares, which is the only reading that cannot be
 /// wrong about a name the scan could not evaluate.
 ({Group root, Map<String, Set<String>> scenarios}) _declare(
-  Map<String, void Function()> scenarioMains,
-) {
+  Map<String, void Function()> scenarioMains, {
+  Map<String, Shots> shots = const {},
+}) {
   var declarer = Declarer();
   var scenarios = <String, Set<String>>{};
   declarer.declare(() {
@@ -309,10 +313,17 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
       group(entry.key, () {
         var sink = <String>[];
         scenarioDeclarationSink = sink;
+        // The folder's shots policy, armed around the file's own `main()`:
+        // under this runner `runScenarios` returns at the probe, so the
+        // ambient it sets in the `flutter test` lane is never set here and the
+        // harness has to arm it itself — the same shape as the translation
+        // index two functions up.
+        scenarioAmbientShots = _nearest(entry.key, shots);
         try {
           entry.value();
         } finally {
           scenarioDeclarationSink = null;
+          scenarioAmbientShots = null;
         }
         scenarios[entry.key] = sink.toSet();
       });
@@ -327,26 +338,33 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
 /// anywhere, and executing it is the only reading that cannot be wrong. Its
 /// own setup runs too — the same setup `flutter test` gives that folder, which
 /// this runner skipped entirely until now.
-Future<Map<String, ScenarioProfile>> _probeProfiles(
+Future<({Map<String, ScenarioProfile> profiles, Map<String, Shots> shots})>
+_probeFolders(
   Map<String, Future<void> Function(FutureOr<void> Function())> configs,
 ) async {
   var profiles = <String, ScenarioProfile>{};
+  var shots = <String, Shots>{};
   for (var MapEntry(key: directory, value: config) in configs.entries) {
     scenarioProbing = true;
     scenarioProbedProfile = null;
+    scenarioProbedShots = null;
     try {
       await config(() {});
       if (scenarioProbedProfile case var profile?) {
         profiles[directory] = profile;
+      }
+      if (scenarioProbedShots case var policy?) {
+        shots[directory] = policy;
       }
     } catch (error, stack) {
       stderr.writeln('[harness] $directory config: $error\n$stack');
     } finally {
       scenarioProbing = false;
       scenarioProbedProfile = null;
+      scenarioProbedShots = null;
     }
   }
-  return profiles;
+  return (profiles: profiles, shots: shots);
 }
 
 /// The profile whose folder contains [file] — the nearest one above it, which
@@ -354,13 +372,18 @@ Future<Map<String, ScenarioProfile>> _probeProfiles(
 ScenarioProfile? _profileFor(
   String file,
   Map<String, ScenarioProfile> profiles,
-) {
-  ScenarioProfile? best;
+) => _nearest(file, profiles);
+
+/// What the nearest folder above [file] says, out of a map keyed by directory
+/// — the rule `flutter test` itself resolves configs by, and the same one for
+/// every fact a folder declares.
+T? _nearest<T>(String file, Map<String, T> byDirectory) {
+  T? best;
   var bestLength = -1;
-  for (var MapEntry(key: directory, value: profile) in profiles.entries) {
+  for (var MapEntry(key: directory, value: value) in byDirectory.entries) {
     if ((file == directory || file.startsWith('$directory/')) &&
         directory.length > bestLength) {
-      best = profile;
+      best = value;
       bestLength = directory.length;
     }
   }
@@ -530,6 +553,7 @@ Future<Map<String, Object?>> _run(
   String? tag,
   ScenarioRunArgs? runArgs,
   Map<String, ScenarioProfile> profiles = const {},
+  Map<String, Shots> shots = const {},
   String? device,
   bool deviceUnspecified = false,
   ScreenOrientation? orientation,
@@ -540,7 +564,7 @@ Future<Map<String, Object?>> _run(
           for (var entry in scenarioMains.entries)
             if (entry.key == file) entry.key: entry.value,
         };
-  var declared = _declare(mains);
+  var declared = _declare(mains, shots: shots);
   var root = declared.root;
 
   var outcomes = <Map<String, Object?>>[];
@@ -909,6 +933,7 @@ Future<Map<String, Object?>> _runOne(
       String? payloadFile,
       String? mimeType,
       int? payloadBytes,
+      String? digest,
       ScenarioNotification? notification,
     }) => ScenarioRunStep(
       index: capture.index,
@@ -941,6 +966,7 @@ Future<Map<String, Object?>> _runOne(
       eventsDropped: capture.eventsDropped > 0 ? capture.eventsDropped : null,
       settled: capture.settled,
       landed: capture.landed,
+      digest: digest,
       strayFrames: capture.strayFrames,
       failure: capture.failure,
     );
@@ -961,6 +987,7 @@ Future<Map<String, Object?>> _runOne(
             payloadFile: path,
             mimeType: capture.mimeType,
             payloadBytes: capture.payload!.length,
+            digest: _digest(capture.payload!),
           ),
         );
         return;
@@ -1092,6 +1119,7 @@ Future<Map<String, Object?>> _runOne(
           : null,
       settled: capture.settled,
       landed: capture.landed,
+      digest: _digest(capture.bytes!),
       strayFrames: capture.strayFrames,
       unchanged: unchanged,
       failure: capture.failure,
@@ -1279,3 +1307,13 @@ String scenarioFileSafe(String name, {int max = scenarioNameMax}) {
   var safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
   return safe.length <= max ? safe : safe.substring(0, max);
 }
+
+/// What a step's bytes hash to — the thing two runs of one suite are compared
+/// by, so that comparing them costs neither run's images.
+///
+/// Truncated, and deliberately: this is compared against another digest from
+/// the same flutterware and never parsed, so what matters is that two
+/// different pictures collide about as often as never. Sixteen hex characters
+/// is 64 bits against a suite of a few thousand steps.
+String _digest(List<int> bytes) =>
+    sha1.convert(bytes).toString().substring(0, 16);

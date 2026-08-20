@@ -1370,7 +1370,8 @@ packages: List<ScenarioRunPackage>
       frameIntervalMs: int?   # Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.
       framesDropped: int?   # Frames refused by the recorder's cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.
       settled: bool?   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
-      landed: bool?   # False when the shutter fell with an image decode or an asset read still in flight: the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step.
+      landed: bool?   # False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.
+      digest: String?   # What this step captured, hashed — the pixels for a screen, the payload for a document.
       strayFrames: int?   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
       unchanged: bool?   # True when this step's captured tree is byte-identical to its parent's: the verb acted and nothing on screen changed.
       failure: String?   # The error, when this is the step a scenario broke on.
@@ -1383,6 +1384,7 @@ packages: List<ScenarioRunPackage>
   report: String?   # The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.
   log: String?   # The harness process's console, whole, on disk — engine noise, and anything printed outside a test zone.
   error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
+  drift: Map<String, Object?>?   # How this run's pictures compare with the previous run of the same package: `compared`, and a count plus a capped list of steps under `changed`, `added` and `removed` — a suite that is green every pass and draws different pixels every pass says so here and nowhere else.
 ```
 
 Exits 1 when `ok` is false, so a job can gate on this action.
