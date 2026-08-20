@@ -21,6 +21,10 @@ import 'settle.dart';
 /// top of it. Twelve is that measured seven with room, and it is spent again
 /// from zero every time a turn actually produces a frame, because a decode
 /// arrives in links and a chain three links long is not three times the guess.
+///
+/// The one caller that cannot reset it is the unsettled branch of
+/// [landRealWork], where a scheduled frame says nothing — there twelve bounds
+/// the whole chain instead of each link.
 const realWorkTurns = 12;
 
 /// How long a caller waits for work it has been **told** is in flight.
@@ -91,12 +95,25 @@ const _waitingTurn = Duration(milliseconds: 1);
 /// `Future.delayed` on the real clock — which no counter names and which
 /// `s.runAsync` is the verb for.
 ///
-/// Does nothing when [settled] is false: a screen holding an indefinite
-/// animation has a frame scheduled for its own reasons, drawing one more per
-/// turn would multiply the cost of exactly the screens that already cost the
-/// most, and such a step is already marked `settled: false` — the same flag
-/// that says the capture is of a moving picture also says it may be of an
-/// unfinished one.
+/// **A tree that never stops asking for frames takes the same turns, spent
+/// flat.** The loop below reads "a frame was scheduled" as progress and hands
+/// the next link a full budget again — which is sound only while a quiet tree
+/// is the baseline. On a screen holding an indefinite animation a frame is
+/// always scheduled, whatever landed or did not, so that reading is worth
+/// nothing there and the reset it drives would never end. Such a step gets
+/// [realWorkTurns] turns with no reset instead, each drawn by a bare
+/// `tester.pump()` rather than by the policy: re-applying it would spend fake
+/// time the caller's policy declined to spend, and one pump at the same
+/// instant draws what landed without moving the clock.
+///
+/// It is the weaker half of the two on purpose — flat turns bound the whole
+/// chain rather than each link, so the depth it carries is [realWorkTurns]
+/// links and not [realWorkTurns] per link (measured: twelve land, thirteen do
+/// not, against the seven the deepest real decode needed). What it buys is
+/// that a spinner, a ripple or any other indefinite animation no longer costs
+/// a step its artwork — before this, *every* step reporting `settled: false`
+/// skipped the landing altogether, the announced half included, and said
+/// `landed: true` while doing it.
 Future<({bool settled, bool landed})> landRealWork(
   WidgetTester tester,
   Settle policy, {
@@ -105,7 +122,24 @@ Future<({bool settled, bool landed})> landRealWork(
   ScenarioAssetBundle? assets,
   ScenarioMotionRecorder? record,
 }) async {
-  if (!settled) return (settled: false, landed: true);
+  if (!settled) {
+    for (var i = 0; i < realWorkTurns; i++) {
+      if (_announced(assets)) {
+        if (!await budget.land(tester, assets)) {
+          return (settled: false, landed: false);
+        }
+      } else {
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      }
+      await tester.pump();
+    }
+    // One frame to the recording rather than one per turn: these pumps all
+    // draw the same fake instant, so a dozen of them play back as a stall —
+    // but without the last of them the movie ends on a frame the still does
+    // not match, which is the hole this whole file exists to close.
+    record?.capture(tester);
+    return (settled: false, landed: true);
+  }
   var guesses = 0;
   while (true) {
     if (_announced(assets)) {
