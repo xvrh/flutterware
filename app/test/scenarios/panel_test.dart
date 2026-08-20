@@ -919,9 +919,10 @@ void main() {
     expect(find.text('Edits their address'), findsOneWidget);
   });
 
-  // The labels drop what every file shares — computed from the files, so a
-  // suite spread across test/ shows the part that differs and the header
-  // names the directory they all sit under.
+  // The tree drops what every file shares — computed from the files, so a
+  // suite spread across test/ shows folders for the part that differs, files
+  // by their basename, and the header names the directory they all sit
+  // under.
   testWidgets('a spread suite is labelled by what differs', (tester) async {
     var core = ScenariosCore(
       PluginHost(
@@ -959,15 +960,16 @@ void main() {
       }
     });
 
+    var address = ValueNotifier(
+      Address(worktree: 'wt', plugin: scenariosPluginId),
+    );
     await tester.pumpWidget(
       MaterialApp(
         theme: appTheme,
         home: Scaffold(
           body: AddressRoot(
-            address: ValueNotifier(
-              Address(worktree: 'wt', plugin: scenariosPluginId),
-            ),
-            onChanged: (_) {},
+            address: address,
+            onChanged: (a) => address.value = a,
             child: Builder(builder: plugin.buildPanel),
           ),
         ),
@@ -976,12 +978,54 @@ void main() {
     await tester.pump();
 
     expect(find.text('test'), findsOneWidget);
-    expect(
-      find.text('scenarios/checkout_test.dart', findRichText: true),
-      findsOneWidget,
+    expect(find.text('scenarios', findRichText: true), findsOneWidget);
+    expect(find.text('widgets', findRichText: true), findsOneWidget);
+    expect(find.text('checkout_test.dart', findRichText: true), findsOneWidget);
+    expect(find.text('menu_test.dart', findRichText: true), findsOneWidget);
+
+    // A branch folds: its scenarios leave the screen and the row says how
+    // many are behind it; the sibling is untouched.
+    expect(find.text('Pays'), findsOneWidget);
+    await tester.tap(find.text('scenarios', findRichText: true));
+    await tester.pump();
+    expect(find.text('Pays'), findsNothing);
+    expect(find.text('Opens'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.text('scenarios', findRichText: true));
+    await tester.pump();
+    expect(find.text('Pays'), findsOneWidget);
+
+    // One button folds the lot, and then only unfolds it.
+    await tester.tap(find.byTooltip('Collapse all'));
+    await tester.pump();
+    expect(find.text('Pays'), findsNothing);
+    expect(find.text('Opens'), findsNothing);
+    expect(find.text('checkout_test.dart'), findsNothing);
+    await tester.tap(find.byTooltip('Expand all'));
+    await tester.pump();
+    expect(find.text('Pays'), findsOneWidget);
+    expect(find.text('Opens'), findsOneWidget);
+
+    // A selection landing from outside the tree — the address bar, a
+    // navigate — is made visible: the branches over it open once.
+    await tester.tap(find.byTooltip('Collapse all'));
+    await tester.pump();
+    expect(find.text('Pays'), findsNothing);
+    address.value = Address(
+      worktree: 'wt',
+      plugin: scenariosPluginId,
+      segments: ['.', 'test', 'scenarios', 'checkout_test.dart', 'Pays'],
     );
+    await tester.pump();
+    await tester.pump();
+    // The page the selection opened names it too, so ask the list: the
+    // branches over the selection are open again, down to its row.
+    expect(find.text('checkout_test.dart'), findsOneWidget);
     expect(
-      find.text('widgets/menu_test.dart', findRichText: true),
+      find.descendant(
+        of: find.byType(ListView).first,
+        matching: find.text('Pays'),
+      ),
       findsOneWidget,
     );
   });

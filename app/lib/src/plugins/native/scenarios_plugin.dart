@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/plugins.dart' show fuzzyMatch;
 import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
@@ -19,6 +18,7 @@ import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';
 import '../../scenarios/harness_entrypoint.dart';
 import '../../scenarios/help_page.dart';
+import '../../scenarios/list_tree.dart';
 import '../../scenarios/new_scenario_dialog.dart';
 import '../../scenarios/step_page.dart';
 import '../../ui/empty_state.dart';
@@ -419,6 +419,18 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
   /// survives opening scenario after scenario and resets when the suite does.
   final _query = TextEditingController();
 
+  /// The folders and files folded away, keyed by [ScenarioBranchNode.id].
+  /// Closed rather than open so that everything starts visible, new files
+  /// included. Owned here for the same lifetime as the filter.
+  final _closed = <String>{};
+
+  /// The selection the tree was last opened for — an action taken once when
+  /// a selection arrives, not a rule applied on every build. The catalog
+  /// learned this the hard way: held open for as long as it is selected, the
+  /// file around your selection refuses to close (see
+  /// `CatalogBrowsing.revealSelection`).
+  String? _revealedFor;
+
   ScenariosCore get core => widget.core;
   String get package => widget.package;
 
@@ -447,7 +459,30 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
           helpSelected: widget.selected.help,
         ),
         if (scanned.isNotEmpty)
-          _FilterField(controller: _query, onChanged: (_) => setState(() {})),
+          _FilterField(
+            controller: _query,
+            onChanged: (_) => setState(() {}),
+            // One button for both directions: with nothing folded away the
+            // only useful thing it can do is fold, and after that, unfold.
+            trailing: IconButton(
+              icon: Icon(
+                _closed.isEmpty ? Icons.unfold_less : Icons.unfold_more,
+                size: FwIconSize.md,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+              tooltip: _closed.isEmpty ? 'Collapse all' : 'Expand all',
+              onPressed: () => setState(() {
+                if (_closed.isEmpty) {
+                  _closed.addAll(
+                    allScenarioBranches(buildScenarioTree(scanned)),
+                  );
+                } else {
+                  _closed.clear();
+                }
+              }),
+            ),
+          ),
         const Divider(height: 1),
         Expanded(child: _body(context)),
       ],
@@ -495,46 +530,32 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
       );
     }
 
-    // The prefix every file shares says nothing — the labels drop it and the
-    // tooltip keeps the whole path. Computed from the files rather than the
-    // configuration, since discovery walks all of `test/` and where the suite
-    // actually sits is the files' own fact. It is also what the filter
-    // matches on, for the same reason: nobody types the part every row
-    // shares.
-    var common = commonScenarioDirectory([
-      for (var ref in result.scenarios) ref.file,
-    ]);
-    var prefix = common.isEmpty ? '' : '$common/';
-    String sectionLabel(String file) =>
-        file.startsWith(prefix) ? file.substring(prefix.length) : file;
-
+    // The suite as its files sit on disk: the shared prefix dropped, folders
+    // and files as collapsible branches, and a file's scenarios in
+    // declaration order — ranking or sorting them would shuffle the suite
+    // out of the shape the reader knows it by.
+    var whole = buildScenarioTree(result.scenarios);
     var query = _query.text.trim();
     var filtering = query.isNotEmpty;
+    var tree = filterScenarioTree(whole, query);
 
-    // Null means the file's own name did not answer the query — which is not
-    // the same as an empty highlight, so the map keeps the distinction.
-    var fileMarks = <String, List<int>?>{};
-    List<int>? fileMark(String file) => fileMarks.putIfAbsent(
-      file,
-      () => filtering ? fuzzyMatch(query, sectionLabel(file))?.matched : null,
-    );
-
-    // A file answers for every scenario in it: `checkout_test` keeps the whole
-    // group, a scenario's own name keeps just that row. Grouping and scan
-    // order are left alone — ranking by score would shuffle the suite out of
-    // the shape the reader knows it by.
-    var byFile = <String, List<(ScenarioRef, List<int>)>>{};
-    for (var ref in result.scenarios) {
-      var marks = const <int>[];
-      if (filtering) {
-        var onName = fuzzyMatch(query, ref.name);
-        if (onName == null && fileMark(ref.file) == null) continue;
-        marks = onName?.matched ?? const [];
+    // Whatever is selected is *made* visible, once, when it arrives — a
+    // selection routinely lands from outside the tree (the address bar, a
+    // navigate, the New dialog) and may sit under a branch folded away.
+    // After the frame, because opening a branch is a setState and this is a
+    // build.
+    if (widget.selected.file case var selectedFile?
+        when '$selectedFile//${widget.selected.scenario}' != _revealedFor) {
+      _revealedFor = '$selectedFile//${widget.selected.scenario}';
+      var toOpen = scenarioBranchesTo(selectedFile);
+      if (toOpen.any(_closed.contains)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _closed.removeAll(toOpen));
+        });
       }
-      byFile.putIfAbsent(ref.file, () => []).add((ref, marks));
     }
 
-    if (byFile.isEmpty) {
+    if (tree.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(FwSpacing.lg),
         child: Text(
@@ -543,6 +564,47 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
         ),
       );
     }
+
+    var rows = <Widget>[];
+    void walk(List<ScenarioListNode> nodes, int depth) {
+      for (var node in nodes) {
+        switch (node) {
+          case ScenarioBranchNode():
+            // A filtered tree is already the answer to a question; folding
+            // part of it away would only hide what was asked for.
+            var open = filtering || !_closed.contains(node.id);
+            rows.add(
+              _BranchRow(
+                node,
+                depth: depth,
+                open: open,
+                onTap: filtering
+                    ? null
+                    : () => setState(() {
+                        if (!_closed.remove(node.id)) _closed.add(node.id);
+                      }),
+              ),
+            );
+            if (open) walk(node.children, depth + 1);
+          case ScenarioLeafNode(:var ref):
+            rows.add(
+              _ScenarioRow(
+                ref,
+                depth: depth,
+                matched: node.marks,
+                selected:
+                    widget.selected.file == ref.file &&
+                    widget.selected.scenario == ref.name,
+                onTap: () => AddressScope.write(context).setSegments(
+                  scenarioSegments(package, file: ref.file, scenario: ref.name),
+                ),
+              ),
+            );
+        }
+      }
+    }
+
+    walk(tree, 0);
 
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: FwSpacing.md),
@@ -566,37 +628,76 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
               ],
             ),
           ),
-        for (var entry in byFile.entries) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.lg,
-              FwSpacing.md,
-              FwSpacing.lg,
-              FwSpacing.xs,
-            ),
-            child: Tooltip(
-              message: entry.key,
-              waitDuration: const Duration(milliseconds: 500),
-              child: MatchedText(
-                sectionLabel(entry.key),
-                matched: fileMark(entry.key) ?? const [],
-                style: context.type.sectionLabel,
-              ),
-            ),
-          ),
-          for (var (ref, marks) in entry.value)
-            _ScenarioRow(
-              ref,
-              matched: marks,
-              selected:
-                  widget.selected.file == ref.file &&
-                  widget.selected.scenario == ref.name,
-              onTap: () => AddressScope.write(context).setSegments(
-                scenarioSegments(package, file: ref.file, scenario: ref.name),
-              ),
-            ),
-        ],
+        ...rows,
       ],
+    );
+  }
+}
+
+/// Indent for [depth], so a branch's children start under its label.
+EdgeInsets _treeRowPadding(int depth) =>
+    EdgeInsets.only(left: FwSpacing.lg + depth * 14.0, right: FwSpacing.lg);
+
+/// A folder or a file in the list: a chevron, the segment's name, and — while
+/// closed — how many scenarios are folded away behind it.
+class _BranchRow extends StatelessWidget {
+  const _BranchRow(
+    this.node, {
+    required this.depth,
+    required this.open,
+    required this.onTap,
+  });
+
+  final ScenarioBranchNode node;
+  final int depth;
+  final bool open;
+
+  /// Null while filtering: a filtered tree is held open, so the tap has
+  /// nothing honest to do.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tappable.builder(
+      onTap: onTap,
+      builder: (context, hovered) => Container(
+        color: hovered ? colors.panel : Colors.transparent,
+        padding: _treeRowPadding(depth),
+        child: SizedBox(
+          height: 26,
+          child: Row(
+            children: [
+              Icon(
+                open ? Icons.expand_more : Icons.chevron_right,
+                size: FwIconSize.sm,
+                color: colors.mut,
+              ),
+              const Gap(FwSpacing.xs),
+              Expanded(
+                child: Tooltip(
+                  // The label is a lone segment now, so the tooltip keeps the
+                  // whole path.
+                  message: node.file ?? node.id,
+                  waitDuration: const Duration(milliseconds: 500),
+                  child: MatchedText(
+                    node.label,
+                    matched: node.marks,
+                    style: context.type.sectionLabel,
+                  ),
+                ),
+              ),
+              if (!open) ...[
+                const Gap(FwSpacing.xs),
+                Text(
+                  '${node.scenarioCount}',
+                  style: context.type.micro.copyWith(color: colors.mut2),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -730,14 +831,56 @@ const _iconSlot = BoxConstraints.tightFor(width: 24, height: 22);
 /// The caller owns the controller and rebuilds on change, which is also what
 /// makes the clear button appear — there is no state here worth keeping.
 class _FilterField extends StatelessWidget {
-  const _FilterField({required this.controller, required this.onChanged});
+  const _FilterField({
+    required this.controller,
+    required this.onChanged,
+    this.trailing,
+  });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
 
+  /// A control that belongs on the filter's row — the fold-all toggle.
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    var field = SizedBox(
+      height: 28,
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        style: context.type.caption.copyWith(color: colors.ink),
+        decoration: InputDecoration(
+          hintText: 'Filter',
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
+          prefixIcon: Icon(
+            Icons.search,
+            size: FwIconSize.sm,
+            color: colors.mut2,
+          ),
+          prefixIconConstraints: _iconSlot,
+          suffixIconConstraints: _iconSlot,
+          suffixIcon: controller.text.isEmpty
+              ? const SizedBox.shrink()
+              : IconButton(
+                  icon: Icon(
+                    Icons.close,
+                    size: FwIconSize.sm,
+                    color: colors.mut2,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: _iconSlot,
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                ),
+        ),
+      ),
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         FwSpacing.md,
@@ -745,43 +888,15 @@ class _FilterField extends StatelessWidget {
         FwSpacing.md,
         FwSpacing.md,
       ),
-      child: SizedBox(
-        height: 28,
-        child: TextField(
-          controller: controller,
-          onChanged: onChanged,
-          style: context.type.caption.copyWith(color: colors.ink),
-          decoration: InputDecoration(
-            hintText: 'Filter',
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: FwSpacing.md,
+      child: trailing == null
+          ? field
+          : Row(
+              children: [
+                Expanded(child: field),
+                const Gap(FwSpacing.xs),
+                trailing!,
+              ],
             ),
-            prefixIcon: Icon(
-              Icons.search,
-              size: FwIconSize.sm,
-              color: colors.mut2,
-            ),
-            prefixIconConstraints: _iconSlot,
-            suffixIconConstraints: _iconSlot,
-            suffixIcon: controller.text.isEmpty
-                ? const SizedBox.shrink()
-                : IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      size: FwIconSize.sm,
-                      color: colors.mut2,
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: _iconSlot,
-                    onPressed: () {
-                      controller.clear();
-                      onChanged('');
-                    },
-                  ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -791,6 +906,7 @@ class _ScenarioRow extends StatelessWidget {
     this.ref, {
     required this.selected,
     required this.onTap,
+    this.depth = 0,
     this.matched = const [],
   });
 
@@ -798,9 +914,12 @@ class _ScenarioRow extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// How deep the row sits in the tree — always below its file's branch.
+  final int depth;
+
   /// Which characters of the name the filter matched. Empty when it matched
-  /// the file instead — the row is on screen for a reason the row cannot show,
-  /// and the lit file header above it is where that reason is.
+  /// a branch instead — the row is on screen for a reason the row cannot
+  /// show, and the lit branch label above it is where that reason is.
   final List<int> matched;
 
   @override
@@ -814,10 +933,9 @@ class _ScenarioRow extends StatelessWidget {
             : hovered
             ? colors.panel
             : Colors.transparent,
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.lg,
-          vertical: FwSpacing.sm,
-        ),
+        padding: _treeRowPadding(
+          depth,
+        ).add(const EdgeInsets.symmetric(vertical: FwSpacing.sm)),
         child: Row(
           children: [
             Icon(
