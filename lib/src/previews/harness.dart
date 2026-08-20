@@ -110,8 +110,9 @@ class PreviewEntry {
 /// - `Declarer.current != null` — `flutter test` is running this file as an
 ///   ordinary test. Each entry is declared as an ordinary `testWidgets` that
 ///   fails when the entry reports anything. Convenient, shardable, and
-///   measuring unstyled text in the test font, so an overflow verdict from this
-///   lane is worth less than one from the other.
+///   measuring unstyled text in *approximate* Roboto — real bytes under the
+///   platform-default family names, which is near enough for an overflow
+///   verdict to mean something and not near enough for a pixel-exact one.
 void runPreviewHarness(
   List<PreviewEntry> entries, {
   List<PreviewCanvas> canvases = const [],
@@ -125,7 +126,16 @@ void runPreviewHarness(
     // Without this the catalog is measured in the fallback font, which is wrong
     // in the one way nothing catches: it still renders, and reports the
     // difference as `RenderFlex overflowed by 3.5 pixels`.
-    setUpAll(loadScenarioFonts);
+    //
+    // The defaults too, and only in this branch: `--use-test-fonts` boxes the
+    // families nobody loads bytes for, and the families most of a catalog
+    // names none of are exactly those. `runScenarios` does the same two lines
+    // for the scenario half of this lane; see [loadDefaultScenarioFonts] for
+    // why the driven lane below must not.
+    setUpAll(() async {
+      await loadScenarioFonts();
+      await loadDefaultScenarioFonts();
+    });
     _declare(entries, canvases, collect: null);
     return;
   }
