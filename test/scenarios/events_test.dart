@@ -26,42 +26,92 @@ void main() {
     for (var event in capture.events) event.title,
   ];
 
-  scenario('an event lands on the step that follows it', (s) async {
-    await s.pumpWidget(const _App());
+  group('an event lands on the step that follows it', () {
+    scenario('not on the one it was recorded after', (s) async {
+      await s.pumpWidget(const _App());
 
-    recordScenarioEvent(ScenarioEvent.analytics('checkout_started'));
-    await s.tap('Save');
-
-    expect(titles(captures[0]), isEmpty);
-    expect(titles(captures[1]), ['checkout_started']);
+      recordScenarioEvent(ScenarioEvent.analytics('checkout_started'));
+      await s.tap('Save');
+    });
+    tearDown(() {
+      expect(titles(captures[0]), isEmpty);
+      expect(titles(captures[1]), ['checkout_started']);
+    });
   });
 
-  scenario('the transition names the verb and its target', (s) async {
-    await s.pumpWidget(const _App());
-    await s.tap('Save');
-    await s.enterText(TextField, 'hello');
-    await s.screen('Done');
-
-    expect(
-      [for (var c in captures) '${c.verb} ${c.target ?? ''}'.trim()],
-      ['pumpWidget _App', 'tap "Save"', 'enterText TextField', 'screen'],
+  group('the transition names the verb and its target', () {
+    scenario('one entry per step', (s) async {
+      await s.pumpWidget(const _App());
+      await s.tap('Save');
+      await s.enterText(TextField, 'hello');
+      // Forced, so there is a step here whose verb is `screen` at all: left to
+      // adopt, this would put its name on the `enterText` step instead.
+      await s.screen('Done', force: true);
+    });
+    tearDown(
+      () => expect(
+        [for (var c in captures) '${c.verb} ${c.target ?? ''}'.trim()],
+        ['pumpWidget _App', 'tap "Save"', 'enterText TextField', 'screen'],
+      ),
     );
   });
 
-  scenario('events recorded before the first step land on it', (s) async {
-    recordScenarioEvent(ScenarioEvent.log('booting'));
-    await s.pumpWidget(const _App());
-
-    expect(titles(captures.single), ['booting']);
+  group('a screen that adopts keeps the verb that drew the frame', () {
+    scenario('so the merged step still says what happened', (s) async {
+      await s.pumpWidget(const _App());
+      await s.tap('Save');
+      await s.screen('Saved');
+    });
+    // Two steps, not three. The name is the author's, the verb is the line of
+    // code — a comparison keys on the first and reads the second, and the
+    // merged step is the one place both have ever been available at once.
+    tearDown(() {
+      expect(captures, hasLength(2));
+      var merged = captures.last;
+      expect(merged.name, 'Saved');
+      expect('${merged.verb} ${merged.target}', 'tap "Save"');
+    });
   });
 
-  scenario('a skipped shot passes its events to the next capture', (s) async {
-    await s.pumpWidget(const _App(), shot: Shot.skip);
-    recordScenarioEvent(ScenarioEvent.log('during'));
+  group('events recorded before the first step', () {
+    scenario('land on it', (s) async {
+      recordScenarioEvent(ScenarioEvent.log('booting'));
+      await s.pumpWidget(const _App());
+    });
+    tearDown(() => expect(titles(captures.single), ['booting']));
+  });
 
-    await s.tap('Save');
+  group('a skipped shot passes its events to the next capture', () {
+    scenario('which is the next step that captures at all', (s) async {
+      await s.pumpWidget(const _App(), shot: Shot.skip);
+      recordScenarioEvent(ScenarioEvent.log('during'));
 
-    expect(titles(captures.single), ['during']);
+      await s.tap('Save');
+    });
+    tearDown(() => expect(titles(captures.single), ['during']));
+  });
+
+  group('a screen that adopts hands its events to the step it names', () {
+    scenario('rather than rolling them on to a later one', (s) async {
+      await s.pumpWidget(const _App());
+      await s.tap('Save');
+      recordScenarioEvent(
+        ScenarioEvent.request(method: 'POST', url: '/receipt', status: 200),
+      );
+      await s.screen('Receipt');
+      await s.tap('Save');
+    });
+    // The request happened on the way to the frame `Receipt` names, so it
+    // belongs to `Receipt`. Rolled forward — what a non-capturing verb does
+    // with its events — it would have landed on the tap after it.
+    tearDown(() {
+      expect(
+        [for (var c in captures) c.name ?? 'auto'],
+        ['auto', 'Receipt', 'auto'],
+      );
+      expect(titles(captures[1]), ['POST /receipt']);
+      expect(titles(captures[2]), isEmpty);
+    });
   });
 
   // A scenario's replays share one capture list, and only the test that
@@ -116,17 +166,43 @@ void main() {
     expect(captures.last.events.single.error, isTrue);
   });
 
-  scenario('events past the per-step cap are counted, not silently lost', (
-    s,
-  ) async {
-    await s.pumpWidget(const _App());
-    for (var i = 0; i < maxScenarioEventsPerStep + 5; i++) {
-      recordScenarioEvent(ScenarioEvent.log('$i'));
-    }
-    await s.tap('Save');
+  group('an adopted screen does not carry two steps’ worth of events', () {
+    scenario('the overflow is counted, like the buffer counts its own', (
+      s,
+    ) async {
+      await s.pumpWidget(const _App());
+      for (var i = 0; i < maxScenarioEventsPerStep; i++) {
+        recordScenarioEvent(ScenarioEvent.log('before $i'));
+      }
+      await s.tap('Save');
+      for (var i = 0; i < 10; i++) {
+        recordScenarioEvent(ScenarioEvent.log('after $i'));
+      }
+      await s.screen('Saved');
+    });
+    // The merged step is one step and keeps one step's worth: the tap's drain
+    // already filled it, so the ten the screen brings are counted rather than
+    // appended.
+    tearDown(() {
+      var merged = captures.last;
+      expect(merged.name, 'Saved');
+      expect(merged.events, hasLength(maxScenarioEventsPerStep));
+      expect(merged.eventsDropped, 10);
+    });
+  });
 
-    expect(captures.last.events, hasLength(maxScenarioEventsPerStep));
-    expect(captures.last.eventsDropped, 5);
+  group('events past the per-step cap', () {
+    scenario('are counted, not silently lost', (s) async {
+      await s.pumpWidget(const _App());
+      for (var i = 0; i < maxScenarioEventsPerStep + 5; i++) {
+        recordScenarioEvent(ScenarioEvent.log('$i'));
+      }
+      await s.tap('Save');
+    });
+    tearDown(() {
+      expect(captures.last.events, hasLength(maxScenarioEventsPerStep));
+      expect(captures.last.eventsDropped, 5);
+    });
   });
 
   testWidgets('recording outside a run is a no-op', (tester) async {

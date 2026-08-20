@@ -7,15 +7,15 @@
 /// <package>/help                       how to write one
 /// <package>/<file…>/<scenario>         one scenario
 /// <package>/<file…>/<scenario>/<n>     one step of its run
-/// <package>/<file…>/<scenario>/<n>/<i> one attachment of that step
 /// ```
 ///
 /// The package path is one segment (the framework escapes `/`); the source
 /// file is split into path segments so the tree reads naturally; the file's
 /// end is recognised by its `.dart` suffix, which is what makes the scenario
-/// name after it unambiguous. The step is a bare index — it is the same
-/// segment the `run` action's per-step addresses carry — and the attachment
-/// is the bare position in the step's attachment list.
+/// name after it unambiguous. The step is a bare index — the same segment the
+/// `run` action's per-step addresses carry, and the whole of it: a document or
+/// a notification is a step of the run like any other, so it is addressed by
+/// its own index rather than by a position inside somebody else's.
 library;
 
 /// A place in the scenarios plugin.
@@ -25,13 +25,8 @@ class ScenarioPlace {
     this.file,
     this.scenario,
     this.step,
-    this.attachment,
     this.help = false,
   }) : assert(scenario != null || step == null, 'a step needs its scenario'),
-       assert(
-         step != null || attachment == null,
-         'an attachment needs its step',
-       ),
        assert(!help || file == null, 'help is not inside a file');
 
   /// The workspace-relative package path whose scenarios are shown.
@@ -50,10 +45,6 @@ class ScenarioPlace {
   /// The selected step of [scenario]'s run, or null for the scenario itself.
   final int? step;
 
-  /// The selected attachment of [step], by its position in the step's list,
-  /// or null for the step itself.
-  final int? attachment;
-
   @override
   bool operator ==(Object other) =>
       other is ScenarioPlace &&
@@ -61,12 +52,10 @@ class ScenarioPlace {
       other.file == file &&
       other.scenario == scenario &&
       other.step == step &&
-      other.attachment == attachment &&
       other.help == help;
 
   @override
-  int get hashCode =>
-      Object.hash(package, file, scenario, step, attachment, help);
+  int get hashCode => Object.hash(package, file, scenario, step, help);
 
   @override
   String toString() =>
@@ -74,8 +63,7 @@ class ScenarioPlace {
       '${help ? '/help' : ''}'
       '${file == null ? '' : '/$file'}'
       '${scenario == null ? '' : '#$scenario'}'
-      '${step == null ? '' : '@$step'}'
-      '${attachment == null ? '' : '+$attachment'})';
+      '${step == null ? '' : '@$step'})';
 }
 
 /// The address segments naming [package] and, if given, where inside it.
@@ -84,21 +72,13 @@ List<String> scenarioSegments(
   String? file,
   String? scenario,
   int? step,
-  int? attachment,
   bool help = false,
 }) {
   assert(scenario == null || file != null, 'a scenario needs its file');
   assert(step == null || scenario != null, 'a step needs its scenario');
-  assert(attachment == null || step != null, 'an attachment needs its step');
   assert(!help || file == null, 'help is not inside a file');
   if (help) return [package, helpSegment];
-  return [
-    package,
-    ...?file?.split('/'),
-    ?scenario,
-    if (step != null) '$step',
-    if (step != null && attachment != null) '$attachment',
-  ];
+  return [package, ...?file?.split('/'), ?scenario, if (step != null) '$step'];
 }
 
 /// What names the help page. Not a file name and never ends in `.dart`, which
@@ -126,14 +106,5 @@ ScenarioPlace? scenarioPlace(List<String> segments) {
   var step = dartIndex + 2 < rest.length
       ? int.tryParse(rest[dartIndex + 2])
       : null;
-  var attachment = step != null && dartIndex + 3 < rest.length
-      ? int.tryParse(rest[dartIndex + 3])
-      : null;
-  return ScenarioPlace(
-    package,
-    file: file,
-    scenario: scenario,
-    step: step,
-    attachment: attachment,
-  );
+  return ScenarioPlace(package, file: file, scenario: scenario, step: step);
 }

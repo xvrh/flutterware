@@ -1,5 +1,60 @@
 ## Unreleased
 
+- **`s.attach` is replaced by `await s.document(…)` and
+  `await s.notification(…)`, and both are steps.** A flow produces beats, and
+  most of them are screens — but a run that exports a receipt has a moment
+  where the receipt is the thing on stage, and one whose backend pushes a
+  notification has a moment that is the push. Those are now steps like any
+  other: named, positioned, parented, carrying the events that led to them.
+  `ScenarioRunStep.kind` says which of the three a step is, and `image`,
+  `format`, `width`, `height` and `tree` are null on anything that is not a
+  screen — a document has no frame, because there was no screen showing it.
+
+  What this removes: `ScenarioRunAttachment` and its `after` flag,
+  `ScenarioRunStep.attachments`, and the attachment level of the panel's
+  address (a beat is addressed by its own step index now). `after` existed to
+  say whether the screen an attachment belonged to was its step or its
+  step's parent — a correction for the fact that a synchronous `attach` could
+  not anchor at its own moment. A verb can.
+
+  What it adds: a document has a name, so a cross-branch comparison aligns it
+  at the same trust tier as an authored `Shot` — where attachments were
+  invisible to a diff entirely. Neither kind renders, so neither costs a
+  capture; and neither draws, so a `screen` after one still names the frame
+  before it rather than photographing it again.
+
+- **The `SCREENSHOTS_DESTINATION` lane names an anonymous step after its verb.**
+  `1-pumpWidget.png` rather than `1-step_1.png`, which is how the runner's own
+  lane has always spelled it. A document beat writes its payload under the same
+  stem, and a notification writes its three strings — so a destination
+  directory reads as the flow did rather than silently omitting the beats that
+  are not screens.
+
+
+- **`s.screen('Name')` names the picture the verb before it took, instead of
+  taking the same one again.** Under `Shots.auto` every verb captures, so the
+  ordinary `tap` then `screen` pair produced two steps of one frame — the
+  second byte-identical to the first, contributing nothing but the name.
+  Measured by a consumer on a 125-scenario suite: **666 of 775 named steps
+  (86%)** were duplicates, and they cost **312 MB of the run's 863 MB of step
+  artifacts (36%)**, multiplied by every device and language CI runs. Where no
+  frame has been drawn since the previous capture, the name now lands on that
+  capture and no second step exists — so writing a name costs nothing, and an
+  author never has to weigh one against the picture it would duplicate. A
+  `screen` whose frame *has* moved on — a `pump`, a completer, a late decode —
+  still takes its own picture, which is what the verb is for. A name never
+  overwrites a name, a split branch's first capture never renames the step
+  before the fork, and `screen('X', force: true)` declines the adoption for a
+  deliberate second picture. **Reports of the same suite now have fewer steps**,
+  so anything pinned to step indices or artifact file names will move; the
+  merged step carries both the author's name and the verb that drew the frame,
+  which is a stronger anchor for a cross-branch comparison than either half was
+  alone.
+- **A stalled `screen` is no longer exempt from `unchanged`.** The flag skipped
+  every `screen` on the grounds that it was a deliberate second picture of the
+  same frame. It is not one any more, so the exclusion is gone and a named step
+  that changed nothing says so — the case the flag was previously blind to.
+
 - **One preview that leaves a decode in flight no longer slows every preview
   after it.** The image cache is `PaintingBinding`'s and process-wide, and
   nothing in `flutter_test` empties it between test bodies — so an entry that

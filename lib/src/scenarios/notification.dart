@@ -2,18 +2,23 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 /// A push notification the flow's backend would have sent — what
-/// `s.notification` attaches, and what a viewer draws as a banner dropped
-/// over the screen it arrived on.
+/// `s.notification` records, and what a viewer draws as a banner over the
+/// screen it landed on.
 ///
-/// One class for both ends of the wire: the scenario encodes it, the panel
-/// and the exported page decode it, and the schema exists in exactly one
-/// place. On the wire it is an ordinary attachment whose [mimeType] says
-/// what it is — a viewer that predates a field ignores it, and one that
-/// predates the type altogether shows a JSON file, which is the truth.
+/// One class for both ends of the wire: the scenario writes it, the panel and
+/// the exported page read it, and the schema exists in exactly one place. It
+/// rides the step **inline** — three short strings, typed on both ends, so
+/// there is no file to fetch and nothing to decode before a banner can be
+/// drawn.
+///
+/// [encode] and [decode] serve the standalone lane, where a bare
+/// `flutter test` with a destination writes each beat as a file rather than a
+/// report.
 class ScenarioNotification {
   ScenarioNotification({required this.body, this.title, this.appName});
 
-  /// The attachment mimeType that marks a payload as one of these.
+  /// What the standalone lane's `.notification.json` is, for a reader that
+  /// wants to say so.
   static const mimeType = 'application/x-notification+json';
 
   /// The notification's message — the one line a banner always has.
@@ -30,9 +35,7 @@ class ScenarioNotification {
     jsonEncode({'body': body, 'title': ?title, 'appName': ?appName}),
   );
 
-  /// [bytes] back as a notification, or null when they are not one — the
-  /// viewer's question, asked about an attachment that merely claims the
-  /// mimeType.
+  /// [bytes] back as a notification, or null when they are not one.
   static ScenarioNotification? decode(List<int> bytes) {
     try {
       var decoded = jsonDecode(utf8.decode(bytes));

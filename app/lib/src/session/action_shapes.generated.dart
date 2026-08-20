@@ -4763,40 +4763,6 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
-  'ScenarioRunAttachment': ResultShape.fromJson(<String, Object?>{
-    'type': 'ScenarioRunAttachment',
-    'fields': <Object?>[
-      <String, Object?>{
-        'name': 'name',
-        'type': 'String',
-        'doc': 'What the scenario called it — `\'report\'`.',
-      },
-      <String, Object?>{
-        'name': 'file',
-        'type': 'String',
-        'doc':
-            'The file, **relative to the worktree root**, like the step\'s own image.',
-      },
-      <String, Object?>{
-        'name': 'mimeType',
-        'type': 'String',
-        'optional': true,
-        'doc': 'What it is, when the scenario said — `application/pdf`.',
-      },
-      <String, Object?>{
-        'name': 'bytes',
-        'type': 'int',
-        'doc': 'How big it is, so a reader knows before opening it.',
-      },
-      <String, Object?>{
-        'name': 'after',
-        'type': 'bool',
-        'optional': true,
-        'doc':
-            'True when it arrived *after* the step\'s capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.',
-      },
-    ],
-  }),
   'ScenarioRunError': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioRunError',
     'fields': <Object?>[
@@ -4881,24 +4847,64 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
             },
             <String, Object?>{
+              'name': 'kind',
+              'type': 'String',
+              'optional': true,
+              'doc': 'What this step is a picture of.',
+            },
+            <String, Object?>{
               'name': 'image',
               'type': 'String',
+              'optional': true,
               'doc':
                   'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
             },
             <String, Object?>{
               'name': 'format',
               'type': 'String',
+              'optional': true,
               'doc':
                   '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
             },
-            <String, Object?>{'name': 'width', 'type': 'int'},
-            <String, Object?>{'name': 'height', 'type': 'int'},
+            <String, Object?>{'name': 'width', 'type': 'int', 'optional': true},
+            <String, Object?>{
+              'name': 'height',
+              'type': 'int',
+              'optional': true,
+            },
             <String, Object?>{
               'name': 'tree',
               'type': 'String',
+              'optional': true,
               'doc':
                   'The widget-tree JSON captured at the same moment, relative like [image].',
+            },
+            <String, Object?>{
+              'name': 'file',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
+            },
+            <String, Object?>{
+              'name': 'mimeType',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'What the document is, when the scenario said — `application/pdf`.',
+            },
+            <String, Object?>{
+              'name': 'bytes',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How big [file] is, so a reader knows before opening it.',
+            },
+            <String, Object?>{
+              'name': 'notification',
+              'type': 'Map<String, String?>',
+              'optional': true,
+              'doc':
+                  'The notification\'s message — the one line a banner always has.',
             },
             <String, Object?>{
               'name': 'keys',
@@ -5053,49 +5059,6 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
               'doc': 'The error, when this is the step a scenario broke on.',
             },
-            <String, Object?>{
-              'name': 'attachments',
-              'type': 'List<ScenarioRunAttachment>',
-              'optional': true,
-              'doc':
-                  'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
-              'shape': <String, Object?>{
-                'type': 'ScenarioRunAttachment',
-                'fields': <Object?>[
-                  <String, Object?>{
-                    'name': 'name',
-                    'type': 'String',
-                    'doc': 'What the scenario called it — `\'report\'`.',
-                  },
-                  <String, Object?>{
-                    'name': 'file',
-                    'type': 'String',
-                    'doc':
-                        'The file, **relative to the worktree root**, like the step\'s own image.',
-                  },
-                  <String, Object?>{
-                    'name': 'mimeType',
-                    'type': 'String',
-                    'optional': true,
-                    'doc':
-                        'What it is, when the scenario said — `application/pdf`.',
-                  },
-                  <String, Object?>{
-                    'name': 'bytes',
-                    'type': 'int',
-                    'doc':
-                        'How big it is, so a reader knows before opening it.',
-                  },
-                  <String, Object?>{
-                    'name': 'after',
-                    'type': 'bool',
-                    'optional': true,
-                    'doc':
-                        'True when it arrived *after* the step\'s capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.',
-                  },
-                ],
-              },
-            },
           ],
         },
       },
@@ -5239,24 +5202,69 @@ final resultShapes = <String, ResultShape>{
                     'optional': true,
                   },
                   <String, Object?>{
+                    'name': 'kind',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'What this step is a picture of.',
+                  },
+                  <String, Object?>{
                     'name': 'image',
                     'type': 'String',
+                    'optional': true,
                     'doc':
                         'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
                   },
                   <String, Object?>{
                     'name': 'format',
                     'type': 'String',
+                    'optional': true,
                     'doc':
                         '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
                   },
-                  <String, Object?>{'name': 'width', 'type': 'int'},
-                  <String, Object?>{'name': 'height', 'type': 'int'},
+                  <String, Object?>{
+                    'name': 'width',
+                    'type': 'int',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'height',
+                    'type': 'int',
+                    'optional': true,
+                  },
                   <String, Object?>{
                     'name': 'tree',
                     'type': 'String',
+                    'optional': true,
                     'doc':
                         'The widget-tree JSON captured at the same moment, relative like [image].',
+                  },
+                  <String, Object?>{
+                    'name': 'file',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
+                  },
+                  <String, Object?>{
+                    'name': 'mimeType',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'What the document is, when the scenario said — `application/pdf`.',
+                  },
+                  <String, Object?>{
+                    'name': 'bytes',
+                    'type': 'int',
+                    'optional': true,
+                    'doc':
+                        'How big [file] is, so a reader knows before opening it.',
+                  },
+                  <String, Object?>{
+                    'name': 'notification',
+                    'type': 'Map<String, String?>',
+                    'optional': true,
+                    'doc':
+                        'The notification\'s message — the one line a banner always has.',
                   },
                   <String, Object?>{
                     'name': 'keys',
@@ -5411,49 +5419,6 @@ final resultShapes = <String, ResultShape>{
                     'optional': true,
                     'doc':
                         'The error, when this is the step a scenario broke on.',
-                  },
-                  <String, Object?>{
-                    'name': 'attachments',
-                    'type': 'List<ScenarioRunAttachment>',
-                    'optional': true,
-                    'doc':
-                        'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
-                    'shape': <String, Object?>{
-                      'type': 'ScenarioRunAttachment',
-                      'fields': <Object?>[
-                        <String, Object?>{
-                          'name': 'name',
-                          'type': 'String',
-                          'doc': 'What the scenario called it — `\'report\'`.',
-                        },
-                        <String, Object?>{
-                          'name': 'file',
-                          'type': 'String',
-                          'doc':
-                              'The file, **relative to the worktree root**, like the step\'s own image.',
-                        },
-                        <String, Object?>{
-                          'name': 'mimeType',
-                          'type': 'String',
-                          'optional': true,
-                          'doc':
-                              'What it is, when the scenario said — `application/pdf`.',
-                        },
-                        <String, Object?>{
-                          'name': 'bytes',
-                          'type': 'int',
-                          'doc':
-                              'How big it is, so a reader knows before opening it.',
-                        },
-                        <String, Object?>{
-                          'name': 'after',
-                          'type': 'bool',
-                          'optional': true,
-                          'doc':
-                              'True when it arrived *after* the step\'s capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.',
-                        },
-                      ],
-                    },
                   },
                 ],
               },
@@ -5638,24 +5603,69 @@ final resultShapes = <String, ResultShape>{
                           'optional': true,
                         },
                         <String, Object?>{
+                          'name': 'kind',
+                          'type': 'String',
+                          'optional': true,
+                          'doc': 'What this step is a picture of.',
+                        },
+                        <String, Object?>{
                           'name': 'image',
                           'type': 'String',
+                          'optional': true,
                           'doc':
                               'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
                         },
                         <String, Object?>{
                           'name': 'format',
                           'type': 'String',
+                          'optional': true,
                           'doc':
                               '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
                         },
-                        <String, Object?>{'name': 'width', 'type': 'int'},
-                        <String, Object?>{'name': 'height', 'type': 'int'},
+                        <String, Object?>{
+                          'name': 'width',
+                          'type': 'int',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'height',
+                          'type': 'int',
+                          'optional': true,
+                        },
                         <String, Object?>{
                           'name': 'tree',
                           'type': 'String',
+                          'optional': true,
                           'doc':
                               'The widget-tree JSON captured at the same moment, relative like [image].',
+                        },
+                        <String, Object?>{
+                          'name': 'file',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
+                        },
+                        <String, Object?>{
+                          'name': 'mimeType',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'What the document is, when the scenario said — `application/pdf`.',
+                        },
+                        <String, Object?>{
+                          'name': 'bytes',
+                          'type': 'int',
+                          'optional': true,
+                          'doc':
+                              'How big [file] is, so a reader knows before opening it.',
+                        },
+                        <String, Object?>{
+                          'name': 'notification',
+                          'type': 'Map<String, String?>',
+                          'optional': true,
+                          'doc':
+                              'The notification\'s message — the one line a banner always has.',
                         },
                         <String, Object?>{
                           'name': 'keys',
@@ -5811,50 +5821,6 @@ final resultShapes = <String, ResultShape>{
                           'doc':
                               'The error, when this is the step a scenario broke on.',
                         },
-                        <String, Object?>{
-                          'name': 'attachments',
-                          'type': 'List<ScenarioRunAttachment>',
-                          'optional': true,
-                          'doc':
-                              'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
-                          'shape': <String, Object?>{
-                            'type': 'ScenarioRunAttachment',
-                            'fields': <Object?>[
-                              <String, Object?>{
-                                'name': 'name',
-                                'type': 'String',
-                                'doc':
-                                    'What the scenario called it — `\'report\'`.',
-                              },
-                              <String, Object?>{
-                                'name': 'file',
-                                'type': 'String',
-                                'doc':
-                                    'The file, **relative to the worktree root**, like the step\'s own image.',
-                              },
-                              <String, Object?>{
-                                'name': 'mimeType',
-                                'type': 'String',
-                                'optional': true,
-                                'doc':
-                                    'What it is, when the scenario said — `application/pdf`.',
-                              },
-                              <String, Object?>{
-                                'name': 'bytes',
-                                'type': 'int',
-                                'doc':
-                                    'How big it is, so a reader knows before opening it.',
-                              },
-                              <String, Object?>{
-                                'name': 'after',
-                                'type': 'bool',
-                                'optional': true,
-                                'doc':
-                                    'True when it arrived *after* the step\'s capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.',
-                              },
-                            ],
-                          },
-                        },
                       ],
                     },
                   },
@@ -5970,24 +5936,60 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
       },
       <String, Object?>{
+        'name': 'kind',
+        'type': 'String',
+        'optional': true,
+        'doc': 'What this step is a picture of.',
+      },
+      <String, Object?>{
         'name': 'image',
         'type': 'String',
+        'optional': true,
         'doc':
             'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
       },
       <String, Object?>{
         'name': 'format',
         'type': 'String',
+        'optional': true,
         'doc':
             '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
       },
-      <String, Object?>{'name': 'width', 'type': 'int'},
-      <String, Object?>{'name': 'height', 'type': 'int'},
+      <String, Object?>{'name': 'width', 'type': 'int', 'optional': true},
+      <String, Object?>{'name': 'height', 'type': 'int', 'optional': true},
       <String, Object?>{
         'name': 'tree',
         'type': 'String',
+        'optional': true,
         'doc':
             'The widget-tree JSON captured at the same moment, relative like [image].',
+      },
+      <String, Object?>{
+        'name': 'file',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
+      },
+      <String, Object?>{
+        'name': 'mimeType',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What the document is, when the scenario said — `application/pdf`.',
+      },
+      <String, Object?>{
+        'name': 'bytes',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How big [file] is, so a reader knows before opening it.',
+      },
+      <String, Object?>{
+        'name': 'notification',
+        'type': 'Map<String, String?>',
+        'optional': true,
+        'doc':
+            'The notification\'s message — the one line a banner always has.',
       },
       <String, Object?>{
         'name': 'keys',
@@ -6123,47 +6125,6 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc': 'The error, when this is the step a scenario broke on.',
-      },
-      <String, Object?>{
-        'name': 'attachments',
-        'type': 'List<ScenarioRunAttachment>',
-        'optional': true,
-        'doc':
-            'What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.',
-        'shape': <String, Object?>{
-          'type': 'ScenarioRunAttachment',
-          'fields': <Object?>[
-            <String, Object?>{
-              'name': 'name',
-              'type': 'String',
-              'doc': 'What the scenario called it — `\'report\'`.',
-            },
-            <String, Object?>{
-              'name': 'file',
-              'type': 'String',
-              'doc':
-                  'The file, **relative to the worktree root**, like the step\'s own image.',
-            },
-            <String, Object?>{
-              'name': 'mimeType',
-              'type': 'String',
-              'optional': true,
-              'doc': 'What it is, when the scenario said — `application/pdf`.',
-            },
-            <String, Object?>{
-              'name': 'bytes',
-              'type': 'int',
-              'doc': 'How big it is, so a reader knows before opening it.',
-            },
-            <String, Object?>{
-              'name': 'after',
-              'type': 'bool',
-              'optional': true,
-              'doc':
-                  'True when it arrived *after* the step\'s capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.',
-            },
-          ],
-        },
       },
     ],
   }),

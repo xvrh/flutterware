@@ -23,6 +23,7 @@ import 'async_watchdog.dart';
 import 'events.dart';
 import 'fonts.dart';
 import 'motion.dart';
+import 'notification.dart';
 import 'profile.dart';
 import 'report.dart';
 import 'run_args.dart';
@@ -860,13 +861,6 @@ Future<Map<String, Object?>> _runOne(
   // the value the falling-back-to-the-template report has to compare against.
   TranslationIndex.reset();
 
-  // The last step's attachment list and file stem, kept for the attachments
-  // that arrive after the scenario's final capture — they land on that step,
-  // marked as following it. The list is the very one the step record holds,
-  // so appending here is appending to the report.
-  List<ScenarioRunAttachment>? lastAttachments;
-  String? lastBase;
-
   scenarioRunListener = (capture) {
     // The verb and what it was aimed at, which is what an automatic capture
     // is called now that it is not called `step 3`.
@@ -878,8 +872,112 @@ Future<Map<String, Object?>> _runOne(
     var base =
         '${directory.path}/$prefix'
         '${scenarioFileSafe(capture.failure != null ? 'failed' : label, max: scenarioNameMax - prefix.length - _longestStepSuffix.length)}';
+    var counts = <String, int>{};
+    for (var event in capture.events) {
+      counts[event.channel] = (counts[event.channel] ?? 0) + 1;
+    }
+    // What the app did on the way here, and the digest of it that rides the
+    // record. Every kind of step has this — a document is reached the same way
+    // a screen is — so it is written before the picture, which only some do.
+    if (capture.events.isNotEmpty) {
+      File('$base.events.json').writeAsStringSync(
+        jsonEncode([
+          for (var event in capture.events) event.toJson(),
+        ], toEncodable: (value) => '$value'),
+      );
+    }
+    ScenarioRunStep record(ScenarioRunStep step) {
+      steps.add(step);
+      // Announced the moment it exists — the artifacts are already on disk —
+      // so a host drawing the flow can fill it in while the scenario still
+      // runs. The response at the end stays the complete report: streaming is
+      // for watching, the barrier is for agents.
+      developer.postEvent('flutterware.scenarios.step', {
+        'file': file,
+        'scenario': name,
+        // Said on every step, not only in the final report: a host drawing
+        // the flow live has to frame the first picture, and by then the
+        // answer is already known.
+        'device': ?device,
+        'step': step.toJson(),
+      });
+      return step;
+    }
+
+    ScenarioRunStep beat(
+      ScenarioStepKind kind, {
+      String? payloadFile,
+      String? mimeType,
+      int? payloadBytes,
+      ScenarioNotification? notification,
+    }) => ScenarioRunStep(
+      index: capture.index,
+      position: capture.position,
+      parent: capture.parent,
+      branch: capture.branch,
+      name: capture.name,
+      auto: capture.name == null,
+      tags: capture.tags,
+      kind: kind,
+      file: payloadFile,
+      mimeType: mimeType,
+      bytes: payloadBytes,
+      notification: notification,
+      verb: capture.verb,
+      target: capture.target,
+      events: capture.events.isNotEmpty ? '$base.events.json' : null,
+      eventCount: capture.events.isNotEmpty ? capture.events.length : null,
+      eventChannels: capture.events.isNotEmpty ? counts : null,
+      // The one-line summaries, inline and capped: the part an agent reasons
+      // about without opening a file. `system` is left out — it is the channel
+      // a reader filters away, and it is most of the volume.
+      eventTitles: capture.events.isEmpty
+          ? null
+          : [
+              for (var event in capture.events)
+                if (event.channel != ScenarioChannel.system)
+                  '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
+            ].take(_maxInlineTitles).toList(),
+      eventsDropped: capture.eventsDropped > 0 ? capture.eventsDropped : null,
+      settled: capture.settled,
+      landed: capture.landed,
+      strayFrames: capture.strayFrames,
+      failure: capture.failure,
+    );
+
+    // A beat with no frame. There is no picture to write, no tree to read, no
+    // semantics and no movie — what it has is its own content, and the record
+    // says which kind of content that is.
+    switch (capture.kind) {
+      case ScenarioCaptureKind.document:
+        var fileName = scenarioFileSafe(
+          capture.fileName ?? capture.name ?? 'document',
+        );
+        var path = '$base.$fileName';
+        File(path).writeAsBytesSync(capture.payload!);
+        record(
+          beat(
+            ScenarioStepKind.document,
+            payloadFile: path,
+            mimeType: capture.mimeType,
+            payloadBytes: capture.payload!.length,
+          ),
+        );
+        return;
+      case ScenarioCaptureKind.notification:
+        record(
+          beat(
+            ScenarioStepKind.notification,
+            notification: capture.notification,
+          ),
+        );
+        return;
+      case ScenarioCaptureKind.screen:
+        break;
+    }
+
     var imagePath = '$base.${capture.format == 'raw' ? 'raw' : 'png'}';
-    File(imagePath).writeAsBytesSync(capture.bytes);
+    File(imagePath).writeAsBytesSync(capture.bytes!);
     // The tree next to the pixels — the step triple's third leg. Written to a
     // file rather than inlined: a run's response stays readable, and the tree
     // is fetched per step by whoever wants it.
@@ -887,13 +985,18 @@ Future<Map<String, Object?>> _runOne(
     var tree = read.toJson();
     var treeJson = jsonEncode(tree);
     File('$base.tree.json').writeAsStringSync(treeJson);
-    // Only a verb that acts can be told it acted for nothing: a `screen` is
-    // a deliberate second picture of the same frame, and a failure's capture
-    // already says everything. The flag is a fact, not a verdict — a capture
-    // parked mid-flight with `Settle.none` is legitimately unchanged.
+    // Only a verb that acts can be told it acted for nothing, and a failure's
+    // capture already says everything. The flag is a fact, not a verdict — a
+    // capture parked mid-flight with `Settle.none` is legitimately unchanged.
+    //
+    // `screen` used to be excluded here, on the grounds that it was "a
+    // deliberate second picture of the same frame". It is not one any more:
+    // where nothing moved, the name lands on the capture that took the frame
+    // and no second step exists. What still reaches this line is a `screen`
+    // that declined to adopt — a second name on one frame, a branch's first
+    // capture, `force: true` — and for those the flag says something true.
     var unchanged =
         capture.verb != null &&
-        capture.verb != 'screen' &&
         capture.failure == null &&
         treeByIndex[capture.parent] == treeJson;
     treeByIndex[capture.index] = treeJson;
@@ -919,23 +1022,6 @@ Future<Map<String, Object?>> _runOne(
     if (semantics != null) {
       File('$base.semantics.json').writeAsStringSync(jsonEncode(semantics));
     }
-    // And the fifth: what the app *did* on the way to this frame. A file like
-    // the trees, for the same reason — a run's response stays readable, and
-    // the payloads are fetched by whoever opens the step. What rides in the
-    // record is the digest.
-    if (capture.events.isNotEmpty) {
-      File('$base.events.json').writeAsStringSync(
-        jsonEncode(
-          [for (var event in capture.events) event.toJson()],
-          // An event's payload is whatever the reporter had in hand — a
-          // channel's decoded arguments, a fake's own objects — and the one
-          // thing this may not do is throw. A viewer that cannot encode a
-          // value shows what it printed as; a `JsonUnsupportedObjectError`
-          // here would fail the step it was only describing.
-          toEncodable: (value) => '$value',
-        ),
-      );
-    }
     // And the sixth: what the transition *looked like*. A directory of
     // numbered frames rather than one blob, so a player can decode the frame
     // it is on and no other, and so the panel's ordinary image plumbing —
@@ -951,28 +1037,6 @@ Future<Map<String, Object?>> _runOne(
         ).writeAsBytesSync(frame);
       }
       framesDir = directory.path;
-    }
-    // And the seventh: whatever the flow *produced* on the way here that is
-    // not a widget. Files like the trees, and for a stronger version of the
-    // same reason — a PDF has no business inside a JSON report, and what a
-    // reader wants is to open it.
-    var attachments = [
-      for (var (index, attachment) in capture.attachments.indexed)
-        () {
-          var path =
-              '$base.${scenarioAttachmentFileName(capture.attachments, index)}';
-          File(path).writeAsBytesSync(attachment.bytes);
-          return ScenarioRunAttachment(
-            name: attachment.name,
-            file: path,
-            mimeType: attachment.mimeType,
-            bytes: attachment.bytes.length,
-          );
-        }(),
-    ];
-    var counts = <String, int>{};
-    for (var event in capture.events) {
-      counts[event.channel] = (counts[event.channel] ?? 0) + 1;
     }
     // The record every surface reads back, built as the published model so
     // the writer here and the readers everywhere cannot drift a field apart.
@@ -1014,7 +1078,6 @@ Future<Map<String, Object?>> _runOne(
                   '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
             ].take(_maxInlineTitles).toList(),
       eventsDropped: capture.eventsDropped > 0 ? capture.eventsDropped : null,
-      attachments: attachments,
       frames: framesDir,
       frameCount: framesDir != null ? capture.motion.bytes.length : null,
       frameWidth: framesDir != null ? capture.motion.width : null,
@@ -1033,45 +1096,7 @@ Future<Map<String, Object?>> _runOne(
       unchanged: unchanged,
       failure: capture.failure,
     );
-    steps.add(step);
-    lastAttachments = attachments;
-    lastBase = base;
-    // Announced the moment it exists — the artifacts are already on disk —
-    // so a host drawing the flow can fill it in while the scenario still
-    // runs. The response at the end stays the complete report: streaming is
-    // for watching, the barrier is for agents.
-    developer.postEvent('flutterware.scenarios.step', {
-      'file': file,
-      'scenario': name,
-      // Said on every step, not only in the final report: a host drawing the
-      // flow live has to frame the first picture, and by then the answer is
-      // already known.
-      'device': ?device,
-      'step': step.toJson(),
-    });
-  };
-
-  // What `s.attach` handed over after the scenario's last capture: it lands
-  // on that capture's step, marked as arriving after it, so a flow may end
-  // with its document. With no step recorded there is nothing to land on,
-  // and the drop is `attach`'s documented residual.
-  scenarioTrailingAttachmentsListener = (attachments) {
-    var (into, base) = (lastAttachments, lastBase);
-    if (into == null || base == null) return;
-    for (var (index, attachment) in attachments.indexed) {
-      var path =
-          '$base.after.${scenarioAttachmentFileName(attachments, index)}';
-      File(path).writeAsBytesSync(attachment.bytes);
-      into.add(
-        ScenarioRunAttachment(
-          name: attachment.name,
-          file: path,
-          mimeType: attachment.mimeType,
-          bytes: attachment.bytes.length,
-          after: true,
-        ),
-      );
-    }
+    record(step);
   };
 
   // The binding's failure path bypasses the LiveTest: `reportTestException`
@@ -1168,7 +1193,6 @@ Future<Map<String, Object?>> _runOne(
     scenarioCaughtErrors = null;
     reportTestException = priorReporter;
     scenarioRunListener = null;
-    scenarioTrailingAttachmentsListener = null;
   }
 
   var errors = [

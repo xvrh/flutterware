@@ -138,39 +138,51 @@ void main() {
       scenarioRunArgs = null;
     });
 
-    scenario('lands the transition on the step it arrives at', (s) async {
-      await s.pumpWidget(const _App());
-      await s.tap('Fade in');
-
+    group('lands the transition on the step it arrives at', () {
+      scenario('never on the one it left', (s) async {
+        await s.pumpWidget(const _App());
+        await s.tap('Fade in');
+      });
       // The tap starts a 300ms fade, and its frames belong to the step the
       // tap arrived at — never to the one it left. `pumpWidget` keeps two:
       // the blank view, and the app on it. A hard cut is two frames long.
-      expect(captures[0].motion.bytes, hasLength(2));
-      expect(captures[1].motion.bytes.length, greaterThan(5));
-      expect(captures[1].motionInterval, const Duration(milliseconds: 33));
+      tearDown(() {
+        expect(captures[0].motion.bytes, hasLength(2));
+        expect(captures[1].motion.bytes.length, greaterThan(5));
+        expect(captures[1].motionInterval, const Duration(milliseconds: 33));
+      });
     });
 
-    scenario("follows the step into raw, at the recording's own size", (
-      s,
-    ) async {
-      await s.pumpWidget(const _App());
-      await s.tap('Fade in');
-
-      var motion = captures[1].motion;
-      expect(motion.bytes.first, hasLength(motion.width * motion.height * 4));
-      expect(motion.width, 400);
+    group('follows the step into raw', () {
+      scenario("at the recording's own size", (s) async {
+        await s.pumpWidget(const _App());
+        await s.tap('Fade in');
+      });
+      tearDown(() {
+        var motion = captures[1].motion;
+        expect(motion.bytes.first, hasLength(motion.width * motion.height * 4));
+        expect(motion.width, 400);
+      });
     });
 
-    scenario("hands a skipped shot's frames to the next capture", (s) async {
-      await s.pumpWidget(const _App());
-      await s.tap('Fade in', shot: Shot.skip);
-      await s.screen('Faded');
-
+    group("hands a skipped shot's frames to the next capture", () {
+      scenario('which is where its own picture would have been', (s) async {
+        await s.pumpWidget(const _App());
+        await s.tap('Fade in', shot: Shot.skip);
+        await s.screen('Faded');
+      });
       // Two captures, not three: the skipped tap emitted nothing, so its
       // frames ride to the capture that follows — the rule the event buffer
       // already follows, for the same reason.
-      expect(captures, hasLength(2));
-      expect(captures[1].motion.bytes.length, greaterThan(5));
+      //
+      // And that capture is a real one rather than a name on `pumpWidget`'s:
+      // the fade drew 21 frames since it, which is exactly what stops a
+      // `screen` from adopting a frame that has moved on.
+      tearDown(() {
+        expect(captures, hasLength(2));
+        expect(captures[1].name, 'Faded');
+        expect(captures[1].motion.bytes.length, greaterThan(5));
+      });
     });
 
     var branched = <ScenarioStepCapture>[];
@@ -223,7 +235,9 @@ void main() {
     scenario('records nothing at all', (s) async {
       await s.pumpWidget(const _App());
       await s.tap('Fade in');
-
+    });
+    tearDown(() {
+      if (captures.isEmpty) return;
       expect(captures.every((c) => c.motion.bytes.isEmpty), isTrue);
       expect(captures.last.motionInterval, isNull);
     });
