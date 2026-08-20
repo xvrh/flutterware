@@ -74,12 +74,30 @@ class TesterHost {
     required this.packageRoot,
     required this.flutterSdkRoot,
     required this.program,
+    this.buildDirectory = defaultBuildDirectory,
     this.onLog,
   });
+
+  /// Where every artifact of the default lane lives, relative to the package.
+  static const defaultBuildDirectory = 'build/flutterware';
 
   final String packageRoot;
   final String flutterSdkRoot;
   final TesterProgram program;
+
+  /// Where this host's artifacts — dill, asset bundle, log — live, relative to
+  /// [packageRoot].
+  ///
+  /// [exclusive] serializes calls *within* one host and says nothing about a
+  /// second host on the same package: two of those with one directory are two
+  /// `frontend_server`s writing one dill and two generators rewriting one
+  /// entrypoint under each other. Anyone who cannot rule the panel's warm
+  /// runner out — the comparison renders the very worktree it lives in — takes
+  /// a directory of its own. The program's generated entrypoint must sit under
+  /// the same directory, which is the owner's job to arrange: this host never
+  /// sees that path, only the dill the compiler makes of it.
+  final String buildDirectory;
+
   final void Function(String line)? onLog;
 
   /// Called for every event on [TesterProgram.eventStream].
@@ -136,7 +154,7 @@ class TesterHost {
     return mine;
   }
 
-  String get _buildDir => p.join(packageRoot, 'build', 'flutterware');
+  String get _buildDir => p.join(packageRoot, buildDirectory);
 
   /// Where the guest's console goes, whole. The live pipes feed a one-line
   /// narration (`onLog`), which is the right size for a spinner caption and

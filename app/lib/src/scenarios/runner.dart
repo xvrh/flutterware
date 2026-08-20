@@ -64,10 +64,19 @@ class ScenarioListing {
 /// The scenario half of a [TesterHost]: which files make up the program, and
 /// what the harness they generate calls itself.
 class _ScenarioProgram extends TesterProgram {
-  _ScenarioProgram({required this.packageRoot, required this.directory});
+  _ScenarioProgram({
+    required this.packageRoot,
+    required this.directory,
+    required this.buildDirectory,
+  });
 
   final String packageRoot;
   final String directory;
+
+  /// Where the generated entrypoint goes — the host's own [buildDirectory],
+  /// so an isolated runner's harness sits beside its dill rather than on top
+  /// of the warm lane's.
+  final String buildDirectory;
 
   @override
   String get name => 'scenarios';
@@ -99,7 +108,7 @@ class _ScenarioProgram extends TesterProgram {
 
   @override
   String writeEntrypoint(List<String> sources) =>
-      writeHarnessEntrypoint(packageRoot, sources);
+      writeHarnessEntrypoint(packageRoot, sources, directory: buildDirectory);
 }
 
 /// Runs a package's scenarios in a directly-spawned `flutter_tester` — see
@@ -117,6 +126,7 @@ class ScenarioRunner {
     required this.packageRoot,
     required this.directory,
     required String flutterSdkRoot,
+    this.buildDirectory = TesterHost.defaultBuildDirectory,
     void Function(String line)? onLog,
   }) : _host = TesterHost(
          packageRoot: packageRoot,
@@ -124,7 +134,9 @@ class ScenarioRunner {
          program: _ScenarioProgram(
            packageRoot: packageRoot,
            directory: directory,
+           buildDirectory: buildDirectory,
          ),
+         buildDirectory: buildDirectory,
          onLog: onLog,
        ) {
     _host.onEvent = (event) => onStep?.call(event);
@@ -134,6 +146,13 @@ class ScenarioRunner {
 
   /// Scenario directory relative to [packageRoot].
   final String directory;
+
+  /// Where this runner's artifacts live, relative to [packageRoot] — see
+  /// [TesterHost.buildDirectory]. The comparison hands each of its runners a
+  /// directory of its own because its head *is* the worktree the panel's warm
+  /// runner lives on, and its base is a checkout every comparison on the
+  /// machine shares.
+  final String buildDirectory;
 
   final TesterHost _host;
 

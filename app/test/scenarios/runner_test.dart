@@ -1037,6 +1037,56 @@ void main() {
     );
     expect(source, contains("    'test/scenarios/mobile': c0.testExecutable,"));
   });
+
+  test('imports climb out of whatever directory the entrypoint sits in', () {
+    // A comparison's entrypoint sits two levels deeper than the default —
+    // a hardcoded `../../` there would import files that do not exist.
+    var source = generateHarnessEntrypoint(
+      ['test/scenarios/a_test.dart'],
+      configs: ['test/scenarios/flutter_test_config.dart'],
+      directory: 'build/flutterware/comparison/123-0',
+    );
+    expect(
+      source,
+      contains("import '../../../../test/scenarios/a_test.dart' as s0;"),
+    );
+    expect(
+      source,
+      contains(
+        "import '../../../../test/scenarios/flutter_test_config.dart' as c0;",
+      ),
+    );
+    // The declared map keys stay package-relative: they are the harness's
+    // identity for a file, not a path anyone resolves.
+    expect(source, contains("    'test/scenarios/a_test.dart': s0.main,"));
+  });
+
+  test('the entrypoint lands in the directory it was asked into', () {
+    var root = Directory.systemTemp.createTempSync('scenario_entrypoint');
+    try {
+      var path = writeHarnessEntrypoint(root.path, [
+        'test/scenarios/a.dart',
+      ], directory: 'build/flutterware/comparison/123-0');
+      expect(
+        p.equals(
+          path,
+          p.join(
+            root.path,
+            'build/flutterware/comparison/123-0/scenarios_harness.dart',
+          ),
+        ),
+        isTrue,
+      );
+      expect(File(path).existsSync(), isTrue);
+      // The default lane's copy is untouched — isolation is the point.
+      expect(
+        File(p.join(root.path, harnessEntrypointPath)).existsSync(),
+        isFalse,
+      );
+    } finally {
+      root.deleteSync(recursive: true);
+    }
+  });
 }
 
 /// The last (only) step's texts of a single-scenario run report.

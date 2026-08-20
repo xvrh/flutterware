@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware_app/src/comparison/build_directory.dart';
 import 'package:flutterware_app/src/previews/discovery.dart';
 import 'package:flutterware_app/src/previews/test_runner.dart';
 import 'package:path/path.dart' as p;
@@ -31,10 +32,16 @@ void main() {
       (entry) => entry.id == 'demo/buttons.dart#buttons',
     );
 
+    // In a claimed directory, exactly as the comparison builds: its head is
+    // the worktree the panel's warm runner lives on, so the production lane
+    // is never the default `build/flutterware` — and the depth is what the
+    // generated imports have to climb out of.
+    var buildDirectory = claimComparisonBuildDirectory(packageRoot);
     var runner = PreviewTestRunner(
       packageRoot: packageRoot,
       flutterSdkRoot: flutterRoot!,
       read: () => (entries: [buttons], canvases: const []),
+      buildDirectory: buildDirectory,
     );
     try {
       var rows = <PreviewCaptureRow>[];
@@ -66,9 +73,27 @@ void main() {
         onRow: (row) async => again.add(row),
       );
       expect(File(again.single.image!).readAsBytesSync(), first);
+      // Everything the run built stayed inside its claim: the dill, the
+      // generated harness, the wrappers, the log. The warm lane's directory
+      // gained none of it, which is the isolation the claim exists for.
+      var claimed = Directory(p.join(packageRoot, buildDirectory));
+      expect(
+        claimed.listSync().map((entity) => p.basename(entity.path)),
+        containsAll([
+          'previews.dill',
+          'previews_harness.dart',
+          'previews_harness',
+          'previews.log',
+        ]),
+      );
     } finally {
       await runner.dispose();
+      releaseComparisonBuildDirectory(packageRoot, buildDirectory);
       Directory(outDir).deleteSync(recursive: true);
     }
+    expect(
+      Directory(p.join(packageRoot, buildDirectory)).existsSync(),
+      isFalse,
+    );
   });
 }

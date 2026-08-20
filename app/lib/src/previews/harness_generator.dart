@@ -35,6 +35,7 @@ const previewWrapperDir = 'build/flutterware/previews_harness';
 String generatePreviewHarness(
   List<CatalogEntry> entries, {
   required List<PreviewCanvas> canvases,
+  String harnessPath = previewHarnessPath,
 }) {
   var sorted = _sorted(entries);
   var buffer = StringBuffer()
@@ -42,7 +43,7 @@ String generatePreviewHarness(
     ..writeln('//')
     ..writeln('// Run it directly to check the catalog with no flutterware:')
     ..writeln('//')
-    ..writeln('//     flutter test $previewHarnessPath')
+    ..writeln('//     flutter test $harnessPath')
     ..writeln('//')
     ..writeln("// That lane inherits `flutter test`'s `--use-test-fonts`, so")
     ..writeln('// unstyled text is measured in the test font and an overflow')
@@ -107,14 +108,23 @@ String generatePreviewHarness(
 /// moved mtime, and a moved mtime is what `SourceInvalidator` reads as an edit —
 /// so a generator that rewrote unconditionally would make every sync recompile
 /// the whole catalog for nothing.
+///
+/// [directory] is where the harness and its wrapper directory go, relative to
+/// the package — the runner's `buildDirectory`. It matters beyond tidiness:
+/// wrapper indices are assigned within *this* entry list, so a harness written
+/// for a subset renumbers — and prunes — another harness's wrappers if the two
+/// share a directory. That is exactly what a comparison rendering the panel's
+/// own worktree would do to the warm audit runner.
 String writePreviewHarness(
   String packageRoot,
   List<CatalogEntry> entries, {
   required List<PreviewCanvas> canvases,
+  String directory = 'build/flutterware',
 }) {
   var sorted = _sorted(entries);
-  var wrapperDir = Directory(p.join(packageRoot, previewWrapperDir))
-    ..createSync(recursive: true);
+  var wrapperDir = Directory(
+    p.join(packageRoot, directory, p.basename(previewWrapperDir)),
+  )..createSync(recursive: true);
   var writer = CatalogWrapperWriter(
     outputDir: wrapperDir.path,
     projectRoot: packageRoot,
@@ -138,8 +148,12 @@ String writePreviewHarness(
     if (name.startsWith('entry_') && !live.contains(name)) stale.deleteSync();
   }
 
-  var path = p.join(packageRoot, previewHarnessPath);
-  _writeIfDifferent(path, generatePreviewHarness(sorted, canvases: canvases));
+  var relative = p.url.join(directory, p.basename(previewHarnessPath));
+  var path = p.join(packageRoot, directory, p.basename(previewHarnessPath));
+  _writeIfDifferent(
+    path,
+    generatePreviewHarness(sorted, canvases: canvases, harnessPath: relative),
+  );
   return path;
 }
 

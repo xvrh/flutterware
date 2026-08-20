@@ -12,6 +12,7 @@ import '../previews/catalog_entry.dart';
 import '../previews/devices.dart';
 import '../previews/discovery.dart';
 import '../previews/test_runner.dart';
+import 'build_directory.dart';
 import 'cancel.dart';
 import 'runner.dart';
 
@@ -116,11 +117,17 @@ class PreviewsSide implements ComparisonSide {
 
     // The generated harness imports exactly the entries being rendered, so
     // the compile pays for this render's closure rather than the whole
-    // catalog's.
+    // catalog's. In a claimed directory of its own, and that subset is one
+    // reason why: written into the warm audit runner's directory it would
+    // renumber and prune that harness's wrappers — the head checkout *is* the
+    // panel's worktree — and the base checkout is shared by every comparison
+    // on the machine.
+    var buildDirectory = claimComparisonBuildDirectory(packageRoot);
     var runner = PreviewTestRunner(
       packageRoot: packageRoot,
       flutterSdkRoot: flutterSdkRoot,
       read: () => (entries: wanted, canvases: canvases),
+      buildDirectory: buildDirectory,
     );
     var outDir = Directory.systemTemp.createTempSync('fw_comparison_previews');
     try {
@@ -188,6 +195,7 @@ class PreviewsSide implements ComparisonSide {
       // A `flutter_tester` and its compiler are child processes; nothing else
       // reaps them.
       await runner.dispose();
+      releaseComparisonBuildDirectory(packageRoot, buildDirectory);
       try {
         outDir.deleteSync(recursive: true);
       } on FileSystemException {
