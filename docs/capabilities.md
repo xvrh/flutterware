@@ -1922,9 +1922,12 @@ flutter test build/flutterware/previews_harness.dart   # the same file, as an or
 ```
 
 The second lane is convenient and shardable and inherits `flutter test`'s
-`--use-test-fonts`, so text with no explicit family is measured in the test font
-— an overflow verdict from it is worth less than one from `audit`, which spawns
-its own tester and omits those flags.
+`--use-test-fonts`, which boxes every family nobody loads bytes for. The harness
+loads them: the project's own from the manifest, and real Roboto under the
+platform-default names that text with no explicit family resolves to. So an
+overflow verdict from it means something — but Roboto stands in for the Apple
+and Windows defaults too, so a pixel-exact question still belongs to `audit`,
+which spawns its own tester and omits those flags.
 
 **Expect the first run to find things.** A preview is a widget and not an app:
 an entry that only ever worked because something above it supplied a

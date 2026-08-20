@@ -141,9 +141,28 @@ void main() {
 
   test('the real fonts were loaded, not the fallback', () {
     // Under `flutter test` this is the FontLoader half only — the engine still
-    // has `--use-test-fonts` forced on it, which is exactly why the tool spawns
-    // its own tester for the lane whose overflow verdicts count.
+    // has `--use-test-fonts` forced on it, so the families below are the
+    // project's own, loaded from its manifest.
     expect(loadedScenarioFonts, isNotNull);
+  });
+
+  testWidgets('text naming no family is measured in something real too', (
+    tester,
+  ) async {
+    // Most of a catalog names no family, and `--use-test-fonts` gives every
+    // glyph of an unloaded family the same advance — so a narrow string and a
+    // wide one agreeing is the fingerprint of a catalog measured in boxes.
+    // Nothing here loads them: the harness's own `setUpAll` did, which is the
+    // claim.
+    Future<Size> measure(String text) async {
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: Text(text))));
+      return tester.getSize(find.text(text));
+    }
+
+    expect(
+      (await measure('iiiii')).width,
+      lessThan((await measure('WWWWW')).width),
+    );
   });
 }
 
