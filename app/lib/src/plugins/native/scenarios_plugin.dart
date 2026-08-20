@@ -1007,12 +1007,48 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     scenario: widget.scenario,
   );
 
-  void _start() => widget.core.startRun(
-    widget.package,
-    file: widget.file,
-    scenario: widget.scenario,
-    axes: widget.axes,
-  );
+  /// How long the run on screen has been going, and whether it has been going
+  /// long enough to be worth a spinner. See [_startedWaiting].
+  final _runFor = Stopwatch();
+  Timer? _ticker;
+  bool get _waitIsWorthSaying => _runFor.elapsed >= _loaderAppearsAfter;
+
+  /// Longer than a warm run, shorter than a wait anybody would question. A
+  /// warm harness answers in a couple of hundred milliseconds, and the panel
+  /// says nothing at all inside that.
+  static const _loaderAppearsAfter = Duration(milliseconds: 250);
+
+  void _start() {
+    widget.core.startRun(
+      widget.package,
+      file: widget.file,
+      scenario: widget.scenario,
+      axes: widget.axes,
+    );
+    _startedWaiting();
+  }
+
+  /// Restarts the clock the loader reads, and ticks it while the spinner is
+  /// the whole screen: the floor has to expire on its own, and past it a
+  /// count that is climbing is the only thing distinguishing slow from hung.
+  /// Stops itself the moment the first step lands — from there the flow
+  /// filling in is the progress.
+  void _startedWaiting() {
+    _runFor
+      ..reset()
+      ..start();
+    _ticker?.cancel();
+    _ticker = Timer.periodic(_loaderAppearsAfter, (timer) {
+      var run = _run;
+      if (!mounted || run == null || !run.running || run.steps.isNotEmpty) {
+        timer.cancel();
+        _ticker = null;
+        _runFor.stop();
+        return;
+      }
+      setState(() {});
+    });
+  }
 
   /// Runs when nothing has, and re-runs when the settled state was made under
   /// different axes than the address now asks for — which is how an axis
@@ -1020,7 +1056,13 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   /// *attempt*'s axes, so a failure is not retried in a loop.
   void _maybeRun() {
     var run = _run;
-    if (run == null || (!run.running && run.axes != widget.axes)) _start();
+    if (run == null || (!run.running && run.axes != widget.axes)) {
+      _start();
+    } else if (run.running && !_runFor.isRunning) {
+      // Already running when the page arrived — the Run button on another
+      // surface, or an agent. The wait is still this page's to narrate.
+      _startedWaiting();
+    }
   }
 
   @override
@@ -1037,6 +1079,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
 
   @override
   void dispose() {
+    _ticker?.cancel();
     _flowTransform.dispose();
     super.dispose();
   }
@@ -1284,22 +1327,20 @@ class _ScenarioPageState extends State<_ScenarioPage> {
         return _RunFailure(error);
       }
       if (running || run == null) {
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const Gap(FwSpacing.lg),
-              // The runner narrates its cold start — "building the asset
-              // bundle" is a very different wait from a hung harness. Once
-              // the first step lands, the flow itself is the progress.
-              Text(
-                widget.core.runnerLogFor(widget.package) ??
-                    'starting the harness…',
-                style: context.type.bodyMuted,
-              ),
-            ],
-          ),
+        // Nothing at all under the floor: a warm run lands in a few hundred
+        // milliseconds, and a spinner that appears and leaves inside one is a
+        // flash rather than news — which is what made walking the list
+        // unpleasant. Past the floor the wait is real and gets said properly.
+        if (!_waitIsWorthSaying) return const SizedBox.expand();
+        // The runner narrates its cold start — rebuilding the asset bundle is
+        // a very different wait from a hung harness — and the seconds are
+        // what separate slow from hung. Once the first step lands, the flow
+        // itself is the progress.
+        return LoadingState(
+          title:
+              widget.core.runnerPhaseFor(widget.package) ??
+              'Running the scenario',
+          message: '${_runFor.elapsed.inSeconds}s',
         );
       }
       return const EmptyState(

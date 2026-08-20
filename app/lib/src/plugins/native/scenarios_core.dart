@@ -79,6 +79,41 @@ class ScenarioPanelRun {
   final String? output;
 }
 
+/// The panel's word for what a runner log line means, or null for a line that
+/// means nothing to somebody watching a spinner.
+///
+/// The runner narrates itself for a log file, and a log file's voice is the
+/// wrong one here: `[tester] flutterware scenarios harness ready — fonts:
+/// Roboto, MaterialIcons` is a long, bracketed, lower-case line that wraps
+/// across a panel and names two things — a process and a font list — that the
+/// person waiting did not ask about. Every wait a cold start has is one of a
+/// handful of phases, so the caption says the phase and the log keeps the
+/// line.
+///
+/// Unknown lines return null rather than a fallback: the guest's stdout is
+/// also the app's own `print`, and a caption that changes to whatever the app
+/// last printed is a caption nobody can read.
+@visibleForTesting
+String? scenarioRunnerPhase(String line) {
+  var text = line.replaceFirst(RegExp(r'^\[[^\]]*\]\s*'), '');
+  if (RegExp(r'^reloading (\d+) edited').firstMatch(text) case var m?) {
+    var count = int.parse(m.group(1)!);
+    return 'Reloading $count edited file${count == 1 ? '' : 's'}';
+  }
+  if (text.startsWith('compiling the harness')) return 'Compiling the harness';
+  if (text.startsWith('the asset bundle changed')) {
+    return 'Rebuilding the asset bundle';
+  }
+  if (text.contains('restarting the harness')) return 'Restarting the harness';
+  if (text.startsWith('the harness exited')) return 'Restarting the harness';
+  if (text.startsWith('The Dart VM service is listening')) {
+    return 'Starting the harness';
+  }
+  if (text.contains('harness ready')) return 'Starting the harness';
+  if (text.startsWith('running')) return 'Running the scenario';
+  return null;
+}
+
 /// Scenarios for each declared package: the syntactic scan projected into the
 /// report and the `list` action, the `run` action in a warm
 /// [ScenarioRunner], and the panel's per-scenario run state on the same
@@ -106,10 +141,16 @@ class ScenariosCore extends PluginCore {
   /// The panel's runs, one per scenario, keyed `(package, file, scenario)`.
   final _panelRuns = <(String, String, String), ScenarioPanelRun>{};
 
-  /// The runner's last progress line per package — the only narration a cold
-  /// start has, so the panel can say "compiling the harness" rather than
-  /// spinning silently.
-  final _runnerLogs = <String, String>{};
+  /// What the runner is doing per package, in the panel's own words — the
+  /// only narration a cold start has, so the panel can say "Compiling the
+  /// harness" rather than spinning silently.
+  ///
+  /// The *phase*, never the log line. The runner's lines are written for a
+  /// log — `[tester] flutterware scenarios harness ready — fonts: Roboto,
+  /// MaterialIcons` — and a caption under a spinner is not a log: it has to
+  /// be short enough to read at a glance and stable enough that the eye is
+  /// not dragged back to it. See [scenarioRunnerPhase].
+  final _runnerPhases = <String, String>{};
 
   /// Declared packages, filtered to those the workspace knows about.
   late final List<String> packages = [
@@ -269,7 +310,9 @@ class ScenariosCore extends PluginCore {
     required String scenario,
   }) => _panelRuns[(package, file, scenario)];
 
-  String? runnerLogFor(String package) => _runnerLogs[package];
+  /// What the runner is doing for [package] right now — the caption under the
+  /// panel's spinner, or null when nothing has said anything yet.
+  String? runnerPhaseFor(String package) => _runnerPhases[package];
 
   bool get anyPanelRunning => _panelRuns.values.any((run) => run.running);
 
@@ -2707,7 +2750,7 @@ class ScenariosCore extends PluginCore {
     if (_runners.remove(path) case var runner?) {
       unawaited(runner.dispose());
     }
-    _runnerLogs.remove(path);
+    _runnerPhases.remove(path);
     notifyChanged();
   }
 
@@ -2719,8 +2762,13 @@ class ScenariosCore extends PluginCore {
         directory: scanRootFor(path),
         flutterSdkRoot: host.workspace.flutterSdk.root,
         onLog: (line) {
-          _runnerLogs[path] = line;
-          notifyChanged();
+          // Lines the panel has no word for are the guest's own console —
+          // an app's `print` during boot. Real log material, and nothing the
+          // spinner is waiting for, so the caption does not move for them.
+          if (scenarioRunnerPhase(line) case var phase?) {
+            _runnerPhases[path] = phase;
+            notifyChanged();
+          }
         },
       ),
     );
