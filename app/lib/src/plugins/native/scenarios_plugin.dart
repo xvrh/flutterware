@@ -1041,6 +1041,28 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     super.dispose();
   }
 
+  /// The device the canvas on screen was laid out for.
+  String? _framedAt;
+
+  /// **Another device is another canvas.** A flow's cells are the device's own
+  /// size, so the same six steps are twice as wide on a tablet as on a phone —
+  /// and a place panned to under one framing is, under the other, blank canvas
+  /// with the flow drawn off behind it. Null is not a framing: a run reports no
+  /// device until its first step lands, so reading it as one would send the
+  /// canvas home on every rerun, including the ones that mean "same flow, look
+  /// again".
+  void _reframe(String? device) {
+    if (device == null || device == _framedAt) return;
+    var first = _framedAt == null;
+    _framedAt = device;
+    if (first) return;
+    // After the frame: the controller has listeners, and moving it while the
+    // tree that holds them is building marks them dirty mid-build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _flowTransform.value = ScenarioFlowView.initialTransform();
+    });
+  }
+
   void _openStep(ScenarioRunStep step) {
     AddressScope.write(context).setSegments(
       scenarioSegments(
@@ -1094,6 +1116,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     // Framed by what the run *did*, which for an unspecified device is what
     // its folder answered.
     var device = run?.device == null ? null : deviceById(run!.device!);
+    _reframe(run?.device);
 
     // Dark runs default to light chrome, like a real phone would show.
     var statusFallback = run?.axes.brightness == 'dark'
