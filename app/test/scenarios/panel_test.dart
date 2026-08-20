@@ -14,6 +14,7 @@ import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/scenarios_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/scenarios/axes.dart';
+import 'package:flutterware_app/src/scenarios/flow_view.dart';
 import 'package:flutterware_app/src/scenarios/framed_shot.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
@@ -1097,6 +1098,81 @@ void main() {
       '// already here\n',
     );
     expect(address.value.segments, isEmpty);
+  });
+
+  testWidgets('a device change puts the flow canvas back at the start', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    core.debugInstallRunner('.', _FakeRunner());
+    var plugin = ScenariosPlugin(core);
+
+    var address = ValueNotifier(
+      Address(
+        worktree: 'wt',
+        plugin: scenariosPluginId,
+        segments: ['.', 'test', 'scenarios', 'a_test.dart', 'A'],
+        axes: {'device': 'iphone-se'},
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: AddressRoot(
+          address: address,
+          onChanged: (a) => address.value = a,
+          child: Builder(builder: plugin.buildPanel),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    TransformationController canvas() => tester
+        .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+        .transformationController!;
+
+    canvas().value = Matrix4.identity()..translateByDouble(-4000.0, 0, 0, 1);
+    await tester.pump();
+
+    address.value = address.value.withAxes({'device': 'ipad'});
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    expect(canvas().value, ScenarioFlowView.initialTransform());
+
+    // And a rerun at the *same* device is the other half of the rule: it means
+    // "same flow, look again", so it keeps the place it was looked at from.
+    var panned = Matrix4.identity()..translateByDouble(-300.0, 0, 0, 1);
+    canvas().value = panned;
+    await tester.pump();
+    await tester.tap(find.text('Run'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(canvas().value, panned);
   });
 }
 
