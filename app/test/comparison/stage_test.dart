@@ -161,6 +161,34 @@ void main() {
     expect(find.text('Neither side rendered'), findsOneWidget);
   });
 
+  // Side by side inherits "where to look": the head half carries the boxes.
+  testWidgets('side by side boxes the changed regions on the head', (
+    tester,
+  ) async {
+    var shots = await pair(tester);
+    await pumpStage(
+      tester,
+      shots,
+      diff: const PixelDiff(
+        width: 8,
+        height: 8,
+        changedPixels: 4,
+        comparedPixels: 64,
+        sizeChanged: false,
+        clusters: [DiffRect(x: 1, y: 1, width: 2, height: 2, pixels: 4)],
+      ),
+    );
+
+    expect(find.byKey(clusterBoxesKey), findsOneWidget);
+  });
+
+  testWidgets('side by side with no diff draws no boxes', (tester) async {
+    var shots = await pair(tester);
+    await pumpStage(tester, shots);
+
+    expect(find.byKey(clusterBoxesKey), findsNothing);
+  });
+
   // The mode an agent reads: where to look, in numbers.
   testWidgets('the pixels mode names the fraction and the regions', (
     tester,

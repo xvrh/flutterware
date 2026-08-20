@@ -142,15 +142,19 @@ class _TappableState extends State<Tappable> {
 
   bool get _enabled => widget.onTap != null;
 
-  // Only watch the pointer when something consumes the flag.
-  bool get _tracksHover =>
+  // Only repaint when something consumes the flag. The flag itself is kept
+  // current even while nothing does: a target disabled under the pointer — a
+  // mode pill that was just picked — would otherwise stop hearing onExit, and
+  // the stale `true` washes it the moment it re-enables, pointer long gone.
+  bool get _paintsHover =>
       widget.builder != null ||
       widget.onHover != null ||
       (_enabled && widget.feedback != TapFeedback.none);
 
   void _setHover(bool value) {
     if (_hover == value) return;
-    setState(() => _hover = value);
+    _hover = value;
+    if (_paintsHover) setState(() {});
     widget.onHover?.call(value);
   }
 
@@ -237,8 +241,8 @@ class _TappableState extends State<Tappable> {
       onKeyEvent: _onKey,
       child: MouseRegion(
         cursor: cursor,
-        onEnter: _tracksHover ? (_) => _setHover(true) : null,
-        onExit: _tracksHover ? (_) => _setHover(false) : null,
+        onEnter: (_) => _setHover(true),
+        onExit: (_) => _setHover(false),
         child: GestureDetector(
           behavior: widget.behavior,
           onTap: widget.onTap,

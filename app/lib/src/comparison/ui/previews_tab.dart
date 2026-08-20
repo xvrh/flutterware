@@ -49,6 +49,9 @@ class PreviewsTab extends StatefulWidget {
 
 class _PreviewsTabState extends State<PreviewsTab> {
   late final _shots = ShotPair(widget.store);
+  // The default answers both first questions at once: side by side shows what
+  // each frame is, and its head half carries the diff's boxes for where to
+  // look.
   var _mode = StageMode.sideBySide;
 
   @override

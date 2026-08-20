@@ -99,6 +99,30 @@ void main() {
     expect(clusters.last.pixels, 4);
   });
 
+  // A hollow change — a card border — has the changes inside it as separate
+  // components, whose boxes would draw over its box.
+  test('clusters whose boxes overlap are folded into one', () {
+    var head = frame(40, 40);
+    // A ring…
+    paint(head, 40, 10, 10, 12, 1, 255);
+    paint(head, 40, 10, 21, 12, 1, 255);
+    paint(head, 40, 10, 10, 1, 12, 255);
+    paint(head, 40, 21, 10, 1, 12, 255);
+    // …and a separate change inside it.
+    paint(head, 40, 14, 14, 4, 4, 255);
+
+    var clusters = diff(frame(40, 40), head).clusters;
+
+    expect(clusters, hasLength(1));
+    var box = clusters.single;
+    expect(box.x, 10);
+    expect(box.y, 10);
+    expect(box.width, 12);
+    expect(box.height, 12);
+    // The ring's 44 plus the block's 16: folding sums the real counts.
+    expect(box.pixels, 60);
+  });
+
   // Eight-connected would join two changes touching only at a corner, which
   // for antialiased text is most of them.
   test('regions touching at a corner stay two clusters', () {

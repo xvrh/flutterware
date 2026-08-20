@@ -34,7 +34,8 @@ class PixelDiff {
   /// because [fraction] hides it and a reader deserves both.
   final int comparedPixels;
 
-  /// Where the changes are, as rects, largest first.
+  /// Where the changes are, as rects, largest first. Rects whose boxes
+  /// overlap are folded into their union, so none of these draw over another.
   final List<DiffRect> clusters;
 
   /// Whether the two frames were different sizes.
@@ -188,8 +189,43 @@ class PixelDiff {
       );
     }
 
-    rects.sort((a, b) => b.pixels.compareTo(a.pixels));
-    return rects;
+    return _foldOverlaps(rects)..sort((a, b) => b.pixels.compareTo(a.pixels));
+  }
+
+  /// Bounding rects folded together until none overlap.
+  ///
+  /// Components are disjoint but their boxes are not: a hollow change — a card
+  /// border, a ring — has the changes inside it as separate components, whose
+  /// boxes then draw *over* its box, and a reader wanting one region gets a
+  /// tangle. Touching deliberately does not count as overlap: antialiased
+  /// neighbours meet at edges and corners constantly, and folding those would
+  /// undo exactly what four-connected components preserve.
+  static List<DiffRect> _foldOverlaps(List<DiffRect> rects) {
+    // Quadratic, so a diff noisy enough to shatter into thousands of
+    // components — past the point where boxes help anyone — keeps them as
+    // they are.
+    if (rects.length > 2048) return rects;
+    var folded = List.of(rects);
+    var again = true;
+    while (again) {
+      again = false;
+      for (var i = 0; i < folded.length; i++) {
+        for (var j = folded.length - 1; j > i; j--) {
+          var a = folded[i];
+          var b = folded[j];
+          if (a.x < b.x + b.width &&
+              b.x < a.x + a.width &&
+              a.y < b.y + b.height &&
+              b.y < a.y + a.height) {
+            folded[i] = a.union(b);
+            folded.removeAt(j);
+            // The union may reach rects already passed over, so go again.
+            again = true;
+          }
+        }
+      }
+    }
+    return folded;
   }
 }
 
@@ -222,6 +258,20 @@ class DiffRect {
   final int pixels;
 
   int get area => width * height;
+
+  /// The bounding box of both, their changed pixels summed — exact, because
+  /// components never share a pixel.
+  DiffRect union(DiffRect other) {
+    var left = math.min(x, other.x);
+    var top = math.min(y, other.y);
+    return DiffRect(
+      x: left,
+      y: top,
+      width: math.max(x + width, other.x + other.width) - left,
+      height: math.max(y + height, other.y + other.height) - top,
+      pixels: pixels + other.pixels,
+    );
+  }
 
   Map<String, Object?> toJson() => {
     'x': x,
