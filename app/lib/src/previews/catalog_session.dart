@@ -158,6 +158,19 @@ class CatalogBrowsing extends ChangeNotifier {
     _listVisible = value;
     notifyListeners();
   }
+
+  /// Whether resting the pointer on a row shows that entry on the canvas.
+  ///
+  /// See [CatalogSession.hover]. On by default and switchable from the list's
+  /// own header, because whether it reads as helpful or as the panel twitching
+  /// under your hand is a matter of taste and of how big a catalog is.
+  bool get previewOnHover => _previewOnHover;
+  var _previewOnHover = true;
+  set previewOnHover(bool value) {
+    if (value == _previewOnHover) return;
+    _previewOnHover = value;
+    notifyListeners();
+  }
 }
 
 /// How the last switch went, for the UI to show.
@@ -320,6 +333,27 @@ class CatalogSession extends ChangeNotifier {
   /// does not compile stays selected — and stays the one a reload retries —
   /// while the guest goes on rendering whatever it last managed to load.
   CatalogEntry? selected;
+
+  /// The entry the pointer is resting on, shown in place of [active] without
+  /// committing to it. Null when the canvas is showing what was asked for.
+  ///
+  /// A peek is **only a picture**. [selected] does not move, neither does
+  /// [active] or the address, the daemon is not told, and the knob, axis and
+  /// inspect panels go on describing the committed entry — which is why the
+  /// canvas names what it is showing while one is up. Leaving the list puts
+  /// back exactly what was there.
+  CatalogEntry? get peeking => _peeking;
+  CatalogEntry? _peeking;
+
+  /// What the guest is showing, when that is not [active] — a peek, and
+  /// nothing else ever writes it. Null means the two agree.
+  String? _peekShowing;
+
+  String? get _showing => _peekShowing ?? active?.id;
+
+  Timer? _peekDelay;
+  CatalogEntry? _peekWanted;
+  var _peekBusy = false;
 
   /// The entry the address names, which is **a request rather than a call**.
   ///
@@ -664,6 +698,7 @@ class CatalogSession extends ChangeNotifier {
     // The old box named the old node. Kept for the moment it takes to resolve
     // the new one, it would draw the previous row's rectangle around this one.
     watchedBox.value = null;
+    _peekDelay?.cancel();
     _watchSettle?.cancel();
     _watchSettle = Timer(const Duration(milliseconds: 120), () {
       if (_disposed || !_panelOpen) return;
@@ -1017,6 +1052,14 @@ class CatalogSession extends ChangeNotifier {
   /// frame after it rather than on a whole cold build.
   InspectClient? _inspect;
 
+  /// The guest channel, for a test that drives one without a daemon.
+  ///
+  /// Peeking is the one thing on this class that is a message to the guest and
+  /// nothing else — no compile, no reload, no daemon — so this is the whole of
+  /// what a test of it needs.
+  @visibleForTesting
+  void attachInspect(InspectClient inspect) => _inspect = inspect;
+
   /// Whether this session announced itself — so a teardown that never got as
   /// far as a guest does not delete a handle belonging to another window.
   var _published = false;
@@ -1307,6 +1350,13 @@ class CatalogSession extends ChangeNotifier {
     //
     // The comment above was already right that `selected` is what the user
     // asked for and that asking happens here. It just never told anybody.
+    //
+    // And a peek is over the moment something is actually asked for: the
+    // pointer is on the row it just clicked, and leaving the intent behind
+    // would have [_peekLoop] put the previous entry back underneath it.
+    _peekDelay?.cancel();
+    _peekWanted = null;
+    _peeking = null;
     notifyListeners();
     _queue = _queue
         .then((_) => _switchTo(entry, previous: previous, ifChanged: ifChanged))
@@ -1314,6 +1364,96 @@ class CatalogSession extends ChangeNotifier {
           _fail('$e');
         });
     return _queue;
+  }
+
+  /// How long the pointer has to rest on a row before its entry is shown.
+  ///
+  /// Long enough that sweeping the list past forty rows shows none of them,
+  /// short enough that stopping on one does not feel like waiting. The switch
+  /// it triggers is 57ms, so this is the whole of what a peek costs in time.
+  static const peekDelay = Duration(milliseconds: 180);
+
+  /// And how long before the committed entry comes back once the pointer has
+  /// left. Shorter, because moving between two rows crosses no gap — the next
+  /// row's [hover] cancels this before it fires — so it only ever runs when
+  /// the pointer has genuinely gone.
+  static const peekReturnDelay = Duration(milliseconds: 90);
+
+  /// The pointer is resting on [entry], or has left the list.
+  ///
+  /// Shows it on the canvas without committing to it — see [peeking]. Free to
+  /// call on every enter and exit: this is a debounce, and the work behind it
+  /// does not start until the pointer stops.
+  void hover(CatalogEntry? entry) {
+    // A list being torn down reports the pointer leaving it, which is the last
+    // thing that happens on the way out of a worktree — and a timer armed
+    // there outlives everything it would have talked to.
+    if (_disposed || phase != CatalogSessionPhase.ready) return;
+    // The switch is gated, the *return* never is: turning the setting off with
+    // a peek on screen has to put the committed entry back, and that is this
+    // call with nothing in it.
+    if (entry != null && !browsing.previewOnHover) return;
+    // A peek is a message to a guest that already holds the entry. One it does
+    // not — quarantined, or written since the guest started — would answer by
+    // refusing, and the recovery for that is a compile and a reload. Not
+    // something to start because a pointer went past.
+    if (entry != null && compileErrorFor(entry) != null) return;
+    if (entry?.id == _peekWanted?.id) return;
+    _peekWanted = entry;
+    _peekDelay?.cancel();
+    _peekDelay = Timer(
+      entry == null ? peekReturnDelay : peekDelay,
+      () => unawaited(_peekLoop()),
+    );
+  }
+
+  /// Brings the canvas to whatever [_peekWanted] currently names.
+  ///
+  /// **Coalesced rather than queued**, like the knob push and for the same
+  /// reason: a pointer produces a stream of targets and only the latest one is
+  /// worth arriving at. Deliberately not on [_queue] — a peek that waited
+  /// behind a compile would land on a row the pointer left seconds ago, and a
+  /// compile that waited behind a peek would be a click made slower by a
+  /// hover.
+  ///
+  /// The switch machinery wins every disagreement: while it is working this
+  /// does nothing, and what it leaves on screen is what the next peek measures
+  /// from.
+  Future<void> _peekLoop() async {
+    if (_peekBusy) return;
+    _peekBusy = true;
+    try {
+      while (!_disposed) {
+        var inspect = _inspect;
+        var want = _peekWanted;
+        // Back to what the guest was rendering before the peek, which is
+        // `active` rather than `selected`: a selection that did not compile
+        // never reached the guest, and asking for it here would only be
+        // refused.
+        var target = want ?? active;
+        if (inspect == null || target == null) return;
+        if (busyWith != null) return;
+        if (_showing != target.id) {
+          if (!await inspect.showEntry(target.id)) {
+            _peeking = null;
+            notifyListeners();
+            return;
+          }
+          _peekShowing = target.id == active?.id ? null : target.id;
+        }
+        // Named only when it is genuinely something else. Hovering the row
+        // already on screen is not a peek, and saying so would put a label on
+        // the canvas for a picture that did not change.
+        var peeked = want?.id == active?.id ? null : want;
+        if (peeked?.id != _peeking?.id) {
+          _peeking = peeked;
+          notifyListeners();
+        }
+        if (_peekWanted?.id == want?.id) return;
+      }
+    } finally {
+      _peekBusy = false;
+    }
   }
 
   /// Sends the entry's knobs what the address asks of them, and reads back
@@ -1677,6 +1817,8 @@ class CatalogSession extends ChangeNotifier {
   /// describing the previous demo, and only sometimes.
   void _afterSwitch(CatalogEntry entry) {
     active = entry;
+    // Whatever a peek had left on screen, this replaced it.
+    _peekShowing = null;
     unawaited(_readKnobs());
     unawaited(_readAxes());
     // Not gated on the panel: this is what puts a badge on the Problems tab,
