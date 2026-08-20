@@ -17,6 +17,7 @@ import '../../previews/web_build_dialog.dart';
 import '../../previews/web_server.dart';
 import '../native_plugin.dart';
 import 'previews_address.dart';
+import '../../previews/thumbnails.dart';
 import 'previews_core.dart';
 import '../../ui/design/design.dart';
 import '../../ui/loading_state.dart';
@@ -41,7 +42,9 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
     super.core, {
     this.connectToDaemon = CompilerDaemonClient.connect,
   }) {
-    core.busyStatusFor = _busyStatusFor;
+    core
+      ..busyStatusFor = _busyStatusFor
+      ..onRescanned = (path) => _thumbnails[path]?.invalidate();
   }
 
   /// How the sessions this builds reach a compiler — see
@@ -55,6 +58,22 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   final DaemonConnector connectToDaemon;
 
   final _sessions = <String, CatalogSession>{};
+
+  /// Each package's photographed previews, for the list's hover popover.
+  ///
+  /// **Here rather than on the core**, which is pure Dart because `fw` and the
+  /// MCP server link it — a cache of `dart:ui` images is exactly what the
+  /// purity guardrail exists to keep out. Here rather than on the *session*
+  /// too: a session is built fresh every time the panel is mounted, and a
+  /// picture is worth keeping past that, because the harness behind it costs a
+  /// compile of the whole catalog to bring up.
+  final _thumbnails = <String, PreviewThumbnails>{};
+
+  /// [path]'s photographed previews, started on first use.
+  PreviewThumbnails thumbnailsFor(String path) => _thumbnails.putIfAbsent(
+    path,
+    () => PreviewThumbnails.of(core.testRunnerFor(path)),
+  );
 
   /// A server per served directory, so a rebuild of the same page reuses the
   /// port a browser tab already has open — the tab reloads onto the new build
@@ -199,6 +218,10 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
         ..dispose();
     }
     _sessions.clear();
+    for (var thumbnails in _thumbnails.values) {
+      thumbnails.dispose();
+    }
+    _thumbnails.clear();
     for (var server in _servers.values) {
       unawaited(server.close());
     }
@@ -519,7 +542,11 @@ class _CatalogPanelState extends State<_CatalogPanel> {
             // A package change still remounts, since one session is one
             // package.
             Expanded(
-              child: CatalogView(key: ObjectKey(session), session: session),
+              child: CatalogView(
+                key: ObjectKey(session),
+                session: session,
+                thumbnails: widget.plugin.thumbnailsFor(path),
+              ),
             ),
           ],
         );

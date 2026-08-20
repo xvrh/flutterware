@@ -22,7 +22,9 @@ import 'catalog_params.dart';
 import 'catalog_devices.dart';
 import 'catalog_entry.dart';
 import 'catalog_session.dart';
+import 'preview_popover.dart';
 import 'staged_device.dart';
+import 'thumbnails.dart';
 import 'catalog_tree.dart';
 import 'inspect_panel.dart';
 
@@ -45,9 +47,14 @@ const _inspectNamespace = 'inspect';
 /// the widget, which is what lets a cold compile keep running — and keep
 /// reporting into the sidebar — while you are looking at another plugin.
 class CatalogView extends StatefulWidget {
-  const CatalogView({super.key, required this.session});
+  const CatalogView({super.key, required this.session, this.thumbnails});
 
   final CatalogSession session;
+
+  /// This package's photographed previews, for the popover the list shows on
+  /// hover. Null where nothing is keeping them — the standalone catalog entry
+  /// point and the motion panel, both of which build a session of their own.
+  final PreviewThumbnails? thumbnails;
 
   @override
   State<CatalogView> createState() => _CatalogViewState();
@@ -279,7 +286,13 @@ class _CatalogViewState extends State<CatalogView> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_session.browsing.listVisible)
-                SizedBox(width: 260, child: _EntryList(session: _session))
+                SizedBox(
+                  width: 260,
+                  child: _EntryList(
+                    session: _session,
+                    thumbnails: widget.thumbnails,
+                  ),
+                )
               else
                 _ShowListStrip(browsing: _session.browsing),
               const VerticalDivider(width: 1),
@@ -420,9 +433,6 @@ class _CatalogViewState extends State<CatalogView> {
         // were, and a switch that has to compile obscures both the same way.
         if (_session.compilingSwitch case var entry?) {
           return _SwitchingOverlay(entry: entry, child: canvas);
-        }
-        if (_session.peeking case var entry?) {
-          return _PeekLabel(entry: entry, child: canvas);
         }
         return canvas;
     }
@@ -1388,10 +1398,52 @@ class _Axis extends StatelessWidget {
 }
 
 /// The entry browser: a filter, then the tree.
-class _EntryList extends StatelessWidget {
-  const _EntryList({required this.session});
+class _EntryList extends StatefulWidget {
+  const _EntryList({required this.session, required this.thumbnails});
 
   final CatalogSession session;
+  final PreviewThumbnails? thumbnails;
+
+  @override
+  State<_EntryList> createState() => _EntryListState();
+}
+
+class _EntryListState extends State<_EntryList> {
+  /// The popover, in the **root** overlay: it has to be able to leave the
+  /// 260-pixel column it is anchored in, which is the whole point of it.
+  final _popover = OverlayPortalController();
+
+  /// What the popover is showing, which lags [CatalogBrowsing.hovering] by
+  /// nothing — it is set from the same notification.
+  CatalogEntry? _showing;
+
+  CatalogSession get session => widget.session;
+
+  @override
+  void initState() {
+    super.initState();
+    session.browsing.addListener(_onBrowsing);
+  }
+
+  @override
+  void dispose() {
+    session.browsing.removeListener(_onBrowsing);
+    super.dispose();
+  }
+
+  /// Toggled from the notification rather than read during a build: showing an
+  /// overlay is a side effect, and a build is not allowed to have one.
+  void _onBrowsing() {
+    var hovering = session.browsing.hovering;
+    if (hovering?.id == _showing?.id) return;
+    setState(() => _showing = hovering);
+    if (hovering == null) {
+      _popover.hide();
+      return;
+    }
+    widget.thumbnails?.want(hovering);
+    _popover.show();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1424,12 +1476,22 @@ class _EntryList extends StatelessWidget {
                 depth: depth,
                 broken: session.compileErrorFor(entry),
                 selected: entry.id == session.selected?.id,
-                peeked: entry.id == session.peeking?.id,
                 highlight: browsing.filter.trim(),
                 onTap: session.phase == CatalogSessionPhase.ready
-                    ? () => session.switchTo(entry)
+                    ? () {
+                        // Before the switch, so the card is gone by the frame
+                        // the selection moves in.
+                        browsing.endHover();
+                        unawaited(session.switchTo(entry));
+                      }
                     : null,
-                onHover: session.hover,
+                // The popover carries the file and the symbol now, and two
+                // things arriving on one hover is one too many. The selected
+                // row shows no popover, so it keeps its tooltip.
+                describe:
+                    !browsing.previewOnHover ||
+                    entry.id == session.selected?.id,
+                onHover: browsing.hover,
               ),
             );
           case CatalogBranch(:var children):
@@ -1453,33 +1515,65 @@ class _EntryList extends StatelessWidget {
     walk(tree, 0);
 
     return MouseRegion(
+      // The harness is started when the hand arrives rather than when it
+      // settles: a cold catalog is a compile of every entry, and those seconds
+      // are the difference between a popover that is there and one you wait
+      // for.
+      onEnter: (_) => widget.thumbnails?.warmUp(session.selected),
       // A backstop for the rows' own exits: a pointer that leaves fast, or
       // over a row that scrolled out from under it, can leave the list without
-      // any row seeing it go — and a peek nobody ended is a canvas stuck on an
-      // entry you are no longer pointing at.
-      onExit: (_) => session.hover(null),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _FilterField(session: session, browsing: browsing, tree: tree),
-          const Divider(height: 1),
-          Expanded(
-            child: rows.isEmpty
-                ? EmptyState(
-                    icon: filtering
-                        ? Icons.search_off_outlined
-                        : Icons.widgets_outlined,
-                    title: filtering ? 'Nothing matches' : 'No entries',
-                    message: filtering
-                        ? 'No demo in this package has a name like that.'
-                        : 'A demo is a top-level function marked @Preview.',
-                  )
-                : ListView(
-                    padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
-                    children: rows,
-                  ),
-          ),
-        ],
+      // any row seeing it go — and a popover nobody closed hangs over the
+      // canvas until something else moves.
+      onExit: (_) => browsing.hover(null),
+      child: OverlayPortal(
+        controller: _popover,
+        // The root one: a 260-pixel column is exactly what this has to be able
+        // to leave.
+        overlayLocation: OverlayChildLocation.rootOverlay,
+        overlayChildBuilder: (context) {
+          var entry = _showing;
+          var at = browsing.hoveringAt;
+          var thumbnails = widget.thumbnails;
+          if (entry == null || at == null || thumbnails == null) {
+            return const SizedBox.shrink();
+          }
+          // Rebuilt when the store answers, which for a cold catalog is tens
+          // of seconds after the popover opened — the wait is the popover's to
+          // show, not a reason to withhold it.
+          return ListenableBuilder(
+            listenable: thumbnails,
+            builder: (context, _) => PreviewPopover(
+              entry: entry,
+              anchor: at,
+              thumbnail: thumbnails.of(entry),
+            ),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _FilterField(session: session, browsing: browsing, tree: tree),
+            const Divider(height: 1),
+            Expanded(
+              child: rows.isEmpty
+                  ? EmptyState(
+                      icon: filtering
+                          ? Icons.search_off_outlined
+                          : Icons.widgets_outlined,
+                      title: filtering ? 'Nothing matches' : 'No entries',
+                      message: filtering
+                          ? 'No demo in this package has a name like that.'
+                          : 'A demo is a top-level function marked @Preview.',
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: FwSpacing.xs,
+                      ),
+                      children: rows,
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1552,9 +1646,9 @@ class _LeafRow extends StatelessWidget {
     required this.depth,
     required this.broken,
     required this.selected,
-    required this.peeked,
     required this.highlight,
     required this.onTap,
+    required this.describe,
     required this.onHover,
   });
 
@@ -1568,67 +1662,68 @@ class _LeafRow extends StatelessWidget {
   final String? broken;
   final bool selected;
 
-  /// Whether the canvas is showing this entry because the pointer is here —
-  /// see [CatalogSession.peeking]. Marked, and marked *differently* from a
-  /// selection: what is on screen is this one, and what you would go back to
-  /// by moving the pointer away is still the other.
-  final bool peeked;
-
   final VoidCallback? onTap;
 
-  /// The pointer arriving on this row, and leaving it.
-  final void Function(CatalogEntry?) onHover;
+  /// Whether the row still says what it is in a tooltip. Off while the popover
+  /// is doing it, which it does better and sooner.
+  final bool describe;
+
+  /// The pointer arriving on this row — with where the row is, so a popover
+  /// can point at it — and leaving it.
+  final void Function(CatalogEntry?, {Rect? at}) onHover;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
     var color = broken != null ? colors.red : colors.ink;
     return MouseRegion(
-      onEnter: (_) => onHover(entry),
+      // Its own box, read here rather than tracked: this fires once when the
+      // pointer arrives, and a row that reported its rectangle on every build
+      // would be doing it forty times for a list nobody is pointing at.
+      //
+      // **Nothing for the row already selected.** Its picture is the canvas,
+      // full size, a few hundred pixels away — a second copy of it under the
+      // pointer says nothing and covers something. Reported as *leaving*
+      // rather than ignored, so arriving here from a neighbouring row closes
+      // that row's card instead of stranding it.
+      onEnter: (_) => onHover(selected ? null : entry, at: _boxOf(context)),
       onExit: (_) => onHover(null),
       child: Tooltip(
         // One line per entry leaves no room for the file, and the file is often
-        // what you remember it by.
-        message: '${entry.path} · ${entry.symbol}',
+        // what you remember it by. Empty is a tooltip that never shows.
+        message: describe ? '${entry.path} · ${entry.symbol}' : '',
         waitDuration: const Duration(milliseconds: 600),
         child: InkWell(
           onTap: onTap,
           // A line down the leading edge rather than a second fill: a peek is
           // transient, and a fill that came and went under the pointer would
           // be the list flickering as you read it. Outside the row's own
-          // `Container` rather than in its decoration, because a
-          // `DecoratedBox` paints the line *over* the padding instead of
-          // insetting the label — and because the fill below goes on being the
-          // one thing that means selected.
-          child: _PeekMark(
-            on: peeked && !selected,
-            child: Container(
-              color: selected ? colors.accentSoft : null,
-              padding: _rowPadding(depth),
-              child: SizedBox(
-                height: 26,
-                child: Row(
-                  children: [
-                    // The chevron column a branch occupies, so a leaf beside a
-                    // folder is indented to match rather than sitting under it.
-                    const SizedBox(width: 14 + FwSpacing.xs),
-                    Expanded(
-                      child: _Marked(
-                        text: entry.name,
-                        mark: highlight,
-                        style: context.type.bodySmall.copyWith(color: color),
-                      ),
+          child: Container(
+            color: selected ? colors.accentSoft : null,
+            padding: _rowPadding(depth),
+            child: SizedBox(
+              height: 26,
+              child: Row(
+                children: [
+                  // The chevron column a branch occupies, so a leaf beside a
+                  // folder is indented to match rather than sitting under it.
+                  const SizedBox(width: 14 + FwSpacing.xs),
+                  Expanded(
+                    child: _Marked(
+                      text: entry.name,
+                      mark: highlight,
+                      style: context.type.bodySmall.copyWith(color: color),
                     ),
-                    if (broken != null) ...[
-                      const Gap(FwSpacing.xs),
-                      Icon(
-                        Icons.error_outline,
-                        size: FwIconSize.sm,
-                        color: colors.red,
-                      ),
-                    ],
+                  ),
+                  if (broken != null) ...[
+                    const Gap(FwSpacing.xs),
+                    Icon(
+                      Icons.error_outline,
+                      size: FwIconSize.sm,
+                      color: colors.red,
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
           ),
@@ -1638,26 +1733,11 @@ class _LeafRow extends StatelessWidget {
   }
 }
 
-/// The leading line that says the canvas is showing this row's entry because
-/// the pointer is on it.
-class _PeekMark extends StatelessWidget {
-  const _PeekMark({required this.on, required this.child});
-
-  final bool on;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!on) return child;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(color: context.colors.accent, width: 2),
-        ),
-      ),
-      child: child,
-    );
-  }
+/// Where [context]'s render object is on screen, or null before it has one.
+Rect? _boxOf(BuildContext context) {
+  var box = context.findRenderObject();
+  if (box is! RenderBox || !box.hasSize) return null;
+  return box.localToGlobal(Offset.zero) & box.size;
 }
 
 /// [text], with every occurrence of [mark] struck through with a highlighter.
@@ -1878,9 +1958,6 @@ class _FilterFieldState extends State<_FilterField> {
                 : 'Preview on hover',
             onPressed: () {
               widget.browsing.previewOnHover = !widget.browsing.previewOnHover;
-              // Off with a peek up would otherwise leave the canvas on an
-              // entry nothing on the panel claims to be showing.
-              if (!widget.browsing.previewOnHover) widget.session.hover(null);
             },
           ),
           // One button for both directions: with nothing folded away the only
@@ -1969,66 +2046,6 @@ class _SwitchingOverlay extends StatelessWidget {
           child: ColoredBox(
             color: context.colors.bg.withValues(alpha: 0.82),
             child: LoadingState(title: entry.name, message: 'Compiling…'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Names the entry the canvas is showing only because the pointer is on its
-/// row.
-///
-/// The picture is the whole of what a peek changes, and a picture of a demo you
-/// did not choose looks exactly like one you did. Everything else on the panel
-/// — the knobs, the axes, the status bar, the address — still describes the
-/// committed entry, so this says which of the two you are looking at.
-///
-/// A corner rather than a wash, and no animation on the way in: it appears
-/// while the pointer is moving, and anything that faded or slid would be the
-/// second moving thing on a screen that already changed its whole picture.
-class _PeekLabel extends StatelessWidget {
-  const _PeekLabel({required this.entry, required this.child});
-
-  final CatalogEntry entry;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Stack(
-      fit: StackFit.passthrough,
-      children: [
-        child,
-        Positioned(
-          top: FwSpacing.md,
-          left: FwSpacing.md,
-          child: IgnorePointer(
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: FwSpacing.md,
-                vertical: FwSpacing.xxs,
-              ),
-              decoration: BoxDecoration(
-                color: colors.accentSoft,
-                borderRadius: BorderRadius.circular(context.radii.pill),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: FwSpacing.xs,
-                children: [
-                  Icon(
-                    Icons.visibility_outlined,
-                    size: FwIconSize.xs,
-                    color: colors.accent,
-                  ),
-                  Text(
-                    entry.name,
-                    style: context.type.micro.copyWith(color: colors.accent),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
       ],
@@ -2256,14 +2273,7 @@ Device? _deviceOf(BuildContext context, CatalogSession session) {
   // than a field: one package may hold a phone app and a desktop dashboard, and
   // moving between them has to move the canvas with them.
   if (param == null) return _canvasOf(session)?.defaultDevice;
-  var picked = resolveDevice(param);
-  // `fit` resolves to no device and is the address asking for the plain
-  // rectangle — an answer that applies to every entry, so there is nothing for
-  // a peek to override.
-  if (picked == null) return null;
-  return _pickHolds(session, picked)
-      ? picked
-      : _canvasOf(session)?.defaultDevice;
+  return resolveDevice(param);
 }
 
 /// What the entry on screen is declared to be framed as.
@@ -2272,37 +2282,8 @@ Device? _deviceOf(BuildContext context, CatalogSession session) {
 /// was asked for, and an entry that will not compile stays selected while the
 /// guest goes on showing whatever it last managed to load. Framing the *old*
 /// entry's picture as the new one would be a canvas that lags a compile.
-/// The canvas that frames what is on screen: the peeked entry while a peek is
-/// up, and the selection otherwise.
-///
-/// Not the selection unconditionally, which is what this was. A package may
-/// hold a phone app and a desktop dashboard, and a peek that framed one as the
-/// other showed a 900-wide panel inside an iPhone — which is not a preview of
-/// anything.
 PreviewCanvas? _canvasOf(CatalogSession session) =>
-    session.canvasOf(session.peeking ?? session.selected);
-
-/// Whether the device the address picked still means anything for what is on
-/// screen.
-///
-/// A pick is a property of the view: it survives a switch, and it survives a
-/// peek for the same reason. But [PreviewCanvas.devices] is the set an entry is
-/// *worth looking at on*, and a phone picked for a motion demo says nothing
-/// about the studio panel the pointer just moved to. Where the peeked entry's
-/// canvas does not offer the pick, that entry's own default wins.
-///
-/// Only during a peek. A pick made against a selection is the user's answer for
-/// that selection, however odd, and second-guessing it would make the picker
-/// unusable.
-bool _pickHolds(CatalogSession session, Device picked) {
-  if (session.peeking == null) return true;
-  var offered = _canvasOf(session)?.devices;
-  // Nothing declared is not a refusal — an entry with no canvas has no opinion
-  // about devices, so there is nothing for the pick to contradict.
-  return offered == null ||
-      offered.isEmpty ||
-      offered.any((device) => device.id == picked.id);
-}
+    session.canvasOf(session.selected);
 
 /// Which way up the picked device is, read from the same un-namespaced level as
 /// [_deviceOf] and for the same reason.
@@ -2323,12 +2304,7 @@ ScreenOrientation? _orientationOf(
   // A peek that fell back to the entry's own device falls back with it: the
   // declaration is one sentence, and half of it applied is a device on its
   // side for no reason.
-  var device = AddressScope.param(context, 'device');
-  if (device == null) return _canvasOf(session)?.defaultOrientation;
-  // `fit` is the plain rectangle, which has no orientation to be in.
-  var picked = resolveDevice(device);
-  if (picked == null) return null;
-  return _pickHolds(session, picked)
-      ? null
-      : _canvasOf(session)?.defaultOrientation;
+  return AddressScope.param(context, 'device') == null
+      ? _canvasOf(session)?.defaultOrientation
+      : null;
 }
