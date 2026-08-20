@@ -192,6 +192,15 @@ class PreviewsCore extends PluginCore {
   /// status here that takes seconds.
   Status? Function(String path)? busyStatusFor;
 
+  /// Called whenever a package has been scanned *again*.
+  ///
+  /// A hook for [busyStatusFor]'s reason, and the wall is the same one: the
+  /// only thing that cares is the panel's picture cache, which holds
+  /// `dart:ui` images and therefore cannot be named from here. What it means
+  /// is "the catalog moved" — every picture taken of the previous scan is of
+  /// code that may no longer be there.
+  void Function(String path)? onRescanned;
+
   /// Runs the `compare` action.
   ///
   /// A hook for the same reason as [busyStatusFor], though the wall is a
@@ -251,11 +260,16 @@ class PreviewsCore extends PluginCore {
 
   /// The warm tester for [packagePath], started on first use.
   ///
+  /// Public because the Flutter side builds its picture cache over the same
+  /// one — see `PreviewsPlugin.thumbnailsFor`. Two testers for one package
+  /// would be two `flutter_tester` processes and two cold compiles of the same
+  /// catalog.
+  ///
   /// [PreviewProgram.read] is a callback rather than a snapshot so that the
   /// harness is regenerated from whatever the scan says *now* — a preview
   /// written since the last audit is picked up by the next one, without the
   /// caller having to know a tester is being reused.
-  PreviewTestRunner _testRunnerFor(String packagePath) =>
+  PreviewTestRunner testRunnerFor(String packagePath) =>
       _testRunners.putIfAbsent(
         packagePath,
         () => PreviewTestRunner(
@@ -318,7 +332,13 @@ class PreviewsCore extends PluginCore {
           previewAnnotations: annotations,
         ).scan(),
       );
+      var previous = _scans[path];
       _scans[path] = result;
+      // Anything holding a picture of the previous scan is holding one of code
+      // that may have moved. An entry whose own file changed is caught by that
+      // side's stamp; one whose *neighbour* changed is not, and a rescan is
+      // exactly the moment we learn something did.
+      if (previous != null) onRescanned?.call(path);
       // A scan that worked supersedes one that did not. Without this the
       // failure outlives its cause for the life of the process: the sidebar
       // keeps the error badge after the demo is fixed, `track` keeps declining
@@ -1911,7 +1931,7 @@ class PreviewsCore extends PluginCore {
       List<PreviewAuditRow> audited;
       try {
         _setBusy(path, const Status.info('rendering the catalog…'));
-        audited = await _testRunnerFor(path).audit(
+        audited = await testRunnerFor(path).audit(
           entryIds: only,
           // Validated above; passed on by id, because the harness resolves it
           // against the device table the *project* pins rather than this one.

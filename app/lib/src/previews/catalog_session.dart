@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' show Rect;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -157,6 +158,89 @@ class CatalogBrowsing extends ChangeNotifier {
     if (value == _listVisible) return;
     _listVisible = value;
     notifyListeners();
+  }
+
+  /// Whether resting the pointer on a row shows that entry's picture.
+  ///
+  /// On by default and switchable from the list's own header, because whether
+  /// it reads as helpful or as the panel twitching under your hand is a matter
+  /// of taste and of how big a catalog is.
+  bool get previewOnHover => _previewOnHover;
+  var _previewOnHover = true;
+  set previewOnHover(bool value) {
+    if (value == _previewOnHover) return;
+    _previewOnHover = value;
+    if (!value) hover(null);
+    notifyListeners();
+  }
+
+  /// How long the pointer has to rest on a row before its picture is asked
+  /// for.
+  ///
+  /// Long enough that sweeping the list past forty rows asks for none of them,
+  /// short enough that stopping on one does not feel like waiting.
+  static const hoverDelay = Duration(milliseconds: 180);
+
+  /// And how long before the picture goes once the pointer has left. Shorter,
+  /// because moving between two rows crosses no gap — the next row's [hover]
+  /// cancels this before it fires — so it only ever runs when the pointer has
+  /// genuinely gone.
+  static const hoverLeaveDelay = Duration(milliseconds: 90);
+
+  /// The entry the pointer is resting on, or null.
+  ///
+  /// Debounced: [hover] is free to call on every enter and exit, and this only
+  /// moves where the pointer stopped.
+  CatalogEntry? get hovering => _hovering;
+  CatalogEntry? _hovering;
+
+  /// Where that row is on screen, so the popover can point at it.
+  Rect? get hoveringAt => _hoveringAt;
+  Rect? _hoveringAt;
+
+  Timer? _hoverDelay;
+  var _disposed = false;
+
+  /// The pointer is resting on [entry], whose row occupies [at] in global
+  /// coordinates, or has left the list.
+  void hover(CatalogEntry? entry, {Rect? at}) {
+    if (_disposed) return;
+    if (entry != null && !previewOnHover) return;
+    if (entry?.id == _wantedHover?.id) return;
+    _wantedHover = entry;
+    _wantedHoverAt = at;
+    _hoverDelay?.cancel();
+    _hoverDelay = Timer(entry == null ? hoverLeaveDelay : hoverDelay, () {
+      if (_disposed || _hovering?.id == _wantedHover?.id) return;
+      _hovering = _wantedHover;
+      _hoveringAt = _wantedHoverAt;
+      notifyListeners();
+    });
+  }
+
+  /// Ends what is showing at once, with no delay to wait out.
+  ///
+  /// What a click calls. A click is an answer, and a picture of the thing you
+  /// just chose, hanging beside the canvas that is about to show it, is one
+  /// picture too many — waiting out [hoverLeaveDelay] for it would be a card
+  /// that lingers over the click that dismissed it.
+  void endHover() {
+    _hoverDelay?.cancel();
+    _wantedHover = null;
+    _wantedHoverAt = null;
+    if (_hovering == null) return;
+    _hovering = null;
+    notifyListeners();
+  }
+
+  CatalogEntry? _wantedHover;
+  Rect? _wantedHoverAt;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _hoverDelay?.cancel();
+    super.dispose();
   }
 }
 

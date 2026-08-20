@@ -205,6 +205,10 @@ class PreviewTestRunner {
   final PreviewProgram _program;
   late final TesterHost _host;
 
+  /// The package these previews belong to — where an entry's `path` is
+  /// relative to.
+  String get packageRoot => _program.packageRoot;
+
   /// Rounds of drop-and-retry. Bounded for the reason the daemon's own loop is:
   /// each round quarantines at least one entry, and errors in one file
   /// routinely hide errors in the next.
@@ -260,13 +264,24 @@ class PreviewTestRunner {
   ///
   /// Frames land under `<outDir>/<index>/`, one directory per entry so the
   /// harness's own within-call numbering cannot collide across calls.
+  /// [sync] brings the harness up to date with what is on disk first, which
+  /// is a sweep of every source and the asset bundle — measured at 1.5–1.9s
+  /// even when nothing moved. Right for a comparison or an audit, which are
+  /// asked for once and must not answer about code the user has since edited;
+  /// wrong for a caller rendering one entry behind a pointer, which has its
+  /// own idea of when its answers went stale and cannot pay two seconds a
+  /// hover to ask.
   Future<void> capture({
     required List<String> entryIds,
     required String outDir,
     required Future<void> Function(PreviewCaptureRow row) onRow,
+    bool sync = true,
   }) => _host.exclusive(() async {
-    _program.quarantined.clear();
-    await _bringUp();
+    // Only when syncing. The quarantine is filled by the blame rounds inside
+    // [_bringUp], so clearing it without one would throw away what the last
+    // compile learned and put nothing in its place.
+    if (sync) _program.quarantined.clear();
+    await _bringUp(sync: sync);
 
     for (var (index, id) in entryIds.indexed) {
       if (_program.quarantined[id] case var error?) {
@@ -331,13 +346,13 @@ class PreviewTestRunner {
   ///
   /// Errors nobody declares an entry in — a shared helper, the app itself —
   /// cannot be fixed by dropping anything, so they stay fatal.
-  Future<void> _bringUp() async {
+  Future<void> _bringUp({bool sync = true}) async {
     for (var round = 0; round < _blameRounds; round++) {
       try {
         await _host.ensureGuest();
         // Warm: what is on disk may have moved since the last audit, and an
         // audit of code the user has already edited is worse than a slow one.
-        if (round == 0) await _host.sync();
+        if (round == 0 && sync) await _host.sync();
         return;
       } on TesterCompileException catch (e) {
         var blame = CompileBlame.of(
