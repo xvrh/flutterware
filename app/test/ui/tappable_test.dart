@@ -138,6 +138,42 @@ void main() {
       expect(washes(tester), isNot(contains(colors.hoverOverlay)));
     });
 
+    // The mode-pill regression: picking a pill disables it, the pointer left
+    // while it was deaf, and picking another pill re-enabled it still washed.
+    testWidgets('re-enabling after the pointer left does not resurrect hover', (
+      tester,
+    ) async {
+      var enabled = true;
+      late StateSetter outer;
+      await mount(
+        tester,
+        StatefulBuilder(
+          builder: (context, setState) {
+            outer = setState;
+            return Tappable(
+              onTap: enabled ? () {} : null,
+              child: const Text('Save'),
+            );
+          },
+        ),
+      );
+      var colors = appTheme.extension<FwTokens>()!.palette;
+
+      var gesture = await mouse(tester);
+      await gesture.moveTo(tester.getCenter(find.text('Save')));
+      await tester.pump();
+      expect(washes(tester), contains(colors.hoverOverlay));
+
+      outer(() => enabled = false);
+      await tester.pump();
+      await gesture.moveTo(Offset.zero);
+      await tester.pump();
+
+      outer(() => enabled = true);
+      await tester.pump();
+      expect(washes(tester), isNot(contains(colors.hoverOverlay)));
+    });
+
     testWidgets('the builder draws its own, so the primitive does not', (
       tester,
     ) async {

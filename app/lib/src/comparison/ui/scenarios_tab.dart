@@ -62,6 +62,9 @@ class ScenariosTab extends StatefulWidget {
 
 class _ScenariosTabState extends State<ScenariosTab> {
   late final _shots = ShotPair(widget.store);
+  // The default answers both first questions at once: side by side shows what
+  // each frame is, and its head half carries the diff's boxes for where to
+  // look.
   var _mode = StageMode.sideBySide;
 
   /// The merged tree's pan and zoom, owned here so that opening a step and

@@ -11,7 +11,9 @@ import '../../ui/empty_state.dart';
 /// The five ways of looking at two frames.
 ///
 /// **Five, because each answers a question the others cannot.** Side by side
-/// says what each one *is*; the slider says where a boundary falls; onion says
+/// says what each one *is* — with the changed regions outlined on the head, so
+/// the subtle change is pointed at rather than hunted; the slider says where a
+/// boundary falls; onion says
 /// how far something moved; blink is the only one that finds a two-pixel shift
 /// a human eye would otherwise walk past; pixels says where to look without
 /// needing an eye at all — and it is the one an agent reads.
@@ -30,6 +32,9 @@ enum StageMode {
 Key stageModeKey(StageMode mode) => ValueKey('stage.mode.${mode.name}');
 
 const stageKey = Key('comparison-stage');
+
+/// The cluster-box overlay, in whichever mode draws one.
+const clusterBoxesKey = Key('stage.clusters');
 
 /// Two frames in one place, five ways.
 class ComparisonStage extends StatefulWidget {
@@ -162,7 +167,9 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) => switch (mode) {
     // Pulled together rather than centred in their own halves: two portrait
     // frames on a wide pane end up a hand's width apart, and comparing them
-    // means looking away from one to see the other.
+    // means looking away from one to see the other. The head half carries the
+    // diff's boxes, so the default mode both shows the frames and says where
+    // to look.
     StageMode.sideBySide => Row(
       children: [
         Expanded(
@@ -177,7 +184,7 @@ class _Body extends StatelessWidget {
           child: _Framed(
             label: 'head',
             align: Alignment.centerLeft,
-            child: ShotView(head),
+            child: _BoxedShot(shot: head, diff: diff),
           ),
         ),
       ],
@@ -376,6 +383,7 @@ class _Clusters extends StatelessWidget {
                 ShotView(head),
                 if (diff case var diff?)
                   CustomPaint(
+                    key: clusterBoxesKey,
                     painter: _ClusterPainter(diff: diff, color: colors.amber),
                   ),
               ],
@@ -387,11 +395,54 @@ class _Clusters extends StatelessWidget {
   }
 }
 
+/// The head frame with the changed regions boxed on it, wherever it hangs.
+///
+/// The stack shrink-wraps to the [ShotView]'s own laid-out box, so the painter
+/// lands on the pixels however the frame settles inside its half. **Outlines
+/// only, no wash**: side by side is where the two frames' true colours are
+/// read against each other, and a tint over the changed regions falsifies
+/// exactly the pixels being judged.
+class _BoxedShot extends StatelessWidget {
+  const _BoxedShot({required this.shot, this.diff});
+
+  final Shot shot;
+  final PixelDiff? diff;
+
+  @override
+  Widget build(BuildContext context) {
+    if (diff case var diff?) {
+      return Stack(
+        children: [
+          ShotView(shot),
+          Positioned.fill(
+            child: CustomPaint(
+              key: clusterBoxesKey,
+              painter: _ClusterPainter(
+                diff: diff,
+                color: context.colors.amber,
+                wash: false,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return ShotView(shot);
+  }
+}
+
 class _ClusterPainter extends CustomPainter {
-  const _ClusterPainter({required this.diff, required this.color});
+  const _ClusterPainter({
+    required this.diff,
+    required this.color,
+    this.wash = true,
+  });
 
   final PixelDiff diff;
   final Color color;
+
+  /// Whether the boxes are filled as well as outlined.
+  final bool wash;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -412,15 +463,14 @@ class _ClusterPainter extends CustomPainter {
         rect.width * scaleX + 2,
         rect.height * scaleY + 2,
       );
-      canvas
-        ..drawRect(box, fill)
-        ..drawRect(box, stroke);
+      if (wash) canvas.drawRect(box, fill);
+      canvas.drawRect(box, stroke);
     }
   }
 
   @override
   bool shouldRepaint(_ClusterPainter old) =>
-      old.diff != diff || old.color != color;
+      old.diff != diff || old.color != color || old.wash != wash;
 }
 
 /// One frame, when only one side has one.
