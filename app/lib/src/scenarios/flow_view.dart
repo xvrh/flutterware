@@ -9,7 +9,7 @@ import '../ui/theme.dart';
 import '../ui/zoomable_canvas.dart';
 import '../utils/graphite.dart';
 import 'artifacts.dart';
-import 'attachment_view.dart';
+import 'beat_view.dart';
 import 'framed_shot.dart';
 import 'motion_player.dart';
 import 'step_status.dart';
@@ -28,7 +28,6 @@ class ScenarioFlowView extends StatefulWidget {
     required this.device,
     required this.transform,
     required this.onOpenStep,
-    this.onOpenAttachment,
     this.appLabel,
     this.appIcon,
     this.statusFallback = Brightness.dark,
@@ -51,7 +50,6 @@ class ScenarioFlowView extends StatefulWidget {
 
   /// A tap on an attachment card — the caller pushes its detail page. Null
   /// leaves the cards on the canvas but inert.
-  final void Function(ScenarioRunStep, int)? onOpenAttachment;
 
   /// What a notification banner calls the app when its payload does not say
   /// — the project's own name, when the caller knows it.
@@ -127,65 +125,29 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
         if (i + 1 < steps.length) children[step.index] = [steps[i + 1].index];
       }
     }
-    // Attachments join the canvas as beats of the story: what rode a capture
-    // sits before its step, over the screen it arrived on; what trailed the
-    // run sits after the last step. The graph gains a node per attachment and
-    // the edge into a step threads through them.
-    var byIndex = {for (var step in steps) step.index: step};
-    var nodes = <String, _FlowNode>{};
-    var next = <String, List<String>>{};
-    String attachmentId(ScenarioRunStep step, int i) => '${step.index}a$i';
-    var entries = <int, String>{};
-    var exits = <int, String>{};
-    for (var (position, step) in steps.indexed) {
-      var riding = <int>[];
-      var trailing = <int>[];
-      for (var (i, attachment) in step.attachments.indexed) {
-        (attachment.after ? trailing : riding).add(i);
-      }
-      // The screen a riding attachment arrived over is the previous one —
-      // the parent where the run recorded parents, the list's previous step
-      // where it did not.
-      var previous = hasParents
-          ? (step.parent == null ? null : byIndex[step.parent])
-          : (position > 0 ? steps[position - 1] : null);
-      nodes['${step.index}'] = _StepFlowNode(step);
-      for (var i in riding) {
-        nodes[attachmentId(step, i)] = _AttachmentFlowNode(
+    // One node per step, and the run's own edges between them. There is no
+    // splicing left to do: a beat that is not a screen is a step like any
+    // other, sitting in the chain where it happened, so the graph is the
+    // report's shape unaltered.
+    var nodes = {
+      for (var (position, step) in steps.indexed)
+        '${step.index}': _FlowNode(
           step,
-          i,
-          background: previous,
-          entry: i == riding.first,
-        );
-      }
-      for (var i in trailing) {
-        nodes[attachmentId(step, i)] = _AttachmentFlowNode(
-          step,
-          i,
-          background: step,
-          entry: false,
-        );
-      }
-      var chain = [
-        for (var i in riding) attachmentId(step, i),
-        '${step.index}',
-        for (var i in trailing) attachmentId(step, i),
-      ];
-      for (var k = 0; k + 1 < chain.length; k++) {
-        next.putIfAbsent(chain[k], () => []).add(chain[k + 1]);
-      }
-      entries[step.index] = chain.first;
-      exits[step.index] = chain.last;
-    }
-    // The run's own edges, threaded through the chains: they leave a step
-    // after its trailing cards and arrive at the next before its riding ones.
-    for (var step in steps) {
-      for (var child in children[step.index] ?? const <int>[]) {
-        next
-            .putIfAbsent(exits[step.index]!, () => [])
-            .add(entries[child] ?? '$child');
-      }
-    }
+          // The screen a frameless beat is drawn on: the parent where the run
+          // recorded parents, the list's previous step where it did not.
+          background: step.image != null
+              ? step
+              : hasParents
+              ? scenarioFrameFor(steps, step)
+              : _previousScreen(steps, position),
+        ),
+    };
+    var next = <String, List<String>>{
+      for (var step in steps)
+        '${step.index}': [
+          for (var child in children[step.index] ?? const <int>[]) '$child',
+        ],
+    };
     var inputs = [
       for (var id in nodes.keys) NodeInput(id: id, next: next[id] ?? const []),
     ];
@@ -212,25 +174,22 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
               child: child,
             ),
             builder: (context, node) => switch (nodes[node.id]!) {
-              _StepFlowNode(:var step) => _StepNode(
-                step,
-                device: widget.device,
-                statusFallback: widget.statusFallback,
-                onTap: () => widget.onOpenStep(step),
-              ),
-              _AttachmentFlowNode(:var step, :var index, :var background) =>
-                _AttachmentNode(
+              _FlowNode(:var step) when step.kind == ScenarioStepKind.screen =>
+                _StepNode(
                   step,
-                  index,
-                  background: background,
                   device: widget.device,
                   statusFallback: widget.statusFallback,
-                  appLabel: widget.appLabel,
-                  appIcon: widget.appIcon,
-                  onTap: widget.onOpenAttachment == null
-                      ? null
-                      : () => widget.onOpenAttachment!(step, index),
+                  onTap: () => widget.onOpenStep(step),
                 ),
+              _FlowNode(:var step, :var background) => _BeatNode(
+                step,
+                background: background,
+                device: widget.device,
+                statusFallback: widget.statusFallback,
+                appLabel: widget.appLabel,
+                appIcon: widget.appIcon,
+                onTap: () => widget.onOpenStep(step),
+              ),
             },
             paintBuilder: (edge) => Paint()
               ..color = context.colors.mut3
@@ -244,30 +203,12 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
             // many events the app fired getting there, so the flow reads as
             // `tap "Pay" › 4 events › Receipt` rather than as two pictures.
             edgeTooltip: (from, to) {
-              // An attachment card carries no transition of its own; the fork
-              // label still belongs to the edge that enters the branch, which
-              // with a riding attachment is the edge into its first card.
-              if (nodes[to] case _AttachmentFlowNode(
-                :var step,
-                entry: true,
-              ) when step.branch != null) {
-                return EdgeTooltip(
-                  step.branch,
-                  style: context.type.body.copyWith(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.accent,
-                  ),
-                  background: context.colors.bg.withValues(alpha: 0.85),
-                );
-              }
               var step = byId[to];
               if (step == null) return null;
-              // Said on the entry card's edge instead when one precedes the
-              // step — the fork label may not repeat down the chain.
-              var branch = step.attachments.any((a) => !a.after)
-                  ? null
-                  : step.branch;
+              // The fork label rides the edge that enters the branch, which is
+              // now simply the edge into the branch's first step — no card is
+              // spliced in front of it any more to take the label instead.
+              var branch = step.branch;
               var transition = scenarioStepTransition(step);
               // The quiet facts share one line under the transition: `7
               // events` needs no legend, and the milliseconds — only where
@@ -321,45 +262,32 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
   }
 }
 
-/// What one graph node is: a captured step, or an attachment drawn as a beat
-/// between two of them.
-sealed class _FlowNode {}
-
-class _StepFlowNode extends _FlowNode {
-  _StepFlowNode(this.step);
+/// One graph node: a step, and the screen it is drawn on.
+///
+/// The two are the same thing for a screen step. They differ only for a beat
+/// that has no frame of its own — a document, a notification — which is drawn
+/// on the nearest screen before it.
+class _FlowNode {
+  _FlowNode(this.step, {required this.background});
 
   final ScenarioRunStep step;
-}
-
-class _AttachmentFlowNode extends _FlowNode {
-  _AttachmentFlowNode(
-    this.step,
-    this.index, {
-    required this.background,
-    required this.entry,
-  });
-
-  /// The step whose record carries the attachment.
-  final ScenarioRunStep step;
-
-  /// Its position in [ScenarioRunStep.attachments].
-  final int index;
-
-  /// The step whose screen it arrived over — see
-  /// [ScenarioAttachmentShot.background].
   final ScenarioRunStep? background;
-
-  /// True for the first card before its step — the node a fork's branch
-  /// label now points at.
-  final bool entry;
 }
 
-/// An attachment on the canvas, in a step's silhouette: the label above, the
-/// thing below, tappable through to its detail page.
-class _AttachmentNode extends StatelessWidget {
-  const _AttachmentNode(
-    this.step,
-    this.index, {
+/// The nearest screen at or before [position] in list order — the answer for a
+/// run whose steps recorded no parents.
+ScenarioRunStep? _previousScreen(List<ScenarioRunStep> steps, int position) {
+  for (var i = position - 1; i >= 0; i--) {
+    if (steps[i].image != null) return steps[i];
+  }
+  return null;
+}
+
+/// A beat that is not a screen, on the canvas in a step's silhouette: the
+/// label above, the thing below, tappable through to its detail page.
+class _BeatNode extends StatelessWidget {
+  const _BeatNode(
+    this.step, {
     required this.background,
     required this.device,
     required this.statusFallback,
@@ -369,7 +297,6 @@ class _AttachmentNode extends StatelessWidget {
   });
 
   final ScenarioRunStep step;
-  final int index;
   final ScenarioRunStep? background;
   final Device? device;
   final Brightness statusFallback;
@@ -379,13 +306,15 @@ class _AttachmentNode extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var attachment = step.attachments[index];
     return Tappable(
       onTap: onTap ?? () {},
       child: Column(
         children: [
           Text(
-            attachment.name,
+            step.name ??
+                (step.kind == ScenarioStepKind.notification
+                    ? 'notification'
+                    : 'document'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             // The step label's size, in the accent that says "not a screen".
@@ -398,8 +327,8 @@ class _AttachmentNode extends StatelessWidget {
           Expanded(
             child: FittedBox(
               fit: BoxFit.contain,
-              child: ScenarioAttachmentShot(
-                attachment: attachment,
+              child: ScenarioBeatShot(
+                step: step,
                 background: background,
                 device: device,
                 statusFallback: statusFallback,

@@ -55,8 +55,11 @@ void main() {
       expect(counter['ok'], isTrue, reason: '${counter['errors']}');
 
       var steps = (counter['steps']! as List).cast<Map<String, dynamic>>();
-      // Two auto taps, one named shot, one auto enterText, one screen().
-      expect(steps, hasLength(5));
+      // `pumpWidget`, two taps — the second carrying a named shot — and an
+      // `enterText`. The `screen('Labelled')` that follows it is *not* a fifth:
+      // nothing was drawn between the two, so it names the enterText's picture
+      // rather than taking the same one again.
+      expect(steps, hasLength(4));
       expect([
         for (var s in steps) s['name'],
       ], containsAll(['Counted to two', 'Labelled']));
@@ -78,8 +81,11 @@ void main() {
       }
       var last = steps.last;
       expect((last['texts']! as List).cast<String>(), contains('a label'));
+      // The adopted name, on the step whose verb produced the frame.
+      expect(last['name'], 'Labelled');
+      expect(last['verb'], 'enterText');
 
-      expect(streamed, hasLength(5));
+      expect(streamed, hasLength(4));
       expect(streamed.first['scenario'], 'Counter');
       expect((streamed.first['step']! as Map)['index'], 1);
       runner.onStep = null;
@@ -87,62 +93,66 @@ void main() {
       // A run that did not ask records nothing — the CLI lane, and what keeps
       // it costing what it always cost.
       expect(steps.every((s) => s['frames'] == null), isTrue);
-      // And nothing attached anything, so nothing says it did.
-      expect(steps.every((s) => s['attachments'] == null), isTrue);
+      // Every step of this one is a screen, so none carries a payload.
+      expect(steps.every((s) => s['kind'] == null), isTrue);
+      expect(steps.every((s) => s['file'] == null), isTrue);
 
-      // What `s.attach` produced: a file beside the pixels, on the step that
-      // captured *after* the attach — an attachment describes the edge into a
-      // step, like the events do.
-      var attached = await runner.run(
+      // A flow whose beats are not all screens: what it produced is a step of
+      // the run, in the place it happened, with its own index and its own
+      // stem on disk.
+      var produced = await runner.run(
         outDir: outDir,
         file: 'test/scenarios/attachment_test.dart',
       );
-      var attachedSteps =
-          ((attached['scenarios']! as List).single
+      var producedSteps =
+          ((produced['scenarios']! as List).single
                   as Map<String, dynamic>)['steps']!
               as List;
-      var carrying = [
-        for (var step in attachedSteps.cast<Map<String, dynamic>>())
-          if (step['attachments'] != null) step,
-      ];
-      expect(carrying, hasLength(1), reason: 'only the step after the attach');
-      expect(carrying.single['name'], 'Exported');
-      var attachments = (carrying.single['attachments']! as List)
-          .cast<Map<String, dynamic>>();
-      expect(attachments, hasLength(3));
-      var attachment = attachments.first;
-      expect(attachment['name'], 'receipt');
-      expect(attachment['mimeType'], 'application/json');
-      var file = File(attachment['file']! as String);
+      var beats = producedSteps.cast<Map<String, dynamic>>();
+      expect(
+        [for (var step in beats) '${step['kind'] ?? 'screen'} ${step['name']}'],
+        [
+          'screen null',
+          'document request',
+          'screen Exported',
+          'document receipt',
+          'notification null',
+          'document summary',
+        ],
+      );
+
+      // A document: bytes with a name and a type, and no frame at all —
+      // there was no screen showing it, which is why it is not one.
+      var receipt = beats[3];
+      expect(receipt['mimeType'], 'application/json');
+      expect(receipt['image'], isNull);
+      expect(receipt['tree'], isNull);
+      var file = File(receipt['file']! as String);
       expect(file.existsSync(), isTrue);
-      // The declared file name, beside the step's own stem — so a directory
-      // reads as "the frame, and what the flow produced to reach it". The
-      // ordinal in front because this step carries more than one.
-      expect(p.basename(file.path), endsWith('.1-receipt.json'));
-      expect(attachment['bytes'], file.lengthSync());
+      // Its own stem, because it is its own step: the declared file name after
+      // the index and label, so a directory reads as the flow did.
+      expect(p.basename(file.path), '4-receipt.receipt.json');
+      expect(receipt['bytes'], file.lengthSync());
       expect(
         jsonDecode(file.readAsStringSync()),
         containsPair('currency', 'EUR'),
       );
-      // `s.notification` is an ordinary attachment whose mimeType marks it.
-      var notification = attachments[1];
-      expect(notification['name'], 'notification');
-      expect(notification['mimeType'], 'application/x-notification+json');
-      expect(
-        jsonDecode(File(notification['file']! as String).readAsStringSync()),
-        containsPair('title', 'Receipts'),
-      );
-      // Attached after the last capture: it lands on that step, marked as
-      // arriving after it, its file beside the others under the same stem.
-      var summary = attachments.last;
-      expect(summary['name'], 'summary');
-      expect(summary['after'], isTrue);
-      var summaryFile = File(summary['file']! as String);
-      expect(p.basename(summaryFile.path), endsWith('.after.summary.txt'));
-      expect(summaryFile.readAsStringSync(), contains('Total 12.50 EUR'));
-      // The riding two say nothing about `after` — absent, not false, so a
-      // normal attachment's record stays the size it was.
-      expect(attachment.containsKey('after'), isFalse);
+
+      // A notification is typed and inline: three short strings, on both ends
+      // of the wire, so there is no file to fetch and nothing to decode before
+      // a viewer can draw the banner.
+      var notification = beats[4]['notification']! as Map<String, dynamic>;
+      expect(notification['title'], 'Receipts');
+      expect(notification['body'], startsWith('Receipt #1042'));
+      expect(beats[4]['file'], isNull);
+
+      // The screen between them is still the tap's own picture wearing the
+      // name the `screen` after it gave up taking a second one for — a beat
+      // draws nothing, so it does not get in the way of that.
+      expect(beats[2]['verb'], 'tap');
+      // And the chain is linear across every beat: one child each, so a walk
+      // over the flow reaches all of them.
+      expect([for (var step in beats) step['parent']], [null, 1, 2, 3, 4, 5]);
 
       // Recording on: the sixth leg, a directory of numbered frames beside
       // the pixels. The panel's settings, so this is the real cost too.
@@ -241,16 +251,15 @@ void main() {
       expect(signInOutcome['ok'], isTrue, reason: '${signInOutcome['errors']}');
       var signInSteps = (signInOutcome['steps']! as List).cast<Map>();
       // Every step names the transition into it, which is what the flow's
-      // arrows and the Events tab's header both read.
+      // arrows and the Events tab's header both read. Three steps, not four:
+      // `screen('Signed in')` names the tap's picture rather than taking the
+      // same one again, so the strongest label and the transition that earned
+      // it sit on one step.
       expect(
         [for (var step in signInSteps) '${step['verb']} ${step['target']}'],
-        [
-          'pumpWidget _SignInApp',
-          'enterText TextField',
-          'tap "Sign in"',
-          'screen null',
-        ],
+        ['pumpWidget _SignInApp', 'enterText TextField', 'tap "Sign in"'],
       );
+      expect(signInSteps.last['name'], 'Signed in');
       // The tap is the interesting transition: the app logged, the fake
       // reported a request, a query and an analytics event, and the framework
       // talked to `flutter/textinput` on the way.
@@ -433,9 +442,14 @@ void main() {
 
       // A stalled walk: verbs that act and change nothing carry
       // `unchanged: true`, so seven identical captures cannot pass as seven
-      // pages — the consumer failure this flag exists for. The `screen` at
-      // the end is a deliberate second picture of the same frame and stays
-      // unflagged.
+      // pages — the consumer failure this flag exists for.
+      //
+      // `screen` used to be excluded, on the grounds that it was a deliberate
+      // second picture. It is not one any more: the first here names the
+      // second tap's own picture, so what the flag lands on is a *named*
+      // stalled step — which is the case it was previously blind to. The
+      // forced one is a genuine second picture of that same frame, and says
+      // so.
       var stalled = File(
         p.join(packageRoot, 'test', 'scenarios', 'stalled_test.dart'),
       );
@@ -450,8 +464,12 @@ void main() {
         expect(outcome['ok'], isTrue, reason: '${outcome['errors']}');
         var steps = (outcome['steps']! as List).cast<Map<String, dynamic>>();
         expect(
+          [for (var step in steps) step['name']],
+          [null, null, 'end', 'end again'],
+        );
+        expect(
           [for (var step in steps) step['unchanged']],
-          [null, true, true, null],
+          [null, true, true, true],
         );
       } finally {
         stalled.deleteSync();
@@ -1514,6 +1532,7 @@ void main() {
     await s.tap('Continue');
     await s.tap('Continue');
     await s.screen('end');
+    await s.screen('end again', force: true);
   });
 }
 

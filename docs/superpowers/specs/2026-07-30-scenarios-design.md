@@ -229,6 +229,69 @@ skipped otherwise.
   auto-shots fold into their predecessor as collapsible detail. This merges the
   ancestors' philosophies — dev_studio's curated graph, the port's
   post-mortem completeness — instead of choosing.
+- **`screen()` names the previous capture rather than duplicating it**
+  (2026-08-20, reversing the line below it as originally written). Under
+  `Shots.auto` a `screen` following a verb was a second, byte-identical picture
+  whose only contribution was the name. Measured by a consumer on a
+  125-scenario suite: **666 of 775 named steps (86%)** were duplicates, costing
+  **312 MB of the run's 863 MB (36%)** — most of it the motion frames of a
+  transition that did not happen.
+
+  Where no frame has been drawn since the previous capture, the name now lands
+  on that capture and no step is emitted. One step carries both the authored
+  name and the verb that produced the frame, which is also the strongest
+  signature `previews compare` has ever had on one node. A `screen` whose frame
+  *has* moved on — a `pump`, a completer, a decode landing — still captures,
+  which is the whole reason the verb exists.
+
+  The frame counter is what decides, and it is exact rather than approximate:
+  the binding draws no frame for a pump with nothing scheduled. It is counted
+  from the previous *capture* rather than the previous step (a `Shot.skip` verb
+  between them draws like any other) and read after the screen's own settle
+  (which is where work the verb before it left in flight actually lands).
+  Refusals: a name never overwrites a name, a branch's first capture never
+  renames the step before the fork, a failure's picture is never renamed, and
+  `screen('X', force: true)` declines outright.
+
+  Two consequences. A capture is handed over **one step late**, because the
+  name has to land before any artifact is written — every file stem is built
+  from the step's label. And an adopted `screen`'s events move onto the step it
+  names rather than rolling forward to a later one.
+
+- **Not every beat is a screen** (2026-08-20). `s.attach` is replaced by
+  `await s.document(name, bytes, …)` and `await s.notification(body, …)`, and
+  both are **steps** — positioned, parented, carrying the events that led to
+  them — rather than files bolted onto somebody else's step.
+
+  The old model attached a file to a step and then needed a boolean, `after`,
+  to say whether the screen it belonged to was that step or its parent. That
+  boolean was provably redundant: a riding attachment on step N occupied the
+  same canvas position, over the same backdrop, as a trailing one on step N−1.
+  It existed only because `attach` was synchronous and so could not anchor at
+  its own moment. And it served exactly one mimeType — the document sheet
+  never read the backdrop at all, only the notification banner did.
+
+  So: a document is a step whose picture is the document, with no frame,
+  because there was no screen showing it. A notification is a step whose
+  picture is the push, also with no frame — a viewer draws it over the nearest
+  screen before it, which is what a real banner does. `ScenarioRunStep.kind`
+  says which; `image`, `format`, `width`, `height` and `tree` are null on
+  anything that is not a screen, and a reader written before there were other
+  kinds reads a screen correctly by ignoring the key.
+
+  Neither renders, so neither costs a capture, and neither draws — which is
+  why a `screen` after a beat still names the frame before it. The one trap:
+  an adopted `screen` must record the chain's **head** as what the next step
+  parents to, not the step its name landed on. Recording the latter gives one
+  node two children with no branch between them, and the comparison aligner's
+  chain walk (`_chainFrom`) follows only one of them — silently dropping the
+  other from every diff.
+
+  Gone with it: `after`, the riding/trailing split in the flow canvas, the
+  attachment level of the plugin's address (`…/<n>/<i>`), the trailing-flush
+  listener, and `scenarioAttachmentBackground`. Gained: a document has a name,
+  so `previews compare` aligns it at the top trust tier — where attachments
+  were invisible to a diff entirely.
 - On failure, the dev_studio post-mortem pair: the frame before the error, then
   the rendered error, then the stack. This is the artifact an agent reads.
 

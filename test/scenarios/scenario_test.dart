@@ -78,12 +78,13 @@ void main() {
     expect(captures.every((c) => c.settled), isTrue);
   });
 
-  scenario("a per-call policy overrides the scenario's", (s) async {
-    await s.pumpWidget(const _StillApp(), settle: Settle.none);
-    await s.tap('Add', settle: const Settle.frames(1));
-
-    expect(captures, hasLength(2));
-  }, settle: Settle.full);
+  group("a per-call policy overrides the scenario's", () {
+    scenario('on the verb that names one', (s) async {
+      await s.pumpWidget(const _StillApp(), settle: Settle.none);
+      await s.tap('Add', settle: const Settle.frames(1));
+    }, settle: Settle.full);
+    tearDown(() => expect(captures, hasLength(2)));
+  });
 
   // `skip`, `tags` and `timeout` are `testWidgets`'s own, passed straight
   // through — the last dent in the superset. The flutterware runner honours

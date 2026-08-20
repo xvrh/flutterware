@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/previews_guest.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
-import 'package:url_launcher/url_launcher.dart';
 
 import '../address/address_scope.dart';
 import '../previews/devices.dart';
@@ -208,7 +207,9 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
     // Fetched together: three round trips one after another is three times the
     // latency on a page served from anywhere but localhost.
     var (tree, semantics, events) = await (
-      artifacts.readString(step.tree),
+      step.tree == null
+          ? Future<String?>.value()
+          : artifacts.readString(step.tree!),
       step.semantics == null
           ? Future<String?>.value()
           : artifacts.readString(step.semantics!),
@@ -289,12 +290,14 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   /// button's quiet refusal.
   Future<Uint8List?> _capturePng() async {
     var step = widget.step;
-    var bytes = await ScenarioArtifactsScope.of(context).readBytes(step.image);
+    var image = step.image;
+    if (image == null) return null;
+    var bytes = await ScenarioArtifactsScope.of(context).readBytes(image);
     if (bytes == null || step.format != 'raw') return bytes;
     return img.encodePng(
       img.Image.fromBytes(
-        width: step.width,
-        height: step.height,
+        width: step.width!,
+        height: step.height!,
         bytes: bytes.buffer,
         bytesOffset: bytes.offsetInBytes,
         numChannels: 4,
@@ -306,7 +309,7 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   /// Named after the files the run wrote — `<run dir>-<index>-<label>` — so a
   /// directory of saves reads like the run that produced them.
   String _suggestedName() {
-    var path = widget.step.image;
+    var path = widget.step.image ?? '';
     return '${p.basename(p.dirname(path))}-'
         '${p.basenameWithoutExtension(path)}.png';
   }
@@ -516,17 +519,6 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
                 label: 'Texts',
                 body: (context) => _TextsTab(step: widget.step),
               ),
-              // Only where there is one. Almost no step attaches anything, and
-              // a permanently empty tab is a tab a reader learns to skip —
-              // which is the wrong lesson for the one step that has the
-              // document the flow existed to produce.
-              if (widget.step.attachments.isNotEmpty)
-                InspectDockTab(
-                  id: 'attachments',
-                  label: 'Files',
-                  badge: widget.step.attachments.length,
-                  body: (context) => _AttachmentsTab(step: widget.step),
-                ),
             ],
           ),
         ],
@@ -866,75 +858,6 @@ class _TextsTab extends StatelessWidget {
       ),
     );
   }
-}
-
-/// What the flow produced on the way to this step, and a way to open it.
-///
-/// Deliberately a list and not a viewer: a PDF, a JSON payload and an email
-/// body want three different renderers, and handing the file to whatever the
-/// machine already opens it with beats a bad one of each. A viewer earns its
-/// place later, per type; the file being reachable at all is the feature.
-class _AttachmentsTab extends StatelessWidget {
-  const _AttachmentsTab({required this.step});
-
-  final ScenarioRunStep step;
-
-  @override
-  Widget build(BuildContext context) {
-    var artifacts = ScenarioArtifactsScope.of(context);
-    return Container(
-      color: context.colors.panel,
-      width: double.infinity,
-      child: ListView(
-        primary: false,
-        padding: const EdgeInsets.all(FwSpacing.lg),
-        children: [
-          Text('PRODUCED ON THE WAY HERE', style: context.type.sectionLabel),
-          const Gap(FwSpacing.md),
-          for (var attachment in step.attachments)
-            Padding(
-              padding: const EdgeInsets.only(bottom: FwSpacing.sm),
-              child: Tappable(
-                onTap: () =>
-                    unawaited(launchUrl(artifacts.uriOf(attachment.file))),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(attachment.name, style: context.type.bodySmall),
-                          Text(
-                            [
-                              p.basename(attachment.file),
-                              ?attachment.mimeType,
-                              _size(attachment.bytes),
-                            ].join(' · '),
-                            style: context.type.bodyMuted,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.open_in_new,
-                      size: FwIconSize.sm,
-                      color: context.colors.mut,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  static String _size(int bytes) => bytes < 1024
-      ? '$bytes B'
-      : bytes < 1024 * 1024
-      ? '${(bytes / 1024).toStringAsFixed(1)} kB'
-      : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
 
 class _StepLink extends StatelessWidget {

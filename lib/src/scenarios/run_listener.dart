@@ -2,56 +2,11 @@ import 'dart:typed_data';
 
 import 'events.dart';
 import 'motion.dart';
+import 'notification.dart';
 
-/// Something the flow produced that is not a widget — a PDF, a payload, an
-/// email body — carried on the step the way the screenshot is.
-///
-/// A screenshot answers "what did this look like"; some flows exist to
-/// produce a *document*, and rendering the button that generates one and then
-/// having nothing to show is a scenario that stops one step short of its own
-/// point.
-///
-/// One shape rather than one per format: what the panel can render it decides
-/// from [mimeType], and everything else is a file you can open.
-class ScenarioAttachment {
-  ScenarioAttachment({
-    required this.name,
-    required this.bytes,
-    this.fileName,
-    this.mimeType,
-  });
-
-  /// What it is called on the step — `'report'`, `'welcome email'`.
-  final String name;
-
-  final Uint8List bytes;
-
-  /// What to call the file on disk, extension included. Defaults to [name]
-  /// made file-safe, which leaves a viewer nothing to go on — so a project
-  /// that knows the extension should say it.
-  final String? fileName;
-
-  /// `application/pdf`, `application/json`, `text/html`. What a viewer
-  /// switches on; a missing one means "offer it as a download".
-  final String? mimeType;
-}
-
-/// What to call attachment [index] of [all] on disk.
-///
-/// The declared file name where there is one — an extension is what tells a
-/// viewer whether it can show the thing — and the ordinal in front only when
-/// a step carries more than one, so the common case reads as `report.pdf`
-/// rather than `1-report.pdf`. Derived rather than checked against the
-/// filesystem, so two runs of the same scenario name their files identically
-/// and a comparison can line them up.
-String scenarioAttachmentFileName(List<ScenarioAttachment> all, int index) {
-  var attachment = all[index];
-  var name = (attachment.fileName ?? attachment.name).replaceAll(
-    RegExp(r'[^A-Za-z0-9._-]+'),
-    '_',
-  );
-  return all.length > 1 ? '${index + 1}-$name' : name;
-}
+/// What a step is a picture *of* — the tester's half of
+/// `ScenarioStepKind`, so the capture and the report cannot drift apart.
+enum ScenarioCaptureKind { screen, document, notification }
 
 /// One captured step, handed from [ScenarioTester]'s capture to whoever is
 /// listening — the harness, when a scenario runs under the flutterware
@@ -64,13 +19,18 @@ class ScenarioStepCapture {
     required this.branch,
     required this.name,
     required this.tags,
-    required this.bytes,
-    required this.format,
-    required this.width,
-    required this.height,
-    required this.texts,
-    required this.statusBrightness,
-    required this.navBrightness,
+    this.kind = ScenarioCaptureKind.screen,
+    this.bytes,
+    this.format,
+    this.width,
+    this.height,
+    this.texts = const [],
+    this.statusBrightness,
+    this.navBrightness,
+    this.payload,
+    this.fileName,
+    this.mimeType,
+    this.notification,
     this.verb,
     this.target,
     this.events = const [],
@@ -81,7 +41,6 @@ class ScenarioStepCapture {
     this.landed = true,
     this.strayFrames = 0,
     this.failure,
-    this.attachments = const [],
   });
 
   /// 1-based position in the scenario's capture sequence.
@@ -113,14 +72,37 @@ class ScenarioStepCapture {
 
   final List<String> tags;
 
+  /// What this step is a picture of. A document and a notification carry no
+  /// [bytes] and no [texts]: neither has a frame, which is why neither pays
+  /// for a render.
+  final ScenarioCaptureKind kind;
+
   /// The image, in [format]: `png`, or `raw` — bare rgba8888 rows,
   /// [width]×[height]×4 bytes. Raw exists because PNG *encoding* is ~80% of
   /// a capture's cost; a host that can display raw pixels asks for them.
-  final Uint8List bytes;
+  ///
+  /// Null on a step that is not a screen.
+  final Uint8List? bytes;
 
-  final String format;
-  final int width;
-  final int height;
+  final String? format;
+  final int? width;
+  final int? height;
+
+  /// A [ScenarioCaptureKind.document]'s bytes — the PDF, the email body, the
+  /// payload the flow produced.
+  final Uint8List? payload;
+
+  /// What to call [payload] on disk, extension included. Defaults to the
+  /// step's name made file-safe, which leaves a viewer nothing to go on — so
+  /// a project that knows the extension should say it.
+  final String? fileName;
+
+  /// What [payload] is — `application/pdf`, `text/plain`. What a viewer
+  /// switches on; a missing one means "offer it as a download".
+  final String? mimeType;
+
+  /// The push a [ScenarioCaptureKind.notification] step is.
+  final ScenarioNotification? notification;
 
   /// The visible `Text` widgets, in tree order — the text projection.
   final List<String> texts;
@@ -187,13 +169,6 @@ class ScenarioStepCapture {
   /// Set on the one step a scenario captures when it breaks: the error, with
   /// its split branch. The frame is the state at the failure.
   final String? failure;
-
-  /// What `s.attach` handed over since the previous capture.
-  ///
-  /// The same lifetime as [events] and [motion], and for the same reason: an
-  /// attachment describes the edge into this step — the document the flow
-  /// produced on the way here — rather than the frame itself.
-  final List<ScenarioAttachment> attachments;
 }
 
 /// Set by the flutterware harness for the duration of one scenario run; null
@@ -204,16 +179,6 @@ class ScenarioStepCapture {
 /// it is the seam between the authoring API and the runner, not part of the
 /// authoring API.
 void Function(ScenarioStepCapture capture)? scenarioRunListener;
-
-/// Set beside [scenarioRunListener]: receives what `s.attach` handed over
-/// *after* the scenario's last capture — the receipt a flow fetches once its
-/// final screen is up. They belong to the step that capture produced, marked
-/// as arriving after it, so the story is allowed to end with the document.
-///
-/// The same seam status as the listener above: the runner's, not the
-/// authoring API's.
-void Function(List<ScenarioAttachment> attachments)?
-scenarioTrailingAttachmentsListener;
 
 /// One exception the running scenario saw, kept whole.
 ///

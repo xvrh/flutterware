@@ -26,6 +26,7 @@ import '../plugins/plugin_result.dart';
 // that lets the rest of it compile for the web. The exported scenario page
 // renders these very classes in a browser, where there is no `dart:io` to
 // import — see `2026-08-11-scenario-web-export-design.md`.
+import 'notification.dart';
 import 'report_events_web.dart' if (dart.library.io) 'report_events_io.dart';
 
 /// The format `run.json` (and the matrix's `index.json`) is written in.
@@ -110,11 +111,12 @@ class ScenarioRunResult
     for (var package in packages)
       for (var scenario in package.scenarios)
         if (!scenario.ok && scenario.steps.isNotEmpty)
-          if (scenario.steps.last case var step when step.format == 'png')
+          if (scenario.steps.last case var step
+              when step.format == 'png' && step.image != null)
             Artifact(
               kind: Artifact.png,
               address: Address.parse(step.address),
-              path: step.image,
+              path: step.image!,
               meta: {
                 'scenario': scenario.name,
                 'file': scenario.file,
@@ -365,8 +367,30 @@ class ScenarioRunOutcome {
   };
 }
 
-/// One captured step: the picture, its three sibling legs on disk, and what
-/// the app did on the way to it.
+/// What a step is a picture *of*.
+///
+/// A flow produces beats, and most of them are screens — but not all. A run
+/// that exports a receipt has a moment where the receipt is the thing on
+/// stage, and a run whose backend pushes a notification has a moment that is
+/// the push. Those are steps like any other: named, positioned, parented,
+/// carrying the events that led to them. What differs is what a viewer draws.
+enum ScenarioStepKind {
+  /// A rendered frame of the app — every automatic capture, and `screen()`.
+  screen,
+
+  /// Something the flow produced that is not a screen: a PDF, an email body,
+  /// a payload. Bytes with a name and a type, drawn as itself. It has no
+  /// frame, because there was no screen showing it.
+  document,
+
+  /// A push the flow's backend would have sent. No frame of its own either —
+  /// a viewer draws it the way the recipient's phone would, as a banner over
+  /// the nearest screen before it.
+  notification,
+}
+
+/// One captured step: what it is a picture of, its sibling legs on disk, and
+/// what the app did on the way to it.
 class ScenarioRunStep {
   factory ScenarioRunStep.fromJson(Map<String, Object?> json) =>
       ScenarioRunStep(
@@ -377,11 +401,30 @@ class ScenarioRunStep {
         name: json['name'] as String?,
         auto: json['auto'] == true,
         tags: _stringList(json['tags']),
-        image: json['image'] as String? ?? '',
-        format: json['format'] as String? ?? 'png',
-        width: _int(json['width'], 0),
-        height: _int(json['height'], 0),
-        tree: json['tree'] as String? ?? '',
+        // Absent means `screen`, which is what every report written before
+        // there was anything else to be holds — and what almost every step of
+        // every report since holds too.
+        kind: switch (json['kind']) {
+          'document' => ScenarioStepKind.document,
+          'notification' => ScenarioStepKind.notification,
+          _ => ScenarioStepKind.screen,
+        },
+        image: json['image'] as String?,
+        format: json['format'] as String?,
+        width: json['width'] as int?,
+        height: json['height'] as int?,
+        tree: json['tree'] as String?,
+        file: json['file'] as String?,
+        mimeType: json['mimeType'] as String?,
+        bytes: json['bytes'] as int?,
+        notification: switch (json['notification']) {
+          Map notification => ScenarioNotification(
+            body: '${notification['body'] ?? ''}',
+            title: notification['title'] as String?,
+            appName: notification['appName'] as String?,
+          ),
+          _ => null,
+        },
         keys: json['keys'] as String?,
         semantics: json['semantics'] as String?,
         texts: _stringList(json['texts']),
@@ -415,23 +458,24 @@ class ScenarioRunStep {
         strayFrames: _int(json['strayFrames'], 0),
         unchanged: json['unchanged'] == true,
         failure: json['failure'] as String?,
-        attachments: _listOf(
-          json['attachments'],
-          ScenarioRunAttachment.fromJson,
-        ),
       );
 
   ScenarioRunStep({
     required this.index,
     required this.position,
     required this.auto,
-    required this.image,
-    required this.format,
-    required this.width,
-    required this.height,
-    required this.tree,
+    this.kind = ScenarioStepKind.screen,
+    this.image,
+    this.format,
+    this.width,
+    this.height,
+    this.tree,
+    this.file,
+    this.mimeType,
+    this.bytes,
+    this.notification,
     this.keys,
-    required this.texts,
+    this.texts = const [],
     this.address = '',
     this.root = '',
     this.semantics,
@@ -459,7 +503,6 @@ class ScenarioRunStep {
     this.strayFrames = 0,
     this.unchanged = false,
     this.failure,
-    this.attachments = const [],
   });
 
   /// 1-based position in the scenario's capture sequence.
@@ -487,23 +530,52 @@ class ScenarioRunStep {
 
   final List<String> tags;
 
+  /// What this step is a picture of. See [ScenarioStepKind].
+  final ScenarioStepKind kind;
+
   /// The captured image, in [format], **relative to the worktree root** — the
   /// same convention the catalog's artifacts follow, so the value survives
   /// being read on another machine and an agent whose tools are scoped to the
   /// repo can open it.
-  final String image;
+  ///
+  /// Null on a step that is not a screen. A [ScenarioStepKind.document] has no
+  /// frame at all; a [ScenarioStepKind.notification] is drawn over the nearest
+  /// screen before it rather than over one of its own, so neither stores
+  /// pixels and neither invents any.
+  final String? image;
 
   /// `png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes. Raw is
   /// the fast capture (~5× at 1×, ~25× at device resolution) for hosts that
   /// can display pixels directly; `png` is the portable default the `run`
-  /// action serves.
-  final String format;
+  /// action serves. Null wherever [image] is.
+  final String? format;
 
-  final int width;
-  final int height;
+  final int? width;
+  final int? height;
 
   /// The widget-tree JSON captured at the same moment, relative like [image].
-  final String tree;
+  /// Null wherever [image] is — there was no tree to read.
+  final String? tree;
+
+  /// The payload of a [ScenarioStepKind.document], **relative to the worktree
+  /// root** like [image] — a path rather than the bytes, for the reason the
+  /// tree and the events beside it are: a run's report stays readable, and
+  /// what a reader wants to do with a document is open it.
+  final String? file;
+
+  /// What the document is, when the scenario said — `application/pdf`. A
+  /// viewer switches on this; absent means "offer it as a download".
+  final String? mimeType;
+
+  /// How big [file] is, so a reader knows before opening it.
+  final int? bytes;
+
+  /// The push a [ScenarioStepKind.notification] step is.
+  ///
+  /// Inline rather than a file: it is three short strings, and it is typed on
+  /// both ends of the wire — a viewer supplies what it leaves out (the app's
+  /// own icon, the banner's "now", the brightness the run was in).
+  final ScenarioNotification? notification;
 
   /// The translation keys on this screen, and the words that belonged to no
   /// catalog — relative like [image]. Null when no catalog was wired up,
@@ -655,19 +727,15 @@ class ScenarioRunStep {
   /// the verb acted and nothing on screen changed. A fact, not a verdict — a
   /// capture parked mid-flight with `Settle.none` is legitimately unchanged —
   /// but a run of these in a walking scenario is a stalled flow passing
-  /// quietly, which is what the flag exists to make visible. Never set on a
-  /// `screen` (a deliberate second picture of the same frame) or on the step
-  /// a scenario failed at.
+  /// quietly, which is what the flag exists to make visible. Never set on the
+  /// step a scenario failed at, nor on one that is not a screen — a document
+  /// has no tree to be identical to anything.
   final bool unchanged;
 
   /// The error, when this is the step a scenario broke on. The frame is the
   /// state at the failure, and the message carries the `split` branch that
   /// reached it.
   final String? failure;
-
-  /// What the flow produced on the way to this step that is not a widget —
-  /// what `s.attach` handed over. Empty on almost every step.
-  final List<ScenarioRunAttachment> attachments;
 
   /// This step, published: its artifact paths rewritten through [path], its
   /// [address] assigned, its [root] recorded.
@@ -688,11 +756,25 @@ class ScenarioRunStep {
     name: name,
     auto: auto,
     tags: tags,
-    image: path(image),
+    kind: kind,
+    image: switch (image) {
+      var image? => path(image),
+      null => null,
+    },
     format: format,
     width: width,
     height: height,
-    tree: path(tree),
+    tree: switch (tree) {
+      var tree? => path(tree),
+      null => null,
+    },
+    file: switch (file) {
+      var file? => path(file),
+      null => null,
+    },
+    mimeType: mimeType,
+    bytes: bytes,
+    notification: notification,
     keys: switch (keys) {
       var keys? => path(keys),
       null => null,
@@ -730,16 +812,6 @@ class ScenarioRunStep {
     strayFrames: strayFrames,
     unchanged: unchanged,
     failure: failure,
-    attachments: [
-      for (var attachment in attachments)
-        ScenarioRunAttachment(
-          name: attachment.name,
-          file: path(attachment.file),
-          mimeType: attachment.mimeType,
-          bytes: attachment.bytes,
-          after: attachment.after,
-        ),
-    ],
   );
 
   Map<String, Object?> toJson() => {
@@ -750,11 +822,24 @@ class ScenarioRunStep {
     if (name != null) 'name': name,
     'auto': auto,
     if (tags.isNotEmpty) 'tags': tags,
-    'image': image,
-    'format': format,
-    'width': width,
-    'height': height,
-    'tree': tree,
+    // Omitted for a screen, so the overwhelmingly common step's record stays
+    // the size it has always been — and so a reader written before there was
+    // anything but screens reads one correctly by ignoring the key.
+    if (kind != ScenarioStepKind.screen) 'kind': kind.name,
+    if (image != null) 'image': image,
+    if (format != null) 'format': format,
+    if (width != null) 'width': width,
+    if (height != null) 'height': height,
+    if (tree != null) 'tree': tree,
+    if (file != null) 'file': file,
+    if (mimeType != null) 'mimeType': mimeType,
+    if (bytes != null) 'bytes': bytes,
+    if (notification case var notification?)
+      'notification': {
+        'body': notification.body,
+        if (notification.title != null) 'title': notification.title,
+        if (notification.appName != null) 'appName': notification.appName,
+      },
     if (keys != null) 'keys': keys,
     if (semantics != null) 'semantics': semantics,
     'texts': texts,
@@ -782,58 +867,6 @@ class ScenarioRunStep {
     if (strayFrames > 0) 'strayFrames': strayFrames,
     if (unchanged) 'unchanged': unchanged,
     if (failure != null) 'failure': failure,
-    if (attachments.isNotEmpty) 'attachments': attachments,
-  };
-}
-
-/// A file a step carries beside its screenshot — a PDF, a payload, an email
-/// body.
-///
-/// A path rather than the bytes, like the tree and the events beside it: a
-/// run's report stays readable, and the thing a reader wants to do with a
-/// document is open it.
-class ScenarioRunAttachment {
-  factory ScenarioRunAttachment.fromJson(Map<String, Object?> json) =>
-      ScenarioRunAttachment(
-        name: json['name'] as String? ?? '',
-        file: json['file'] as String? ?? '',
-        mimeType: json['mimeType'] as String?,
-        bytes: _int(json['bytes'], 0),
-        after: json['after'] == true,
-      );
-
-  ScenarioRunAttachment({
-    required this.name,
-    required this.file,
-    required this.bytes,
-    this.mimeType,
-    this.after = false,
-  });
-
-  /// What the scenario called it — `'report'`.
-  final String name;
-
-  /// The file, **relative to the worktree root**, like the step's own image.
-  final String file;
-
-  /// What it is, when the scenario said — `application/pdf`. A viewer
-  /// switches on this; absent means "offer it as a download".
-  final String? mimeType;
-
-  /// How big it is, so a reader knows before opening it.
-  final int bytes;
-
-  /// True when it arrived *after* the step's capture — the scenario ended
-  /// with it, and a viewer places it after the step rather than on the way
-  /// in.
-  final bool after;
-
-  Map<String, Object?> toJson() => {
-    'name': name,
-    'file': file,
-    if (mimeType != null) 'mimeType': mimeType,
-    'bytes': bytes,
-    if (after) 'after': after,
   };
 }
 

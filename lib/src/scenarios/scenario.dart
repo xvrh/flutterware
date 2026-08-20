@@ -253,7 +253,7 @@ Future<void> _runScenario(
       );
       try {
         await body(s);
-        s._flushTrailingAttachments();
+        s._flushPending();
       } catch (error, stack) {
         var inContext = s._inContext(error);
         // The binding reports this rethrow only after the body — after the
@@ -794,115 +794,188 @@ class ScenarioTester {
   Future<void> settle([Settle? policy]) =>
       _step(Shot.skip, policy, () async {}, verb: 'settle');
 
-  /// Captures a named screen without performing an action.
+  /// Names the screen as it stands, without performing an action.
+  ///
+  /// Where nothing has moved since the last verb captured — the ordinary
+  /// `tap` then `screen` pair — this **names that capture** rather than
+  /// photographing the same frame a second time:
+  ///
+  /// ```dart
+  /// await s.tap(Keys.search);
+  /// await s.screen('Cases');   // one step, named 'Cases', verb `tap`
+  /// ```
+  ///
+  /// So a name costs nothing, and an author never has to weigh writing one
+  /// against the picture it would duplicate. Where something *has* moved —
+  /// a `pump`, a completer, a rebuild from outside the tree — there is a new
+  /// frame to photograph and this captures it, which is the whole reason the
+  /// verb exists:
+  ///
+  /// ```dart
+  /// await s.tap(Keys.takePicture, pumpFrames: false);
+  /// await s.screen('Capturing');        // names the tap's frame
+  /// await s.wait(const Duration(seconds: 5));
+  /// await s.screen('Captured');         // a new frame: its own step
+  /// ```
+  ///
+  /// A name never overwrites a name: two `screen` calls on one frame stay two
+  /// steps. [force] declines the adoption outright, for a deliberate second
+  /// picture of a frame that already has a name on it.
   Future<void> screen(
     String name, {
     List<String> tags = const [],
     Settle? settle,
-  }) => _step(Shot(name, tags: tags), settle, () async {}, verb: 'screen');
+    bool force = false,
+  }) => _step(
+    Shot(name, tags: tags),
+    settle,
+    () async {},
+    verb: 'screen',
+    adopt: !force,
+  );
 
-  /// Hands the run something the flow produced that is not a widget — the PDF
-  /// it just generated, the email body it queued, the payload it posted.
+  /// A beat of the flow that is not a screen: the PDF it just generated, the
+  /// email body it queued, the payload it posted.
   ///
-  /// It rides the **next** capture, exactly as recorded events do: an
-  /// attachment describes what happened on the way to a step, and a document
-  /// generally exists before the screen that announces it.
+  /// A step like any other — named, positioned, carrying the events that led
+  /// to it — whose picture is the document rather than the app:
   ///
   /// ```dart
+  /// await s.tap('Export');
   /// var bytes = await s.runAsync(() => report.generatePdf());
-  /// s.attach('report', bytes!, fileName: 'report.pdf');
-  /// await s.screen('PDF report');
+  /// await s.document('receipt', bytes!, fileName: 'receipt.pdf',
+  ///     mimeType: 'application/pdf');
   /// ```
   ///
   /// A flow whose whole point is the document it produces was otherwise a
-  /// scenario that stopped one step short: you could screenshot the button
-  /// and prove nothing about what it made. Deliberately one verb rather than
-  /// one per format — the format is [mimeType]'s job.
+  /// scenario that stopped one step short: you could screenshot the button and
+  /// prove nothing about what it made. Deliberately one verb rather than one
+  /// per format — the format is [mimeType]'s job, and a viewer shows what it
+  /// can and offers the rest as a download.
   ///
-  /// Attached after the last capture, it lands on that capture, marked as
-  /// arriving after it — the story is allowed to end with the document, and
-  /// a flow that fetches its receipt once the final screen is up need not
-  /// invent a trailing `screen()` to carry it. (Trailing [events] still go
-  /// nowhere: an attachment is a beat of the story, an event only ever
-  /// describes the edge into a step.) Only a scenario that captured nothing
-  /// at all drops it — there is no story for the document to end.
-  void attach(
+  /// It renders nothing, so it costs no capture: there is no screen here to
+  /// photograph, which is the whole reason it is its own kind of step rather
+  /// than a file bolted onto somebody else's.
+  Future<void> document(
     String name,
     List<int> bytes, {
     String? fileName,
     String? mimeType,
-  }) {
-    if (!_capturing) return;
-    _pendingAttachments.add(
-      ScenarioAttachment(
-        name: name,
-        bytes: bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
-        fileName: fileName,
-        mimeType: mimeType,
-      ),
-    );
-  }
+    List<String> tags = const [],
+  }) => _beat(
+    kind: ScenarioCaptureKind.document,
+    verb: 'document',
+    name: name,
+    tags: tags,
+    payload: bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+    fileName: fileName,
+    mimeType: mimeType,
+  );
 
-  /// A push notification the flow's backend would have sent — typed sugar
-  /// over [attach], so a viewer can draw the real thing: a banner dropped
-  /// over the screen it arrived on, the way the recipient's phone would show
-  /// it.
+  /// A push the flow's backend would have sent — a beat the recipient sees,
+  /// drawn the way their phone would draw it.
   ///
   /// ```dart
   /// await s.tap('Pay');
-  /// s.notification("Your cappuccino is ready — counter 3",
+  /// await s.notification("Your cappuccino is ready — counter 3",
   ///     title: "Barista's");
-  /// await s.screen('Order confirmed');
   /// ```
   ///
-  /// Everything [attach] says holds here — it rides the next capture, or
-  /// lands on the last one when the flow ends with it. The viewer supplies
-  /// what the payload leaves out: the project's own launcher icon, the
-  /// banner's "now", the brightness the scenario ran under.
-  void notification(String body, {String? title, String? appName}) {
-    attach(
-      'notification',
-      ScenarioNotification(title: title, body: body, appName: appName).encode(),
-      fileName: 'notification.json',
-      mimeType: ScenarioNotification.mimeType,
-    );
-  }
+  /// Like [document] it has no frame of its own. A viewer draws it over the
+  /// nearest screen before it — which is what a real banner does — and
+  /// supplies everything the payload leaves out: the project's own launcher
+  /// icon, the banner's "now", the brightness the scenario ran under.
+  ///
+  /// Deliberately unnamed as a step. A notification's words are the app's
+  /// user-facing text, so they are translated and reworded; keying a
+  /// comparison on them would read one flow under two languages as two
+  /// different flows. The same reasoning the aligner already applies to a
+  /// verb's visible-text target.
+  Future<void> notification(
+    String body, {
+    String? title,
+    String? appName,
+    List<String> tags = const [],
+  }) => _beat(
+    kind: ScenarioCaptureKind.notification,
+    verb: 'notification',
+    tags: tags,
+    notification: ScenarioNotification(
+      title: title,
+      body: body,
+      appName: appName,
+    ),
+  );
 
-  /// What [attach] has collected since the last capture drained it.
-  final _pendingAttachments = <ScenarioAttachment>[];
+  /// Emits a step that has no frame — see [document] and [notification].
+  ///
+  /// Everything a captured step does about position, parent, branch and
+  /// replay, and none of what it does about pixels. It deliberately does
+  /// **not** hand over the capture being held: nothing was drawn here, so a
+  /// `screen` after this beat may still name the frame before it, and the
+  /// chain stays linear because the position map records the chain's head
+  /// rather than the step a name landed on.
+  Future<void> _beat({
+    required ScenarioCaptureKind kind,
+    required String verb,
+    String? name,
+    List<String> tags = const [],
+    Uint8List? payload,
+    String? fileName,
+    String? mimeType,
+    ScenarioNotification? notification,
+  }) async {
+    var position = '${_state.plan.path}#${++_ordinal}';
+    if (!_capturing) return;
+    var parent = _lastPosition == null ? null : _state.emitted[_lastPosition!];
+    if (_state.emitted.containsKey(position)) {
+      // Recognised from an earlier replay of a shared prefix, exactly as a
+      // captured step is: the beat was emitted on the first pass with that
+      // pass's events, and appending these would multiply the prefix.
+      scenarioEventBuffer?.discard();
+      _lastCaptureFresh = false;
+      _lastPosition = position;
+      _pendingBranch = null;
+      return;
+    }
+    var index = ++_state.stepCount;
+    _state.emitted[position] = index;
+    _lastPosition = position;
+    var branch = _pendingBranch;
+    _pendingBranch = null;
+    var (events, dropped) =
+        scenarioEventBuffer?.drain() ?? (const <ScenarioEvent>[], 0);
+    _pendingBeats.add(
+      _PendingEmit(
+        index: index,
+        parent: parent,
+        branch: branch,
+        kind: kind,
+        name: name,
+        tags: tags,
+        payload: payload,
+        fileName: fileName,
+        mimeType: mimeType,
+        notification: notification,
+        verb: verb,
+        target: null,
+        position: position,
+        events: List.of(events),
+        eventsDropped: dropped,
+        settled: true,
+        landed: true,
+        strayFrames: 0,
+        failure: null,
+        frames: _frames,
+      ),
+    );
+    _lastCaptureFresh = true;
+  }
 
   /// Whether the last capture this replay saw was emitted by this replay —
   /// false when it was recognised from an earlier pass over a shared `split`
-  /// prefix. Trailing attachments follow the same discard rule mid-flow ones
-  /// do: they belong to the replay that actually emitted their step.
+  /// prefix, which leaves something older held.
   var _lastCaptureFresh = false;
-
-  /// The standalone lane's file stem for the last capture — where a trailing
-  /// attachment's file goes, there being no listener to hand it to.
-  String? _lastStandaloneBase;
-
-  /// Hands whatever [attach] collected after the last capture to the step
-  /// that capture produced. Called once the body has run to its end — a
-  /// failure never gets here, its own capture having drained the list.
-  void _flushTrailingAttachments() {
-    if (_pendingAttachments.isEmpty) return;
-    var attachments = List.of(_pendingAttachments);
-    _pendingAttachments.clear();
-    // A replay that ended on a shared prefix: the step these would land on
-    // was emitted by an earlier pass, with that pass's artifacts.
-    if (!_lastCaptureFresh) return;
-    if (scenarioRunListener != null) {
-      scenarioTrailingAttachmentsListener?.call(attachments);
-      return;
-    }
-    if (_lastStandaloneBase case var base?) {
-      for (var (i, attachment) in attachments.indexed) {
-        File(
-          '$base.after.${scenarioAttachmentFileName(attachments, i)}',
-        ).writeAsBytesSync(attachment.bytes);
-      }
-    }
-  }
 
   /// One verb: act, wait per the policy, capture. The settle result rides the
   /// step, so a screen that never stopped animating says so instead of
@@ -913,6 +986,7 @@ class ScenarioTester {
     Future<void> Function() action, {
     String? verb,
     String? target,
+    bool adopt = false,
   }) async {
     // Frames since the previous verb finished: nothing this scenario's verbs
     // drew, so they came from `s.tester` — and whatever they showed is not in
@@ -962,6 +1036,7 @@ class ScenarioTester {
       stray: stray,
       verb: verb,
       target: target,
+      adopt: adopt,
     );
   }
 
@@ -1034,6 +1109,7 @@ class ScenarioTester {
     required int stray,
     String? verb,
     String? target,
+    bool adopt = false,
   }) async {
     // Nothing captures, so nothing drains: what the app did during this verb
     // belongs to whichever step captures next, which is the transition a
@@ -1047,6 +1123,7 @@ class ScenarioTester {
       stray: stray,
       verb: verb,
       target: target,
+      adopt: adopt,
     );
   }
 
@@ -1107,6 +1184,162 @@ class ScenarioTester {
   @visibleForTesting
   Finder finderFor(dynamic target) => finderForTarget(target);
 
+  /// The capture that has been rendered but not yet handed over.
+  ///
+  /// Held for exactly one step, because a [screen] that follows without
+  /// moving the screen adopts its name — and adoption has to land before
+  /// anything is written, every artifact's file name being built from the
+  /// step's label. Handing over one step late is what buys that, and it is
+  /// the whole of the cost: a host drawing the flow live sees each step as
+  /// the next one is taken, and the last is flushed when the body ends.
+  _PendingEmit? _pending;
+
+  /// Frameless beats — [document]s and [notification]s — emitted since
+  /// [_pending] was rendered, still waiting behind it.
+  ///
+  /// They cannot go out first: their indices are higher than the held frame's,
+  /// and a host drawing the flow live reads the order it is given. And they
+  /// must not force the frame out, because nothing they do draws — so a
+  /// `screen` after them still names the frame before them.
+  final _pendingBeats = <_PendingEmit>[];
+
+  /// Whether the capture being taken is the frame [_pending] already took.
+  ///
+  /// The frame counter carries it, and exactly rather than approximately: the
+  /// binding draws no frame at all for a pump with nothing scheduled, so a
+  /// settled screen nobody has touched does not move it. Counted from the
+  /// pending *capture* rather than from the last step, because the two are not
+  /// the same line — a `Shot.skip` verb between them draws its frames like any
+  /// other, and they are frames this screen would otherwise adopt away.
+  ///
+  /// Read here rather than at the top of the verb, so it spans the verb's own
+  /// settle too: a `screen` acts on nothing, but its settle still lands work
+  /// the verb before it left in flight, and an image arriving there is a
+  /// different picture.
+  ///
+  /// The rest is bookkeeping that keeps a real second picture, or somebody
+  /// else's step, from being swallowed by a name.
+  bool _canAdopt({required bool settled}) {
+    var pending = _pending;
+    return pending != null &&
+        // Nothing has been drawn since that capture, so the frame still
+        // stands as it photographed it.
+        _frames == pending.frames &&
+        // Neither that capture nor this one is parked mid-flight: a settle
+        // that gave up leaves an animation running, and *that* is one pump
+        // away from different pixels.
+        pending.settled &&
+        settled &&
+        // A name never overwrites a name.
+        pending.name == null &&
+        // A failure's own picture is nobody's to rename.
+        pending.failure == null &&
+        // The pending capture is this replay's immediately preceding step —
+        // false where that step was recognised from an earlier pass over a
+        // shared `split` prefix, which leaves something older pending.
+        _lastCaptureFresh &&
+        // And this is not a branch's first capture, whose parent is the
+        // shared step before the fork: a branch-local name has no business on
+        // a step every other branch shows too.
+        _pendingBranch == null;
+  }
+
+  /// Puts [shot]'s name on the capture waiting to be handed over, with
+  /// everything the flow produced on the way to it.
+  void _adoptOntoPending(Shot shot) {
+    var pending = _pending!;
+    pending.name = shot.name;
+    pending.tags = shot.tags;
+    // The events belong to the step wearing the name rather than to whichever
+    // step captures next: they happened on the way to *this* frame, and this
+    // frame is the pending capture. Rolling them forward — what a
+    // non-capturing verb does with them — would file the request the flow
+    // made here under a screen two taps later.
+    var (events, dropped) =
+        scenarioEventBuffer?.drain() ?? (const <ScenarioEvent>[], 0);
+    // One step keeps one step's worth. The buffer caps each drain, and this
+    // step is now the far side of two of them — so the overflow is counted
+    // here the way the buffer counts its own, rather than quietly making one
+    // step's `events.json` twice the size every other step's may be.
+    var room = (maxScenarioEventsPerStep - pending.events.length).clamp(
+      0,
+      maxScenarioEventsPerStep,
+    );
+    if (events.length > room) {
+      dropped += events.length - room;
+      events = events.take(room).toList();
+    }
+    pending.events.addAll(events);
+    pending.eventsDropped += dropped;
+    // Frames of a transition that did not happen. The movie behind the merged
+    // step is the one its own verb recorded.
+    _recorder?.discard();
+  }
+
+  /// Hands the held capture over, to the listener or to disk.
+  ///
+  /// Nothing can adopt it afterwards: the name it has here is the name its
+  /// files are called after.
+  void _flushPending() {
+    var frame = _pending;
+    _pending = null;
+    var beats = List.of(_pendingBeats);
+    _pendingBeats.clear();
+    for (var pending in [?frame, ...beats]) {
+      _hand(pending);
+    }
+  }
+
+  /// One held step, out.
+  void _hand(_PendingEmit pending) {
+    if (scenarioRunListener case var listener?) {
+      listener(pending.toCapture());
+      return;
+    }
+    var destination = _screenshotsDestination;
+    if (destination == null) return;
+    var label = pending.failure != null
+        ? 'failed'
+        : pending.name ?? pending.verb ?? 'step ${pending.index}';
+    // The axis above the scenario: a matrix writes every combination under
+    // one destination, and without it the last language to run would be the
+    // only one on disk. The file above the scenario for the same reason, and
+    // spelled the way the harness spells it (`<file>/<name>`): a name is
+    // unique per file, not per suite, so two files naming the same screen
+    // were overwriting each other step for step.
+    var slug = assignment?.slug ?? '';
+    var directory = Directory(
+      '$destination/'
+      '${slug.isEmpty ? '' : '${scenarioFileSafe(slug)}/'}'
+      '${_source == null ? '' : '${scenarioFileSafe(_source)}/'}'
+      '${scenarioFileSafe(_description)}',
+    )..createSync(recursive: true);
+    var prefix = '${pending.index}-';
+    var base =
+        '${directory.path}/$prefix'
+        '${scenarioFileSafe(label, max: scenarioNameMax - prefix.length - '.png'.length)}';
+    // What the step is a picture of, written as itself. This lane writes only
+    // what a person would look at — no trees, no events — so a beat that is
+    // not a screen writes its own content and nothing else.
+    switch (pending.kind) {
+      case ScenarioCaptureKind.screen:
+        File('$base.png').writeAsBytesSync(pending.bytes!);
+      case ScenarioCaptureKind.document:
+        var name = (pending.fileName ?? pending.name ?? 'document').replaceAll(
+          RegExp(r'[^A-Za-z0-9._-]+'),
+          '_',
+        );
+        File('$base.$name').writeAsBytesSync(pending.payload!);
+      case ScenarioCaptureKind.notification:
+        // Three strings and no picture. Written anyway rather than skipped: a
+        // destination directory that silently omits a beat reads as a flow
+        // that never had one.
+        File(
+          '$base.notification.json',
+        ).writeAsBytesSync(pending.notification!.encode());
+    }
+  }
+
   /// Captures one step.
   ///
   /// Under the flutterware runner the harness listens and receives the bytes.
@@ -1122,6 +1355,7 @@ class ScenarioTester {
     int stray = 0,
     String? verb,
     String? target,
+    bool adopt = false,
   }) async {
     // Where this capture sits in the scenario's shape: the split choices
     // taken so far plus the count since the last one. Replays of a shared
@@ -1137,14 +1371,27 @@ class ScenarioTester {
       // appending these would multiply a shared prefix once per branch.
       scenarioEventBuffer?.discard();
       _recorder?.discard();
-      // Same reasoning for the attachments this replay collected on the way:
-      // the step they belong to was emitted on the first pass, with that
-      // pass's artifacts, and appending these would multiply a shared prefix
-      // once per branch.
-      _pendingAttachments.clear();
       _lastCaptureFresh = false;
       _lastPosition = position;
       _pendingBranch = null;
+      return;
+    }
+    // Nothing has moved since the last capture, so this is that capture with
+    // a name on it. Adopting rather than rendering is the point: the second
+    // picture is never taken, and the name lands on the step that already
+    // carries the verb which produced the frame.
+    //
+    // Keyed like an emitted step so a later replay recognises the position
+    // and skips it. The value is the *chain head* — what the step after this
+    // one should call its parent — which is what every entry in this map has
+    // always meant. Usually that is the step the name landed on; where a
+    // frameless beat has been emitted since, it is the beat, and recording
+    // the adopted step instead would fork the chain in two and leave the
+    // aligner walking only one of them.
+    if (adopt && shot != null && _canAdopt(settled: settled)) {
+      _adoptOntoPending(shot);
+      _state.emitted[position] = _state.stepCount;
+      _lastPosition = position;
       return;
     }
     var index = ++_state.stepCount;
@@ -1201,6 +1448,9 @@ class ScenarioTester {
       target: target,
       failure: '${_inContext(error)}',
     );
+    // Handed over at once rather than held: a failure's picture is nobody's
+    // to rename, and this replay is over — nothing is coming that could.
+    _flushPending();
   }
 
   bool get _capturing =>
@@ -1220,14 +1470,15 @@ class ScenarioTester {
     String? failure,
   }) async {
     var listener = scenarioRunListener;
-    var destination = _screenshotsDestination;
+    // Whatever was being held goes now: this capture is about to take a frame
+    // of its own, so it is not the name of the held one and nothing else can
+    // be either.
+    _flushPending();
     // Drained here rather than inside `runAsync`: the capture itself sends
     // platform messages (and the spy records them), and those belong to the
     // *next* transition, not to the one being closed.
     var (events, dropped) =
         scenarioEventBuffer?.drain() ?? (const <ScenarioEvent>[], 0);
-    var attachments = List.of(_pendingAttachments);
-    _pendingAttachments.clear();
     await tester.runAsync(() async {
       var view = tester.binding.renderViews.single;
       var layer = view.debugLayer! as OffsetLayer;
@@ -1264,69 +1515,41 @@ class ScenarioTester {
       // that costs 10ms and one that costs 250.
       var motion =
           await _recorder?.drain(raw: raw) ?? ScenarioMotionFrames.empty;
-      if (listener != null) {
-        // The overlay style the app last declared — what the GUI's fake
-        // status bar tints itself with. Visible-for-testing is exactly what
-        // this is: scenario code only ever runs under the test binding.
-        // ignore: invalid_use_of_visible_for_testing_member
-        var style = SystemChrome.latestStyle;
-        listener(
-          ScenarioStepCapture(
-            index: index,
-            parent: parent,
-            branch: branch,
-            name: shot?.name,
-            tags: shot?.tags ?? const [],
-            bytes: bytes,
-            format: raw ? 'raw' : 'png',
-            width: width,
-            height: height,
-            texts: visibleTexts(),
-            statusBrightness: style?.statusBarIconBrightness?.name,
-            navBrightness: style?.systemNavigationBarIconBrightness?.name,
-            verb: verb,
-            target: target,
-            position: position,
-            events: events,
-            eventsDropped: dropped,
-            motion: motion,
-            motionInterval: _recorder?.interval,
-            settled: settled,
-            landed: landed,
-            strayFrames: stray,
-            failure: failure,
-            attachments: attachments,
-          ),
-        );
-        return;
-      }
-      var label = failure != null ? 'failed' : shot?.name ?? 'step $index';
-      // The axis above the scenario: a matrix writes every combination under
-      // one destination, and without it the last language to run would be the
-      // only one on disk. The file above the scenario for the same reason, and
-      // spelled the way the harness spells it (`<file>/<name>`): a name is
-      // unique per file, not per suite, so two files naming the same screen
-      // were overwriting each other step for step.
-      var slug = assignment?.slug ?? '';
-      var directory = Directory(
-        '$destination/'
-        '${slug.isEmpty ? '' : '${scenarioFileSafe(slug)}/'}'
-        '${_source == null ? '' : '${scenarioFileSafe(_source)}/'}'
-        '${scenarioFileSafe(_description)}',
-      )..createSync(recursive: true);
-      var prefix = '$index-';
-      var base =
-          '${directory.path}/$prefix'
-          '${scenarioFileSafe(label, max: scenarioNameMax - prefix.length - '.png'.length)}';
-      File('$base.png').writeAsBytesSync(bytes);
-      _lastStandaloneBase = base;
-      // Beside the picture, under the same stem, so a destination directory
-      // stays readable as "one step, its frame and whatever it produced".
-      for (var (i, attachment) in attachments.indexed) {
-        File(
-          '$base.${scenarioAttachmentFileName(attachments, i)}',
-        ).writeAsBytesSync(attachment.bytes);
-      }
+      // The overlay style the app last declared — what the GUI's fake status
+      // bar tints itself with. Read at capture time rather than at hand-over,
+      // because by then the app has moved on. Visible-for-testing is exactly
+      // what this is: scenario code only ever runs under the test binding.
+      // ignore: invalid_use_of_visible_for_testing_member
+      var style = SystemChrome.latestStyle;
+      // Held rather than handed over, so a `screen` that names this same
+      // frame can put its name here instead of taking a second picture. See
+      // [_pending] — this is the one step of latency that buys it.
+      _pending = _PendingEmit(
+        index: index,
+        parent: parent,
+        branch: branch,
+        name: shot?.name,
+        tags: shot?.tags ?? const [],
+        bytes: bytes,
+        format: raw ? 'raw' : 'png',
+        width: width,
+        height: height,
+        texts: visibleTexts(),
+        statusBrightness: style?.statusBarIconBrightness?.name,
+        navBrightness: style?.systemNavigationBarIconBrightness?.name,
+        verb: verb,
+        target: target,
+        position: position,
+        events: List.of(events),
+        eventsDropped: dropped,
+        motion: motion,
+        motionInterval: _recorder?.interval,
+        settled: settled,
+        landed: landed,
+        strayFrames: stray,
+        failure: failure,
+        frames: _frames,
+      );
     });
   }
 
@@ -1335,11 +1558,131 @@ class ScenarioTester {
   /// `TextField` would be pixels only.
   List<String> visibleTexts() => visibleTextsOf(tester);
 
+  /// Stands in for the define and the environment variable below, which are
+  /// the two things a test process cannot change about itself: one is fixed at
+  /// compile time and the other is read-only. Without it the standalone lane —
+  /// what a bare `flutter test` writes, and the only lane a consumer's CI uses
+  /// without the GUI — can be exercised nowhere but a subprocess.
+  @visibleForTesting
+  static String? screenshotsDestinationOverride;
+
   static String? get _screenshotsDestination {
+    if (screenshotsDestinationOverride case var override?) return override;
     const define = String.fromEnvironment('screenshots-destination');
     if (define.isNotEmpty) return define;
     var env = Platform.environment['SCREENSHOTS_DESTINATION'];
     if (env != null && env.isNotEmpty) return env;
     return null;
   }
+}
+
+/// A capture that has been rendered but not yet handed over — see
+/// [ScenarioTester._pending].
+///
+/// Mutable in exactly the places a following `screen` may still change: the
+/// name, the tags, and what the flow produced on the way here. The rest is the
+/// frame, which has been taken and does not move.
+class _PendingEmit {
+  _PendingEmit({
+    required this.index,
+    required this.parent,
+    required this.branch,
+    required this.name,
+    required this.tags,
+    required this.verb,
+    required this.target,
+    required this.position,
+    required this.events,
+    required this.eventsDropped,
+    required this.settled,
+    required this.landed,
+    required this.strayFrames,
+    required this.failure,
+    required this.frames,
+    this.kind = ScenarioCaptureKind.screen,
+    this.bytes,
+    this.format,
+    this.width,
+    this.height,
+    this.texts = const [],
+    this.statusBrightness,
+    this.navBrightness,
+    this.payload,
+    this.fileName,
+    this.mimeType,
+    this.notification,
+    this.motion = ScenarioMotionFrames.empty,
+    this.motionInterval,
+  });
+
+  final int index;
+  final int? parent;
+  final String? branch;
+
+  /// The frame count when this picture was taken — the baseline a following
+  /// `screen` proves nothing has been drawn since. Not the count at the end of
+  /// the last *step*: a step whose shot was skipped captures nothing and still
+  /// draws.
+  final int frames;
+
+  /// Null while the frame is anonymous — which is what makes it adoptable.
+  /// A name arriving here from a later `screen` is indistinguishable
+  /// afterwards from one the shot carried, and that is the point.
+  String? name;
+  List<String> tags;
+
+  final ScenarioCaptureKind kind;
+  final Uint8List? bytes;
+  final String? format;
+  final int? width;
+  final int? height;
+  final List<String> texts;
+  final Uint8List? payload;
+  final String? fileName;
+  final String? mimeType;
+  final ScenarioNotification? notification;
+  final String? statusBrightness;
+  final String? navBrightness;
+  final String? verb;
+  final String? target;
+  final String position;
+  final List<ScenarioEvent> events;
+  int eventsDropped;
+  final ScenarioMotionFrames motion;
+  final Duration? motionInterval;
+  final bool settled;
+  final bool landed;
+  final int strayFrames;
+  final String? failure;
+
+  ScenarioStepCapture toCapture() => ScenarioStepCapture(
+    index: index,
+    parent: parent,
+    branch: branch,
+    name: name,
+    tags: tags,
+    kind: kind,
+    bytes: bytes,
+    format: format,
+    width: width,
+    height: height,
+    texts: texts,
+    payload: payload,
+    fileName: fileName,
+    mimeType: mimeType,
+    notification: notification,
+    statusBrightness: statusBrightness,
+    navBrightness: navBrightness,
+    verb: verb,
+    target: target,
+    position: position,
+    events: events,
+    eventsDropped: eventsDropped,
+    motion: motion,
+    motionInterval: motionInterval,
+    settled: settled,
+    landed: landed,
+    strayFrames: strayFrames,
+    failure: failure,
+  );
 }

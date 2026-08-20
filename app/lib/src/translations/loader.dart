@@ -91,7 +91,7 @@ Future<TranslationSurvey> buildSurvey({
               scenario: scenario,
               step: label,
               stepIndex: step.index,
-              image: step.image,
+              image: step.image ?? '',
               locale: locale,
               device: outcome.device ?? package.axes?['device'],
               rect: rect,
@@ -100,7 +100,9 @@ Future<TranslationSurvey> buildSurvey({
               // pixels, and a share computed against those would shift with
               // whatever the run was captured at.
               screenArea:
-                  (step.width * step.height / (captureScale * captureScale))
+                  ((step.width ?? 0) *
+                          (step.height ?? 0) /
+                          (captureScale * captureScale))
                       .round(),
               charStart: key['start'] as int?,
               charEnd: key['end'] as int?,

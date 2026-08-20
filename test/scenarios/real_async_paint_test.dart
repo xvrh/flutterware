@@ -36,35 +36,41 @@ void main() {
   });
   tearDown(() => scenarioRunListener = null);
 
-  scenario('the step that mounts the artwork is the step that shows it', (
-    s,
-  ) async {
-    await s.pumpWidget(const _App());
-    await s.tap('Show');
-    await s.screen('one step later');
-
-    var mounting = captures[captures.length - 2];
-    var after = captures.last;
-    // Byte-identical, because there is nothing left for the next step to add.
-    // Before this, the mounting step photographed a frame the tree was about to
-    // replace: the decode landed inside the capture's own `runAsync` — which is
-    // why one more step always fixed it and more pumping inside the step never
-    // did.
-    expect(mounting.bytes, after.bytes);
+  group('the step that mounts the artwork is the step that shows it', () {
+    scenario('so a screen after it has nothing new to photograph', (s) async {
+      await s.pumpWidget(const _App());
+      await s.tap('Show');
+      await s.screen('one step later');
+    });
+    // Two steps, and the second is the tap's own wearing the name — which is
+    // a stronger claim than the byte comparison this used to make. Adoption is
+    // refused the moment a frame is drawn between the two, so a mounting step
+    // that photographed a frame the tree was about to replace would leave the
+    // decode to land in this screen's settle, draw there, and split back into
+    // two pictures. That is precisely what happened before the landing fix —
+    // and why one more step always fixed it while more pumping inside the step
+    // never did.
+    tearDown(() {
+      expect(captures, hasLength(2));
+      expect(captures.last.name, 'one step later');
+      expect(captures.last.verb, 'tap');
+    });
   });
 
-  scenario('nothing a scenario can assert says the picture is short', (
-    s,
-  ) async {
-    await s.pumpWidget(const _App());
-    await s.tap('Show');
+  group('nothing a scenario can assert says the picture is short', () {
+    scenario('every flag reads the same either way', (s) async {
+      await s.pumpWidget(const _App());
+      await s.tap('Show');
 
+      expect(find.byType(_Art), findsOneWidget);
+    });
     // The trap, and why this cost a consumer an afternoon: every one of these
     // was already true on the step whose picture was missing the artwork. Only
     // the pixels differed, and nothing was watching them.
-    expect(find.byType(_Art), findsOneWidget);
-    expect(captures.last.settled, isTrue);
-    expect(captures.last.strayFrames, 0);
+    tearDown(() {
+      expect(captures.last.settled, isTrue);
+      expect(captures.last.strayFrames, 0);
+    });
   });
 
   // The same shape with an `ImageProvider` on the end of it — the half of the
@@ -84,18 +90,24 @@ void main() {
     ('8×8', 8, 8),
     ('2400×1800', 2400, 1800),
   ]) {
-    scenario('a $label image lands on the step that mounts it', (s) async {
-      var bytes = rasterFixture(width, height);
-      await s.pumpWidget(_ImageApp(bytes));
-      await s.tap('Show');
-      await s.screen('one step later');
-
-      var mounting = captures[captures.length - 2];
-      var after = captures.last;
-      expect(mounting.bytes, after.bytes);
-      // `pendingImageCount` is what was waited on, so a step that gave up says
-      // so — the whole point of the flag is that this cannot go wrong quietly.
-      expect(mounting.landed, isTrue);
+    group('a $label image lands on the step that mounts it', () {
+      scenario('leaving the screen after it nothing to add', (s) async {
+        var bytes = rasterFixture(width, height);
+        await s.pumpWidget(_ImageApp(bytes));
+        await s.tap('Show');
+        await s.screen('one step later');
+      });
+      tearDown(() {
+        // Adopted rather than photographed again: nothing was drawn between
+        // the two, which is what "the decode already landed" looks like from
+        // the frame counter.
+        expect(captures, hasLength(2));
+        expect(captures.last.name, 'one step later');
+        // `pendingImageCount` is what was waited on, so a step that gave up
+        // says so — the whole point of the flag is that this cannot go wrong
+        // quietly.
+        expect(captures.last.landed, isTrue);
+      });
     });
   }
 
@@ -131,7 +143,10 @@ void main() {
       await s.pumpWidget(_ImageApp(solidRed(400, 400)));
       await s.tap('Show');
       await s.screen('one step later');
-
+    });
+    tearDown(() {
+      // The tap's own step, wearing the name the `screen` gave it — the movie
+      // behind a merged step is the one its verb recorded.
       var motion = captures[1].motion;
       var blank = motion.bytes.where((frame) => _redPixels(frame) == 0);
       expect(motion.bytes, hasLength(greaterThan(10)));
@@ -144,17 +159,18 @@ void main() {
     });
   });
 
-  scenario('a decode that never arrives is reported, not waited on forever', (
-    s,
-  ) async {
-    await s.pumpWidget(const _ImageApp.provider(_NeverDecodes()));
-    await s.tap('Show');
-
+  group('a decode that never arrives', () {
+    scenario('is reported, not waited on forever', (s) async {
+      await s.pumpWidget(const _ImageApp.provider(_NeverDecodes()));
+      await s.tap('Show');
+    });
     // The one case the ceiling exists for. It is still photographed — a picture
     // of a screen that never filled in is the evidence — but it no longer
     // claims to be finished.
-    expect(captures.last.landed, isFalse);
-    expect(captures.last.settled, isTrue);
+    tearDown(() {
+      expect(captures.last.landed, isFalse);
+      expect(captures.last.settled, isTrue);
+    });
   });
 
   // **A screen that is still animating lands its work too.**
@@ -183,23 +199,29 @@ void main() {
       ('a ripple is running', _Busy.ripple),
       ('a spinner is on screen', _Busy.spinner),
     ]) {
-      scenario('lands an announced decode while $label', (s) async {
-        await s.pumpWidget(_ImageApp(solidRed(400, 400), busy: busy));
-        await s.tap('Show', settle: Settle.none);
-
-        var step = captures.last;
-        expect(step.settled, isFalse, reason: 'the fixture must be busy');
-        expect(step.landed, isTrue);
-        expect(_redPixels(step.bytes), greaterThan(0));
+      group('lands an announced decode while $label', () {
+        scenario('with the artwork in the picture', (s) async {
+          await s.pumpWidget(_ImageApp(solidRed(400, 400), busy: busy));
+          await s.tap('Show', settle: Settle.none);
+        });
+        tearDown(() {
+          var step = captures.last;
+          expect(step.settled, isFalse, reason: 'the fixture must be busy');
+          expect(step.landed, isTrue);
+          expect(_redPixels(step.bytes!), greaterThan(0));
+        });
       });
 
-      scenario('lands a guessed decode while $label', (s) async {
-        await s.pumpWidget(_ImageApp.art(busy: busy));
-        await s.tap('Show', settle: Settle.none);
-
-        var step = captures.last;
-        expect(step.settled, isFalse, reason: 'the fixture must be busy');
-        expect(_redPixels(step.bytes), greaterThan(0));
+      group('lands a guessed decode while $label', () {
+        scenario('with the artwork in the picture', (s) async {
+          await s.pumpWidget(_ImageApp.art(busy: busy));
+          await s.tap('Show', settle: Settle.none);
+        });
+        tearDown(() {
+          var step = captures.last;
+          expect(step.settled, isFalse, reason: 'the fixture must be busy');
+          expect(_redPixels(step.bytes!), greaterThan(0));
+        });
       });
     }
 
@@ -211,24 +233,28 @@ void main() {
     // measured, it carries this fixture at one link and loses it at six —
     // shallower than the deepest decode a real suite has produced here, which
     // is the whole reason `realWorkTurns` is not one.
-    scenario('carries a decode six links deep', (s) async {
-      await s.pumpWidget(const _ImageApp.art(busy: _Busy.spinner, links: 6));
-      await s.tap('Show', settle: Settle.none);
-
-      expect(_redPixels(captures.last.bytes), greaterThan(0));
+    group('carries a decode six links deep', () {
+      scenario('to the step that mounts it', (s) async {
+        await s.pumpWidget(const _ImageApp.art(busy: _Busy.spinner, links: 6));
+        await s.tap('Show', settle: Settle.none);
+      });
+      tearDown(() => expect(_redPixels(captures.last.bytes!), greaterThan(0)));
     });
 
     // The honesty half. Skipping the landing reported `landed: true` on a step
     // that had not tried, so the flag could not be read at all; now it says
     // what it always meant.
-    scenario('still reports a decode that never arrives', (s) async {
-      await s.pumpWidget(
-        const _ImageApp.provider(_NeverDecodes(), busy: _Busy.spinner),
-      );
-      await s.tap('Show', settle: Settle.none);
-
-      expect(captures.last.landed, isFalse);
-      expect(captures.last.settled, isFalse);
+    group('still reports a decode that never arrives', () {
+      scenario('as unlanded rather than as finished', (s) async {
+        await s.pumpWidget(
+          const _ImageApp.provider(_NeverDecodes(), busy: _Busy.spinner),
+        );
+        await s.tap('Show', settle: Settle.none);
+      });
+      tearDown(() {
+        expect(captures.last.landed, isFalse);
+        expect(captures.last.settled, isFalse);
+      });
     });
 
     // The movie has to end where the still is. The turns above all draw the
@@ -250,9 +276,10 @@ void main() {
       scenario('ends on the frame the still was taken from', (s) async {
         await s.pumpWidget(_ImageApp(solidRed(400, 400), busy: _Busy.spinner));
         await s.tap('Show', settle: Settle.none);
-
+      });
+      tearDown(() {
         var step = captures.last;
-        expect(_redPixels(step.bytes), greaterThan(0));
+        expect(_redPixels(step.bytes!), greaterThan(0));
         expect(_redPixels(step.motion.bytes.last), greaterThan(0));
       });
     });

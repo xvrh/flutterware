@@ -105,8 +105,8 @@ class FramedShot extends StatelessWidget {
           border: Border.all(color: context.colors.line),
         ),
         child: SizedBox(
-          width: step.width.toDouble(),
-          height: step.height.toDouble(),
+          width: (step.width ?? 0).toDouble(),
+          height: (step.height ?? 0).toDouble(),
           child: Stack(fit: StackFit.expand, children: [image, ?screenOverlay]),
         ),
       );

@@ -1340,11 +1340,16 @@ packages: List<ScenarioRunPackage>
       name: String?   # The `Shot`'s name; null for an automatic capture.
       auto: bool   # True when nothing named this capture — a collapsible detail step.
       tags: List<String>?
-      image: String   # The captured image, in [format], **relative to the worktree root** — the same convention the catalog's artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.
-      format: String   # `png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.
-      width: int
-      height: int
-      tree: String   # The widget-tree JSON captured at the same moment, relative like [image].
+      kind: String?   # What this step is a picture of.
+      image: String?   # The captured image, in [format], **relative to the worktree root** — the same convention the catalog's artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.
+      format: String?   # `png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.
+      width: int?
+      height: int?
+      tree: String?   # The widget-tree JSON captured at the same moment, relative like [image].
+      file: String?   # The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run's report stays readable, and what a reader wants to do with a document is open it.
+      mimeType: String?   # What the document is, when the scenario said — `application/pdf`.
+      bytes: int?   # How big [file] is, so a reader knows before opening it.
+      notification: Map<String, String?>?   # The notification's message — the one line a banner always has.
       keys: String?   # The translation keys on this screen, and the words that belonged to no catalog — relative like [image].
       semantics: String?   # The semantics-tree JSON — what a screen reader gets — relative like [image].
       texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
@@ -1369,12 +1374,6 @@ packages: List<ScenarioRunPackage>
       strayFrames: int?   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
       unchanged: bool?   # True when this step's captured tree is byte-identical to its parent's: the verb acted and nothing on screen changed.
       failure: String?   # The error, when this is the step a scenario broke on.
-      attachments: List<ScenarioRunAttachment>?   # What the flow produced on the way to this step that is not a widget — what `s.attach` handed over.
-        name: String   # What the scenario called it — `'report'`.
-        file: String   # The file, **relative to the worktree root**, like the step's own image.
-        mimeType: String?   # What it is, when the scenario said — `application/pdf`.
-        bytes: int   # How big it is, so a reader knows before opening it.
-        after: bool?   # True when it arrived *after* the step's capture — the scenario ended with it, and a viewer places it after the step rather than on the way in.
     stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
     unchangedCount: int   # How many of those steps a verb acted for nothing on — captured trees byte-identical to their parent's.
     errors: List<ScenarioRunError>?   # The failure, when [ok] is false.

@@ -1775,7 +1775,11 @@ class ScenariosCore extends PluginCore {
     for (var package in report.packages) {
       for (var outcome in package.scenarios) {
         for (var step in outcome.steps) {
-          if (_absolute(step.tree) == wanted) return (outcome, step);
+          // A beat with no frame has no tree either, so it is never what a
+          // `.tree.json` path is asking about.
+          if (step.tree case var tree? when _absolute(tree) == wanted) {
+            return (outcome, step);
+          }
         }
       }
     }
@@ -1808,7 +1812,7 @@ class ScenariosCore extends PluginCore {
 
   _PickedStep _fromRecord(ScenarioRunOutcome outcome, ScenarioRunStep step) =>
       _PickedStep(
-        base: _baseOf(_absolute(step.tree))!,
+        base: _baseOf(_absolute(step.tree!))!,
         file: outcome.file,
         scenario: outcome.name,
         index: step.index,
@@ -1818,7 +1822,10 @@ class ScenariosCore extends PluginCore {
                 ? outcome.errors.firstOrNull?.error
                 : null),
         image: step.image,
-        siblings: [for (var other in outcome.steps) p.basename(other.tree)],
+        siblings: [
+          for (var other in outcome.steps)
+            if (other.tree case var tree?) p.basename(tree),
+        ],
       );
 
   /// What is in a directory, as values that can be passed straight back.

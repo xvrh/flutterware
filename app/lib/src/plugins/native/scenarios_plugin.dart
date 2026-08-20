@@ -12,7 +12,7 @@ import '../../previews/web_server.dart';
 import '../../scenarios/web_export_dialog.dart';
 import '../../scenarios/artifacts.dart';
 import '../../scenarios/artifacts_io.dart';
-import '../../scenarios/attachment_view.dart';
+import '../../scenarios/beat_view.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';
@@ -319,7 +319,6 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
             file: file,
             scenario: scenario,
             step: place.step,
-            attachment: place.attachment,
             axes: axes,
             key: ValueKey('${place.package}/$file#$scenario'),
           );
@@ -972,7 +971,6 @@ class _ScenarioPage extends StatefulWidget {
     required this.scenario,
     required this.axes,
     this.step,
-    this.attachment,
     super.key,
   });
 
@@ -986,9 +984,6 @@ class _ScenarioPage extends StatefulWidget {
 
   /// The step the address pushes, or null for the flow.
   final int? step;
-
-  /// The attachment of [step] the address pushes, or null for the step.
-  final int? attachment;
 
   @override
   State<_ScenarioPage> createState() => _ScenarioPageState();
@@ -1127,18 +1122,6 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     );
   }
 
-  void _openAttachment(ScenarioRunStep step, int attachment) {
-    AddressScope.write(context).setSegments(
-      scenarioSegments(
-        widget.package,
-        file: widget.file,
-        scenario: widget.scenario,
-        step: step.index,
-        attachment: attachment,
-      ),
-    );
-  }
-
   /// What the banner names the app when a notification payload does not —
   /// the package is the closest thing to the project's own name here.
   String get _appLabel => p.basename(widget.package);
@@ -1171,19 +1154,13 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     var steps = run?.steps ?? const <ScenarioRunStep>[];
     if (widget.step != null) {
       var step = steps.firstWhereOrNull((s) => s.index == widget.step);
-      // The attachment's page over the step's, the way the step's sits over
-      // the flow — its card lives on the canvas, so back goes there.
+      // A beat that is not a screen renders as itself — the document, or the
+      // banner over the screen it landed on.
       if (step != null) {
-        if (widget.attachment case var index?
-            when index >= 0 && index < step.attachments.length) {
-          return ScenarioAttachmentPage(
+        if (step.kind != ScenarioStepKind.screen) {
+          return ScenarioBeatPage(
             step: step,
-            index: index,
-            background: scenarioAttachmentBackground(
-              steps,
-              step,
-              step.attachments[index],
-            ),
+            background: scenarioFrameFor(steps, step),
             device: device,
             onBack: _closeStep,
             statusFallback: statusFallback,
@@ -1367,7 +1344,6 @@ class _ScenarioPageState extends State<_ScenarioPage> {
             device: device,
             transform: _flowTransform,
             onOpenStep: _openStep,
-            onOpenAttachment: _openAttachment,
             appLabel: _appLabel,
             appIcon: _appIcon,
             statusFallback: statusFallback,

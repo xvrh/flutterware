@@ -11,14 +11,16 @@ void main() {
   });
   tearDown(() => scenarioRunListener = null);
 
-  scenario('scrollTo walks a list until the item is on screen', (s) async {
-    await s.pumpWidget(const _ListApp());
-    expect(find.text('Item 40'), findsNothing);
+  group('scrollTo walks a list until the item is on screen', () {
+    scenario('and the step it captures shows it', (s) async {
+      await s.pumpWidget(const _ListApp());
+      expect(find.text('Item 40'), findsNothing);
 
-    await s.scrollTo('Item 40', shot: Shot('Item 40'));
+      await s.scrollTo('Item 40', shot: Shot('Item 40'));
 
-    expect(find.text('Item 40'), findsOneWidget);
-    expect(captures.last.texts, contains('Item 40'));
+      expect(find.text('Item 40'), findsOneWidget);
+    });
+    tearDown(() => expect(captures.last.texts, contains('Item 40')));
   });
 
   scenario('scrollTo walks back up with a negative step', (s) async {
@@ -106,12 +108,16 @@ void main() {
   // pages scroll depends on the device, so a scenario cannot know statically,
   // and the old unconditional refusal made every walking scenario carry a
   // guard around the verb.
-  scenario('scrollTo on a target already on screen is a no-op', (s) async {
-    await s.pumpWidget(const _StaticApp());
+  group('scrollTo on a target already on screen is a no-op', () {
+    scenario('and still captures the step it was asked for', (s) async {
+      await s.pumpWidget(const _StaticApp());
 
-    await s.scrollTo('nothing to scroll', shot: Shot('short page'));
-
-    expect(captures.last.texts, contains('nothing to scroll'));
+      await s.scrollTo('nothing to scroll', shot: Shot('short page'));
+    });
+    tearDown(() {
+      expect(captures.last.name, 'short page');
+      expect(captures.last.texts, contains('nothing to scroll'));
+    });
   });
 
   scenario('scrollTo still refuses a target off screen that nothing scrolls', (
@@ -242,19 +248,25 @@ void main() {
     expect(find.text('918406'), findsOneWidget);
   });
 
-  scenario('frames the verbs did not draw are counted onto the next step', (
-    s,
-  ) async {
-    await s.pumpWidget(const _CardsApp());
-    expect(captures.last.strayFrames, 0);
+  group('frames the verbs did not draw', () {
+    scenario('are counted onto the next step', (s) async {
+      await s.pumpWidget(const _CardsApp());
 
-    // The escape hatch, used for something a verb covers: the app changes,
-    // and the flow has no picture of it.
-    await s.tester.tap(find.text('Buy the first'));
-    await s.tester.pump();
+      // The escape hatch, used for something a verb covers: the app changes,
+      // and the flow has no picture of it.
+      await s.tester.tap(find.text('Buy the first'));
+      await s.tester.pump();
 
-    await s.screen('after a raw tap');
-    expect(captures.last.strayFrames, greaterThan(0));
+      await s.screen('after a raw tap');
+    });
+    // Two steps, because that raw pump drew: a `screen` names the frame the
+    // verb before it took, and this is not that frame any more.
+    tearDown(() {
+      expect(captures, hasLength(2));
+      expect(captures[0].strayFrames, 0);
+      expect(captures[1].name, 'after a raw tap');
+      expect(captures[1].strayFrames, greaterThan(0));
+    });
   });
 }
 

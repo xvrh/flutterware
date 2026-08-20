@@ -67,14 +67,6 @@ void main() {
         strayFrames: 1,
         unchanged: true,
         failure: 'boom',
-        attachments: [
-          ScenarioRunAttachment(
-            name: 'invoice',
-            file: 'a.invoice.pdf',
-            mimeType: 'application/pdf',
-            bytes: 12,
-          ),
-        ],
       );
 
       var back = ScenarioRunStep.fromJson(
@@ -117,9 +109,27 @@ void main() {
       expect(back.strayFrames, 1);
       expect(back.unchanged, isTrue);
       expect(back.failure, 'boom');
-      expect(back.attachments, hasLength(1));
-      expect(back.attachments.first.file, 'a.invoice.pdf');
-      expect(back.attachments.first.mimeType, 'application/pdf');
+      // A step that is not a screen: its kind rides the record, and the frame
+      // fields it has no business carrying are absent rather than zeroed.
+      var beat = ScenarioRunStep.fromJson(
+        ScenarioRunStep(
+          index: 2,
+          position: '#2',
+          auto: false,
+          name: 'invoice',
+          kind: ScenarioStepKind.document,
+          file: 'a.invoice.pdf',
+          mimeType: 'application/pdf',
+          bytes: 12,
+          verb: 'document',
+        ).toJson(),
+      );
+      expect(beat.kind, ScenarioStepKind.document);
+      expect(beat.file, 'a.invoice.pdf');
+      expect(beat.mimeType, 'application/pdf');
+      expect(beat.bytes, 12);
+      expect(beat.image, isNull);
+      expect(beat.tree, isNull);
     });
 
     test('a healthy record stays the size it was', () {
@@ -132,7 +142,11 @@ void main() {
       expect(json.keys, isNot(contains('unchanged')));
       expect(json.keys, isNot(contains('strayFrames')));
       expect(json.keys, isNot(contains('eventCount')));
-      expect(json.keys, isNot(contains('attachments')));
+      // Omitted for a screen, so the overwhelmingly common step's record stays
+      // the size it has always been — and a reader written before there was
+      // anything but screens reads one correctly by ignoring the key.
+      expect(json.keys, isNot(contains('kind')));
+      expect(json.keys, isNot(contains('file')));
       expect(json.keys, isNot(contains('address')));
     });
 
@@ -154,13 +168,6 @@ void main() {
             frameCount: 2,
             texts: const ['x'],
             verb: 'tap',
-            attachments: [
-              ScenarioRunAttachment(
-                name: 'doc',
-                file: '/abs/out/1-a.doc.pdf',
-                bytes: 1,
-              ),
-            ],
           ).locate(
             root: '/worktree',
             address: 'fw://main/scenarios/f/s/1',
@@ -173,7 +180,23 @@ void main() {
       expect(located.semantics, 'out/1-a.semantics.json');
       expect(located.events, 'out/1-a.events.json');
       expect(located.frames, 'out/1-a.frames');
-      expect(located.attachments.first.file, 'out/1-a.doc.pdf');
+      // A document beat's payload is rewritten like every other artifact path.
+      expect(
+        ScenarioRunStep(
+              index: 2,
+              position: '#2',
+              auto: false,
+              kind: ScenarioStepKind.document,
+              file: '/abs/out/2-doc.pdf',
+            )
+            .locate(
+              root: '/worktree',
+              address: 'fw://main/scenarios/f/s/2',
+              path: (path) => path.replaceFirst('/abs/out/', 'out/'),
+            )
+            .file,
+        'out/2-doc.pdf',
+      );
       expect(located.root, '/worktree');
       expect(located.address, 'fw://main/scenarios/f/s/1');
       expect(located.verb, 'tap');

@@ -51,23 +51,30 @@ void main() {
     expect(scenarioPlace(segments), place);
   });
 
-  test('round-trips an attachment', () {
-    var place = const ScenarioPlace(
+  // A document or a notification is a step of the run like any other, so it
+  // is addressed by its own index. There is no level below the step any more:
+  // the trailing segment a stale link carries is ignored rather than read as a
+  // position inside somebody else's record.
+  test('a segment past the step is ignored', () {
+    var place = scenarioPlace([
       'examples/example',
-      file: 'test/scenarios/counter_test.dart',
-      scenario: 'Counter',
-      step: 3,
-      attachment: 1,
+      'test',
+      'scenarios',
+      'counter_test.dart',
+      'Counter',
+      '3',
+      '1',
+    ]);
+    expect(place?.step, 3);
+    expect(
+      scenarioSegments(
+        place!.package,
+        file: place.file,
+        scenario: place.scenario,
+        step: place.step,
+      ).last,
+      '3',
     );
-    var segments = scenarioSegments(
-      place.package,
-      file: place.file,
-      scenario: place.scenario,
-      step: place.step,
-      attachment: place.attachment,
-    );
-    expect(segments.sublist(segments.length - 2), ['3', '1']);
-    expect(scenarioPlace(segments), place);
   });
 
   test('round-trips the help page', () {

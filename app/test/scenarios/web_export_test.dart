@@ -166,8 +166,8 @@ void main() {
       expect(steps, hasLength(2));
       for (var step in steps) {
         for (var path in [
-          step.image,
-          step.tree,
+          step.image!,
+          step.tree!,
           step.semantics!,
           step.events!,
         ]) {

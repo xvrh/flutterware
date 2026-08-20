@@ -146,7 +146,15 @@ class ScenarioWebExporter {
         }
 
         for (var step in ((outcome as Map)['steps'] as List? ?? const [])) {
-          for (var key in const ['image', 'tree', 'semantics', 'events']) {
+          // `file` is a document beat's payload — the same treatment its
+          // siblings get, because the page has to be able to open it too.
+          for (var key in const [
+            'image',
+            'tree',
+            'semantics',
+            'events',
+            'file',
+          ]) {
             var source = (step as Map)[key];
             if (source is! String) continue;
             var from = File(p.join(worktreeRoot, source));

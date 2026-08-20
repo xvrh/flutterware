@@ -31,9 +31,9 @@ abstract class ScenarioArtifacts {
   /// desktop's own file association in the panel, a download in an exported
   /// page. Both are `launchUrl`'s job; only the scheme differs.
   ///
-  /// The one artifact this is for is an attachment — a step's other files are
-  /// read and rendered in place, where a PDF or a payload is a thing you open
-  /// elsewhere.
+  /// The one artifact this is for is a document step's payload — a step's
+  /// other files are read and rendered in place, where a PDF or a payload is a
+  /// thing you open elsewhere.
   Uri uriOf(String path);
 
   /// A provider for an already-encoded image — the PNG case, where the
@@ -46,15 +46,23 @@ abstract class ScenarioArtifacts {
   /// `raw` captures are rgba8888 rows with no header, so they carry their
   /// dimensions from the report and skip decoding entirely — the fast lane the
   /// runner offers hosts that can display pixels directly.
+  ///
+  /// For a [ScenarioStepKind.screen] only. A step of any other kind has no
+  /// frame of its own; resolve it through [scenarioFrameFor] first, which is
+  /// what every caller here does.
   ImageProvider imageOf(ScenarioRunStep step) =>
-      _decoded(step.image, step.format, step.width, step.height);
+      _decoded(step.image!, step.format!, step.width!, step.height!);
 
   /// One frame of a step's recorded transition.
   ///
   /// Its own size, not the step's: a recording runs at half scale and the shot
   /// beside it does not.
-  ImageProvider frameImageOf(ScenarioRunStep step, String path) =>
-      _decoded(path, step.format, step.frameWidth ?? 0, step.frameHeight ?? 0);
+  ImageProvider frameImageOf(ScenarioRunStep step, String path) => _decoded(
+    path,
+    step.format ?? 'png',
+    step.frameWidth ?? 0,
+    step.frameHeight ?? 0,
+  );
 
   ImageProvider _decoded(String path, String format, int width, int height) =>
       format == 'raw'
@@ -98,4 +106,36 @@ class ScenarioArtifactsScope extends InheritedWidget {
   @override
   bool updateShouldNotify(ScenarioArtifactsScope oldWidget) =>
       oldWidget.artifacts != artifacts;
+}
+
+/// The frame a step is drawn on.
+///
+/// Itself for a screen. For a beat that has none — a document, a notification —
+/// the nearest screen before it, which is what was on the device when it
+/// happened: a banner goes over the screen it landed on, and a document sheet
+/// is drawn on that screen's canvas so it scales with the shots beside it.
+///
+/// Null when nothing has been drawn yet, which a viewer shows as a locked
+/// phone rather than inventing a screen.
+ScenarioRunStep? scenarioFrameFor(
+  List<ScenarioRunStep> steps,
+  ScenarioRunStep step,
+) {
+  if (step.image != null) return step;
+  // Backwards along the chain the run recorded, and by list order where it
+  // recorded no parents — the same pair of answers every walk over these has.
+  var byIndex = {for (var candidate in steps) candidate.index: candidate};
+  var current = step;
+  while (true) {
+    var parent = current.parent;
+    var next = parent == null ? null : byIndex[parent];
+    if (next == null) break;
+    if (next.image != null) return next;
+    current = next;
+  }
+  if (steps.any((s) => s.parent != null)) return null;
+  for (var i = steps.indexOf(step) - 1; i >= 0; i--) {
+    if (steps[i].image != null) return steps[i];
+  }
+  return null;
 }

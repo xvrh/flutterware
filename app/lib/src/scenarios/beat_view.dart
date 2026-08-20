@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 // ignore: implementation_imports
@@ -15,17 +14,17 @@ import '../ui/theme.dart';
 import 'artifacts.dart';
 import 'framed_shot.dart';
 
-/// An attachment as a beat of the story: what the flow canvas draws between
-/// two screens, and what the detail page blows up.
+/// A beat that is not a screen, drawn: what the flow canvas puts between two
+/// screens, and what the detail page blows up.
 ///
 /// A notification is drawn as the recipient's phone would show it — a banner
-/// dropped over the screen it arrived on. Everything else is a document: a
-/// paper sheet carrying its content where the format allows (text renders,
-/// images show) and its identity where it does not.
-class ScenarioAttachmentShot extends StatelessWidget {
-  const ScenarioAttachmentShot({
+/// over the screen it landed on. A document is a paper sheet carrying its
+/// content where the format allows (text renders, images show) and its
+/// identity where it does not.
+class ScenarioBeatShot extends StatelessWidget {
+  const ScenarioBeatShot({
     super.key,
-    required this.attachment,
+    required this.step,
     required this.background,
     required this.device,
     required this.statusFallback,
@@ -33,12 +32,12 @@ class ScenarioAttachmentShot extends StatelessWidget {
     this.appIcon,
   });
 
-  final ScenarioRunAttachment attachment;
+  /// The beat — a [ScenarioStepKind.document] or a
+  /// [ScenarioStepKind.notification].
+  final ScenarioRunStep step;
 
-  /// The step whose screen the attachment arrived over — the previous step
-  /// for one that rode a capture, the last step for one that trailed the
-  /// run. Null when there was no screen yet, which draws a lock-screen-ish
-  /// blank instead.
+  /// The screen this beat happened on: [scenarioFrameFor]'s answer. Null when
+  /// nothing had been drawn yet, which draws a locked phone instead.
   final ScenarioRunStep? background;
 
   final Device? device;
@@ -54,9 +53,9 @@ class ScenarioAttachmentShot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (attachment.mimeType == ScenarioNotification.mimeType) {
+    if (step.notification case var notification?) {
       return _NotificationShot(
-        attachment: attachment,
+        notification: notification,
         background: background,
         device: device,
         statusFallback: statusFallback,
@@ -74,7 +73,7 @@ class ScenarioAttachmentShot extends StatelessWidget {
       height: canvas.height,
       child: Center(
         child: _DocumentSheet(
-          attachment: attachment,
+          step: step,
           width: width,
           height: math.min(width * 1.35, canvas.height * 0.9),
         ),
@@ -87,7 +86,7 @@ class ScenarioAttachmentShot extends StatelessWidget {
 /// when it arrived before the flow drew anything.
 class _NotificationShot extends StatelessWidget {
   const _NotificationShot({
-    required this.attachment,
+    required this.notification,
     required this.background,
     required this.device,
     required this.statusFallback,
@@ -95,7 +94,9 @@ class _NotificationShot extends StatelessWidget {
     required this.appIcon,
   });
 
-  final ScenarioRunAttachment attachment;
+  /// Read straight off the step: three strings, typed on both ends of the
+  /// wire, so there is no file to fetch and nothing to decode before drawing.
+  final ScenarioNotification notification;
   final ScenarioRunStep? background;
   final Device? device;
   final Brightness statusFallback;
@@ -104,88 +105,72 @@ class _NotificationShot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var artifacts = ScenarioArtifactsScope.of(context);
-    return FutureBuilder<Uint8List?>(
-      future: artifacts.readBytes(attachment.file),
-      builder: (context, snapshot) {
-        var notification = snapshot.data == null
-            ? null
-            : ScenarioNotification.decode(snapshot.data!);
-        if (snapshot.connectionState == ConnectionState.done &&
-            notification == null) {
-          // Claimed the mimeType, was not one — the sheet tells the truth.
-          return _DocumentSheet(attachment: attachment);
-        }
-        // Dark runs got light status icons; the banner follows the run.
-        var dark = statusFallback == Brightness.light;
-        var overlay = Stack(
-          fit: StackFit.expand,
-          children: [
-            // The dim that says "this moment is about the banner" — the
-            // screen stays legible under it, the way a real notification
-            // leaves the app visible.
-            Container(color: Colors.black.withValues(alpha: 0.3)),
-            if (notification != null)
-              Positioned(
-                top: (device?.insetTop ?? 0) + 8,
-                left: 8,
-                right: 8,
-                child: NotificationBanner(
-                  notification: notification,
-                  appLabel: appLabel,
-                  appIcon: appIcon,
-                  dark: dark,
-                ),
-              ),
-          ],
-        );
-        if (background case var step?) {
-          return FramedShot(
-            step: step,
-            device: device,
-            fallbackBrightness: statusFallback,
-            screenOverlay: overlay,
-          );
-        }
-        // No screen yet: the phone was locked, which is where a real one
-        // lands anyway.
-        var size = Size(device?.width ?? 390, device?.height ?? 844);
-        return SizedBox(
-          width: size.width,
-          height: size.height,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Container(
-                color: const Color(0xFF15151A),
-                alignment: Alignment.topCenter,
-                padding: EdgeInsets.only(top: (device?.insetTop ?? 0) + 40),
-                child: Text(
-                  '9:41',
-                  style: TextStyle(
-                    fontSize: 68,
-                    fontWeight: FontWeight.w300,
-                    color: Colors.white.withValues(alpha: 0.9),
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ),
-              if (notification != null)
-                Positioned(
-                  top: (device?.insetTop ?? 0) + 140,
-                  left: 8,
-                  right: 8,
-                  child: NotificationBanner(
-                    notification: notification,
-                    appLabel: appLabel,
-                    appIcon: appIcon,
-                    dark: true,
-                  ),
-                ),
-            ],
+    // Dark runs got light status icons; the banner follows the run.
+    var dark = statusFallback == Brightness.light;
+    var overlay = Stack(
+      fit: StackFit.expand,
+      children: [
+        // The dim that says "this moment is about the banner" — the screen
+        // stays legible under it, the way a real notification leaves the app
+        // visible.
+        Container(color: Colors.black.withValues(alpha: 0.3)),
+        Positioned(
+          top: (device?.insetTop ?? 0) + 8,
+          left: 8,
+          right: 8,
+          child: NotificationBanner(
+            notification: notification,
+            appLabel: appLabel,
+            appIcon: appIcon,
+            dark: dark,
           ),
-        );
-      },
+        ),
+      ],
+    );
+    if (background case var step?) {
+      return FramedShot(
+        step: step,
+        device: device,
+        fallbackBrightness: statusFallback,
+        screenOverlay: overlay,
+      );
+    }
+    // No screen yet: the phone was locked, which is where a real one lands
+    // anyway.
+    var size = Size(device?.width ?? 390, device?.height ?? 844);
+    return SizedBox(
+      width: size.width,
+      height: size.height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(
+            color: const Color(0xFF15151A),
+            alignment: Alignment.topCenter,
+            padding: EdgeInsets.only(top: (device?.insetTop ?? 0) + 40),
+            child: Text(
+              '9:41',
+              style: TextStyle(
+                fontSize: 68,
+                fontWeight: FontWeight.w300,
+                color: Colors.white.withValues(alpha: 0.9),
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ),
+          Positioned(
+            top: (device?.insetTop ?? 0) + 140,
+            left: 8,
+            right: 8,
+            child: NotificationBanner(
+              notification: notification,
+              appLabel: appLabel,
+              appIcon: appIcon,
+              dark: true,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -314,12 +299,12 @@ class NotificationBanner extends StatelessWidget {
 /// the strip's half-scale, where the words are too small to.
 class _DocumentSheet extends StatelessWidget {
   const _DocumentSheet({
-    required this.attachment,
+    required this.step,
     this.width = 440,
     this.height = 580,
   });
 
-  final ScenarioRunAttachment attachment;
+  final ScenarioRunStep step;
   final double width;
   final double height;
 
@@ -338,7 +323,7 @@ class _DocumentSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var mime = attachment.mimeType;
+    var mime = step.mimeType;
     return SizedBox(
       width: width,
       height: height,
@@ -365,16 +350,17 @@ class _DocumentSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        attachment.name,
+                        step.name ?? 'document',
                         style: context.type.heading,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const Gap(FwSpacing.xs),
                       Text(
                         [
-                          p.basename(attachment.file),
+                          if (step.file case var file?) p.basename(file),
                           ?mime,
-                          scenarioAttachmentSize(attachment.bytes),
+                          if (step.bytes case var bytes?)
+                            scenarioBeatSize(bytes),
                         ].join(' · '),
                         style: context.type.caption.copyWith(
                           color: colors.mut2,
@@ -402,14 +388,14 @@ class _DocumentSheet extends StatelessWidget {
       return Align(
         alignment: Alignment.topCenter,
         child: Image(
-          image: artifacts.encodedImage(attachment.file),
+          image: artifacts.encodedImage(step.file!),
           fit: BoxFit.contain,
         ),
       );
     }
     if (_textish(mime)) {
       return FutureBuilder<String?>(
-        future: artifacts.readString(attachment.file),
+        future: artifacts.readString(step.file!),
         builder: (context, snapshot) {
           var text = snapshot.data;
           if (text == null) return const SizedBox.shrink();
@@ -435,7 +421,10 @@ class _DocumentSheet extends StatelessWidget {
             color: context.colors.mut3,
           ),
           const Gap(FwSpacing.md),
-          Text(p.basename(attachment.file), style: context.type.bodyMuted),
+          Text(
+            step.file == null ? '' : p.basename(step.file!),
+            style: context.type.bodyMuted,
+          ),
         ],
       ),
     );
@@ -489,39 +478,18 @@ class _PaperPainter extends CustomPainter {
       old.fill != fill || old.line != line || old.fold != fold;
 }
 
-/// The screen [attachment] arrived over: the step itself for one that
-/// trailed the run, the previous screen for one that rode the capture — the
-/// parent where the run recorded parents, the list's previous step where it
-/// did not.
-ScenarioRunStep? scenarioAttachmentBackground(
-  List<ScenarioRunStep> steps,
-  ScenarioRunStep step,
-  ScenarioRunAttachment attachment,
-) {
-  if (attachment.after) return step;
-  if (step.parent case var parent?) {
-    for (var candidate in steps) {
-      if (candidate.index == parent) return candidate;
-    }
-    return null;
-  }
-  var position = steps.indexOf(step);
-  return position > 0 ? steps[position - 1] : null;
-}
-
-String scenarioAttachmentSize(int bytes) => bytes < 1024
+String scenarioBeatSize(int bytes) => bytes < 1024
     ? '$bytes B'
     : bytes < 1024 * 1024
     ? '${(bytes / 1024).toStringAsFixed(1)} kB'
     : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
-/// One attachment, pushed over the flow the way a step is: the thing big,
-/// its facts and the way out to the desktop underneath.
-class ScenarioAttachmentPage extends StatelessWidget {
-  const ScenarioAttachmentPage({
+/// One beat, blown up: the thing big, its facts and the way out to the
+/// desktop underneath.
+class ScenarioBeatPage extends StatelessWidget {
+  const ScenarioBeatPage({
     super.key,
     required this.step,
-    required this.index,
     required this.background,
     required this.device,
     required this.onBack,
@@ -530,13 +498,10 @@ class ScenarioAttachmentPage extends StatelessWidget {
     this.appIcon,
   });
 
+  /// The beat — a document or a notification.
   final ScenarioRunStep step;
 
-  /// Which of [step]'s attachments this page is.
-  final int index;
-
-  /// The step whose screen a notification arrived over — see
-  /// [ScenarioAttachmentShot.background].
+  /// The screen it happened on — see [ScenarioBeatShot.background].
   final ScenarioRunStep? background;
 
   final Device? device;
@@ -548,7 +513,6 @@ class ScenarioAttachmentPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var attachment = step.attachments[index];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -570,38 +534,46 @@ class ScenarioAttachmentPage extends StatelessWidget {
               const Gap(FwSpacing.lg),
               Expanded(
                 child: Text(
-                  attachment.name,
+                  step.name ??
+                      (step.notification != null ? 'notification' : 'document'),
                   style: context.type.heading,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Text(
-                [
-                  p.basename(attachment.file),
-                  ?attachment.mimeType,
-                  scenarioAttachmentSize(attachment.bytes),
-                ].join(' · '),
-                style: context.type.caption.copyWith(color: colors.mut2),
-              ),
-              const Gap(FwSpacing.lg),
-              Tappable(
-                onTap: () => unawaited(
-                  launchUrl(
-                    ScenarioArtifactsScope.of(context).uriOf(attachment.file),
+              // A document's facts. A notification has none — it is three
+              // strings and they are all on screen already — so the line is
+              // absent rather than empty.
+              if ([
+                    if (step.file case var file?) p.basename(file),
+                    ?step.mimeType,
+                    if (step.bytes case var bytes?) scenarioBeatSize(bytes),
+                  ].join(' · ')
+                  case var facts when facts.isNotEmpty)
+                Text(
+                  facts,
+                  style: context.type.caption.copyWith(color: colors.mut2),
+                ),
+              // Only a document has a file to open; a notification is three
+              // strings and is entirely on screen already.
+              if (step.file case var file?) ...[
+                const Gap(FwSpacing.lg),
+                Tappable(
+                  onTap: () => unawaited(
+                    launchUrl(ScenarioArtifactsScope.of(context).uriOf(file)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.open_in_new,
+                        size: FwIconSize.sm,
+                        color: colors.mut,
+                      ),
+                      const Gap(FwSpacing.xs),
+                      Text('Open', style: context.type.bodySmall),
+                    ],
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.open_in_new,
-                      size: FwIconSize.sm,
-                      color: colors.mut,
-                    ),
-                    const Gap(FwSpacing.xs),
-                    Text('Open', style: context.type.bodySmall),
-                  ],
-                ),
-              ),
+              ],
             ],
           ),
         ),
@@ -612,8 +584,8 @@ class ScenarioAttachmentPage extends StatelessWidget {
             padding: const EdgeInsets.all(FwSpacing.xl),
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: ScenarioAttachmentShot(
-                attachment: attachment,
+              child: ScenarioBeatShot(
+                step: step,
                 background: background,
                 device: device,
                 statusFallback: statusFallback,
