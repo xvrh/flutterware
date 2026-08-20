@@ -225,6 +225,10 @@ class ScenarioRunner {
     await _host.ensureGuest();
     if (wasWarm) await _host.sync();
     Directory(outDir).createSync(recursive: true);
+    // Closes the narration the host started: everything before this was
+    // getting a guest ready, and a caption still saying so while the scenario
+    // is executing is a stale one.
+    _host.onLog?.call('[scenarios] running');
     var response = await _host.vm.requireExtension(
       'ext.flutterware.scenarios.run',
       args: {
