@@ -35,12 +35,18 @@ class MergedTree extends StatelessWidget {
     super.key,
     required this.scenario,
     required this.store,
+    required this.transform,
     required this.selected,
     required this.onSelect,
   });
 
   final ScenarioComparison scenario;
   final ShotStore store;
+
+  /// The canvas's pan and zoom, owned by the tab: it has to survive a pushed
+  /// step and be *reset* when another flow is picked, and only the tab knows
+  /// which of the two just happened.
+  final TransformationController transform;
 
   /// The step id the address names, or null.
   final String? selected;
@@ -65,6 +71,7 @@ class MergedTree extends StatelessWidget {
       tipLength: 14,
       orientation: MatrixOrientation.horizontal,
       interactiveBuilder: (context, child) => ZoomableCanvas(
+        transformationController: transform,
         maxScale: 1.5,
         minScale: 0.2,
         boundaryMargin: const EdgeInsets.all(2000),
