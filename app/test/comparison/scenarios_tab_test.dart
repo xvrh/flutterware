@@ -90,6 +90,80 @@ void main() {
     expect(find.text('Not replayed'), findsNothing);
     expect(find.byKey(mergedTreeKey), findsOneWidget);
   });
+
+  /// **Pan is per flow.** The canvas is unconstrained, so a place scrolled to
+  /// in a long flow is blank canvas in a short one — the tree drawn off behind
+  /// you, which reads as a flow that failed to draw.
+  testWidgets('another flow gets the canvas back at the origin', (
+    tester,
+  ) async {
+    var scenarios = [
+      const ScenarioComparison(
+        scenario: 'test/cart_test.dart#cart',
+        state: ComparedState.changed,
+        items: [ComparedItem(id: 'Cart', state: ComparedState.changed)],
+        branches: [],
+      ),
+      const ScenarioComparison(
+        scenario: 'test/login_test.dart#login',
+        state: ComparedState.changed,
+        items: [ComparedItem(id: 'Login', state: ComparedState.changed)],
+        branches: [],
+      ),
+    ];
+    await pump(tester, scenarios, selected: 'test/cart_test.dart#cart');
+
+    var viewer = tester.widget<InteractiveViewer>(
+      find.byType(InteractiveViewer),
+    );
+    viewer.transformationController!.value = Matrix4.identity()
+      ..translateByDouble(-900.0, -600.0, 0, 1);
+    await tester.pump();
+
+    await pump(tester, scenarios, selected: 'test/login_test.dart#login');
+
+    expect(
+      tester
+          .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+          .transformationController!
+          .value,
+      Matrix4.identity(),
+    );
+  });
+
+  testWidgets('opening a step and coming back lands where the canvas was', (
+    tester,
+  ) async {
+    var scenarios = [
+      const ScenarioComparison(
+        scenario: 'test/cart_test.dart#cart',
+        state: ComparedState.changed,
+        items: [ComparedItem(id: 'Cart', state: ComparedState.changed)],
+        branches: [],
+      ),
+    ];
+    await pump(tester, scenarios, selected: 'test/cart_test.dart#cart');
+
+    var panned = Matrix4.identity()..translateByDouble(-120.0, -80.0, 0, 1);
+    tester
+            .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+            .transformationController!
+            .value =
+        panned;
+    await tester.pump();
+
+    await pump(tester, scenarios, selected: 'test/cart_test.dart#cart/Cart');
+    expect(find.byKey(stepPageKey), findsOneWidget);
+
+    await pump(tester, scenarios, selected: 'test/cart_test.dart#cart');
+    expect(
+      tester
+          .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+          .transformationController!
+          .value,
+      panned,
+    );
+  });
 }
 
 /// Every frame evicted — the store is not what these tests are about, and a

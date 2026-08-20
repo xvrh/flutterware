@@ -64,6 +64,14 @@ class _ScenariosTabState extends State<ScenariosTab> {
   late final _shots = ShotPair(widget.store);
   var _mode = StageMode.sideBySide;
 
+  /// The merged tree's pan and zoom, owned here so that opening a step and
+  /// coming back lands where the canvas was — the scenarios panel's flow keeps
+  /// its place the same way.
+  final _treeTransform = TransformationController();
+
+  /// The flow the canvas above was panned over.
+  String? _panned;
+
   @override
   void initState() {
     super.initState();
@@ -131,8 +139,20 @@ class _ScenariosTabState extends State<ScenariosTab> {
   }
 
   void _load() {
+    _resetTreeIfFlowChanged();
     var frames = _scenario?.frames[_step?.id];
     unawaited(_shots.loadFrames(base: frames?.base, head: frames?.head));
+  }
+
+  /// **Another flow starts at the origin.** The canvas is unconstrained and
+  /// pans two thousand pixels past its own edges, so a place scrolled to in a
+  /// long flow is, in the next one, blank canvas — the tree is drawn, off
+  /// somewhere behind you.
+  void _resetTreeIfFlowChanged() {
+    var flow = _scenario?.scenario;
+    if (flow == _panned) return;
+    _panned = flow;
+    _treeTransform.value = Matrix4.identity();
   }
 
   void _select({String? scenario, String? step}) {
@@ -200,6 +220,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
                       : MergedTree(
                           scenario: scenario,
                           store: widget.store,
+                          transform: _treeTransform,
                           selected: null,
                           onSelect: (id) => _select(step: id),
                         ),
@@ -218,6 +239,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
     _shots
       ..removeListener(_onShots)
       ..dispose();
+    _treeTransform.dispose();
     super.dispose();
   }
 }
