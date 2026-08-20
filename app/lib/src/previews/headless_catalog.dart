@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
@@ -55,8 +54,10 @@ class HeadlessCatalog {
   /// Screenshots [entryId] into [output], optionally with its knobs turned.
   ///
   /// Starts a daemon, compiles the entry, renders one frame, and shuts
-  /// everything down. Fine for one entry; a batch wants a session that stays
-  /// warm, which is how [captureAll] works.
+  /// everything down. Fine for one entry, which is the shape of every caller
+  /// left: catalog-wide batches — the audit, the comparison — render under
+  /// `flutter_tester` instead, where a demo that animates for ever costs fake
+  /// clock rather than real seconds.
   ///
   /// [knobs] are raw strings — a flag and a JSON object both arrive as text —
   /// and are coerced to whatever kind the demo declared. A name the entry does
@@ -192,35 +193,6 @@ class HeadlessCatalog {
     }
   }
 
-  /// Shows [entry] on a guest that is already running, and reports what went
-  /// wrong rather than throwing.
-  ///
-  /// The fast path is [_GuestSession.showEntry]: the guest's program holds the
-  /// whole catalog, so nothing has to be compiled to move between entries.
-  /// A guest that cannot — one from before the extension, or one whose program
-  /// predates this entry — falls back to the compile and the reload that used
-  /// to be the only path.
-  ///
-  /// The reload is followed by a switch, and belt-and-braces on purpose: a
-  /// reload does not re-run `main`, so the guest's idea of the current entry
-  /// survives it. A current guest rebases on the regenerated file by itself —
-  /// see [CatalogEntries] — which makes this a no-op there, and the one line
-  /// that would have caught it going wrong.
-  ///
-  /// Returns null on success, or the compiler's complaint.
-  Future<String?> _show(
-    _GuestSession guest,
-    CompilerDaemonClient daemon,
-    CatalogEntry entry,
-  ) async {
-    if (await guest.showEntry(entry.id)) return null;
-    var compiled = await daemon.select(entry.id);
-    if (!compiled.ok) return compiled.error ?? 'did not compile';
-    await guest.reload(compiled.dill!);
-    await guest.showEntry(entry.id);
-    return null;
-  }
-
   /// Which entries the compiler can actually build, and why the rest cannot.
   ///
   /// Needs no guest: the daemon compiles every wrapper into one program while
@@ -276,110 +248,6 @@ class HeadlessCatalog {
     viewport: viewport,
     (guest) => guest.settledAxes(entryId),
   );
-
-  /// Photographs **every** entry against one warm guest, handing each frame to
-  /// [onFrame] as it lands.
-  ///
-  /// The first entry pays a cold compile and a guest launch; every one after it
-  /// is a hot reload and a frame, with the picture and the tree taken off that
-  /// frame.
-  ///
-  /// Measured on `examples/example`: six entries in **5.6s**, of which 4.3s is
-  /// the first entry's cold compile and guest launch; the rest cost
-  /// **197–329ms** each — the number a comparison's per-entry budget is drawn
-  /// against.
-  ///
-  /// **Streamed, and it has to be.** A phone-sized frame is ~2.5MB of rgba8888,
-  /// so a 200-entry catalog is half a gigabyte if the batch keeps what it
-  /// renders. [onFrame] is therefore required rather than optional and the
-  /// bytes are not retained here: a comparison hashes, diffs and files each
-  /// frame as it arrives, and the caller that wants them all in memory has to
-  /// say so by keeping them.
-  ///
-  /// **Raw, never PNG.** Encoding is ~80% of a 1× capture's cost and a
-  /// comparison reads pixels; only the handful of pictures that reach a screen
-  /// are ever encoded. That is also why this does not go through [observe],
-  /// which writes a file.
-  ///
-  /// An entry the compiler refuses is reported in [CatalogBatch.failed] rather
-  /// than thrown: on a comparison's base side that is "it was already broken",
-  /// which is a result, and one refusal must not cost the other 212 frames.
-  Future<CatalogBatch> captureAll({
-    required Future<void> Function(CatalogFrame frame) onFrame,
-    List<String>? entryIds,
-    CaptureViewport viewport = CaptureViewport.panel,
-    bool wantTree = true,
-  }) async {
-    var (daemon, ready) = await CompilerDaemonClient.connect(
-      dartExecutable: dartExecutable,
-      config: config,
-    );
-    _GuestSession? guest;
-    try {
-      var quarantined = [
-        for (var broken in ready.quarantined)
-          if (entryIds == null || entryIds.contains(broken.entry.id)) broken,
-      ];
-      var servable = [
-        for (var entry in ready.entries)
-          if (entryIds == null || entryIds.contains(entry.id)) entry,
-      ];
-
-      var captured = <String>[];
-      var failed = {
-        for (var broken in quarantined) broken.entry.id: broken.error,
-      };
-
-      for (var entry in servable) {
-        if (guest == null) {
-          var compiled = await daemon.select(entry.id, full: true);
-          if (!compiled.ok) {
-            failed[entry.id] = compiled.error ?? 'did not compile';
-            continue;
-          }
-          guest = await _GuestSession.start(
-            hostPath: ready.hostPath,
-            assetsDir: ready.assetsDir,
-            icuData: ready.icuData,
-            name: ready.sessionId,
-            viewport: viewport,
-          );
-        } else {
-          if (await _show(guest, daemon, entry) case var error?) {
-            failed[entry.id] = error;
-            continue;
-          }
-        }
-
-        // The picture *is* the settling frame, as in [observe]: nothing here
-        // has to be read before it is taken, so a separate settle would draw a
-        // second frame per entry for nothing.
-        var (image, settled) = await guest.captureImage(
-          pixelRatio: viewport.pixelRatio,
-        );
-        var tree = wantTree ? await guest.readTree(entry.id) : null;
-        var errors = await guest.readErrors(entry.id);
-        captured.add(entry.id);
-        await onFrame(
-          CatalogFrame(
-            entry: entry,
-            rgba: image.getBytes(order: img.ChannelOrder.rgba),
-            width: image.width,
-            height: image.height,
-            tree: tree,
-            errors: errors,
-            settled: settled.settled,
-            seesAnimations: settled.seesAnimations,
-          ),
-        );
-      }
-
-      return CatalogBatch(captured: captured, failed: failed);
-    } finally {
-      await guest?.close();
-      await daemon.close();
-    }
-  }
 
   /// Everything asked about **one** rendered build.
   ///
@@ -692,75 +560,6 @@ class CatalogCapture {
   /// What the entry reported *after* the values were applied — so a clamped or
   /// ignored value is visible rather than assumed.
   final List<KnobDescriptor> knobs;
-}
-
-/// One entry's frame, as [HeadlessCatalog.captureAll] hands it over.
-///
-/// Lives exactly as long as the `onFrame` call that receives it: the batch
-/// does not keep [rgba], and a caller that wants it later has to take a copy.
-class CatalogFrame {
-  CatalogFrame({
-    required this.entry,
-    required this.rgba,
-    required this.width,
-    required this.height,
-    required this.tree,
-    required this.errors,
-    this.settled = true,
-    this.seesAnimations = true,
-  });
-
-  final CatalogEntry entry;
-
-  /// rgba8888 rows, [width]×[height]×4 — the composited frame, undecoded and
-  /// unencoded.
-  final Uint8List rgba;
-
-  final int width;
-  final int height;
-
-  /// The tree taken off the same frame, or null when the caller said it did
-  /// not want one. Same build as the pixels, by construction rather than by
-  /// luck — the whole point of [HeadlessCatalog.observe]'s one-render rule.
-  final InspectTree? tree;
-
-  /// What the entry threw while building. A picture with errors is still a
-  /// picture, and on a comparison's base side it is often the answer.
-  final InspectErrors errors;
-
-  /// Whether everything had stopped moving when the shutter fired.
-  ///
-  /// False for a preview that animates forever — a spinner, a shimmer. The
-  /// picture is real; what it is *not* is reproducible, and a comparison that
-  /// reported the resulting difference as a change would be blaming the branch
-  /// for the clock.
-  final bool settled;
-
-  /// Whether the guest could report animations at all.
-  ///
-  /// False for one built from a `package:flutterware` that predates the field —
-  /// which is the base side of a comparison against a checkout older than this
-  /// change. It settles for images only, so its frames can be mid-transition
-  /// while the other side's are not: the two sides differ by their *tooling*,
-  /// and saying so is the only thing that separates that from a finding.
-  final bool seesAnimations;
-}
-
-/// What a whole batch managed to photograph.
-///
-/// Carries no pixels: they went to `onFrame` as they were taken. This is the
-/// index of what happened, which is all that is left to say afterwards.
-class CatalogBatch {
-  CatalogBatch({required this.captured, required this.failed});
-
-  /// Entry ids photographed, in the order they were.
-  final List<String> captured;
-
-  /// Entry id → why nothing was photographed of it. A quarantined entry and
-  /// one that failed its own compile land here alike: the difference matters
-  /// to the compiler and not to a comparison, which reports both as "this side
-  /// could not render it".
-  final Map<String, String> failed;
 }
 
 /// What the compiler could and could not build.

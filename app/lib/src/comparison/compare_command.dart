@@ -179,12 +179,11 @@ Future<CompareOutcome> runComparison({
     cache: shotCache,
     only: options.entries.isEmpty ? null : options.entries,
     side: PreviewsSide(
-      dartExecutable: p.join(sdk.root, 'bin', 'dart'),
       flutterSdkRoot: sdk.root,
-      appToolDirectory: session.workspace.appContext.appToolDirectory.path,
       packagePath: package,
       root: core.rootFor(packageInWorktree),
       previewAnnotations: core.previewAnnotationsFor(packageInWorktree),
+      canvases: core.canvasesFor(packageInWorktree),
     ),
   );
 

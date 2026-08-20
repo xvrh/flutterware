@@ -31,7 +31,10 @@ class ShotKey {
   /// v4 — the closure folds in the pixel inputs no compile names (assets,
   /// lockfiles, l10n bundles); every v3 key was computed without them and
   /// could be serving a picture of the wrong asset.
-  static const revision = 'v4';
+  /// v5 — previews render under `flutter_tester` (the audit's lane) rather
+  /// than the embedder guest: a different engine, different settle, and a
+  /// clock parked at a fake instant instead of read off the wall.
+  static const revision = 'v5';
 
   /// [closure] is a [SourceClosure.fingerprint]; [sdk] identifies the SDK both
   /// sides are rendered with; [axes] and [knobs] are whatever was applied.
