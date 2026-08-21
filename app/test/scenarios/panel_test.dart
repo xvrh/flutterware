@@ -19,6 +19,7 @@ import 'package:flutterware_app/src/scenarios/framed_shot.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:flutterware_app/src/ui/aside.dart';
 import 'package:flutterware_app/src/ui/matched_text.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
@@ -1034,6 +1035,71 @@ void main() {
   // The fold is the browser's, not the panel's: the shell rebuilds this panel
   // from scratch on every visit, and a collapse thrown away with it was
   // something you re-clicked rather than a shape you chose.
+  // A 240px list beside a 232px rail leaves 61% of the window for a flow of
+  // seven phones, which is where this came from. The fold is one verb over
+  // both, and the way back is drawn by the pane itself — see [AsidePane].
+  testWidgets('expanding folds the list, and the way back is on the very '
+      'first frame after a plugin switch', (tester) async {
+    var core = _core(root);
+    var plugin = ScenariosPlugin(core);
+
+    File('${root.path}/test/scenarios/checkout_test.dart')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync("void main() => scenario('Pays', () {});\n");
+    await _settleScan(tester, core);
+
+    var railVisible = true;
+    var aside = AsideVisibility(
+      railVisible: () => railVisible,
+      setRailVisible: (value) => railVisible = value,
+    );
+    var address = ValueNotifier(
+      Address(worktree: 'wt', plugin: scenariosPluginId),
+    );
+    Future<void> showPanel() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme,
+          home: Scaffold(
+            body: AsideScope(
+              aside: aside,
+              child: AddressRoot(
+                address: address,
+                onChanged: (a) => address.value = a,
+                child: Builder(builder: plugin.buildPanel),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    await showPanel();
+    expect(find.text('Pays'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Expand the panel (⌥⌘B)'));
+    await tester.pump();
+    expect(find.text('Pays'), findsNothing);
+    expect(railVisible, isFalse, reason: 'one verb, both panes');
+
+    // Away to a panel with no aside, and back. **One pump**, deliberately: the
+    // gutter used to be the shell's, and the shell lays its row out before the
+    // panel inside it has built — so for exactly this frame the window had a
+    // folded list, no rail, and nothing at all to click.
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: SizedBox.shrink())),
+    );
+    await tester.pump();
+    await showPanel();
+
+    expect(find.byTooltip('Restore the panels (⌥⌘B)'), findsOneWidget);
+    await tester.tap(find.byTooltip('Restore the panels (⌥⌘B)'));
+    await tester.pump();
+    expect(find.text('Pays'), findsOneWidget);
+    expect(railVisible, isTrue);
+  });
+
   testWidgets('a fold survives leaving the plugin', (tester) async {
     var core = _core(root);
     var plugin = ScenariosPlugin(core);
