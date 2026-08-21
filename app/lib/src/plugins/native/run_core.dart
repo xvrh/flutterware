@@ -1069,10 +1069,16 @@ class RunCore extends PluginCore {
               description: 'What to do',
               options: [
                 ActionOption('tap'),
+                ActionOption('doubleTap'),
                 ActionOption('longPress'),
+                ActionOption('secondaryTap'),
+                ActionOption('hover'),
+                ActionOption('unhover'),
                 ActionOption('drag'),
+                ActionOption('scroll'),
                 ActionOption('scrollTo'),
                 ActionOption('enterText'),
+                ActionOption('key'),
                 ActionOption('back'),
                 ActionOption('wait'),
                 ActionOption('observe'),
@@ -1105,17 +1111,62 @@ class RunCore extends PluginCore {
             ),
             const ActionParameter(
               'dx',
-              'Drag dx',
+              'Horizontal distance',
               required: false,
-              description: 'Horizontal drag distance, logical pixels',
+              description:
+                  'For drag and scroll: horizontal distance, logical pixels',
             ),
             const ActionParameter(
               'dy',
-              'Drag dy',
+              'Vertical distance',
               required: false,
               description:
-                  'Vertical drag distance. Negative moves the finger up the '
-                  'screen, the touch convention.',
+                  'Vertical distance, and the sign depends on which verb: '
+                  'drag is a finger, so negative moves it up the screen; '
+                  'scroll is a wheel, whose delta is added to the scroll '
+                  'offset, so positive moves *down* the list. Opposite '
+                  "conventions, both the platform's.",
+            ),
+            const ActionParameter(
+              'keys',
+              'Keys',
+              required: false,
+              description:
+                  'For key: the chord to press. `+`-separated, the last name '
+                  'fires and the ones before it are held for it — `escape`, '
+                  '`enter`, `meta+k`, `shift+tab`. This is for shortcuts and '
+                  'navigation, not for typing: a character never reaches a '
+                  'text field through a key event on any platform, so `a` '
+                  'leaves a focused field empty — enterText is the verb that '
+                  'types. Names are LogicalKeyboardKey '
+                  'debug names spelled any way that reads (`arrowDown`), a '
+                  'single character (`k`), or a shorthand (`cmd`, `ctrl`, '
+                  '`alt`, `opt`, `shift`, `esc`). A Mac shortcut and its '
+                  'Windows/Linux twin are different chords: meta+k, control+k.',
+            ),
+            const ActionParameter(
+              'gapMs',
+              'Double-tap gap',
+              kind: ActionParameterKind.integer,
+              required: false,
+              description:
+                  'For doubleTap: real milliseconds between the two taps. 80 '
+                  'by default, which is the middle of the only window that '
+                  'works — under 40 the recognizer reads them as one '
+                  'restarted tap, over 300 as two separate ones.',
+            ),
+            const ActionParameter(
+              'holdMs',
+              'Hover hold',
+              kind: ActionParameterKind.integer,
+              required: false,
+              description:
+                  'For hover and unhover: how long to keep the pointer there '
+                  'before settling, in real milliseconds. 600 by default, and '
+                  'cut short the moment the app reacts — a settle waits on '
+                  'frames, and what a hover is usually asked about is a timer '
+                  "(a tooltip's waitDuration), which schedules no frame until "
+                  'it fires. 0 skips the hold, for a plain enter/exit check.',
             ),
             const ActionParameter(
               'within',
@@ -3923,7 +3974,10 @@ class RunCore extends PluginCore {
         'step',
         'maxScrolls',
         'route',
+        'keys',
+        'gapMs',
         'waitMs',
+        'holdMs',
         'settleMs',
         'actTimeoutMs',
       ])

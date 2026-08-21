@@ -775,9 +775,29 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
       properties: {
         'verb': Schema.string(
           description:
-              'tap | longPress | drag | scrollTo | enterText | back | wait '
-              '| observe | navigate. observe is the act-less transaction — '
-              'the opening move, and the call after a reload. On '
+              'tap | doubleTap | longPress | secondaryTap | hover | unhover '
+              '| drag | scroll | scrollTo | enterText | key | back | wait | '
+              'observe | navigate. observe is the act-less transaction — the '
+              'opening move, and the call after a reload. doubleTap taps '
+              'twice with a real gap between (a recognizer reads two taps '
+              'closer than 40ms as one), and secondaryTap right-clicks, which '
+              'is how a context menu is asked for. The mouse-and-keyboard '
+              'verbs are what a desktop app needs and a phone does not. hover '
+              'parks a mouse '
+              'over a target and holds it there, which is how a tooltip, a '
+              'hover tint or a control that only appears to a mouse gets onto '
+              'the screen at all — the tooltip lands in `texts` like any '
+              'other widget; the pointer stays put until unhover moves it, '
+              'exactly as a real mouse would. scroll turns the wheel over a '
+              'target, and a wheel is hit-tested, so it scrolls *that* pane — '
+              'scrollTo picks a scrollable and walks it, which is the other '
+              'question. key presses a chord (`keys`), and needs the app to '
+              'hold focus: a keystroke dispatches from the focused widget '
+              'upwards, so with nothing focused it misses every Shortcuts '
+              'binding — tap or enterText something first, and a key that '
+              'went nowhere says so rather than reporting success. It is for '
+              'shortcuts and navigation, never for typing: enterText is the '
+              'verb that types. On '
               'layer: native: observe | tap | enterText | foreground.',
         ),
         'layer': Schema.string(
@@ -817,11 +837,47 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               'For navigate — needs the app to have registered a '
               'navigation handler.',
         ),
-        'dx': Schema.num(description: 'Drag distance, logical px.'),
+        'dx': Schema.num(
+          description: 'For drag and scroll: horizontal distance, logical px.',
+        ),
         'dy': Schema.num(
-          description: 'Drag distance; negative moves the finger up.',
+          description:
+              'Vertical distance, and the sign depends on the verb: drag is a '
+              'finger, so negative moves it up the screen; scroll is a wheel, '
+              'whose delta is added to the scroll offset, so positive moves '
+              "*down* the list. Opposite conventions, both the platform's.",
+        ),
+        'gapMs': Schema.int(
+          description:
+              'For doubleTap: real milliseconds between the two taps. 80 by '
+              'default, the middle of the only window that works — under 40 '
+              'the recognizer reads them as one restarted tap, over 300 as '
+              'two separate ones.',
+        ),
+        'keys': Schema.string(
+          description:
+              'For key: the chord to press. `+`-separated, the last name '
+              'fires and the ones before it are held for it — `escape`, '
+              '`enter`, `meta+k`, `shift+tab`. This is for shortcuts and '
+              'navigation, not for typing: a character never reaches a text '
+              'field through a key event on any platform, so `a` leaves a '
+              'focused field empty — enterText is the verb that types. Names '
+              'are LogicalKeyboardKey '
+              'debug names spelled any way that reads (`arrowDown`), a single '
+              'character (`k`), or a shorthand (`cmd`, `ctrl`, `alt`, `opt`, '
+              '`shift`, `esc`). A Mac shortcut and its Windows/Linux twin are '
+              'different chords: meta+k, control+k.',
         ),
         'waitMs': Schema.int(description: 'For wait: real milliseconds.'),
+        'holdMs': Schema.int(
+          description:
+              'For hover and unhover: how long to keep the pointer there '
+              'before settling, in real milliseconds. 600 by default, and cut '
+              'short the moment the app reacts — a settle waits on frames, '
+              'and what a hover is usually asked about is a timer (a '
+              "tooltip's waitDuration), which schedules no frame until it "
+              'fires. 0 skips the hold, for a plain enter/exit check.',
+        ),
         'settleMs': Schema.int(
           description:
               'Settle budget, default 800. Running out is reported, never an '
@@ -963,7 +1019,10 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
     'route',
     'dx',
     'dy',
+    'keys',
+    'gapMs',
     'waitMs',
+    'holdMs',
     'settleMs',
     'screen',
     'find',

@@ -717,6 +717,186 @@ void main() {
     expect(result.framesEnabled, isFalse);
     expect(result.note, contains('hidden or occluded'));
   });
+
+  /// The hold is the whole reason `hover` is not just a tap with a different
+  /// event, and it is spent inside the guest — so the host's only job is to
+  /// let the number through. A key missing from the wire allowlist is a
+  /// parameter that is documented, accepted and silently dropped.
+  test('hover carries its hold across the wire', () async {
+    Map<String, String>? wire;
+    core.debugAct = (handle, args) async {
+      wire = args;
+      return {
+        'step': {
+          'verb': 'hover',
+          'target': '"Save"',
+          'settle': {'settled': true, 'elapsedMs': 40},
+        },
+        'texts': ['Save', 'Saves the document'],
+      };
+    };
+
+    var result =
+        (await core.invoke(
+              'act',
+              arguments: {'verb': 'hover', 'target': 'Save', 'holdMs': 250},
+            ))!
+            as RunActResult;
+
+    expect(wire!['verb'], 'hover');
+    expect(wire!['holdMs'], '250');
+    expect(result.ok, isTrue);
+    expect(
+      result.texts,
+      contains('Saves the document'),
+      reason: 'a tooltip is an OverlayEntry, so it rides the texts',
+    );
+    expect(readJournal(handle).single.verb, 'hover');
+  });
+
+  /// `unhover` takes no target, and the step names what it released — so the
+  /// journal line reads `unhover "Save"` rather than a bare verb, and a
+  /// reviewer can see which hover ended.
+  test('unhover journals what the guest released', () async {
+    core.debugAct = (handle, args) async => {
+      'step': {
+        'verb': 'unhover',
+        'target': '"Save"',
+        'settle': {'settled': true, 'elapsedMs': 30},
+      },
+      'texts': ['Save'],
+    };
+
+    var result =
+        (await core.invoke('act', arguments: {'verb': 'unhover'}))!
+            as RunActResult;
+
+    expect(result.ok, isTrue);
+    expect(result.verb, 'unhover');
+    expect(result.target, '"Save"');
+    expect(readJournal(handle).single.target, '"Save"');
+  });
+
+  /// `keys` is the second parameter the guest cannot invent for itself. Same
+  /// hole as `holdMs`: declared, accepted, and dropped on the floor unless the
+  /// wire allowlist names it too.
+  test('key carries its chord across the wire', () async {
+    Map<String, String>? wire;
+    core.debugAct = (handle, args) async {
+      wire = args;
+      return {
+        'step': {
+          'verb': 'key',
+          'target': 'meta+k',
+          'settle': {'settled': true, 'elapsedMs': 40},
+        },
+        'texts': ['Search plugins, entries and actions…'],
+      };
+    };
+
+    var result =
+        (await core.invoke(
+              'act',
+              arguments: {'verb': 'key', 'keys': 'meta+k'},
+            ))!
+            as RunActResult;
+
+    expect(wire!['verb'], 'key');
+    expect(wire!['keys'], 'meta+k');
+    expect(result.ok, isTrue);
+    expect(readJournal(handle).single.target, 'meta+k');
+  });
+
+  /// `gapMs` is the third parameter that only reaches the guest if the wire
+  /// allowlist names it — and the one whose absence is hardest to see, because
+  /// a doubleTap with no gap still returns ok and simply is not a double tap.
+  test('doubleTap carries its gap across the wire', () async {
+    Map<String, String>? wire;
+    core.debugAct = (handle, args) async {
+      wire = args;
+      return {
+        'step': {
+          'verb': 'doubleTap',
+          'target': '"Handle"',
+          'settle': {'settled': true, 'elapsedMs': 90},
+        },
+        'texts': <String>[],
+      };
+    };
+
+    var result =
+        (await core.invoke(
+              'act',
+              arguments: {
+                'verb': 'doubleTap',
+                'target': 'Handle',
+                'gapMs': 120,
+              },
+            ))!
+            as RunActResult;
+
+    expect(wire!['verb'], 'doubleTap');
+    expect(wire!['gapMs'], '120');
+    expect(result.ok, isTrue);
+    expect(readJournal(handle).single.verb, 'doubleTap');
+  });
+
+  test('secondaryTap reaches the guest as its own verb', () async {
+    Map<String, String>? wire;
+    core.debugAct = (handle, args) async {
+      wire = args;
+      return {
+        'step': {
+          'verb': 'secondaryTap',
+          'target': '"Row"',
+          'settle': {'settled': true, 'elapsedMs': 40},
+        },
+        'texts': ['Copy', 'Paste'],
+      };
+    };
+
+    var result =
+        (await core.invoke(
+              'act',
+              arguments: {'verb': 'secondaryTap', 'target': 'Row'},
+            ))!
+            as RunActResult;
+
+    expect(wire!['verb'], 'secondaryTap');
+    expect(result.ok, isTrue);
+    expect(result.verb, 'secondaryTap');
+    expect(readJournal(handle).single.target, '"Row"');
+  });
+
+  /// `scroll` reuses `dx`/`dy`, which `drag` already put on the wire — so this
+  /// is about the verb reaching the guest with its delta intact, and about the
+  /// journal naming the pane rather than the numbers.
+  test('scroll carries its delta and journals its target', () async {
+    Map<String, String>? wire;
+    core.debugAct = (handle, args) async {
+      wire = args;
+      return {
+        'step': {
+          'verb': 'scroll',
+          'target': '"Rules"',
+          'settle': {'settled': true, 'elapsedMs': 60},
+        },
+        'texts': <String>[],
+      };
+    };
+
+    var result =
+        (await core.invoke(
+              'act',
+              arguments: {'verb': 'scroll', 'target': 'Rules', 'dy': 600},
+            ))!
+            as RunActResult;
+
+    expect(wire!['verb'], 'scroll');
+    expect(wire!['dy'], '600');
+    expect(result.ok, isTrue);
+    expect(readJournal(handle).single.target, '"Rules"');
+  });
 }
 
 /// A 1×1 transparent PNG.

@@ -368,9 +368,10 @@ class NativeSession {
         default:
           throw NativeRefusal(
             '`$verb` is not a native verb. The native layer does `observe`, '
-            '`tap`, `enterText` and `foreground`; everything else — drag, '
-            'scrollTo, back, navigate — is the drive layer, which addresses '
-            "Flutter's own tree. Drop `layer` for those.",
+            '`tap`, `enterText` and `foreground`; everything else — '
+            'doubleTap, secondaryTap, drag, scroll, scrollTo, hover, key, '
+            "back, navigate — is the drive layer, which addresses Flutter's "
+            'own tree. Drop `layer` for those.',
             failure: 'unsupported',
           );
       }

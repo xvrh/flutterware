@@ -1556,10 +1556,15 @@ String stepSentence(JournalEntry entry) =>
     entry.target == null ? entry.verb : '${entry.verb} ${entry.target}';
 
 IconData _verbIcon(String verb) => switch (verb) {
-  'tap' || 'longPress' => Icons.touch_app_outlined,
+  'tap' ||
+  'doubleTap' ||
+  'longPress' ||
+  'secondaryTap' => Icons.touch_app_outlined,
+  'hover' || 'unhover' => Icons.mouse_outlined,
   'drag' => Icons.swipe_outlined,
-  'scrollTo' => Icons.swap_vert,
+  'scroll' || 'scrollTo' => Icons.swap_vert,
   'enterText' => Icons.keyboard_outlined,
+  'key' => Icons.keyboard_alt_outlined,
   'back' => Icons.arrow_back,
   'wait' => Icons.hourglass_empty,
   'observe' => Icons.visibility_outlined,
