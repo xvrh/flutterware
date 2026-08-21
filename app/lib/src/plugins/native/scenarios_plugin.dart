@@ -1107,8 +1107,17 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   @override
   void didUpdateWidget(_ScenarioPage old) {
     super.didUpdateWidget(old);
+    // Which step the reader is walking off, so the one they land on knows
+    // whether it was walked into. Held here rather than on the step page
+    // because a document and a screen are different widgets, and the page is
+    // rebuilt from scratch every time the walk crosses between them.
+    if (old.step != widget.step) _cameFrom = old.step;
     _maybeRun();
   }
+
+  /// The step that was open when this one was, or null for an arrival from
+  /// the flow, a fresh run, or a link somebody sent.
+  int? _cameFrom;
 
   @override
   void dispose() {
@@ -1197,10 +1206,12 @@ class _ScenarioPageState extends State<_ScenarioPage> {
       if (step != null) {
         if (step.kind != ScenarioStepKind.screen) {
           return ScenarioBeatPage(
+            steps: steps,
             step: step,
             background: scenarioFrameFor(steps, step),
             device: device,
             onBack: _closeStep,
+            onOpenStep: _openStep,
             statusFallback: statusFallback,
             appLabel: _appLabel,
             appIcon: _appIcon,
@@ -1209,6 +1220,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
         return ScenarioStepPage(
           steps: steps,
           step: step,
+          from: _cameFrom,
           device: device,
           onBack: _closeStep,
           onOpenStep: _openStep,

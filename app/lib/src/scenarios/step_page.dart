@@ -23,6 +23,7 @@ import 'artifacts.dart';
 import 'events_view.dart';
 import 'framed_shot.dart';
 import 'motion_player.dart';
+import 'step_links.dart';
 import '../inspect/focus_order.dart';
 import '../inspect/semantics_node.dart';
 import '../inspect/semantics_view.dart';
@@ -49,6 +50,7 @@ class ScenarioStepPage extends StatefulWidget {
     required this.onBack,
     required this.onOpenStep,
     required this.displayRoot,
+    this.from,
     this.statusFallback = Brightness.dark,
   });
 
@@ -57,6 +59,16 @@ class ScenarioStepPage extends StatefulWidget {
   final Device? device;
   final VoidCallback onBack;
   final void Function(ScenarioRunStep) onOpenStep;
+
+  /// The index of the step the reader was on when they opened this one, or
+  /// null when they arrived from the flow, from a link somebody sent them, or
+  /// from a run that just finished.
+  ///
+  /// Told rather than inferred, because the two arrivals that have to be told
+  /// apart are not both changes to *this* widget: walking off a document
+  /// replaces the whole page, and a page that watched only its own updates
+  /// would call the step after a beat a cold open.
+  final int? from;
 
   /// What a node's source path is shortened against — the package root.
   final String displayRoot;
@@ -137,7 +149,11 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _loadTree();
-    if (!_motionLoaded || _motionFrames != widget.step.frames) _loadMotion();
+    if (!_motionLoaded || _motionFrames != widget.step.frames) {
+      // A first mount is a walk too when the page before it was a beat, which
+      // is a different widget and so a different [State].
+      _loadMotion(play: _walkedForward);
+    }
   }
 
   @override
@@ -148,8 +164,22 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
       // Walking to the next step, or a re-run replacing this one: either way
       // the recording just left behind is not what is on screen any more.
       scenarioMotionResidency.forget(old.step);
-      _loadMotion();
+      _loadMotion(play: _walkedForward);
     }
+  }
+
+  /// Whether this step is one the step the reader came *from* leads to — the
+  /// only arrival that plays.
+  ///
+  /// Answered off the graph rather than off the tap, so a link, an address
+  /// typed into the bar and whatever walks these steps next all get the same
+  /// answer. A back link, a jump from the flow canvas and a re-run all come
+  /// out false, and rest on the still as before.
+  bool get _walkedForward {
+    var from = widget.steps.firstWhereOrNull((s) => s.index == widget.from);
+    if (from == null) return false;
+    var (_, nexts) = scenarioNeighbours(widget.steps, from);
+    return nexts.any((step) => step.index == widget.step.index);
   }
 
   @override
@@ -166,20 +196,42 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   /// screenshot, so arriving on the page looks exactly as it did before the
   /// recording existed. Walking to the next step with the previous/next links
   /// rebuilds it for the new transition.
-  void _loadMotion() {
+  ///
+  /// With [play] it starts at the first frame instead: the recording *is* the
+  /// transition from the step just left, so a forward walk shows the app
+  /// moving from one screen to the next, and pressing next along a flow plays
+  /// it the way it ran. It still ends on the screenshot, so a walk that
+  /// stopped is a page nobody can tell from the old one.
+  void _loadMotion({bool play = false}) {
     _motionLoaded = true;
     _motionFrames = widget.step.frames;
     _motion?.dispose();
-    _motion = ScenarioMotionController.forStep(widget.step, this)
-      ?..rest()
-      ..addListener(_onFrame);
-    if (_motion == null) return;
+    var motion = _motion = ScenarioMotionController.forStep(widget.step, this);
+    // Plays only what is already decoded. The first pass over a recording is
+    // the one that decodes it and an undecoded frame draws as nothing, so a
+    // cold autoplay would flicker the phone empty on the way in — worse than
+    // the still it replaces. [_warm] is what keeps the ordinary walk warm;
+    // everything else rests, and the transport is right there to play it.
+    if (motion != null) {
+      if (play && scenarioMotionResidency.isWarm(widget.step)) {
+        motion.play();
+      } else {
+        motion.rest();
+      }
+      motion.addListener(_onFrame);
+    }
     // After the frame, not from `initState`: precaching resolves against the
     // element's image configuration, which does not exist yet here.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(precacheScenarioMotion(context, widget.step));
+      if (mounted) unawaited(_warmMotion());
     });
   }
+
+  /// Decodes this step's own frames, so replaying costs nothing after the
+  /// first pass. Warming the step *ahead* — what makes the next press play
+  /// rather than rest — is [ScenarioStepLinks]'s, since the page on the far
+  /// side of a beat has no recording of its own to hang it on.
+  Future<void> _warmMotion() => precacheScenarioMotion(context, widget.step);
 
   void _onFrame() {
     if (mounted) setState(() {});
@@ -330,7 +382,6 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var (previous, next) = _neighbours();
 
     return LayoutBuilder(
       builder: (context, constraints) => Column(
@@ -424,26 +475,13 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
                     ),
                   ),
                 ),
-                if (previous != null)
-                  Positioned(
-                    left: 0,
-                    bottom: 0,
-                    child: _StepLink(
-                      previous,
-                      isNext: false,
-                      onTap: () => widget.onOpenStep(previous),
-                    ),
+                Positioned.fill(
+                  child: ScenarioStepLinks(
+                    steps: widget.steps,
+                    step: widget.step,
+                    onOpenStep: widget.onOpenStep,
                   ),
-                if (next != null)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: _StepLink(
-                      next,
-                      isNext: true,
-                      onTap: () => widget.onOpenStep(next),
-                    ),
-                  ),
+                ),
               ],
             ),
           ),
@@ -523,26 +561,6 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
           ),
         ],
       ),
-    );
-  }
-
-  /// Walks the graph, not the emission order: previous is this step's
-  /// parent, next its first child — so inside a split branch the links stay
-  /// on the branch. Parentless data (older artifacts) falls back to the
-  /// list order it used to walk.
-  (ScenarioRunStep?, ScenarioRunStep?) _neighbours() {
-    var steps = widget.steps;
-    var step = widget.step;
-    if (steps.any((s) => s.parent != null)) {
-      return (
-        steps.firstWhereOrNull((s) => s.index == step.parent),
-        steps.firstWhereOrNull((s) => s.parent == step.index),
-      );
-    }
-    var position = steps.indexWhere((s) => s.index == step.index);
-    return (
-      position > 0 ? steps[position - 1] : null,
-      position >= 0 && position + 1 < steps.length ? steps[position + 1] : null,
     );
   }
 }
@@ -855,52 +873,6 @@ class _TextsTab extends StatelessWidget {
             Text(step.tags.join(', '), style: context.type.bodySmall),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _StepLink extends StatelessWidget {
-  const _StepLink(this.step, {required this.isNext, required this.onTap});
-
-  final ScenarioRunStep step;
-  final bool isNext;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Tappable(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.md,
-          vertical: FwSpacing.sm,
-        ),
-        color: colors.bg.withValues(alpha: 0.9),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!isNext)
-              Icon(
-                Icons.arrow_back_ios,
-                size: FwIconSize.xs,
-                color: colors.mut,
-              ),
-            Text(
-              '${step.index} · ${scenarioStepLabel(step)}',
-              style: context.type.caption.copyWith(
-                color: scenarioStepTone(context, step),
-              ),
-            ),
-            if (isNext)
-              Icon(
-                Icons.arrow_forward_ios,
-                size: FwIconSize.xs,
-                color: colors.mut,
-              ),
-          ],
-        ),
       ),
     );
   }
