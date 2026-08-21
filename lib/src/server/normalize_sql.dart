@@ -21,9 +21,11 @@ String normalizeSql(String sql) {
       // digits inside a string are not visited twice.
       .replaceAll(RegExp(r"'(?:[^']|'')*'"), '?')
       // Driver placeholders before bare numbers — the numeric rule would
-      // otherwise eat `$1`'s digit and leave `$?`. Postgres `$1` groups with
-      // its literal-inlined twin; `?` is itself already.
-      .replaceAll(RegExp(r'\$\d+'), '?')
+      // otherwise eat the digit and leave `$?` or `??`. Postgres `$1` and
+      // sqlite's numbered `?1` are both already placeholders needing no
+      // normalization, and `??` reads as a typo in a title; plain `?` is
+      // itself already. `?1` is what `sqlite3`/`sqlite_async` emit.
+      .replaceAll(RegExp(r'[\$?]\d+'), '?')
       // Numeric literals. `\b` keeps digits inside identifiers (`user_id2`)
       // untouched: there is no word boundary between `d` and `2`.
       .replaceAll(RegExp(r'\b\d+(\.\d+)?\b'), '?')

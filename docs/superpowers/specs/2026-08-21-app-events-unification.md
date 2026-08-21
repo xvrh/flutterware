@@ -202,6 +202,62 @@ The same reasoning applies to the inline cap: `eventTitles` now ends with
 silence. The count it reports is of the *titles*, after the `system`
 exclusion, because that is the number a reader would otherwise think they
 were seeing all of.
+## A title is the statement, not its first keyword
+
+Reported by the same consumer wiring the `db` channel, measured at `5e96ddd`.
+
+`AppEvent.query` took its title from the first line of the SQL. A generator
+emits one line, so a generated statement titled whole; a person formats theirs
+across several with the keyword alone on the first, so it titled `select …`.
+On their suite that was **110 of 194 db events** — half the channel saying
+nothing, and which half depended only on who wrote the SQL, which is not a
+distinction the pane means to draw.
+
+**The comparison channel is why this mattered more than legibility.**
+`EventChannel.mask` keys an event on its channel and its title, so every
+hand-formatted `select` was one key. They flagged it as latent and said
+plainly they had not observed it. Built as a test, it is worse than a merged
+row: base runs the task query, head runs a users query instead, and
+`EventChannel.of` returns `added: [], removed: []` — no difference at all, on
+the channel whose whole job is to notice. Now pinned in
+`app/test/comparison/channels_test.dart`.
+
+**Folded, not normalized.** Their suggestion was to title with `normalizeSql`,
+which already folds whitespace and exists two subsystems over for exactly the
+"reduce a statement to its shape" job. Declined for the display half: it
+blanks literals, so `version >= 3` reads `version >= ?` and the value goes
+back into `body` one expand away — which is the complaint the report opened
+with, relocated rather than fixed. Folding whitespace and keeping the literals
+gets legibility *and* the values for the same row width.
+
+Grouping is unharmed by keeping them: `mask` already folds digits to `#`, so
+an N+1's siblings — which differ precisely in an id — still meet. That is
+pinned too, because it is the property the fold could plausibly have broken.
+
+One argument of theirs that does not transfer, recorded so it is not
+re-litigated: `normalizeSql`'s docstring keeps the rules attacher-side so they
+"can improve with flutterware releases without touching anyone's server". A
+scenario's events are regenerated every run, so nothing freezes app-side and
+that reasoning does not argue against normalizing in `AppEvent.query`. The
+literals argument is the one that does.
+
+**`normalizeSql` had a bug beside it.** `?1` — sqlite's numbered placeholder,
+what `sqlite3`/`sqlite_async` emit — fell past the explicit `$1` rule into the
+bare-number one, which ate the digit and left `??`. Stable enough to group by,
+and reading as a typo wherever the result is shown. The placeholder rule takes
+`[$?]\d+` now.
+
+**And a trap in the docstring.** Opening a database costs a dozen statements
+before the app has done anything — `BEGIN IMMEDIATE`, the migration
+bookkeeping, the `create table`s, `COMMIT`. Across 125 scenarios that was 1680
+of 1874 events, 89% of the channel. It takes measuring to notice, because a
+busy pane looks like a working one. `AppEvent.query` says so now, since
+everyone following the `LogQueriesPlugin` recipe meets it.
+
+Beyond what was asked: the database browser's own panel feed cut at the first
+line the same way, and there the SQL is *typed by the person reading it back*.
+Folded too — leaving one of two identical defects would have been the
+inconsistency this removes.
 
 ## Silence, which was the part that bit
 

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutterware/app_events.dart';
 import 'package:flutterware_app/src/comparison/channels.dart';
 import 'package:flutterware_app/src/comparison/pixel_diff.dart';
 import 'package:flutterware_app/src/comparison/tree_diff.dart';
@@ -162,5 +163,55 @@ void main() {
     expect(channels['pixels'], isNotNull);
     expect(channels['texts'], isNotNull);
     expect(channels.containsKey('tree'), isFalse);
+  });
+
+  group('db events are told apart by their statement', () {
+    /// Two different statements, both formatted the way a person formats
+    /// them: the keyword alone on the first line.
+    AppEvent tasks() => AppEvent.query(
+      sql:
+          'select\n  t.*,\n  count(te.id)\nfrom task as t\nwhere t.done is null',
+    );
+    AppEvent users() =>
+        AppEvent.query(sql: 'select\n  u.id,\n  u.email\nfrom users as u');
+
+    test('a branch that swapped one query for another says so', () {
+      // `mask` keys an event on its channel and its title. While `AppEvent
+      // .query` titled from the first line, both of these were `db select …`
+      // — one key — and this diff came back empty: a silent false negative,
+      // on the channel whose entire job is to notice.
+      var diff = EventChannel.of(
+        base: [tasks().toJson()],
+        head: [users().toJson()],
+      );
+
+      expect(diff.added, hasLength(1));
+      expect(diff.removed, hasLength(1));
+      expect(diff.added.single, contains('users'));
+      expect(diff.removed.single, contains('task'));
+    });
+
+    test('the same query on both sides is still no change', () {
+      var diff = EventChannel.of(
+        base: [tasks().toJson()],
+        head: [tasks().toJson()],
+      );
+
+      expect(diff.added, isEmpty);
+      expect(diff.removed, isEmpty);
+    });
+
+    test('an N+1 sibling still meets its twin, because digits fold', () {
+      // Folding whitespace keeps the literals, so grouping leans on `mask`'s
+      // digits-to-`#` rule exactly as it did before — the queries of an N+1
+      // differ precisely in an id, and must not read as a change.
+      var diff = EventChannel.of(
+        base: [AppEvent.query(sql: 'select * from t\nwhere id = 1').toJson()],
+        head: [AppEvent.query(sql: 'select * from t\nwhere id = 2').toJson()],
+      );
+
+      expect(diff.added, isEmpty);
+      expect(diff.removed, isEmpty);
+    });
   });
 }

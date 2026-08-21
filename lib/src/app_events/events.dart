@@ -72,12 +72,20 @@ class AppEvent {
        level = null;
 
   /// A database statement, with the SQL as the body so it can be read whole.
+  ///
+  /// **Report the app's own statements, not the schema's.** Opening a database
+  /// costs a dozen before the app has done anything — `BEGIN IMMEDIATE`, the
+  /// migration bookkeeping, the `create table`s, `COMMIT` — and measured on a
+  /// real suite that was 1680 of 1874 events, 89% of the channel, drowning the
+  /// 194 that were the app. It takes measuring to notice, because a busy pane
+  /// looks like a working one. Keep the decorator quiet until the database has
+  /// finished opening.
   AppEvent.query({
     required String sql,
     List<Object?> args = const [],
     int? rows,
   }) : channel = AppChannel.db,
-       title = _firstLine(sql),
+       title = foldSql(sql),
        detail = rows == null ? null : '$rows ${rows == 1 ? 'row' : 'rows'}',
        data = args.isEmpty ? const {} : {'args': args},
        body = sql,
@@ -155,13 +163,28 @@ class AppEvent {
     if (error) 'error': true,
     'level': ?level,
   };
-
-  static String _firstLine(String text) {
-    var trimmed = text.trim();
-    var end = trimmed.indexOf('\n');
-    return end < 0 ? trimmed : '${trimmed.substring(0, end)} …';
-  }
 }
+
+/// A SQL statement on one line — what a title is made of.
+///
+/// **Folded rather than cut at the first newline**, which is what this used to
+/// do. A generator emits one line, so its statement titled whole; a person
+/// formats theirs across several with the keyword alone on the first, so it
+/// titled `select …`. Measured on a real suite, 110 of 194 db events were
+/// that one string — a list of rows saying nothing, about half the channel,
+/// and which half depended only on who wrote the SQL.
+///
+/// Worse than unreadable, it was wrong: the comparison channel keys an event
+/// on its channel and title, so every hand-formatted `select` shared one key
+/// and a branch that swapped one query for another reported no difference at
+/// all.
+///
+/// The literals stay. Blanking them is [normalizeSql]'s job and it is the
+/// right one for *grouping*, where an N+1's queries must collapse — but a
+/// title is read, and `version >= 3` says more than `version >= ?` for the
+/// same width. Grouping is unharmed: the comparison mask already folds digits
+/// to `#`, so N+1 siblings still meet.
+String foldSql(String sql) => sql.trim().replaceAll(RegExp(r'\s+'), ' ');
 
 /// Per-event caps. An app that logs in a build method would otherwise write a
 /// run measured in tens of megabytes; every one of these leaves a marker

@@ -1,5 +1,33 @@
 ## Unreleased
 
+- **A `db` event is titled with its statement, not with its first keyword.**
+  `AppEvent.query` cut the SQL at the first newline, so a statement a
+  generator emitted on one line titled whole and one a person formatted across
+  several titled `select …`. Measured on a real suite, 110 of 194 db events
+  were that one string — which half of an app was legible depended only on who
+  wrote its SQL.
+
+  It folds whitespace now and keeps the literals. Blanking those is
+  `normalizeSql`'s job and the right one for *grouping*; a title is read, and
+  `version >= 3` says more than `version >= ?` for the same width.
+
+  **This also fixes a silent false negative in the comparison channel.**
+  `EventChannel.mask` keys an event on its channel and title, so every
+  hand-formatted `select` shared one key — and a branch that swapped one query
+  for another reported no difference at all. N+1 siblings still group, because
+  the mask folds digits to `#` and the literals are still there to fold.
+
+  The database browser's panel feed had the same first-line cut and now folds
+  too. `AppEvent.query`'s docstring gained the trap worth knowing before
+  wiring one: opening a database costs a dozen statements before the app has
+  done anything, and on a real suite that was 89% of the channel.
+
+- **`normalizeSql` no longer turns `?1` into `??`.** sqlite's numbered
+  placeholder — what `sqlite3` and `sqlite_async` emit — fell past the
+  explicit `$1` rule into the bare-number one, which ate the digit and left a
+  second `?`. Stable enough to group by, and reading as a typo wherever the
+  result is shown.
+
 - **One report reaches every surface, and the reporting API is renamed to say
   so.** There were two app-side places to say what the app did, neither aware
   of the other: a project wired `DevbarHttpClient` and got a full Network tab

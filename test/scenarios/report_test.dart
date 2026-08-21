@@ -479,7 +479,9 @@ void main() {
     );
 
     expect(back.channel, AppChannel.db);
-    expect(back.title, 'SELECT 1 …');
+    // Folded on the way out, so the title survives the wire as the whole
+    // statement; the body still carries the formatting the app wrote.
+    expect(back.title, 'SELECT 1 FROM t');
     expect(back.detail, '3 rows');
     expect(back.data, {
       'args': [1],

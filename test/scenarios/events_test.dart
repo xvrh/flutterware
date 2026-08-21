@@ -219,22 +219,21 @@ void main() {
     expect(AppEvent.request(method: 'GET', url: '/me').error, isFalse);
   });
 
-  test(
-    'a query event summarises to its first line and keeps the whole SQL',
-    () {
-      var event = AppEvent.query(
-        sql: 'SELECT *\nFROM items\nWHERE id = ?',
-        args: [42],
-        rows: 1,
-      );
-      expect(event.title, 'SELECT * …');
-      expect(event.detail, '1 row');
-      expect(event.body, contains('WHERE id = ?'));
-      expect(event.data, {
-        'args': [42],
-      });
-    },
-  );
+  test('a query event summarises to one line and keeps the whole SQL', () {
+    var event = AppEvent.query(
+      sql: 'SELECT *\nFROM items\nWHERE id = ?',
+      args: [42],
+      rows: 1,
+    );
+    // Folded, not cut at the first newline: that titled every
+    // hand-formatted statement `SELECT …` and told a reader nothing.
+    expect(event.title, 'SELECT * FROM items WHERE id = ?');
+    expect(event.detail, '1 row');
+    expect(event.body, contains('WHERE id = ?'));
+    expect(event.data, {
+      'args': [42],
+    });
+  });
 
   test('a payload the encoder cannot take does not break the artifact', () {
     // A fake reports whatever it had in hand, and a channel's decoded
@@ -263,6 +262,70 @@ void main() {
     var body = event.toJson()['body']! as String;
     expect(body, contains('more characters'));
     expect(body.length, lessThan(5000));
+  });
+
+  group('a folded title is what makes a db event legible', () {
+    /// The shape a formatter produces and a person reads: the keyword alone
+    /// on the first line. It titled `select …` and nothing else.
+    var handWritten = [
+      'select',
+      '  t.*,',
+      '  count(te.id) as error_count',
+      'from task as t',
+      'left join task_error as te',
+      '  on t.id = te.task_id',
+      'where t.completed_at is null',
+    ].join('\n');
+
+    test('the statement reads, rather than its first keyword', () {
+      expect(
+        AppEvent.query(sql: handWritten).title,
+        'select t.*, count(te.id) as error_count from task as t '
+        'left join task_error as te on t.id = te.task_id '
+        'where t.completed_at is null',
+      );
+    });
+
+    test('two hand-formatted statements no longer share a title', () {
+      // The one with teeth. The comparison channel keys an event on its
+      // channel and its title, so while every multi-line `select` titled
+      // `select …` they were one key — and a branch that swapped one query
+      // for another reported no difference at all.
+      var tasks = AppEvent.query(sql: handWritten).title;
+      var users = AppEvent.query(
+        sql: 'select\n  u.id,\n  u.email\nfrom users as u',
+      ).title;
+
+      expect(tasks, isNot(users));
+    });
+
+    test('the literals stay — a title is read, not only grouped', () {
+      expect(
+        AppEvent.query(sql: 'select * from t\nwhere version >= 3').title,
+        endsWith('version >= 3'),
+        reason: "blanking them is normalizeSql's job, and that is for grouping",
+      );
+    });
+
+    test('a statement already on one line is unchanged', () {
+      expect(
+        AppEvent.query(sql: 'SELECT "id" FROM "task" WHERE "id" = (?1)').title,
+        'SELECT "id" FROM "task" WHERE "id" = (?1)',
+      );
+    });
+
+    test('leading and trailing whitespace goes', () {
+      expect(AppEvent.query(sql: '\n  SELECT 1\n  ').title, 'SELECT 1');
+    });
+
+    test('a title too long for the wire is still capped', () {
+      var wide = 'select ${List.filled(200, 'column_name').join(', ')} from t';
+      var json = AppEvent.query(sql: wide).toJson();
+
+      expect((json['title']! as String).length, lessThan(360));
+      expect(json['title'], contains('more characters'));
+      expect(json['body'], wide, reason: 'the whole statement is still here');
+    });
   });
 }
 

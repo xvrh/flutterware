@@ -143,7 +143,7 @@ void main() {
 
       var query = devbar.queries.queries.value.single;
       // The list shows one line; the dialog shows the statement entire.
-      expect(query.summary, 'SELECT * …');
+      expect(query.summary, 'SELECT * FROM sessions WHERE email = ?');
       expect(query.sql, 'SELECT *\nFROM sessions\nWHERE email = ?');
       expect(query.rows, '3 rows');
       expect(query.args, ['nobody@example.com']);
