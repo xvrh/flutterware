@@ -188,15 +188,6 @@ class CatalogBrowsing extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Whether the entry list is showing at all, so the guest can have the panel.
-  bool get listVisible => _listVisible;
-  var _listVisible = true;
-  set listVisible(bool value) {
-    if (value == _listVisible) return;
-    _listVisible = value;
-    notifyListeners();
-  }
-
   /// Whether resting the pointer on a row shows that entry's picture.
   ///
   /// On by default and switchable from the list's own header, because whether

@@ -7,6 +7,7 @@ import 'package:flutterware_app/src/previews/catalog_entry.dart';
 import 'package:flutterware_app/src/previews/catalog_session.dart';
 import 'package:flutterware_app/src/previews/catalog_view.dart';
 import 'package:flutterware_app/src/previews/protocol.dart';
+import 'package:flutterware_app/src/ui/aside.dart';
 
 /// What the panel does when a demo stops compiling.
 ///
@@ -69,6 +70,20 @@ void main() {
   // rather than on a field, which is the whole point of the change.
   late ValueNotifier<Address> address;
 
+  // The shell's half of the fold, stood in for: the panel reaches the rail
+  // through these two and never through a [ShellController], which is what lets
+  // one button fold both without the catalog knowing what a shell is.
+  late bool railVisible;
+  late AsideVisibility aside;
+
+  setUp(() {
+    railVisible = true;
+    aside = AsideVisibility(
+      railVisible: () => railVisible,
+      setRailVisible: (value) => railVisible = value,
+    );
+  });
+
   Future<void> pump(
     WidgetTester tester,
     CatalogSession session, {
@@ -108,7 +123,13 @@ void main() {
         home: AddressRoot(
           address: address,
           onChanged: (next) => address.value = next,
-          child: Scaffold(body: CatalogView(session: session)),
+          // The scope the shell puts above every panel. Without it the list
+          // cannot be folded at all — which is the honest answer for the
+          // exported page, and the wrong one for a test about the panel.
+          child: AsideScope(
+            aside: aside,
+            child: Scaffold(body: CatalogView(session: session)),
+          ),
         ),
       ),
     );
@@ -338,17 +359,41 @@ void main() {
     );
   });
 
-  testWidgets('hiding the list leaves the way back', (tester) async {
+  testWidgets('expanding folds the rail with the list, and leaves the way '
+      'back', (tester) async {
     var session = sessionWithBroken(beta, 'boom');
     await pump(tester, session);
 
-    await tester.tap(find.byTooltip('Hide the list'));
+    await tester.tap(find.byTooltip('Expand the panel (⌥⌘B)'));
     await tester.pump();
     expect(find.text('Alpha'), findsNothing);
+    expect(railVisible, isFalse, reason: 'one verb, both panes');
 
-    await tester.tap(find.byTooltip('Show the list'));
+    await tester.tap(find.byTooltip('Restore the panels (⌥⌘B)'));
     await tester.pump();
     expect(find.text('Alpha'), findsOneWidget);
+    expect(railVisible, isTrue);
+  });
+
+  testWidgets('restoring gives back a rail that was already hidden — as '
+      'hidden', (tester) async {
+    var session = sessionWithBroken(beta, 'boom');
+    railVisible = false;
+    await pump(tester, session);
+
+    await tester.tap(find.byTooltip('Expand the panel (⌥⌘B)'));
+    await tester.pump();
+    // With the rail already gone the gutter still offers everything back,
+    // because everything that is gone is the aside.
+    await tester.tap(find.byTooltip('Restore the panels (⌥⌘B)'));
+    await tester.pump();
+
+    expect(find.text('Alpha'), findsOneWidget);
+    expect(
+      railVisible,
+      isFalse,
+      reason: 'restore undoes expand, not a choice somebody made before it',
+    );
   });
 
   testWidgets('the compiler error is shown where the widget would be', (

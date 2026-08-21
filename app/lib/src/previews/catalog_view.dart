@@ -14,6 +14,7 @@ import '../embedder/protocol.dart';
 import '../inspect/node_highlight.dart';
 import '../inspect/pick_region.dart';
 import '../inspect/semantics_node.dart';
+import '../ui/aside.dart';
 import '../ui/empty_state.dart';
 import '../ui/loading_state.dart';
 import '../ui/capture_button.dart';
@@ -377,17 +378,13 @@ class _CatalogViewState extends State<CatalogView> {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_session.browsing.listVisible)
-                SizedBox(
-                  width: 260,
-                  child: _EntryList(
-                    session: _session,
-                    thumbnails: widget.thumbnails,
-                  ),
-                )
-              else
-                _ShowListStrip(browsing: _session.browsing),
-              const VerticalDivider(width: 1),
+              AsidePane(
+                width: 260,
+                child: _EntryList(
+                  session: _session,
+                  thumbnails: widget.thumbnails,
+                ),
+              ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2141,6 +2138,10 @@ class _FilterFieldState extends State<_FilterField> {
             icon: Icon(
               widget.browsing.anyClosed ? Icons.unfold_more : Icons.unfold_less,
               size: FwIconSize.md,
+              // Set, because an `IconButton` that names no colour takes
+              // Material's pure black — which is not a token this app has, and
+              // left this the one icon in the window darker than every other.
+              color: colors.mut,
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 24, height: 24),
@@ -2149,41 +2150,12 @@ class _FilterFieldState extends State<_FilterField> {
                 ? widget.browsing.openAll()
                 : widget.browsing.closeAll(allBranches(widget.tree)),
           ),
-          IconButton(
-            icon: const Icon(Icons.chevron_left, size: FwIconSize.md),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-            tooltip: 'Hide the list',
-            onPressed: () => widget.browsing.listVisible = false,
-          ),
+          // Folds the rail with it. Hiding the list is something you do when
+          // you have stopped choosing and started looking, and at that moment
+          // the rail is the same kind of noise — ⌘B brings it back on its own
+          // if it was not.
+          const AsideExpandButton(),
         ],
-      ),
-    );
-  }
-}
-
-/// All that is left of the list when it is hidden: the way back.
-class _ShowListStrip extends StatelessWidget {
-  const _ShowListStrip({required this.browsing});
-
-  final CatalogBrowsing browsing;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 28,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: Padding(
-          padding: const EdgeInsets.only(top: FwSpacing.md),
-          child: IconButton(
-            icon: const Icon(Icons.chevron_right, size: FwIconSize.md),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-            tooltip: 'Show the list',
-            onPressed: () => browsing.listVisible = true,
-          ),
-        ),
       ),
     );
   }

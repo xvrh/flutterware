@@ -15,6 +15,7 @@ import '../plugins/registry.dart';
 import '../worktrees/facts_controller.dart';
 import '../worktrees/watchers.dart';
 import '../plugins/worktree_session.dart';
+import '../ui/aside.dart';
 import '../utils/flutter_sdk.dart';
 import 'config_load.dart';
 import 'config_watcher.dart';
@@ -534,6 +535,21 @@ class ShellController extends ChangeNotifier {
     _sidebarVisible = !_sidebarVisible;
     notifyListeners();
   }
+
+  /// The panel's own navigation column, and the one verb over both it and the
+  /// rail.
+  ///
+  /// Held here because the macro needs both halves and only the shell has the
+  /// rail; handed to the panel through an `AsideScope`, so a plugin can fold
+  /// its list without knowing what a [ShellController] is.
+  late final aside = AsideVisibility(
+    railVisible: () => _sidebarVisible,
+    setRailVisible: (value) {
+      if (value == _sidebarVisible) return;
+      _sidebarVisible = value;
+      notifyListeners();
+    },
+  );
 
   /// How wide the rail is drawn, in the app's own pixels.
   ///

@@ -22,6 +22,7 @@ import '../../scenarios/help_page.dart';
 import '../../scenarios/list_tree.dart';
 import '../../scenarios/new_scenario_dialog.dart';
 import '../../scenarios/step_page.dart';
+import '../../ui/aside.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/matched_text.dart';
 import '../../ui/menu.dart';
@@ -368,7 +369,7 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
+              AsidePane(
                 width: 240,
                 child: _ScenarioListPane(
                   _core,
@@ -378,7 +379,6 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
                   key: ValueKey(place.package),
                 ),
               ),
-              const VerticalDivider(width: 1),
               Expanded(child: detail),
             ],
           ),
@@ -804,6 +804,10 @@ class _ListPaneHeader extends StatelessWidget {
             selected: helpSelected,
           ),
           _HeaderButton(icon: Icons.add, tooltip: 'New scenario', onTap: onNew),
+          // Last in the row, because it is the only one here that acts on the
+          // pane rather than on the suite in it — and because a flow of seven
+          // steps in 726px is the reason this exists.
+          const AsideExpandButton(),
         ],
       ),
     );

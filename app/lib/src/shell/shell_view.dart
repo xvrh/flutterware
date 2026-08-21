@@ -12,6 +12,7 @@ import '../comparison/ui/comparison_tabs.dart';
 import '../capture/capture_mode.dart';
 import '../capture/capture_request.dart';
 import '../plugins/native_plugin.dart';
+import '../ui/aside.dart';
 import '../ui/badged_icon.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
@@ -78,6 +79,14 @@ const _railHandleWidth = 8.0;
 /// strip that offers it reaches once the rail is gone.
 const _railToggleSize = 20.0;
 const _railPeekWidth = 20.0;
+
+/// Whether the aside gutter is taking room in the row this frame.
+///
+/// The rail's peek strip stands down when it is: the gutter's own button
+/// restores both panes, and two controls a few pixels apart both offering to
+/// give something back is the kind of clutter a way out cannot afford.
+bool _gutterInFlow(ShellController shell) =>
+    !shell.inWorktreesSpace && shell.aside.present && !shell.aside.visible;
 
 /// The smallest window this layout lays out for: the pane's floor, plus the
 /// rail the user has asked to see.
@@ -177,13 +186,26 @@ class ShellView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: shell,
+      // The aside as well as the shell: a fold taken in the panel below is
+      // what tells the rail's peek strip to stand down, and the strip is up
+      // here.
+      animation: Listenable.merge([shell, shell.aside]),
       builder: (context, _) => CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.keyB, meta: true):
               shell.toggleSidebar,
           const SingleActivator(LogicalKeyboardKey.keyB, control: true):
               shell.toggleSidebar,
+          // ⌘B, more so: the rail *and* the panel's own list. Not bound to
+          // Escape as well — see the note on the one Escape binding below;
+          // the gutter is the discoverable way out and this is the fast one.
+          const SingleActivator(LogicalKeyboardKey.keyB, meta: true, alt: true):
+              shell.aside.toggleExpanded,
+          const SingleActivator(
+            LogicalKeyboardKey.keyB,
+            control: true,
+            alt: true,
+          ): shell.aside.toggleExpanded,
           const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
               unawaited(showShellSearch(context, shell)),
           const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
@@ -283,7 +305,16 @@ class ShellView extends StatelessWidget {
                           // shape of the tree the panel is in.
                           child: Stack(
                             children: [
-                              Positioned.fill(child: _Panel(shell)),
+                              Positioned.fill(
+                                // Above the panel and below the shell, which
+                                // is the only place that can see both halves
+                                // of the fold: the rail is the shell's and the
+                                // list is the plugin's.
+                                child: AsideScope(
+                                  aside: shell.aside,
+                                  child: _Panel(shell),
+                                ),
+                              ),
                               Positioned(
                                 left: 0,
                                 top: 0,
@@ -1508,7 +1539,9 @@ class _RailPeekState extends State<_RailPeek> {
   @override
   Widget build(BuildContext context) {
     var shell = widget.shell;
-    if (shell.sidebarVisible || shell.inWorktreesSpace) {
+    if (shell.sidebarVisible ||
+        shell.inWorktreesSpace ||
+        _gutterInFlow(shell)) {
       return const SizedBox.shrink();
     }
     return MouseRegion(
