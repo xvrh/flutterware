@@ -170,19 +170,74 @@ void main() {
       expect(asked.map((a) => a.sync), [true, false]);
     });
 
+    /// Moves [entry]'s file on, the way an editor saving it would.
+    void touch(CatalogEntry entry) => File(
+      p.join(package.path, entry.path),
+    ).setLastModifiedSync(DateTime.now().add(const Duration(seconds: 5)));
+
     test('a picture is stale once its own file moves', () async {
       var (store, asked) = storeOf();
       store.want(alpha);
       await until(() => store.of(alpha) is ThumbnailReady);
 
-      File(
-        p.join(package.path, alpha.path),
-      ).setLastModifiedSync(DateTime.now().add(const Duration(seconds: 5)));
+      touch(alpha);
       expect(store.of(alpha), isNull, reason: 'and asking again re-renders');
 
       store.want(alpha);
       await until(() => store.of(alpha) is ThumbnailReady);
       expect(asked.length, 2);
+      // The whole point of re-rendering. Without this the harness answers out
+      // of the code it compiled at bring-up, hands back the picture that was
+      // already there, and the store files it under the *new* stamp — an entry
+      // that is now permanently wrong and has no way left to say so.
+      expect(asked.last.sync, isTrue);
+    });
+
+    test('an edit is synced once, not once per hover', () async {
+      var (store, asked) = storeOf();
+      store.want(alpha);
+      await until(() => store.of(alpha) is ThumbnailReady);
+
+      touch(alpha);
+      store.want(alpha);
+      await until(() => store.of(alpha) is ThumbnailReady);
+      store.want(beta);
+      await until(() => store.of(beta) is ThumbnailReady);
+
+      expect(asked.map((a) => a.sync), [true, true, false]);
+    });
+
+    test('a neighbour moving is the harness being behind, too', () async {
+      var (store, asked) = storeOf();
+      store.want(alpha);
+      await until(() => store.of(alpha) is ThumbnailReady);
+      store.want(beta);
+      await until(() => store.of(beta) is ThumbnailReady);
+
+      // Beta's own file never moves. It is alpha's that does — and the picture
+      // of beta may well be drawn by something alpha edited.
+      touch(alpha);
+      store.want(beta);
+      await until(() => asked.length == 3);
+      expect(asked.last, (id: beta.id, sync: true));
+      expect(
+        store.of(alpha),
+        isNull,
+        reason: 'and the sync moved the harness past alpha as well',
+      );
+    });
+
+    test('a rescan makes the next render sync', () async {
+      var (store, asked) = storeOf();
+      store.want(alpha);
+      await until(() => store.of(alpha) is ThumbnailReady);
+
+      // What the plugin calls when the catalog scan changed under it — an edit
+      // to a file no entry is declared in, which no stamp here can see.
+      store.invalidate();
+      store.want(alpha);
+      await until(() => store.of(alpha) is ThumbnailReady);
+      expect(asked.map((a) => a.sync), [true, true]);
     });
 
     test('a harness that throws is the answer, not a crash', () async {
