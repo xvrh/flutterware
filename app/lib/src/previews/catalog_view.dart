@@ -1451,6 +1451,12 @@ class _EntryListState extends State<_EntryList> {
     // Built from everything discovered, broken included: an entry you are
     // midway through fixing keeps its place, and selecting it is the retry.
     var whole = buildCatalogTree(session.allEntries);
+    // Whether this catalog is one you arrive scrolling, answered once — from
+    // the whole tree, never the filtered one, since a filter is a question
+    // rather than the shape of the catalog.
+    if (browsing.needsFoldDecision) {
+      browsing.foldIfCrowded(catalogTreeRows(whole), allBranches(whole));
+    }
     var tree = filterCatalogTree(whole, browsing.filter);
     var filtering = browsing.filter.trim().isNotEmpty;
     // Whatever is selected is *made* visible, once, when it arrives — rather

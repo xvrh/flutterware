@@ -149,6 +149,22 @@ Set<String> allScenarioBranches(List<ScenarioListNode> nodes) => {
     ],
 };
 
+/// How many rows [nodes] lays out with everything open.
+///
+/// Folders and files count: a branch is a row like any other, and what the
+/// count is compared against is the height of the pane. See
+/// `foldsOnArrival`.
+int scenarioTreeRows(List<ScenarioListNode> nodes) {
+  var rows = 0;
+  for (var node in nodes) {
+    rows++;
+    if (node case ScenarioBranchNode(:var children)) {
+      rows += scenarioTreeRows(children);
+    }
+  }
+  return rows;
+}
+
 /// The branch ids that have to be open for [file]'s scenarios to be visible:
 /// the file itself and every directory above it.
 ///

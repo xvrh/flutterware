@@ -1031,6 +1031,124 @@ void main() {
     );
   });
 
+  // The fold is the browser's, not the panel's: the shell rebuilds this panel
+  // from scratch on every visit, and a collapse thrown away with it was
+  // something you re-clicked rather than a shape you chose.
+  testWidgets('a fold survives leaving the plugin', (tester) async {
+    var core = _core(root);
+    var plugin = ScenariosPlugin(core);
+
+    File('${root.path}/test/scenarios/checkout_test.dart')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync("void main() => scenario('Pays', () {});\n");
+    File('${root.path}/test/widgets/menu_test.dart')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync("void main() => scenario('Opens', () {});\n");
+    await _settleScan(tester, core);
+
+    var address = ValueNotifier(
+      Address(worktree: 'wt', plugin: scenariosPluginId),
+    );
+    Future<void> showPanel() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme,
+          home: Scaffold(
+            body: AddressRoot(
+              address: address,
+              onChanged: (a) => address.value = a,
+              child: Builder(builder: plugin.buildPanel),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    await showPanel();
+    await tester.tap(find.byTooltip('Collapse all'));
+    await tester.pump();
+    expect(find.text('Pays'), findsNothing);
+
+    // Away to another plugin — anything that is not this panel — and back.
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: SizedBox.shrink())),
+    );
+    await showPanel();
+
+    expect(find.text('Pays'), findsNothing);
+    expect(find.text('Opens'), findsNothing);
+    expect(
+      find.byTooltip('Expand all'),
+      findsOneWidget,
+      reason:
+          'the button knows what is folded too, since it reads the same '
+          'set the tree does',
+    );
+  });
+
+  // A long suite arrives as a table of contents rather than as a list you are
+  // already scrolling. The threshold is a paneful — see `treeRowBudget` — and
+  // the two-file suite every other test here uses is well under it, which is
+  // why they all find their scenarios on the first pump.
+  testWidgets('a suite too long for the pane opens folded', (tester) async {
+    var core = _core(root);
+    var plugin = ScenariosPlugin(core);
+
+    var body = StringBuffer('void main() {\n');
+    for (var i = 0; i < 40; i++) {
+      body.write("  scenario('Step $i', () {});\n");
+    }
+    body.write('}\n');
+    File('${root.path}/test/scenarios/checkout_test.dart')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync(body.toString());
+    await _settleScan(tester, core);
+
+    var address = ValueNotifier(
+      Address(worktree: 'wt', plugin: scenariosPluginId),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: AddressRoot(
+            address: address,
+            onChanged: (a) => address.value = a,
+            child: Builder(builder: plugin.buildPanel),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Folded on the first frame it is laid out on, not a frame later: nothing
+    // here has to pump twice to see it.
+    expect(find.text('Step 0'), findsNothing);
+    expect(find.text('checkout_test.dart', findRichText: true), findsOneWidget);
+    expect(
+      find.text('40'),
+      findsOneWidget,
+      reason:
+          'a closed row says how many are behind it, which is what makes '
+          'the folded tree a table of contents',
+    );
+
+    // And the decision is taken once, however many times the tree is laid out
+    // again. Unfolded, it stays unfolded — filtering and clearing the filter
+    // rebuilds the whole thing, and folding it back over you would undo a
+    // choice you had made.
+    await tester.tap(find.byTooltip('Expand all'));
+    await tester.pump();
+    expect(find.text('Step 0'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Step 1');
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pump();
+    expect(find.text('Step 0'), findsOneWidget);
+  });
+
   // The action refuses to overwrite, and the dialog stays open saying so —
   // the answer is another name typed into the field still on screen.
   testWidgets('a name whose file exists is reported in place', (tester) async {
@@ -1175,6 +1293,37 @@ void main() {
     expect(canvas().value, panned);
   });
 }
+
+/// The core every test here builds, with the one package the temp root holds.
+ScenariosCore _core(Directory root) => ScenariosCore(
+  PluginHost(
+    id: scenariosPluginId,
+    label: 'Scenarios',
+    worktree: Worktree(path: root.path),
+    workspace: Workspace(
+      root: root.path,
+      declared: [Pkg('.')],
+      discovered: ['.'],
+      appContext: AppContext(logger: LogClient.print()),
+      flutterSdk: FlutterSdkPath('/tmp/flutter'),
+    ),
+    config: {
+      'packages': [
+        {'path': '.'},
+      ],
+    },
+  ),
+)..debugInstallRunner('.', _FakeRunner());
+
+/// Scans before the panel is pumped, so the first frame it lays out is the one
+/// with the whole suite on it — which is the frame the fold is decided on.
+Future<void> _settleScan(WidgetTester tester, ScenariosCore core) =>
+    tester.runAsync(() async {
+      core.track('.');
+      while (core.scanResultFor('.') == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
 
 class _FakeRunner extends ScenarioRunner {
   _FakeRunner()

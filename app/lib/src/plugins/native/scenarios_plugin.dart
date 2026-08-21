@@ -14,6 +14,7 @@ import '../../scenarios/artifacts.dart';
 import '../../scenarios/artifacts_io.dart';
 import '../../scenarios/beat_view.dart';
 import '../../scenarios/axes.dart';
+import '../../scenarios/browsing.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';
 import '../../scenarios/harness_entrypoint.dart';
@@ -59,6 +60,17 @@ class ScenariosPlugin extends NativePlugin<ScenariosCore> {
   /// port a browser tab already has open — the tab reloads onto the new run
   /// rather than pointing at a server that has gone.
   final _servers = <String, CatalogWebServer>{};
+
+  final _browsing = <String, ScenarioBrowsing>{};
+
+  /// How [package]'s list is folded, for as long as this worktree is open.
+  ///
+  /// Here rather than on the list pane, which the shell rebuilds from scratch
+  /// on every visit to the plugin — see [ScenarioBrowsing] for what that cost.
+  /// The same lifetime the catalog gives its own browser state, which lives on
+  /// the session the previews plugin keeps per package.
+  ScenarioBrowsing browsingFor(String package) =>
+      _browsing.putIfAbsent(package, ScenarioBrowsing.new);
 
   @override
   String? get busyWith {
@@ -126,6 +138,10 @@ class ScenariosPlugin extends NativePlugin<ScenariosCore> {
       unawaited(server.close());
     }
     _servers.clear();
+    for (var browsing in _browsing.values) {
+      browsing.dispose();
+    }
+    _browsing.clear();
     super.dispose();
   }
 }
@@ -357,6 +373,7 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
                 child: _ScenarioListPane(
                   _core,
                   place.package,
+                  browsing: widget.plugin.browsingFor(place.package),
                   selected: place,
                   key: ValueKey(place.package),
                 ),
@@ -400,12 +417,18 @@ class _ScenarioListPane extends StatefulWidget {
   const _ScenarioListPane(
     this.core,
     this.package, {
+    required this.browsing,
     required this.selected,
     super.key,
   });
 
   final ScenariosCore core;
   final String package;
+
+  /// How this package's tree is folded. Outlives the pane — see
+  /// [ScenarioBrowsing].
+  final ScenarioBrowsing browsing;
+
   final ScenarioPlace selected;
 
   @override
@@ -418,23 +441,32 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
   /// survives opening scenario after scenario and resets when the suite does.
   final _query = TextEditingController();
 
-  /// The folders and files folded away, keyed by [ScenarioBranchNode.id].
-  /// Closed rather than open so that everything starts visible, new files
-  /// included. Owned here for the same lifetime as the filter.
-  final _closed = <String>{};
-
-  /// The selection the tree was last opened for — an action taken once when
-  /// a selection arrives, not a rule applied on every build. The catalog
-  /// learned this the hard way: held open for as long as it is selected, the
-  /// file around your selection refuses to close (see
-  /// `CatalogBrowsing.revealSelection`).
-  String? _revealedFor;
-
   ScenariosCore get core => widget.core;
   String get package => widget.package;
+  ScenarioBrowsing get browsing => widget.browsing;
+
+  @override
+  void initState() {
+    super.initState();
+    browsing.addListener(_onBrowsing);
+  }
+
+  @override
+  void didUpdateWidget(_ScenarioListPane old) {
+    super.didUpdateWidget(old);
+    // A config reload swaps the plugin under a mounted panel, and the browsing
+    // it hands over comes with it.
+    if (!identical(old.browsing, browsing)) {
+      old.browsing.removeListener(_onBrowsing);
+      browsing.addListener(_onBrowsing);
+    }
+  }
+
+  void _onBrowsing() => setState(() {});
 
   @override
   void dispose() {
+    browsing.removeListener(_onBrowsing);
     _query.dispose();
     super.dispose();
   }
@@ -444,6 +476,24 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
     // Nothing to narrow until the scan has found something: a filter over a
     // suite of none is a control that can only disappoint.
     var scanned = core.scanResultFor(package)?.scenarios ?? const [];
+    // The suite as its files sit on disk: the shared prefix dropped, folders
+    // and files as collapsible branches, and a file's scenarios in
+    // declaration order — ranking or sorting them would shuffle the suite out
+    // of the shape the reader knows it by.
+    var whole = buildScenarioTree(scanned);
+    // Whether this suite is one you arrive scrolling, answered once — and
+    // answered here, above everything built from it. The collapse-all button
+    // reads the same set the tree does, so a fold taken further down would
+    // leave it a frame behind, offering to collapse what is already folded.
+    //
+    // From the whole tree, never the filtered one: a filter is a question
+    // rather than the shape of the suite.
+    if (browsing.needsFoldDecision) {
+      browsing.foldIfCrowded(
+        scenarioTreeRows(whole),
+        allScenarioBranches(whole),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -465,25 +515,23 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
             // only useful thing it can do is fold, and after that, unfold.
             trailing: IconButton(
               icon: Icon(
-                _closed.isEmpty ? Icons.unfold_less : Icons.unfold_more,
+                browsing.anyClosed ? Icons.unfold_more : Icons.unfold_less,
                 size: FwIconSize.md,
               ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-              tooltip: _closed.isEmpty ? 'Collapse all' : 'Expand all',
-              onPressed: () => setState(() {
-                if (_closed.isEmpty) {
-                  _closed.addAll(
-                    allScenarioBranches(buildScenarioTree(scanned)),
-                  );
+              tooltip: browsing.anyClosed ? 'Expand all' : 'Collapse all',
+              onPressed: () {
+                if (browsing.anyClosed) {
+                  browsing.openAll();
                 } else {
-                  _closed.clear();
+                  browsing.closeAll(allScenarioBranches(whole));
                 }
-              }),
+              },
             ),
           ),
         const Divider(height: 1),
-        Expanded(child: _body(context)),
+        Expanded(child: _body(context, whole)),
       ],
     );
   }
@@ -497,7 +545,7 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
     return common.isEmpty ? core.scanRootFor(package) : common;
   }
 
-  Widget _body(BuildContext context) {
+  Widget _body(BuildContext context, List<ScenarioListNode> whole) {
     var result = core.scanResultFor(package);
     if (result == null) {
       if (core.scanErrorFor(package) case var error?) {
@@ -529,11 +577,6 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
       );
     }
 
-    // The suite as its files sit on disk: the shared prefix dropped, folders
-    // and files as collapsible branches, and a file's scenarios in
-    // declaration order — ranking or sorting them would shuffle the suite
-    // out of the shape the reader knows it by.
-    var whole = buildScenarioTree(result.scenarios);
     var query = _query.text.trim();
     var filtering = query.isNotEmpty;
     var tree = filterScenarioTree(whole, query);
@@ -541,15 +584,14 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
     // Whatever is selected is *made* visible, once, when it arrives — a
     // selection routinely lands from outside the tree (the address bar, a
     // navigate, the New dialog) and may sit under a branch folded away.
-    // After the frame, because opening a branch is a setState and this is a
-    // build.
-    if (widget.selected.file case var selectedFile?
-        when '$selectedFile//${widget.selected.scenario}' != _revealedFor) {
-      _revealedFor = '$selectedFile//${widget.selected.scenario}';
-      var toOpen = scenarioBranchesTo(selectedFile);
-      if (toOpen.any(_closed.contains)) {
+    // After the frame, because opening a branch notifies and this is a build.
+    if (widget.selected.file case var selectedFile?) {
+      var key = '$selectedFile//${widget.selected.scenario}';
+      if (browsing.needsReveal(key)) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => _closed.removeAll(toOpen));
+          if (mounted) {
+            browsing.revealSelection(key, scenarioBranchesTo(selectedFile));
+          }
         });
       }
     }
@@ -571,17 +613,13 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
           case ScenarioBranchNode():
             // A filtered tree is already the answer to a question; folding
             // part of it away would only hide what was asked for.
-            var open = filtering || !_closed.contains(node.id);
+            var open = filtering || browsing.isOpen(node.id);
             rows.add(
               _BranchRow(
                 node,
                 depth: depth,
                 open: open,
-                onTap: filtering
-                    ? null
-                    : () => setState(() {
-                        if (!_closed.remove(node.id)) _closed.add(node.id);
-                      }),
+                onTap: filtering ? null : () => browsing.toggle(node.id),
               ),
             );
             if (open) walk(node.children, depth + 1);

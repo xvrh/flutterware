@@ -477,6 +477,57 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  // A long catalog arrives as a table of contents rather than as a list you
+  // are already scrolling. The threshold is a paneful — see `treeRowBudget` —
+  // and the three-entry catalog every other test here uses is well under it,
+  // which is why they all find their entries on the first pump.
+  testWidgets('a catalog too long for the pane opens folded', (tester) async {
+    var many = [
+      for (var i = 0; i < 16; i++)
+        CatalogEntry(
+          path: 'demo/left/e$i.dart',
+          symbol: 'left$i',
+          annotation: 'Demo()',
+          name: 'Left $i',
+        ),
+      for (var i = 0; i < 16; i++)
+        CatalogEntry(
+          path: 'demo/right/e$i.dart',
+          symbol: 'right$i',
+          annotation: 'Demo()',
+          name: 'Right $i',
+        ),
+    ];
+    // 34 rows with everything open: two folders and thirty-two entries.
+    await pump(tester, sessionOf([...many, beta], beta, 'boom'));
+
+    expect(find.text('left'), findsOneWidget);
+    expect(find.text('right'), findsOneWidget);
+    expect(find.text('Left 0'), findsNothing);
+    expect(find.text('Right 0'), findsNothing);
+    expect(
+      find.byTooltip('Expand all'),
+      findsOneWidget,
+      reason:
+          'the button reads the same set the tree does, so it offers the '
+          'direction the fold left open',
+    );
+
+    // Folded is not hidden: a folder opens on a click like any other.
+    await tester.tap(find.text('left'));
+    await tester.pump();
+    expect(find.text('Left 0'), findsOneWidget);
+    expect(find.text('Right 0'), findsNothing);
+
+    // And the two rules compose. A fresh catalog this long folds, and then
+    // opens the branches over whatever is selected: the entry the panel is
+    // showing is never one you have to go looking for.
+    await pump(tester, sessionOf([...many, beta], many.first, 'boom'));
+    await tester.pump();
+    expect(find.text('Left 0'), findsOneWidget);
+    expect(find.text('Right 0'), findsNothing);
+  });
+
   testWidgets('one button folds everything, then unfolds it', (tester) async {
     const one = CatalogEntry(
       path: 'demo/team/one.dart',
