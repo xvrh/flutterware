@@ -620,12 +620,13 @@ class TranslationExport {
   final ExportFindings findings;
 
   /// The key with this `catalog/key` id, or null.
-  ExportedKey? operator [](String id) {
-    for (var key in keys) {
-      if (key.id == id) return key;
-    }
-    return null;
-  }
+  ///
+  /// Indexed on the first lookup, because the reader's whole job is a join:
+  /// every caller walks its own catalog and probes this once per key. A scan
+  /// made that quadratic, and quietly: the panel's table cost 5ms a rebuild
+  /// before an export existed and 324ms after one, at 2000 keys — and the
+  /// studio rebuilds it whenever any plugin says anything at all.
+  ExportedKey? operator [](String id) => _indexOf(this)[id];
 
   /// Every key that was actually seen on a screen.
   Iterable<ExportedKey> get seen =>
@@ -726,3 +727,22 @@ List<T> _list<T>(Object? value, T Function(Map<String, Object?>) decode) => [
   for (var entry in value as List? ?? const [])
     if (entry is Map) decode(entry.cast<String, Object?>()),
 ];
+
+/// One `catalog/key` → key map per export, built on the first lookup.
+///
+/// An [Expando] rather than a field: the constructor is `const` and staying
+/// that way is worth more than the field would be. First-wins, like the scan
+/// it replaced — a duplicate id is a malformed export, and the two spellings
+/// must not disagree about which key it names.
+Map<String, ExportedKey> _indexOf(TranslationExport export) {
+  var index = _indexes[export];
+  if (index != null) return index;
+  index = <String, ExportedKey>{};
+  for (var key in export.keys) {
+    index.putIfAbsent(key.id, () => key);
+  }
+  _indexes[export] = index;
+  return index;
+}
+
+final _indexes = Expando<Map<String, ExportedKey>>('TranslationExport index');

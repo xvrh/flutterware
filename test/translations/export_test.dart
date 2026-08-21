@@ -237,6 +237,38 @@ void main() {
 
       expect(it.seen.map((k) => k.key), ['save']);
     });
+
+    test('a lookup is a lookup, not a walk', () {
+      // The join every reader performs — one probe per key it holds — so a
+      // scan here is quadratic in the caller. 20k keys is a table nobody has;
+      // as a walk this took minutes, so the assertion is the clock.
+      var it = export(
+        keys: [
+          for (var i = 0; i < 20000; i++)
+            ExportedKey(catalog: 'app', key: '$i'),
+        ],
+      );
+
+      var watch = Stopwatch()..start();
+      for (var i = 0; i < 20000; i++) {
+        expect(it['app/$i'], isNotNull);
+      }
+      watch.stop();
+
+      expect(it['app/nope'], isNull);
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    });
+
+    test('a duplicated id keeps the first one, as the walk did', () {
+      var it = export(
+        keys: const [
+          ExportedKey(catalog: 'app', key: 'save', values: {'en': 'first'}),
+          ExportedKey(catalog: 'app', key: 'save', values: {'en': 'second'}),
+        ],
+      );
+
+      expect(it['app/save']?.values['en'], 'first');
+    });
   });
 
   group('reading one back', () {

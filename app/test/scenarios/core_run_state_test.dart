@@ -536,6 +536,39 @@ void main() {
     );
     expect(runner.seenCaptureScales.last, 1);
   });
+  test('a running point counts the scenarios that have reported', () async {
+    File(p.join(root.path, 'test', 'scenarios', 'a_test.dart'))
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync('''
+void main() {
+  scenario('A', (s) async {});
+  scenario('B', (s) async {});
+}
+''');
+    var gate = Completer<void>();
+    var runner = _FakeRunner()
+      ..emitSteps = true
+      ..stepScenarios = ['A', 'B']
+      ..gate = gate;
+    var subject = core(runner: runner);
+    var running = subject.invoke(
+      'run',
+      arguments: {'package': '.', 'file': 'test/scenarios/a_test.dart'},
+    );
+
+    // The scan is kicked by the run and lands on its own, so the denominator
+    // arrives a beat late — exactly as it does behind a real compile.
+    while (subject.runProgressFor('.')?.total == null) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(subject.runProgressFor('.'), (done: 2, total: 2));
+    // And the sidebar reads it off the status, where MCP forwards it too.
+    expect(subject.report.status.message, contains('2 of 2 scenarios'));
+
+    gate.complete();
+    await running;
+    expect(subject.runProgressFor('.'), isNull);
+  });
 }
 
 class _FakeRunner extends ScenarioRunner {
@@ -566,6 +599,10 @@ class _FakeRunner extends ScenarioRunner {
   /// Announce each step through [onStep] before returning, as the real
   /// runner's VM-service subscription does.
   var emitSteps = false;
+
+  /// Which scenarios the announced steps come from, when the run was not
+  /// narrowed to one — what the progress count is counting.
+  List<String>? stepScenarios;
 
   /// Merged into the emitted step — what the harness writes only when the news
   /// is bad: `settled: false`, `failure: …`.
@@ -612,7 +649,9 @@ class _FakeRunner extends ScenarioRunner {
       ...extraStepFields,
     };
     if (emitSteps) {
-      onStep?.call({'file': file, 'scenario': scenario, 'step': step});
+      for (var name in stepScenarios ?? [scenario]) {
+        onStep?.call({'file': file, 'scenario': name, 'step': step});
+      }
     }
     if (gate case var gate?) await gate.future;
     if (failure case var failure?) throw StateError(failure);
