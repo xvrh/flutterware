@@ -58,7 +58,7 @@ class ScenarioKeyboard {
 
   /// What the app is asking for, or null when it is asking for nothing at all.
   ///
-  /// **A field can ask for no keyboard.** `TextInputType.none` is a custom
+  /// A field can ask for no keyboard. `TextInputType.none` is a custom
   /// pad, a date picker sheet, a calculator's own keys: the field opens a
   /// connection and the platform shows nothing. `TextInput.show` is still
   /// sent, so reading the show alone raises a keyboard over a screen that has
@@ -88,7 +88,7 @@ class ScenarioKeyboard {
 
   /// [variant], as something the slab can rebuild on.
   ///
-  /// **The picture needs its own signal, because the height is not one.** The
+  /// The picture needs its own signal, because the height is not one. The
   /// slab sits *above* the app, so an app-internal frame never rebuilds it; the
   /// only thing that does is the view's insets changing, which is the height.
   /// And email, url and letters are all the same height on every device

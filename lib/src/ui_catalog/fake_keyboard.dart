@@ -212,7 +212,7 @@ class FakeKeyboardPainter extends CustomPainter {
 
   /// Every label this keyboard draws, in drawing order.
   ///
-  /// **Exists so a test can hold the picture to account.** A label here is
+  /// Exists so a test can hold the picture to account. A label here is
   /// painted, not built, so no finder can see it and no `screen()` reports it —
   /// which is the property that keeps a keyboard out of the app's text
   /// projection, and also the property that let a variant go missing while
@@ -345,7 +345,7 @@ class FakeKeyboardPainter extends CustomPainter {
   /// `(weight, isModifier, label)` per key, for the row that says which
   /// keyboard this is.
   ///
-  /// **The labels are the whole point of this row.** A real email keyboard
+  /// The labels are the whole point of this row. A real email keyboard
   /// grows an `@` and a dot here and a URL one a slash and a `.com`, both at
   /// the space bar's expense — and drawn as bare rectangles the two rows
   /// differ only in how wide the middle key is, which nobody reads as a
@@ -400,7 +400,7 @@ class FakeKeyboardPainter extends CustomPainter {
   /// A digit pad: three columns, four rows, and nothing that looks like a
   /// letter.
   ///
-  /// **Unmistakable is the whole job.** A shorter band drawn with ten-key rows
+  /// Unmistakable is the whole job. A shorter band drawn with ten-key rows
   /// would be a picture of a keyboard the app did not ask for, and the reader
   /// would have no way to tell the form wanted digits.
   void _paintKeypad(
@@ -552,7 +552,7 @@ class FakeKeyboardPainter extends CustomPainter {
   /// `maxWidth` on a `TextPainter` wraps rather than shrinks — a `.com` on a
   /// narrow key would come out as two lines rather than as smaller text.
   ///
-  /// **Every painter made here is disposed here**, including the one that
+  /// Every painter made here is disposed here, including the one that
   /// turned out too wide and was never drawn. A `TextPainter` owns a
   /// `ui.Paragraph`, which is engine memory a Dart garbage collection has to
   /// come round to; a keypad is ten of them, the slide repaints on every frame

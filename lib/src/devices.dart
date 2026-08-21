@@ -72,7 +72,7 @@ enum KeyboardMode {
 /// Which keyboard a field asked for — what a platform draws, not only how
 /// tall it is.
 ///
-/// **Two facts wear one name here, and they are genuinely separate.** The
+/// Two facts wear one name here, and they are genuinely separate. The
 /// *height* differs by platform: an iPhone gives a keypad 27–45 fewer points
 /// than a QWERTY, an iPad gives every type the same keyboard, and Gboard swaps
 /// the layout without moving the height at all. The *picture* differs
@@ -106,7 +106,7 @@ enum KeyboardVariant {
 /// pair rather than a `TextInputType` is what lets one function serve both
 /// without either lane translating first.
 ///
-/// **`signed` is the discriminator nobody expects.** A plain number field and
+/// `signed` is the discriminator nobody expects. A plain number field and
 /// a decimal one get iOS's keypad; the moment a minus sign is allowed the
 /// platform gives the full punctuation keyboard at full height instead.
 /// Measured on two phones, both agreeing.
@@ -255,7 +255,7 @@ class Device {
 
   /// How tall this device's keyboard is when a field asks for [variant].
   ///
-  /// **The one place a variant becomes a number**, so nothing downstream has
+  /// The one place a variant becomes a number, so nothing downstream has
   /// to know which variants differ on which platform — an iPad answers the
   /// same height for all four, and that is a property of the iPad rather than
   /// something a caller should special-case.
