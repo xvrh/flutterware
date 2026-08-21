@@ -91,9 +91,26 @@ void main() {
       var media = await pump(tester, keyboard: 0);
       expect(media.viewInsets.bottom, 0);
       expect(media.padding.bottom, 34);
-      // Not merely equivalent: nothing is added to the tree, so a demo with no
-      // keyboard pays no stack, no painter and no absorber.
-      expect(find.byType(CustomPaint), findsNothing);
+      // The band is in the tree and it is nothing: zero high, so it absorbs
+      // nothing and paints nothing. See the remount test below for why it is
+      // kept rather than removed.
+      expect(tester.getSize(find.byType(AbsorbPointer)).height, 0);
+    });
+
+    testWidgets('raising it does not remount the app', (tester) async {
+      // **The bug this pins, measured.** A wrapper that returns its child bare
+      // at zero and wraps it at 336 *reparents* the app when the keyboard
+      // moves: every `State` under it is disposed and rebuilt. In a scenario
+      // that showed up as `TextInput.show` immediately followed by
+      // `clearClient` — the field asked for a keyboard and then lost the focus
+      // that asked, so the keyboard it had just raised went straight back
+      // down. In a preview it would empty whatever had been typed.
+      var key = GlobalKey<_LivesState>();
+      await pump(tester, keyboard: 0, child: _Lives(key: key));
+      key.currentState!.value = 'typed';
+      await pump(tester, keyboard: 336, child: _Lives(key: key));
+      expect(key.currentState!.value, 'typed');
+      expect(key.currentState!.mounts, 1);
     });
   });
 
@@ -191,4 +208,26 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+}
+
+/// A widget that remembers whether it has been remounted.
+class _Lives extends StatefulWidget {
+  const _Lives({super.key});
+
+  @override
+  State<_Lives> createState() => _LivesState();
+}
+
+class _LivesState extends State<_Lives> {
+  String value = '';
+  int mounts = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    mounts++;
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
 }

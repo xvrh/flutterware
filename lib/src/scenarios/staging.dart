@@ -27,6 +27,7 @@
 /// ```
 library;
 
+import 'dart:math' as math;
 import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart';
@@ -53,12 +54,20 @@ extension DeviceStaging on WidgetTester {
   ///
   /// A null [device] is the plain surface and a reset that does nothing, so a
   /// caller looking a device up per entry needs no branch around this.
-  VoidCallback applyDevice(Device? device, {ScreenOrientation? orientation}) {
+  VoidCallback applyDevice(
+    Device? device, {
+    ScreenOrientation? orientation,
+    KeyboardMode? keyboard,
+  }) {
     if (device == null) return () {};
-    return applyScenarioRunArgs(
+    var reset = applyScenarioRunArgs(
       this,
       const ScenarioRunArgs().withDevice(device, orientation: orientation),
     );
+    if (keyboard == KeyboardMode.up) {
+      stageKeyboard(this, device.oriented(orientation).keyboard);
+    }
+    return reset;
   }
 
   /// [applyDevice] with the head of [canvas] — what that list means everywhere
@@ -76,7 +85,11 @@ extension DeviceStaging on WidgetTester {
   VoidCallback applyCanvas(PreviewCanvas? canvas) {
     if (canvas == null) return () {};
     if (canvas.defaultDevice case var device?) {
-      return applyDevice(device, orientation: canvas.defaultOrientation);
+      return applyDevice(
+        device,
+        orientation: canvas.defaultOrientation,
+        keyboard: canvas.defaultKeyboard,
+      );
     }
     return applyScenarioRunArgs(
       this,
@@ -141,4 +154,34 @@ VoidCallback applyScenarioRunArgs(WidgetTester tester, ScenarioRunArgs args) {
     view.reset();
     dispatcher.clearAllTestValues();
   };
+}
+
+/// Puts [height] logical pixels of software keyboard on the view.
+///
+/// **The three numbers a real embedder writes**, and all three of them: the
+/// insets rise, the bottom safe area is eaten — measured as 0 on every device
+/// in the table with a keyboard up — and `viewPadding` is left alone, because
+/// it is what still remembers the device underneath and the one number
+/// `MediaQueryData.fromView` does not derive.
+///
+/// `FakeViewPadding` speaks **physical** pixels where the device table speaks
+/// logical, which is the same trap [applyScenarioRunArgs] documents at its own
+/// padding.
+///
+/// Static: the caller decides when it moves. A scenario slides it over 250ms
+/// of fake time through its own driver; a preview harness stages it once for
+/// the entry, because nothing in a cold render ever focuses a field.
+void stageKeyboard(WidgetTester tester, double height) {
+  if (height <= 0) return;
+  var view = tester.view;
+  var ratio = view.devicePixelRatio;
+  var physical = height * ratio;
+  var device = view.viewPadding;
+  view.viewInsets = FakeViewPadding(bottom: physical);
+  view.padding = FakeViewPadding(
+    left: device.left,
+    top: device.top,
+    right: device.right,
+    bottom: math.max(0, device.bottom - physical),
+  );
 }

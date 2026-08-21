@@ -482,6 +482,7 @@ class ScenarioRunStep {
         landed: json['landed'] as bool? ?? true,
         digest: json['digest'] as String?,
         strayFrames: _int(json['strayFrames'], 0),
+        keyboard: (json['keyboard'] as num?)?.toDouble(),
         unchanged: json['unchanged'] == true,
         failure: json['failure'] as String?,
       );
@@ -529,6 +530,7 @@ class ScenarioRunStep {
     this.landed = true,
     this.digest,
     this.strayFrames = 0,
+    this.keyboard,
     this.unchanged = false,
     this.failure,
   });
@@ -791,6 +793,16 @@ class ScenarioRunStep {
   /// those frames is not in the flow. Zero is the healthy case.
   final int strayFrames;
 
+  /// How tall the software keyboard was when this frame was taken, in logical
+  /// pixels, or null when it was down — which is nearly every step.
+  ///
+  /// **A note about the screen rather than a node in it.** A real phone's
+  /// keyboard is not in the app's widget tree either, and putting one in would
+  /// mean a keyboard in every `find.text`, every semantics audit and every
+  /// transcript. The only reason to record it at all is that a reader looking
+  /// at a shot with the bottom third missing cannot otherwise tell why.
+  final double? keyboard;
+
   /// True when this step's picture is byte-identical to its parent's: the
   /// verb acted and nothing on screen changed. A fact, not a verdict — a
   /// capture parked mid-flight with `Settle.none` is legitimately unchanged —
@@ -889,6 +901,7 @@ class ScenarioRunStep {
     strayFrames: strayFrames,
     unchanged: unchanged,
     failure: failure,
+    keyboard: keyboard,
   );
 
   Map<String, Object?> toJson() => {
@@ -944,6 +957,7 @@ class ScenarioRunStep {
     if (!landed) 'landed': landed,
     if (digest != null) 'digest': digest,
     if (strayFrames > 0) 'strayFrames': strayFrames,
+    if (keyboard != null) 'keyboard': keyboard,
     if (unchanged) 'unchanged': unchanged,
     if (failure != null) 'failure': failure,
   };

@@ -263,6 +263,7 @@ class TargetResolver {
     this._pump,
     this.ensureSemantics,
     this.describeScreen,
+    this.namedCovering,
   });
 
   final WidgetController controller;
@@ -280,6 +281,18 @@ class TargetResolver {
   /// One line describing what is on screen, for the nothing-matches message —
   /// the first thing whoever wrote the target needs to see.
   final String Function()? describeScreen;
+
+  /// A refusal for a covering the host can *name*, outranking the generic
+  /// covered sentence. Given the target's centre, the verb and how the target
+  /// reads; null means this is not that covering.
+  ///
+  /// The engine deliberately knows nothing about what might be doing the
+  /// covering. A scenario's software keyboard is the first case — it absorbs
+  /// the pointer exactly as a real one does, so the generic sentence would be
+  /// true and would send the reader looking for an overlay that is not in
+  /// their code.
+  final String? Function(Offset center, String verb, String described)?
+  namedCovering;
 
   Future<Finder> resolve(dynamic target, String verb) async {
     if (target is Target && target.needsSemantics) {
@@ -574,7 +587,11 @@ class TargetResolver {
     if (bounds.contains(center)) {
       throw TargetError(
         TargetFailure.covered,
-        _decorationRefusal(finder, described, verb) ??
+        // The named covering first: it is the most specific thing anybody
+        // knows about why this failed, and the two below are what to say when
+        // nobody knows.
+        namedCovering?.call(center, verb, described) ??
+            _decorationRefusal(finder, described, verb) ??
             messages.covered(
               verb,
               described,

@@ -162,7 +162,8 @@ Future<void> _runHarness(
   // returns — which is why it is on here rather than behind a request field.
   TranslationIndex.recording = true;
 
-  var (:profiles, shots: folderShots) = await _probeFolders(configs);
+  var (:profiles, shots: folderShots, keyboards: folderKeyboards) =
+      await _probeFolders(configs);
 
   var inspector = GuestInspector(
     rootOf: () => binding.rootElement,
@@ -187,6 +188,7 @@ Future<void> _runHarness(
         runArgs: _parseRunArgs(args),
         profiles: profiles,
         shots: folderShots,
+        keyboards: folderKeyboards,
         // The host resolved a device id to geometry, or said it had nobody's
         // choice to resolve — in which case the folder's profile speaks and
         // the geometry that did arrive is only the host's fallback.
@@ -358,6 +360,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
 ({Group root, Map<String, Set<String>> scenarios}) _declare(
   Map<String, void Function()> scenarioMains, {
   Map<String, Shots> shots = const {},
+  Map<String, bool> keyboards = const {},
 }) {
   var declarer = Declarer();
   var scenarios = <String, Set<String>>{};
@@ -372,11 +375,13 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
         // harness has to arm it itself — the same shape as the translation
         // index two functions up.
         scenarioAmbientShots = _nearest(entry.key, shots);
+        scenarioAmbientKeyboard = _nearest(entry.key, keyboards);
         try {
           entry.value();
         } finally {
           scenarioDeclarationSink = null;
           scenarioAmbientShots = null;
+          scenarioAmbientKeyboard = null;
         }
         scenarios[entry.key] = sink.toSet();
       });
@@ -391,16 +396,24 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
 /// anywhere, and executing it is the only reading that cannot be wrong. Its
 /// own setup runs too — the same setup `flutter test` gives that folder, which
 /// this runner skipped entirely until now.
-Future<({Map<String, ScenarioProfile> profiles, Map<String, Shots> shots})>
+Future<
+  ({
+    Map<String, ScenarioProfile> profiles,
+    Map<String, Shots> shots,
+    Map<String, bool> keyboards,
+  })
+>
 _probeFolders(
   Map<String, Future<void> Function(FutureOr<void> Function())> configs,
 ) async {
   var profiles = <String, ScenarioProfile>{};
   var shots = <String, Shots>{};
+  var keyboards = <String, bool>{};
   for (var MapEntry(key: directory, value: config) in configs.entries) {
     scenarioProbing = true;
     scenarioProbedProfile = null;
     scenarioProbedShots = null;
+    scenarioProbedKeyboard = null;
     try {
       await config(() {});
       if (scenarioProbedProfile case var profile?) {
@@ -409,15 +422,19 @@ _probeFolders(
       if (scenarioProbedShots case var policy?) {
         shots[directory] = policy;
       }
+      if (scenarioProbedKeyboard case var wanted?) {
+        keyboards[directory] = wanted;
+      }
     } catch (error, stack) {
       stderr.writeln('[harness] $directory config: $error\n$stack');
     } finally {
       scenarioProbing = false;
       scenarioProbedProfile = null;
       scenarioProbedShots = null;
+      scenarioProbedKeyboard = null;
     }
   }
-  return (profiles: profiles, shots: shots);
+  return (profiles: profiles, shots: shots, keyboards: keyboards);
 }
 
 /// The profile whose folder contains [file] — the nearest one above it, which
@@ -614,6 +631,7 @@ Future<Map<String, Object?>> _run(
   ScenarioRunArgs? runArgs,
   Map<String, ScenarioProfile> profiles = const {},
   Map<String, Shots> shots = const {},
+  Map<String, bool> keyboards = const {},
   String? device,
   bool deviceUnspecified = false,
   bool narrowestDevice = false,
@@ -625,7 +643,7 @@ Future<Map<String, Object?>> _run(
           for (var entry in scenarioMains.entries)
             if (entry.key == file) entry.key: entry.value,
         };
-  var declared = _declare(mains, shots: shots);
+  var declared = _declare(mains, shots: shots, keyboards: keyboards);
   var root = declared.root;
 
   var outcomes = <Map<String, Object?>>[];
@@ -1059,6 +1077,7 @@ Future<Map<String, Object?>> _runOne(
       digest: digest,
       strayFrames: capture.strayFrames,
       failure: capture.failure,
+      keyboard: capture.keyboard,
     );
 
     // A beat with no frame. There is no picture to write, no tree to read, no
@@ -1241,6 +1260,7 @@ Future<Map<String, Object?>> _runOne(
       strayFrames: capture.strayFrames,
       unchanged: unchanged,
       failure: capture.failure,
+      keyboard: capture.keyboard,
     );
     record(step);
   };

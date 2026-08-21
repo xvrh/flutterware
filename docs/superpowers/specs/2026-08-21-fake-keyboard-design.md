@@ -3,10 +3,9 @@
 **Date:** 2026-08-21
 **Status:** Designed. Three measurements were taken *before* the design, and
 two of them changed it (§ What was measured). The owner decided four things on
-2026-08-21, marked **owner** where they land. **PR 1 (staging the platform)
-and PR 2 (the previews keyboard) are built**; the scenario half is not. What
-was built differently from what is written below is in § What PR 2 did
-differently.
+2026-08-21, marked **owner** where they land. **All three PRs are built.**
+What was built differently from what is written below is in § What PR 2 did
+differently and § What PR 3 did differently.
 
 **Lineage:** `2026-07-30-scenarios-design.md` (the substrate every scenario
 verb runs on), `2026-08-15-previews-audit-on-flutter-tester.md` (the second
@@ -452,6 +451,72 @@ heights are available whenever they are wanted. They are not wanted in v1:
 each one is another measured number per device, and a numeric pad that is
 wrong by 40 points is worse than a text keyboard that is right.
 
+## What PR 3 did differently
+
+Six departures, and the first is the one worth reading.
+
+- **The slide is a real `Ticker` in the pumped tree, not a step in the settle
+  hook.** The hook was tried first and it does not work, for a reason worth
+  writing down: a `Settle` loop asks `hasScheduledFrame` *after* its pump, and
+  the frame that writing the view schedules has been consumed by then. So a
+  keyboard driven from between the frames stops one frame in — a quarter of the
+  way up, with the layout laid out against a screen that never existed. An
+  `AnimationController` keeps the binding asking for frames until it lands,
+  which is exactly what every settle policy already knows how to wait for, and
+  what `pumpAndSettle` waits for too. The hook survives, doing only what it can
+  do: reading `testTextInput.isVisible` and pointing the ticker.
+
+- **`keyboard: false`, not `keyboard: off`.** The switch is binary and the
+  design's `off` was a value from an enum that does not exist; a `bool` needed
+  no new noun. It is on `runScenarios` beside `shots:`, read as the folder
+  declares — the same rule, because a matrix declares one body once per
+  assignment and each declaration keeps what it was made under.
+
+- **A named-covering hook on the shared resolver, not a scenario-only check.**
+  `_ensureReachable` already computes the target's centre and already refuses a
+  covered target; the keyboard needed the same refusal with a better sentence.
+  So `TargetResolver` takes an optional `namedCovering` that outranks the
+  generic one, and the engine goes on knowing nothing about keyboards. The live
+  drive layer gets the seam for free when it wants one.
+
+- **`Settle.full` lands once before its loop.** It was the one policy that
+  called the hook not at all — `pumpAndSettle` owns its own loop — so a
+  scenario written with `settle: Settle.full` would have had no keyboard.
+  Landing once *before* the loop is the whole of what a hookless policy can do,
+  and it is enough: the sample points the ticker and the SDK's own settle waits
+  the slide out like any other animation.
+
+- **The previews harness stages a keyboard, it does not drive one.** The
+  `flutter_tester` lane renders each entry cold, and nothing cold ever focuses
+  a field — so there is no signal to follow there and no driver. What it does
+  have is the canvas: `keyboards: [KeyboardMode.up]` is applied by
+  `applyCanvas` as a static height on the view, with the same slab over it. The
+  axis is *declared* in PR 2 and *crossed* here, in the one lane where crossing
+  it means anything.
+
+- **The verbs are `show` / `hide` / `auto` / `dismiss`, four rather than
+  three.** `auto` is what hands the keyboard back to the app after a `show`,
+  and without it the only way back was `dismiss`, which also unfocuses the
+  field — a bigger hammer than "stop holding it up".
+
+### And a bug in PR 2 that this found
+
+`FakeKeyboard` returned its child bare at zero and wrapped it in a `MediaQuery`
+and a `Stack` at 336. That **reparents the app** the moment the keyboard moves:
+every `State` under it is disposed and rebuilt. In a scenario it showed up as
+`TextInput.show` immediately followed by `clearClient` — the field asked for a
+keyboard, the wrapper appearing threw the field away, and the keyboard it had
+just asked for went straight back down. In a preview the same thing would have
+emptied whatever had been typed into the demo.
+
+The wrappers are unconditional now and only the numbers move; down costs one
+`MediaQuery` holding the data it was given and a zero-height band.
+`test/ui_catalog/fake_keyboard_test.dart` pins it with a `State` that counts
+its own mounts.
+
+The rule: **a widget whose shape depends on a value it also animates will
+reparent everything below it.** Keep the shape and move the numbers.
+
 ## Not in v1
 
 - IME composition, dead keys, CJK. Unchanged from today: the guest has no IME.
@@ -476,7 +541,7 @@ the first is what makes the second faithful):
 2. ~~**The previews keyboard.**~~ **Built.** The shared core (`DeviceKeyboard`, the
    arithmetic, the slab), the guest driver, the tri-state control, the
    address, the canvas axis, the host-drawn dismiss key.
-3. **The scenarios keyboard.** The test-binding driver, the settle hook, the
+3. ~~**The scenarios keyboard.**~~ **Built.** The test-binding driver, the settle hook, the
    occlusion refusal, the profile switch, the step and `screen()` reporting,
    an example scenario that fills a form on a phone.
 
@@ -511,5 +576,8 @@ framework queue.
 - Whether forced-up survives an entry switch. It is a property of the stage,
   not of the entry, which argues yes — but a demo with no field in it and a
   keyboard over the bottom third argues no.
-- Whether the scenario off switch also belongs per-scenario, or only per
-  profile. Per-profile is the smaller promise, and nothing yet asks for more.
+- ~~Whether the scenario off switch also belongs per-scenario, or only per
+  profile.~~ **Built per-profile only**, which is the smaller promise and what
+  nothing yet asks past. A scenario that wants one picture without a keyboard
+  says `await s.keyboard.hide()` and takes it, which turned out to cover the
+  case a per-scenario switch was imagined for.

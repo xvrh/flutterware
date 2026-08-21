@@ -18,6 +18,7 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../devices.dart';
@@ -49,8 +50,17 @@ class FakeKeyboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (height <= 0) return child;
     var media = MediaQuery.of(context);
+    // **The wrappers are unconditional, and that is not tidiness.** A widget
+    // that returns its child bare at zero and wraps it at 336 *reparents the
+    // app* the moment the keyboard moves: every `State` under it is disposed
+    // and rebuilt, which loses the focus, closes the text input connection and
+    // empties whatever had been typed. Measured — a scenario tapping a field
+    // saw `TextInput.show` immediately followed by `clearClient`, and the
+    // keyboard it had just asked for went straight back down.
+    //
+    // So the shape stays put and only the numbers move. Down costs one
+    // `MediaQuery` with the data it was given and a zero-height band.
     return MediaQuery(
       // The arithmetic, and all three numbers of it. Getting only the first is
       // how a fake keyboard ends up with a `SafeArea` floating 34 points above
@@ -61,39 +71,80 @@ class FakeKeyboard extends StatelessWidget {
       // simulators and an emulator, `padding.bottom` is 0 on every one of them
       // while the keyboard is up — and `viewPadding` is what still remembers
       // the device underneath.
-      data: media.copyWith(
-        padding: media.padding.copyWith(
-          bottom: math.max(0, media.padding.bottom - height),
-        ),
-        viewInsets: media.viewInsets.copyWith(bottom: height),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          child,
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: height,
-            // **It hit-tests true**, because that is what a keyboard does: a
-            // tap that lands on it does not reach the app. Absorbing rather
-            // than ignoring is the whole difference between a picture of a
-            // keyboard and a keyboard.
-            child: ExcludeSemantics(
-              child: AbsorbPointer(
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: FakeKeyboardPainter(
-                    platform: platform,
-                    dark: media.platformBrightness == Brightness.dark,
-                  ),
+      data: height <= 0
+          ? media
+          : media.copyWith(
+              padding: media.padding.copyWith(
+                bottom: math.max(0, media.padding.bottom - height),
+              ),
+              viewInsets: media.viewInsets.copyWith(bottom: height),
+            ),
+      child: FakeKeyboardSlab(height: height, platform: platform, child: child),
+    );
+  }
+}
+
+/// The slab alone, over [child], with none of the arithmetic.
+///
+/// **Its own widget because the two lanes divide the work differently.** In a
+/// preview the numbers are a `MediaQuery` this package writes, so [FakeKeyboard]
+/// does both halves in one place. In a scenario they are the *view's* — set on
+/// the binding's test values exactly as a real embedder would report them, so
+/// that every `MediaQuery.fromView` in the app sees them and not only the
+/// subtree under one widget — and all that is left for the tree is the picture
+/// and the occlusion. Which is this.
+class FakeKeyboardSlab extends StatelessWidget {
+  const FakeKeyboardSlab({
+    super.key,
+    required this.height,
+    this.platform,
+    required this.child,
+  });
+
+  final double height;
+  final DevicePlatform? platform;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      // Non-directional on purpose: the default `AlignmentDirectional.topStart`
+      // needs a `Directionality`, and this widget sits **above** the app — in
+      // the scenario lane there is no `MaterialApp` over it to supply one, and
+      // asking a keyboard to know the reading direction to draw a band at the
+      // bottom of the screen would be inventing a dependency.
+      alignment: Alignment.topLeft,
+      children: [
+        child,
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          // Zero when it is down — kept in the tree rather than removed, for
+          // the reason [FakeKeyboard] gives: a child list that changes length
+          // is a child list that can reparent, and reparenting the app is how
+          // a keyboard ends up wiping the field that asked for it.
+          height: math.max(0, height),
+          // **It hit-tests true**, because that is what a keyboard does: a tap
+          // that lands on it does not reach the app. Absorbing rather than
+          // ignoring is the whole difference between a picture of a keyboard
+          // and a keyboard.
+          child: ExcludeSemantics(
+            child: AbsorbPointer(
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: FakeKeyboardPainter(
+                  platform: platform,
+                  dark:
+                      MediaQuery.platformBrightnessOf(context) ==
+                      Brightness.dark,
                 ),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -294,4 +345,28 @@ class FakeKeyboardPainter extends CustomPainter {
   @override
   bool shouldRepaint(FakeKeyboardPainter old) =>
       old.platform != platform || old.dark != dark;
+}
+
+/// [FakeKeyboardSlab] as tall as the **view** says the keyboard is.
+///
+/// For the lanes where the numbers are the view's rather than a widget's — a
+/// scenario, and the previews harness on `flutter_tester` — which is every
+/// lane running under a test binding. Reading the height back off the view is
+/// what stops the picture and the layout from being two facts: they are one,
+/// and the app met it first.
+class ViewKeyboardSlab extends StatelessWidget {
+  const ViewKeyboardSlab({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => FakeKeyboardSlab(
+    height: MediaQuery.viewInsetsOf(context).bottom,
+    // The staged platform, which the run has already set from the device —
+    // the same fact the app's own `.adaptive` widgets read.
+    platform: defaultTargetPlatform == TargetPlatform.android
+        ? DevicePlatform.android
+        : DevicePlatform.ios,
+    child: child,
+  );
 }

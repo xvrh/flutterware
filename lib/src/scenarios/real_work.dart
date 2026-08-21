@@ -121,6 +121,7 @@ Future<({bool settled, bool landed})> landRealWork(
   required RealWorkBudget budget,
   ScenarioAssetBundle? assets,
   ScenarioMotionRecorder? record,
+  void Function()? beforePump,
 }) async {
   if (!settled) {
     for (var i = 0; i < realWorkTurns; i++) {
@@ -131,6 +132,7 @@ Future<({bool settled, bool landed})> landRealWork(
       } else {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       }
+      beforePump?.call();
       await tester.pump();
     }
     // One frame to the recording rather than one per turn: these pumps all
@@ -158,7 +160,10 @@ Future<({bool settled, bool landed})> landRealWork(
     settled = await policy.apply(
       tester,
       record: record,
-      land: () => budget.land(tester, assets),
+      land: () async {
+        beforePump?.call();
+        await budget.land(tester, assets);
+      },
     );
     if (!settled) return (settled: false, landed: true);
   }

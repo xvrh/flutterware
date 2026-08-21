@@ -1380,6 +1380,7 @@ packages: List<ScenarioRunPackage>
       landed: bool?   # False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.
       digest: String?   # What this step captured, hashed — the pixels for a screen, the payload for a document.
       strayFrames: int?   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
+      keyboard: double?   # How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.
       unchanged: bool?   # True when this step's picture is byte-identical to its parent's: the verb acted and nothing on screen changed.
       failure: String?   # The error, when this is the step a scenario broke on.
     stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.

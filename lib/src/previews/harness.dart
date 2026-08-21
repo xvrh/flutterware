@@ -24,6 +24,7 @@ import 'package:test_api/src/backend/test.dart' as backend;
 
 import '../canvases.dart';
 import '../devices.dart';
+import '../ui_catalog/fake_keyboard.dart';
 import '../inspect/error.dart';
 import '../inspect/guest_errors.dart';
 import '../inspect/guest_inspect.dart';
@@ -339,7 +340,15 @@ void _declare(
       // rule that eventually differs.
       var canvas = canvasFor(canvases, entry.path);
       var reset = switch ((device, canvas?.defaultDevice)) {
-        (var named?, _) => tester.applyDevice(named, orientation: orientation),
+        (var named?, _) => tester.applyDevice(
+          named,
+          orientation: orientation,
+          // The device is the run's; the keyboard is still the entry's own
+          // canvas talking, because *which entries are worth seeing with a
+          // keyboard over them* is a fact about the entries and not about
+          // which phone somebody asked for.
+          keyboard: canvas?.defaultKeyboard,
+        ),
         (_, _?) => tester.applyCanvas(canvas),
         // Neither: the plain rectangle, staged rather than left alone. The
         // default test surface is 800×600 and the guest's is 900×700, and an
@@ -373,7 +382,13 @@ void _declare(
             // the same order, so what differs between the backends is the
             // engine and not the tree. `CatalogGuest` is what makes knobs
             // answer and what resets the axes, errors and logs per entry.
-            child: CatalogGuest(entryId: entry.id, child: entry.build()),
+            // And the keyboard, if the canvas staged one — as tall as the
+            // view says, so the picture and the layout are the same number.
+            // Nothing focuses in a cold render, so this lane has no driver:
+            // the canvas is the only thing that can ask.
+            child: ViewKeyboardSlab(
+              child: CatalogGuest(entryId: entry.id, child: entry.build()),
+            ),
           ),
         );
         // A turn of the *real* event loop, which is what lets an asset read
