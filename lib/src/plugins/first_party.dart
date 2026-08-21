@@ -309,12 +309,57 @@ class TranslationsPackage extends PluginPackage {
 }
 
 /// One catalog, as `tool/flutterware.dart` declares it.
-class TranslationCatalog {
-  const TranslationCatalog({
-    required this.name,
-    required this.files,
-    this.template = 'en',
-  });
+///
+/// Sealed, for the reason [StackRun] is: the variants do not carry the same
+/// thing. A file per locale is found with a **glob**, because there is one
+/// file for each of them; every locale under a key is **one file**, and
+/// `files` naming it would be a plural that is never plural. The gap widens
+/// with the next format rather than closing — an ARB carries its locale
+/// inside the file and hides metadata under `@`-prefixed keys, a CSV needs to
+/// be told its delimiter and which column holds the key. None of those are a
+/// mode of one shape; each is its own set of questions, and a class per format
+/// is where the answers go.
+///
+/// The alternative — one class with a `layout:` and the union of every
+/// format's parameters on it — reads fine at two and stops reading at three,
+/// because most of the fields on any one declaration would not apply to it.
+sealed class TranslationCatalog {
+  const TranslationCatalog._({required this.name, required this.template});
+
+  /// One file per locale, named for it, each a flat object of key to string:
+  /// `en.json` holding `{"save": "Save"}`.
+  ///
+  /// Unnamed because it is the shape every declaration had before there was a
+  /// choice, so those go on compiling.
+  ///
+  /// [files] is a glob, package-relative like every other path in this file,
+  /// and the locale is each file's base name: `en.json` is `en`. That is a
+  /// convention rather than a parse, and a file whose name is not a locale tag
+  /// is skipped rather than loaded as a locale called `schema`.
+  const factory TranslationCatalog({
+    required String name,
+    required String files,
+    String template,
+  }) = FilePerLocaleCatalog;
+
+  /// Every locale under each key, in one file: `strings.json` holding
+  /// `{"save": {"en": "Save", "nl": "Opslaan"}}`.
+  ///
+  /// What a catalog looks like where a human or a translation service fills in
+  /// languages a key at a time — the row is the unit of work, so the row holds
+  /// every language.
+  ///
+  /// ```dart
+  /// TranslationCatalog.localesPerKey(
+  ///   name: 'server',
+  ///   file: 'tool/translations/strings.json',
+  /// )
+  /// ```
+  const factory TranslationCatalog.localesPerKey({
+    required String name,
+    required String file,
+    String template,
+  }) = LocalesPerKeyCatalog;
 
   /// What the seam calls it — `indexTranslations('app')` and this must agree.
   ///
@@ -323,30 +368,104 @@ class TranslationCatalog {
   /// rather than quietly producing an export that attributes half its keys.
   final String name;
 
-  /// A glob of the catalog's files, one per locale, each a flat JSON object
-  /// of key to string. Package-relative, like every other path in this file.
+  /// The locale the source text is written in.
   ///
-  /// The locale is the file's base name: `en.json` is `en`. That is a
-  /// convention rather than a parse, and a file whose name is not a locale tag
-  /// is skipped rather than loaded as a locale called `schema`.
-  final String files;
-
-  /// The locale the source text is written in — what a translator is
-  /// translating *from*, and what a target locale falling back reads as.
+  /// It decides two of the three findings an export can make, which is why it
+  /// is declared rather than assumed: a key the template has no text for is
+  /// skipped entirely — there is nothing to fall back *to*, and a key only a
+  /// target locale defines is usually stale — and a locale that *is* the
+  /// template is never reported as falling back to itself or as disagreeing
+  /// with itself. It is also the text shown beside a key as what a translator
+  /// is working from.
   final String template;
 
+  /// The value of [layoutKey] this variant writes, and what
+  /// [TranslationCatalog.fromJson] reads it back by.
+  String get layout;
+
+  Map<String, Object?> toJson();
+
+  /// Where a serialised catalog says which variant it is.
+  static const layoutKey = 'layout';
+
+  /// Reads back what [toJson] wrote, or **null for a layout this build does
+  /// not know** — a project pinning a newer flutterware than the studio
+  /// opening it, which is a thing to report rather than to guess at. Guessing
+  /// would read a CSV as JSON and call the catalog empty.
+  static TranslationCatalog? fromJson(Map<String, Object?> json) {
+    var name = json['name'] as String? ?? '';
+    var template = json['template'] as String? ?? 'en';
+    switch (json[layoutKey]) {
+      // Absent is not unknown: every declaration written before there was a
+      // choice described a file per locale, because it was the only thing the
+      // loader could read.
+      case null:
+      case FilePerLocaleCatalog._layout:
+        return FilePerLocaleCatalog(
+          name: name,
+          files: json['files'] as String? ?? '',
+          template: template,
+        );
+      case LocalesPerKeyCatalog._layout:
+        return LocalesPerKeyCatalog(
+          name: name,
+          file: json['file'] as String? ?? '',
+          template: template,
+        );
+    }
+    return null;
+  }
+}
+
+/// See [TranslationCatalog.new].
+final class FilePerLocaleCatalog extends TranslationCatalog {
+  const FilePerLocaleCatalog({
+    required super.name,
+    required this.files,
+    super.template = 'en',
+  }) : super._();
+
+  static const _layout = 'filePerLocale';
+
+  /// A glob of the catalog's files, one per locale and named for it.
+  final String files;
+
+  @override
+  String get layout => _layout;
+
+  @override
   Map<String, Object?> toJson() => {
     'name': name,
     'files': files,
     'template': template,
+    TranslationCatalog.layoutKey: _layout,
   };
+}
 
-  static TranslationCatalog fromJson(Map<String, Object?> json) =>
-      TranslationCatalog(
-        name: json['name']! as String,
-        files: json['files']! as String,
-        template: json['template'] as String? ?? 'en',
-      );
+/// See [TranslationCatalog.localesPerKey].
+final class LocalesPerKeyCatalog extends TranslationCatalog {
+  const LocalesPerKeyCatalog({
+    required super.name,
+    required this.file,
+    super.template = 'en',
+  }) : super._();
+
+  static const _layout = 'localesPerKey';
+
+  /// The catalog's one file, package-relative. Singular and not a glob: every
+  /// locale is already inside it, so there is nothing for a second file to be.
+  final String file;
+
+  @override
+  String get layout => _layout;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'file': file,
+    'template': template,
+    TranslationCatalog.layoutKey: _layout,
+  };
 }
 
 /// Motion — timelines scrubbed against a live screen, with the tuned numbers in

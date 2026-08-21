@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/plugins.dart';
 import 'package:flutterware_app/src/plugins/native/scenarios_results.dart';
 import 'package:flutterware_app/src/translations/loader.dart';
 import 'package:flutterware_app/src/translations/survey.dart';
@@ -168,7 +169,7 @@ void main() {
   group('loading catalogs', () {
     test('a file per locale becomes a locale per catalog', () async {
       var loaded = await loadCatalogs(
-        [(name: 'app', files: 'l10n/*.json', template: 'en')],
+        [const TranslationCatalog(name: 'app', files: 'l10n/*.json')],
         read: (glob) async => {
           'l10n/en.json': '{"save":"Save"}',
           'l10n/nl.json': '{"save":"Opslaan"}',
@@ -182,7 +183,7 @@ void main() {
 
     test('a file that is not a locale is skipped, not loaded as one', () async {
       var loaded = await loadCatalogs(
-        [(name: 'app', files: 'l10n/*.json', template: 'en')],
+        [const TranslationCatalog(name: 'app', files: 'l10n/*.json')],
         read: (glob) async => {
           'l10n/en.json': '{"save":"Save"}',
           'l10n/schema.json': '{"anything":"here"}',
@@ -194,7 +195,7 @@ void main() {
 
     test('a glob matching nothing keeps the catalog, empty', () async {
       var loaded = await loadCatalogs([
-        (name: 'app', files: 'nowhere/*.json', template: 'en'),
+        const TranslationCatalog(name: 'app', files: 'nowhere/*.json'),
       ], read: (glob) async => {});
 
       // Kept rather than dropped: an empty catalog names the problem, a
@@ -205,13 +206,116 @@ void main() {
 
     test('a non-string value is left out rather than stringified', () async {
       var loaded = await loadCatalogs(
-        [(name: 'app', files: 'l10n/*.json', template: 'en')],
+        [const TranslationCatalog(name: 'app', files: 'l10n/*.json')],
         read: (glob) async => {
           'l10n/en.json': '{"save":"Save","meta":{"note":"x"}}',
         },
       );
 
       expect(loaded['app']!.keys, {'save'});
+    });
+
+    test('every locale under each key becomes a locale per catalog', () async {
+      var loaded = await loadCatalogs(
+        [
+          const TranslationCatalog.localesPerKey(
+            name: 'server',
+            file: 'strings.json',
+          ),
+        ],
+        read: (glob) async => {
+          'strings.json':
+              '{"save":{"en":"Save","nl":"Opslaan"},'
+              '"open":{"en":"Open"}}',
+        },
+      );
+
+      expect(loaded['server']!.byLocale.keys, containsAll(['en', 'nl']));
+      expect(loaded['server']!.valueOf('nl', 'save'), 'Opslaan');
+      expect(loaded['server']!.keys, {'save', 'open'});
+      // The locale that only one key answers for still holds only that key —
+      // which is what makes the missing one a fallback rather than a silence.
+      expect(loaded['server']!.valueOf('nl', 'open'), isNull);
+    });
+
+    test('the file name carries nothing under localesPerKey', () async {
+      var loaded = await loadCatalogs(
+        [
+          // Named for neither a locale nor anything else; under the other
+          // layout this file is skipped for exactly that.
+          const TranslationCatalog.localesPerKey(
+            name: 'server',
+            file: 'data/server_translations.json',
+          ),
+        ],
+        read: (glob) async => {
+          'data/server_translations.json': '{"save":{"en":"Save"}}',
+        },
+      );
+
+      expect(loaded['server']!.keys, {'save'});
+      expect(loaded['server']!.valueOf('en', 'save'), 'Save');
+    });
+
+    test('a key that is not an object is left out, not stringified', () async {
+      var loaded = await loadCatalogs(
+        [
+          const TranslationCatalog.localesPerKey(
+            name: 'server',
+            file: 'strings.json',
+          ),
+        ],
+        read: (glob) async => {
+          'strings.json':
+              '{"save":{"en":"Save"},"note":"a comment","n":{"en":1}}',
+        },
+      );
+
+      // The same rule the other layout keeps, on both halves of the shape:
+      // a value that is not text is not text.
+      expect(loaded['server']!.keys, {'save'});
+    });
+
+    test('an empty catalog says which of the two mistakes it is', () async {
+      var missing = await loadCatalogs([
+        const TranslationCatalog(name: 'app', files: 'nowhere/*.json'),
+      ], read: (glob) async => {});
+      var misread = await loadCatalogs([
+        const TranslationCatalog.localesPerKey(
+          name: 'app',
+          // The wrong one for this file, which is the mistake the count is
+          // there to tell apart from a glob that found nothing.
+          file: 'l10n/en.json',
+        ),
+      ], read: (glob) async => {'l10n/en.json': '{"save":"Save"}'});
+
+      expect(missing['app']!.keys, isEmpty);
+      expect(missing['app']!.filesMatched, 0);
+      expect(misread['app']!.keys, isEmpty);
+      expect(misread['app']!.filesMatched, 1);
+    });
+
+    test('the layouts are read as declared, not as the JSON looks', () async {
+      var files = {'l10n/en.json': '{"save":"Save","meta":{"nl":"Opslaan"}}'};
+
+      var perLocale = await loadCatalogs([
+        const TranslationCatalog(name: 'app', files: 'l10n/*.json'),
+      ], read: (glob) async => files);
+      var perKey = await loadCatalogs([
+        const TranslationCatalog.localesPerKey(
+          name: 'app',
+          file: 'l10n/en.json',
+        ),
+      ], read: (glob) async => files);
+
+      // One file, two readings, and neither is wrong — which is the whole
+      // reason the layout is declared. Sniffed, this file would have to be
+      // one of them, and the `meta` object is exactly what a real catalog
+      // carries beside its strings.
+      expect(perLocale['app']!.byLocale.keys, ['en']);
+      expect(perLocale['app']!.keys, {'save'});
+      expect(perKey['app']!.byLocale.keys, ['nl']);
+      expect(perKey['app']!.keys, {'meta'});
     });
   });
 
@@ -225,6 +329,22 @@ void main() {
         ..writeAsStringSync('{"save":"Save"}');
     });
     tearDown(() => package.deleteSync(recursive: true));
+
+    test('a path naming one file reads that file, not a directory', () async {
+      File(p.join(package.path, 'tool', 'strings.json'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('{"save":{"en":"Save"}}');
+
+      var files = await catalogFilesUnder(package.path)('tool/strings.json');
+
+      // A whole catalog can be one file, and a path with no wildcard in it is
+      // the natural way to name it. The walk below starts at the glob's
+      // literal prefix, which for this one is the file itself — opened as a
+      // directory it does not exist, and the catalog reads as empty with the
+      // declaration perfectly right.
+      expect(files.keys, ['tool/strings.json']);
+      expect(files.values.single, contains('Save'));
+    });
 
     test('finds the catalog beside the package', () async {
       var files = await catalogFilesUnder(package.path)('assets/i18n/*.json');
