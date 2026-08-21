@@ -658,7 +658,7 @@ class ScenarioRunStep {
 
   /// What the app did on the way here — logs, prints, platform channel
   /// messages, and whatever the project's fakes reported through
-  /// `recordScenarioEvent`. Relative like [image]; null when this transition
+  /// `recordAppEvent`. Relative like [image]; null when this transition
   /// was quiet, which is distinct from a run too old to have captured any.
   final String? events;
 

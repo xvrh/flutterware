@@ -1,8 +1,21 @@
+import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import '../../../app_events/events.dart';
 import '../../../utils/value_stream.dart';
 import '../../devbar.dart';
 import 'ui.dart';
+
+/// Names `DevbarHttpClient` as the reporter of an event.
+///
+/// A mounted devbar registers with this as its `ignoreSource`: that client
+/// hands every devbar the exchange in two halves as it happens, so the
+/// completed report it makes for every *other* listener would be a second row
+/// for the same request. Lives here rather than beside the client so that
+/// `devbar.dart` can name it without importing its own barrel back.
+///
+/// A project writing its own listener can ignore it the same way.
+const devbarHttpClientSource = #devbarHttpClient;
 
 /// A plugin for the Devbar which add a tab to display network requests and responses.
 class LogNetworkPlugin implements DevbarPlugin {
@@ -10,6 +23,10 @@ class LogNetworkPlugin implements DevbarPlugin {
 
   final requests = ValueStream<List<NetworkRequest>>([]);
   final DevbarState devbar;
+
+  /// Ids for [reported] rows. Negative, so they can never be answered by a
+  /// [response] meant for one of [DevbarHttpClient]'s in-flight requests.
+  var _reportedId = -1;
 
   LogNetworkPlugin(this.devbar) {
     devbar.ui.addTab(
@@ -53,10 +70,51 @@ class LogNetworkPlugin implements DevbarPlugin {
     requests.add(requestList);
   }
 
+  /// Records an exchange that was already over when it was reported.
+  ///
+  /// [request]/[response] track one this process is watching go out and come
+  /// back, which is what [DevbarHttpClient] has in hand. An [AppEvent] a
+  /// project reported from its own client has only the outcome, so it lands
+  /// here in one piece and with no timing.
+  void reported(AppEvent event) {
+    // The inverse of what `AppEvent.request` composed — a method never holds a
+    // space. A network event some other constructor made keeps its whole title
+    // as the path, which is the only honest reading of it.
+    var split = event.title.indexOf(' ');
+    var request = NetworkRequest(
+      _reportedId--,
+      apiName: null,
+      requestBody: event.data.isEmpty ? null : event.data,
+      httpMethod: split < 0 ? '' : event.title.substring(0, split),
+      path: split < 0 ? event.title : event.title.substring(split + 1),
+      parameters: const {},
+      timed: false,
+    );
+    if (event.error) {
+      request.errorResponse = ErrorResponse(
+        code: int.tryParse(event.detail ?? '') ?? 0,
+        reason: event.detail ?? '',
+        message: event.body ?? '',
+      );
+    } else {
+      // Decoded where it parses, so the Response tab shows a tree like it does
+      // for an exchange this process watched. A report carries its body as
+      // text; handed to the viewer as text it comes back JSON-encoded a second
+      // time, as one escaped line.
+      request.response = _decodedOrRaw(event.body);
+    }
+
+    var requestList = requests.value..add(request);
+    if (requestList.length > _maxRequest) {
+      requestList.removeAt(0);
+    }
+    requests.add(requestList);
+  }
+
   void response(int id, {body}) {
     var request = requests.value.firstWhereOrNull((n) => n.id == id);
     if (request != null) {
-      request.watch.stop();
+      request.watch?.stop();
 
       request.response = body;
 
@@ -67,7 +125,7 @@ class LogNetworkPlugin implements DevbarPlugin {
   void responseError(int id, {int? code, String? reason, String? message}) {
     var request = requests.value.firstWhereOrNull((n) => n.id == id);
     if (request != null) {
-      request.watch.stop();
+      request.watch?.stop();
 
       request.errorResponse = ErrorResponse(
         code: code ?? 400,
@@ -92,7 +150,13 @@ class NetworkRequest {
   final String path;
   final Map<String, String?> parameters;
   final dynamic requestBody;
-  final watch = Stopwatch()..start();
+
+  /// Null for a [LogNetworkPlugin.reported] row: the exchange was over before
+  /// this process heard about it, so there is no duration to show. The report
+  /// carries none either — the scenario design ruled durations out, because
+  /// `FakeAsync` makes them meaningless.
+  final Stopwatch? watch;
+
   dynamic response;
   ErrorResponse? errorResponse;
 
@@ -103,7 +167,19 @@ class NetworkRequest {
     required this.httpMethod,
     required this.path,
     required this.parameters,
-  });
+    bool timed = true,
+  }) : watch = timed ? (Stopwatch()..start()) : null;
+}
+
+/// [body] as an object where it is JSON, and unchanged where it is not — a
+/// stack, an HTML error page, a line of prose.
+Object? _decodedOrRaw(String? body) {
+  if (body == null) return null;
+  try {
+    return jsonDecode(body);
+  } on FormatException {
+    return body;
+  }
 }
 
 class ErrorResponse {

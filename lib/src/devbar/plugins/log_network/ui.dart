@@ -64,9 +64,11 @@ class RequestTile extends StatelessWidget {
       ),
       leading: Text(request.errorResponse != null ? 'FAIL' : 'OK'),
       subtitle: request.parameters.isNotEmpty ? Text(_parametersText) : null,
-      trailing: request.watch.isRunning
-          ? CircularProgressIndicator()
-          : Text('${request.watch.elapsedMilliseconds}ms'),
+      trailing: switch (request.watch) {
+        null => null,
+        var watch when watch.isRunning => CircularProgressIndicator(),
+        var watch => Text('${watch.elapsedMilliseconds}ms'),
+      },
       onTap: () {
         devbar.ui.showOverlayDialog(
           builder: (context) => RequestDialog(request),
@@ -168,6 +170,16 @@ class _ResponseTab extends StatelessWidget {
   Widget build(BuildContext context) {
     if (request.response == null) {
       return Center(child: Text('<empty>'));
+    }
+
+    // Text as text. Handing a String to the viewer JSON-encodes it, so a body
+    // that is not JSON — a stack, an HTML error page, `<unknown>` — came back
+    // as one escaped line with quotes around it.
+    if (request.response case String text) {
+      return SingleChildScrollView(
+        padding: EdgeInsets.all(10),
+        child: SelectableText(text),
+      );
     }
 
     return JsonViewer(request.response);

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/app_events.dart';
 import 'package:flutterware/devbar.dart';
 import 'package:flutterware/devbar_plugins/device_frame.dart';
 import 'package:flutterware/devbar_plugins/log_analytics.dart';
 import 'package:flutterware/devbar_plugins/log_network.dart';
+import 'package:flutterware/devbar_plugins/log_queries.dart';
 import 'package:flutterware/devbar_plugins/logger.dart';
 import 'package:flutterware/devbar_plugins/variables.dart';
 import 'package:logging/logging.dart';
@@ -54,6 +56,7 @@ class MyDevBar extends StatelessWidget {
         LoggerPlugin.init(),
         LogNetworkPlugin.init(),
         LogAnalyticsPlugin.init(),
+        LogQueriesPlugin.init(),
         VariablesPlugin.init(
           filePath: () async => p.join(
             (await getApplicationSupportDirectory()).path,
@@ -132,7 +135,9 @@ class _MyAppState extends State<MyApp> {
                 Divider(),
                 ElevatedButton(
                   onPressed: () {
-                    context.devbar?.analytics.log('Open popup event');
+                    // The door to prefer. No devbar in hand, no null check,
+                    // and the same call fills a scenario's Events pane.
+                    recordAppEvent(AppEvent.analytics('Open popup event'));
 
                     showDialog(
                       context: context,
@@ -144,8 +149,27 @@ class _MyAppState extends State<MyApp> {
                 Divider(),
                 ElevatedButton(
                   onPressed: () {
-                    context.devbar?.analytics.log('Add network event');
+                    recordAppEvent(
+                      AppEvent.query(
+                        sql:
+                            'SELECT id, email\n'
+                            'FROM sessions\n'
+                            'WHERE expires_at > ?',
+                        args: ['2026-08-21'],
+                        rows: 2,
+                      ),
+                    );
+                  },
+                  child: Text('Add Query'),
+                ),
+                Divider(),
+                ElevatedButton(
+                  onPressed: () {
+                    recordAppEvent(AppEvent.analytics('Add network event'));
 
+                    // The plugin's own two-part API, which is what
+                    // `DevbarHttpClient` uses: it shows a request while it is
+                    // still in flight, which one completed report cannot.
                     var id = _networkId++;
                     context.devbar?.network.request(
                       id,

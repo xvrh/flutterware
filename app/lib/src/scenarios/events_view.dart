@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/scenarios.dart';
+import 'package:flutterware/app_events.dart';
 
 import '../ui/count_badge.dart';
 import '../ui/json_view.dart';
@@ -47,7 +47,7 @@ class _ScenarioEventsViewState extends State<ScenarioEventsView> {
   /// Channels the reader has turned off. Seeded with `system` rather than
   /// filtered at the source, so the chip that reveals it carries its count and
   /// one click brings it back.
-  var _hidden = {ScenarioChannel.system};
+  var _hidden = {AppChannel.system};
 
   /// Expanded rows, by position — position rather than identity because two
   /// identical log lines are two rows.
@@ -77,13 +77,13 @@ class _ScenarioEventsViewState extends State<ScenarioEventsView> {
 
     var counts = <String, int>{};
     for (var event in widget.events) {
-      var channel = '${event['channel'] ?? ScenarioChannel.log}';
+      var channel = '${event['channel'] ?? AppChannel.log}';
       counts[channel] = (counts[channel] ?? 0) + 1;
     }
     var channels = counts.keys.toList()..sort();
     var rows = [
       for (var (position, event) in widget.events.indexed)
-        if (!_hidden.contains('${event['channel'] ?? ScenarioChannel.log}'))
+        if (!_hidden.contains('${event['channel'] ?? AppChannel.log}'))
           (position, event),
     ];
 
@@ -186,7 +186,7 @@ class _EventRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var channel = '${event['channel'] ?? ScenarioChannel.log}';
+    var channel = '${event['channel'] ?? AppChannel.log}';
     var error = event['error'] == true;
     var data = event['data'];
     var body = event['body'] as String?;
@@ -289,10 +289,10 @@ class _EventRow extends StatelessWidget {
   Color _channelColor(BuildContext context, String channel) {
     var colors = context.colors;
     return switch (channel) {
-      ScenarioChannel.network => colors.accent,
-      ScenarioChannel.analytics => colors.grn,
-      ScenarioChannel.db => colors.amber,
-      ScenarioChannel.system => colors.mut3,
+      AppChannel.network => colors.accent,
+      AppChannel.analytics => colors.grn,
+      AppChannel.db => colors.amber,
+      AppChannel.system => colors.mut3,
       _ => colors.mut,
     };
   }

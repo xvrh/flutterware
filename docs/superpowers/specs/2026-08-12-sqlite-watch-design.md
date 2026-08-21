@@ -165,7 +165,7 @@ against the uploader's DELETE often enough to matter.
 ## Relation to scenario query events (owner raised, 2026-08-12)
 
 Scenarios already have a `db` channel: a fake or an in-memory sqlite layer
-calls `recordScenarioEvent(ScenarioEvent.query(sql: …, args: …, rows: …))`
+calls `recordAppEvent(AppEvent.query(sql: …, args: …, rows: …))`
 and the statement lands on the transition
 (`2026-08-11-scenario-transition-events.md`, lane 3). Should this design
 uniformize with that? In three parts:
@@ -181,22 +181,31 @@ uniformize with that? In three parts:
   report through one entry point that routes to whoever is listening:
   scenario buffer in a scenario, the panel's future `queries` feed in a live
   run, a null check nowhere. The app instruments once and both surfaces
-  light up. `recordScenarioEvent`'s own contract ("safe to leave in shared
+  light up. `recordAppEvent`'s own contract ("safe to leave in shared
   fakes forever") is the model, and this is the strongest argument yet for
   the upstream hook over per-surface wrappers.
 - **The vocabulary is shared now, so the shapes cannot drift later.** The
-  future `queries` feed uses the keys `ScenarioEvent.query` already fixed —
+  future `queries` feed uses the keys `AppEvent.query` already fixed —
   `sql`, `args`, a row *count* — and v1's watch feed carries its SQL under
   `sql` for the same reason. An agent that learned to read one surface has
   learned the other.
 
-Not uniformized: the transports. `scenarioEventBuffer` and the panel ring are
+Not uniformized: the transports. `appEventBuffer` and the panel ring are
 the same concept on two hosts — bounded, capped loudly, drained by a reader —
 but one lives in a FakeAsync test process writing artifacts and the other
 behind a VM-service nudge. Merging them buys nothing v1 needs and couples the
 two lifecycles. Worth recording as a door: a live app's fakes calling
-`recordScenarioEvent` could someday feed a panel feed, which would make every
+`recordAppEvent` could someday feed a panel feed, which would make every
 scenario-instrumented app observable live for free.
+
+> **That door was walked through on 2026-08-21**, on a consumer's report that
+> the two reporting surfaces could not hear each other — see
+> `2026-08-21-app-events-unification.md`. `recordAppEvent` (then
+> `recordScenarioEvent`) now fans out to registered listeners as well as to
+> the buffer, and a mounted devbar registers one. The `db` channel got the
+> devbar tab this section anticipated: `LogQueriesPlugin`, the log beside the
+> browser. The transports are still not merged, and the paragraph above is
+> still why.
 
 ## Experiments
 

@@ -2,7 +2,22 @@ import 'dart:convert';
 import 'package:http/http.dart';
 import '../../../../devbar.dart';
 import '../../../../devbar_plugins/log_network.dart';
+import '../../../app_events/events.dart';
 
+/// An `http.Client` that shows every request it carries.
+///
+/// **It reports to both surfaces, and a project wires neither.** Every mounted
+/// devbar gets the exchange in two halves, so its Network tab shows a request
+/// while it is still in flight. A scenario run gets it in one piece when it is
+/// over, on the step's Events pane — which is why a suite whose fakes sit
+/// under `package:http` needs no reporting code of its own.
+///
+/// The completed exchange is reported through [recordAppEvent] like anything
+/// else, tagged `source: DevbarHttpClient`. A mounted devbar registers with a
+/// matching `ignoreSource` and skips it, because it was handed the two halves
+/// already — but the scenario buffer and any listener a project registered
+/// itself still see it, which writing straight to the buffer would have
+/// denied them.
 class DevbarHttpClient extends BaseClient {
   static int _id = 0;
   final String? apiName;
@@ -87,6 +102,16 @@ class DevbarHttpClient extends BaseClient {
         }
       }
 
+      recordAppEvent(
+        AppEvent.request(
+          method: request.method,
+          url: request.url.toString(),
+          status: response.statusCode,
+          body: body == '<unknown>' ? null : jsonEncode(body),
+        ),
+        source: devbarHttpClientSource,
+      );
+
       return response;
     } catch (e) {
       for (var devbar in _instances) {
@@ -97,6 +122,20 @@ class DevbarHttpClient extends BaseClient {
           message: '$e',
         );
       }
+
+      // No status: the exchange never got one. `error` still has to be set,
+      // which is what the explicit constructor is for — `.request` infers it
+      // from a status code that does not exist here.
+      recordAppEvent(
+        AppEvent.custom(
+          channel: AppChannel.network,
+          title: '${request.method} ${request.url}',
+          detail: '${e.runtimeType}',
+          body: '$e',
+          error: true,
+        ),
+        source: devbarHttpClientSource,
+      );
 
       rethrow;
     }

@@ -363,7 +363,7 @@ void main() {
     test('finds run.json, resolves artifacts, types the events', () async {
       var out = Directory('${temp.path}/out')..createSync();
       var events = [
-        ScenarioEvent.request(method: 'POST', url: '/login', status: 401),
+        AppEvent.request(method: 'POST', url: '/login', status: 401),
       ];
       File('${temp.path}/build/runs/1/f/s/1-shot.events.json')
         ..parent.createSync(recursive: true)
@@ -407,7 +407,7 @@ void main() {
       var read = report.run.packages.single.scenarios.single.steps.single;
       expect(report.file(read.events!).existsSync(), isTrue);
       var typed = report.events(read);
-      expect(typed.single.channel, ScenarioChannel.network);
+      expect(typed.single.channel, AppChannel.network);
       expect(typed.single.title, 'POST /login');
       expect(typed.single.detail, '401');
       expect(typed.single.error, isTrue);
@@ -468,21 +468,17 @@ void main() {
   });
 
   test('an event round-trips through its file spelling', () {
-    var back = ScenarioEvent.fromJson(
+    var back = AppEvent.fromJson(
       (jsonDecode(
                 jsonEncode(
-                  ScenarioEvent.query(
-                    sql: 'SELECT 1\nFROM t',
-                    args: [1],
-                    rows: 3,
-                  ),
+                  AppEvent.query(sql: 'SELECT 1\nFROM t', args: [1], rows: 3),
                 ),
               )
               as Map)
           .cast<String, Object?>(),
     );
 
-    expect(back.channel, ScenarioChannel.db);
+    expect(back.channel, AppChannel.db);
     expect(back.title, 'SELECT 1 …');
     expect(back.detail, '3 rows');
     expect(back.data, {

@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import '../app_events/events.dart';
 import '../server/vm_transport.dart';
 import '../utils/value_stream.dart';
 import 'bridge.dart';
 import 'feature_flag.dart';
+import 'plugins/log_analytics/plugin.dart';
+import 'plugins/log_network/plugin.dart';
+import 'plugins/log_queries/plugin.dart';
 import 'ui/button.dart';
 import 'ui/overlay_dialog.dart';
 import 'ui/panel.dart';
@@ -73,6 +77,7 @@ class DevbarState extends State<Devbar> {
   late final UiService ui = UiService(this);
   final _plugins = <DevbarPlugin>[];
   late Future<void> _loadPluginsFuture;
+  void Function()? _unsubscribeEvents;
 
   static DevbarState of(BuildContext context) {
     return context.findAncestorStateOfType<DevbarState>()!;
@@ -107,12 +112,58 @@ class DevbarState extends State<Devbar> {
         ),
       );
     } finally {
-      // Unconditionally, and before the bridge: nothing that can throw may
-      // stand between a deferred first frame and this call.
+      // Unconditionally, and before the guard: nothing that can throw — and
+      // nothing conditional — may stand between a deferred first frame and
+      // this call.
       WidgetsBinding.instance.allowFirstFrame();
-      // After construction, never in `initState`: a plugin still being built
-      // has nothing to describe, and the bridge reads each one's declaration.
-      DevbarBridge.mount(this, _plugins);
+      // **Only if this devbar is still alive.** A factory may await (the
+      // example's `VariablesPlugin.init` waits on a directory), and the widget
+      // can be gone by the time it answers — at which point `dispose` has
+      // already run *its* half of both registrations below and will not run
+      // again. Registering here anyway leaves a listener that outlives the
+      // app's last devbar, routing events into plugins it has already
+      // disposed: `StateError` out of the app's own `recordAppEvent`.
+      if (mounted) {
+        // After construction, never in `initState`: a plugin still being built
+        // has nothing to describe, and the bridge reads each one's
+        // declaration.
+        DevbarBridge.mount(this, _plugins);
+        // Same reason: the routing below looks the plugins up. `ignoreSource`
+        // is what keeps a `DevbarHttpClient` request off the Network tab twice
+        // — that client hands every mounted devbar the exchange in two halves
+        // as it happens, and reports the completed one for everybody else.
+        _unsubscribeEvents = addAppEventListener(
+          _onAppEvent,
+          ignoreSource: devbarHttpClientSource,
+        );
+      }
+    }
+  }
+
+  /// Routes what the app reported into whichever tab shows that channel.
+  ///
+  /// **Only the channels the devbar has no source of its own for.** `log` is
+  /// left out on purpose: [LoggerPlugin] listens on `Logger.root` directly, so
+  /// routing reported log events here would show every record twice. `print`,
+  /// `platform` and `system` have no tab at all — they are a scenario's
+  /// reading of a run, and nothing collects them in a live app.
+  ///
+  /// A channel whose plugin is not in this devbar's list is dropped, like any
+  /// other report nobody is listening for.
+  void _onAppEvent(AppEvent event) {
+    switch (event.channel) {
+      case AppChannel.network:
+        maybePlugin<LogNetworkPlugin>()?.reported(event);
+      case AppChannel.analytics:
+        // Null, not an empty map: the tile renders its subtitle on
+        // `parameters != null`, so `{}` would print a literal "{}" under every
+        // event reported without parameters.
+        maybePlugin<LogAnalyticsPlugin>()?.log(
+          event.title,
+          event.data.isEmpty ? null : {...event.data},
+        );
+      case AppChannel.db:
+        maybePlugin<LogQueriesPlugin>()?.reported(event);
     }
   }
 
@@ -205,6 +256,7 @@ class DevbarState extends State<Devbar> {
   @override
   void dispose() {
     _devbarStates.remove(this);
+    _unsubscribeEvents?.call();
     DevbarBridge.unmount(this);
     ui.dispose();
     for (var plugin in _plugins) {

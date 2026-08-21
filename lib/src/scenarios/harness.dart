@@ -21,7 +21,7 @@ import 'package:test_api/src/backend/test.dart';
 import '../devices.dart';
 import '../inspect/guest_inspect.dart';
 import 'async_watchdog.dart';
-import 'events.dart';
+import '../app_events/events.dart';
 import 'fonts.dart';
 import 'motion.dart';
 import 'notification.dart';
@@ -205,9 +205,9 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
   Future<ByteData?>? send(String channel, ByteData? message) {
     var system = channel.startsWith('flutter/');
     var call = _decode(message);
-    recordScenarioEvent(
-      ScenarioEvent.custom(
-        channel: system ? ScenarioChannel.system : ScenarioChannel.platform,
+    recordAppEvent(
+      AppEvent.custom(
+        channel: system ? AppChannel.system : AppChannel.platform,
         title: call == null ? channel : '$channel ${call.method}',
         detail: call == null ? '${message?.lengthInBytes ?? 0} bytes' : null,
         data: _arguments(call),
@@ -223,9 +223,9 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
     result?.then(
       (reply) {
         if (reply == null) {
-          recordScenarioEvent(
-            ScenarioEvent.custom(
-              channel: ScenarioChannel.platform,
+          recordAppEvent(
+            AppEvent.custom(
+              channel: AppChannel.platform,
               title: '$channel — no implementation',
               detail: call?.method,
               error: true,
@@ -236,9 +236,9 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
         try {
           const StandardMethodCodec().decodeEnvelope(reply);
         } catch (error) {
-          recordScenarioEvent(
-            ScenarioEvent.custom(
-              channel: ScenarioChannel.platform,
+          recordAppEvent(
+            AppEvent.custom(
+              channel: AppChannel.platform,
               title: '$channel ${call?.method ?? ''} failed'.trim(),
               body: '$error',
               error: true,
@@ -246,9 +246,9 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
           );
         }
       },
-      onError: (Object error) => recordScenarioEvent(
-        ScenarioEvent.custom(
-          channel: ScenarioChannel.platform,
+      onError: (Object error) => recordAppEvent(
+        AppEvent.custom(
+          channel: AppChannel.platform,
           title: '$channel ${call?.method ?? ''} threw'.trim(),
           body: '$error',
           error: true,
@@ -977,7 +977,7 @@ Future<Map<String, Object?>> _runOne(
           ? null
           : [
               for (var event in capture.events)
-                if (event.channel != ScenarioChannel.system)
+                if (event.channel != AppChannel.system)
                   '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
             ].take(_maxInlineTitles).toList(),
       eventsDropped: capture.eventsDropped > 0 ? capture.eventsDropped : null,
@@ -1135,7 +1135,7 @@ Future<Map<String, Object?>> _runOne(
           ? null
           : [
               for (var event in capture.events)
-                if (event.channel != ScenarioChannel.system)
+                if (event.channel != AppChannel.system)
                   '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
             ].take(_maxInlineTitles).toList(),
       eventsDropped: capture.eventsDropped > 0 ? capture.eventsDropped : null,
@@ -1206,11 +1206,11 @@ Future<Map<String, Object?>> _runOne(
   // root-zone future and the fake clock does not drain the real microtask
   // queue. That hangs the whole run, silently, including scenarios that log
   // nothing (`2026-08-11-scenario-events-spike-findings.md`).
-  scenarioEventBuffer = ScenarioEventBuffer();
+  appEventBuffer = AppEventBuffer();
   scenarioCaughtErrors = [];
   var records = Logger.root.onRecord.listen(
-    (record) => recordScenarioEvent(
-      ScenarioEvent.log(
+    (record) => recordAppEvent(
+      AppEvent.log(
         record.message,
         level: record.level.name,
         logger: record.loggerName.isEmpty ? null : record.loggerName,
@@ -1227,8 +1227,8 @@ Future<Map<String, Object?>> _runOne(
     // arrive; filtered anyway, because it is a fact about the test, not
     // something the app printed.
     if (message.type != MessageType.print) return;
-    recordScenarioEvent(
-      ScenarioEvent.custom(channel: ScenarioChannel.print, title: message.text),
+    recordAppEvent(
+      AppEvent.custom(channel: AppChannel.print, title: message.text),
     );
   });
 
@@ -1251,7 +1251,7 @@ Future<Map<String, Object?>> _runOne(
     // Whatever the app did after the last capture goes with it: there is no
     // step for it to belong to, and inventing one would put teardown —
     // `TextInput.clearClient` and its like — on the flow.
-    scenarioEventBuffer = null;
+    appEventBuffer = null;
     scenarioCaughtErrors = null;
     reportTestException = priorReporter;
     scenarioRunListener = null;
