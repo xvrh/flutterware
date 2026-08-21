@@ -8,7 +8,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'events.dart';
+import '../app_events/events.dart';
 import 'report.dart';
 
 /// A written run, read back.
@@ -92,14 +92,14 @@ class ScenarioRunReport {
 
   /// The transition's events for [step], typed — empty for a quiet
   /// transition, which is most of them.
-  List<ScenarioEvent> events(ScenarioRunStep step) {
+  List<AppEvent> events(ScenarioRunStep step) {
     var path = step.events;
     if (path == null) return const [];
     var eventsFile = file(path);
     if (!eventsFile.existsSync()) return const [];
     return [
       for (var event in jsonDecode(eventsFile.readAsStringSync()) as List)
-        if (event is Map) ScenarioEvent.fromJson(event.cast<String, Object?>()),
+        if (event is Map) AppEvent.fromJson(event.cast<String, Object?>()),
     ];
   }
 }

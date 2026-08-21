@@ -336,11 +336,20 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
       } else {
         // A quiet transition is the common case and reads as one; a step with
         // a count but no file is a run whose artifacts have moved.
+        //
+        // The empty case names the door, because the pane cannot tell "the app
+        // did nothing" from "the app reported somewhere else". A project whose
+        // fakes sit above `package:http` has nothing here until it calls
+        // `recordAppEvent`, and reads silence as a broken feature.
         _eventsPlaceholder = step.hasEvents
             ? 'This step recorded ${step.eventCount} events, but the '
                   'file is gone. Run the scenario again.'
             : 'Nothing happened on the way to this step — no logs, no '
-                  'requests, no platform calls.';
+                  'requests, no platform calls.\n\n'
+                  'Work that never leaves the isolate has to say so: call '
+                  'recordAppEvent(AppEvent.request(…)) from your fakes, or '
+                  'wrap your http.Client in DevbarHttpClient. A mounted '
+                  'devbar shows the same reports on its own tabs.';
       }
     });
   }

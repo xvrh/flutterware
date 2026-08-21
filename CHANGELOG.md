@@ -1,5 +1,56 @@
 ## Unreleased
 
+- **One report reaches every surface, and the reporting API is renamed to say
+  so.** There were two app-side places to say what the app did, neither aware
+  of the other: a project wired `DevbarHttpClient` and got a full Network tab
+  with an empty scenario Events pane, or wired the scenario call and got the
+  reverse. Both describe the same fact about the same app.
+
+  `recordAppEvent` now writes the scenario buffer *and* notifies registered
+  listeners, and a mounted devbar registers one. Three things follow:
+
+  * **`DevbarHttpClient` fills the Events pane for free**, for every project
+    that already wraps its client — no new API, no migration. A suite whose
+    fakes sit under `package:http` needs no reporting code at all.
+  * **A project reporting from its own fakes fills the devbar for free**,
+    which is what a suite that fakes at the typed-client layer needs: nothing
+    is serialised there, so `DevbarHttpClient` has nothing to wrap.
+  * **The `db` channel has a devbar home**: `LogQueriesPlugin`, a `Queries`
+    tab beside `DatabasePlugin`'s browser. One wrapper around a database now
+    feeds both surfaces.
+
+  The devbar routes only the channels it has no source of its own for —
+  `network`, `analytics`, `db`. `log` is excluded because `LoggerPlugin`
+  already listens on `Logger.root`, and routing it would show every record
+  twice.
+
+  **Breaking, and mechanical.** The old names said *scenario* about something
+  that was never scenario-only, which was half of why the split went
+  unnoticed:
+
+  | was | is |
+  |---|---|
+  | `ScenarioEvent` | `AppEvent` |
+  | `ScenarioChannel` | `AppChannel` |
+  | `recordScenarioEvent` | `recordAppEvent` |
+  | `package:flutterware/scenarios.dart` | `package:flutterware/app_events.dart` |
+
+  A rename and an import rewrite; no call site changes shape. The `.events.json`
+  wire format is untouched, so `scenarioRunReportVersion` did not move and an
+  old run still reads.
+
+  The empty Events pane now names the door rather than only reporting silence
+  — it could not tell "the app did nothing" from "this project reports
+  somewhere else".
+
+  `addAppEventListener` is published too, for a project that wants a live
+  surface of its own. Reporting cannot disturb the app that reports: a
+  listener that throws is sent to the `Zone` and skipped rather than surfacing
+  in the caller, and one that unregisters itself mid-report costs its
+  neighbours nothing. Pass `ignoreSource` to skip a reporter that already
+  handed your surface a copy — `devbarHttpClientSource` is the one that
+  exists, and it is how the devbar avoids listing a request twice.
+
 - **`s.attach` is replaced by `await s.document(…)` and
   `await s.notification(…)`, and both are steps.** A flow produces beats, and
   most of them are screens — but a run that exports a receipt has a moment

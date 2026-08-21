@@ -13,7 +13,7 @@
 ///   the check that a green suite is also a *deterministic* one.
 /// * [readScenarioRunIndex] reads the `index.json` a matrix run leaves at the
 ///   root of its output tree — the entry point a CI job walks.
-/// * [ScenarioEvent.fromJson] (from `package:flutterware/scenarios.dart`)
+/// * [AppEvent.fromJson] (from `package:flutterware/app_events.dart`)
 ///   types the `.events.json` a step points at; [ScenarioRunReport.events]
 ///   does the read.
 ///
@@ -26,6 +26,6 @@
 /// `tool/flutterware.dart` does.
 library;
 
-export 'src/scenarios/events.dart' show ScenarioChannel, ScenarioEvent;
+export 'src/app_events/events.dart' show AppChannel, AppEvent;
 export 'src/scenarios/report.dart';
 export 'src/scenarios/report_io.dart';

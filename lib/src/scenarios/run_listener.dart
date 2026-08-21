@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import '../inspect/node.dart';
 import 'aim.dart';
-import 'events.dart';
+import '../app_events/events.dart';
 import 'motion.dart';
 import 'notification.dart';
 
@@ -133,7 +133,7 @@ class ScenarioStepCapture {
   /// are one step run under two languages.
   /// What the app did on the way here: everything recorded between the
   /// previous capture and this one, in the order it happened.
-  final List<ScenarioEvent> events;
+  final List<AppEvent> events;
 
   /// Events dropped to stay inside the per-step or per-run cap. Reported
   /// rather than swallowed — silence would read as "the app did nothing".

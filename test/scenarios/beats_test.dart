@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
-import 'package:flutterware/src/scenarios/events.dart';
+import 'package:flutterware/src/app_events/events.dart';
 import 'package:flutterware/src/scenarios/run_listener.dart';
 
 /// The beats of a flow that are not screens: what the run produced, and what
@@ -14,11 +14,11 @@ void main() {
   setUp(() {
     captures = [];
     scenarioRunListener = captures.add;
-    scenarioEventBuffer = ScenarioEventBuffer();
+    appEventBuffer = AppEventBuffer();
   });
   tearDown(() {
     scenarioRunListener = null;
-    scenarioEventBuffer = null;
+    appEventBuffer = null;
   });
 
   List<String> shape() => [
@@ -111,8 +111,8 @@ void main() {
     scenario('like they do on any other step', (s) async {
       await s.pumpWidget(const _App());
       await s.tap('Export');
-      recordScenarioEvent(
-        ScenarioEvent.request(method: 'GET', url: '/receipt', status: 200),
+      recordAppEvent(
+        AppEvent.request(method: 'GET', url: '/receipt', status: 200),
       );
       await s.document('receipt', [1]);
     });

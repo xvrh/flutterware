@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
-import 'package:flutterware/src/scenarios/events.dart';
+import 'package:flutterware/src/app_events/events.dart';
 import 'package:flutterware/src/scenarios/run_listener.dart';
 
 /// What the app did between two captured steps, and which step it lands on.
@@ -15,11 +15,11 @@ void main() {
   setUp(() {
     captures = [];
     scenarioRunListener = captures.add;
-    scenarioEventBuffer = ScenarioEventBuffer();
+    appEventBuffer = AppEventBuffer();
   });
   tearDown(() {
     scenarioRunListener = null;
-    scenarioEventBuffer = null;
+    appEventBuffer = null;
   });
 
   List<String> titles(ScenarioStepCapture capture) => [
@@ -30,7 +30,7 @@ void main() {
     scenario('not on the one it was recorded after', (s) async {
       await s.pumpWidget(const _App());
 
-      recordScenarioEvent(ScenarioEvent.analytics('checkout_started'));
+      recordAppEvent(AppEvent.analytics('checkout_started'));
       await s.tap('Save');
     });
     tearDown(() {
@@ -75,7 +75,7 @@ void main() {
 
   group('events recorded before the first step', () {
     scenario('land on it', (s) async {
-      recordScenarioEvent(ScenarioEvent.log('booting'));
+      recordAppEvent(AppEvent.log('booting'));
       await s.pumpWidget(const _App());
     });
     tearDown(() => expect(titles(captures.single), ['booting']));
@@ -84,7 +84,7 @@ void main() {
   group('a skipped shot passes its events to the next capture', () {
     scenario('which is the next step that captures at all', (s) async {
       await s.pumpWidget(const _App(), shot: Shot.skip);
-      recordScenarioEvent(ScenarioEvent.log('during'));
+      recordAppEvent(AppEvent.log('during'));
 
       await s.tap('Save');
     });
@@ -95,8 +95,8 @@ void main() {
     scenario('rather than rolling them on to a later one', (s) async {
       await s.pumpWidget(const _App());
       await s.tap('Save');
-      recordScenarioEvent(
-        ScenarioEvent.request(method: 'POST', url: '/receipt', status: 200),
+      recordAppEvent(
+        AppEvent.request(method: 'POST', url: '/receipt', status: 200),
       );
       await s.screen('Receipt');
       await s.tap('Save');
@@ -120,16 +120,16 @@ void main() {
   var branched = <ScenarioStepCapture>[];
   scenario('every branch records its own events', (s) async {
     await s.pumpWidget(const _App());
-    recordScenarioEvent(ScenarioEvent.log('on the shared prefix'));
+    recordAppEvent(AppEvent.log('on the shared prefix'));
     await s.tap('Save');
 
     await s.split({
       'left': () async {
-        recordScenarioEvent(ScenarioEvent.log('left only'));
+        recordAppEvent(AppEvent.log('left only'));
         await s.screen('Left');
       },
       'right': () async {
-        recordScenarioEvent(ScenarioEvent.log('right only'));
+        recordAppEvent(AppEvent.log('right only'));
         await s.screen('Right');
       },
     });
@@ -151,9 +151,7 @@ void main() {
 
   scenario('the failing step carries the events that led to it', (s) async {
     await s.pumpWidget(const _App());
-    recordScenarioEvent(
-      ScenarioEvent.request(method: 'POST', url: '/pay', status: 500),
-    );
+    recordAppEvent(AppEvent.request(method: 'POST', url: '/pay', status: 500));
     try {
       await s.tap('Nothing here');
     } on ScenarioTargetError {
@@ -171,12 +169,12 @@ void main() {
       s,
     ) async {
       await s.pumpWidget(const _App());
-      for (var i = 0; i < maxScenarioEventsPerStep; i++) {
-        recordScenarioEvent(ScenarioEvent.log('before $i'));
+      for (var i = 0; i < maxAppEventsPerStep; i++) {
+        recordAppEvent(AppEvent.log('before $i'));
       }
       await s.tap('Save');
       for (var i = 0; i < 10; i++) {
-        recordScenarioEvent(ScenarioEvent.log('after $i'));
+        recordAppEvent(AppEvent.log('after $i'));
       }
       await s.screen('Saved');
     });
@@ -186,7 +184,7 @@ void main() {
     tearDown(() {
       var merged = captures.last;
       expect(merged.name, 'Saved');
-      expect(merged.events, hasLength(maxScenarioEventsPerStep));
+      expect(merged.events, hasLength(maxAppEventsPerStep));
       expect(merged.eventsDropped, 10);
     });
   });
@@ -194,41 +192,37 @@ void main() {
   group('events past the per-step cap', () {
     scenario('are counted, not silently lost', (s) async {
       await s.pumpWidget(const _App());
-      for (var i = 0; i < maxScenarioEventsPerStep + 5; i++) {
-        recordScenarioEvent(ScenarioEvent.log('$i'));
+      for (var i = 0; i < maxAppEventsPerStep + 5; i++) {
+        recordAppEvent(AppEvent.log('$i'));
       }
       await s.tap('Save');
     });
     tearDown(() {
-      expect(captures.last.events, hasLength(maxScenarioEventsPerStep));
+      expect(captures.last.events, hasLength(maxAppEventsPerStep));
       expect(captures.last.eventsDropped, 5);
     });
   });
 
   testWidgets('recording outside a run is a no-op', (tester) async {
-    scenarioEventBuffer = null;
+    appEventBuffer = null;
     expect(
-      () => recordScenarioEvent(ScenarioEvent.log('nobody is listening')),
+      () => recordAppEvent(AppEvent.log('nobody is listening')),
       returnsNormally,
     );
   });
 
   test('a request event reads as a line, and 4xx is an error', () {
-    var event = ScenarioEvent.request(
-      method: 'POST',
-      url: '/login',
-      status: 401,
-    );
+    var event = AppEvent.request(method: 'POST', url: '/login', status: 401);
     expect(event.title, 'POST /login');
     expect(event.detail, '401');
     expect(event.error, isTrue);
-    expect(ScenarioEvent.request(method: 'GET', url: '/me').error, isFalse);
+    expect(AppEvent.request(method: 'GET', url: '/me').error, isFalse);
   });
 
   test(
     'a query event summarises to its first line and keeps the whole SQL',
     () {
-      var event = ScenarioEvent.query(
+      var event = AppEvent.query(
         sql: 'SELECT *\nFROM items\nWHERE id = ?',
         args: [42],
         rows: 1,
@@ -248,7 +242,7 @@ void main() {
     // `toEncodable` fallback for exactly this reason: a value JSON cannot take
     // must degrade to what it prints as, never throw out of the step listener
     // that was only describing it.
-    var event = ScenarioEvent.custom(
+    var event = AppEvent.custom(
       channel: 'network',
       title: 'GET /me',
       data: {'when': DateTime(2026), 'who': Object()},
@@ -261,7 +255,7 @@ void main() {
   });
 
   test('an oversized body is truncated with a marker', () {
-    var event = ScenarioEvent.custom(
+    var event = AppEvent.custom(
       channel: 'network',
       title: 'GET /big',
       body: 'x' * 5000,

@@ -4968,7 +4968,7 @@ final resultShapes = <String, ResultShape>{
               'type': 'String',
               'optional': true,
               'doc':
-                  'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordScenarioEvent`.',
+                  'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
             },
             <String, Object?>{
               'name': 'eventCount',
@@ -5342,7 +5342,7 @@ final resultShapes = <String, ResultShape>{
                     'type': 'String',
                     'optional': true,
                     'doc':
-                        'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordScenarioEvent`.',
+                        'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
                   },
                   <String, Object?>{
                     'name': 'eventCount',
@@ -5764,7 +5764,7 @@ final resultShapes = <String, ResultShape>{
                           'type': 'String',
                           'optional': true,
                           'doc':
-                              'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordScenarioEvent`.',
+                              'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
                         },
                         <String, Object?>{
                           'name': 'eventCount',
@@ -6105,7 +6105,7 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc':
-            'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordScenarioEvent`.',
+            'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
       },
       <String, Object?>{
         'name': 'eventCount',

@@ -14,7 +14,7 @@ import '../drive/resolve.dart';
 import 'aim.dart';
 import 'asset_bundle.dart';
 import 'async_watchdog.dart';
-import 'events.dart';
+import '../app_events/events.dart';
 import 'motion.dart';
 import 'notification.dart';
 import 'profile.dart';
@@ -922,7 +922,7 @@ class ScenarioTester {
       // Recognised from an earlier replay of a shared prefix, exactly as a
       // captured step is: the beat was emitted on the first pass with that
       // pass's events, and appending these would multiply the prefix.
-      scenarioEventBuffer?.discard();
+      appEventBuffer?.discard();
       _lastCaptureFresh = false;
       _lastPosition = position;
       _pendingBranch = null;
@@ -933,8 +933,7 @@ class ScenarioTester {
     _lastPosition = position;
     var branch = _pendingBranch;
     _pendingBranch = null;
-    var (events, dropped) =
-        scenarioEventBuffer?.drain() ?? (const <ScenarioEvent>[], 0);
+    var (events, dropped) = appEventBuffer?.drain() ?? (const <AppEvent>[], 0);
     _pendingBeats.add(
       _PendingEmit(
         index: index,
@@ -1285,15 +1284,14 @@ class ScenarioTester {
     // frame is the pending capture. Rolling them forward — what a
     // non-capturing verb does with them — would file the request the flow
     // made here under a screen two taps later.
-    var (events, dropped) =
-        scenarioEventBuffer?.drain() ?? (const <ScenarioEvent>[], 0);
+    var (events, dropped) = appEventBuffer?.drain() ?? (const <AppEvent>[], 0);
     // One step keeps one step's worth. The buffer caps each drain, and this
     // step is now the far side of two of them — so the overflow is counted
     // here the way the buffer counts its own, rather than quietly making one
     // step's `events.json` twice the size every other step's may be.
-    var room = (maxScenarioEventsPerStep - pending.events.length).clamp(
+    var room = (maxAppEventsPerStep - pending.events.length).clamp(
       0,
-      maxScenarioEventsPerStep,
+      maxAppEventsPerStep,
     );
     if (events.length > room) {
       dropped += events.length - room;
@@ -1400,7 +1398,7 @@ class ScenarioTester {
       // this replay collected on the way go with it: the step they belong to
       // was emitted on the first pass, with the events of *that* pass, and
       // appending these would multiply a shared prefix once per branch.
-      scenarioEventBuffer?.discard();
+      appEventBuffer?.discard();
       _recorder?.discard();
       _lastCaptureFresh = false;
       _lastPosition = position;
@@ -1511,8 +1509,7 @@ class ScenarioTester {
     // Drained here rather than inside `runAsync`: the capture itself sends
     // platform messages (and the spy records them), and those belong to the
     // *next* transition, not to the one being closed.
-    var (events, dropped) =
-        scenarioEventBuffer?.drain() ?? (const <ScenarioEvent>[], 0);
+    var (events, dropped) = appEventBuffer?.drain() ?? (const <AppEvent>[], 0);
     await tester.runAsync(() async {
       var view = tester.binding.renderViews.single;
       var layer = view.debugLayer! as OffsetLayer;
@@ -1695,7 +1692,7 @@ class _PendingEmit {
   final ScenarioAim? aim;
 
   final String position;
-  final List<ScenarioEvent> events;
+  final List<AppEvent> events;
   int eventsDropped;
   final ScenarioMotionFrames motion;
   final Duration? motionInterval;

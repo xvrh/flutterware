@@ -9,7 +9,16 @@ corrected three things in place: the print lane (no zone —
 the run hangs), and the plugin table (sqflite is **not** free). Every amended
 paragraph is marked.
 
-As built: `lib/src/scenarios/events.dart` (model, sink, buffer, caps),
+> **Superseded in part, 2026-08-21.** The reporting call is no longer
+> scenario-only: it fans out to a mounted devbar as well, and the names moved
+> with it — `ScenarioEvent` → `AppEvent`, `recordScenarioEvent` →
+> `recordAppEvent`, `lib/src/scenarios/events.dart` →
+> `lib/src/app_events/events.dart`. See
+> `2026-08-21-app-events-unification.md`. Everything below about the *model*,
+> the buffer, the caps and the lanes is unchanged and still current; only the
+> names and the destination widened. This file uses the new names throughout.
+
+As built: `lib/src/app_events/events.dart` (model, sink, buffer, caps),
 `lib/scenarios.dart` (the import a fake uses), the three lanes in
 `harness.dart`, drain-and-dedupe in `scenario.dart`,
 `app/lib/src/scenarios/events_view.dart` (the tab), the two-line edge label in
@@ -158,14 +167,14 @@ repository fake, an analytics service the app wrote itself. Those report
 themselves, through one global sink in the spirit of `scenarioRunListener`:
 
 ```dart
-// package:flutterware/scenarios.dart — imported by fakes, not only by tests
-void recordScenarioEvent(ScenarioEvent event);
+// package:flutterware/app_events.dart — imported by fakes, not only by tests
+void recordAppEvent(AppEvent event);
 
-ScenarioEvent.request(method: 'POST', url: '/login', status: 401, body: …)
-ScenarioEvent.query(sql: …, args: …, rows: 12)
-ScenarioEvent.analytics('checkout_started', params: {…})
-ScenarioEvent.log('…', level: …)
-ScenarioEvent.custom(channel: 'websocket', title: …, data: …)
+AppEvent.request(method: 'POST', url: '/login', status: 401, body: …)
+AppEvent.query(sql: …, args: …, rows: 12)
+AppEvent.analytics('checkout_started', params: {…})
+AppEvent.log('…', level: …)
+AppEvent.custom(channel: 'websocket', title: …, data: …)
 ```
 
 Typed constructors rather than a free-form channel string, because the GUI
