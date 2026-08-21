@@ -25,6 +25,7 @@ import 'catalog_entry.dart';
 import 'catalog_session.dart';
 import 'preview_popover.dart';
 import 'staged_device.dart';
+import 'stage_ground.dart';
 import 'stage_zoom.dart';
 import 'zoom_control.dart';
 import 'thumbnails.dart';
@@ -546,15 +547,29 @@ class _CatalogViewState extends State<CatalogView> {
   ) {
     if (device == null) {
       var hostRatio = MediaQuery.of(context).devicePixelRatio;
-      return ZoomableStage(
-        controller: _zoom,
-        onInteracting: (panning) => _setPanning(engine, panning),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            _stage = (engine, constraints.biggest, hostRatio, EdgeInsets.zero);
-            _resizeAfterFrame();
-            return _guestInput(engine, const SizedBox.expand());
-          },
+      return StageGround(
+        child: ZoomableStage(
+          controller: _zoom,
+          onInteracting: (panning) => _setPanning(engine, panning),
+          // Above the `LayoutBuilder`, so what the guest is told to render is
+          // already the inset size — a fitted canvas that measured the whole
+          // pane and then got padded would be one inset too wide in each
+          // direction, and would be told to render a surface it cannot fill.
+          child: Padding(
+            padding: const EdgeInsets.all(stageInset),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                _stage = (
+                  engine,
+                  constraints.biggest,
+                  hostRatio,
+                  EdgeInsets.zero,
+                );
+                _resizeAfterFrame();
+                return _staged(_guestInput(engine, const SizedBox.expand()));
+              },
+            ),
+          ),
         ),
       );
     }
@@ -590,36 +605,44 @@ class _CatalogViewState extends State<CatalogView> {
     // screen while the body stayed put would look like neither. So the
     // transform goes above both, and the artwork re-rasterizes through it for
     // the same reason the guest's own picture does.
-    return ZoomableStage(
-      controller: _zoom,
-      onInteracting: (panning) => _setPanning(engine, panning),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(FwSpacing.xl),
-          // scaleDown, never up: at rest the texture is the device's own
-          // resolution, and enlarging that is just a blurrier phone. Past rest
-          // it is the transform above that enlarges, with the pixels behind it
-          // to make that honest.
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: chrome == null || !_session.staging.frameVisible
-                ? SizedBox.fromSize(size: screen, child: guest)
-                // Told which way up, because the body it is holding is not: a
-                // hand-drawn phone is drawn portrait and turned here, and the
-                // screen box handed to it has already traded its width for its
-                // height.
-                : DeviceFrame(
-                    device: chrome,
-                    screen: guest,
-                    orientation: orientation == ScreenOrientation.landscape
-                        ? Orientation.landscape
-                        : Orientation.portrait,
-                  ),
+    return StageGround(
+      child: ZoomableStage(
+        controller: _zoom,
+        onInteracting: (panning) => _setPanning(engine, panning),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(FwSpacing.xl),
+            // scaleDown, never up: at rest the texture is the device's own
+            // resolution, and enlarging that is just a blurrier phone. Past rest
+            // it is the transform above that enlarges, with the pixels behind it
+            // to make that honest.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: chrome == null || !_session.staging.frameVisible
+                  // The body already *is* the edge, so only the bodyless
+                  // stagings get one drawn.
+                  ? _staged(SizedBox.fromSize(size: screen, child: guest))
+                  // Told which way up, because the body it is holding is not: a
+                  // hand-drawn phone is drawn portrait and turned here, and the
+                  // screen box handed to it has already traded its width for its
+                  // height.
+                  : DeviceFrame(
+                      device: chrome,
+                      screen: guest,
+                      orientation: orientation == ScreenOrientation.landscape
+                          ? Orientation.landscape
+                          : Orientation.portrait,
+                    ),
+            ),
           ),
         ),
       ),
     );
   }
+
+  /// The guest's picture with the edge that marks where it ends.
+  Widget _staged(Widget picture) =>
+      StageSpecimen(focus: _focusNode, child: picture);
 
   /// What the stage last laid out, so the zoom listener can work out what to
   /// render at without a rebuild.
