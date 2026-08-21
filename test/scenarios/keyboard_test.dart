@@ -161,6 +161,10 @@ void main() {
               contains('behind the software keyboard'),
               contains('336'),
               contains('s.keyboard.dismiss()'),
+              // And pointedly *not* `scrollTo`: measured, it stops inside a
+              // viewport that runs under the keyboard, so the next verb is
+              // refused again. See [_keyboardOver].
+              isNot(contains('scrollTo')),
             ),
           ),
         ),
@@ -216,6 +220,40 @@ void main() {
       await s.keyboard.show();
       await s.keyboard.auto();
       expect(s.keyboard.isUp, isFalse, reason: 'nothing is focused');
+    });
+  });
+
+  group('a replay starts from a screen with no keyboard on it', () {
+    setUp(stageAPhone);
+
+    var seen = <String, double>{};
+    scenario('whatever the branch before it typed into', (s) async {
+      await s.pumpWidget(const _Form());
+      await s.split({
+        'types': () async {
+          await s.tap(const Key('name'));
+          seen['types'] = s.keyboard.height;
+        },
+        'does not type': () async {
+          // **The regression this pins.** A replay tears the tree down, which
+          // takes the host widget — and with it anything that could have put
+          // the view back. So the *driver* has to, from between the replays,
+          // unconditionally: it once believed the unmount had already zeroed
+          // things and wrote nothing, and every branch after one that typed
+          // was laid out against 336 points of keyboard nobody had asked for.
+          seen['does not type'] = MediaQuery.of(
+            s.tester.element(find.byType(MaterialApp)),
+          ).viewInsets.bottom;
+        },
+      });
+    });
+    tearDown(() {
+      expect(seen['types'], 336);
+      expect(
+        seen['does not type'],
+        0,
+        reason: 'a fresh branch, a fresh screen',
+      );
     });
   });
 

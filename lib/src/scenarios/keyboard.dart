@@ -95,10 +95,17 @@ class ScenarioKeyboard {
   void attach(void Function(double fraction, {required bool animate}) run) =>
       _run = run;
 
-  void detach() {
-    _run = null;
-    _height = 0;
-  }
+  /// **[_height] is deliberately left alone.** It records what is on the
+  /// *view*, and unmounting the tree does not take it off — the host is gone,
+  /// so nothing can. Zeroing it here is what made a raised keyboard survive
+  /// into the next branch of a `split`: [reset] then believed there was
+  /// nothing to put back, and the fresh app was laid out against 336 points of
+  /// keyboard nobody had asked for.
+  ///
+  /// The view itself is not written here either, because this runs from a
+  /// `dispose` inside a build and a metrics change there is a `setState` in
+  /// `MediaQuery.fromView`. [reset] does it, from between the replays.
+  void detach() => _run = null;
 
   /// Samples the app — called between the frames of whatever [Settle] policy
   /// is running.
@@ -138,8 +145,7 @@ class ScenarioKeyboard {
   /// touched yet.
   void reset() {
     mode = KeyboardMode.auto;
-    if (_height != 0) write(0);
-    _height = 0;
+    write(0);
   }
 
   /// The three numbers, on the view — through [stageKeyboard], which is the

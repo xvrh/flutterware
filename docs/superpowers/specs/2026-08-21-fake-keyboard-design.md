@@ -517,6 +517,40 @@ its own mounts.
 The rule: **a widget whose shape depends on a value it also animates will
 reparent everything below it.** Keep the shape and move the numbers.
 
+## What the review pass found
+
+Three things, all found by asking what a seam does rather than by reading it.
+
+- **A raised keyboard survived into the next branch of a `split`.** The host
+  widget clears its own bookkeeping as it unmounts, so the driver believed
+  there was nothing left on the view to put back — and the fresh app of the
+  second branch was laid out against 336 points of keyboard nobody had asked
+  for. The unmount touches nothing now and the reset between replays writes
+  unconditionally, from where a metrics change is safe. Pinned by a two-branch
+  scenario where one branch types and the other reads the insets.
+
+- **The refusal's own advice did not work.** It offered `s.scrollTo(...)` as a
+  way past a covered target; measured, `Scrollable.ensureVisible` stops the
+  moment the target is inside the *viewport*, and in the app this refusal
+  actually fires on — one that does not resize — the viewport runs under the
+  keyboard. So the scroll succeeded, the target was still covered, and the next
+  verb was refused again. **The behaviour is right and the sentence was wrong**:
+  a row parked at the bottom of a list under a real keyboard is not reachable
+  on a real phone either. The message names `dismiss()` and nothing else now,
+  and the test asserts it does *not* say `scrollTo`.
+
+- **The dismiss key was dead on a keyboard somebody had held up.** The canvas
+  re-pushes what the address says after every frame, so telling the guest alone
+  put the keyboard straight back on the next rebuild — and the guest's own
+  `up → auto` was undone before it could be seen. Pressing it clears the
+  address parameter now, which is where the mode actually lives. Found by
+  driving the studio; no test would have caught it, because the bug is the
+  round trip.
+
+The last of these settled an open question by construction: **forced-up does
+survive an entry switch**, because it is on the address un-namespaced exactly
+as `device` is.
+
 ## Not in v1
 
 - IME composition, dead keys, CJK. Unchanged from today: the guest has no IME.
@@ -573,9 +607,11 @@ framework queue.
   building it: no.** It has no device, therefore no measured height, and
   forced-up there raises nothing rather than inventing one. The bar segment
   goes dim and says so, like the rotation on a window.
-- Whether forced-up survives an entry switch. It is a property of the stage,
-  not of the entry, which argues yes — but a demo with no field in it and a
-  keyboard over the bottom third argues no.
+- ~~Whether forced-up survives an entry switch.~~ **Yes, by construction**: it
+  rides the address un-namespaced, exactly as `device` does, so it persists
+  across entries and a link carries it. Left as a question the first time it
+  was written; answered by building the address parameter the same way its
+  neighbours are.
 - ~~Whether the scenario off switch also belongs per-scenario, or only per
   profile.~~ **Built per-profile only**, which is the smaller promise and what
   nothing yet asks past. A scenario that wants one picture without a keyboard

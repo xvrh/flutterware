@@ -436,6 +436,24 @@ class _CatalogViewState extends State<CatalogView> {
                           var device = _deviceOf(context, _session);
                           var orientation = _orientationOf(context, _session);
                           var keyboard = _keyboardOf(context, _session);
+                          // **Built here, above the namespace.** Pressing the
+                          // dismiss key on a keyboard somebody *held* up has
+                          // to clear the address, not only tell the guest: the
+                          // canvas re-pushes what the address says after every
+                          // frame, so a mode left at `up` puts the keyboard
+                          // straight back — measured, and it made the key look
+                          // dead. `keyboard` is un-namespaced like `device`,
+                          // so the writer has to be taken from a context no
+                          // `AddressScope` below has renamed.
+                          void dismissKeyboard() {
+                            if (keyboard == KeyboardMode.up) {
+                              AddressScope.write(
+                                context,
+                              ).setParam('keyboard', null);
+                            }
+                            _session.dismissKeyboard();
+                          }
+
                           return AddressScope(
                             namespace: _inspectNamespace,
                             child: LayoutBuilder(
@@ -448,6 +466,7 @@ class _CatalogViewState extends State<CatalogView> {
                                       device,
                                       orientation,
                                       keyboard,
+                                      dismissKeyboard,
                                     ),
                                   ),
                                   // Always mounted, unlike the knob drawer it
@@ -489,6 +508,7 @@ class _CatalogViewState extends State<CatalogView> {
     Device? device,
     ScreenOrientation? orientation,
     KeyboardMode keyboard,
+    VoidCallback onDismissKeyboard,
   ) {
     switch (_session.phase) {
       case CatalogSessionPhase.starting:
@@ -523,6 +543,7 @@ class _CatalogViewState extends State<CatalogView> {
                 device,
                 orientation,
                 keyboard,
+                onDismissKeyboard,
               )
             : _CompileError(
                 entry: _session.selected!,
@@ -551,6 +572,7 @@ class _CatalogViewState extends State<CatalogView> {
     Device? device,
     ScreenOrientation? orientation,
     KeyboardMode keyboard,
+    VoidCallback onDismissKeyboard,
   ) {
     if (device == null) {
       var hostRatio = MediaQuery.of(context).devicePixelRatio;
@@ -627,7 +649,7 @@ class _CatalogViewState extends State<CatalogView> {
       // the *app* asked for through the mode, and a key drawn from the table
       // would sit over a keyboard that is not up.
       band: _session.keyboard?.height ?? 0,
-      onDismiss: _session.dismissKeyboard,
+      onDismiss: onDismissKeyboard,
       child: _guestInput(
         engine,
         SizedBox.fromSize(size: screen),

@@ -1298,14 +1298,24 @@ class ScenarioTester {
   /// screen that did not change. The generic covered sentence would be true —
   /// something absorbs the pointer — and would send the reader looking for an
   /// overlay that is not in their code.
+  ///
+  /// **It does not offer `scrollTo`, and that was measured rather than
+  /// assumed.** `Scrollable.ensureVisible` stops the moment the target is
+  /// inside the *viewport*, and in the app this refusal actually fires on —
+  /// one that does not resize — the viewport runs under the keyboard. So the
+  /// scroll succeeds, the target is still covered, and the very next verb is
+  /// refused again. Which is faithful: a row parked at the bottom of a list
+  /// under a real keyboard is not reachable on a real phone either. The only
+  /// honest way past is to take the keyboard away.
   String? _keyboardOver(Offset center, String verb, String described) {
     if (!_keyboard.up || center.dy < _keyboardTop) return null;
     return '$described is behind the software keyboard, which covers the '
         'bottom ${_keyboard.height.round()} points of the screen — so '
         '`s.$verb` at its centre lands on the keyboard, exactly as a finger '
-        'would. That is a real layout problem if the app meant this to be '
-        'reachable. To get past it: `await s.keyboard.dismiss()`, or scroll it '
-        'into view with `await s.scrollTo($described)`.';
+        'would. If the app is meant to reach this while somebody is typing, '
+        'that is a real layout problem: a `Scaffold` that resizes moves it out '
+        'of the way, and one that does not leaves it as unreachable on a phone '
+        'as it is here. To carry the flow on: `await s.keyboard.dismiss()`.';
   }
 
   /// Where the keyboard's top edge is, in the logical pixels every box in a
