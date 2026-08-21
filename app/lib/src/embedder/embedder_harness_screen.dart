@@ -87,7 +87,6 @@ class _EmbedderHarnessScreenState extends State<EmbedderHarnessScreen> {
                   });
                   return EmbedderInputRegion(
                     engine: _engine,
-                    dpr: dpr,
                     focusNode: _focusNode,
                     child: SizedBox.expand(
                       child: _engine.textureId == null
