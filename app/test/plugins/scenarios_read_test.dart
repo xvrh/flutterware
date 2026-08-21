@@ -28,6 +28,7 @@ void main() {
     required bool ok,
     int steps = 3,
     bool withTrees = true,
+    Map<int, List<Map<String, Object?>>> events = const {},
   }) {
     var runDir = p.join(
       worktree.path,
@@ -68,10 +69,24 @@ void main() {
           }),
         );
       }
+      var stepEvents = events[index];
+      if (stepEvents != null) {
+        File('$base.events.json').writeAsStringSync(jsonEncode(stepEvents));
+      }
       records.add({
         'index': index,
         'position': '#$index',
         'auto': false,
+        if (stepEvents != null) ...{
+          'events': p.relative('$base.events.json', from: worktree.path),
+          'eventCount': stepEvents.length,
+          'eventChannels': <String, int>{
+            for (var event in stepEvents)
+              '${event['channel']}': stepEvents
+                  .where((e) => e['channel'] == event['channel'])
+                  .length,
+          },
+        },
         'image': p.relative('$base.png', from: worktree.path),
         'format': 'png',
         'width': 300,
@@ -335,5 +350,146 @@ void main() {
         ),
       ),
     );
+  });
+
+  group('what the app did on the way here', () {
+    /// One busy step: the shape a real transition has — a couple of things
+    /// the app reported, and a pile of framework chatter around them.
+    Map<int, List<Map<String, Object?>>> busyStep() => {
+      3: [
+        {'channel': 'system', 'title': 'flutter/textinput TextInput.show'},
+        {'channel': 'system', 'title': 'flutter/accessibility'},
+        {
+          'channel': 'network',
+          'title': 'POST /pay',
+          'detail': '500',
+          'error': true,
+          'body': '{"reason":"card_declined"}',
+        },
+        {'channel': 'db', 'title': 'SELECT * FROM cart', 'detail': '3 rows'},
+        {'channel': 'log', 'title': 'paying', 'level': 'INFO'},
+      ],
+    };
+
+    test(
+      'a read that did not ask still says there is something to ask',
+      () async {
+        // The regression this whole lane exists for: an agent that does not
+        // already know events are a thing has to be told by the reply, on the
+        // step that has them. `next` is where it looks on step forty.
+        writeRun(stamp: '100', ok: false, events: busyStep());
+
+        var result = await read();
+
+        expect(result.events, isNull, reason: 'not paid for unless asked');
+        expect(result.eventCount, 5);
+        expect(result.eventChannels, {
+          'system': 2,
+          'network': 1,
+          'db': 1,
+          'log': 1,
+        });
+        expect(result.next, contains('events: true'));
+        expect(result.next, contains('5 on'));
+      },
+    );
+
+    test('a step with none says nothing about them', () async {
+      writeRun(stamp: '100', ok: false);
+
+      var result = await read();
+
+      expect(result.eventCount, isNull);
+      expect(result.eventChannels, isNull);
+      expect(result.next, isNot(contains('events')));
+    });
+
+    test('events: true hands back the payload, without the chatter', () async {
+      writeRun(stamp: '100', ok: false, events: busyStep());
+
+      var result = await read({'events': true});
+
+      expect(
+        [for (var event in result.events!) event.channel],
+        ['network', 'db', 'log'],
+        reason: '`system` is most of the volume and none of the signal',
+      );
+      // The part that was unreachable before without opening the raw file.
+      expect(result.events!.first.body, '{"reason":"card_declined"}');
+      expect(result.events!.first.error, isTrue);
+      // The count still describes the whole capture, as `run` reports it.
+      expect(result.eventCount, 5);
+    });
+
+    test('channel narrows, and is the only way to see system', () async {
+      writeRun(stamp: '100', ok: false, events: busyStep());
+
+      var network = await read({'channel': 'network'});
+      expect([for (var e in network.events!) e.title], ['POST /pay']);
+
+      var system = await read({'channel': 'system'});
+      expect(system.events, hasLength(2));
+
+      var both = await read({'channel': 'db,log'});
+      expect([for (var e in both.events!) e.channel], ['db', 'log']);
+    });
+
+    test('errors: true is the first question to ask of a red step', () async {
+      writeRun(stamp: '100', ok: false, events: busyStep());
+
+      var result = await read({'errors': true});
+
+      expect([for (var e in result.events!) e.title], ['POST /pay']);
+    });
+
+    test(
+      'a filter that matches nothing says why, rather than going quiet',
+      () async {
+        writeRun(stamp: '100', ok: false, events: busyStep());
+
+        var result = await read({'channel': 'analytics'});
+
+        expect(result.events, isEmpty);
+        expect(result.note, contains('This step recorded 5'));
+        expect(result.note, contains('network'));
+      },
+    );
+
+    test('naming a channel implies events, without also saying so', () async {
+      writeRun(stamp: '100', ok: false, events: busyStep());
+
+      expect((await read({'channel': 'db'})).events, isNotNull);
+      expect((await read({'errors': true})).events, isNotNull);
+    });
+
+    test('pointing step at the events leg answers about events', () async {
+      // It used to answer about the widget tree instead — silently, with
+      // `step` rewritten to the `.tree.json`. A reply may not substitute a
+      // different question for the one it was asked.
+      var runDir = writeRun(stamp: '100', ok: false, events: busyStep());
+      var leg = p.join(
+        runDir,
+        'checkout_test.dart',
+        'Checkout',
+        '3-step.events.json',
+      );
+
+      var result = await read({'step': leg});
+
+      expect(result.events, isNotNull);
+      expect(
+        [for (var e in result.events!) e.channel],
+        ['network', 'db', 'log'],
+      );
+    });
+
+    test('a step whose events file is gone says so', () async {
+      writeRun(stamp: '100', ok: false);
+
+      var result = await read({'events': true});
+
+      expect(result.events, isNull);
+      expect(result.note, contains('no events'));
+    });
   });
 }

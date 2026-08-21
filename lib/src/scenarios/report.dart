@@ -674,6 +674,11 @@ class ScenarioRunStep {
   /// The one-line summaries, capped, `system` excluded — what a reader gets
   /// without opening [events]. `POST /login → 401` is the part an agent
   /// reasons about; the payloads are what it fetches when it cares.
+  ///
+  /// **The cap says when it bit**, as a final `… N more` entry rather than by
+  /// going quiet, because twelve of forty handed back silently read as an app
+  /// that did twelve things. `scenarios read events: true` is where the rest
+  /// live, filtered by `channel` or by `errors`.
   final List<String>? eventTitles;
 
   /// Events dropped to stay inside the per-step or per-run cap. Reported
