@@ -601,7 +601,7 @@ class _CatalogViewState extends State<CatalogView> {
                 // is the thing the whole table exists not to do. The mode
                 // still travels, so the guest reports the request rather than
                 // silently discarding it.
-                _keyboardAfterFrame(keyboard, 0);
+                _keyboardAfterFrame(keyboard, 0, null);
                 return _staged(
                   _guestInput(engine, const SizedBox.expand(), touch: false),
                 );
@@ -639,7 +639,7 @@ class _CatalogViewState extends State<CatalogView> {
     // And how much of it a keyboard would take, already turned — a phone's
     // landscape keyboard is shorter than its portrait one, and a tablet's is
     // taller.
-    _keyboardAfterFrame(keyboard, effective.keyboard);
+    _keyboardAfterFrame(keyboard, effective.keyboard, effective.keypadKeyboard);
     // The one thing `device_frame` is here for, and the only place it is
     // touched: the silhouette. Everything above came from our own measurements.
     // Null for a desktop size, which gets none.
@@ -726,9 +726,13 @@ class _CatalogViewState extends State<CatalogView> {
 
   /// And how tall its keyboard is. Post-frame and deduped for the reasons
   /// [_stageAfterFrame] is.
-  void _keyboardAfterFrame(KeyboardMode mode, double height) {
+  void _keyboardAfterFrame(
+    KeyboardMode mode,
+    double height,
+    double? keypadHeight,
+  ) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _session.keyboardAs(mode, height);
+      if (mounted) _session.keyboardAs(mode, height, keypadHeight);
     });
   }
 

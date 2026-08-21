@@ -17,6 +17,7 @@ void main() {
   Future<MediaQueryData> pump(
     WidgetTester tester, {
     required double keyboard,
+    KeyboardVariant variant = KeyboardVariant.letters,
     Widget child = const SizedBox.expand(),
   }) async {
     // The surface itself, not only what `MediaQuery` claims: a `Scaffold`
@@ -39,6 +40,7 @@ void main() {
           child: FakeKeyboard(
             height: keyboard,
             platform: DevicePlatform.ios,
+            variant: variant,
             child: Builder(
               builder: (context) {
                 seen = MediaQuery.of(context);
@@ -174,6 +176,26 @@ void main() {
   });
 
   group('the artwork', () {
+    testWidgets('the variant reaches the brush', (tester) async {
+      // **Pinned because it silently did not.** `FakeKeyboard` takes the
+      // variant, hands the height and the platform to the slab, and once
+      // forgot to hand over the third — so the guest knew perfectly well a
+      // phone field was focused, reported `variant: keypad` over the wire, and
+      // drew ten rows of letters anyway. Nothing about that is visible from
+      // either end on its own.
+      await pump(tester, keyboard: 291, variant: KeyboardVariant.keypad);
+      var paint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(AbsorbPointer),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      expect(
+        (paint.painter! as FakeKeyboardPainter).variant,
+        KeyboardVariant.keypad,
+      );
+    });
+
     testWidgets('repaints only when the keyboard it draws changes', (
       tester,
     ) async {

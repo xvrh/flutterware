@@ -7,6 +7,43 @@ import 'shell.dart';
 /// guest's own text input (there is no platform IME on the other side), and
 /// scrolling needs wheel and trackpad events on the wire.
 
+/// A field per keyboard the platform can be asked for — which is what makes
+/// this the entry to look at when the fake keyboard changes: tapping between
+/// them morphs one keyboard into another, and on a phone the digits one is
+/// measurably shorter.
+@Preview(name: 'Keyboards', group: 'Input', wrapper: wrapInApp)
+Widget keyboards() => Scaffold(
+  appBar: AppBar(title: const Text('Keyboards')),
+  body: Padding(
+    padding: const EdgeInsets.all(24),
+    child: Column(
+      spacing: 16,
+      children: [
+        const TextField(
+          autofocus: true,
+          keyboardType: TextInputType.phone,
+          decoration: InputDecoration(labelText: 'Phone — a digit pad'),
+        ),
+        const TextField(
+          keyboardType: TextInputType.emailAddress,
+          decoration: InputDecoration(labelText: 'Email — an @ and a dot'),
+        ),
+        const TextField(
+          keyboardType: TextInputType.url,
+          decoration: InputDecoration(labelText: 'URL — a slash and a .com'),
+        ),
+        const TextField(
+          decoration: InputDecoration(labelText: 'Text — the letters'),
+        ),
+        const TextField(
+          keyboardType: TextInputType.none,
+          decoration: InputDecoration(labelText: 'None — brings its own pad'),
+        ),
+      ],
+    ),
+  ),
+);
+
 @Preview(name: 'Text fields', group: 'Input', wrapper: wrapInApp)
 Widget textFields() => Scaffold(
   appBar: AppBar(title: const Text('Text fields')),

@@ -257,6 +257,35 @@ void main() {
     });
   });
 
+  group('which keyboard, and how tall', () {
+    setUp(stageAPhone);
+
+    scenario('a number field gets the shorter one', (s) async {
+      await s.pumpWidget(const _Form(number: true));
+      await s.tap(const Key('name'));
+      expect(s.keyboard.variant, KeyboardVariant.keypad);
+      // The iPhone 16's measured keypad, 45 points under its letters
+      // keyboard — so the layout meets the screen a phone would give it and
+      // not one 45 points smaller.
+      expect(s.keyboard.height, 291);
+      expect(s.tester.getSize(find.byKey(const Key('body'))).height, 852 - 291);
+    });
+
+    scenario('and the morph between them needs no going down', (s) async {
+      // Tapping from a text field to a number field on a phone turns one
+      // keyboard into a shorter one — it never leaves the screen. The slide
+      // has nowhere to travel, so the driver has to notice the *variant*
+      // moved rather than waiting for a fraction that never changes.
+      await s.pumpWidget(const _Form(number: true));
+      await s.tap(const Key('email'));
+      expect(s.keyboard.variant, KeyboardVariant.letters);
+      expect(s.keyboard.height, 336);
+      await s.tap(const Key('name'));
+      expect(s.keyboard.variant, KeyboardVariant.keypad);
+      expect(s.keyboard.height, 291);
+    });
+  });
+
   group('a field that wants no keyboard gets none', () {
     setUp(stageAPhone);
 
@@ -334,9 +363,13 @@ final _name = FocusNode();
 /// keyboard, which is the case the refusal exists for and a real layout bug
 /// nothing else in this tool can see.
 class _Form extends StatefulWidget {
-  const _Form({this.resizes = true, this.custom = false});
+  const _Form({this.resizes = true, this.custom = false, this.number = false});
 
   final bool resizes;
+
+  /// Whether the first field wants digits — the shorter keyboard on a phone,
+  /// and a different set of keys everywhere.
+  final bool number;
 
   /// Whether the first field brings its own input surface — the shape a date
   /// picker, a PIN pad or a calculator has.
@@ -359,7 +392,11 @@ class _FormState extends State<_Form> {
           TextField(
             key: const Key('name'),
             focusNode: _name,
-            keyboardType: widget.custom ? TextInputType.none : null,
+            keyboardType: widget.custom
+                ? TextInputType.none
+                : widget.number
+                ? TextInputType.phone
+                : null,
           ),
           const TextField(key: Key('email')),
           const Spacer(),

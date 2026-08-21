@@ -764,6 +764,7 @@ class _GuestSession {
       await session._inspect.setKeyboard(
         mode: viewport.keyboardMode,
         height: viewport.keyboard,
+        keypadHeight: viewport.keypadKeyboard,
       );
       return session;
     } catch (_) {

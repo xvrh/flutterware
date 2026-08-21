@@ -466,15 +466,20 @@ changes its mind through `updateConfig` and never re-attaches. The forced modes
 still ignore it: they ignore focus already, and they are the human asking about
 the layout rather than the app asking for a keyboard.
 
-**Per-input-type heights are still not in v1**, and the reason is no longer
-that we cannot tell — it is that each one is another measured number per
-device, and the honest version is more than a number. A shorter height drawn
-with ten-key rows is a lying picture, so the pass owes a keypad layout to the
-painter as well. What it would buy is real: our one height is the text
-keyboard's, which is the **tallest**, so a numeric form is judged against a
-keyboard taller than the device would raise — and a keyboard that is too tall
-is a false-failure generator in both directions at once, overflowing layouts
-that fit and covering buttons that a finger would reach.
+**Per-input-type heights and per-input-type artwork are built.** What made it
+possible was already on the wire and simply not being read: `attach` carries
+the `TextInputConfiguration` and the test binding carries the same
+`{name, signed, decimal}` map, so one pure-Dart discriminator —
+`keyboardVariantForName` — serves both lanes off the identical payload.
+
+**Height and picture are separate consequences of one fact**, and keeping them
+separate is what makes the model fit all three platforms. A `KeyboardVariant`
+always changes what is drawn; it changes the height only where the device has a
+measurement saying it should. An iPad draws a digit pad and stays 405.5 tall;
+Gboard draws a digit pad and stays 336.4; an iPhone draws one and loses 27–45
+points. `Device.keypadKeyboard` is null wherever there is no shrink, and null
+covers three situations that all want the same answer — a device that genuinely
+does not shrink, a device with no keyboard, and a cell nobody has measured.
 
 ### How many classes there are, measured 2026-08-21
 

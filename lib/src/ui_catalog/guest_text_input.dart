@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../devices.dart';
+
 /// The guest's text input — what lets a demo's `TextField` receive typing.
 ///
 /// The guest has no platform text input: the host is a few hundred lines of C
@@ -35,40 +37,66 @@ class GuestTextInput with TextInputControl {
   TextEditingValue _value = TextEditingValue.empty;
   var _listening = false;
 
-  /// Whether the platform would be showing a keyboard right now.
+  /// What keyboard the platform would be showing right now, or null for none.
   ///
   /// The two signals, and the whole state machine they drive. The
   /// framework computes this and hands it to whatever control is installed, so
   /// nothing downstream needs a heuristic for when a phone would raise its
   /// keyboard: it is up between a [show] and the [hide] after it.
   ///
-  /// Two things about the traffic are worth knowing before reading it. [show]
-  /// arrives **twice** per focus — an `EditableText` asks on focus and again on
-  /// tap — so a listener must be edge-triggered on the value rather than
-  /// counting calls, which a [ValueNotifier] does for free. And moving from one
-  /// field to the next produces **no [hide] at all**: `TextInput` defers it to
-  /// a microtask that cancels itself if anything re-attaches
-  /// (`_scheduleHide`), which is why nothing here needs a debounce of its own.
-  final showing = ValueNotifier<bool>(false);
+  /// Three things about the traffic are worth knowing before reading it.
+  /// [show] arrives **twice** per focus — an `EditableText` asks on focus and
+  /// again on tap — so a listener must be edge-triggered on the value rather
+  /// than counting calls, which a [ValueNotifier] does for free. Moving from
+  /// one field to the next produces **no [hide] at all**: `TextInput` defers it
+  /// to a microtask that cancels itself if anything re-attaches
+  /// (`_scheduleHide`), which is why nothing here needs a debounce. And the
+  /// *variant* can change without the keyboard ever going down — a text field
+  /// to a number field is one keyboard morphing into a shorter one — which is
+  /// why this carries which keyboard rather than only whether there is one.
+  final asking = ValueNotifier<KeyboardVariant?>(null);
 
   @override
-  void show() => showing.value = _wantsSystemKeyboard;
+  void show() {
+    _shown = true;
+    asking.value = _asked;
+  }
 
   @override
-  void hide() => showing.value = false;
+  void hide() {
+    _shown = false;
+    asking.value = null;
+  }
 
-  /// Whether the field that asked would get a keyboard **on a real device**.
+  /// Whether the platform has been told to show, kept apart from what
+  /// [asking] resolves to.
   ///
-  /// `TextInputType.none` is a field that opens a connection and wants no
-  /// system keyboard: a custom pad, a date picker sheet, a calculator's own
+  /// The two are not the same question and collapsing them loses one: a
+  /// `TextInputType.none` field is *shown* and asks for nothing, so reading
+  /// "asking is null" as "hidden" would leave a field that switches from a
+  /// custom pad to a normal keyboard unable to raise one.
+  var _shown = false;
+
+  /// What the attached field asked for, or null when it wants no system
+  /// keyboard at all.
+  ///
+  /// `TextInputType.none` is a field that opens a connection and brings its
+  /// own input surface: a custom pad, a date picker sheet, a calculator's own
   /// keys. The platform shows nothing for it — and `show()` is still called,
-  /// so a control that took the call at face value would raise 336 points of
-  /// keyboard over a screen that has none on the phone it is imitating.
+  /// so a control that took the call at face value would raise a keyboard over
+  /// a screen that has none on the phone it is imitating.
   ///
   /// Read at [show] rather than at [attach] because a field may change its
   /// mind — see [updateConfig].
-  bool get _wantsSystemKeyboard =>
-      _configuration != null && _configuration!.inputType != TextInputType.none;
+  KeyboardVariant? get _asked {
+    var json = _configuration?.inputType.toJson();
+    if (json == null) return null;
+    var name = '${json['name']}';
+    if (name == 'TextInputType.none') return null;
+    // The channel's own `{name, signed, decimal}`, handed to the same
+    // pure-Dart discriminator the scenario lane uses on the same map.
+    return keyboardVariantForName(name, signed: json['signed'] == true);
+  }
 
   /// Replaces the platform control. Call once, before `runApp`.
   void install() {
@@ -115,10 +143,11 @@ class GuestTextInput with TextInputControl {
     if (client == null) return;
     _release();
     client.connectionClosed();
-    showing.value = false;
+    asking.value = null;
   }
 
   void _release() {
+    _shown = false;
     if (_listening) {
       _listening = false;
       HardwareKeyboard.instance.removeHandler(_handleKey);
@@ -132,9 +161,10 @@ class GuestTextInput with TextInputControl {
   void updateConfig(TextInputConfiguration configuration) {
     _configuration = configuration;
     // A field that swaps its keyboard type while focused — a "use a custom
-    // pad" toggle — has to move the keyboard with it, in both directions.
-    if (showing.value != _wantsSystemKeyboard && _client != null) {
-      showing.value = _wantsSystemKeyboard;
+    // pad" toggle, a "this is a phone number" switch — has to move the
+    // keyboard with it, in both directions and between variants.
+    if (_client != null && _shown && asking.value != _asked) {
+      asking.value = _asked;
     }
   }
 

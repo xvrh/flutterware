@@ -219,9 +219,8 @@ Future<void> _runScenario(
   // back before the second one starts.
   var keyboard = ScenarioKeyboard(
     tester,
-    deviceHeight: wantsKeyboard
-        ? (assignment?.orientedDevice?.keyboard ?? 0)
-        : 0,
+    device: assignment?.orientedDevice,
+    enabled: wantsKeyboard,
   );
   // Whatever the scenario before this one left memoized on `rootBundle`
   // belongs to *its* FakeAsync zone. A read still in flight when that scenario
@@ -1923,6 +1922,13 @@ class ScenarioKeyboardVerbs {
 
   /// Whether one is on screen.
   bool get isUp => _s._keyboard.up;
+
+  /// Which keyboard is on screen — what the focused field asked for, and
+  /// letters where nothing did.
+  ///
+  /// A `phone` or `number` field gets [KeyboardVariant.keypad], which on an
+  /// iPhone is a measurably shorter keyboard as well as a different picture.
+  KeyboardVariant get variant => _s._keyboard.variant;
 
   /// Whether the **app** has asked for one — a field has focus, and the
   /// framework told the platform so.

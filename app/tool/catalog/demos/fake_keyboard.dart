@@ -50,11 +50,43 @@ class _Sheet extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _Slab(
-          'iPhone 16 · portrait',
+          'iPhone 16 · letters',
           platform: DevicePlatform.ios,
           dark: dark,
           width: 393,
           height: 336,
+        ),
+        _Slab(
+          'iPhone 16 · email — an @ and a dot out of the space bar',
+          platform: DevicePlatform.ios,
+          dark: dark,
+          width: 393,
+          height: 336,
+          variant: KeyboardVariant.email,
+        ),
+        _Slab(
+          'iPhone 16 · url — a slash and a .com',
+          platform: DevicePlatform.ios,
+          dark: dark,
+          width: 393,
+          height: 336,
+          variant: KeyboardVariant.url,
+        ),
+        _Slab(
+          'iPhone 16 · keypad — 45 points shorter, and no strip to predict with',
+          platform: DevicePlatform.ios,
+          dark: dark,
+          width: 393,
+          height: 291,
+          variant: KeyboardVariant.keypad,
+        ),
+        _Slab(
+          'Pixel · keypad — Gboard swaps the keys and keeps the height',
+          platform: DevicePlatform.android,
+          dark: dark,
+          width: 412,
+          height: 336.4,
+          variant: KeyboardVariant.keypad,
         ),
         _Slab(
           'iPhone 16 · landscape',
@@ -96,6 +128,7 @@ class _Slab extends StatelessWidget {
     required this.dark,
     required this.width,
     required this.height,
+    this.variant = KeyboardVariant.letters,
   });
 
   final String label;
@@ -103,6 +136,7 @@ class _Slab extends StatelessWidget {
   final bool dark;
   final double width;
   final double height;
+  final KeyboardVariant variant;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -124,7 +158,11 @@ class _Slab extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: CustomPaint(
             size: Size(width, height),
-            painter: FakeKeyboardPainter(platform: platform, dark: dark),
+            painter: FakeKeyboardPainter(
+              platform: platform,
+              dark: dark,
+              variant: variant,
+            ),
           ),
         ),
       ],
