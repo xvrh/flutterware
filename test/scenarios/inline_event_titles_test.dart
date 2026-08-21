@@ -62,4 +62,65 @@ void main() {
 
     expect(titles.last, '… 6 more — scenarios read events: true');
   });
+
+  group('a title too wide for a summary', () {
+    /// What a folded db title looks like now: a whole statement, ordinary
+    /// rather than pathological.
+    var statement =
+        'select t.*, count(te.id) as error_count from task as t '
+        'left join task_error as te on t.id = te.task_id '
+        'where t.completed_at is null and t.version >= 3';
+
+    test('is cut, and says it was', () {
+      var title = inlineEventTitles([
+        AppEvent.custom(channel: AppChannel.db, title: statement),
+      ])!.single;
+
+      expect(title.length, 121, reason: '120 and the ellipsis');
+      expect(title, endsWith('…'));
+      expect(title, startsWith('select t.*, count(te.id) as error_count'));
+    });
+
+    test('one that fits is left exactly alone', () {
+      var title = inlineEventTitles([
+        AppEvent.analytics('checkout_started'),
+      ])!.single;
+
+      expect(title, 'checkout_started');
+    });
+
+    test('the detail survives the cut', () {
+      // A status code is a handful of characters and most of what the line is
+      // read for; losing `→ 500` to a long URL would be the wrong half to
+      // drop, so the detail is appended after the cut rather than inside it.
+      var title = inlineEventTitles([
+        AppEvent.request(
+          method: 'POST',
+          url: 'https://api.example.com/${'segment/' * 40}',
+          status: 500,
+        ),
+      ])!.single;
+
+      expect(title, contains('…'));
+      expect(title, endsWith(' → 500'));
+    });
+
+    test('the whole summary is bounded whatever the app reports', () {
+      // The point of the second cap: rows times width, both known.
+      var titles = inlineEventTitles([
+        for (var i = 0; i < 40; i++)
+          AppEvent.custom(channel: AppChannel.db, title: 'x' * 5000),
+      ])!;
+
+      expect(titles, hasLength(13));
+      for (var title in titles.take(12)) {
+        expect(title.length, 121);
+      }
+      expect(
+        titles.join().length,
+        lessThan(1600),
+        reason: '12 × 121 plus the count marker, and nothing else is possible',
+      );
+    });
+  });
 }

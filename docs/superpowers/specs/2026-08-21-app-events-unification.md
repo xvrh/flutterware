@@ -259,6 +259,16 @@ line the same way, and there the SQL is *typed by the person reading it back*.
 Folded too — leaving one of two identical defects would have been the
 inconsistency this removes.
 
+**A second cap, on width, once a db title became a whole statement.** A
+summary is bounded by rows times width and only the rows were. Twelve titles
+at the stored 300-character limit is 3,600 characters on one step; measured
+with folded SQL, twenty hand-formatted queries on one step put 1,980 bytes in
+the run's answer, and 1,639 at 120 characters each. The saving on that case is
+17% — the point is the ceiling, which is now known whatever an app reports:
+the same twenty queries with 5,000-character titles still fit in 1,600 bytes.
+The detail is appended after the cut, never inside it, because `→ 500` is a
+handful of characters and most of what the line is read for.
+
 ## Silence, which was the part that bit
 
 An Events pane fed by nothing showed `Nothing happened on the way to this
