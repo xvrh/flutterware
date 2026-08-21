@@ -111,7 +111,8 @@ class _ProbeState extends State<_Probe> {
 
     var settled = 0.0;
     var stable = 0;
-    for (var i = 0; i < 40; i++) {
+    var raisedAt = -1;
+    for (var i = 0; i < 60; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 250));
       // Ask again while nothing has come up — Android's first request after a
       // cold start lands before the window has focus and raises nothing, which
@@ -124,9 +125,21 @@ class _ProbeState extends State<_Probe> {
       if (!mounted) return 'KBTYPE $name abandoned';
       var view = View.of(context);
       var bottom = view.viewInsets.bottom / view.devicePixelRatio;
+      if (bottom > 0 && raisedAt < 0) raisedAt = i;
       if (bottom > 0 && (bottom - settled).abs() < 0.01) {
         stable++;
-        if (stable >= 2) break;
+        // **Two stable samples are not enough, and this is why the letters
+        // column exists as a control.** Raised from nothing, an iOS keyboard
+        // arrives and *then* grows its predictive bar a beat later — so a rule
+        // that stopped at the first plateau read 209 where the orientation
+        // probe, which morphs an already-open keyboard, read 248 on the same
+        // simulator. Thirty-nine points, silently, on every notched phone
+        // before the 16.
+        //
+        // So: hold for two full seconds past the first non-zero reading and
+        // take what it settles on. The cost is eight samples per measurement
+        // and the run is still under a minute.
+        if (stable >= 2 && i >= raisedAt + 8) break;
       } else {
         stable = 0;
       }

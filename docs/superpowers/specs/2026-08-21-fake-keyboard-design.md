@@ -495,10 +495,12 @@ The keypad class on iPhone is exactly three types — `phone`, `number` and
 
 Four things worth having measured rather than reasoned:
 
-- **The delta is 44–45 points, not the ~120 this section previously guessed.**
-  Constant across two phones of very different sizes rather than proportional
-  to them. That is a real gap and a much smaller one than the argument for
-  closing it assumed.
+- **The delta is tens of points, not the ~120 this section previously
+  guessed** — and it moves with the phone's *generation*, not its size. 44 on
+  an iPhone SE and 45 on both 16s; **27** on an iPhone 13 and a 12 Pro Max.
+  An earlier draft of this line said "constant across two phones of very
+  different sizes", which generalised from two samples that happened to be the
+  same generation. Two more devices disproved it.
 - **`number.signed` is a QWERTY, not a keypad.** Allowing a minus sign gets the
   full `numbersAndPunctuation` keyboard at full height, on both phones. A table
   derived by reasoning would have put it with the other numbers.
@@ -511,6 +513,39 @@ Four things worth having measured rather than reasoned:
   right for thirteen of fifteen types, and the one case it is wrong about
   under-reports by 34 points. Under-reporting produces a false *pass*, which
   is the harmless direction.
+
+### The keypad column, as far as it is verified
+
+A second pass, one reading per class per orientation. **The letters column is
+the control**: where it reproduces the number already in the table, the keypad
+reading beside it was taken under the same conditions and is trusted; where it
+does not, neither is.
+
+| Device | letters ⟂ | **keypad ⟂** | letters ↔ | **keypad ↔** |
+| --- | --- | --- | --- | --- |
+| `iphone-se` | 260 ✓ | **216** | 200 ✓ | **162** |
+| `iphone-13` | 335 ✓ | **308** | 248 ✗ | *165, unverified* |
+| `iphone-12-pro-max` | 345 ✓ | **318** | 248 ✗ | *165, unverified* |
+| `iphone-16` | 336 ✓ | **291** | 219 ✓ | **181** |
+| `iphone-16-pro-max` | 346 ✓ | **301** | 219 ✓ | **181** |
+
+**What the control caught.** On two freshly created simulators the landscape
+letters height came back as 209 against the table's 248. The same simulator
+under the *orientation* probe reads 248, so the device was not the variable —
+the reading was. Raised from nothing, an iOS keyboard arrives and grows its
+predictive bar a beat later, and a settle rule that stopped at the first
+plateau caught it before the bar. The orientation probe never sees this
+because it morphs a keyboard that is already open.
+
+Without that column there would now be two wrong numbers in the table and
+nothing to say so. It is the reason a measurement pass should always re-measure
+something it already knows.
+
+The two unverified cells stay **unset** rather than guessed, and unset means
+*no shrink*: those devices keep their letters height for a keypad until
+somebody measures them. A keyboard that is too tall is the failure mode this
+whole section is about, so leaving two cells conservative is a smaller lie
+than filling them from a round whose control failed.
 
 So the pass that was described as "another measured number per device" is
 smaller than that: **one extra number per iOS phone**, reaching three input
