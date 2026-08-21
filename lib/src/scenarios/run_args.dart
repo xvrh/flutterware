@@ -22,9 +22,11 @@ class ScenarioRunArgs {
     this.captureScale,
     this.captureRaw = false,
     this.captureNative = false,
+    this.capturePixels = true,
     this.record,
     this.clockOrigin,
     this.assignment,
+    this.expandTranslations,
   });
 
   /// The assignment a `flutter_test_config.dart` set, as the binding's test
@@ -80,6 +82,7 @@ class ScenarioRunArgs {
       captureScale: captureScale,
       captureRaw: captureRaw,
       captureNative: captureNative,
+      capturePixels: capturePixels,
       record: record,
       clockOrigin: clockOrigin,
       // The scenario reads its axes off the assignment, so the device the
@@ -91,6 +94,7 @@ class ScenarioRunArgs {
         orientation: orientation,
         language: assignment?.language,
       ),
+      expandTranslations: expandTranslations,
     );
   }
 
@@ -177,6 +181,20 @@ class ScenarioRunArgs {
   /// no assignment at all was measured on a consumer suite as scenarios
   /// silently passing in English.
   final ScenarioAssignment? assignment;
+
+  /// Capture pixels at all. False for a probe pass — a translation budget run
+  /// reads its answers off the walk (`didExceedMaxLines`, the keys artifact)
+  /// and rasterizing frames nobody looks at is most of a capture's cost. The
+  /// step still emits: tree, keys and texts are written as ever, only the
+  /// image is skipped.
+  final bool capturePixels;
+
+  /// Pad every translation read — the max-length probe. The number is a rung
+  /// in `[1, 100]`: `percent` of each value's own ceiling, which is larger
+  /// the shorter the value is (`TranslationIndex.expansionLength`). Applied
+  /// through `TranslationIndex.expandPercent` for the request; null for every
+  /// ordinary run. Design: `2026-08-19-translation-max-lengths-design.md`.
+  final int? expandTranslations;
 }
 
 /// The accessibility features a run can turn on — the platform switches a

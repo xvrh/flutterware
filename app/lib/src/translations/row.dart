@@ -17,6 +17,7 @@ class TranslationRow {
     this.values = const {},
     this.shot,
     this.occurrences = const [],
+    this.maxLength,
   });
 
   final String catalog;
@@ -34,6 +35,24 @@ class TranslationRow {
   final ExportedShot? shot;
 
   final List<ExportedShot> occurrences;
+
+  /// What the last export's max-length probe proved, or null — no probe ran,
+  /// or this key was never on a screen that could clip it.
+  final ExportedMaxLength? maxLength;
+
+  /// A real limit was found: a longer string was rendered and clipped.
+  bool get fragile => maxLength?.bounded ?? false;
+
+  /// Locales whose text is already longer than the proven limit — the finding
+  /// only the measurement can produce, and the row's loudest state.
+  List<String> overLimit(Iterable<String> locales) {
+    var limit = maxLength;
+    if (limit == null || !limit.bounded) return const [];
+    return [
+      for (var locale in locales)
+        if ((values[locale] ?? '').length > limit.chars) locale,
+    ];
+  }
 
   String get id => '$catalog/$key';
 

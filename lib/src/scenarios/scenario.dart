@@ -11,6 +11,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../drive/resolve.dart';
+import '../translations/index.dart';
 import 'aim.dart';
 import 'asset_bundle.dart';
 import 'async_watchdog.dart';
@@ -196,6 +197,7 @@ Future<void> _runScenario(
   // named, the same as it would under `flutter test` with `FW_LANGUAGES`.
   assignment = scenarioRunArgs?.assignment ?? assignment;
   var restore = _applyRunArgs(tester, assignment);
+  var restoreErrors = _installExpansionOverflowFilter();
   // Whatever the scenario before this one left memoized on `rootBundle`
   // belongs to *its* FakeAsync zone. A read still in flight when that scenario
   // ended can never complete again — nothing will ever flush that zone — and
@@ -289,7 +291,38 @@ Future<void> _runScenario(
     // the end of the body, before tearDowns run.
     state.disposeSemantics();
     restore?.call();
+    restoreErrors?.call();
   }
+}
+
+/// Layout overflow errors swallowed since the last capture, drained per step
+/// into [ScenarioStepCapture.overflowErrors]. Only ever counts under the
+/// expansion filter below, so it stays zero on every ordinary run.
+int _overflowsSinceLastCapture = 0;
+
+/// Under a budget probe, an overflow is the *measurement*, not a failure.
+///
+/// Every value on screen was just deliberately expanded, so a `RenderFlex`
+/// running out of room is data the pass exists to collect — and left to the
+/// binding it fails the scenario, which would make every fragile screen
+/// unmeasurable past its first break. Installed inside the test body, over the
+/// binding's own handler, and restored before the body ends; anything that is
+/// not an overflow report still goes where it always went.
+///
+/// Design: `2026-08-19-translation-max-lengths-design.md`.
+VoidCallback? _installExpansionOverflowFilter() {
+  if (TranslationIndex.expandPercent == null) return null;
+  var prior = FlutterError.onError;
+  FlutterError.onError = (details) {
+    // The one stable word in every "RenderFlex overflowed by … pixels"
+    // report, and in its cousins (constrained boxes overflow the same way).
+    if (details.exception.toString().contains('overflowed')) {
+      _overflowsSinceLastCapture++;
+      return;
+    }
+    prior?.call(details);
+  };
+  return () => FlutterError.onError = prior;
 }
 
 /// A failure raised inside a `split` branch, wrapping the real error with the
@@ -1510,6 +1543,8 @@ class ScenarioTester {
     // platform messages (and the spy records them), and those belong to the
     // *next* transition, not to the one being closed.
     var (events, dropped) = appEventBuffer?.drain() ?? (const <AppEvent>[], 0);
+    var overflowErrors = _overflowsSinceLastCapture;
+    _overflowsSinceLastCapture = 0;
     await tester.runAsync(() async {
       var view = tester.binding.renderViews.single;
       var layer = view.debugLayer! as OffsetLayer;
@@ -1525,21 +1560,37 @@ class ScenarioTester {
       // fidelity is worth the wait.
       var dpr = view.flutterView.devicePixelRatio;
       var scale = scenarioCaptureScale(scenarioRunArgs, dpr);
-      var image = await layer.toImage(
-        Offset.zero & (view.size * dpr),
-        pixelRatio: scale / dpr,
-      );
       // Raw when the host asked for it: PNG *encoding* is ~80% of a 1×
       // capture's cost (56ms/step vs 11.5ms raw) and ~96% at 3× — the
       // rasterization itself is nearly free. Standalone runs always get PNG,
       // which everything can open.
       var raw = listener != null && (scenarioRunArgs?.captureRaw ?? false);
-      var data = (await image.toByteData(
-        format: raw ? ui.ImageByteFormat.rawRgba : ui.ImageByteFormat.png,
-      ))!;
-      var (width, height) = (image.width, image.height);
-      image.dispose();
-      var bytes = data.buffer.asUint8List();
+      Uint8List bytes;
+      String format;
+      int width;
+      int height;
+      if (listener != null && !(scenarioRunArgs?.capturePixels ?? true)) {
+        // A budget probe reads the walk, not the pixels — skipping the
+        // rasterization and the encode is what makes a probe pass cheaper
+        // than the capture pass it rides beside. The dimensions are still
+        // reported, because the survey computes screen share from them.
+        bytes = Uint8List(0);
+        format = 'none';
+        width = (view.size.width * scale).round();
+        height = (view.size.height * scale).round();
+      } else {
+        var image = await layer.toImage(
+          Offset.zero & (view.size * dpr),
+          pixelRatio: scale / dpr,
+        );
+        var data = (await image.toByteData(
+          format: raw ? ui.ImageByteFormat.rawRgba : ui.ImageByteFormat.png,
+        ))!;
+        (width, height) = (image.width, image.height);
+        image.dispose();
+        bytes = data.buffer.asUint8List();
+        format = raw ? 'raw' : 'png';
+      }
       // Drained in the same `runAsync` as the shot: this is where the
       // rasterization `toImageSync` deferred is finally paid, and paying it
       // once for the whole transition is the difference between a recording
@@ -1562,7 +1613,7 @@ class ScenarioTester {
         name: shot?.name,
         tags: shot?.tags ?? const [],
         bytes: bytes,
-        format: raw ? 'raw' : 'png',
+        format: format,
         width: width,
         height: height,
         texts: visibleTexts(),
@@ -1584,6 +1635,7 @@ class ScenarioTester {
         landed: landed,
         strayFrames: stray,
         failure: failure,
+        overflowErrors: overflowErrors,
         frames: _frames,
       );
     });
@@ -1635,6 +1687,7 @@ class _PendingEmit {
     required this.strayFrames,
     required this.failure,
     required this.frames,
+    this.overflowErrors = 0,
     this.aim,
     this.kind = ScenarioCaptureKind.screen,
     this.bytes,
@@ -1701,6 +1754,10 @@ class _PendingEmit {
   final int strayFrames;
   final String? failure;
 
+  /// See [ScenarioStepCapture.overflowErrors] — carried on the edge into this
+  /// step, like [events].
+  final int overflowErrors;
+
   ScenarioStepCapture toCapture() => ScenarioStepCapture(
     index: index,
     parent: parent,
@@ -1732,5 +1789,6 @@ class _PendingEmit {
     landed: landed,
     strayFrames: strayFrames,
     failure: failure,
+    overflowErrors: overflowErrors,
   );
 }

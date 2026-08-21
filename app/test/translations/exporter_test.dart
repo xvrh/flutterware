@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/translations.dart';
+import 'package:flutterware_app/src/translations/max_length.dart';
 import 'package:flutterware_app/src/translations/exporter.dart';
 import 'package:flutterware_app/src/translations/survey.dart';
 import 'package:path/path.dart' as p;
@@ -26,6 +27,7 @@ KeySighting sighting({
   String step = 'Home',
   int stepIndex = 1,
   String? locale = 'en',
+  String? device,
   String? rect = '10,20 100×40',
   bool overflowed = false,
   bool offstage = false,
@@ -39,6 +41,7 @@ KeySighting sighting({
   stepIndex: stepIndex,
   image: image ?? frame('$step-$stepIndex.png'),
   locale: locale,
+  device: device,
   rect: rect,
   area: area,
   charStart: 0,
@@ -67,10 +70,16 @@ TranslationSurvey survey({
   read: read,
 );
 
-WrittenExport write(TranslationSurvey it, {double captureScale = 1}) =>
-    TranslationExporter(
-      worktreeRoot: worktree.path,
-    ).write(survey: it, output: output.path, captureScale: captureScale);
+WrittenExport write(
+  TranslationSurvey it, {
+  double captureScale = 1,
+  TranslationMaxLengths? maxLengths,
+}) => TranslationExporter(worktreeRoot: worktree.path).write(
+  survey: it,
+  output: output.path,
+  captureScale: captureScale,
+  maxLengths: maxLengths,
+);
 
 void main() {
   setUp(() {
@@ -218,6 +227,63 @@ void main() {
       // `git diff` of two exports say what actually moved, and what lets a
       // push script upload only the difference.
       expect(second, first);
+    });
+
+    test('a max length rides its key, its shots filed apart', () {
+      // The probe's shots come from probe-device runs whose scenario and
+      // step names collide with the main baseline's — a shared `shots/` path
+      // would overwrite one with the other.
+      var screen = sighting(
+        image: frame('probe-baseline.png'),
+        device: 'pixel-4a',
+      );
+      var clipped = sighting(image: frame('probe-clip.png'), overflowed: true);
+      var written = write(
+        survey(sightings: [sighting()]),
+        maxLengths: TranslationMaxLengths(
+          devices: const ['pixel-4a'],
+          byKey: {
+            'app/save': KeyMaxLength(
+              chars: 29,
+              fitsText: 'Save padded to twenty-nine ch',
+              clipsChars: 34,
+              clipsText: 'Save padded to thirty-four chars.',
+              screen: screen,
+              clipped: clipped,
+            ),
+          },
+          breaks: const [
+            MaxLengthBreak(
+              scenario: 'home_test.dart/Home',
+              level: 35,
+              step: 'Home',
+              stepIndex: 1,
+              overflows: 2,
+            ),
+          ],
+        ),
+      );
+
+      var export = written.export;
+      expect(export.measuredMaxLengths, isTrue);
+      expect(export.maxLengthDevices, ['pixel-4a']);
+      var limit = export['app/save']?.maxLength;
+      expect(limit?.chars, 29);
+      expect(limit?.clipsChars, 34);
+      expect(limit?.screen?.image, startsWith('shots/max-length/'));
+      expect(limit?.clipped?.image, startsWith('shots/max-length/clipped/'));
+      expect(limit?.measuredOn, 'pixel-4a');
+      expect(export.findings.expansionBreaks.single.overflows, 2);
+    });
+
+    test('no probe leaves the format without a max length anywhere', () {
+      var written = write(survey(sightings: [sighting()]));
+
+      var json =
+          jsonDecode(File(written.keysJson).readAsStringSync())
+              as Map<String, Object?>;
+      expect(json.containsKey('maxLengths'), isFalse);
+      expect('${json['keys']}'.contains('maxLength'), isFalse);
     });
 
     test('is emptied first, so a deleted key takes its frames with it', () {

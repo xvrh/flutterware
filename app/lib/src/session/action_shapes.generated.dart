@@ -6773,6 +6773,30 @@ final resultShapes = <String, ResultShape>{
         'type': 'int',
         'doc': 'Scenarios that came back red.',
       },
+      <String, Object?>{
+        'name': 'maxLengths',
+        'type': 'int',
+        'doc': 'Keys whose max length was measured.',
+      },
+      <String, Object?>{
+        'name': 'maxLengthLimits',
+        'type': 'int',
+        'doc':
+            'Of those, keys with a *real* limit — a longer string was rendered and clipped.',
+      },
+      <String, Object?>{
+        'name': 'maxLengthDevices',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The devices the measurement ran on — what every `maxLength` claim is true for.',
+      },
+      <String, Object?>{
+        'name': 'expansionBreaks',
+        'type': 'int',
+        'doc':
+            'Screens that broke under expansion — a layout overflow, or a scenario red at some growth level.',
+      },
       <String, Object?>{'name': 'durationMs', 'type': 'int'},
       <String, Object?>{
         'name': 'open',

@@ -220,6 +220,16 @@ class ScenarioRunner {
     double? recordScale,
     int recordMaxFrames = 90,
     DateTime? clock,
+
+    /// Skip pixels entirely — a probe pass reads the walk, not the frames.
+    bool capturePixels = true,
+
+    /// Pad every translation read by this percentage: the max-length probe.
+    int? expandTranslations,
+
+    /// When no device is named, frame each file on the *narrowest* device its
+    /// folder profile declares instead of the first — the probe's geometry.
+    bool narrowestDevice = false,
   }) => _host.exclusive(() async {
     var wasWarm = _host.isWarm;
     await _host.ensureGuest();
@@ -239,6 +249,9 @@ class ScenarioRunner {
         if (captureScale != null) 'captureScale': '$captureScale',
         if (captureRaw) 'captureRaw': 'true',
         if (captureNative) 'captureNative': 'true',
+        if (!capturePixels) 'capturePixels': 'false',
+        if (expandTranslations != null) 'expand': '$expandTranslations',
+        if (narrowestDevice) 'deviceChoice': 'narrowest',
         // Present only when recording: the interval is what turns motion
         // capture on, so its absence is the off switch and no run that did
         // not ask pays for one.

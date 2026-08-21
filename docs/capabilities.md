@@ -1316,7 +1316,7 @@ packages: List<ScenarioListPackage>
 Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured **at** the failure, whatever the capture policy. The answer summarises the steps (see `steps=`); `run.json` in the output directory always carries every one.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--orientation=…] [--language=…] [--devices=…] [--languages=…] [--orientations=…] [--matrix=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--orientation=…] [--language=…] [--devices=…] [--languages=…] [--orientations=…] [--matrix=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…] [--expand=…] [--device-choice=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -1418,7 +1418,9 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `invert-colors` | choice | no | — | The invert-colors accessibility switch |
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. Omitted means the package's configured captureScale (tool/flutterware.dart), or 1. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
 | `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at — `2026-01-01T09:00:00Z`. A scenario clock already advances deterministically under FakeAsync, but it starts at the wall time of the run, so any screen showing a date differs run to run. Pinning it is what makes two runs comparable. Reaches code that reads `package:clock`; a direct `DateTime.now()` cannot be intercepted by anything. |
-| `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips PNG encoding, which is ~80% of a capture's cost; for pipelines that consume pixels directly. |
+| `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips PNG encoding, which is ~80% of a capture's cost; for pipelines that consume pixels directly. `none` skips pixels entirely — trees, keys and texts are still written; for probe passes that read the walk rather than the frames. |
+| `expand` | string | no | — | Pad every translation read — the max-length probe. The number is a rung in [1, 100]: that percentage of each value's own ceiling, which is larger the shorter the value is (a 6-character label is probed up to +300%, a sentence up to +100%). Which sightings clip says which keys have no room. Identity still resolves and targeting still lands: a scenario written against the catalog reads the padded value too. Usually paired with `format: none`. |
+| `device-choice` | choice | no | — | How a file with no named device picks from its folder profile. `narrowest` takes the tightest declared screen instead of the first — what a max-length probe measures on. Ignored when `device` names one. |
 
 #### `read` — Read a captured step
 
@@ -2334,7 +2336,7 @@ Takes no parameters.
 Runs the scenarios across every locale the catalogs have, and writes a directory a translator can read: the screenshots, a `keys.json` of key to where it was seen, and a page that draws the box. Nothing is cropped and nothing is drawn into the pixels — the rectangle rides in the JSON, so the same file serves this page and a translation service. Read it back typed with `package:flutterware/translations.dart`.
 
 ```sh
-fw run translations export [--package=…] [--output=…] [--languages=…] [--device=…] [--file=…] [--capture-scale=…]
+fw run translations export [--package=…] [--output=…] [--languages=…] [--device=…] [--file=…] [--capture-scale=…] [--max-lengths=…] [--max-length-device=…]
 ```
 
 Returns `TranslationExportResult`:
@@ -2357,6 +2359,10 @@ absentFromCatalog: int   # Keys the app read that no declared catalog defines.
 overflowing: int   # Sightings where the words did not fit.
 unkeyed: int   # Distinct strings on screen that belonged to no catalog.
 scenariosFailed: int   # Scenarios that came back red.
+maxLengths: int   # Keys whose max length was measured.
+maxLengthLimits: int   # Of those, keys with a *real* limit — a longer string was rendered and clipped.
+maxLengthDevices: String?   # The devices the measurement ran on — what every `maxLength` claim is true for.
+expansionBreaks: int   # Screens that broke under expansion — a layout overflow, or a scenario red at some growth level.
 durationMs: int
 open: String   # How to look at it.
 ok: bool
@@ -2372,6 +2378,8 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `device` | string | no | — | What the screens are captured on — `iphone-16`. One device, because a translator wants one picture per key and a second device only doubles the candidates. |
 | `file` | string | no | — | Narrow to one scenario file, package-relative. The export is only as complete as what it runs. |
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. Defaults to 2 — these are read on a retina screen and zoomed into, which is the one place the bytes are worth it. |
+| `max-lengths` | string | no | — | `true` to measure how long each string can get: the suite is re-run with every value progressively padded, and each key gains `maxLength` — the longest string *proven* to fit its tightest box, in characters, with the tested strings and the clip photographed as evidence. Measured on the source language, so it holds for every locale at once. Off when omitted — the export costs what it always cost. |
+| `max-length-device` | string | no | — | The geometry the measurement is true for — `pixel-4a`. Separate from `device`, which only chooses what the translator's screenshots look like. Defaults to the narrowest device each scenario folder declares: the tightest screen the project itself claims to run on. |
 
 
 ### `flutterware.lints`

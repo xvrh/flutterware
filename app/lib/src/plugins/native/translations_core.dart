@@ -5,6 +5,7 @@ import 'package:flutterware/plugins.dart';
 import 'package:flutterware/translations.dart';
 import 'package:path/path.dart' as p;
 
+import '../../translations/max_length.dart';
 import '../../translations/exporter.dart';
 import '../../translations/loader.dart';
 import '../../translations/row.dart';
@@ -209,6 +210,7 @@ class TranslationsCore extends PluginCore {
             },
             shot: exported?.representative,
             occurrences: exported?.occurrences ?? const [],
+            maxLength: exported?.maxLength,
           ),
         );
       }
@@ -220,6 +222,36 @@ class TranslationsCore extends PluginCore {
   /// and what stays pinned beside whatever it switches to.
   String templateFor(String path) =>
       _cache[path]?.values.firstOrNull?.template ?? 'en';
+
+  /// Whether the last export measured max lengths — what gates the fragile
+  /// filter and the column: an unprobed table must not offer a filter whose
+  /// emptiness reads as room.
+  bool measuredMaxLengthsFor(String path) =>
+      _exports[path]?.export.measuredMaxLengths ?? false;
+
+  /// Whether the panel's Export button measures max lengths for [path].
+  ///
+  /// Until the user says otherwise it follows the export on disk, so the
+  /// button reproduces what the panel is showing: a table with a Max length
+  /// column must not have its own control silently wipe that column. The
+  /// override is not persisted — the next session reads the answer off the
+  /// export again, which remembers the same thing.
+  bool measureOnExport(String path) =>
+      _measureOnExport[path] ?? measuredMaxLengthsFor(path);
+
+  void setMeasureOnExport(String path, bool value) {
+    if (measureOnExport(path) == value) return;
+    _measureOnExport[path] = value;
+    notifyChanged();
+  }
+
+  final _measureOnExport = <String, bool>{};
+
+  /// What a running export is doing right now — "measuring max lengths —
+  /// +40%…" — for the strip that replaced its button with a spinner. A
+  /// measuring export is minutes, not seconds, and a silent spinner that long
+  /// reads as a hang.
+  String? busyFor(String path) => _busy[path];
 
   @override
   PluginReport get report => PluginReport(
@@ -415,9 +447,43 @@ class TranslationsCore extends PluginCore {
               'these are read on a retina screen and zoomed into, which is '
               'the one place the bytes are worth it.',
         ),
+        const ActionParameter(
+          'max-lengths',
+          'Max lengths',
+          kind: ActionParameterKind.string,
+          required: false,
+          description:
+              '`true` to measure how long each string can get: the suite is '
+              're-run with every value progressively padded, and each key '
+              'gains `maxLength` — the longest string *proven* to fit its '
+              'tightest box, in characters, with the tested strings and the '
+              'clip photographed as evidence. Measured on the source '
+              'language, so it holds for every locale at once. Off when '
+              'omitted — the export costs what it always cost.',
+        ),
+        const ActionParameter(
+          'max-length-device',
+          'Max-length device',
+          kind: ActionParameterKind.string,
+          required: false,
+          description:
+              'The geometry the measurement is true for — `pixel-4a`. '
+              'Separate from `device`, which only chooses what the '
+              "translator's screenshots look like. Defaults to the narrowest "
+              'device each scenario folder declares: the tightest screen the '
+              'project itself claims to run on.',
+        ),
       ],
     ),
   ];
+
+  /// The internal ladder — ten even rungs of each value's own ceiling, which
+  /// `TranslationIndex.expansionLength` sets higher the shorter the value is
+  /// (+300% at ≤10 characters down to +100% for a sentence). Not API: the
+  /// deliverable is characters, and the rung width (~a tenth of the ceiling)
+  /// is the measurement's resolution, visible in the evidence rather than
+  /// hidden in rounding.
+  static const _ladder = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
   @override
   Future<Object?> invoke(
@@ -489,6 +555,31 @@ class TranslationsCore extends PluginCore {
     }
     captureScale ??= 2;
 
+    var measureMaxLengths = switch (arguments['max-lengths']) {
+      null || false || 'false' => false,
+      true || 'true' || '' => true,
+      var other => throw ArgumentError.value(
+        other,
+        'max-lengths',
+        '`true` to measure',
+      ),
+    };
+    var maxLengthDevice = arguments['max-length-device'];
+    if (maxLengthDevice != null &&
+        (maxLengthDevice is! String || !isDeviceId(maxLengthDevice))) {
+      throw ArgumentError.value(
+        maxLengthDevice,
+        'max-length-device',
+        'no such device. Accepted: ${deviceIds.join(', ')}',
+      );
+    }
+    if (maxLengthDevice != null && !measureMaxLengths) {
+      throw ArgumentError(
+        '`max-length-device` frames the max-length probe — '
+        'pass `max-lengths: true` with it.',
+      );
+    }
+
     var packageRoot = host.workspace.packageFor(path).directory.path;
     var output = switch (arguments['output']) {
       String value when value.trim().isNotEmpty =>
@@ -496,45 +587,149 @@ class TranslationsCore extends PluginCore {
       _ => TranslationExporter.defaultOutputIn(packageRoot),
     };
 
+    var worktreeRoot = host.worktree.path;
+    Future<String?> readArtifact(String artifact) async {
+      var file = File(p.join(worktreeRoot, artifact));
+      return file.existsSync() ? file.readAsString() : null;
+    }
+
     _setBusy(path, 'running ${languages.length} locales…');
     ScenarioRunResult run;
+    ProbeBaseline? probeBaseline;
+    var probePasses = <ProbePass>[];
+    var evidencePasses = <({int level, TranslationSurvey survey})>[];
     var scenarios = _scenariosFor(path);
     try {
-      run =
-          (await scenarios.invoke(
-                'run',
-                arguments: {
-                  'package': path,
-                  'languages': languages.join(','),
-                  'device': ?arguments['device'],
-                  'file': ?arguments['file'],
-                  'capture-scale': captureScale,
-                  // The whole point: every step, so every screen a key was
-                  // seen on is in the result rather than only the failures.
-                  'steps': 'all',
-                },
-              ))!
+      // `!`: the `??= 2` above settled it, but a closure capture defeats
+      // the promotion.
+      Future<TranslationSurvey> surveyOf(ScenarioRunResult it) => buildSurvey(
+        run: it,
+        catalogs: catalogs,
+        readArtifact: readArtifact,
+        captureScale: captureScale!,
+      );
+      Future<ScenarioRunResult> invoke(Map<String, Object?> arguments) async =>
+          (await scenarios.invoke('run', arguments: arguments))!
               as ScenarioRunResult;
+
+      run = await invoke({
+        'package': path,
+        'languages': languages.join(','),
+        'device': ?arguments['device'],
+        'file': ?arguments['file'],
+        'capture-scale': captureScale,
+        // The whole point: every step, so every screen a key was seen on is
+        // in the result rather than only the failures.
+        'steps': 'all',
+      });
+
+      if (measureMaxLengths) {
+        // The probe's geometry is its own axis, deliberately not
+        // `arguments['device']`: that one chooses what the translator's
+        // screenshots look like, and a max length measured on a roomy screen
+        // over-promises. Default is the narrowest device each folder
+        // declares — the tightest screen the project itself claims.
+        var probeArgs = {
+          'package': path,
+          'languages': templateFor(path),
+          'file': ?arguments['file'],
+          'capture-scale': captureScale,
+          'steps': 'all',
+          if (maxLengthDevice != null)
+            'device': maxLengthDevice
+          else
+            'device-choice': 'narrowest',
+        };
+        // Its own baseline, on its own device: the exclusion rule compares
+        // padded against unpadded *on the same geometry* — a string clean on
+        // the screenshot device may already ellipsize here, and pairing
+        // against the wrong baseline would misread that pre-existing clip as
+        // a flip at the first rung. Captured, because it also supplies the
+        // `screen` evidence shots.
+        _setBusy(path, 'measuring max lengths — baseline…');
+        probeBaseline = ProbeBaseline(await surveyOf(await invoke(probeArgs)));
+
+        var remaining = probeBaseline.measurableIds;
+        var firstClipLevels = <int>{};
+        for (var level in _ladder) {
+          // Every measurable key has clipped: the rest of the ladder can
+          // only re-prove it.
+          if (remaining.isEmpty) break;
+          _setBusy(path, 'measuring max lengths — +$level%…');
+          var result = await invoke({
+            ...probeArgs,
+            'format': 'none',
+            'expand': level,
+          });
+          var survey = await surveyOf(result);
+          probePasses.add(
+            ProbePass(
+              level: level,
+              survey: survey,
+              failures: [
+                for (var package in result.packages)
+                  for (var outcome in package.scenarios)
+                    if (!outcome.ok)
+                      (
+                        scenario: '${outcome.file}/${outcome.name}',
+                        failure: outcome.errors.firstOrNull?.error ?? 'failed',
+                      ),
+              ],
+            ),
+          );
+          var hit = {
+            for (var cell in probeBaseline.flippedCells(survey).values) cell.id,
+          };
+          if (hit.intersection(remaining).isNotEmpty) {
+            firstClipLevels.add(level);
+          }
+          remaining.removeAll(hit);
+        }
+        // The clip, photographed: one captured pass per level at which keys
+        // first clipped, so every real limit gets a picture of the padded
+        // string actually ellipsizing in place.
+        for (var level in firstClipLevels.toList()..sort()) {
+          _setBusy(path, 'measuring max lengths — photographing +$level%…');
+          evidencePasses.add((
+            level: level,
+            survey: await surveyOf(
+              await invoke({...probeArgs, 'expand': level}),
+            ),
+          ));
+        }
+      }
     } finally {
       _setBusy(path, 'building the export…');
       scenarios.dispose();
     }
 
     try {
-      var worktreeRoot = host.worktree.path;
       var survey = await buildSurvey(
         run: run,
         catalogs: catalogs,
-        readArtifact: (artifact) async {
-          var file = File(p.join(worktreeRoot, artifact));
-          return file.existsSync() ? file.readAsString() : null;
-        },
+        readArtifact: readArtifact,
         captureScale: captureScale,
       );
 
-      var written = TranslationExporter(
-        worktreeRoot: worktreeRoot,
-      ).write(survey: survey, output: output, captureScale: captureScale);
+      TranslationMaxLengths? maxLengths;
+      if (probeBaseline != null) {
+        maxLengths = computeMaxLengths(
+          baseline: probeBaseline,
+          passes: probePasses,
+          values: (catalog, key) {
+            var loaded = catalogs[catalog];
+            return loaded?.valueOf(loaded.template, key);
+          },
+          evidence: evidencePasses,
+        );
+      }
+
+      var written = TranslationExporter(worktreeRoot: worktreeRoot).write(
+        survey: survey,
+        output: output,
+        captureScale: captureScale,
+        maxLengths: maxLengths,
+      );
 
       var occurrences = 0;
       for (var key in written.export.keys) {
@@ -565,6 +760,12 @@ class TranslationsCore extends PluginCore {
         overflowing: written.export.findings.overflowing.length,
         unkeyed: written.export.findings.unkeyed.length,
         scenariosFailed: failed,
+        maxLengths: maxLengths?.byKey.length ?? 0,
+        maxLengthLimits: maxLengths?.bounded ?? 0,
+        maxLengthDevices: maxLengths == null || maxLengths.devices.isEmpty
+            ? null
+            : maxLengths.devices.join(','),
+        expansionBreaks: written.export.findings.expansionBreaks.length,
         durationMs: stopwatch.elapsedMilliseconds,
         open: 'open ${_relative(written.indexHtml)}',
       );
