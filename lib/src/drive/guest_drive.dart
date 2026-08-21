@@ -174,6 +174,25 @@ class GuestDrive {
         return drive.tap(_target(params), settle: settle);
       case 'longPress':
         return drive.longPress(_target(params), settle: settle);
+      case 'doubleTap':
+        return drive.doubleTap(
+          _target(params),
+          gap: _durationOf(params, 'gapMs'),
+          settle: settle,
+        );
+      case 'secondaryTap':
+        return drive.secondaryTap(_target(params), settle: settle);
+      case 'hover':
+        return drive.hover(
+          _target(params),
+          hold: _durationOf(params, 'holdMs'),
+          settle: settle,
+        );
+      case 'unhover':
+        return drive.unhover(
+          hold: _durationOf(params, 'holdMs'),
+          settle: settle,
+        );
       case 'drag':
         return drive.drag(
           _target(params),
@@ -183,6 +202,17 @@ class GuestDrive {
           ),
           settle: settle,
         );
+      case 'scroll':
+        return drive.scroll(
+          _target(params),
+          Offset(
+            double.parse(params['dx'] ?? '0'),
+            double.parse(params['dy'] ?? '0'),
+          ),
+          settle: settle,
+        );
+      case 'key':
+        return drive.key(params['keys'] ?? '', settle: settle);
       case 'scrollTo':
         return drive.scrollTo(
           _target(params),
@@ -229,8 +259,9 @@ class GuestDrive {
         );
       default:
         throw ArgumentError(
-          'unknown verb ${params['verb']} — one of tap, longPress, drag, '
-          'scrollTo, enterText, back, wait, observe, navigate',
+          'unknown verb ${params['verb']} — one of tap, doubleTap, '
+          'longPress, secondaryTap, hover, unhover, drag, scroll, scrollTo, '
+          'enterText, key, back, wait, observe, navigate',
         );
     }
   }
