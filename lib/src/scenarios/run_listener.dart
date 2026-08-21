@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../inspect/node.dart';
+import 'aim.dart';
 import 'events.dart';
 import 'motion.dart';
 import 'notification.dart';
@@ -35,6 +36,7 @@ class ScenarioStepCapture {
     this.notification,
     this.verb,
     this.target,
+    this.aim,
     this.events = const [],
     this.eventsDropped = 0,
     this.motion = ScenarioMotionFrames.empty,
@@ -120,6 +122,10 @@ class ScenarioStepCapture {
   /// the flow from an arrow into a sentence.
   final String? verb;
   final String? target;
+
+  /// Where the verb's finger went, for the pointer verbs that have one — see
+  /// [ScenarioAim].
+  final ScenarioAim? aim;
 
   /// How [target] was named — a key, visible text, a type. What a comparison
   /// reads to know how far it can trust the label: an author's key is theirs

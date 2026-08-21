@@ -27,11 +27,17 @@ class ScenarioStepLinks extends StatefulWidget {
     required this.steps,
     required this.step,
     required this.onOpenStep,
+    this.onPreview,
   });
 
   final List<ScenarioRunStep> steps;
   final ScenarioRunStep step;
   final void Function(ScenarioRunStep) onOpenStep;
+
+  /// Called with the step the pointer is over, and null when it leaves — so
+  /// the surface underneath can show what pressing that link would do. Only
+  /// for a next: a back link goes where the reader has already been.
+  final ValueChanged<ScenarioRunStep?>? onPreview;
 
   @override
   State<ScenarioStepLinks> createState() => _ScenarioStepLinksState();
@@ -113,6 +119,7 @@ class _ScenarioStepLinksState extends State<ScenarioStepLinks> {
                     // steps are as likely as not to be named the same thing.
                     showBranch: nexts.length > 1,
                     onTap: () => widget.onOpenStep(next),
+                    onPreview: widget.onPreview,
                   ),
                 ],
               ],
@@ -157,6 +164,7 @@ class _StepLink extends StatelessWidget {
     required this.isNext,
     required this.onTap,
     this.showBranch = false,
+    this.onPreview,
   });
 
   final ScenarioRunStep step;
@@ -166,6 +174,9 @@ class _StepLink extends StatelessWidget {
   /// Whether to lead with the `split` branch this step opens — only worth the
   /// room when there is another branch beside it to be told apart from.
   final bool showBranch;
+
+  /// See [ScenarioStepLinks.onPreview].
+  final ValueChanged<ScenarioRunStep?>? onPreview;
 
   @override
   Widget build(BuildContext context) {
@@ -184,6 +195,7 @@ class _StepLink extends StatelessWidget {
       onHover: isNext
           ? (over) {
               if (over) unawaited(precacheScenarioMotion(context, step));
+              onPreview?.call(over ? step : null);
             }
           : null,
       child: Container(

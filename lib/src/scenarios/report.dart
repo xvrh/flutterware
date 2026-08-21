@@ -22,9 +22,11 @@ library;
 import '../plugins/address.dart';
 import '../plugins/artifact.dart';
 import '../plugins/plugin_result.dart';
+import 'aim.dart';
 import 'drift.dart';
 // The drift types are part of this model's surface — `ScenarioRunPackage`
 // carries one — so whoever has the model has them.
+export 'aim.dart';
 export 'drift.dart';
 // The one thing near this model that needs a filesystem, behind the one seam
 // that lets the rest of it compile for the web. The exported scenario page
@@ -455,6 +457,7 @@ class ScenarioRunStep {
         navBrightness: json['navBrightness'] as String?,
         verb: json['verb'] as String?,
         target: json['target'] as String?,
+        aim: ScenarioAim.fromJson(json['aim']),
         events: json['events'] as String?,
         eventCount: json['eventCount'] as int?,
         eventChannels: switch (json['eventChannels']) {
@@ -510,6 +513,7 @@ class ScenarioRunStep {
     this.navBrightness,
     this.verb,
     this.target,
+    this.aim,
     this.events,
     this.eventCount,
     this.eventChannels,
@@ -633,6 +637,16 @@ class ScenarioRunStep {
   /// capture existed, and on a step captured at a failure.
   final String? verb;
   final String? target;
+
+  /// Where the verb's finger went — the box it resolved, in the view's own
+  /// logical pixels, measured on the frame it was about to act on. Null for a
+  /// verb with nothing to point at (`wait`, `screen`, `back`), for one whose
+  /// target had no box, and for every run written before this was recorded.
+  ///
+  /// Belongs to the step the verb *produced*, and describes the screen the
+  /// step *came from* — which is the first frame of this step's own recording,
+  /// banked before the verb acted. That is the picture to draw it on.
+  final ScenarioAim? aim;
 
   /// The verb and its target as one label — `tap "Pay"` — or null where
   /// nothing acted. What an unnamed step is labelled with, in place of its
@@ -846,6 +860,7 @@ class ScenarioRunStep {
     navBrightness: navBrightness,
     verb: verb,
     target: target,
+    aim: aim,
     events: switch (events) {
       var events? => path(events),
       null => null,
@@ -905,6 +920,7 @@ class ScenarioRunStep {
     if (navBrightness != null) 'navBrightness': navBrightness,
     if (verb != null) 'verb': verb,
     if (target != null) 'target': target,
+    if (aim != null) 'aim': aim!.toJson(),
     if (events != null) 'events': events,
     if (eventCount != null) 'eventCount': eventCount,
     if (eventChannels != null) 'eventChannels': eventChannels,

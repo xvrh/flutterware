@@ -19,6 +19,7 @@ import '../plugins/native/scenarios_results.dart';
 import '../ui/capture_button.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
+import 'aim_overlay.dart';
 import 'artifacts.dart';
 import 'events_view.dart';
 import 'framed_shot.dart';
@@ -104,6 +105,11 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   var _tab = 'elements';
   var _collapsed = false;
 
+  /// The step whose next-link the pointer is over — what the picture is
+  /// showing instead of this step's own still, and whose aim is drawn on it.
+  /// Null whenever the pointer is not on a next link, which is nearly always.
+  ScenarioRunStep? _preview;
+
   /// Playback over the transition that arrived at this step, or null when the
   /// run recorded none.
   ScenarioMotionController? _motion;
@@ -166,6 +172,13 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
       scenarioMotionResidency.forget(old.step);
       _loadMotion(play: _walkedForward);
     }
+    // A preview belongs to the page it was hovered on. `MouseRegion` does not
+    // reliably report an exit for a link that is replaced under a stationary
+    // pointer, and a preview that outlived its page would answer the question
+    // asked of the *last* screen — for a walk, that is this step's own aim
+    // drawn over the frame it was measured on, which is a picture of the
+    // transition undoing itself.
+    if (old.step.index != widget.step.index) _preview = null;
   }
 
   /// Whether this step is one the step the reader came *from* leads to — the
@@ -366,22 +379,86 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
         '${p.basenameWithoutExtension(path)}.png';
   }
 
-  /// The recorded frame to draw instead of the shot, or null when playback is
-  /// parked at the end — where the shot itself is the frame, and the page is
-  /// exactly what it was before any of this existed.
-  ImageProvider? get _frame {
+  /// What the screen shows, and what may be drawn over it.
+  ///
+  /// **One decision, not two.** The picture and the overlay have to agree
+  /// about which *instant* they are of: an aim measured on the frame before a
+  /// verb, drawn over a frame from the middle of the transition after it,
+  /// boxes a widget that is not there — and so does a tree, which is why the
+  /// inspect overlay has always been dropped while a recording plays.
+  ///
+  /// Playback comes first, for a reason that is not obvious: pressing next
+  /// puts a *new* next link under a pointer that never moved, so an arrival
+  /// fires a hover of its own — and a preview that won there would cover the
+  /// transition the same press had just started. A reader who moves onto a
+  /// link mid-transition waits out the rest of it instead, which is the
+  /// smaller price and reads better anyway: the transition is the answer to
+  /// the question they asked a moment ago.
+  ({ImageProvider? image, Widget? overlay}) get _picture {
     var motion = _motion;
-    if (motion == null || motion.index >= motion.frames.length - 1) return null;
-    return scenarioFrameImage(
-      ScenarioArtifactsScope.of(context),
-      widget.step,
-      motion.frames[motion.index],
-    );
+    if (motion != null &&
+        (motion.playing || motion.index < motion.frames.length - 1)) {
+      return (
+        image: scenarioFrameImage(
+          ScenarioArtifactsScope.of(context),
+          widget.step,
+          motion.frames[motion.index],
+        ),
+        overlay: null,
+      );
+    }
+    if (_preview?.aim case var aim?) {
+      return (
+        image: _previewFrame,
+        overlay: ScenarioAimOverlay(aim: aim, verb: _preview!.verb),
+      );
+    }
+    return (image: null, overlay: _inspectOverlay);
   }
+
+  /// The frame the previewed verb was about to act on.
+  ///
+  /// **The first frame of the step being previewed**, not this step's own
+  /// still: the harness banks a frame before every verb acts, so frame zero of
+  /// the transition *into* the next step is, by construction, the exact
+  /// instant its aim was measured on. This step's still is the same pixels in
+  /// the ordinary case and not in several others — an adopted name, a
+  /// `Shot.skip` between them, stray frames from raw `s.tester` — and a rect
+  /// drawn on the wrong instant boxes a widget that is not there.
+  ///
+  /// Null when the previewed step recorded no frames, where the still is the
+  /// best answer anyone has.
+  ImageProvider? get _previewFrame {
+    if (_preview?.framePaths.firstOrNull case var frame?) {
+      return scenarioFrameImage(
+        ScenarioArtifactsScope.of(context),
+        _preview!,
+        frame,
+      );
+    }
+    return null;
+  }
+
+  /// The tree's boxes and the picker, for the still — every rectangle in it
+  /// was measured on the frame the step settled at.
+  Widget get _inspectOverlay => _ScreenOverlay(
+    tree: _tree,
+    highlight: _highlight,
+    semanticsHighlight: _semanticsHighlight,
+    picking: _picking,
+    onPick: _select,
+    focusOrder: _focusOrder,
+    // Only while the Semantics tab is the one showing — its toggle is the
+    // only way to turn the numbers off, so they must not outlive it.
+    focusNodes: _tab == 'semantics'
+        ? _transcript?.utterances.map((u) => u.node).toList()
+        : null,
+  );
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    var picture = _picture;
 
     return LayoutBuilder(
       builder: (context, constraints) => Column(
@@ -447,30 +524,8 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
                         step: widget.step,
                         device: widget.device,
                         fallbackBrightness: widget.statusFallback,
-                        image: _frame,
-                        // Dropped while the transition is anywhere but its
-                        // last frame: every rectangle in the tree was measured
-                        // on the frame the step settled at, and drawn over a
-                        // frame from the middle of a page push it would box a
-                        // widget that is not there yet.
-                        screenOverlay: _frame != null
-                            ? null
-                            : _ScreenOverlay(
-                                tree: _tree,
-                                highlight: _highlight,
-                                semanticsHighlight: _semanticsHighlight,
-                                picking: _picking,
-                                onPick: _select,
-                                focusOrder: _focusOrder,
-                                // Only while the Semantics tab is the one
-                                // showing — its toggle is the only way to turn
-                                // the numbers off, so they must not outlive it.
-                                focusNodes: _tab == 'semantics'
-                                    ? _transcript?.utterances
-                                          .map((u) => u.node)
-                                          .toList()
-                                    : null,
-                              ),
+                        image: picture.image,
+                        screenOverlay: picture.overlay,
                       ),
                     ),
                   ),
@@ -480,6 +535,7 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
                     steps: widget.steps,
                     step: widget.step,
                     onOpenStep: widget.onOpenStep,
+                    onPreview: (step) => setState(() => _preview = step),
                   ),
                 ),
               ],

@@ -966,6 +966,7 @@ Future<Map<String, Object?>> _runOne(
       notification: notification,
       verb: capture.verb,
       target: capture.target,
+      aim: capture.aim,
       events: capture.events.isNotEmpty ? '$base.events.json' : null,
       eventCount: capture.events.isNotEmpty ? capture.events.length : null,
       eventChannels: capture.events.isNotEmpty ? counts : null,
@@ -1123,6 +1124,7 @@ Future<Map<String, Object?>> _runOne(
       // app did on the way.
       verb: capture.verb,
       target: capture.target,
+      aim: capture.aim,
       events: capture.events.isNotEmpty ? '$base.events.json' : null,
       eventCount: capture.events.isNotEmpty ? capture.events.length : null,
       eventChannels: capture.events.isNotEmpty ? counts : null,

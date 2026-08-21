@@ -1,9 +1,11 @@
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/scenarios/notification.dart';
+import 'package:flutterware_app/src/scenarios/aim_overlay.dart';
 import 'package:flutterware_app/src/scenarios/beat_view.dart';
 import 'package:flutterware_app/src/plugins/native/scenarios_results.dart';
 import 'package:flutterware_app/src/scenarios/artifacts.dart';
@@ -28,6 +30,8 @@ void main() {
     int? parent,
     String? branch,
     String? name,
+    String? verb,
+    ScenarioAim? aim,
     int frames = 4,
   }) => ScenarioRunStep(
     index: index,
@@ -42,6 +46,8 @@ void main() {
     height: 1,
     texts: const [],
     address: 'fw://wt/p/$index',
+    verb: verb,
+    aim: aim,
     frames: 'run/$index.frames',
     frameCount: frames,
     frameWidth: 1,
@@ -264,6 +270,115 @@ void main() {
     await tester.pumpWidget(_harness(steps: steps, step: after, from: 1));
     await tester.pump();
     expect(find.byIcon(Icons.pause), findsOneWidget);
+  });
+
+  testWidgets('hovering a next says where its finger goes', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var steps = [
+      step(1, name: 'Menu'),
+      step(
+        2,
+        parent: 1,
+        name: 'Cart',
+        verb: 'tap',
+        aim: const ScenarioAim(x: 20, y: 300, width: 120, height: 40),
+      ),
+    ];
+    await tester.pumpWidget(_harness(steps: steps, step: steps.first));
+    expect(find.byType(ScenarioAimOverlay), findsNothing);
+
+    var pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await pointer.addPointer(location: Offset.zero);
+    addTearDown(pointer.removePointer);
+    await tester.pump();
+
+    await pointer.moveTo(tester.getCenter(find.text('2 · Cart')));
+    await tester.pump();
+    expect(find.byType(ScenarioAimOverlay), findsOneWidget);
+
+    // Off the link, the picture goes back to being a picture.
+    await pointer.moveTo(const Offset(5, 5));
+    await tester.pump();
+    expect(find.byType(ScenarioAimOverlay), findsNothing);
+  });
+
+  testWidgets('a next with nothing to point at previews nothing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // `enterText`, `scrollTo`, a beat, a run older than the recording: all of
+    // them arrive here as a step with no aim, and the honest answer is to
+    // leave the still alone.
+    var steps = [step(1), step(2, parent: 1, name: 'Cart', verb: 'enterText')];
+    await tester.pumpWidget(_harness(steps: steps, step: steps.first));
+
+    var pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await pointer.addPointer(location: Offset.zero);
+    addTearDown(pointer.removePointer);
+    await tester.pump();
+    await pointer.moveTo(tester.getCenter(find.text('2 · Cart')));
+    await tester.pump();
+
+    expect(find.byType(ScenarioAimOverlay), findsNothing);
+  });
+
+  testWidgets('a walk that lands under a next link still plays', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Why the picture and the overlay are one decision: pressing next puts a
+    // *new* next link under a pointer that never moved, so the arrival fires a
+    // hover of its own, and a preview that won there would cover the
+    // transition the same press had just started.
+    var steps = [
+      step(1, name: 'Menu'),
+      step(2, parent: 1, name: 'Cart'),
+      step(
+        3,
+        parent: 2,
+        name: 'Paid',
+        verb: 'tap',
+        aim: const ScenarioAim(x: 20, y: 300, width: 120, height: 40),
+      ),
+    ];
+    await _warm(tester, [steps[1]]);
+
+    await tester.pumpWidget(_harness(steps: steps, step: steps.first));
+    await tester.pumpWidget(_harness(steps: steps, step: steps[1], from: 1));
+    await tester.pump();
+    expect(find.byIcon(Icons.pause), findsOneWidget, reason: 'playing');
+
+    // The pointer arrives on the link that step 2 now offers.
+    var pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await pointer.addPointer(location: Offset.zero);
+    addTearDown(pointer.removePointer);
+    await tester.pump();
+    await pointer.moveTo(tester.getCenter(find.text('3 · Paid')));
+    await tester.pump();
+
+    expect(find.byIcon(Icons.pause), findsOneWidget, reason: 'still playing');
+    expect(
+      find.byType(ScenarioAimOverlay),
+      findsNothing,
+      reason: 'the preview may not cover the transition it interrupted',
+    );
+
+    // And once the transition lands, the preview takes over with no second
+    // movement of the pointer — the walk ends by saying what the next press
+    // would do.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.byIcon(Icons.play_arrow), findsOneWidget, reason: 'landed');
+    expect(find.byType(ScenarioAimOverlay), findsOneWidget);
   });
 
   testWidgets('a recording handed back is no longer warm', (tester) async {
