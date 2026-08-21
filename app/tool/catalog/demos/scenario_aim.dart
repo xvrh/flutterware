@@ -11,10 +11,11 @@ import 'app_theme.dart';
 
 /// What a scenario's next link promises, drawn over the frame it acts on.
 ///
-/// What this is for. The mark appears on hover, and a hover is the one
-/// thing the drive loop cannot produce — the same reason `run_screen_picture`
-/// exists — so in the running studio there is no way to *look* at this without
-/// a hand on the mouse.
+/// What this is for. In the running studio the mark exists only while a
+/// pointer is parked on a next link, over whichever frame that run happened
+/// to capture, at whatever size the window is — three variables to hold still
+/// before a judgement about a stroke width means anything. Here the frame and
+/// the size are fixed and the mark is always up.
 ///
 /// What there is to judge, and the reason for two widths: the step page draws
 /// the phone at about a quarter of its logical size, so every stroke here is
@@ -33,6 +34,30 @@ Widget scenarioAim() => const _Sheet();
   wrapper: wrapInDarkTheme,
 )
 Widget scenarioAimDark() => const _Sheet();
+
+/// The verbs that put no pointer down anywhere.
+///
+/// What there is to judge. `enterText` focuses an editable and pushes a
+/// value, and `scrollTo` and `keyboard` act on a whole region — so none of
+/// the three may wear a contact ring, and the question is whether what
+/// replaces it survives the same quarter scale. Two things were measured to
+/// fail here and are worth not re-inventing: a thin arrow across a pane
+/// disappears at the small size, and `show` and `hide` become the same
+/// picture if the only thing separating them is the wedge inside the band.
+/// Hence a fill on one and a hollow on the other.
+@Preview(
+  name: 'Scenario aim · no finger',
+  group: 'Scenarios',
+  wrapper: wrapInAppTheme,
+)
+Widget scenarioAimNoFinger() => const _NoFingerSheet();
+
+@Preview(
+  name: 'Scenario aim · no finger · dark',
+  group: 'Scenarios',
+  wrapper: wrapInDarkTheme,
+)
+Widget scenarioAimNoFingerDark() => const _NoFingerSheet();
 
 /// The three verbs v1 draws, at the size the step page draws them and at one
 /// big enough to see what is actually being painted.
@@ -72,12 +97,104 @@ class _Sheet extends StatelessWidget {
               const SizedBox(height: 8),
               // The big one to see what is painted, the small one because
               // that is the size it is actually seen at.
-              _Phone(width: 260, verb: verb, aim: aim),
+              _Phone(width: 260, verb: verb, aim: aim, picture: _menu),
               const SizedBox(height: 12),
-              _Phone(width: 110, verb: verb, aim: aim),
+              _Phone(width: 110, verb: verb, aim: aim, picture: _menu),
             ],
           ),
           const SizedBox(width: 24),
+        ],
+      ],
+    ),
+  );
+}
+
+/// `enterText`, `scrollTo` and `keyboard`, on a screen that has a field and a
+/// list to act on.
+///
+/// The whole phone rather than a band of it: two of these three marks are
+/// about the bottom of the screen and one about the top, and a crop that fits
+/// them all is the phone.
+class _NoFingerSheet extends StatelessWidget {
+  const _NoFingerSheet();
+
+  /// The field the search screen puts at the top — an `enterText` aims at the
+  /// editable, so this is the text area rather than the decoration around it.
+  static const _field = ScenarioAim(x: 24, y: 130, width: 342, height: 52);
+
+  /// Everything under the field: the viewport a `scrollTo` would walk.
+  static const _viewport = ScenarioAim(
+    x: 0,
+    y: 196,
+    width: 390,
+    height: 648,
+    toward: 'down',
+  );
+
+  /// An iPhone 16's keyboard, which is what the devices table measures. The
+  /// band arriving and the band leaving are the same rect and differ by one
+  /// word — which is the whole of what the painter has to tell them apart by.
+  static const _rising = ScenarioAim(
+    x: 0,
+    y: 844 - 336,
+    width: 390,
+    height: 336,
+    toward: 'up',
+  );
+  static const _leaving = ScenarioAim(
+    x: 0,
+    y: 844 - 336,
+    width: 390,
+    height: 336,
+    toward: 'down',
+  );
+
+  @override
+  Widget build(BuildContext context) => Container(
+    color: context.colors.panel2,
+    padding: const EdgeInsets.all(24),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var (label, verb, aim) in [
+          ('enterText', 'enterText', _field),
+          ('scrollTo', 'scrollTo', _viewport),
+          // The no-op: the target is already wholly inside the pane, so
+          // there is no direction to promise. Onstage-ness is deliberately
+          // not the test — a row can be built, onstage and a screenful above
+          // the viewport, and the walk ends with an `ensureVisible` that goes
+          // and gets it.
+          (
+            'scrollTo · already here',
+            'scrollTo',
+            const ScenarioAim(x: 24, y: 306, width: 342, height: 84),
+          ),
+          ('keyboard.show', 'keyboard', _rising),
+          ('keyboard.hide', 'keyboard', _leaving),
+        ]) ...[
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: context.type.sectionLabel),
+              const SizedBox(height: 8),
+              _Phone(
+                width: 200,
+                verb: verb,
+                aim: aim,
+                picture: _search,
+                band: 844,
+              ),
+              const SizedBox(height: 12),
+              _Phone(
+                width: 110,
+                verb: verb,
+                aim: aim,
+                picture: _search,
+                band: 844,
+              ),
+            ],
+          ),
+          const SizedBox(width: 20),
         ],
       ],
     ),
@@ -88,27 +205,34 @@ class _Sheet extends StatelessWidget {
 /// — which is exactly what the step page's `FittedBox` does to `FramedShot`,
 /// and the only arrangement in which the overlay needs no transform.
 class _Phone extends StatelessWidget {
-  const _Phone({required this.width, required this.verb, required this.aim});
+  const _Phone({
+    required this.width,
+    required this.verb,
+    required this.aim,
+    required this.picture,
+    this.band = 470,
+  });
 
   final double width;
   final String verb;
   final ScenarioAim aim;
+  final ui.Image Function() picture;
 
   /// How much of the phone is shown — the band the mark is in. Cropped rather
   /// than shrunk, because the whole question is how the mark reads at the
   /// scale the step page draws it, and a scale chosen to fit this page on a
   /// screen would answer a different one.
-  static const _band = 470.0;
+  final double band;
 
   @override
   Widget build(BuildContext context) => SizedBox(
     width: width,
-    height: width * _band / 390,
+    height: width * band / 390,
     child: FittedBox(
       child: ClipRect(
         child: SizedBox(
           width: 390,
-          height: _band,
+          height: band,
           child: OverflowBox(
             alignment: Alignment.topLeft,
             maxHeight: 844,
@@ -118,7 +242,7 @@ class _Phone extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  RawImage(image: _menu(), fit: BoxFit.fill),
+                  RawImage(image: picture(), fit: BoxFit.fill),
                   ScenarioAimOverlay(aim: aim, verb: verb),
                 ],
               ),
@@ -170,6 +294,65 @@ ui.Image _menu() {
           ..color = i == 1 ? const Color(0xFF2563EB) : const Color(0xFFEADFD4),
       )
       // The label, and the line under it.
+      ..drawRect(
+        Rect.fromLTWH(112, top + 18, 82, 22),
+        Paint()..color = const Color(0xFF44322A),
+      )
+      ..drawRect(
+        Rect.fromLTWH(112, top + 50, 180, 12),
+        Paint()..color = const Color(0xFFC9BAB0),
+      );
+  }
+  return recorder.endRecording().toImageSync(
+    (width * 2).round(),
+    (height * 2).round(),
+  );
+}
+
+/// A search screen: a bar, a field, and a list under it — the stage the
+/// no-finger verbs need, since all three are about a field or a list.
+ui.Image _search() {
+  const width = 390.0;
+  const height = 844.0;
+  const field = Rect.fromLTWH(24, 130, 342, 52);
+  var recorder = ui.PictureRecorder();
+  var canvas = Canvas(recorder)
+    ..scale(2)
+    ..drawRect(
+      const Rect.fromLTWH(0, 0, width, height),
+      Paint()..color = const Color(0xFFFDF7F2),
+    )
+    ..drawRect(
+      const Rect.fromLTWH(0, 0, width, 110),
+      Paint()..color = const Color(0xFF7C3A16),
+    )
+    ..drawRRect(
+      RRect.fromRectAndRadius(field, const Radius.circular(14)),
+      Paint()..color = Colors.white,
+    )
+    // The placeholder the typed text replaces.
+    ..drawRect(
+      const Rect.fromLTWH(44, 148, 110, 16),
+      Paint()..color = const Color(0xFFC9BAB0),
+    );
+  for (var i = 0; i < 6; i++) {
+    var top = 206.0 + i * 100;
+    canvas
+      ..drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(24, top, 342, 84),
+          const Radius.circular(14),
+        ),
+        Paint()..color = Colors.white,
+      )
+      ..drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(40, top + 14, 56, 56),
+          const Radius.circular(12),
+        ),
+        Paint()
+          ..color = i == 1 ? const Color(0xFF2563EB) : const Color(0xFFEADFD4),
+      )
       ..drawRect(
         Rect.fromLTWH(112, top + 18, 82, 22),
         Paint()..color = const Color(0xFF44322A),

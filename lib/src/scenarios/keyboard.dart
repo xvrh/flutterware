@@ -115,7 +115,14 @@ class ScenarioKeyboard {
   bool get requested => asked != null;
 
   /// What the height should be, as a fraction of [targetHeight].
-  double get _want => switch (mode) {
+  double get _want => wantedFor(mode);
+
+  /// What [mode] would ask for, without being the mode yet.
+  ///
+  /// A verb about to set a mode needs the answer *before* it sets it — the
+  /// slab writes the view as the jump lands, so a fraction read afterwards
+  /// describes a screen that has already moved.
+  double wantedFor(KeyboardMode mode) => switch (mode) {
     KeyboardMode.up => 1,
     KeyboardMode.down => 0,
     KeyboardMode.auto => requested ? 1 : 0,
