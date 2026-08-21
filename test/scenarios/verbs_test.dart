@@ -120,6 +120,93 @@ void main() {
     });
   });
 
+  // The same consumer, one report later: the defensive call the loop above
+  // makes became, on every page that happened not to scroll, a step
+  // byte-identical to its parent — measured at half the suite's duplicate
+  // warnings. A no-op that drew nothing now skips its automatic capture; the
+  // explicit shot above still gets its picture, because the author asked.
+  group('a no-op scrollTo that drew nothing', () {
+    scenario('skips its automatic capture', (s) async {
+      await s.pumpWidget(const _StaticApp());
+
+      await s.scrollTo('nothing to scroll');
+    });
+    tearDown(() {
+      expect(captures, hasLength(1));
+      expect(captures.single.verb, 'pumpWidget');
+    });
+  });
+
+  // The measured consumer shape is not the group above: the page *has* a
+  // list, the list happens not to scroll on this device, and the walk's
+  // trailing alignment moves nothing because there is no extent to move
+  // through. The skip has to fire on this path too — it rests on the SDK's
+  // trailing `ensureVisible` clamping to a zero scroll extent, which this
+  // pins against the moving beta.
+  group('a no-op scrollTo in a list with nothing to scroll', () {
+    scenario('skips its automatic capture too', (s) async {
+      await s.pumpWidget(const _FittingListApp());
+
+      await s.scrollTo('Row 2');
+    });
+    tearDown(() {
+      expect(captures, hasLength(1));
+      expect(captures.single.verb, 'pumpWidget');
+    });
+  });
+
+  group('a scrollTo that scrolled', () {
+    scenario('captures as ever', (s) async {
+      await s.pumpWidget(const _ListApp());
+
+      await s.scrollTo('Item 40');
+    });
+    tearDown(() {
+      expect(captures, hasLength(2));
+      expect(captures.last.verb, 'scrollTo');
+      expect(captures.last.texts, contains('Item 40'));
+    });
+  });
+
+  group('a no-op scrollTo after frames it did not draw', () {
+    scenario('still captures — the flow has no picture of them yet', (s) async {
+      await s.pumpWidget(const _StaticApp());
+      // A raw pump redraws outside the verbs. The skip must not swallow the
+      // capture that is the flow's only look at whatever it showed.
+      s.tester.binding.scheduleFrame();
+      await s.tester.pump();
+
+      await s.scrollTo('nothing to scroll');
+    });
+    tearDown(() {
+      expect(captures, hasLength(2));
+      expect(captures.last.verb, 'scrollTo');
+      expect(captures.last.strayFrames, greaterThan(0));
+    });
+  });
+
+  // A skipped shot consumes its position — mapped to the chain's head, like
+  // an adoption — so however the skip decision falls on a replay, the walk
+  // keeps recognising the shared prefix and the branches hang off the right
+  // step.
+  group('a skipped no-op scrollTo on a shared split prefix', () {
+    scenario('leaves the replay aligned', (s) async {
+      await s.pumpWidget(const _StaticApp());
+      await s.scrollTo('nothing to scroll');
+      await s.split({
+        'left': () => s.screen('Left'),
+        'right': () => s.screen('Right'),
+      });
+    });
+    tearDown(() {
+      expect(captures, hasLength(3));
+      expect(captures[1].name, 'Left');
+      expect(captures[2].name, 'Right');
+      expect(captures[1].parent, captures[0].index);
+      expect(captures[2].parent, captures[0].index);
+    });
+  });
+
   scenario('scrollTo still refuses a target off screen that nothing scrolls', (
     s,
   ) async {
@@ -276,6 +363,24 @@ class _StaticApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const MaterialApp(home: Scaffold(body: Text('nothing to scroll')));
+}
+
+/// A list whose content fits its viewport — a scrollable with zero extent,
+/// which is what a walking suite's short pages actually are.
+class _FittingListApp extends StatelessWidget {
+  const _FittingListApp();
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: Scaffold(
+      body: ListView(
+        children: [
+          for (var i = 1; i <= 3; i++)
+            SizedBox(height: 40, child: Text('Row $i')),
+        ],
+      ),
+    ),
+  );
 }
 
 /// A widget laid out past the screen's edge, with nothing that scrolls — the

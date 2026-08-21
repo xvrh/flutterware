@@ -1,14 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
+import 'package:flutterware/src/scenarios/run_args.dart';
 import 'package:flutterware/src/scenarios/run_listener.dart';
 
 /// When `screen` names the picture the verb before it took, and when it takes
 /// one of its own.
 ///
-/// The rule is a frame count: nothing drawn since the last capture means the
-/// screen is still as that capture photographed it, so there is a name to put
-/// on it and no second picture to take. Everything here is a reason that
-/// answer is no.
+/// The rule is a frame count, backed by the bytes: nothing drawn since the
+/// last capture means the screen is still as that capture photographed it,
+/// and where frames *were* drawn, a picture that renders byte-identical
+/// adopts all the same — the render was already paid, and bytes are proof
+/// where the count was a prediction. Everything else here is a reason the
+/// answer is still no.
 void main() {
   var captures = <ScenarioStepCapture>[];
   setUp(() {
@@ -135,11 +140,17 @@ void main() {
     scenario('is not a frame a later screen may claim', (s) async {
       await s.pumpWidget(const _App());
       // Captures nothing, but draws: the frame the screen below would name is
-      // no longer the one `pumpWidget` photographed.
+      // no longer the one `pumpWidget` photographed. Under this binding's
+      // box-glyph font the count change rasters to the very same bytes, so
+      // the visible words are the half of the proof refusing the adoption
+      // here — under real fonts the pixels would refuse it too.
       await s.tap('Add', shot: Shot.skip);
       await s.screen('Added');
     });
-    tearDown(() => expect(shape(), ['pumpWidget', 'Added']));
+    tearDown(() {
+      expect(shape(), ['pumpWidget', 'Added']);
+      expect(captures.last.verb, 'screen');
+    });
   });
 
   group('a scenario that ends on an adopted screen', () {
@@ -153,6 +164,149 @@ void main() {
     tearDown(() {
       expect(captures, hasLength(2));
       expect(captures.last.name, 'Added');
+    });
+  });
+
+  // A suite migrating from the old harness settles by hand between a verb and
+  // its name. Usually that draws nothing and the frame count already says
+  // yes; when it redraws the screen *identically*, only the bytes can.
+  group('a screen across drawn but identical frames', () {
+    scenario('still names the verb’s capture, proven on the bytes', (s) async {
+      await s.pumpWidget(const _App());
+      await s.tap('Add');
+      // A frame the verbs did not draw, changing nothing on screen.
+      s.tester.binding.scheduleFrame();
+      await s.tester.pump();
+      await s.screen('Added');
+    });
+    tearDown(() {
+      expect(shape(), ['pumpWidget', 'Added']);
+      expect(captures.last.verb, 'tap');
+    });
+  });
+
+  group('a screen that never settled over identical pixels', () {
+    scenario('adopts anyway — the bytes answer what settling predicted', (
+      s,
+    ) async {
+      await s.pumpWidget(const _BusyIdleApp());
+      await s.screen('Home');
+    });
+    // A ticker that repaints nothing: every settle gives up, frames keep
+    // being drawn, and every one of them is the same picture. Emitting the
+    // unsettled duplicate here would say strictly less than adopting.
+    tearDown(() {
+      expect(shape(), ['Home']);
+      expect(captures.single.verb, 'pumpWidget');
+      expect(captures.single.settled, isFalse);
+    });
+  });
+
+  group('a name never overwrites a name, even byte-identical', () {
+    scenario('so the second screen still takes its own picture', (s) async {
+      await s.pumpWidget(const _App());
+      await s.screen('First');
+      s.tester.binding.scheduleFrame();
+      await s.tester.pump();
+      await s.screen('Second');
+    });
+    tearDown(() => expect(shape(), ['First', 'Second']));
+  });
+
+  group('a byte-adopted step on a shared prefix', () {
+    scenario('is recognised by the replay, not captured again', (s) async {
+      await s.pumpWidget(const _App());
+      await s.tap('Add');
+      s.tester.binding.scheduleFrame();
+      await s.tester.pump();
+      await s.screen('Added');
+      await s.split({
+        'left': () => s.screen('Left'),
+        'right': () => s.screen('Right'),
+      });
+    });
+    // The adoption consumes the screen's position exactly as the frame-exact
+    // kind does, so the second replay recognises it and the branches hang off
+    // the merged step.
+    tearDown(() {
+      expect(shape(), ['pumpWidget', 'Added', 'Left', 'Right']);
+      var merged = captures[1];
+      expect(merged.verb, 'tap');
+      expect(captures[2].parent, merged.index);
+      expect(captures[3].parent, merged.index);
+    });
+  });
+
+  // A beat consumes the branch label, but not the branch: the capture still
+  // pending is the shared step before the fork, and a branch-local name has
+  // no business on it however the label moved. The guard is the capture's
+  // own segment, not `_pendingBranch`.
+  group('a branch that opens with a beat', () {
+    scenario('cannot put its name on the step before the fork', (s) async {
+      await s.pumpWidget(const _App());
+      await s.split({
+        'left': () async {
+          await s.document('note', const [1, 2, 3]);
+          await s.screen('Left result');
+        },
+        'right': () => s.screen('Right'),
+      });
+    });
+    tearDown(() {
+      expect(shape(), ['pumpWidget', 'note', 'Left result', 'Right']);
+      expect(captures.first.name, isNull);
+    });
+  });
+
+  // The stretch between the verb and its name really happened — a flash that
+  // came and went on provably identical end pixels — and the adopted step
+  // now stands for it, so its facts merge on rather than vanishing with the
+  // second picture.
+  group('a real transition between the verb and its name', () {
+    scenario('adopts when it lands back on the same pixels', (s) async {
+      await s.pumpWidget(const _FlashApp());
+      await s.tester.tap(find.text('flash'));
+      await s.tester.pumpAndSettle();
+      await s.screen('Home');
+    });
+    tearDown(() {
+      expect(shape(), ['Home']);
+      expect(captures.single.verb, 'pumpWidget');
+      // The frames outside the verbs stay on the record.
+      expect(captures.single.strayFrames, greaterThan(0));
+    });
+  });
+
+  group('a screen that stopped settling after a settled verb', () {
+    scenario('adopts, and the merged step keeps the truer flag', (s) async {
+      await s.pumpWidget(const _LateBusyApp());
+      // Fires the timer that starts an invisible ticker: from here on every
+      // settle gives up, while every frame is the same picture.
+      await s.tester.pump(const Duration(seconds: 3));
+      await s.screen('Home');
+    });
+    tearDown(() {
+      expect(shape(), ['Home']);
+      expect(captures.single.verb, 'pumpWidget');
+      expect(captures.single.settled, isFalse);
+    });
+  });
+
+  group('a probe pass captures no pixels', () {
+    setUp(() => scenarioRunArgs = const ScenarioRunArgs(capturePixels: false));
+    tearDown(() => scenarioRunArgs = null);
+    scenario('so there are no bytes to prove an adoption on', (s) async {
+      await s.pumpWidget(const _App());
+      await s.tap('Add');
+      s.tester.binding.scheduleFrame();
+      await s.tester.pump();
+      await s.screen('Added');
+    });
+    // Every probe capture holds the same empty bytes — equality there proves
+    // nothing, so the screen emits as it did before the byte comparison
+    // existed. Frame-exact adoption needs no pixels and still works.
+    tearDown(() {
+      expect(shape(), ['pumpWidget', 'tap', 'Added']);
     });
   });
 }
@@ -184,6 +338,127 @@ class _AppState extends State<_App> {
       ),
     ),
   );
+}
+
+/// An app whose tap plays a flash — an overlay fading in and straight back
+/// out — so frames genuinely differ mid-way and the screen ends byte-identical
+/// to where it started.
+class _FlashApp extends StatefulWidget {
+  const _FlashApp();
+
+  @override
+  State<_FlashApp> createState() => _FlashAppState();
+}
+
+class _FlashAppState extends State<_FlashApp>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _flash;
+
+  @override
+  void initState() {
+    super.initState();
+    _flash =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 150),
+          )
+          ..addStatusListener((status) {
+            if (status == AnimationStatus.completed) _flash.reverse();
+          })
+          ..addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _flash.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: Scaffold(
+      body: Stack(
+        children: [
+          GestureDetector(onTap: _flash.forward, child: const Text('flash')),
+          IgnorePointer(
+            child: Opacity(
+              opacity: _flash.value,
+              child: Container(color: const Color(0xFF2196F3)),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// An app that is quiet at first and starts an invisible ticker on a timer —
+/// the settled verb, then the screen whose settle gives up over the same
+/// picture.
+class _LateBusyApp extends StatefulWidget {
+  const _LateBusyApp();
+
+  @override
+  State<_LateBusyApp> createState() => _LateBusyAppState();
+}
+
+class _LateBusyAppState extends State<_LateBusyApp>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _busy;
+  Timer? _later;
+
+  @override
+  void initState() {
+    super.initState();
+    _busy = AnimationController(
+      vsync: this,
+      duration: const Duration(hours: 1),
+    );
+    _later = Timer(const Duration(seconds: 2), () => _busy.repeat());
+  }
+
+  @override
+  void dispose() {
+    _later?.cancel();
+    _busy.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      const MaterialApp(home: Scaffold(body: Text('Home')));
+}
+
+/// An app whose ticker runs forever and paints nothing: every settle gives
+/// up, and every frame it forces is byte-identical to the last — the shape of
+/// a periodic timer repainting a screen that is not changing.
+class _BusyIdleApp extends StatefulWidget {
+  const _BusyIdleApp();
+
+  @override
+  State<_BusyIdleApp> createState() => _BusyIdleAppState();
+}
+
+class _BusyIdleAppState extends State<_BusyIdleApp>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _busy;
+
+  @override
+  void initState() {
+    super.initState();
+    _busy = AnimationController(vsync: this, duration: const Duration(hours: 1))
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _busy.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      const MaterialApp(home: Scaffold(body: Text('Home')));
 }
 
 /// An app that puts a spinner on screen and leaves it there — so the settle

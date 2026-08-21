@@ -8,6 +8,7 @@ KeySighting sighting({
   String scenario = 'home_test/Home',
   String step = 'Home',
   int stepIndex = 1,
+  String? position,
   String? device,
   bool offstage = false,
   bool overflowed = false,
@@ -18,6 +19,7 @@ KeySighting sighting({
   scenario: scenario,
   step: step,
   stepIndex: stepIndex,
+  position: position ?? '#$stepIndex',
   image: '$step.png',
   device: device,
   offstage: offstage,
@@ -258,6 +260,7 @@ void main() {
         scenario: 'home_test/Home',
         step: 'Home',
         stepIndex: 1,
+        position: '#1',
         locale: null,
         count: count,
       );

@@ -92,6 +92,7 @@ Future<TranslationSurvey> buildSurvey({
               scenario: scenario,
               step: label,
               stepIndex: step.index,
+              position: step.position,
               image: step.image ?? '',
               locale: locale,
               device: outcome.device ?? package.axes?['device'],
@@ -137,6 +138,7 @@ Future<TranslationSurvey> buildSurvey({
             scenario: scenario,
             step: label,
             stepIndex: step.index,
+            position: step.position,
             locale: locale,
             count: count.toInt(),
           ));
