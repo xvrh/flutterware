@@ -83,7 +83,10 @@ class _KeyboardsState extends State<_Keyboards> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Keyboards')),
-    body: Padding(
+    // Scrollable, because on a small phone in landscape five fields and a
+    // keyboard do not fit — which is what a real form does there, and beats an
+    // overflow stripe across the entry that exists to be looked at.
+    body: SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         spacing: 16,

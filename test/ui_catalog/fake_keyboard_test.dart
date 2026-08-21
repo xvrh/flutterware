@@ -54,6 +54,56 @@ void main() {
     return seen;
   }
 
+  group('the keys that say which keyboard it is carry their characters', () {
+    // **The one thing a finder cannot check.** Every label here is painted, so
+    // it is invisible to `find.text`, to `screen()` and to the transcript
+    // audits — which is exactly the property that keeps a keyboard out of the
+    // app's own text projection, and exactly the property that let a variant
+    // reach the painter and change nothing anybody could assert on.
+    FakeKeyboardPainter painterFor(KeyboardVariant variant) =>
+        FakeKeyboardPainter(
+          platform: DevicePlatform.ios,
+          dark: false,
+          variant: variant,
+        );
+
+    test('an email keyboard draws an @ and a dot', () {
+      expect(painterFor(KeyboardVariant.email).labels, ['123', '@', '.']);
+    });
+
+    test('a url keyboard draws a slash and a .com, and no space bar', () {
+      expect(painterFor(KeyboardVariant.url).labels, ['123', '.', '/', '.com']);
+    });
+
+    test('a keypad draws the ten digits', () {
+      expect(painterFor(KeyboardVariant.keypad).labels, [
+        '1',
+        '2',
+        '3',
+        '4',
+        '5',
+        '6',
+        '7',
+        '8',
+        '9',
+        '0',
+      ]);
+    });
+
+    test('and letters claim no language at all', () {
+      // `123` is the only mark on it, and it is a mark every locale's keyboard
+      // carries. Nothing here spells a letter, because a letter would need a
+      // layout that is a lie on an AZERTY.
+      expect(painterFor(KeyboardVariant.letters).labels, ['123']);
+    });
+
+    test('a repaint follows the labels, not only the height', () {
+      var email = painterFor(KeyboardVariant.email);
+      expect(email.shouldRepaint(painterFor(KeyboardVariant.url)), isTrue);
+      expect(email.shouldRepaint(painterFor(KeyboardVariant.email)), isFalse);
+    });
+  });
+
   group('the arithmetic', () {
     testWidgets('the insets rise by exactly the keyboard', (tester) async {
       var media = await pump(tester, keyboard: 336);

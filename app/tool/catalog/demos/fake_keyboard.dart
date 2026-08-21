@@ -65,7 +65,7 @@ class _Sheet extends StatelessWidget {
           variant: KeyboardVariant.email,
         ),
         _Slab(
-          'iPhone 16 · url — a slash and a .com',
+          'iPhone 16 · url — a slash, and .com where the space bar was',
           platform: DevicePlatform.ios,
           dark: dark,
           width: 393,

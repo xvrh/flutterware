@@ -7,9 +7,18 @@
 /// [ExcludeSemantics] is one leaf, one paint call, and invisible to every
 /// finder.
 ///
-/// No glyphs. Letters would need a font that differs between the previews
-/// harness and a bare `flutter test`, and a per-locale layout to not be a lie.
-/// Rows of rounded rectangles say *keyboard* without claiming a language.
+/// Glyphs only where they are the same in every language. No letter is ever
+/// drawn: a letter would need a per-locale layout to not be a lie, and rows of
+/// rounded rectangles say *keyboard* without claiming a language. But `@`, `.`,
+/// `/`, `.com` and the digits sit in the same place on an AZERTY, a Cyrillic
+/// and a QWERTY keyboard — and they are precisely the keys that say *which*
+/// keyboard it is. Leaving those blank is what made an email keyboard and a
+/// text one tell apart only by the width of a space bar.
+///
+/// Every label is ASCII, deliberately: a glyph the rendering font does not
+/// carry comes out as a tofu box, which is worse than the blank key it
+/// replaced. That is why the backspace on the keypad is drawn as a shape
+/// rather than as `⌫`.
 ///
 /// Shared by both lanes on purpose — the guest drives it from a
 /// [TextInputControl], a scenario drives it from the test binding, and the
@@ -186,6 +195,33 @@ class FakeKeyboardPainter extends CustomPainter {
 
   bool get _android => platform == DevicePlatform.android;
 
+  /// The ten characters on every locale's number pad, in the order the grid
+  /// draws them — `1`–`9` across three rows, then `0` beside the backspace.
+  static const _keypadDigits = [
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    '0',
+  ];
+
+  /// Every label this keyboard draws, in drawing order.
+  ///
+  /// **Exists so a test can hold the picture to account.** A label here is
+  /// painted, not built, so no finder can see it and no `screen()` reports it —
+  /// which is the property that keeps a keyboard out of the app's text
+  /// projection, and also the property that let a variant go missing while
+  /// every assertion still passed. This is the seam that closes it: the email
+  /// keyboard draws an `@`, and a test can say so.
+  List<String> get labels => variant == KeyboardVariant.keypad
+      ? _keypadDigits
+      : [for (var (_, _, label) in _bottomRow) ?label];
+
   /// The slab itself.
   Color get _ground => switch ((_android, dark)) {
     (true, false) => const Color(0xFFEDEFF2),
@@ -212,6 +248,9 @@ class FakeKeyboardPainter extends CustomPainter {
 
   /// The suggestion pills, which are text on a real keyboard and shapes here.
   Color get _hint => _modifier.withValues(alpha: dark ? 0.9 : 0.75);
+
+  /// What a key's label is drawn in.
+  Color get _ink => dark ? const Color(0xFFF2F2F7) : const Color(0xFF1C1C1E);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -275,15 +314,15 @@ class FakeKeyboardPainter extends CustomPainter {
       radius,
       gap,
       const [
-        (1.5, true),
-        (1, false),
-        (1, false),
-        (1, false),
-        (1, false),
-        (1, false),
-        (1, false),
-        (1, false),
-        (1.5, true),
+        (1.5, true, null),
+        (1, false, null),
+        (1, false, null),
+        (1, false, null),
+        (1, false, null),
+        (1, false, null),
+        (1, false, null),
+        (1, false, null),
+        (1.5, true, null),
       ],
     );
     // The bottom row is the whole of what a reader can see the *type* in. A
@@ -303,30 +342,51 @@ class FakeKeyboardPainter extends CustomPainter {
     );
   }
 
-  /// `(weight, isModifier)` per key, for the row that says which keyboard this
-  /// is.
-  List<(double, bool)> get _bottomRow => switch (variant) {
+  /// `(weight, isModifier, label)` per key, for the row that says which
+  /// keyboard this is.
+  ///
+  /// **The labels are the whole point of this row.** A real email keyboard
+  /// grows an `@` and a dot here and a URL one a slash and a `.com`, both at
+  /// the space bar's expense — and drawn as bare rectangles the two rows
+  /// differ only in how wide the middle key is, which nobody reads as a
+  /// keyboard type. With the two characters on them it needs no explaining.
+  List<(double, bool, String?)> get _bottomRow => switch (variant) {
     KeyboardVariant.email => const [
-      (1.4, true),
-      (1.0, false),
-      (1.0, false),
-      (3.4, false),
-      (1.9, true),
+      (1.4, true, '123'),
+      (1.0, false, '@'),
+      (1.0, false, '.'),
+      (3.4, false, null),
+      (1.9, true, null),
     ],
+    // **`.com` stands exactly where the space bar does**, and that is the
+    // whole of the difference from the row above it: a URL has no spaces in
+    // it, so the platform spends the space bar's width on the one string every
+    // address ends with. Drawn as a narrower key with a blank one beside it,
+    // that blank read as a key nobody could name.
     KeyboardVariant.url => const [
-      (1.4, true),
-      (1.0, false),
-      (1.0, false),
-      (1.7, false),
-      (1.8, false),
-      (1.9, true),
+      (1.4, true, '123'),
+      (1.0, false, '.'),
+      (1.0, false, '/'),
+      (3.4, false, '.com'),
+      (1.9, true, null),
     ],
     // Android splits the same width between a comma, a full stop and a smaller
     // enter; iOS gives the return key a fifth of the row.
     _ =>
       _android
-          ? const [(1.4, true), (1, true), (5, false), (1, true), (1.4, true)]
-          : const [(1.4, true), (1.1, true), (4.6, false), (1.9, true)],
+          ? const [
+              (1.4, true, '?123'),
+              (1, true, ','),
+              (5, false, null),
+              (1, true, '.'),
+              (1.4, true, null),
+            ]
+          : const [
+              (1.4, true, '123'),
+              (1.1, true, null),
+              (4.6, false, null),
+              (1.9, true, null),
+            ],
   };
 
   /// A digit pad: three columns, four rows, and nothing that looks like a
@@ -353,20 +413,55 @@ class FakeKeyboardPainter extends CustomPainter {
         // as much a part of a number pad's silhouette as the digits are.
         var lastRow = row == 3;
         if (lastRow && column == 0) continue;
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTWH(
-              margin + column * (width + keyGap),
-              rowTop(row),
-              width,
-              rowHeight,
-            ),
-            radius,
-          ),
-          Paint()..color = lastRow && column == 2 ? _modifier : _key,
+        var backspace = lastRow && column == 2;
+        var rect = Rect.fromLTWH(
+          margin + column * (width + keyGap),
+          rowTop(row),
+          width,
+          rowHeight,
         );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect, radius),
+          Paint()..color = backspace ? _modifier : _key,
+        );
+        if (backspace) {
+          _paintBackspace(canvas, rect);
+        } else {
+          // The digits, which are the same ten characters on every locale's
+          // number pad — so drawing them claims nothing a blank key does not
+          // already claim, and says the one thing it cannot.
+          _paintLabel(
+            canvas,
+            rect,
+            _keypadDigits[lastRow ? 9 : row * 3 + column],
+          );
+        }
       }
     }
+  }
+
+  /// The backspace arrow, as a shape.
+  ///
+  /// Drawn rather than written because `⌫` is the one mark this keyboard wants
+  /// that a rendering font may not carry, and a missing glyph is a tofu box —
+  /// which on a key that is otherwise blank reads as a bug rather than as a
+  /// character.
+  void _paintBackspace(Canvas canvas, Rect key) {
+    var height = key.height * 0.26;
+    var width = height * 1.5;
+    var centre = key.center;
+    var tip = centre.dx - width / 2;
+    var right = centre.dx + width / 2;
+    canvas.drawPath(
+      Path()
+        ..moveTo(tip, centre.dy)
+        ..lineTo(tip + height / 2, centre.dy - height / 2)
+        ..lineTo(right, centre.dy - height / 2)
+        ..lineTo(right, centre.dy + height / 2)
+        ..lineTo(tip + height / 2, centre.dy + height / 2)
+        ..close(),
+      Paint()..color = _ink.withValues(alpha: 0.65),
+    );
   }
 
   /// Three pills where a real keyboard puts the words it is guessing at.
@@ -415,7 +510,7 @@ class FakeKeyboardPainter extends CustomPainter {
     }
   }
 
-  /// A row of keys of unequal width — `(weight, isModifier)` each.
+  /// A row of keys of unequal width — `(weight, isModifier, label)` each.
   void _paintWeighted(
     Canvas canvas,
     Size size,
@@ -424,22 +519,61 @@ class FakeKeyboardPainter extends CustomPainter {
     double margin,
     Radius radius,
     double gap,
-    List<(double, bool)> keys,
+    List<(double, bool, String?)> keys,
   ) {
     var available = size.width - margin * 2;
     var keyGap = gap * 0.6;
     var total = keys.fold<double>(0, (sum, key) => sum + key.$1);
     var unit = (available - keyGap * (keys.length - 1)) / total;
     var x = margin;
-    for (var (weight, modifier) in keys) {
+    for (var (weight, modifier, label) in keys) {
       var width = unit * weight;
+      var rect = Rect.fromLTWH(x, top, width, height);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(x, top, width, height), radius),
+        RRect.fromRectAndRadius(rect, radius),
         Paint()..color = modifier ? _modifier : _key,
       );
+      if (label != null) _paintLabel(canvas, rect, label);
       x += width + keyGap;
     }
   }
+
+  /// One key's label, centred, shrunk to fit rather than allowed to spill.
+  ///
+  /// Laid out unconstrained first and then re-laid at a scaled size, because
+  /// `maxWidth` on a `TextPainter` wraps rather than shrinks — a `.com` on a
+  /// narrow key would come out as two lines rather than as smaller text.
+  void _paintLabel(Canvas canvas, Rect key, String label) {
+    var size = key.height * 0.34;
+    var painter = _layOut(label, size);
+    var room = key.width * 0.78;
+    if (painter.width > room) {
+      painter = _layOut(label, size * room / painter.width);
+    }
+    painter.paint(
+      canvas,
+      Offset(
+        key.center.dx - painter.width / 2,
+        key.center.dy - painter.height / 2,
+      ),
+    );
+  }
+
+  TextPainter _layOut(String label, double fontSize) => TextPainter(
+    text: TextSpan(
+      text: label,
+      style: TextStyle(
+        color: _ink,
+        fontSize: fontSize,
+        // Whatever the rendering lane's default face is. Naming a family here
+        // would be naming one that only one of the two lanes has.
+        fontWeight: FontWeight.w400,
+        height: 1,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+    textAlign: TextAlign.center,
+  )..layout();
 
   @override
   bool shouldRepaint(FakeKeyboardPainter old) =>
