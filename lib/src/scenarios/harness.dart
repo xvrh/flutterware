@@ -42,6 +42,22 @@ import '../translations/index.dart';
 /// a wall.
 const _maxInlineTitles = 12;
 
+/// How wide one inline title may be.
+///
+/// **Two caps, because a summary is bounded by rows times width and this is
+/// the half that was open.** A stored title is capped at 300 characters and
+/// that is right for the artifact; twelve of those inline is 3,600 characters
+/// on one step, and a step is not the unit anyone budgets in. A db event's
+/// title is a whole SQL statement now, so the case is ordinary rather than
+/// pathological: measured, twenty hand-formatted queries on one step put
+/// 1,980 bytes of titles in the run's answer.
+///
+/// 120 keeps what a title is scanned for — the verb and the subject, `select
+/// … from … join …`, `POST` and its path — and drops the tail. The whole one
+/// is in the capture either way, which is what `scenarios read events: true`
+/// reads.
+const _maxInlineTitleChars = 120;
+
 /// The one-line summaries that ride inline on a step, capped.
 ///
 /// The part an agent reasons about without opening a file. `system` is left
@@ -49,17 +65,23 @@ const _maxInlineTitles = 12;
 /// volume: measured on the example suite, 183 of 189 events and 98% of the
 /// bytes.
 ///
-/// **The cap says when it bit.** Handing back twelve of forty with nothing
+/// **Both caps say when they bit.** Handing back twelve of forty with nothing
 /// saying so reads as "the app did twelve things", and the arithmetic that
 /// would disprove it — `eventCount` minus the `system` count — needs the
-/// exclusion rule above to be known first. `scenarios read events: true`
-/// hands back the whole list, filtered how you ask.
+/// exclusion rule above to be known first. A title cut short ends in `…` for
+/// the same reason. `scenarios read events: true` hands back the whole list,
+/// untruncated and filtered how you ask.
 List<String>? inlineEventTitles(List<AppEvent> events) {
   if (events.isEmpty) return null;
   var titles = [
     for (var event in events)
       if (event.channel != AppChannel.system)
-        '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
+        // The detail is appended *after* the cut, never inside it: a status
+        // code or a row count is a handful of characters and most of what the
+        // line is read for, and losing `→ 500` to a long URL would be the
+        // wrong half to drop.
+        _capTitle(event.title) +
+            (event.detail == null ? '' : ' → ${event.detail}'),
   ];
   if (titles.length <= _maxInlineTitles) return titles;
   return [
@@ -67,6 +89,10 @@ List<String>? inlineEventTitles(List<AppEvent> events) {
     '… ${titles.length - _maxInlineTitles} more — scenarios read events: true',
   ];
 }
+
+String _capTitle(String title) => title.length <= _maxInlineTitleChars
+    ? title
+    : '${title.substring(0, _maxInlineTitleChars)}…';
 
 /// The scenario harness `main`, called by the generated entrypoint the runner
 /// compiles into `flutter_tester`:

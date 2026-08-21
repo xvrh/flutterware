@@ -1,5 +1,19 @@
 ## Unreleased
 
+- **A step's inline event titles are bounded in width as well as in count.**
+  `eventTitles` kept twelve summaries per step and each could run to the
+  stored title's 300 characters — 3,600 on one step, which is not a number
+  anyone budgets in. Now that a `db` event's title is a whole SQL statement
+  the case is ordinary rather than pathological: measured, twenty
+  hand-formatted queries on one step put 1,980 bytes of titles in the run's
+  answer, and 1,639 with the cap.
+
+  120 characters keeps what a title is scanned for — `select … from … join …`,
+  a method and its path — and a cut one ends in `…` like the count marker
+  beside it. The detail is appended *after* the cut, so a status code or a row
+  count is never the half lost to a long URL. The whole title is in the
+  capture either way, which is what `scenarios read events: true` reads.
+
 - **A `db` event is titled with its statement, not with its first keyword.**
   `AppEvent.query` cut the SQL at the first newline, so a statement a
   generator emitted on one line titled whole and one a person formatted across
