@@ -41,6 +41,34 @@ enum DevicePlatform { ios, android, macos, windows, linux }
 /// `widgets.dart`.
 enum ScreenOrientation { portrait, landscape }
 
+/// Whether the software keyboard follows the app, or the person looking at it.
+///
+/// An axis applied on top of a [Device], like [ScreenOrientation] — and like it
+/// in the way that matters: a phone with its keyboard up is the same phone,
+/// with less screen. See
+/// `docs/superpowers/specs/2026-08-21-fake-keyboard-design.md`.
+///
+/// **Auto is not "off".** It is the whole feature: the app asks for a keyboard
+/// when a field takes focus and lets go of it when the view dismisses one, and
+/// that is what a phone does. The two forced states are for the layout with no
+/// field in it — *what does this do with 336 points less* — which nothing on
+/// screen would otherwise ask.
+///
+/// Here rather than beside the guest that drives it, for the reason
+/// [ScreenOrientation] is: a `PreviewCanvas` names these, and a project
+/// declaring one must not have to import Flutter to do it.
+enum KeyboardMode {
+  /// Exactly what the app asks for. The default everywhere.
+  auto,
+
+  /// Raised, focus or no focus. Sticky until it is cleared, or until the
+  /// keyboard's own dismiss key is pressed.
+  up,
+
+  /// Down, whatever the app asks for.
+  down,
+}
+
 /// A device's safe areas, as one value.
 ///
 /// Ours rather than `EdgeInsets` because this file is pure Dart by design: a
@@ -660,3 +688,15 @@ ScreenOrientation? orientationById(String id) =>
 
 /// Whether [id] is an orientation this build accepts.
 bool isOrientationId(String id) => orientationById(id) != null;
+
+/// Every value `?keyboard=` accepts, the default first.
+List<String> get keyboardModeIds => [
+  for (var mode in KeyboardMode.values) mode.name,
+];
+
+/// The keyboard mode [id] names, or null for anything unknown.
+KeyboardMode? keyboardModeById(String id) =>
+    KeyboardMode.values.where((m) => m.name == id).firstOrNull;
+
+/// Whether [id] is a keyboard mode this build accepts.
+bool isKeyboardModeId(String id) => keyboardModeById(id) != null;

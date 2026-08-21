@@ -758,6 +758,13 @@ class _GuestSession {
       // machine. The first frame has not been asked for yet, so nothing is
       // remounted by it — the guest simply builds staged.
       await session._inspect.setStaging(viewport.platform);
+      // And how much of that screen a keyboard would take. Awaited for the
+      // same reason: a capture that started before it landed would photograph
+      // the full screen and file it as the picture of a raised keyboard.
+      await session._inspect.setKeyboard(
+        mode: viewport.keyboardMode,
+        height: viewport.keyboard,
+      );
       return session;
     } catch (_) {
       // Whatever failed above, nothing owns the guest yet.

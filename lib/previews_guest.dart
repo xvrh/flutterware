@@ -16,6 +16,13 @@ export 'src/ui_catalog/entries.dart' show CatalogEntries;
 export 'src/ui_catalog/clock.dart' show previewClockOrigin, withPreviewClock;
 export 'src/ui_catalog/guest_keyboard.dart' show GuestKeyboard;
 export 'src/ui_catalog/guest_text_input.dart' show GuestTextInput;
+export 'src/ui_catalog/catalog_keyboard.dart'
+    show CatalogKeyboard, CatalogKeyboardScope;
+// The model comes with it for the reason the layout types come with the node:
+// a host can drive the keyboard without them but cannot name what arrives.
+export 'src/ui_catalog/keyboard.dart' show KeyboardState;
+export 'src/ui_catalog/fake_keyboard.dart'
+    show FakeKeyboard, FakeKeyboardPainter;
 export 'src/ui_catalog/knob.dart' show KnobDescriptor, KnobKind, KnobReport;
 export 'src/ui_catalog/axis.dart' show AxisReport;
 export 'src/inspect/error.dart' show InspectError, InspectErrors;

@@ -86,11 +86,20 @@ void main() {
         'src/mobile',
         devices: [Devices.iphone16, Devices.iphoneSe],
         orientations: [ScreenOrientation.landscape],
+        keyboards: [KeyboardMode.up],
       );
 
       expect(both.defaultDevice, Devices.iphone16);
       expect(both.defaultOrientation, ScreenOrientation.landscape);
+      expect(both.defaultKeyboard, KeyboardMode.up);
       expect(both.devices, hasLength(2));
+    });
+
+    test('a canvas that says nothing about the keyboard says auto', () {
+      // Absence is not `down`: an entry under a canvas with no `keyboards:`
+      // still raises one when it focuses a field, because that is what a
+      // phone does and what `auto` means.
+      expect(const PreviewCanvas('src/x').defaultKeyboard, isNull);
     });
 
     test('an empty canvas is a subtree opting out of the one above it', () {
@@ -110,6 +119,7 @@ void main() {
           'demo/mobile/',
           devices: [Devices.iphone16, Devices.iphoneSe],
           orientations: [ScreenOrientation.landscape],
+          keyboards: [KeyboardMode.up, KeyboardMode.auto],
         ).toJson(),
       );
 
@@ -117,6 +127,7 @@ void main() {
       expect(read?.root, 'demo/mobile');
       expect(read?.devices.map((d) => d.id), ['iphone-16', 'iphone-se']);
       expect(read?.orientations, [ScreenOrientation.landscape]);
+      expect(read?.keyboards, [KeyboardMode.up, KeyboardMode.auto]);
     });
 
     test('a device the reader has no entry for drops out', () {

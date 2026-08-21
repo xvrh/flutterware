@@ -99,6 +99,8 @@ class CaptureViewport {
     this.insetBottom = 0,
     this.insetLeft = 0,
     this.platform,
+    this.keyboard = 0,
+    this.keyboardMode = KeyboardMode.auto,
   });
 
   /// The device's screen, at its own ratio, with its safe areas — the same
@@ -113,6 +115,9 @@ class CaptureViewport {
     insetBottom: device.insetBottom,
     insetLeft: device.insetLeft,
     platform: device.platform,
+    // Already turned: [Device.rotated] swaps in `landscapeKeyboard`, because a
+    // phone's landscape keyboard is not its portrait one in a wider box.
+    keyboard: device.keyboard,
   );
 
   /// What a capture that names no device gets.
@@ -140,6 +145,36 @@ class CaptureViewport {
   /// `stageGuestPlatform`.
   final DevicePlatform? platform;
 
+  /// How tall this device's software keyboard is, in logical pixels, once it
+  /// is up — zero for a stage that has none, which is every desktop size and
+  /// the panel's own rectangle.
+  ///
+  /// Measured per device per orientation rather than derived, and already
+  /// turned by the time it lands here: see
+  /// `docs/superpowers/specs/2026-08-21-fake-keyboard-design.md`.
+  final double keyboard;
+
+  /// Whether that keyboard follows the entry or the caller.
+  ///
+  /// On the viewport for the reason [platform] is: it changes the picture,
+  /// so two settings are two captures rather than one file written twice —
+  /// and a warm guest being reused has to be re-staged when it moves.
+  final KeyboardMode keyboardMode;
+
+  /// The same viewport with the keyboard asked for differently.
+  CaptureViewport withKeyboard(KeyboardMode mode) => CaptureViewport(
+    width: width,
+    height: height,
+    pixelRatio: pixelRatio,
+    insetTop: insetTop,
+    insetRight: insetRight,
+    insetBottom: insetBottom,
+    insetLeft: insetLeft,
+    platform: platform,
+    keyboard: keyboard,
+    keyboardMode: mode,
+  );
+
   /// The same viewport at a different size, for a caller that asked for one
   /// explicitly. The ratio and the insets stay: asking for a taller iPhone is
   /// asking for a taller iPhone, not for a slab of glass with no notch.
@@ -152,6 +187,8 @@ class CaptureViewport {
     insetBottom: insetBottom,
     insetLeft: insetLeft,
     platform: platform,
+    keyboard: keyboard,
+    keyboardMode: keyboardMode,
   );
 
   /// By value, because "is this the same screen" is a question about the
@@ -168,7 +205,9 @@ class CaptureViewport {
       other.insetRight == insetRight &&
       other.insetBottom == insetBottom &&
       other.insetLeft == insetLeft &&
-      other.platform == platform;
+      other.platform == platform &&
+      other.keyboard == keyboard &&
+      other.keyboardMode == keyboardMode;
 
   @override
   int get hashCode => Object.hash(
@@ -180,6 +219,8 @@ class CaptureViewport {
     insetBottom,
     insetLeft,
     platform,
+    keyboard,
+    keyboardMode,
   );
 
   @override

@@ -967,6 +967,70 @@ class CatalogSession extends ChangeNotifier {
   /// Which guest was told what — see [stageAs].
   (InspectClient, DevicePlatform?)? _staged;
 
+  /// What the guest's keyboard is doing, as the guest last said.
+  ///
+  /// Pushed rather than polled, because the transitions that matter are the
+  /// *app's*: a field takes focus and the keyboard comes up on its own. A
+  /// host that had to ask would find out a poll late, and the control drawn
+  /// over the keyboard band would be drawn in the wrong place for that long.
+  ///
+  /// Null before the first push — a guest still starting, or one built before
+  /// the extension existed.
+  KeyboardState? get keyboard => _keyboard;
+  KeyboardState? _keyboard;
+
+  StreamSubscription<KeyboardState>? _keyboardStream;
+
+  /// Tells the guest how tall its keyboard is and whether to raise it.
+  ///
+  /// Deduped against the guest that was told, exactly as [stageAs] is and for
+  /// the same reason: a restart starts from the guest's own defaults, so a
+  /// dedupe on the value alone would leave a fresh guest with no measurement
+  /// and a mode nobody chose.
+  void keyboardAs(KeyboardMode mode, double height) {
+    var inspect = _inspect;
+    if (inspect == null) return;
+    if (_keyboarded case (
+      var told,
+      var was,
+    ) when identical(told, inspect) && was == (mode, height)) {
+      return;
+    }
+    _keyboarded = (inspect, (mode, height));
+    _fireAndForget(
+      inspect.setKeyboard(mode: mode, height: height),
+      'raising the keyboard',
+    );
+  }
+
+  /// Closes the keyboard the way a platform does — what the dismiss key drawn
+  /// over the band calls. The app is told, and lets go of the field itself.
+  ///
+  /// Clears the forced-up mode with it, so the key that is drawn on a keyboard
+  /// somebody raised by hand actually takes it away rather than being undone
+  /// by the next push. The guest does the same on its own side; both, because
+  /// the mode lives here and the focus lives there.
+  void dismissKeyboard() {
+    var inspect = _inspect;
+    if (inspect == null) return;
+    if (_keyboarded case (
+      var told,
+      (KeyboardMode.up, var height),
+    ) when identical(told, inspect)) {
+      _keyboarded = (inspect, (KeyboardMode.auto, height));
+    }
+    _fireAndForget(inspect.dismissKeyboard(), 'dismissing the keyboard');
+  }
+
+  /// Which guest was told what — see [keyboardAs].
+  (InspectClient, (KeyboardMode, double))? _keyboarded;
+
+  void _onKeyboard(KeyboardState state) {
+    if (_disposed || state == _keyboard) return;
+    _keyboard = state;
+    notifyListeners();
+  }
+
   /// Forgets what the entry has reported, then reads it back.
   ///
   /// What the panel's refresh does, and what a reload does before it rebuilds.
@@ -1356,6 +1420,11 @@ class CatalogSession extends ChangeNotifier {
         _startWatch();
         _startLogs();
       }
+      // Not gated on the panel being open, unlike the two above: this is one
+      // small event per keyboard move rather than a per-frame push, and the
+      // thing that draws on it — the dismiss key over the band — is part of
+      // the picture rather than part of the inspector.
+      _keyboardStream = _inspect!.keyboards.listen(_onKeyboard);
       if (_inspectingSemantics) _enableSemantics(_inspect!);
       // Announced only now: a URI published before the service answers is a
       // URI that fails to connect. From here on `fw` and an agent can read the
@@ -1941,6 +2010,7 @@ class CatalogSession extends ChangeNotifier {
     _scrollSettle?.cancel();
     unawaited(_watch?.cancel());
     unawaited(_logStream?.cancel());
+    unawaited(_keyboardStream?.cancel());
     watchedBox.dispose();
     guestLogs.dispose();
     browsing

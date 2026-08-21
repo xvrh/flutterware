@@ -435,6 +435,7 @@ class _CatalogViewState extends State<CatalogView> {
                           // over.
                           var device = _deviceOf(context, _session);
                           var orientation = _orientationOf(context, _session);
+                          var keyboard = _keyboardOf(context, _session);
                           return AddressScope(
                             namespace: _inspectNamespace,
                             child: LayoutBuilder(
@@ -446,6 +447,7 @@ class _CatalogViewState extends State<CatalogView> {
                                       context,
                                       device,
                                       orientation,
+                                      keyboard,
                                     ),
                                   ),
                                   // Always mounted, unlike the knob drawer it
@@ -486,6 +488,7 @@ class _CatalogViewState extends State<CatalogView> {
     BuildContext context,
     Device? device,
     ScreenOrientation? orientation,
+    KeyboardMode keyboard,
   ) {
     switch (_session.phase) {
       case CatalogSessionPhase.starting:
@@ -514,7 +517,13 @@ class _CatalogViewState extends State<CatalogView> {
         // selection it does not belong to is how you end up wondering why your
         // edit did nothing.
         var canvas = _session.selectedError == null
-            ? _buildTexture(context, _session.engine!, device, orientation)
+            ? _buildTexture(
+                context,
+                _session.engine!,
+                device,
+                orientation,
+                keyboard,
+              )
             : _CompileError(
                 entry: _session.selected!,
                 error: _session.selectedError!,
@@ -541,6 +550,7 @@ class _CatalogViewState extends State<CatalogView> {
     EmbeddedEngine engine,
     Device? device,
     ScreenOrientation? orientation,
+    KeyboardMode keyboard,
   ) {
     if (device == null) {
       var hostRatio = MediaQuery.of(context).devicePixelRatio;
@@ -564,6 +574,12 @@ class _CatalogViewState extends State<CatalogView> {
                 );
                 _resizeAfterFrame();
                 _stageAfterFrame(null);
+                // Zero, whatever the bar asks for. `Fit` is not a device, so
+                // there is no measured keyboard to raise — and inventing one
+                // is the thing the whole table exists not to do. The mode
+                // still travels, so the guest reports the request rather than
+                // silently discarding it.
+                _keyboardAfterFrame(keyboard, 0);
                 return _staged(
                   _guestInput(engine, const SizedBox.expand(), touch: false),
                 );
@@ -598,14 +614,25 @@ class _CatalogViewState extends State<CatalogView> {
     // The identity, where everything above was the geometry — the guest renders
     // as this platform, not as the machine the studio is running on.
     _stageAfterFrame(effective.platform);
+    // And how much of it a keyboard would take, already turned — a phone's
+    // landscape keyboard is shorter than its portrait one, and a tablet's is
+    // taller.
+    _keyboardAfterFrame(keyboard, effective.keyboard);
     // The one thing `device_frame` is here for, and the only place it is
     // touched: the silhouette. Everything above came from our own measurements.
     // Null for a desktop size, which gets none.
     var chrome = deviceFrameFor(device);
-    var guest = _guestInput(
-      engine,
-      SizedBox.fromSize(size: screen),
-      touch: deviceIsTouched(effective),
+    var guest = StageKeyboardDismiss(
+      // The guest's own number, not the device's: what is on screen is what
+      // the *app* asked for through the mode, and a key drawn from the table
+      // would sit over a keyboard that is not up.
+      band: _session.keyboard?.height ?? 0,
+      onDismiss: _session.dismissKeyboard,
+      child: _guestInput(
+        engine,
+        SizedBox.fromSize(size: screen),
+        touch: deviceIsTouched(effective),
+      ),
     );
     // **The body is inside the zoom, not around it.** Zooming a framed preview
     // ought to look like leaning towards the phone; a stage that magnified the
@@ -672,6 +699,14 @@ class _CatalogViewState extends State<CatalogView> {
   void _stageAfterFrame(DevicePlatform? platform) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _session.stageAs(platform);
+    });
+  }
+
+  /// And how tall its keyboard is. Post-frame and deduped for the reasons
+  /// [_stageAfterFrame] is.
+  void _keyboardAfterFrame(KeyboardMode mode, double height) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _session.keyboardAs(mode, height);
     });
   }
 
@@ -1346,6 +1381,11 @@ class _TopBar extends StatelessWidget {
             orientation: orientation,
             declared: _canvasOf(session)?.devices ?? const [],
             staging: staging,
+            keyboard: _keyboardOf(context, session),
+            // The guest's own answer, not the mode's: in `auto` the app is
+            // what decides, and the bar saying otherwise would be a control
+            // describing its own setting rather than the picture.
+            keyboardUp: session.keyboard?.up ?? false,
           ),
           if (device != null)
             Text(
@@ -2486,4 +2526,20 @@ ScreenOrientation? _orientationOf(
   return AddressScope.param(context, 'device') == null
       ? _canvasOf(session)?.defaultOrientation
       : null;
+}
+
+/// Whether the keyboard is following the demo or the person looking at it,
+/// read from the same un-namespaced level as [_deviceOf].
+///
+/// **A staging axis, so it is on the address**, which is what makes a link, a
+/// screenshot and the panel agree about a picture with a keyboard in it.
+///
+/// Falls back to what the canvas declared with no condition attached, unlike
+/// [_orientationOf]: a keyboard is a property of the *entries* — these are the
+/// form screens — rather than of the device they were declared with, so
+/// picking a different phone should not take it away.
+KeyboardMode _keyboardOf(BuildContext context, CatalogSession session) {
+  var param = AddressScope.param(context, 'keyboard');
+  if (param != null) return keyboardModeById(param) ?? KeyboardMode.auto;
+  return _canvasOf(session)?.defaultKeyboard ?? KeyboardMode.auto;
 }

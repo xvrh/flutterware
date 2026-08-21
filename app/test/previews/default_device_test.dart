@@ -115,7 +115,7 @@ void main() {
     test('an entry under no canvas gets the plain rectangle', () {
       expect(
         coreWith(canvases).defaultFramingFor('.', entry: 'demo/shared/x.dart'),
-        (device: null, orientation: null),
+        (device: null, orientation: null, keyboard: null),
       );
     });
 
@@ -306,7 +306,7 @@ void main() {
     test('the declaration frames a call that names no device', () {
       var (deviceId, _, viewport) = PreviewsCore.framingFor(
         const {},
-        fallback: (device: phone, orientation: null),
+        fallback: (device: phone, orientation: null, keyboard: null),
       );
       expect(deviceId, 'iphone-16');
       // On the address as well as in the pixels: a picture framed as a phone
@@ -317,7 +317,7 @@ void main() {
     test('a call that names a device wins', () {
       var (deviceId, _, viewport) = PreviewsCore.framingFor(
         const {'device': 'ipad'},
-        fallback: (device: phone, orientation: null),
+        fallback: (device: phone, orientation: null, keyboard: null),
       );
       expect(deviceId, 'ipad');
       expect(viewport.width, CaptureViewport.of(tablet).width);
@@ -329,7 +329,7 @@ void main() {
       // so the default it is countermanding must not win.
       var (deviceId, _, viewport) = PreviewsCore.framingFor(
         const {'device': fitDeviceId},
-        fallback: (device: phone, orientation: null),
+        fallback: (device: phone, orientation: null, keyboard: null),
       );
       expect(deviceId, fitDeviceId);
       expect(viewport.width, CaptureViewport.panel.width);
@@ -338,7 +338,11 @@ void main() {
     test('a declared orientation turns the declared device', () {
       var (deviceId, orientationId, viewport) = PreviewsCore.framingFor(
         const {},
-        fallback: (device: tablet, orientation: ScreenOrientation.landscape),
+        fallback: (
+          device: tablet,
+          orientation: ScreenOrientation.landscape,
+          keyboard: null,
+        ),
       );
       expect(deviceId, 'ipad');
       expect(orientationId, 'landscape');
@@ -355,7 +359,11 @@ void main() {
       // picture nobody chose.
       var (_, orientationId, viewport) = PreviewsCore.framingFor(
         const {'device': 'iphone-16'},
-        fallback: (device: tablet, orientation: ScreenOrientation.landscape),
+        fallback: (
+          device: tablet,
+          orientation: ScreenOrientation.landscape,
+          keyboard: null,
+        ),
       );
       expect(orientationId, isNull);
       expect(viewport.height, greaterThan(viewport.width));
@@ -364,11 +372,77 @@ void main() {
     test('width and height still override the declaration', () {
       var (deviceId, _, viewport) = PreviewsCore.framingFor(
         const {'width': 400, 'height': 800},
-        fallback: (device: phone, orientation: null),
+        fallback: (device: phone, orientation: null, keyboard: null),
       );
       expect(deviceId, 'iphone-16', reason: 'the device is still on record');
       expect(viewport.width, 400);
       expect(viewport.height, 800);
+    });
+  });
+
+  group('the keyboard', () {
+    var phone = deviceById('iphone-16')!;
+    var window = deviceById('window')!;
+
+    test('a device brings its own measured height', () {
+      var (_, _, viewport) = PreviewsCore.framingFor(const {
+        'device': 'iphone-16',
+      });
+      expect(viewport.keyboard, 336);
+      // The mode is what a caller chooses; the height is not.
+      expect(viewport.keyboardMode, KeyboardMode.auto);
+    });
+
+    test('and the turned device brings the turned one', () {
+      var (_, _, viewport) = PreviewsCore.framingFor(const {
+        'device': 'iphone-16',
+        'orientation': 'landscape',
+      });
+      // 219, not 336: a phone's landscape keyboard is shorter, and this is the
+      // number that says the rotation reached the measurement rather than only
+      // the geometry.
+      expect(viewport.keyboard, 219);
+    });
+
+    test('a window has none, so `up` raises nothing', () {
+      var (_, _, viewport) = PreviewsCore.framingFor(const {
+        'device': 'window',
+        'keyboard': 'up',
+      });
+      expect(viewport.keyboard, 0);
+      expect(window.keyboard, 0);
+      // The mode still travels: the guest reports what was asked for rather
+      // than pretending nobody asked.
+      expect(viewport.keyboardMode, KeyboardMode.up);
+    });
+
+    test('a mode this build does not know is refused, not approximated', () {
+      expect(
+        () => PreviewsCore.framingFor(const {'keyboard': 'floating'}),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('a declared keyboard applies to the declared device', () {
+      var (_, _, viewport) = PreviewsCore.framingFor(
+        const {},
+        fallback: (device: phone, orientation: null, keyboard: KeyboardMode.up),
+      );
+      expect(viewport.keyboardMode, KeyboardMode.up);
+    });
+
+    test('and not to a device the call picked instead', () {
+      var (_, _, viewport) = PreviewsCore.framingFor(
+        const {'device': 'ipad'},
+        fallback: (device: phone, orientation: null, keyboard: KeyboardMode.up),
+      );
+      expect(viewport.keyboardMode, KeyboardMode.auto);
+    });
+
+    test('it is part of what makes two pictures two pictures', () {
+      var up = CaptureViewport.of(phone).withKeyboard(KeyboardMode.up);
+      expect(up, isNot(CaptureViewport.of(phone)));
+      expect(up.withKeyboard(KeyboardMode.auto), CaptureViewport.of(phone));
     });
   });
 }

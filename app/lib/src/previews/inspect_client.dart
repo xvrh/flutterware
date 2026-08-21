@@ -21,6 +21,8 @@ import 'package:flutterware/src/inspect/watch.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/ui_catalog/axis.dart';
 // ignore: implementation_imports
+import 'package:flutterware/src/ui_catalog/keyboard.dart';
+// ignore: implementation_imports
 import 'package:flutterware/src/ui_catalog/knob.dart';
 
 import '../embedder/guest_vm_service.dart';
@@ -250,6 +252,63 @@ class InspectClient {
   /// for why that one rather than an extension of ours.
   Future<void> setStaging(DevicePlatform? platform) =>
       stageGuestPlatform(vmService, platform);
+
+  /// Tells the guest how tall its keyboard is and whether to raise it.
+  ///
+  /// **Two halves of one fact, and neither is a keyboard on its own.** The
+  /// height is a measurement the host holds — it comes off the device table
+  /// and the guest has no way to know it — and the mode is what the person
+  /// looking at the picture asked for. What the app *wants* stays entirely on
+  /// the guest's side: a field taking focus is a framework signal, and nothing
+  /// here polls for it.
+  ///
+  /// Zero height is how a stage with no keyboard is said: a desktop window,
+  /// and `Fit`, which is not a device and has nothing measured to draw. A
+  /// forced-up keyboard there raises nothing rather than inventing a number.
+  ///
+  /// **Required rather than tolerant**, like the other writes: a keyboard that
+  /// silently failed to arrive looks exactly like a layout that survived it.
+  Future<KeyboardState?> setKeyboard({
+    required KeyboardMode mode,
+    required double height,
+  }) async {
+    var json = await vmService.requireExtension(
+      'ext.flutterware.keyboard',
+      args: {'mode': mode.name, 'height': '$height'},
+    );
+    return json == null ? null : KeyboardState.fromJson(json);
+  }
+
+  /// What the guest's keyboard is doing, without changing it.
+  Future<KeyboardState?> keyboard() async {
+    var json = await vmService.callExtension('ext.flutterware.keyboard');
+    return json == null ? null : KeyboardState.fromJson(json);
+  }
+
+  /// Closes the keyboard the way a platform does — the dismiss key.
+  ///
+  /// Not a mode change: the guest tells the focused field its connection went
+  /// away, the field unfocuses, and the keyboard comes down *because the view
+  /// dismissed it*. That is the only gesture on a real phone that takes a
+  /// keyboard away from outside the app, and it is the one that makes the app
+  /// react rather than making artwork disappear.
+  Future<KeyboardState?> dismissKeyboard() async {
+    var json = await vmService.requireExtension(
+      'ext.flutterware.keyboard',
+      args: const {'dismiss': 'true'},
+    );
+    return json == null ? null : KeyboardState.fromJson(json);
+  }
+
+  /// Every move the keyboard makes, pushed rather than polled.
+  ///
+  /// The interesting transitions are the *app's* — a field took focus, a view
+  /// let go of one — so a host that had to ask would find out a poll late. For
+  /// a control drawn over the keyboard band, a poll late means drawn in the
+  /// wrong place.
+  Stream<KeyboardState> get keyboards => vmService
+      .extensionEvents('flutterware.keyboard')
+      .map(KeyboardState.fromJson);
 
   /// Puts [entryId] on screen without recompiling or reloading anything.
   ///

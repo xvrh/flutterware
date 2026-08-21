@@ -188,10 +188,15 @@ String _canvasSource(PreviewCanvas canvas) {
     for (var o in canvas.orientations)
       '?orientationById(${escapeDartString(o.name)})',
   ];
+  var keyboards = [
+    for (var k in canvas.keyboards)
+      '?keyboardModeById(${escapeDartString(k.name)})',
+  ];
   var parts = [
     escapeDartString(canvas.root),
     if (devices.isNotEmpty) 'devices: [${devices.join(', ')}]',
     if (orientations.isNotEmpty) 'orientations: [${orientations.join(', ')}]',
+    if (keyboards.isNotEmpty) 'keyboards: [${keyboards.join(', ')}]',
   ];
   return 'PreviewCanvas(${parts.join(', ')})';
 }

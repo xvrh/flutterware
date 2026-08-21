@@ -38,6 +38,8 @@ class StagedDevice extends StatelessWidget {
     required this.orientation,
     required this.declared,
     required this.staging,
+    required this.keyboard,
+    required this.keyboardUp,
   });
 
   /// The upright device, or null for the panel — which is not a device and has
@@ -50,6 +52,13 @@ class StagedDevice extends StatelessWidget {
   final List<Device> declared;
 
   final CatalogStaging staging;
+
+  /// What the address asks the keyboard to do.
+  final KeyboardMode keyboard;
+
+  /// Whether one is actually up — which in [KeyboardMode.auto] is the app's
+  /// answer rather than anything this control knows.
+  final bool keyboardUp;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +88,13 @@ class StagedDevice extends StatelessWidget {
             _RotateSegment(device: device, orientation: orientation),
             line,
             _FrameSegment(device: device, staging: staging),
+            line,
+            _KeyboardSegment(
+              device: device,
+              orientation: orientation,
+              mode: keyboard,
+              up: keyboardUp,
+            ),
           ],
         ),
       ),
@@ -116,29 +132,51 @@ class _StagedToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var colors = context.colors;
-    var enabled = onTap != null;
     return Tooltip(
       message: tooltip,
       child: Tappable(
         onTap: onTap,
-        // The wash rather than a colour of our own: the fill here is state, and
-        // a hover that changed it would be the segment claiming to have been
-        // pressed. The capsule clips, so the overlay takes its rounded end.
-        child: Container(
-          width: 26,
-          alignment: Alignment.center,
-          color: enabled && on ? colors.accentSoft : colors.bg,
-          child: Icon(
-            icon,
-            size: FwIconSize.sm,
-            color: !enabled
-                ? colors.mut3
-                : on
-                ? colors.accent
-                : colors.ink,
-          ),
-        ),
+        child: _SegmentFace(icon: icon, on: on, enabled: onTap != null),
+      ),
+    );
+  }
+}
+
+/// What every segment looks like: one square, one glyph, three states.
+///
+/// Shared rather than copied because the capsule's whole readability rests on
+/// its segments agreeing — the lit fill is the language that says *on* across
+/// all of them, and a fourth segment that invented its own would read as an
+/// unrelated control that happens to touch the others.
+class _SegmentFace extends StatelessWidget {
+  const _SegmentFace({
+    required this.icon,
+    required this.on,
+    required this.enabled,
+  });
+
+  final IconData icon;
+  final bool on;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    // The wash rather than a colour of our own: the fill here is state, and a
+    // hover that changed it would be the segment claiming to have been
+    // pressed. The capsule clips, so the overlay takes its rounded end.
+    return Container(
+      width: 26,
+      alignment: Alignment.center,
+      color: enabled && on ? colors.accentSoft : colors.bg,
+      child: Icon(
+        icon,
+        size: FwIconSize.sm,
+        color: !enabled
+            ? colors.mut3
+            : on
+            ? colors.accent
+            : colors.ink,
       ),
     );
   }
@@ -228,6 +266,102 @@ class _FrameSegment extends StatelessWidget {
       onTap: enabled
           ? () => staging.frameVisible = !staging.frameVisible
           : null,
+    );
+  }
+}
+
+/// Raises the software keyboard, or lets the demo decide.
+///
+/// **A menu rather than a toggle, because it has three states and they have
+/// names.** The other two segments are switches — the device is framed or it
+/// is not — and this one is not: *automatic* is a third thing, and it is the
+/// default. A cycling icon would have made the two forced states and the
+/// default indistinguishable until you had clicked twice to find out.
+///
+/// The fill still says one thing and says it the way its neighbours do:
+/// **lit when a keyboard is actually up**. In [KeyboardMode.auto] that is the
+/// app's answer rather than the address's — a form with a field focused lights
+/// this without anybody having chosen anything, which is exactly the fact
+/// worth putting on the bar.
+///
+/// Dark on anything with no measured keyboard: every desktop size, and `Fit`,
+/// which is not a device. Raising a keyboard there would mean inventing a
+/// height, which is the one thing the measured table exists not to do.
+class _KeyboardSegment extends StatelessWidget {
+  const _KeyboardSegment({
+    required this.device,
+    required this.orientation,
+    required this.mode,
+    required this.up,
+  });
+
+  /// The upright device — turned here, because a phone's landscape keyboard is
+  /// not its portrait one and the height is what the menu shows.
+  final Device? device;
+
+  final ScreenOrientation? orientation;
+  final KeyboardMode mode;
+  final bool up;
+
+  @override
+  Widget build(BuildContext context) {
+    var height = device?.oriented(orientation).keyboard ?? 0;
+    var enabled = height > 0;
+    var face = _SegmentFace(
+      // The keyboard, and the *hidden* keyboard when it is forced down — the
+      // one state the fill cannot say, because dark already means "nothing is
+      // up" and forced-down means "nothing may come up".
+      icon: mode == KeyboardMode.down ? Icons.keyboard_hide : Icons.keyboard,
+      on: enabled && up,
+      enabled: enabled,
+    );
+    if (!enabled) {
+      return Tooltip(
+        message: '${device?.label ?? 'Fit'} has no software keyboard',
+        child: face,
+      );
+    }
+    return Tooltip(
+      message: switch (mode) {
+        KeyboardMode.auto =>
+          up
+              ? 'Keyboard up — the demo has a field focused'
+              : 'Keyboard follows the demo',
+        KeyboardMode.up => 'Keyboard held up (${height.round()}\u2009pt)',
+        KeyboardMode.down => 'Keyboard held down',
+      },
+      child: Popover<KeyboardMode>(
+        selected: mode,
+        // Automatic clears the parameter rather than writing itself, like the
+        // rotation beside it: the default belongs in nobody's address, and a
+        // link that says nothing about the keyboard has to keep meaning what
+        // it meant before there was one.
+        onSelected: (value) => AddressScope.write(
+          context,
+        ).setParam('keyboard', value == KeyboardMode.auto ? null : value.name),
+        groups: [
+          (
+            heading: null,
+            items: [
+              (
+                value: KeyboardMode.auto,
+                label: 'Automatic',
+                detail: 'on focus',
+              ),
+              (
+                value: KeyboardMode.up,
+                label: 'Shown',
+                // The measurement, where the other rows say a rule. It is the
+                // number the layout has to survive, and the only place in the
+                // GUI it is written down.
+                detail: '${height.round()} pt',
+              ),
+              (value: KeyboardMode.down, label: 'Hidden', detail: 'never'),
+            ],
+          ),
+        ],
+        child: face,
+      ),
     );
   }
 }

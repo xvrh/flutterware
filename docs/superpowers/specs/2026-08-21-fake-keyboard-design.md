@@ -3,8 +3,10 @@
 **Date:** 2026-08-21
 **Status:** Designed. Three measurements were taken *before* the design, and
 two of them changed it (§ What was measured). The owner decided four things on
-2026-08-21, marked **owner** where they land. **PR 1 — staging the platform —
-is built**; the keyboard itself is not.
+2026-08-21, marked **owner** where they land. **PR 1 (staging the platform)
+and PR 2 (the previews keyboard) are built**; the scenario half is not. What
+was built differently from what is written below is in § What PR 2 did
+differently.
 
 **Lineage:** `2026-07-30-scenarios-design.md` (the substrate every scenario
 verb runs on), `2026-08-15-previews-audit-on-flutter-tester.md` (the second
@@ -233,7 +235,76 @@ makes the app *react* rather than making artwork disappear.
 
 **Trap:** on that path `TextInput._clearClient()` never runs, so the control
 receives no `detach`. It has to clear its own client and key listener, or the
-next keystroke goes to a field that no longer believes it is focused.
+next keystroke goes to a field that no longer believes it is focused. Built as
+`GuestTextInput.dismiss()`, which tears down before it tells the client.
+
+## What PR 2 did differently
+
+Eight departures, each with its reason. Everything else is as written above.
+
+- **The dismiss key is drawn around the guest's picture, not inside
+  `StageSpecimen`.** `StageSpecimen` is only reached by the *bodyless* stagings
+  — a framed phone goes through `DeviceFrame` instead — so a key put there
+  would have been missing from exactly the picture the feature is for.
+  `StageKeyboardDismiss` lives in `stage_ground.dart` as designed and wraps the
+  guest one level lower, where both paths pass through.
+
+- **Which keyboard to draw is read, not pushed.** PR 1 stages the platform
+  through the framework's own `ext.flutter.platformOverride`, so
+  `defaultTargetPlatform` in the guest is already the staged phone's — the same
+  fact the demo's own `.adaptive` widgets read. A second copy of it on the
+  keyboard's wire is a second copy that can disagree.
+
+- **The bar control is a menu of three named rows, not a cycling icon.** Its
+  two neighbours in the capsule are switches; this one has three states and the
+  default is the interesting one. A cycle would have made *automatic*, *up* and
+  *down* indistinguishable until you had clicked twice to find out which you
+  were on. The fill still says the one thing its neighbours say — **lit when a
+  keyboard is actually up**, which in `auto` is the app's answer and not the
+  address's.
+
+- **`--keyboard` is on `screenshot` and `inspect` only.** `compare` declares no
+  framing flags at all — no `--device`, no `--orientation` — so a keyboard flag
+  there would have been the first, and the canvas declaration is already its
+  lever. `audit` runs on the flutter_tester lane, which has no keyboard until
+  PR 3.
+
+- **`keyboards:` on `PreviewCanvas` is declared, and crossed by nobody yet.**
+  The panel and the headless lane take its head as the default, which is what
+  makes it visible today. The *matrix* over it belongs to the harness, and the
+  harness is a test binding — PR 3.
+
+- **Nothing animates in previews.** The height is a pushed fact and it lands in
+  one frame. The ~250ms slide over fake time is the scenario lane's, where the
+  settle loop already owns a between-frames hook to step it in; a previews-side
+  animation would have to be awaited by every headless capture for nothing.
+
+- **`Device.keyboard` and `Device.landscapeKeyboard`, not a `DeviceKeyboard`
+  pair.** Two doubles beside the four inset doubles the table already carries,
+  and `rotated()` swaps them exactly as it swaps the insets — so everything
+  downstream of `oriented()` sees one number and never an orientation.
+
+- **The verification tool is `app/tool/embedder/fake_keyboard_probe.dart`.**
+  `keyboard_probe.dart` was taken: that is the *measurement* app at the repo
+  root, the one that runs on a simulator to find out how tall a real keyboard
+  is. This one takes those numbers as given and asks whether the fake one
+  behaves.
+
+### And one thing PR 1 got wrong, found here
+
+`staging_probe.dart` — PR 1's own verification — was calling
+`ext.flutterware.setStaging`, an extension deleted the same day the framework's
+own switch replaced it. `GuestVmService.callExtension` swallows an unknown
+method, so the probe staged **nothing** and passed anyway. Fixed to go through
+`stageGuestPlatform`, the panel's own call, and with it a second wrong
+assumption surfaced: staging does not remount the demo. `platformOverride`
+*reassembles*, which rebuilds while keeping every `State`, so the field carries
+what the previous half typed and the probe's expected strings are deltas now
+rather than literals.
+
+The rule, since this is the second time: **a probe that spells an extension
+itself goes on passing after the code it checks stops using it.** Call what the
+product calls.
 
 ## Scenarios: a policy, not an axis
 
@@ -398,11 +469,11 @@ wrong by 40 points is worse than a text keyboard that is right.
 Three PRs, each doing something visible on its own (and in this order because
 the first is what makes the second faithful):
 
-1. **Stage the platform.** `debugDefaultTargetPlatformOverride` pushed with
+1. ~~**Stage the platform.**~~ **Built.** `debugDefaultTargetPlatformOverride` pushed with
    the device, touch pointers for phone and tablet staging, the hover and
    wheel rules, the pan arbitration test. Moves every preview screenshot once,
    for its own reasons, before a keyboard is anywhere near it.
-2. **The previews keyboard.** The shared core (`DeviceKeyboard`, the
+2. ~~**The previews keyboard.**~~ **Built.** The shared core (`DeviceKeyboard`, the
    arithmetic, the slab), the guest driver, the tri-state control, the
    address, the canvas axis, the host-drawn dismiss key.
 3. **The scenarios keyboard.** The test-binding driver, the settle hook, the
@@ -413,10 +484,18 @@ The measurement pass for the heights gates PR 2, not PR 1.
 
 ## Verification
 
-`app/tool/embedder/keyboard_probe.dart` — the spike tool, returning as a real
-check rather than as prints. The transcript in § What was measured is its
-contract: autofocus raises, field → field does not flicker, an outside tap on
-a phone-staged guest does **not** dismiss, and the dismiss key does.
+`app/tool/embedder/fake_keyboard_probe.dart` — the spike tool, returning as a
+real check rather than as prints. The transcript in § What was measured is its
+contract, and it passes on a real guest: autofocus raises, an outside **touch**
+on a phone-staged guest does not dismiss, the dismiss key does — and does it by
+making the app let go, which is why the probe asserts `requested` rather than
+`height` — a forced mode overrules the app without lying about what the app
+asked for, and a stage with no measurement raises nothing however hard it is
+asked.
+
+Field → field is the one line of the transcript this probe does not drive: it
+needs two field positions, and it is exactly what a widget test can say for
+free. `test/ui_catalog/catalog_keyboard_test.dart` counts the flickers.
 
 Written down because this repo has learned it the expensive way: a smoke test
 that proves the guest survived a message proves nothing about arrival, which
@@ -425,8 +504,10 @@ framework queue.
 
 ## Open, deliberately
 
-- Whether `Fit` (no device) should have a keyboard at all. It has no device,
-  therefore no measured height; forced-up on `Fit` would have to invent one.
+- ~~Whether `Fit` (no device) should have a keyboard at all.~~ **Settled by
+  building it: no.** It has no device, therefore no measured height, and
+  forced-up there raises nothing rather than inventing one. The bar segment
+  goes dim and says so, like the rotation on a window.
 - Whether forced-up survives an entry switch. It is a property of the stage,
   not of the entry, which argues yes — but a demo with no field in it and a
   keyboard over the bottom third argues no.

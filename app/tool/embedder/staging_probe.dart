@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart' as wire;
 import 'package:flutterware_app/src/previews/compiler_daemon_client.dart';
+import 'package:flutterware_app/src/previews/debug_flags.dart';
+import 'package:flutterware_app/src/previews/devices.dart';
 import 'package:flutterware_app/src/previews/protocol.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:path/path.dart' as p;
@@ -13,7 +15,7 @@ import 'package:path/path.dart' as p;
 /// not just pixels.
 ///
 /// The one assertion that covers the whole chain — the panel's wire, the C
-/// host, the engine's pointer bookkeeping, `ext.flutterware.setStaging` and
+/// host, the engine's pointer bookkeeping, `ext.flutter.platformOverride` and
 /// `debugDefaultTargetPlatformOverride` — is what tapping outside a focused
 /// field does, because the framework decides it from the platform *and* the
 /// pointer kind:
@@ -62,10 +64,20 @@ Future<void> main(List<String> args) async {
     }
     guest = await _Guest.start(ready);
 
-    // Staged as a phone, driven by a finger. The demo remounts on the staging
-    // change, so the field is freshly autofocused and its echo empty.
-    await guest.stage('ios');
+    // **Each half is a delta, not a literal.** Staging the guest does *not*
+    // remount the demo — `platformOverride` reassembles, which rebuilds while
+    // keeping every `State` — so the field carries whatever the previous half
+    // typed into it, and an expectation spelled as a whole string is wrong
+    // from the second half onwards. This probe said `'z'` there for a while
+    // and passed anyway: it was calling an extension deleted the day the
+    // framework's own switch replaced it, and `callExtension` swallows an
+    // unknown method rather than raising.
+
+    // Staged as a phone, driven by a finger: the field keeps focus, so the
+    // letter after the tap lands in it.
+    await guest.stage(DevicePlatform.ios);
     await guest.report('staged ios');
+    var held = await guest.echo();
     guest.type('z');
     await guest.settle();
     await guest.report('typed z');
@@ -76,16 +88,19 @@ Future<void> main(List<String> args) async {
     await guest.settle();
     var phone = await guest.echo();
     stdout.writeln('[probe] staged ios, touched outside: echo "$phone"');
-    if (phone != 'zq') {
+    if (phone != '${held}zq') {
       failures.add(
-        'a touch outside took the focus on a phone (echo "$phone", wanted "zq")',
+        'a touch outside took the focus on a phone (echo "$phone", wanted '
+        '"${held}zq")',
       );
     }
 
     // Staged as nothing, driven by a mouse — the desktop rule, which is what
-    // the guest did on every device before staging existed.
-    await guest.stage('');
+    // the guest did on every device before staging existed. The letter after
+    // the click goes nowhere.
+    await guest.stage(null);
     await guest.report('staged fit');
+    held = await guest.echo();
     guest.type('z');
     await guest.settle();
     await guest.report('typed z');
@@ -96,10 +111,10 @@ Future<void> main(List<String> args) async {
     await guest.settle();
     var desktop = await guest.echo();
     stdout.writeln('[probe] staged fit, clicked outside: echo "$desktop"');
-    if (desktop != 'z') {
+    if (desktop != '${held}z') {
       failures.add(
         'a click outside left the focus on the desktop (echo "$desktop", '
-        'wanted "z")',
+        'wanted "${held}z")',
       );
     }
   } finally {
@@ -180,11 +195,14 @@ class _Guest {
 
   Future<void> settle() => Future.delayed(const Duration(seconds: 2));
 
-  Future<void> stage(String platform) async {
-    await _vm.callExtension(
-      'ext.flutterware.setStaging',
-      args: {'platform': platform},
-    );
+  /// Through [stageGuestPlatform], which is the *panel's own* call — a probe
+  /// that spelled the extension itself would go on passing after the panel
+  /// stopped using it, which is exactly what happened: this said
+  /// `ext.flutterware.setStaging` for a while, an extension deleted the day
+  /// the framework's own switch replaced it, and `callExtension` swallows an
+  /// unknown method rather than raising.
+  Future<void> stage(DevicePlatform? platform) async {
+    await stageGuestPlatform(_vm, platform);
     await settle();
   }
 
