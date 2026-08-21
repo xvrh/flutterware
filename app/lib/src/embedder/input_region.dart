@@ -24,6 +24,7 @@ class EmbedderInputRegion extends StatelessWidget {
     super.key,
     required this.engine,
     required this.focusNode,
+    this.touch = false,
     this.shouldIgnoreKey,
     this.shouldIgnorePointer,
     required this.child,
@@ -31,6 +32,20 @@ class EmbedderInputRegion extends StatelessWidget {
 
   final EmbeddedEngine engine;
   final FocusNode focusNode;
+
+  /// Whether the guest is being touched rather than clicked — a phone or a
+  /// tablet, where the mouse driving it is standing in for a finger.
+  ///
+  /// **The mouse then stops existing**, which is the point rather than a side
+  /// effect: no add, no hover, no exit, so a demo staged as a phone shows no
+  /// hover states, because a phone has none. What survives is the wheel, sent
+  /// as it always was — a phone has no wheel, but the human driving one has no
+  /// finger to drag with either, and a preview you cannot scroll is worse than
+  /// a preview scrolled by a device that is not there.
+  ///
+  /// A trackpad's two-finger pan is untouched for the same reason and arrives
+  /// as itself; the guest's scrollables read it on every platform.
+  final bool touch;
 
   /// Keys the host keeps for itself — chords a surrounding
   /// `CallbackShortcuts` should claim. Returning true answers `ignored`, not
@@ -53,6 +68,29 @@ class EmbedderInputRegion extends StatelessWidget {
 
   bool _ignores(PointerEvent event) =>
       shouldIgnorePointer?.call(event) ?? false;
+
+  /// One contact event, as whichever kind of pointer is driving the guest.
+  void _contact(PointerPhase phase, PointerEvent event, {int buttons = 0}) =>
+      engine.sendPointer(
+        phaseKind: phase,
+        x: event.localPosition.dx * engine.pixelRatio,
+        y: event.localPosition.dy * engine.pixelRatio,
+        buttons: buttons,
+        touch: touch,
+      );
+
+  /// [child] with the mouse's own events forwarded, or [child] alone when the
+  /// guest is being touched.
+  Widget _hovered(Widget child) => touch
+      ? child
+      : MouseRegion(
+          onEnter: (e) => _contact(PointerPhase.add, e),
+          onHover: (e) => _contact(PointerPhase.hover, e),
+          // Paired with the add: the guest is tracking a device that has left
+          // the window, and a hover state left behind never lifts.
+          onExit: (e) => _contact(PointerPhase.remove, e),
+          child: child,
+        );
 
   @override
   Widget build(BuildContext context) {
@@ -82,54 +120,32 @@ class EmbedderInputRegion extends StatelessWidget {
       // this the demo is blind to the mouse unless you are dragging — no ink
       // highlight, no `MouseRegion`, no hover tooltip, every demo frozen in
       // its resting state.
-      child: MouseRegion(
-        onEnter: (e) => engine.sendPointer(
-          phaseKind: PointerPhase.add,
-          x: e.localPosition.dx * engine.pixelRatio,
-          y: e.localPosition.dy * engine.pixelRatio,
-        ),
-        onHover: (e) => engine.sendPointer(
-          phaseKind: PointerPhase.hover,
-          x: e.localPosition.dx * engine.pixelRatio,
-          y: e.localPosition.dy * engine.pixelRatio,
-        ),
-        // Paired with the add: the guest is tracking a device that has left
-        // the window, and a hover state left behind never lifts.
-        onExit: (e) => engine.sendPointer(
-          phaseKind: PointerPhase.remove,
-          x: e.localPosition.dx * engine.pixelRatio,
-          y: e.localPosition.dy * engine.pixelRatio,
-        ),
-        child: Listener(
+      //
+      // And on a phone that is exactly right: there is no mouse to be blind
+      // to. See [touch].
+      child: _hovered(
+        Listener(
           onPointerDown: (e) {
             if (_ignores(e)) return;
             focusNode.requestFocus();
-            engine.sendPointer(
-              phaseKind: PointerPhase.down,
-              x: e.localPosition.dx * engine.pixelRatio,
-              y: e.localPosition.dy * engine.pixelRatio,
-              buttons: 1,
-            );
+            // A finger comes into existence when it lands and stops existing
+            // when it lifts, which is what a real touchscreen embedder sends
+            // and what keeps the engine's own pointer bookkeeping honest — a
+            // mouse, by contrast, was added when it entered the window.
+            if (touch) _contact(PointerPhase.add, e);
+            _contact(PointerPhase.down, e, buttons: 1);
           },
-          onPointerMove: (e) => _ignores(e)
-              ? null
-              : engine.sendPointer(
-                  phaseKind: PointerPhase.move,
-                  x: e.localPosition.dx * engine.pixelRatio,
-                  y: e.localPosition.dy * engine.pixelRatio,
-                  buttons: 1,
-                ),
+          onPointerMove: (e) =>
+              _ignores(e) ? null : _contact(PointerPhase.move, e, buttons: 1),
           // Withheld like the moves, and for a reason that is easy to miss:
           // the demo has already had a `cancel` by the time the host is
           // claiming this gesture, and an `up` arriving after it is an up with
           // no down behind it.
-          onPointerUp: (e) => _ignores(e)
-              ? null
-              : engine.sendPointer(
-                  phaseKind: PointerPhase.up,
-                  x: e.localPosition.dx * engine.pixelRatio,
-                  y: e.localPosition.dy * engine.pixelRatio,
-                ),
+          onPointerUp: (e) {
+            if (_ignores(e)) return;
+            _contact(PointerPhase.up, e);
+            if (touch) _contact(PointerPhase.remove, e);
+          },
           // A discrete wheel only — a trackpad's two-finger scroll has not
           // arrived here since Flutter 3.3; it is the pan-zoom sequence below.
           onPointerSignal: (e) {

@@ -146,6 +146,12 @@ ScenarioAssignment? scenarioAmbientAssignment;
 /// A `scenario()` that names its own `shots:` still wins, and a folder that
 /// says nothing is [Shots.auto] as it always was.
 ///
+/// [keyboard] is the folder's software-keyboard policy, and it is **on**: a
+/// scenario that taps a text field raises a keyboard exactly as a phone does,
+/// so the layout is seen meeting the smaller screen and the shots are pictures
+/// a phone could have taken. See [scenarioAmbientKeyboard] for what turning it
+/// off restores and why a suite adopting this sees its pictures move once.
+///
 /// Also loads the project's fonts, once, before anything is declared — the
 /// step `flutter test` otherwise leaves to each project's own
 /// `flutter_test_config.dart`. Without it this lane measures text in the
@@ -155,6 +161,7 @@ Future<void> runScenarios(
   FutureOr<void> Function() testMain, {
   ScenarioProfile? profile,
   Shots? shots,
+  bool keyboard = true,
 }) async {
   // Under the flutterware runner this is called to *ask* what the folder is
   // for, not to declare anything: the harness reads the profile here and
@@ -170,6 +177,7 @@ Future<void> runScenarios(
   if (scenarioProbing) {
     scenarioProbedProfile = profile;
     scenarioProbedShots = shots;
+    scenarioProbedKeyboard = keyboard;
     return;
   }
 
@@ -186,6 +194,7 @@ Future<void> runScenarios(
 
   var assignments = scenarioAssignments(profile);
   scenarioAmbientShots = shots;
+  scenarioAmbientKeyboard = keyboard;
   try {
     for (var assignment in assignments) {
       scenarioAmbientAssignment = assignment;
@@ -199,8 +208,24 @@ Future<void> runScenarios(
     scenarioAmbientAssignment = null;
     scenarioAmbientIsMatrix = false;
     scenarioAmbientShots = null;
+    scenarioAmbientKeyboard = null;
   }
 }
+
+/// Whether the folder being declared right now wants the software keyboard,
+/// or null where it said nothing — which is on.
+///
+/// **On by default, and one switch turns it off.** A scenario that taps a
+/// field now renders with a keyboard over the bottom third of the screen, the
+/// way a phone would, so a suite adopting this version sees its pictures move
+/// from the first tap on a field onward — once. `keyboard: false` restores the
+/// old behaviour byte for byte, and it covers *both* halves: no insets, no
+/// slab, and no refusal for a target under the band. `compareScenarioRuns` is
+/// how a consumer reads the delta before deciding.
+bool? scenarioAmbientKeyboard;
+
+/// What the last probed config said about the keyboard.
+bool? scenarioProbedKeyboard;
 
 /// The shots policy the folder being declared right now asked for, or null
 /// where it asked for nothing.

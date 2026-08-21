@@ -46,6 +46,7 @@ class ScenarioStepCapture {
     this.strayFrames = 0,
     this.failure,
     this.overflowErrors = 0,
+    this.keyboard,
   });
 
   /// 1-based position in the scenario's capture sequence.
@@ -179,6 +180,15 @@ class ScenarioStepCapture {
   /// so they came from the raw `tester`, and whatever they showed is missing
   /// from the flow. Zero in a scenario written in verbs alone.
   final int strayFrames;
+
+  /// How tall the software keyboard was when the frame was taken, in logical
+  /// pixels, or null when it was down.
+  ///
+  /// **A note about the screen, not a node in it.** A real phone's keyboard is
+  /// not in the app's tree either; the only reason to say it at all is that
+  /// an agent looking at a shot with the bottom third gone cannot otherwise
+  /// tell why.
+  final double? keyboard;
 
   /// Set on the one step a scenario captures when it breaks: the error, with
   /// its split branch. The frame is the state at the failure.

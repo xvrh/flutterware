@@ -1,3 +1,5 @@
+import 'package:flutterware/devices.dart';
+
 import '../embedder/guest_vm_service.dart';
 
 /// The framework's own debug switches, named for a command line.
@@ -158,6 +160,48 @@ Future<void> applyDebugFlags(
         '$got',
       );
     }
+  }
+}
+
+/// Stages the guest as [platform] — the device's *identity*, where the window
+/// metrics carry its geometry.
+///
+/// **The framework's own switch, not one of ours.** `platformOverride` is
+/// registered by every debug binding, it is what DevTools' platform selector
+/// drives, and its setter reassembles the application — so a `ThemeData` built
+/// at the top of a demo is rebuilt rather than left describing the machine the
+/// studio is running on. A guest-side extension of our own was written first
+/// and thrown away: it did the same thing, less completely, and only we would
+/// have known it existed.
+///
+/// A null [platform] is a preview staged as no device at all, and resets the
+/// override — the framework does that for any value it does not recognise,
+/// which is what the empty string is for here.
+///
+/// Not [applyDebugFlags], though it is the same extension: that one is for a
+/// caller who *asked* for a flag by name and refuses anything the guest would
+/// not take, and neither half fits. Nobody asked for this — a device did — and
+/// the reset has no value to check against, because the guest answers with the
+/// platform it is really running on.
+Future<void> stageGuestPlatform(
+  GuestVmService service,
+  DevicePlatform? platform,
+) async {
+  var wanted = switch (platform) {
+    null => '',
+    DevicePlatform.ios => 'iOS',
+    DevicePlatform.android => 'android',
+    DevicePlatform.macos => 'macOS',
+    DevicePlatform.windows => 'windows',
+    DevicePlatform.linux => 'linux',
+  };
+  var response = await service.requireExtension(
+    'ext.flutter.platformOverride',
+    args: {'value': wanted},
+  );
+  var got = '${response?['value']}';
+  if (wanted.isNotEmpty && got != wanted) {
+    throw StateError('the guest would not stage as $wanted: it reports $got');
   }
 }
 

@@ -110,6 +110,25 @@ const _debugDoc =
     '`defaultTargetPlatform` reports, `timeDilation=5` slows animations enough '
     'to photograph. Only what you name is set; the rest are left as they are.';
 
+/// What `--keyboard` is, on every action that renders.
+///
+/// One string for the same reason [_orientationDoc] is one: a reader meeting it
+/// on `screenshot` and again on `inspect` should not have to work out whether
+/// the two differ.
+const _keyboardDoc =
+    'Whether the software keyboard is up — `auto` (the default), `up` or '
+    '`down`. **`auto` is not off**: the preview raises a keyboard exactly when '
+    'the widget asks for one, the way a phone does, so an entry that '
+    'autofocuses a field is already rendered with 336 points less screen. '
+    '`up` holds one up with nothing focused, which is how to ask *what does '
+    'this layout do with a third of the screen gone* without hunting for a '
+    'field to tap. The height is measured per device and per orientation — a '
+    "phone's landscape keyboard is shorter than its portrait one, an iPad's is "
+    'taller — and it is reported in the `MediaQuery` the way a real embedder '
+    'reports it: the insets rise, the bottom safe area is eaten, `viewPadding` '
+    'still remembers the device. Ignored by anything with no measured '
+    'keyboard, which is every desktop size and `fit`.';
+
 /// What `--width` and `--height` are, on both actions that take them.
 const _sizeOverrideDoc =
     'Override the viewport, whatever it would otherwise have been — the '
@@ -403,14 +422,13 @@ class PreviewsCore extends PluginCore {
   /// is a question only a path can settle. Omitting it asks what the package
   /// says with no subtree in mind, which is what `new` and an empty catalog
   /// want.
-  ({Device? device, ScreenOrientation? orientation}) defaultFramingFor(
-    String path, {
-    String? entry,
-  }) {
+  ({Device? device, ScreenOrientation? orientation, KeyboardMode? keyboard})
+  defaultFramingFor(String path, {String? entry}) {
     var canvas = canvasFor(canvasesFor(path), entry ?? '');
     return (
       device: canvas?.defaultDevice,
       orientation: canvas?.defaultOrientation,
+      keyboard: canvas?.defaultKeyboard,
     );
   }
 
@@ -754,6 +772,14 @@ class PreviewsCore extends PluginCore {
             description: _orientationDoc,
             options: [for (var id in orientationIds) ActionOption(id)],
           ),
+          ActionParameter(
+            'keyboard',
+            'Keyboard',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: _keyboardDoc,
+            options: [for (var id in keyboardModeIds) ActionOption(id)],
+          ),
           // Declared because they change the pixels, and anything that changes
           // the pixels is recorded on the artifact's address.
           //
@@ -1037,6 +1063,14 @@ class PreviewsCore extends PluginCore {
             required: false,
             description: _orientationDoc,
             options: [for (var id in orientationIds) ActionOption(id)],
+          ),
+          ActionParameter(
+            'keyboard',
+            'Keyboard',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: _keyboardDoc,
+            options: [for (var id in keyboardModeIds) ActionOption(id)],
           ),
           const ActionParameter(
             'width',
@@ -2699,6 +2733,12 @@ class PreviewsCore extends PluginCore {
       // Absent for portrait, so an address written before orientation existed
       // and one written now are the same string for the same picture.
       'orientation': ?orientationId,
+      // And absent for `auto`, which is what an address that says nothing has
+      // always meant. Read off the viewport rather than passed in beside it:
+      // the mode is part of what the guest was staged with, so there is one
+      // copy of it and the picture and the address cannot disagree.
+      if (viewport.keyboardMode != KeyboardMode.auto)
+        'keyboard': viewport.keyboardMode.name,
       'width': '${viewport.width}',
       'height': '${viewport.height}',
       for (var knob in knobs.entries) 'knob.${knob.key}': knob.value,
@@ -2733,9 +2773,11 @@ class PreviewsCore extends PluginCore {
   @visibleForTesting
   static (String?, String?, CaptureViewport) framingFor(
     Map<String, Object?> arguments, {
-    ({Device? device, ScreenOrientation? orientation}) fallback = (
+    ({Device? device, ScreenOrientation? orientation, KeyboardMode? keyboard})
+    fallback = (
       device: null,
       orientation: null,
+      keyboard: null,
     ),
   }) {
     var deviceId = arguments['device'] ?? fallback.device?.id;
@@ -2760,6 +2802,19 @@ class PreviewsCore extends PluginCore {
         'no such orientation. Accepted: ${orientationIds.join(', ')}',
       );
     }
+    // Only with the device, like the orientation: a keyboard belongs to the
+    // subtree that declared it, and it is the same declaration.
+    var keyboardId =
+        arguments['keyboard'] ??
+        (arguments['device'] == null ? fallback.keyboard?.name : null);
+    if (keyboardId != null &&
+        (keyboardId is! String || !isKeyboardModeId(keyboardId))) {
+      throw ArgumentError.value(
+        keyboardId,
+        'keyboard',
+        'no such keyboard mode. Accepted: ${keyboardModeIds.join(', ')}',
+      );
+    }
     // Width and height still win where they are given: they are how you ask for
     // a size no device has, and on a device they stretch its screen rather than
     // dropping its ratio and its notch.
@@ -2781,10 +2836,16 @@ class PreviewsCore extends PluginCore {
               (device?.canRotate ?? false)
           ? orientationId as String?
           : null,
-      viewport.resized(
-        width: _intArgument(arguments, 'width'),
-        height: _intArgument(arguments, 'height'),
-      ),
+      viewport
+          .withKeyboard(
+            keyboardId is String
+                ? keyboardModeById(keyboardId)!
+                : KeyboardMode.auto,
+          )
+          .resized(
+            width: _intArgument(arguments, 'width'),
+            height: _intArgument(arguments, 'height'),
+          ),
     );
   }
 
@@ -2834,9 +2895,11 @@ class _InspectRequest {
 
   factory _InspectRequest.of(
     Map<String, Object?> arguments, {
-    ({Device? device, ScreenOrientation? orientation}) fallback = (
+    ({Device? device, ScreenOrientation? orientation, KeyboardMode? keyboard})
+    fallback = (
       device: null,
       orientation: null,
+      keyboard: null,
     ),
   }) {
     var entryId = arguments['entry'];

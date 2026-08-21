@@ -5080,6 +5080,13 @@ final resultShapes = <String, ResultShape>{
                   'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
             },
             <String, Object?>{
+              'name': 'keyboard',
+              'type': 'double',
+              'optional': true,
+              'doc':
+                  'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
+            },
+            <String, Object?>{
               'name': 'unchanged',
               'type': 'bool',
               'optional': true,
@@ -5452,6 +5459,13 @@ final resultShapes = <String, ResultShape>{
                     'optional': true,
                     'doc':
                         'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+                  },
+                  <String, Object?>{
+                    'name': 'keyboard',
+                    'type': 'double',
+                    'optional': true,
+                    'doc':
+                        'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
                   },
                   <String, Object?>{
                     'name': 'unchanged',
@@ -5876,6 +5890,13 @@ final resultShapes = <String, ResultShape>{
                               'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
                         },
                         <String, Object?>{
+                          'name': 'keyboard',
+                          'type': 'double',
+                          'optional': true,
+                          'doc':
+                              'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
+                        },
+                        <String, Object?>{
                           'name': 'unchanged',
                           'type': 'bool',
                           'optional': true,
@@ -6201,6 +6222,13 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc':
             'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+      },
+      <String, Object?>{
+        'name': 'keyboard',
+        'type': 'double',
+        'optional': true,
+        'doc':
+            'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
       },
       <String, Object?>{
         'name': 'unchanged',

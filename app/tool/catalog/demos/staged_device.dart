@@ -9,10 +9,10 @@ import 'package:flutterware_app/src/ui/theme.dart';
 
 import 'app_theme.dart';
 
-/// The preview panel's own device capsule — picker, rotation, frame — in every
-/// state it takes, all at once.
+/// The preview panel's own device capsule — picker, rotation, frame, keyboard
+/// — in every state it takes, all at once.
 ///
-/// **What this is for.** The control is three 24pt segments sharing one border,
+/// **What this is for.** The control is four 24pt segments sharing one border,
 /// and everything interesting about it is a pixel or a glyph: whether the
 /// border survives the corner, whether the two icons beside each other read as
 /// two different controls, what "dim" looks like next to "lit". None of that
@@ -56,7 +56,14 @@ class _Sheet extends StatelessWidget {
         _Row('on its side', device: 'iphone-16', orientation: 'landscape'),
         _Row('frame off', device: 'iphone-16', framed: false),
         _Row('a tablet', device: 'ipad'),
-        _Row('a window — neither switch applies', device: 'window-wide'),
+        _Row(
+          'keyboard up because the demo focused a field',
+          device: 'iphone-16',
+          keyboardUp: true,
+        ),
+        _Row('keyboard held up', device: 'iphone-16', keyboard: 'up'),
+        _Row('keyboard held down', device: 'iphone-16', keyboard: 'down'),
+        _Row('a window — only the picker applies', device: 'window-wide'),
         _Row('Fit — the panel itself'),
       ],
     ),
@@ -66,12 +73,26 @@ class _Sheet extends StatelessWidget {
 /// One capsule with its own address, labelled. Live: the segments write to the
 /// notifier beside them, so a demo of six is six working controls.
 class _Row extends StatefulWidget {
-  const _Row(this.label, {this.device, this.orientation, this.framed = true});
+  const _Row(
+    this.label, {
+    this.device,
+    this.orientation,
+    this.framed = true,
+    this.keyboard,
+    this.keyboardUp,
+  });
 
   final String label;
   final String? device;
   final String? orientation;
   final bool framed;
+  final String? keyboard;
+
+  /// Whether a keyboard is on screen. Null follows the mode, which is what
+  /// every row but one wants — the exception is the row that exists to show
+  /// what `auto` looks like once the demo itself has focused something, which
+  /// no address can say.
+  final bool? keyboardUp;
 
   @override
   State<_Row> createState() => _RowState();
@@ -85,6 +106,7 @@ class _RowState extends State<_Row> {
       axes: {
         if (widget.device != null) 'device': widget.device!,
         if (widget.orientation != null) 'orientation': widget.orientation!,
+        if (widget.keyboard != null) 'keyboard': widget.keyboard!,
       },
     ),
   );
@@ -96,6 +118,10 @@ class _RowState extends State<_Row> {
     staging.dispose();
     super.dispose();
   }
+
+  KeyboardMode get keyboardMode =>
+      keyboardModeById(address.value.axes['keyboard'] ?? '') ??
+      KeyboardMode.auto;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -114,6 +140,8 @@ class _RowState extends State<_Row> {
               ),
               declared: const [],
               staging: staging,
+              keyboard: keyboardMode,
+              keyboardUp: widget.keyboardUp ?? keyboardMode == KeyboardMode.up,
             ),
             const SizedBox(width: 16),
             // Flexible because this sheet is looked at inside the panel too,

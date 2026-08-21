@@ -16,6 +16,8 @@ import 'aim.dart';
 import 'asset_bundle.dart';
 import 'async_watchdog.dart';
 import '../app_events/events.dart';
+import '../devices.dart';
+import 'keyboard.dart';
 import 'motion.dart';
 import 'notification.dart';
 import 'profile.dart';
@@ -85,6 +87,12 @@ void scenario(
   // here for the same reason, and beaten by anything this scenario said for
   // itself. Nobody having spoken is `auto`, which is what it always was.
   var policy = shots ?? scenarioAmbientShots ?? Shots.auto;
+  // The folder's keyboard policy, captured as this scenario is declared for
+  // the reason the shots policy is: a matrix declares one body once per
+  // assignment, and each declaration keeps what it was made under. On unless
+  // the folder said otherwise — see [scenarioAmbientKeyboard] for what off
+  // restores.
+  var keyboard = scenarioAmbientKeyboard ?? true;
   var name =
       scenarioAmbientIsMatrix && assignment != null && !assignment.isEmpty
       ? '$description [${assignment.label}]'
@@ -115,6 +123,7 @@ void scenario(
           settle,
           assignment,
           source,
+          keyboard,
         );
       }
       // Pinned, but still ticking with FakeAsync: the offset from where this
@@ -132,6 +141,7 @@ void scenario(
           settle,
           assignment,
           source,
+          keyboard,
         ),
       );
     },
@@ -190,6 +200,7 @@ Future<void> _runScenario(
   Settle settle,
   ScenarioAssignment? assignment,
   String? source,
+  bool wantsKeyboard,
 ) async {
   // The runner's assignment wins, like its args do below: the declaration
   // captured the ambient one, which under the runner is null — and a body
@@ -198,6 +209,20 @@ Future<void> _runScenario(
   assignment = scenarioRunArgs?.assignment ?? assignment;
   var restore = _applyRunArgs(tester, assignment);
   var restoreErrors = _installExpansionOverflowFilter();
+  // **The measurement, read off the device the run is staged as.** Zero when
+  // the folder turned the keyboard off, when the run is staged on nothing, and
+  // on every desktop size — and zero is the whole of "off": no insets, no
+  // slab, and no refusal for a target under a band that is not there.
+  //
+  // One driver for the scenario, not one per replay: a split's branches share
+  // a tester and a view, so a keyboard raised on the first path has to be put
+  // back before the second one starts.
+  var keyboard = ScenarioKeyboard(
+    tester,
+    deviceHeight: wantsKeyboard
+        ? (assignment?.orientedDevice?.keyboard ?? 0)
+        : 0,
+  );
   // Whatever the scenario before this one left memoized on `rootBundle`
   // belongs to *its* FakeAsync zone. A read still in flight when that scenario
   // ended can never complete again — nothing will ever flush that zone — and
@@ -247,6 +272,9 @@ Future<void> _runScenario(
         // its previous self keeps every State alive — the navigator stack
         // included — and a replay must start from nothing.
         await tester.pumpWidget(const SizedBox.shrink());
+        // With the tree goes the keyboard: the next branch starts from a fresh
+        // app, and one left up would be over a form nobody has touched yet.
+        keyboard.reset();
       }
       first = false;
       var s = ScenarioTester._(
@@ -258,6 +286,7 @@ Future<void> _runScenario(
         assignment,
         source,
         assets,
+        keyboard,
       );
       try {
         await body(s);
@@ -482,6 +511,7 @@ class ScenarioTester {
     this.assignment,
     this._source,
     this.assets,
+    this._keyboard,
   );
 
   /// The real tester — the escape hatch to the full `flutter_test` surface.
@@ -501,6 +531,25 @@ class ScenarioTester {
   ///
   /// One per scenario, shared by every replay of its splits.
   final ScenarioAssetBundle assets;
+
+  /// What raises and lowers the software keyboard — shared across replays for
+  /// the same reason [assets] is.
+  final ScenarioKeyboard _keyboard;
+
+  /// The software keyboard, for a scenario that wants to say it explicitly.
+  ///
+  /// **Nothing here is needed to get one.** A scenario that taps a text field
+  /// already renders with a keyboard over the bottom of the screen, because
+  /// that is what a phone does and the framework says when. This is for the
+  /// other cases: a layout you want to see under one with nothing focused, a
+  /// user who swipes it away, a screen you want photographed without it.
+  ///
+  /// Every one of them is a **no-op on a stage with no keyboard** — a run on
+  /// a desktop size or on nothing, and a folder that turned the feature off.
+  /// Raising one there would mean inventing a height, which is the one thing
+  /// the measured table exists not to do, and a matrix crossing a phone with a
+  /// window must not fail on the window.
+  late final keyboard = ScenarioKeyboardVerbs._(this);
 
   final Shots shots;
 
@@ -577,7 +626,16 @@ class ScenarioTester {
       // app that installs a `DefaultAssetBundle` of its own still wins, since
       // its is the nearer ancestor.
       await tester.pumpWidget(
-        DefaultAssetBundle(bundle: assets, child: widget),
+        DefaultAssetBundle(
+          bundle: assets,
+          // The slab, above the app and inside the pumped tree, so every
+          // capture that exists already contains it — step shots, motion
+          // frames, the web export — with no compositing step anywhere. The
+          // *insets* are on the view rather than here; see [ScenarioKeyboard].
+          child: _keyboard.deviceHeight > 0
+              ? ScenarioKeyboardSlab(driver: _keyboard, child: widget)
+              : widget,
+        ),
       );
       await _realAsyncTurn();
       await tester.pump();
@@ -1068,7 +1126,15 @@ class ScenarioTester {
       settled = await policy.apply(
         tester,
         record: _recorder,
-        land: () => budget.land(tester, assets),
+        // The keyboard rides the same between-frames hook the real work does,
+        // and for a related reason: it has to move *between* the policy's
+        // frames or the slide is not in them. Writing the view schedules a
+        // forced frame, so a bounded policy keeps pumping until it lands
+        // rather than stopping halfway down.
+        land: () async {
+          _keyboard.step();
+          await budget.land(tester, assets);
+        },
       );
       // Frames are all a policy follows; work on the real event loop
       // schedules none while it is in flight. See [landRealWork].
@@ -1079,6 +1145,7 @@ class ScenarioTester {
         budget: budget,
         assets: assets,
         record: _recorder,
+        beforePump: _keyboard.step,
       );
     } catch (error) {
       // The verb that broke captures its own frame; `scenario`'s catch is the
@@ -1219,7 +1286,45 @@ class ScenarioTester {
     pump: () => tester.pump(),
     ensureSemantics: () => _state.ensureSemantics(tester),
     describeScreen: _describeVisibleTexts,
+    namedCovering: _keyboardOver,
   );
+
+  /// The refusal a target under the keyboard deserves, or null when the
+  /// keyboard is not what is over it.
+  ///
+  /// **A refusal is the feature here.** Without it the tap lands on the slab,
+  /// which absorbs it, and the flow sails on: the verb reported success, the
+  /// button was never pressed, and the failure surfaces three steps later as a
+  /// screen that did not change. The generic covered sentence would be true —
+  /// something absorbs the pointer — and would send the reader looking for an
+  /// overlay that is not in their code.
+  ///
+  /// **It does not offer `scrollTo`, and that was measured rather than
+  /// assumed.** `Scrollable.ensureVisible` stops the moment the target is
+  /// inside the *viewport*, and in the app this refusal actually fires on —
+  /// one that does not resize — the viewport runs under the keyboard. So the
+  /// scroll succeeds, the target is still covered, and the very next verb is
+  /// refused again. Which is faithful: a row parked at the bottom of a list
+  /// under a real keyboard is not reachable on a real phone either. The only
+  /// honest way past is to take the keyboard away.
+  String? _keyboardOver(Offset center, String verb, String described) {
+    if (!_keyboard.up || center.dy < _keyboardTop) return null;
+    return '$described is behind the software keyboard, which covers the '
+        'bottom ${_keyboard.height.round()} points of the screen — so '
+        '`s.$verb` at its centre lands on the keyboard, exactly as a finger '
+        'would. If the app is meant to reach this while somebody is typing, '
+        'that is a real layout problem: a `Scaffold` that resizes moves it out '
+        'of the way, and one that does not leaves it as unreachable on a phone '
+        'as it is here. To carry the flow on: `await s.keyboard.dismiss()`.';
+  }
+
+  /// Where the keyboard's top edge is, in the logical pixels every box in a
+  /// scenario is measured in.
+  double get _keyboardTop {
+    var view = tester.binding.renderViews.firstOrNull;
+    var height = view?.size.height ?? 0;
+    return height - _keyboard.height;
+  }
 
   /// Resolves a verb's target and insists it names exactly one widget the
   /// pointer can actually reach.
@@ -1637,6 +1742,10 @@ class ScenarioTester {
         failure: failure,
         overflowErrors: overflowErrors,
         frames: _frames,
+        // What the screen lost to a keyboard when this was photographed. Read
+        // here with the texts and the overlay style, for the reason written on
+        // both: the hand-over is a step late and by then the app has moved on.
+        keyboard: _keyboard.up ? _keyboard.height : null,
       );
     });
   }
@@ -1688,6 +1797,7 @@ class _PendingEmit {
     required this.failure,
     required this.frames,
     this.overflowErrors = 0,
+    this.keyboard,
     this.aim,
     this.kind = ScenarioCaptureKind.screen,
     this.bytes,
@@ -1758,6 +1868,10 @@ class _PendingEmit {
   /// step, like [events].
   final int overflowErrors;
 
+  /// How tall the software keyboard was when this frame was taken, in logical
+  /// pixels — null when it was down, which is nearly every step.
+  final double? keyboard;
+
   ScenarioStepCapture toCapture() => ScenarioStepCapture(
     index: index,
     parent: parent,
@@ -1790,5 +1904,87 @@ class _PendingEmit {
     strayFrames: strayFrames,
     failure: failure,
     overflowErrors: overflowErrors,
+    keyboard: keyboard,
+  );
+}
+
+/// The software keyboard's own verbs — `s.keyboard`.
+///
+/// **A scenario needs none of them for the ordinary case.** Tapping a field
+/// raises a keyboard already, because the framework says so and the driver
+/// listens; these are for saying something the flow does not: hold one up over
+/// a layout with nothing focused, swipe one away the way a user does, or take
+/// one picture without it.
+///
+/// Each is a step like any other verb, so the flow shows the screen moving
+/// rather than a screen that changed between two shots for no visible reason.
+class ScenarioKeyboardVerbs {
+  ScenarioKeyboardVerbs._(this._s);
+
+  final ScenarioTester _s;
+
+  /// Whether one is on screen.
+  bool get isUp => _s._keyboard.up;
+
+  /// Whether the **app** has asked for one — a field has focus, and the
+  /// framework told the platform so.
+  ///
+  /// Separate from [isUp] because the two genuinely differ, and reporting only
+  /// one is how a control ends up lying: [hide] leaves this true with nothing
+  /// on screen, and [show] leaves it false with a keyboard over a third of it.
+  bool get isRequested => _s._keyboard.requested;
+
+  /// How much of the screen it is taking, in logical pixels — 0 when down.
+  double get height => _s._keyboard.height;
+
+  /// Whether this stage has a keyboard at all: false on a desktop size, on a
+  /// run staged as nothing, and in a folder that turned the feature off.
+  /// Every verb below is a no-op when it is false.
+  bool get isAvailable => _s._keyboard.deviceHeight > 0;
+
+  /// Holds it up, focus or no focus — *what does this layout do with a third
+  /// of the screen gone*, asked without hunting for a field to tap.
+  ///
+  /// Sticky: the app asking for the keyboard to go away no longer takes it
+  /// away. [auto] hands it back, and so does [dismiss].
+  Future<void> show({Shot? shot, Settle? settle}) =>
+      _set(KeyboardMode.up, 'show', shot, settle);
+
+  /// Holds it down, whatever the app asks for — one picture of the whole
+  /// screen in the middle of a flow that is typing into it.
+  Future<void> hide({Shot? shot, Settle? settle}) =>
+      _set(KeyboardMode.down, 'hide', shot, settle);
+
+  /// Back to following the app, which is where every scenario starts.
+  Future<void> auto({Shot? shot, Settle? settle}) =>
+      _set(KeyboardMode.auto, 'auto', shot, settle);
+
+  /// The platform closing it without the app being touched — a swipe down on
+  /// Android, the dismiss key on an iPad.
+  ///
+  /// **Not the same as [hide]**, and the difference is the whole reason both
+  /// exist: this makes the app *let go*. The focused field is unfocused, so
+  /// anything the app does on losing focus — validating, committing a draft,
+  /// collapsing a suggestion list — actually happens. [hide] leaves the field
+  /// focused and takes the picture away.
+  Future<void> dismiss({Shot? shot, Settle? settle}) => _s._step(
+    shot,
+    settle,
+    () async => _s._keyboard.dismiss(),
+    verb: 'keyboard',
+    target: 'dismiss',
+  );
+
+  Future<void> _set(
+    KeyboardMode mode,
+    String said,
+    Shot? shot,
+    Settle? settle,
+  ) => _s._step(
+    shot,
+    settle,
+    () async => _s._keyboard.jumpTo(mode),
+    verb: 'keyboard',
+    target: said,
   );
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// The guest's text input — what lets a demo's `TextField` receive typing.
@@ -34,6 +35,28 @@ class GuestTextInput with TextInputControl {
   TextEditingValue _value = TextEditingValue.empty;
   var _listening = false;
 
+  /// Whether the platform would be showing a keyboard right now.
+  ///
+  /// **The two signals, and the whole of the state machine they drive.** The
+  /// framework computes this and hands it to whatever control is installed, so
+  /// nothing downstream needs a heuristic for when a phone would raise its
+  /// keyboard: it is up between a [show] and the [hide] after it.
+  ///
+  /// Two things about the traffic are worth knowing before reading it. [show]
+  /// arrives **twice** per focus — an `EditableText` asks on focus and again on
+  /// tap — so a listener must be edge-triggered on the value rather than
+  /// counting calls, which a [ValueNotifier] does for free. And moving from one
+  /// field to the next produces **no [hide] at all**: `TextInput` defers it to
+  /// a microtask that cancels itself if anything re-attaches
+  /// (`_scheduleHide`), which is why nothing here needs a debounce of its own.
+  final showing = ValueNotifier<bool>(false);
+
+  @override
+  void show() => showing.value = true;
+
+  @override
+  void hide() => showing.value = false;
+
   /// Replaces the platform control. Call once, before `runApp`.
   void install() {
     TextInput.setInputControl(this);
@@ -57,6 +80,32 @@ class GuestTextInput with TextInputControl {
     // A client switch attaches the new client before the old one's connection
     // closes; only the current client's detach may tear down.
     if (_client != client) return;
+    _release();
+  }
+
+  /// What a platform does when the user closes the IME without touching the
+  /// app — the swipe-down on Android, the dismiss key on an iPad, and the one
+  /// gesture that takes a keyboard away from outside the app.
+  ///
+  /// It makes the app *react* rather than making artwork disappear:
+  /// [TextInputClient.connectionClosed] is what `EditableText` unfocuses on,
+  /// so the field lets go and the keyboard comes down because the view
+  /// dismissed it, which is the rule the whole feature is built on.
+  ///
+  /// **The trap it exists to avoid.** On this path `TextInput._clearClient()`
+  /// never runs, so no [detach] ever arrives: a control that waited for one
+  /// would keep its key handler installed and its client believed-focused, and
+  /// the next keystroke would go to a field that has already let go. So the
+  /// teardown happens here, before the client is told.
+  void dismiss() {
+    var client = _client;
+    if (client == null) return;
+    _release();
+    client.connectionClosed();
+    showing.value = false;
+  }
+
+  void _release() {
     if (_listening) {
       _listening = false;
       HardwareKeyboard.instance.removeHandler(_handleKey);

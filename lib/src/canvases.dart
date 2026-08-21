@@ -41,6 +41,7 @@ class PreviewCanvas {
     this.prefix, {
     this.devices = const [],
     this.orientations = const [],
+    this.keyboards = const [],
   });
 
   /// Which entries this covers: a path relative to the **package**, in the same
@@ -81,6 +82,20 @@ class PreviewCanvas {
   /// tablet, so two short lists beat one long one with the rotatable entries
   /// written twice. Empty means portrait.
   final List<ScreenOrientation> orientations;
+
+  /// Whether the entries under here are worth seeing with a keyboard up, head
+  /// first, likewise.
+  ///
+  /// **A staging axis in previews and a policy in scenarios**, and the reason
+  /// is that nothing in a preview focuses on its own: a form rendered cold has
+  /// no field selected, so the only way a matrix covers the smaller screen is
+  /// to cross it. A scenario taps the field itself and the keyboard follows,
+  /// which is why `ScenarioProfile` has no list like this one.
+  ///
+  /// Empty means [KeyboardMode.auto] — exactly what the entry asks for, which
+  /// for most entries is nothing at all. `[KeyboardMode.up]` on a directory of
+  /// form screens is how a project says *these are the ones where it matters*.
+  final List<KeyboardMode> keyboards;
 
   /// [prefix] with its slashes tidied — no leading or trailing one, `.` and the
   /// empty string both meaning the whole package.
@@ -124,6 +139,10 @@ class PreviewCanvas {
   ScreenOrientation? get defaultOrientation =>
       orientations.isEmpty ? null : orientations.first;
 
+  /// And whether it has a keyboard over it.
+  KeyboardMode? get defaultKeyboard =>
+      keyboards.isEmpty ? null : keyboards.first;
+
   /// Whether [path] — a package-relative, `/`-separated file or directory — is
   /// under this canvas.
   bool covers(String path) {
@@ -137,6 +156,7 @@ class PreviewCanvas {
     if (devices.isNotEmpty) 'devices': [for (var d in devices) d.id],
     if (orientations.isNotEmpty)
       'orientations': [for (var o in orientations) o.name],
+    if (keyboards.isNotEmpty) 'keyboards': [for (var k in keyboards) k.name],
   };
 
   /// Reads back what [toJson] wrote.
@@ -160,6 +180,10 @@ class PreviewCanvas {
       orientations: [
         for (var name in (raw['orientations'] as List? ?? const []))
           if (name is String) ?orientationById(name),
+      ],
+      keyboards: [
+        for (var name in (raw['keyboards'] as List? ?? const []))
+          if (name is String) ?keyboardModeById(name),
       ],
     );
   }

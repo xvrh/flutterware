@@ -343,6 +343,7 @@ class EmbeddedEngine extends ChangeNotifier {
     double panY = 0,
     double scale = 1,
     double rotation = 0,
+    bool touch = false,
   }) {
     _send(
       PointerEventMessage(
@@ -357,6 +358,7 @@ class EmbeddedEngine extends ChangeNotifier {
         panY: panY,
         scale: scale,
         rotation: rotation,
+        touch: touch,
       ),
     );
   }

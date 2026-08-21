@@ -214,6 +214,13 @@ void main() => withClock(Clock.fixed($clockLiteral), () => GuestLogs.instance.in
   // guest does not have, and both must be up before the first frame.
   GuestKeyboard.instance.install();
   GuestTextInput.instance.install();
+  // The fake keyboard, which is two facts meeting: what the app asks for
+  // arrives from the control just installed, and how tall it is arrives from
+  // the host. Installed before runApp because the app half is a framework
+  // signal that can fire on the very first frame — an entry with an
+  // autofocused field asks for a keyboard before anything has been drawn.
+  CatalogKeyboard.instance.install();
+  CatalogKeyboard.instance.registerExtensions();
   // Before runApp, and once, like every extension below: the host may ask for
   // another entry before the first frame, and switching must outlive the entry
   // it switches away from.
@@ -311,7 +318,15 @@ class _CatalogHost extends StatelessWidget {
         viewPadding: media.viewInsets,
         viewInsets: EdgeInsets.zero,
       ),
-      child: Directionality(textDirection: TextDirection.ltr, child: child),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        // The keyboard: the insets it takes out of the screen, and the slab
+        // that says where they went. Below the conversion above rather than
+        // beside it — it reads the padding that produced as the device's own
+        // safe areas and subtracts its own height from the bottom of them,
+        // which is the arithmetic a real embedder reports.
+        child: CatalogKeyboardScope(child: child),
+      ),
     );
   }
 }

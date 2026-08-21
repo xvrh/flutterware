@@ -149,6 +149,7 @@ class PointerEventMessage extends EmbedderMessage {
     this.panY = 0,
     this.scale = 1,
     this.rotation = 0,
+    this.touch = false,
   });
 
   final PointerPhase phase;
@@ -168,6 +169,19 @@ class PointerEventMessage extends EmbedderMessage {
   final double panY;
   final double scale;
   final double rotation;
+
+  /// Whether this is a finger rather than a mouse.
+  ///
+  /// **Not cosmetic, and not inferable in the guest.** The framework asks what
+  /// kind of pointer an event came from before it decides what it means — a
+  /// tap outside a text field dismisses the keyboard from a mouse and leaves
+  /// it up from a finger — so a phone driven by mouse events behaves like a
+  /// desktop however it is staged. Only the host knows which it is: it is the
+  /// one that picked the device.
+  ///
+  /// The `panZoom*` phases ignore this. A trackpad is a trackpad whatever the
+  /// staging, and the guest's own scrollables are what read it.
+  final bool touch;
 }
 
 class KeyEventMessage extends EmbedderMessage {
@@ -263,6 +277,7 @@ Uint8List encodeMessage(EmbedderMessage message) {
       _f64(body, message.panY);
       _f64(body, message.scale);
       _f64(body, message.rotation);
+      body.addByte(message.touch ? 1 : 0);
     case KeyEventMessage():
       body.addByte(MessageType.keyEvent.tag);
       _u32(body, message.kind.index);
@@ -357,6 +372,9 @@ EmbedderMessage decodeMessageBody(Uint8List body) {
         panY: data.getFloat64(56, Endian.little),
         scale: data.getFloat64(64, Endian.little),
         rotation: data.getFloat64(72, Endian.little),
+        // Appended, so a frame that stops at 80 bytes is a host that predates
+        // staging — the same length guard the pan/zoom fields carry.
+        touch: data.lengthInBytes > 80 && data.getUint8(80) == 1,
       );
     case MessageType.keyEvent:
       var characterLength = data.getUint32(32, Endian.little);

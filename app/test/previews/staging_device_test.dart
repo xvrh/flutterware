@@ -9,6 +9,16 @@ void main() {
       expect(ids, everyElement(matches(RegExp(r'^[a-z0-9-]+$'))));
     });
 
+    test('a phone and a tablet are touched, a window is clicked', () {
+      // Both halves of staging a device, and the framework wants both before it
+      // will behave like a phone: the platform decides the convention, the
+      // pointer kind decides whether a tap outside a field counts as one.
+      expect(deviceIsTouched(Devices.iphone16), isTrue);
+      expect(deviceIsTouched(Devices.iPad), isTrue);
+      expect(deviceIsTouched(Devices.window), isFalse);
+      expect(deviceIsTouched(null), isFalse);
+    });
+
     test('the accepted list is the offered list plus fit', () {
       // One list, so the picker and the address cannot disagree about what
       // exists. A vocabulary documented apart from the code that enforces it is

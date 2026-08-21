@@ -1651,7 +1651,22 @@ class ScenariosCore extends PluginCore {
       events: events,
       eventCount: record?.eventCount,
       eventChannels: record?.eventChannels,
-      note: read.note ?? eventsNote,
+      // **A note, not a node.** A real phone's keyboard is not in the app's
+      // widget tree either, so putting one in the screen would be inventing a
+      // widget nobody wrote — and it would land in every `find`, every
+      // semantics audit and every transcript. The only reason to mention it at
+      // all is that a reader looking at a shot with the bottom third gone
+      // cannot otherwise tell why.
+      note: switch (<String>[
+        if (picked.keyboard case var height?) _keyboardNote(height),
+        ?(read.note ?? eventsNote),
+      ]) {
+        // Null rather than the empty string when nobody said anything, which
+        // is what every reply before this one carried and what a reader that
+        // checks for a note is checking for.
+        [] => null,
+        var notes => notes.join(' '),
+      },
       next: _offerFor(record),
       steps: picked.siblings,
       picture: showable
@@ -1757,6 +1772,12 @@ class ScenariosCore extends PluginCore {
     return '${ScreenRead.offer} · events: true for what the app did on the '
         'way here ($count on ${channels ?? 'several channels'}).';
   }
+
+  /// What a screen with a keyboard over it says about itself.
+  static String _keyboardNote(double height) =>
+      'The software keyboard is up: it covers the bottom ${height.round()} '
+      'points of this screen, and everything above was laid out against what '
+      'is left.';
 
   /// The lens named for this call, or `act`.
   ///
@@ -2037,6 +2058,7 @@ class ScenariosCore extends PluginCore {
                 ? outcome.errors.firstOrNull?.error
                 : null),
         image: step.image,
+        keyboard: step.keyboard,
         siblings: [
           for (var other in outcome.steps)
             if (other.tree case var tree?) p.basename(tree),
@@ -3192,6 +3214,7 @@ class _PickedStep {
     this.index,
     this.failure,
     this.image,
+    this.keyboard,
   });
 
   /// Absolute, without an extension: every leg is `$base.<leg>`.
@@ -3208,4 +3231,8 @@ class _PickedStep {
 
   /// Worktree-relative, as the run reported it.
   final String? image;
+
+  /// How tall the software keyboard was when this frame was taken, or null
+  /// when it was down. See [ScenarioRunStep.keyboard].
+  final double? keyboard;
 }

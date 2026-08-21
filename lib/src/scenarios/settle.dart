@@ -93,6 +93,12 @@ sealed class Settle {
   /// and offers no per-frame hook, and reimplementing it here to get one would
   /// be trading the exact semantics this policy exists to provide for a
   /// nicety.
+  ///
+  /// [apply] still lands once *before* the loop, which is the whole of what a
+  /// hookless policy can do and is enough for anything that only needs to be
+  /// told where to head: the software keyboard reads the app's focus there,
+  /// points its ticker at the right height, and `pumpAndSettle` waits the
+  /// slide out like any other animation.
   static const full = _Full();
 
   /// Applies the policy. False when the app was still scheduling frames when
@@ -225,6 +231,9 @@ class _Full extends Settle {
     ScenarioMotionRecorder? record,
     Future<void> Function()? land,
   }) async {
+    // Once, and there is nowhere else to put it: `pumpAndSettle` owns its own
+    // loop. Enough for whatever only needs pointing — see [Settle.full].
+    await land?.call();
     await tester.pumpAndSettle();
     return true;
   }
