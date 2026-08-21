@@ -155,6 +155,17 @@ class LocaleFinding {
   final String? expected;
 }
 
+/// Layout overflow errors one step swallowed under a budget probe — a fact
+/// about the screen, not about any one key, because every value on it was
+/// expanded at once.
+typedef ScreenOverflow = ({
+  String scenario,
+  String step,
+  int stepIndex,
+  String? locale,
+  int count,
+});
+
 /// A run's translations, and what the catalogs make of them.
 class TranslationSurvey {
   TranslationSurvey({
@@ -162,6 +173,7 @@ class TranslationSurvey {
     required List<KeySighting> sightings,
     required this.unkeyed,
     required this.read,
+    this.screenOverflows = const [],
   }) : _sightings = sightings {
     for (var sighting in sightings) {
       (_byKey[sighting.id] ??= []).add(sighting);
@@ -173,6 +185,10 @@ class TranslationSurvey {
   final Map<String, List<KeySighting>> _byKey = {};
 
   final List<UnkeyedSighting> unkeyed;
+
+  /// Nonzero only on a probe pass's survey — an ordinary run fails on
+  /// overflow instead of recording it.
+  final List<ScreenOverflow> screenOverflows;
 
   /// What each catalog was asked for and answered, per locale:
   /// `locale -> catalog -> key -> value`.

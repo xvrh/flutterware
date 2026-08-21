@@ -173,6 +173,92 @@ class ExportedShot {
   );
 }
 
+/// How long one key's text can get, measured — with the experiment that
+/// proved it.
+///
+/// [chars] is **the longest string proven to fit this key's tightest box**:
+/// a padded string of exactly that length actually rendered there without
+/// clipping, on [measuredOn]. Measured on the source language's screens by
+/// re-running the suite with every value padded, so it is a fact about the
+/// layout that holds for every locale at once.
+///
+/// [clipsChars] present means the bound is a real limit — a longer string was
+/// rendered and clipped. Absent, the key never clipped at anything tried and
+/// [chars] reads as "at least": every surface must render it that way, never
+/// as a limit. Design: `2026-08-19-translation-max-lengths-design.md`.
+class ExportedMaxLength {
+  const ExportedMaxLength({
+    required this.chars,
+    this.fitsText,
+    this.clipsChars,
+    this.clipsText,
+    this.screen,
+    this.clipped,
+    this.measuredOn,
+  });
+
+  /// The longest length proven to fit, in characters of the rendered string.
+  final int chars;
+
+  /// The literal string that was rendered and fit — [chars] characters of it.
+  final String? fitsText;
+
+  /// The shortest tested length that clipped, or null when nothing did.
+  final int? clipsChars;
+
+  /// The literal string that was rendered and clipped.
+  final String? clipsText;
+
+  /// The constraining screen, unpadded, on the probe device — where the box
+  /// whose limit this is lives.
+  final ExportedShot? screen;
+
+  /// The clip itself, photographed: the padded string ellipsizing in place.
+  /// Only present when the probe captured evidence, and only for real limits.
+  final ExportedShot? clipped;
+
+  /// The device the claim is true for. A max length without its geometry is
+  /// an opinion.
+  final String? measuredOn;
+
+  /// Whether this is a real limit rather than an open bound.
+  bool get bounded => clipsChars != null;
+
+  Map<String, Object?> toJson() => {
+    'chars': chars,
+    if (fitsText case var text?) 'fits': {'text': text, 'chars': chars},
+    if (clipsChars case var clips?)
+      'clips': {'text': ?clipsText, 'chars': clips},
+    if (screen case var screen?) 'screen': screen.toJson(),
+    if (clipped case var clipped?) 'clipped': clipped.toJson(),
+    'measuredOn': ?measuredOn,
+  };
+
+  static ExportedMaxLength fromJson(Map<String, Object?> json) {
+    ExportedShot? shot(Object? value) => switch (value) {
+      Map shot => ExportedShot.fromJson(shot.cast<String, Object?>()),
+      _ => null,
+    };
+    var fits = switch (json['fits']) {
+      Map fits => fits.cast<String, Object?>(),
+      _ => const <String, Object?>{},
+    };
+    var clips = switch (json['clips']) {
+      Map clips => clips.cast<String, Object?>(),
+      _ => null,
+    };
+    return ExportedMaxLength(
+      chars: _int(json['chars']),
+      fitsText: fits['text'] as String?,
+      clipsChars: clips == null ? null : _int(clips['chars']),
+      clipsText: clips?['text'] as String?,
+      screen: shot(json['screen']),
+      clipped: shot(json['clipped']),
+      measuredOn: json['measuredOn'] as String?,
+    );
+  }
+}
+
 /// One key, everything the run learned about it.
 class ExportedKey {
   const ExportedKey({
@@ -181,6 +267,7 @@ class ExportedKey {
     this.values = const {},
     this.representative,
     this.occurrences = const [],
+    this.maxLength,
   });
 
   final String catalog;
@@ -200,6 +287,9 @@ class ExportedKey {
   /// Everywhere else it was seen, [representative] included.
   final List<ExportedShot> occurrences;
 
+  /// What the max-length probe measured, when one ran and saw this key.
+  final ExportedMaxLength? maxLength;
+
   Map<String, Object?> toJson() => {
     'catalog': catalog,
     'key': key,
@@ -207,6 +297,7 @@ class ExportedKey {
     if (representative case var shot?) 'representative': shot.toJson(),
     if (occurrences.isNotEmpty)
       'occurrences': [for (var shot in occurrences) shot.toJson()],
+    if (maxLength case var maxLength?) 'maxLength': maxLength.toJson(),
   };
 
   static ExportedKey fromJson(Map<String, Object?> json) => ExportedKey(
@@ -221,6 +312,10 @@ class ExportedKey {
       for (var shot in json['occurrences'] as List? ?? const [])
         if (shot is Map) ExportedShot.fromJson(shot.cast<String, Object?>()),
     ],
+    maxLength: switch (json['maxLength']) {
+      Map block => ExportedMaxLength.fromJson(block.cast<String, Object?>()),
+      _ => null,
+    },
   );
 }
 
@@ -355,6 +450,56 @@ class ExportedUnkeyed {
   );
 }
 
+/// A screen a max-length probe broke — a fact about the app, not about any one
+/// string, because under batch expansion every value on it moved at once.
+class ExportedExpansionBreak {
+  const ExportedExpansionBreak({
+    required this.scenario,
+    required this.level,
+    this.step,
+    this.stepIndex,
+    this.overflows = 0,
+    this.failure,
+  });
+
+  /// `file/name`, as a run reports a scenario.
+  final String scenario;
+
+  /// The lowest probed level at which it broke.
+  final int level;
+
+  /// The step it broke on, when the break was a layout overflow the probe
+  /// swallowed. Absent when the whole scenario went red instead.
+  final String? step;
+  final int? stepIndex;
+
+  /// Layout overflow errors on that step, at [level].
+  final int overflows;
+
+  /// Set when the scenario itself failed under expansion — the suite cannot
+  /// even complete at this level, which is the strongest break there is.
+  final String? failure;
+
+  Map<String, Object?> toJson() => {
+    'scenario': scenario,
+    'level': level,
+    if (step != null) 'step': step,
+    if (stepIndex != null) 'stepIndex': stepIndex,
+    if (overflows > 0) 'overflows': overflows,
+    if (failure != null) 'failure': failure,
+  };
+
+  static ExportedExpansionBreak fromJson(Map<String, Object?> json) =>
+      ExportedExpansionBreak(
+        scenario: json['scenario'] as String? ?? '',
+        level: _int(json['level']),
+        step: json['step'] as String?,
+        stepIndex: json['stepIndex'] as int?,
+        overflows: _int(json['overflows']),
+        failure: json['failure'] as String?,
+      );
+}
+
 /// Everything the export noticed that is worth acting on.
 ///
 /// Findings, deliberately not failures: a run that produced them is still a
@@ -367,6 +512,7 @@ class ExportFindings {
     this.absentFromCatalog = const [],
     this.overflowing = const [],
     this.unkeyed = const [],
+    this.expansionBreaks = const [],
   });
 
   /// Every place the app showed the source language to somebody who asked for
@@ -388,13 +534,18 @@ class ExportFindings {
 
   final List<ExportedUnkeyed> unkeyed;
 
+  /// Screens the max-length probe broke, lowest breaking level each. Empty when
+  /// no probe ran — absence of a probe is not evidence of room.
+  final List<ExportedExpansionBreak> expansionBreaks;
+
   bool get isEmpty =>
       fallingBack.isEmpty &&
       disagrees.isEmpty &&
       notReached.isEmpty &&
       absentFromCatalog.isEmpty &&
       overflowing.isEmpty &&
-      unkeyed.isEmpty;
+      unkeyed.isEmpty &&
+      expansionBreaks.isEmpty;
 
   Map<String, Object?> toJson() => {
     'fallingBack': [for (var it in fallingBack) it.toJson()],
@@ -403,6 +554,8 @@ class ExportFindings {
     'absentFromCatalog': [for (var it in absentFromCatalog) it.toJson()],
     'overflowing': [for (var it in overflowing) it.toJson()],
     'unkeyed': [for (var it in unkeyed) it.toJson()],
+    if (expansionBreaks.isNotEmpty)
+      'expansionBreaks': [for (var it in expansionBreaks) it.toJson()],
   };
 
   static ExportFindings fromJson(Map<String, Object?> json) => ExportFindings(
@@ -415,6 +568,10 @@ class ExportFindings {
     ),
     overflowing: _list(json['overflowing'], ExportedShot.fromJson),
     unkeyed: _list(json['unkeyed'], ExportedUnkeyed.fromJson),
+    expansionBreaks: _list(
+      json['expansionBreaks'],
+      ExportedExpansionBreak.fromJson,
+    ),
   );
 }
 
@@ -435,9 +592,20 @@ class TranslationExport {
     this.catalogs = const [],
     this.keys = const [],
     this.findings = const ExportFindings(),
+    this.measuredMaxLengths = false,
+    this.maxLengthDevices = const [],
   });
 
   final int version;
+
+  /// Whether a max-length probe ran at all. False is "not measured", which a
+  /// reader must keep distinguishable from "measured and roomy" — absence of
+  /// a probe is not evidence of room.
+  final bool measuredMaxLengths;
+
+  /// The devices the probe measured on, sorted — the geometry every
+  /// [ExportedMaxLength.measuredOn] refers to.
+  final List<String> maxLengthDevices;
 
   /// Where it was read from — what [file] resolves against. Not serialized:
   /// an export is movable, and a path baked into it would survive the move and
@@ -519,11 +687,20 @@ class TranslationExport {
         ),
         _ => const ExportFindings(),
       },
+      measuredMaxLengths: json['maxLengths'] is Map,
+      maxLengthDevices: switch (json['maxLengths']) {
+        Map block => [
+          for (var device in block['devices'] as List? ?? const [])
+            if (device is String) device,
+        ],
+        _ => const [],
+      },
     );
   }
 
   Map<String, Object?> toJson() => {
     'version': version,
+    if (measuredMaxLengths) 'maxLengths': {'devices': maxLengthDevices},
     'catalogs': [for (var it in catalogs) it.toJson()],
     'keys': [for (var it in keys) it.toJson()],
     'findings': findings.toJson(),

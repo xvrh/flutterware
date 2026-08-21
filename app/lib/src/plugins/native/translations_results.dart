@@ -38,6 +38,10 @@ class TranslationExportResult implements PluginResult, ReportsFailure {
     this.overflowing = 0,
     this.unkeyed = 0,
     this.scenariosFailed = 0,
+    this.maxLengths = 0,
+    this.maxLengthLimits = 0,
+    this.maxLengthDevices,
+    this.expansionBreaks = 0,
     required this.durationMs,
     required this.open,
   });
@@ -96,6 +100,22 @@ class TranslationExportResult implements PluginResult, ReportsFailure {
 
   /// Scenarios that came back red. Their screens are in the export.
   final int scenariosFailed;
+
+  /// Keys whose max length was measured. Zero with the flag off means
+  /// nothing was measured, not that everything fits.
+  final int maxLengths;
+
+  /// Of those, keys with a *real* limit — a longer string was rendered and
+  /// clipped. The rest are open bounds ("at least N characters").
+  final int maxLengthLimits;
+
+  /// The devices the measurement ran on — what every `maxLength` claim is
+  /// true for. Absent when no probe ran.
+  final String? maxLengthDevices;
+
+  /// Screens that broke under expansion — a layout overflow, or a scenario
+  /// red at some growth level. Detail is in `findings.expansionBreaks`.
+  final int expansionBreaks;
 
   final int durationMs;
 

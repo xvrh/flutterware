@@ -45,6 +45,7 @@ class ScenarioStepCapture {
     this.landed = true,
     this.strayFrames = 0,
     this.failure,
+    this.overflowErrors = 0,
   });
 
   /// 1-based position in the scenario's capture sequence.
@@ -182,6 +183,12 @@ class ScenarioStepCapture {
   /// Set on the one step a scenario captures when it breaks: the error, with
   /// its split branch. The frame is the state at the failure.
   final String? failure;
+
+  /// Layout overflow errors swallowed on the way to this frame — nonzero only
+  /// under a translation budget probe, where the expansion filter records them
+  /// as data instead of letting them fail the scenario. The same lifetime as
+  /// [events]: they describe the edge into this step.
+  final int overflowErrors;
 }
 
 /// The tree behind one capture, and the semantics behind it.

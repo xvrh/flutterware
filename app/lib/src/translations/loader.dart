@@ -46,6 +46,7 @@ Future<TranslationSurvey> buildSurvey({
 }) async {
   var sightings = <KeySighting>[];
   var unkeyed = <UnkeyedSighting>[];
+  var screenOverflows = <ScreenOverflow>[];
   var read = <String, Map<String, Map<String, String>>>{};
 
   for (var package in run.packages) {
@@ -130,6 +131,16 @@ Future<TranslationSurvey> buildSurvey({
             ),
           );
         }
+
+        if (json['flexOverflows'] case num count when count > 0) {
+          screenOverflows.add((
+            scenario: scenario,
+            step: label,
+            stepIndex: step.index,
+            locale: locale,
+            count: count.toInt(),
+          ));
+        }
       }
     }
   }
@@ -139,6 +150,7 @@ Future<TranslationSurvey> buildSurvey({
     sightings: sightings,
     unkeyed: unkeyed,
     read: read,
+    screenOverflows: screenOverflows,
   );
 }
 

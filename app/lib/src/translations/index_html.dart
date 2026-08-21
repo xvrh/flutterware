@@ -155,6 +155,13 @@ const TABS = [
   ['absentFromCatalog', 'Not in catalog', (f.absentFromCatalog || []).length],
   ['unkeyed', 'Unkeyed', (f.unkeyed || []).length],
 ];
+// Probe-only tab: absent entirely when no max-length pass ran, because an
+// empty list would read as "nothing breaks" where the truth is "nothing was
+// asked".
+if (data.maxLengths) {
+  TABS.push(['expansionBreaks', 'Breaks under expansion',
+    (f.expansionBreaks || []).length]);
+}
 let tab = 'keys';
 let selected = keys.length ? keys[0].catalog + '/' + keys[0].key : null;
 
@@ -254,6 +261,36 @@ function renderKey(host) {
     host.appendChild(el('p', 'sub', 'No catalog file defines this key.'));
   }
 
+  if (k.maxLength) {
+    const m = k.maxLength;
+    const where = (m.screen ? ' on ' + m.screen.step : '') +
+      (m.measuredOn ? ' (' + m.measuredOn + ')' : '');
+    const sentence = m.clips
+      ? 'Measured: ' + m.chars + ' characters fit' + where + '; ' +
+        m.clips.chars + ' were cut off.'
+      : 'Measured: at least ' + m.chars + ' characters fit' + where +
+        ' \u2014 nothing tried was long enough to clip.';
+    const p = el('p', 'sub');
+    p.appendChild(el('span', m.clips ? 'tag warn' : 'tag',
+      m.clips ? 'max ' + m.chars + ' ch' : '\u2265 ' + m.chars + ' ch'));
+    p.appendChild(document.createTextNode(' ' + sentence));
+    host.appendChild(p);
+    if (m.fits && m.fits.text) {
+      const how = el('p', 'sub');
+      how.appendChild(document.createTextNode('Fit: \u201c' + m.fits.text +
+        '\u201d' + (m.clips && m.clips.text
+          ? ' \u00b7 cut off: \u201c' + m.clips.text + '\u201d' : '')));
+      host.appendChild(how);
+    }
+    if (m.clipped) {
+      host.appendChild(el('h3', null, 'The clip, photographed'));
+      const shots = el('div', 'shots');
+      shots.appendChild(shotFigure(m.clipped,
+        'The padded string cut off in place \u00b7 ' + describe(m.clipped)));
+      host.appendChild(shots);
+    }
+  }
+
   if (!k.representative) {
     host.appendChild(el('p', 'empty',
       'Declared, and no scenario in this run showed it.'));
@@ -296,6 +333,14 @@ function renderFindings(host) {
     const shots = el('div', 'shots');
     for (const s of rows) shots.appendChild(shotFigure(s, describe(s)));
     host.appendChild(shots);
+  } else if (tab === 'expansionBreaks') {
+    host.appendChild(el('p', 'sub',
+      'Screens the max-length probe broke — every value on them grown at ' +
+      'once, like a verbose language would.'));
+    host.appendChild(table(['Scenario', 'Step', 'At', 'What broke'],
+      rows.map(r => [r.scenario, r.step || '—', '+' + r.level + '%',
+        r.failure ? 'scenario failed: ' + r.failure
+                  : r.overflows + ' overflow' + (r.overflows === 1 ? '' : 's')])));
   } else if (tab === 'unkeyed') {
     host.appendChild(el('p', 'sub',
       'Words on a screen that belonged to no catalog.'));

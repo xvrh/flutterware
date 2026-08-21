@@ -77,7 +77,13 @@ enum TranslationFilter {
   /// No export has photographed it — either the scenarios miss that screen, or
   /// the key is an orphan. Both are worth knowing; neither is a defect on its
   /// own, which is why this is a filter and not a badge.
-  noPicture('no-picture');
+  noPicture('no-picture'),
+
+  /// The max-length probe found a real limit: a longer string was rendered
+  /// and clipped, so a translation past `maxLength.chars` will be cut off.
+  /// Offered only when the last export measured — absence of a probe is not
+  /// evidence of room.
+  fragile('fragile');
 
   const TranslationFilter(this.id);
 

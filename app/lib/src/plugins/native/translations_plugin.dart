@@ -12,6 +12,8 @@ import '../../translations/row.dart';
 import '../../ui/design/design.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/error_state.dart';
+import '../../ui/menu.dart';
+import '../../ui/popover.dart';
 import '../../ui/tappable.dart';
 import '../native_plugin.dart';
 import 'no_packages.dart';
@@ -55,6 +57,9 @@ const _rowHeight = 44.0;
 /// be, because the crop fits the *whole* string: every point here is a point a
 /// long sentence does not have to shrink by.
 const _cropWidth = 168.0;
+
+/// The max-length cell — `≥ 120 ch` at caption size, with room to spare.
+const _maxLengthWidth = 76.0;
 
 class _TranslationsPanel extends StatefulWidget {
   const _TranslationsPanel(this.plugin);
@@ -137,7 +142,10 @@ class _TranslationsPanelState extends State<_TranslationsPanel> {
       _error = null;
     });
     try {
-      await _core.export({'package': package});
+      await _core.export({
+        'package': package,
+        if (_core.measureOnExport(package)) 'max-lengths': 'true',
+      });
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
@@ -203,6 +211,7 @@ class _TranslationsPanelState extends State<_TranslationsPanel> {
           rows: rows,
           place: place,
           exported: _core.exportFor(place.package) != null,
+          probed: _core.measuredMaxLengthsFor(place.package),
           onChanged: _go,
         ),
         Expanded(
@@ -233,6 +242,7 @@ class _TranslationsPanelState extends State<_TranslationsPanel> {
         TranslationFilter.all => true,
         TranslationFilter.missing => row.missingIn(locale),
         TranslationFilter.noPicture => !row.hasPicture,
+        TranslationFilter.fragile => row.fragile,
       };
 }
 
@@ -313,11 +323,105 @@ class _Strip extends StatelessWidget {
                     color: colors.accent,
                   ),
                 ),
-                Text('Running the scenarios…', style: context.type.bodyMuted),
+                Text(
+                  core.busyFor(place.package) ?? 'Running the scenarios…',
+                  style: context.type.bodyMuted,
+                ),
               ],
             )
           else
-            FilledButton(onPressed: onExport, child: const Text('Export')),
+            _ExportSplitButton(
+              measure: core.measureOnExport(place.package),
+              onExport: onExport,
+              onToggleMeasure: () => core.setMeasureOnExport(
+                place.package,
+                !core.measureOnExport(place.package),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The Export button with its one choice behind the chevron.
+///
+/// Same anatomy as the scenario panel's Run button: the primary segment runs
+/// with whatever is ticked, the arrow holds the rare toggle. The label says
+/// which export a click buys — a primary that silently measures (or silently
+/// stops measuring) would make the button's cost and result both a surprise,
+/// and measuring is minutes where plain export is seconds.
+class _ExportSplitButton extends StatelessWidget {
+  const _ExportSplitButton({
+    required this.measure,
+    required this.onExport,
+    required this.onToggleMeasure,
+  });
+
+  final bool measure;
+  final VoidCallback onExport;
+
+  /// Remembered by the core per package — see
+  /// `TranslationsCore.measureOnExport`.
+  final VoidCallback onToggleMeasure;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var fg = colors.onPrimary;
+    return Container(
+      height: 32,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: colors.accent,
+        borderRadius: BorderRadius.circular(context.radii.radius),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: measure
+                ? 'Re-run the suite, then measure how long every string '
+                      'can get — several extra passes'
+                : 'Re-run the suite and refresh the pictures',
+            child: Tappable(
+              onTap: onExport,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
+                child: Text(
+                  measure ? 'Export + measure' : 'Export',
+                  style: context.type.button.copyWith(color: fg),
+                ),
+              ),
+            ),
+          ),
+          Container(width: 1, color: fg.withValues(alpha: 0.3)),
+          Menu(
+            align: PopoverAlign.end,
+            entries: [
+              MenuItem(
+                'Measure max lengths',
+                icon: measure
+                    ? Icons.check_box_outlined
+                    : Icons.check_box_outline_blank,
+                onSelected: onToggleMeasure,
+              ),
+            ],
+            builder: (context, controller) => Tooltip(
+              message: 'Export options',
+              child: Tappable(
+                onTap: controller.toggle,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xs),
+                  child: Icon(
+                    Icons.arrow_drop_down,
+                    size: FwIconSize.lg,
+                    color: fg,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -398,6 +502,7 @@ class _Filters extends StatelessWidget {
     required this.rows,
     required this.place,
     required this.exported,
+    required this.probed,
     required this.onChanged,
   });
 
@@ -413,6 +518,11 @@ class _Filters extends StatelessWidget {
   /// offered and useless.
   final bool exported;
 
+  /// Whether the last export measured max lengths. Gates the fragile filter
+  /// the way [exported] gates the picture one: an unprobed table offering
+  /// "fragile: 0" would read as room where nothing was measured.
+  final bool probed;
+
   final ValueChanged<TranslationPlace> onChanged;
 
   @override
@@ -420,6 +530,7 @@ class _Filters extends StatelessWidget {
     var colors = context.colors;
     var missing = rows.where((row) => row.missingIn(locale)).length;
     var noPicture = rows.where((row) => !row.hasPicture).length;
+    var fragile = rows.where((row) => row.fragile).length;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: FwSpacing.xl,
@@ -458,17 +569,20 @@ class _Filters extends StatelessWidget {
           ),
           const Spacer(),
           for (var filter in TranslationFilter.values)
-            if (exported || filter != TranslationFilter.noPicture)
+            if ((exported || filter != TranslationFilter.noPicture) &&
+                (probed || filter != TranslationFilter.fragile))
               _Chip(
                 label: switch (filter) {
                   TranslationFilter.all => 'All',
                   TranslationFilter.missing => 'Missing in $locale',
                   TranslationFilter.noPicture => 'No picture',
+                  TranslationFilter.fragile => 'Fragile',
                 },
                 count: switch (filter) {
                   TranslationFilter.all => rows.length,
                   TranslationFilter.missing => missing,
                   TranslationFilter.noPicture => noPicture,
+                  TranslationFilter.fragile => fragile,
                 },
                 warn: filter != TranslationFilter.all,
                 selected: place.filter == filter,
@@ -735,6 +849,7 @@ class _Table extends StatelessWidget {
       directory: directory,
       selected: place.id,
       exported: exported,
+      probed: core.measuredMaxLengthsFor(place.package),
       compact: open != null,
       onOpen: (row) => onOpen(
         TranslationPlace(
@@ -780,6 +895,7 @@ class _List extends StatelessWidget {
     required this.directory,
     required this.selected,
     required this.exported,
+    required this.probed,
     required this.compact,
     required this.onOpen,
   });
@@ -796,6 +912,9 @@ class _List extends StatelessWidget {
   /// person came to read off to the right.
   final bool exported;
 
+  /// The max-length column is what a probe adds — same rule as [exported].
+  final bool probed;
+
   final bool compact;
   final ValueChanged<TranslationRow> onOpen;
 
@@ -810,6 +929,7 @@ class _List extends StatelessWidget {
           locale: locale,
           showTarget: showTarget && !compact,
           showPicture: exported,
+          showBudget: probed && !compact,
         ),
         Expanded(
           child: ListView.builder(
@@ -823,6 +943,7 @@ class _List extends StatelessWidget {
               selected: rows[index].id == selected,
               showTarget: showTarget && !compact,
               showPicture: exported,
+              showBudget: probed && !compact,
               onTap: () => onOpen(rows[index]),
             ),
           ),
@@ -838,12 +959,14 @@ class _HeaderRow extends StatelessWidget {
     required this.locale,
     required this.showTarget,
     required this.showPicture,
+    required this.showBudget,
   });
 
   final String template;
   final String locale;
   final bool showTarget;
   final bool showPicture;
+  final bool showBudget;
 
   @override
   Widget build(BuildContext context) {
@@ -867,6 +990,11 @@ class _HeaderRow extends StatelessWidget {
           SizedBox(width: 190, child: Text('Key', style: style)),
           Expanded(child: Text(template, style: style)),
           if (showTarget) Expanded(child: Text(locale, style: style)),
+          if (showBudget)
+            SizedBox(
+              width: _maxLengthWidth,
+              child: Text('Max length', style: style),
+            ),
         ],
       ),
     );
@@ -882,6 +1010,7 @@ class _Row extends StatelessWidget {
     required this.selected,
     required this.showTarget,
     required this.showPicture,
+    required this.showBudget,
     required this.onTap,
   });
 
@@ -892,6 +1021,7 @@ class _Row extends StatelessWidget {
   final bool selected;
   final bool showTarget;
   final bool showPicture;
+  final bool showBudget;
   final VoidCallback onTap;
 
   @override
@@ -936,9 +1066,63 @@ class _Row extends StatelessWidget {
                   missing: row.missingIn(locale),
                 ),
               ),
+            if (showBudget)
+              SizedBox(
+                width: _maxLengthWidth,
+                child: _MaxLengthCell(row, locale: locale),
+              ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The evidence, as one sentence: what fit, what clipped, where, and — when a
+/// translation is already over the limit — who is over.
+String _maxLengthSentence(ExportedMaxLength measured, List<String> over) {
+  var where = switch (measured.screen) {
+    var screen? =>
+      ' on ${screen.step}'
+          '${measured.measuredOn == null ? '' : ' (${measured.measuredOn})'}',
+    _ => '',
+  };
+  var base = measured.bounded
+      ? 'Measured: ${measured.chars} characters fit$where; '
+            '${measured.clipsChars} were cut off.'
+      : 'Measured: at least ${measured.chars} characters fit$where — '
+            'nothing tried was long enough to clip.';
+  if (over.isEmpty) return base;
+  return '$base The ${over.join(', ')} text is already longer than the limit.';
+}
+
+/// The max-length cell: the proven characters, in one glance.
+///
+/// `≤ N ch` for a real limit, `≥ N ch` muted for an open bound, blank for
+/// unmeasured — blank must never read as room. Amber is reserved for the one
+/// state that demands action: a translation that already exceeds the limit.
+class _MaxLengthCell extends StatelessWidget {
+  const _MaxLengthCell(this.row, {required this.locale});
+
+  final TranslationRow row;
+  final String locale;
+
+  @override
+  Widget build(BuildContext context) {
+    var measured = row.maxLength;
+    if (measured == null) return const SizedBox.shrink();
+    var colors = context.colors;
+    var exceeded = row.overLimit([locale]).isNotEmpty;
+    return Text(
+      measured.bounded ? '≤ ${measured.chars} ch' : '≥ ${measured.chars} ch',
+      style: context.type.caption.copyWith(
+        color: exceeded
+            ? colors.amber
+            : measured.bounded
+            ? colors.ink
+            : colors.mut3,
+      ),
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
@@ -1085,6 +1269,50 @@ class _Detail extends StatelessWidget {
                 style: context.type.bodySmall.copyWith(color: colors.amber),
               ),
             ),
+          if (row.maxLength case var measured?) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: FwSpacing.md),
+              child: Text(
+                _maxLengthSentence(measured, row.overLimit([locale])),
+                style: context.type.bodySmall.copyWith(
+                  color: row.overLimit([locale]).isNotEmpty
+                      ? colors.amber
+                      : colors.mut,
+                ),
+              ),
+            ),
+            if (measured.clipped case var clipped?)
+              Padding(
+                padding: const EdgeInsets.only(top: FwSpacing.lg),
+                child: SizedBox(
+                  width: 220,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _Openable(
+                        file: File(
+                          p.join(
+                            directory,
+                            clipped.image.replaceAll('/', p.separator),
+                          ),
+                        ),
+                        rect: clipped.rect,
+                        title:
+                            '${row.id} clipping · '
+                            '${clipped.scenario} · ${clipped.step}',
+                        maxHeight: 260,
+                      ),
+                      const SizedBox(height: FwSpacing.xs),
+                      Text(
+                        'The clip, photographed: the padded string cut off '
+                        'in place.',
+                        style: context.type.micro.copyWith(color: colors.mut),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
           const SizedBox(height: FwSpacing.xxl),
           if (shot == null)
             EmptyState(

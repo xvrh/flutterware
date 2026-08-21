@@ -845,8 +845,41 @@ class ScenariosCore extends PluginCore {
                   'bare rgba8888 rows, width×height×4 bytes as the result '
                   'reports them — skips PNG encoding, which is ~80% of a '
                   "capture's cost; for pipelines that consume pixels "
-                  'directly.',
-              options: [ActionOption('png'), ActionOption('raw')],
+                  'directly. `none` skips pixels entirely — trees, keys and '
+                  'texts are still written; for probe passes that read the '
+                  'walk rather than the frames.',
+              options: [
+                ActionOption('png'),
+                ActionOption('raw'),
+                ActionOption('none'),
+              ],
+            ),
+            const ActionParameter(
+              'expand',
+              'Expand translations',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Pad every translation read — the max-length probe. The '
+                  'number is a rung in [1, 100]: that percentage of each '
+                  "value's own ceiling, which is larger the shorter the "
+                  'value is (a 6-character label is probed up to +300%, a '
+                  'sentence up to +100%). Which sightings clip says which '
+                  'keys have no room. Identity still resolves and targeting '
+                  'still lands: a scenario written against the catalog reads '
+                  'the padded value too. Usually paired with `format: none`.',
+            ),
+            const ActionParameter(
+              'device-choice',
+              'Device choice',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  'How a file with no named device picks from its folder '
+                  'profile. `narrowest` takes the tightest declared screen '
+                  'instead of the first — what a max-length probe measures '
+                  'on. Ignored when `device` names one.',
+              options: [ActionOption('narrowest')],
             ),
           ],
         ),
@@ -2472,8 +2505,33 @@ class ScenariosCore extends PluginCore {
       }
     }
     var format = arguments['format'];
-    if (format != null && format != 'png' && format != 'raw') {
-      throw ArgumentError.value(format, 'format', 'accepted: png, raw');
+    if (format != null &&
+        format != 'png' &&
+        format != 'raw' &&
+        format != 'none') {
+      throw ArgumentError.value(format, 'format', 'accepted: png, raw, none');
+    }
+    var expand = switch (arguments['expand']) {
+      null => null,
+      num value => value.toInt(),
+      String value => int.tryParse(value),
+      var other => throw ArgumentError.value(other, 'expand', 'a rung'),
+    };
+    if (arguments['expand'] != null &&
+        (expand == null || expand < 1 || expand > 100)) {
+      throw ArgumentError.value(
+        arguments['expand'],
+        'expand',
+        'a rung in [1, 100]',
+      );
+    }
+    var deviceChoice = arguments['device-choice'];
+    if (deviceChoice != null && deviceChoice != 'narrowest') {
+      throw ArgumentError.value(
+        deviceChoice,
+        'device-choice',
+        'accepted: narrowest',
+      );
     }
     DateTime? clock;
     if (arguments['clock'] case var raw?) {
@@ -2583,6 +2641,9 @@ class ScenariosCore extends PluginCore {
             unspecifiedDevice: defaultScenarioDeviceId,
             captureScale: captureScale ?? captureScaleFor(path),
             captureRaw: format == 'raw',
+            capturePixels: format != 'none',
+            expandTranslations: expand,
+            narrowestDevice: deviceChoice == 'narrowest',
             clock: clock,
           );
           var described = _describeRun(

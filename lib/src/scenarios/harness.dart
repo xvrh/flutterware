@@ -166,6 +166,7 @@ Future<void> _runHarness(
         // the geometry that did arrive is only the host's fallback.
         device: args['device'],
         deviceUnspecified: args['deviceUnspecified'] == 'true',
+        narrowestDevice: args['deviceChoice'] == 'narrowest',
         // Travels as an axis rather than baked into the geometry above,
         // because the device it applies to may still be undecided: when the
         // folder's profile is the one that picks, the rotation has to happen
@@ -538,6 +539,11 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
     captureScale: number('captureScale'),
     captureRaw: args['captureRaw'] == 'true',
     captureNative: args['captureNative'] == 'true',
+    capturePixels: args['capturePixels'] != 'false',
+    expandTranslations: switch (args['expand']) {
+      null => null,
+      var raw => int.parse(raw),
+    },
     record: switch (number('recordIntervalMs')) {
       null => null,
       var interval => MotionRecording(
@@ -564,9 +570,11 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       runArgs.captureScale == null &&
       !runArgs.captureRaw &&
       !runArgs.captureNative &&
+      runArgs.capturePixels &&
       runArgs.record == null &&
       runArgs.clockOrigin == null &&
-      runArgs.assignment == null;
+      runArgs.assignment == null &&
+      runArgs.expandTranslations == null;
   return untouched ? null : runArgs;
 }
 
@@ -582,6 +590,7 @@ Future<Map<String, Object?>> _run(
   Map<String, Shots> shots = const {},
   String? device,
   bool deviceUnspecified = false,
+  bool narrowestDevice = false,
   ScreenOrientation? orientation,
 }) async {
   var mains = file == null
@@ -605,7 +614,23 @@ Future<Map<String, Object?>> _run(
   (ScenarioRunArgs?, String?) framingFor(String file) =>
       framings.putIfAbsent(file, () {
         if (!deviceUnspecified) return (runArgs, device);
-        var chosen = _profileFor(file, profiles)?.devices.firstOrNull;
+        var declared = _profileFor(file, profiles)?.devices;
+        // The max-length probe measures on the tightest geometry the folder
+        // claims — the narrowest *declared* device, never one the project
+        // does not run on, which would manufacture false-tight limits.
+        var chosen = narrowestDevice && (declared?.isNotEmpty ?? false)
+            ? declared!.reduce(
+                (a, b) => switch (a.width.compareTo(b.width)) {
+                  < 0 => a,
+                  > 0 => b,
+                  // Total, like every ordering that picks a stable winner.
+                  _ =>
+                    a.height != b.height
+                        ? (a.height < b.height ? a : b)
+                        : (a.id.compareTo(b.id) <= 0 ? a : b),
+                },
+              )
+            : declared?.firstOrNull;
         if (chosen == null) return (runArgs, device);
         return (
           (runArgs ?? const ScenarioRunArgs()).withDevice(
@@ -773,10 +798,15 @@ Future<Map<String, Object?>> _run(
   }
 
   var suite = Suite(root, SuitePlatform(Runtime.vm));
+  // Armed for the whole request, like `scenarioRunArgs`: the padding is a
+  // property of the pass, not of one scenario, and `TranslationIndex.reset()`
+  // between scenarios deliberately leaves it alone.
+  TranslationIndex.expandPercent = runArgs?.expandTranslations;
   try {
     await walk(root, suite, const [], null);
   } finally {
     scenarioRunArgs = null;
+    TranslationIndex.expandPercent = null;
   }
 
   return {
@@ -1047,8 +1077,12 @@ Future<Map<String, Object?>> _runOne(
         break;
     }
 
-    var imagePath = '$base.${capture.format == 'raw' ? 'raw' : 'png'}';
-    File(imagePath).writeAsBytesSync(capture.bytes!);
+    // A pixel-less capture — a max-length probe — has nothing to write and no
+    // path to report; everything else about the step is recorded as ever.
+    var imagePath = capture.format == 'none'
+        ? ''
+        : '$base.${capture.format == 'raw' ? 'raw' : 'png'}';
+    if (imagePath.isNotEmpty) File(imagePath).writeAsBytesSync(capture.bytes!);
     // The tree next to the pixels — the step triple's third leg. Written to a
     // file rather than inlined: a run's response stays readable, and the tree
     // is fetched per step by whoever wants it.
@@ -1072,7 +1106,10 @@ Future<Map<String, Object?>> _runOne(
     // and no second step exists. What still reaches this line is a `screen`
     // that declined to adopt — a second name on one frame, a branch's first
     // capture, `force: true` — and for those the flag says something true.
+    // Never on a pixel-less capture: every probe step digests the same empty
+    // bytes, and "unchanged" would be a statement about pixels nobody took.
     var unchanged =
+        capture.format != 'none' &&
         capture.verb != null &&
         capture.failure == null &&
         digestByIndex[capture.parent] == digest;
@@ -1083,12 +1120,17 @@ Future<Map<String, Object?>> _runOne(
     // have to parse every node of every step to find out.
     var keys = read.translationKeys();
     var unkeyed = read.unkeyedText();
-    if (keys.isNotEmpty || unkeyed.isNotEmpty) {
+    if (keys.isNotEmpty || unkeyed.isNotEmpty || capture.overflowErrors > 0) {
       File('$base.keys.json').writeAsStringSync(
         jsonEncode({
           'keys': [for (var key in keys) key.toJson()],
           if (unkeyed.isNotEmpty)
             'unkeyed': [for (var text in unkeyed) text.toJson()],
+          // Layout overflow errors the expansion filter swallowed on the way
+          // to this frame — a screen-level fact of a budget probe, so it rides
+          // the artifact the budget reader already opens.
+          if (capture.overflowErrors > 0)
+            'flexOverflows': capture.overflowErrors,
         }),
       );
     }
@@ -1127,12 +1169,20 @@ Future<Map<String, Object?>> _runOne(
       name: capture.name,
       auto: capture.name == null,
       tags: capture.tags,
-      image: imagePath,
+      // Null on a pixel-less capture, like every other artifact that does not
+      // exist — readers guard on `image != null`, and an empty path would
+      // slip past them into a decode.
+      image: imagePath.isEmpty ? null : imagePath,
       format: capture.format,
       width: capture.width,
       height: capture.height,
       tree: '$base.tree.json',
-      keys: keys.isNotEmpty ? '$base.keys.json' : null,
+      // Written for overflow counts too: flexOverflows is a screen-level
+      // fact of a max-length probe, and it rides the artifact the probe
+      // reader already opens.
+      keys: keys.isNotEmpty || capture.overflowErrors > 0
+          ? '$base.keys.json'
+          : null,
       semantics: semantics != null ? '$base.semantics.json' : null,
       texts: capture.texts,
       statusBrightness: capture.statusBrightness,

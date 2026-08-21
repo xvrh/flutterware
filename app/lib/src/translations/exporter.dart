@@ -16,6 +16,7 @@ import 'dart:io';
 import 'package:flutterware/translations.dart';
 import 'package:path/path.dart' as p;
 
+import 'max_length.dart';
 import 'index_html.dart';
 import 'survey.dart';
 
@@ -70,10 +71,15 @@ class TranslationExporter {
   /// exporter is the thing that chose the scale, so it is passed rather than
   /// inferred — measuring it back off a PNG header would be a second answer to
   /// a question already settled.
+  /// [maxLengths] is what the probe proved, when one ran — attached per key
+  /// and as findings. Probe shots (the box, the clip) come from probe-device
+  /// runs whose scenario/step names collide with the main baseline's, so they
+  /// are filed under their own subdirectories rather than sharing `shots/`.
   WrittenExport write({
     required TranslationSurvey survey,
     required String output,
     double captureScale = 1,
+    TranslationMaxLengths? maxLengths,
   }) {
     var directory = Directory(output);
     // Cleared rather than merged into: a key deleted since the last export
@@ -89,7 +95,10 @@ class TranslationExporter {
     var missing = <String>{};
 
     /// Copies a frame in once, and answers with its export-relative path.
-    String? shotPath(KeySighting sighting) {
+    ///
+    /// [into] namespaces frames from a run other than the main baseline —
+    /// the same scenario and step from two runs must not share one file.
+    String? shotPath(KeySighting sighting, {String into = ''}) {
       var source = sighting.image;
       if (source.isEmpty) return null;
       if (copied[source] case var already?) return already;
@@ -101,12 +110,13 @@ class TranslationExporter {
       // Named for where it came from rather than hashed: somebody will open
       // this directory in a file browser, and `en/checkout_test.dart/3.png`
       // is the difference between browsing it and grepping the JSON.
-      var relative = p.url.join(
+      var relative = p.url.joinAll([
         shotsDir,
+        if (into.isNotEmpty) into,
         _slug(sighting.locale ?? 'default'),
         _slug(sighting.scenario),
         '${sighting.stepIndex}${p.extension(source)}',
-      );
+      ]);
       var to = File(p.join(output, relative.replaceAll('/', p.separator)));
       Directory(to.parent.path).createSync(recursive: true);
       from.copySync(to.path);
@@ -114,8 +124,8 @@ class TranslationExporter {
       return relative;
     }
 
-    ExportedShot? shotOf(KeySighting sighting) {
-      var image = shotPath(sighting);
+    ExportedShot? shotOf(KeySighting sighting, {String into = ''}) {
+      var image = shotPath(sighting, into: into);
       if (image == null) return null;
       return ExportedShot(
         image: image,
@@ -132,12 +142,32 @@ class TranslationExporter {
       );
     }
 
+    ExportedMaxLength? maxLengthOf(String id) {
+      var measured = maxLengths?.byKey[id];
+      if (measured == null) return null;
+      return ExportedMaxLength(
+        chars: measured.chars,
+        fitsText: measured.fitsText,
+        clipsChars: measured.clipsChars,
+        clipsText: measured.clipsText,
+        screen: switch (measured.screen) {
+          var sighting? => shotOf(sighting, into: 'max-length'),
+          _ => null,
+        },
+        clipped: switch (measured.clipped) {
+          var sighting? => shotOf(sighting, into: 'max-length/clipped'),
+          _ => null,
+        },
+        measuredOn: measured.screen?.device,
+      );
+    }
+
     var keys = <ExportedKey>[];
     var seen = <String>{};
 
     // Seen keys first, in the survey's own most-seen-first order — the order a
     // reader scrolling the page wants, and the order a push script should
-    // upload in when it has a budget.
+    // upload in when it has a call budget.
     for (var id in survey.keysSeen) {
       var parts = id.split('/');
       var catalog = parts.first;
@@ -156,6 +186,7 @@ class TranslationExporter {
           occurrences: [
             for (var occurrence in occurrences) ?shotOf(occurrence),
           ],
+          maxLength: maxLengthOf(id),
         ),
       );
     }
@@ -180,6 +211,8 @@ class TranslationExporter {
     var localeFindings = survey.localeFindings();
     var export = TranslationExport(
       directory: output,
+      measuredMaxLengths: maxLengths != null,
+      maxLengthDevices: maxLengths?.devices ?? const [],
       catalogs: [
         for (var catalog in survey.catalogs.values)
           ExportedCatalog(
@@ -218,6 +251,17 @@ class TranslationExporter {
               step: word.step,
               source: word.source,
               locale: word.locale,
+            ),
+        ],
+        expansionBreaks: [
+          for (var broke in maxLengths?.breaks ?? const <MaxLengthBreak>[])
+            ExportedExpansionBreak(
+              scenario: broke.scenario,
+              level: broke.level,
+              step: broke.step,
+              stepIndex: broke.stepIndex,
+              overflows: broke.overflows,
+              failure: broke.failure,
             ),
         ],
       ),

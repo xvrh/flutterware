@@ -103,6 +103,88 @@ void main() {
       expect(back.catalogs.single.locales, ['en', 'nl']);
     });
 
+    test('a max length survives the round trip with its evidence', () {
+      var original = TranslationExport(
+        measuredMaxLengths: true,
+        maxLengthDevices: const ['pixel-4a'],
+        keys: const [
+          ExportedKey(
+            catalog: 'app',
+            key: 'save',
+            maxLength: ExportedMaxLength(
+              chars: 29,
+              fitsText: 'Warm spices, creamy milk. wor',
+              clipsChars: 34,
+              clipsText: 'Warm spices, creamy milk. word le',
+              screen: ExportedShot(
+                image: 'shots/max-length/en/home/1.png',
+                scenario: 'home_test.dart/Home',
+                step: 'Home',
+                stepIndex: 1,
+              ),
+              clipped: ExportedShot(
+                image: 'shots/max-length/clipped/en/home/1.png',
+                scenario: 'home_test.dart/Home',
+                step: 'Home',
+                stepIndex: 1,
+                overflowed: true,
+              ),
+              measuredOn: 'pixel-4a',
+            ),
+          ),
+          // An open bound: proven to fit this much, nothing clipped it.
+          ExportedKey(
+            catalog: 'app',
+            key: 'blurb',
+            maxLength: ExportedMaxLength(chars: 120, fitsText: 'long…'),
+          ),
+          ExportedKey(catalog: 'app', key: 'title'),
+        ],
+        findings: const ExportFindings(
+          expansionBreaks: [
+            ExportedExpansionBreak(
+              scenario: 'home_test.dart/Home',
+              level: 70,
+              step: 'Home',
+              stepIndex: 1,
+              overflows: 2,
+            ),
+            ExportedExpansionBreak(
+              scenario: 'cart_test.dart/Cart',
+              level: 35,
+              failure: 'tap found nothing',
+            ),
+          ],
+        ),
+      );
+
+      var back = TranslationExport.fromJson(original.toJson());
+
+      expect(back.measuredMaxLengths, isTrue);
+      expect(back.maxLengthDevices, ['pixel-4a']);
+      var limit = back['app/save']?.maxLength;
+      expect(limit?.chars, 29);
+      expect(limit?.bounded, isTrue);
+      expect(limit?.fitsText, 'Warm spices, creamy milk. wor');
+      expect(limit?.clipsChars, 34);
+      expect(limit?.clipsText, 'Warm spices, creamy milk. word le');
+      expect(limit?.screen?.stepIndex, 1);
+      expect(limit?.clipped?.overflowed, isTrue);
+      expect(limit?.measuredOn, 'pixel-4a');
+      var open = back['app/blurb']?.maxLength;
+      expect(open?.chars, 120);
+      expect(open?.bounded, isFalse, reason: 'an open bound is not a limit');
+      expect(back['app/title']?.maxLength, isNull);
+      expect(back.findings.expansionBreaks, hasLength(2));
+      expect(back.findings.expansionBreaks.first.overflows, 2);
+      expect(back.findings.expansionBreaks.last.failure, 'tap found nothing');
+      // An unprobed export's JSON does not even mention max lengths —
+      // absence of a probe must stay distinguishable from a probe that
+      // found room.
+      expect(export().toJson().containsKey('maxLengths'), isFalse);
+      expect(export().measuredMaxLengths, isFalse);
+    });
+
     test('a newer version is refused rather than half-decoded', () {
       // The message names both numbers, because whoever reads it is looking at
       // somebody else's build output and needs to know which half to move.

@@ -19,6 +19,7 @@ void main() {
   tearDown(() {
     TranslationIndex.reset();
     TranslationIndex.recording = false;
+    TranslationIndex.expandPercent = null;
   });
 
   String read(String key, {String catalog = 'app'}) =>
@@ -165,5 +166,85 @@ void main() {
 
     expect(identical(value, constCatalog['common_cancel']), isTrue);
     expect(TranslationIndex.keyOf(value), isNull);
+  });
+
+  group('a budget probe expands what renders, never what was read', () {
+    setUp(() => TranslationIndex.expandPercent = 35);
+
+    test('the padded value starts with the real one and is longer', () {
+      var value = read('common_cancel');
+
+      expect(value, startsWith('Cancel'));
+      expect(value.length, greaterThan('Cancel'.length));
+      // 6 characters is in the ≤10 bracket (×3 ceiling):
+      // ceil(6 × 35 × 3 / 100) = 7 extra characters.
+      expect(value.length, 'Cancel'.length + 7);
+    });
+
+    test('the ceiling scales with how short the value is', () {
+      // Top rung, one value per bracket: +300% at ≤10 characters, +200% at
+      // ≤20, +150% at ≤30, +120% at ≤50, +100% beyond.
+      expect(TranslationIndex.expansionLength(10, 100), 30);
+      expect(TranslationIndex.expansionLength(20, 100), 40);
+      expect(TranslationIndex.expansionLength(30, 100), 45);
+      expect(TranslationIndex.expansionLength(50, 100), 60);
+      expect(TranslationIndex.expansionLength(80, 100), 80);
+      // Every rung below scales the same ceiling, so the ladder stays
+      // monotonic per key.
+      expect(TranslationIndex.expansionLength(20, 50), 20);
+    });
+
+    test('the padded value still resolves to its key by identity', () {
+      var value = read('common_cancel');
+
+      expect(TranslationIndex.keyOf(value)?.key, 'common_cancel');
+    });
+
+    test('what the catalog answered is the real value', () {
+      read('common_cancel');
+
+      expect(
+        TranslationIndex.read['app'],
+        containsPair('common_cancel', 'Cancel'),
+        reason:
+            'the export compares read against the files; a padded value '
+            'there would make every key look wrong',
+      );
+    });
+
+    test('the padding is deterministic and cached like any token', () {
+      expect(identical(read('common_save'), read('common_save')), isTrue);
+      expect(
+        TranslationIndex.expansionPadding('app', 'common_save', 5),
+        TranslationIndex.expansionPadding('app', 'common_save', 5),
+      );
+    });
+
+    test('two keys sharing a value get distinct padding', () {
+      var first = read('common_cancel');
+      var second = read('dialog_cancel');
+
+      expect(first, isNot(second));
+      expect(TranslationIndex.keyOf(first)?.key, 'common_cancel');
+      expect(TranslationIndex.keyOf(second)?.key, 'dialog_cancel');
+    });
+
+    test('a short value still grows by at least two characters', () {
+      var value = indexTranslations('app')('ok', 'OK');
+
+      expect(value.length, greaterThanOrEqualTo('OK'.length + 2));
+    });
+
+    test('an empty value stays empty', () {
+      expect(indexTranslations('app')('missing', ''), isEmpty);
+    });
+
+    test('an expansion is padded too — the built string is what renders', () {
+      var built = indexExpansions('app')('greeting', 'Hello, Ada');
+
+      expect(built, startsWith('Hello, Ada'));
+      expect(built.length, greaterThan('Hello, Ada'.length));
+      expect(TranslationIndex.keyOf(built)?.key, 'greeting');
+    });
   });
 }

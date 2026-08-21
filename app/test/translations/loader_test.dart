@@ -259,4 +259,30 @@ void main() {
       expect(files, isEmpty);
     });
   });
+
+  group('a probe pass artifact', () {
+    test('surfaces its swallowed overflows as a screen fact', () async {
+      var survey = await buildSurvey(
+        run: run(steps: [step()]),
+        catalogs: const {},
+        readArtifact: (path) async =>
+            jsonEncode({'keys': <Object?>[], 'flexOverflows': 3}),
+      );
+
+      var overflow = survey.screenOverflows.single;
+      expect(overflow.scenario, 'home_test.dart/Home');
+      expect(overflow.stepIndex, 1);
+      expect(overflow.count, 3);
+    });
+
+    test('an ordinary artifact reports none', () async {
+      var survey = await buildSurvey(
+        run: run(steps: [step()]),
+        catalogs: const {},
+        readArtifact: (path) async => keysArtifact(),
+      );
+
+      expect(survey.screenOverflows, isEmpty);
+    });
+  });
 }
