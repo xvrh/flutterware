@@ -33,8 +33,8 @@ class WatchPush {
   /// What that walk cost, on this frame.
   ///
   /// Carried in every push rather than behind a separate question, because a
-  /// per-frame cost that has to be asked for is one nobody reads until
-  /// something is already slow.
+  /// per-frame cost that has to be asked for goes unread until something is
+  /// already slow.
   final int hashMicros;
 
   /// The shape of the element tree changed — the host should re-read the tree.
@@ -59,7 +59,7 @@ class WatchPush {
   /// Something in the demo scrolled — so the rects below it have all moved,
   /// though the shape did not change and neither did the demo's box.
   ///
-  /// **Still moving, not finished moving.** This arrives on every frame of a
+  /// Still moving, not finished moving. This arrives on every frame of a
   /// fling, and a host that re-read the tree on each one would queue walks
   /// faster than they complete. What it says is "wait for me": read once the
   /// pushes stop.

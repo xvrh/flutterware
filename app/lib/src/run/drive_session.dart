@@ -29,13 +29,13 @@ class DriveTimeout implements Exception {
 
 /// The app answers, and what it answers is that it carries no drive guest.
 ///
-/// **A conclusion, and it has to be earned.** The wire says only `Unknown
+/// A conclusion, and it has to be earned. The wire says only `Unknown
 /// method "ext.flutterware.act"`, which is what an uninstrumented app returns
 /// *and* what any correctly instrumented app returns when the question was put
 /// to the wrong isolate (measured: a live app's worker isolate answers exactly
 /// that, as does a call with no isolate at all). Saying "launch it through
-/// flutterware" on the strength of that alone sends somebody who did launch it
-/// through flutterware into a two-minute relaunch. So this is thrown only
+/// flutterware" on the strength of that alone sends a correctly launched app
+/// into a two-minute relaunch. So this is thrown only
 /// after the VM has been asked which isolate holds the extension, and it
 /// carries the answer.
 class DriveNoGuest implements Exception {
@@ -75,8 +75,8 @@ class DriveNoGuest implements Exception {
 class DriveSession {
   DriveSession(this.handle);
 
-  /// A session over a connection somebody else stood up, for a test — there
-  /// is no uri to dial, so the handle is only the label in its refusals.
+  /// A session over a connection the caller stood up, for a test — there is no
+  /// uri to dial, so the handle is only the label in its refusals.
   @visibleForTesting
   factory DriveSession.forTesting(RunHandle handle, RunConnection connection) =>
       DriveSession(handle).._connection = Future.value(connection);
@@ -118,7 +118,7 @@ class DriveSession {
   /// which is the one behavior this surface may not have. On the deadline the
   /// call is diagnosed ([_whyNoAnswer]) and thrown as a [DriveTimeout].
   ///
-  /// **A suspended app has two doors and both had to be shut.** The session is
+  /// A suspended app has two doors and both had to be shut. The session is
   /// dropped whenever a probe finds the app unresponsive, so the *next* call
   /// re-connects — and against a suspended process the connect is what times
   /// out, five seconds earlier and with `TimeoutException after 0:00:05` as

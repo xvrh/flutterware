@@ -11,7 +11,7 @@ import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
-/// **Who a stack trace accuses.**
+/// Who a stack trace accuses.
 ///
 /// `fw` prints one for any failure it does not recognise, and that is right: a
 /// plugin bug has to be reportable from the surface that has a terminal. But a

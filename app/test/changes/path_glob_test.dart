@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/changes/path_glob.dart';
 
-/// **Every case here was measured against `package:glob` first**, and the ones
+/// Every case here was measured against `package:glob` first, and the ones
 /// marked below are the ones it gets wrong for this use. They are not
 /// hypothetical: `**/*.g.dart` is the spelling everybody carries over from
 /// `.gitignore`, and a rule that silently never fires is the exact failure the

@@ -13,7 +13,7 @@ import 'shot_cache.dart';
 
 /// What a pull-request comment needs, as files.
 ///
-/// **fw emits, the workflow hosts and posts.** A comment on GitHub can only
+/// fw emits, the workflow hosts and posts. A comment on GitHub can only
 /// show images by URL, and where those URLs live — an orphan branch, Pages, a
 /// bucket — is the repository's business, not this tool's. So the comment is
 /// written with `__MOSAIC_URL__` and `__VIEWER_URL__` placeholders, and the
@@ -309,8 +309,8 @@ String _comment(
     buffer.writeln('[Open the full comparison]($viewerUrlPlaceholder)\n');
   }
   buffer.writeln(
-    '<sub>`fw compare` — both sides computed from git; nothing is '
-    'blessed.</sub>',
+    '<sub>`fw compare` — both sides computed from git, with no stored '
+    'baseline.</sub>',
   );
   return buffer.toString();
 }

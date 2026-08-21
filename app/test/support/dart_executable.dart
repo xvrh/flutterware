@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 /// Shared by the two suites that spawn the CLI as a real process, because they
 /// each had a copy and the copies were wrong in the same way.
 ///
-/// **`FLUTTER_ROOT` first, and the ordering is the whole fix.** `flutter test`
+/// `FLUTTER_ROOT` first, and the ordering is the whole fix. `flutter test`
 /// runs a suite under `flutter_tester`, so `Platform.resolvedExecutable` does
 /// not end in `/dart` — and the previous version fell through to `which dart`,
 /// which is whatever SDK happens to be on PATH. On a checkout pinned to a newer

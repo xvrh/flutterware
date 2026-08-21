@@ -59,8 +59,8 @@ class AssetsPackage extends PluginPackage {
   const AssetsPackage(super.pkg);
 
   /// Every package. Offered because there is nothing to configure per package
-  /// here — the pubspec is the declaration — so naming them one at a time buys
-  /// only the chance to forget one.
+  /// here — the pubspec is the declaration — so naming them one at a time only
+  /// creates a chance to forget one.
   static List<AssetsPackage> each(List<Pkg> packages) => [
     for (var pkg in packages) AssetsPackage(pkg),
   ];
@@ -69,7 +69,7 @@ class AssetsPackage extends PluginPackage {
 /// Previews — your `@Preview`s, rendered in the embedded engine.
 ///
 /// Wherever they are: the whole package is scanned, so a preview beside the
-/// widget it shows is found without anybody declaring anything.
+/// widget it shows is found without being declared.
 /// [PreviewsPackage.directory] narrows that, and is the only reason to name a
 /// directory at all.
 class Previews extends Plugin {
@@ -108,10 +108,9 @@ class PreviewsPackage extends PluginPackage {
 
   /// What the previews under each subtree are framed as. See [PreviewCanvas].
   ///
-  /// **[device] is one of these with no prefix**, which is the whole
-  /// relationship between the two: a project that is all phones says `device:`
-  /// and is done, and a package holding two form factors says where each of
-  /// them lives.
+  /// [device] is one of these with no prefix, which is the whole relationship
+  /// between the two: a project that is all phones says `device:` and is done,
+  /// and a package holding two form factors says where each of them lives.
   ///
   /// ```dart
   /// PreviewsPackage(app, directory: 'demo', canvases: [
@@ -120,23 +119,23 @@ class PreviewsPackage extends PluginPackage {
   /// ])
   /// ```
   ///
-  /// **Here rather than one package declaration per form factor**, which is the
-  /// shape everybody reaches for first and the one thing that cannot work: a
+  /// Here rather than one package declaration per form factor, which is the
+  /// obvious shape to reach for and the one thing that cannot work: a
   /// package's path is the identity of its entry in the report, in `fw:///`
   /// addresses and in the previews compiler's own daemon address, so a second
   /// declaration of one package is not a second thing anything downstream could
   /// name. `Flutterware.configure` refuses it outright for that reason.
   ///
   /// Longest prefix wins, and two canvases with the same prefix are refused —
-  /// they are one rule written twice, and either resolution drops an answer
-  /// somebody wrote down.
+  /// they are one rule written twice, and either resolution drops a declared
+  /// answer.
   final List<PreviewCanvas> canvases;
 
   /// What this package's previews are framed as when a caller names no device
   /// — the panel's canvas, every `screenshot`, `inspect` and `compare`, and the
   /// page `build-web` writes.
   ///
-  /// **Null is a rectangle, and for a phone app that is the wrong picture.**
+  /// Null is a rectangle, and for a phone app that is the wrong picture.
   /// Without a device a preview renders at 900 × 700, which is landscape and
   /// desktop-shaped: a phone screen laid out in it does not overflow, does not
   /// wrap and looks fine, so the default hides the bug you opened the preview
@@ -156,7 +155,7 @@ class PreviewsPackage extends PluginPackage {
 
   /// Narrows the scan to one directory, relative to the package.
   ///
-  /// **Null scans the whole package**, which is the default and what most
+  /// Null scans the whole package, which is the default and what most
   /// projects want: previews are found wherever they are written, ignored files
   /// and `build/` excluded the way git excludes them. Naming a directory is for
   /// a package that wants the scan bounded — and it moves `new` there too, so
@@ -296,7 +295,7 @@ class TranslationsPackage extends PluginPackage {
 
   /// Where this package's translations live.
   ///
-  /// **A list, never a single catalog with a special case.** Several in one
+  /// A list, never a single catalog with a special case. Several in one
   /// UI is ordinary — a product's own strings beside a shared package's, or
   /// two halves of a migration — and a shape that makes the second one awkward
   /// is a shape that gets worked around.
@@ -556,8 +555,8 @@ class Entrypoint {
 
   /// The knobs this entry point's `main` takes, annotated — see [Knob].
   ///
-  /// Declaring none is the ordinary case: the signature is the list, and a
-  /// parameter nobody annotated still gets a control with its own name, type
+  /// Declaring none is the ordinary case: the signature is the list, and an
+  /// unannotated parameter still gets a control with its own name, type
   /// and default. This is for the two things a signature cannot say — a
   /// computed value, and a human label.
   final List<Knob> knobs;
@@ -571,7 +570,7 @@ class Entrypoint {
 
   /// The `--flavor` this entry point is built with — `dev`, `staging`.
   ///
-  /// **A flavoured project cannot be run without one at all.** Where a missing
+  /// A flavoured project cannot be run without one at all. Where a missing
   /// `--dart-define` merely gives you the fallback value, a missing `--flavor`
   /// on a project that declares product flavors is a hard failure before
   /// anything is compiled: Gradle has no such variant, and Xcode has no such
@@ -708,7 +707,7 @@ enum RunPlatform {
 
 /// One knob an entry point's `main` takes, annotated.
 ///
-/// **The signature is the declaration; this only annotates it.** `main`'s
+/// The signature is the declaration; this only annotates it. `main`'s
 /// parameter list already says what exists, with what type and what default,
 /// and it cannot be wrong about its own function — so nothing here repeats any
 /// of that. Only [name] appears twice, and it is the join key.
@@ -738,7 +737,7 @@ enum RunPlatform {
 /// 262ms on desktop, 3s on an Android emulator, against a rebuild. See
 /// `docs/superpowers/specs/2026-08-12-run-knobs-design.md`.
 ///
-/// **The word is back because the cost is.** This was `LaunchKnob`, renamed to
+/// The word is back because the cost is. This was `LaunchKnob`, renamed to
 /// `DartDefine` on the grounds that a preview's knob costs a frame while a
 /// define costs a rebuild, so one word for both would hide the difference. The
 /// mechanism underneath has changed: a restart is not a frame, but it is the
@@ -784,8 +783,8 @@ class Knob {
 
   /// Whether a launch that sets no value for this knob is refused.
   ///
-  /// **The second thing a signature cannot say, and for a harder reason than
-  /// [from].** A knob *is* an optional named parameter, and
+  /// The second thing a signature cannot say, and for a harder reason than
+  /// [from]. A knob *is* an optional named parameter, and
   /// `void main({required String x})` is not an entry point at all: Flutter's
   /// bootstrap calls `main()` with no arguments, so the word `required` in the
   /// signature stops the file running under plain `flutter run`. That is why a
@@ -808,7 +807,7 @@ class Knob {
   /// chosen for this launch, not that a human typed it — which is what makes
   /// `required` with a working source a declaration rather than a chore.
   ///
-  /// **The refusal comes before anything is built, which is the whole value.**
+  /// The refusal comes before anything is built, which is the whole value.
   /// Left to the app, forgetting one costs a compile, an install, a boot and
   /// whatever the code does about a placeholder — usually throwing somewhere
   /// that names neither the knob nor the launch, minutes after the mistake.
@@ -853,8 +852,8 @@ sealed class DefineSource {
 
   /// The root of the Flutter SDK this launch is being built with.
   ///
-  /// **A value flutterware is holding while the app it launches cannot see
-  /// it.** `flutter run` hands its child a stripped environment, so nothing
+  /// A value flutterware is holding while the app it launches cannot see
+  /// it. `flutter run` hands its child a stripped environment, so nothing
   /// inside the process can tell which `flutter` started it — and an app that
   /// has to spawn Flutter itself, a dev tool or a codegen harness or this GUI,
   /// must not fall back to the one on PATH: that is routinely a different
@@ -884,14 +883,14 @@ sealed class DefineSource {
   ///         args: ['port', 'server'])),
   /// ```
   ///
-  /// **A script, not a command, because a command would have to name an
-  /// executable and no config file can know which one.** A `dart` on PATH is
+  /// A script, not a command, because a command would have to name an
+  /// executable and no config file can know which one. A `dart` on PATH is
   /// routinely older than the SDK the project pins — this repo's own is — so a
   /// config saying `dart` would be saying "whichever SDK happens to be first",
   /// which is not a thing anybody means. Run with the same `dart` that compiles
   /// and runs this config file, from the worktree root.
   ///
-  /// **Selection belongs in [args], not here.** An earlier draft had a `pick:`
+  /// Selection belongs in [args], not here. An earlier draft had a `pick:`
   /// naming a key in a JSON object the script printed; it would have grown a
   /// path syntax the first time somebody's output was nested. Passing the
   /// selection as an argument puts it in the tool that owns the data, where it
@@ -986,7 +985,7 @@ class LauncherIconPackage extends PluginPackage {
 ///
 /// See `docs/superpowers/specs/2026-08-10-dev-stack-design.md`.
 ///
-/// **It owns nothing.** flutterware runs [probe] to find out what is going on
+/// It owns nothing. flutterware runs [probe] to find out what is going on
 /// and runs [start] / [stop] when told to; the project's own CLI stays the
 /// authority on what those mean. That is the whole difference from a
 /// supervisor, and it is why a stack brought up in a terminal, by a teammate's
@@ -1025,7 +1024,7 @@ class LauncherIconPackage extends PluginPackage {
 /// ));
 /// ```
 ///
-/// **Named `.background` for what it requires of the tool**, not for how this
+/// Named `.background` for what it requires of the tool, not for how this
 /// is implemented: the command must return, leaving something running behind
 /// it. A tool you stop with Ctrl-C — `firebase emulators:start`, `tilt up`,
 /// `ngrok http` — cannot be declared this way, because there is no `stop` to
@@ -1066,9 +1065,9 @@ class DevStack extends Plugin {
 
   /// How often to re-run [probe] while something is watching.
   ///
-  /// **The plugin declares the timescale; the shell decides whether to poll at
-  /// all.** Only this declaration knows how fast the subject changes — nobody
-  /// brings a docker stack up twice a minute — and only the shell knows about
+  /// The plugin declares the timescale; the shell decides whether to poll at
+  /// all. Only this declaration knows how fast the subject changes — a docker
+  /// stack does not come up twice a minute — and only the shell knows about
   /// window focus and which panel is on screen. So the shell scales this rather
   /// than replacing it, and a stack that is nowhere on screen is not polled.
   final Duration poll;
@@ -1076,13 +1075,12 @@ class DevStack extends Plugin {
   /// How long to wait for `start`, `stop` or a [StackCommand] before giving up
   /// on it. [StackCommand.timeout] overrides this per command.
   ///
-  /// **It bounds the wait, not the process.** Nothing is killed when this
-  /// expires: a `docker compose up` interrupted half way through leaves a
-  /// stack in a state nobody asked for, and flutterware does not own the
-  /// command well enough to make that call. What it does end is flutterware's
-  /// *claim* on the stack — without which one command that never returns takes
-  /// every later one with it, because a transition in flight is what refuses
-  /// the next.
+  /// It bounds the wait, not the process. Nothing is killed when this expires:
+  /// a `docker compose up` interrupted half way through leaves the stack in an
+  /// indeterminate state, and flutterware does not own the command well enough
+  /// to make that call. What it does end is flutterware's *claim* on the stack
+  /// — without which one command that never returns takes every later one with
+  /// it, because a transition in flight is what refuses the next.
   ///
   /// So the default is generous rather than tight: ten minutes is longer than
   /// any bring-up that is actually working and short enough that a session
@@ -1118,8 +1116,8 @@ class DevStack extends Plugin {
 
 /// Something a [DevStack] runs: the probe, `start`, `stop`, a [StackCommand].
 ///
-/// **Two kinds, because "which executable" is a question a config file cannot
-/// answer and does not have to.** A [StackRun.command] names an executable and
+/// Two kinds, because "which executable" is a question a config file cannot
+/// answer and does not have to. A [StackRun.command] names an executable and
 /// is right for one the machine is expected to have — `docker`, `kubectl`, `sh`.
 /// A [StackRun.script] names a Dart file in this project and lets flutterware
 /// supply the interpreter, which is the only way to be sure it is the SDK the
@@ -1147,19 +1145,18 @@ sealed class StackRun {
   /// StackRun.script('tool/local_env.dart', args: ['status', '--json'])
   /// ```
   ///
-  /// **[path] is relative to the stack's `workingDirectory`, and the script runs
-  /// there** — so it is written exactly as you would type it, having cd'd to the
+  /// [path] is relative to the stack's `workingDirectory`, and the script runs
+  /// there — so it is written exactly as you would type it, having cd'd to the
   /// directory the stack's other commands already run in. That differs from
   /// [DefineSource.script], which is relative to the worktree root, and the
   /// difference is the `workingDirectory` this plugin has and that one does not.
   ///
-  /// **Run as `dart <path>`, not `dart run <path>`.** `run` re-resolves the
-  /// package graph and executes every build hook in it, every time — a cost a
-  /// probe would pay on every poll, and one that grows with the project rather
-  /// than staying a rounding error. The price is that build hooks do not run, so
-  /// a script whose imports need native assets built will not find them. Declare
-  /// that one as a [StackRun.command] naming its own interpreter, and accept
-  /// what that means.
+  /// Run as `dart <path>`, not `dart run <path>`. `run` re-resolves the package
+  /// graph and executes every build hook in it, every time — a cost a probe
+  /// would pay on every poll, and one that grows with the project. The tradeoff
+  /// is that build hooks do not run, so a script whose imports need native
+  /// assets built will not find them. Declare that one as a [StackRun.command]
+  /// naming its own interpreter.
   const factory StackRun.script(String path, {List<String> args}) = ScriptRun;
 
   Map<String, Object?> toJson();
@@ -1220,19 +1217,19 @@ final class ScriptRun extends StackRun {
 
 /// How a [DevStack] finds out what state it is in.
 ///
-/// Two shapes, because the honest floor and the useful ceiling are different
+/// Two shapes, because the minimum and the useful maximum are different
 /// commands. [Probe.exitCode] works against any health check that already
 /// exists; [Probe.json] needs the tool to say more, and gives more back.
 class Probe {
-  /// **Zero is up, anything else is down.** The command's last non-empty output
+  /// Zero is up, anything else is down. The command's last non-empty output
   /// line becomes the detail shown beside the status.
   ///
   /// The floor, and it works today against `minikube status`,
   /// `supabase status` and any health check a project already has, without
   /// asking anyone to change anything.
   ///
-  /// **The command has to say no when the stack is down, and a lister does
-  /// not.** `docker compose ps --quiet` exits 0 and prints nothing for a
+  /// The command has to say no when the stack is down, and a lister does
+  /// not. `docker compose ps --quiet` exits 0 and prints nothing for a
   /// stopped project — it succeeded at listing zero containers — so a probe
   /// declared that way reads `up` forever, and the panel is confidently green
   /// with no Bring-up button on it. The same goes for anything whose exit code
@@ -1259,7 +1256,7 @@ class Probe {
   /// [StackRun.script] of its own — which is most of the work of earning a
   /// [Probe.json], and gets the service list and the *broken* state with it.
   ///
-  /// **And a lister exits 0 over someone else's stack, too.** The example above
+  /// And a lister exits 0 over someone else's stack, too. The example above
   /// is right about zero containers and still wrong in a worktree: `docker
   /// compose` resolves its project from the working directory, so a checkout
   /// that has never brought its own stack up reports `up` — describing the
@@ -1295,8 +1292,8 @@ class Probe {
   /// as the reason there as well, because one sentence explaining what is wrong
   /// is one sentence whichever key it arrives under.
   ///
-  /// **A partly-up stack is `up`, with `services` saying which parts are
-  /// not.** Four of five services serving fits no single word above, and the
+  /// A partly-up stack is `up`, with `services` saying which parts are
+  /// not. Four of five services serving fits no single word above, and the
   /// word is not asked to carry it: report each service's own state and the
   /// surfaces render the fraction — `up 3/4`, washed amber rather than
   /// green. A probe that answers `down` there paints a working stack red and

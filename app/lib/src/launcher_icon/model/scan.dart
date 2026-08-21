@@ -297,7 +297,7 @@ enum IconFlavorSource {
   iosCatalog,
 }
 
-/// A flavor, and everything on disk that says so.
+/// A flavor, and every file on disk that declares it.
 class IconFlavor {
   const IconFlavor(this.name, this.sources);
 
@@ -320,7 +320,7 @@ class IconFlavor {
 /// Every flavor this package appears to have, from the three sources that cost
 /// a directory listing.
 ///
-/// **Gradle and Xcode are the real authorities and are deliberately not read.**
+/// Gradle and Xcode are the real authorities and are deliberately not read.
 /// `productFlavors` needs a Groovy parser and a Kotlin one, and the scheme list
 /// needs a third; `lib/src/run/flavors.dart` declined the same job for the same
 /// reason. What is here instead is the union of what the generator was told to

@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 /// Marks a tree that exists to be photographed.
 ///
-/// **A signal, not a policy.** This says only that the window was launched to
+/// A signal, not a policy. This says only that the window was launched to
 /// produce a picture; what to do about it belongs to each widget, because only
 /// the widget knows which of the things it draws are facts about the project
 /// and which are facts about this run. The capture code deliberately has no
@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 /// a timing is simply not a property of the thing being photographed. Committed
 /// screenshots that disagree on it churn the repository on every regeneration.
 ///
-/// **Absent means false**, so every widget that has never heard of this keeps
+/// Absent means false, so every widget that has never heard of this keeps
 /// behaving exactly as it does now, and [isCapturing] needs no null handling at
 /// the call site.
 ///
@@ -28,9 +28,8 @@ class CaptureMode extends InheritedWidget {
   /// Whether this frame is going to be photographed.
   ///
   /// True for the whole life of a capture process rather than only for the
-  /// instant the shutter fires. Flipping it at capture time would rebuild the
-  /// tree in the moment it most needs to be still, which is the opposite of
-  /// what it is for.
+  /// instant the picture is taken. Flipping it at capture time would rebuild
+  /// the tree in the moment it most needs to be still.
   static bool isCapturing(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<CaptureMode>() != null;
 

@@ -92,8 +92,8 @@ class MotionScanResult {
 /// a local bound to one. Nothing here crosses a file boundary, so there is
 /// nothing to resolve.
 ///
-/// **Provisional by construction.** It cannot know what a helper widget reads,
-/// and it does not try; a live guest answers that. What it buys is a list that
+/// Provisional by construction. It cannot know what a helper widget reads, and
+/// it does not try; a live guest answers that. What it gives is a list that
 /// exists before anything is compiled.
 class MotionScanner {
   MotionScanner({
@@ -214,7 +214,7 @@ class _Scope {
 
 /// Finds the scopes; [_BuilderVisitor] reads inside one.
 ///
-/// **Both node kinds, and that is not belt-and-braces.** Unresolved,
+/// Both node kinds, and that is not belt-and-braces. Unresolved,
 /// `MotionScope(...)` parses as a `MethodInvocation` — the analyzer only
 /// rewrites it into an `InstanceCreationExpression` once it knows the name is a
 /// class, which is exactly the step a syntactic scan skips. Only the `const`

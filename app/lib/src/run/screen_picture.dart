@@ -8,10 +8,10 @@ import '../inspect/node_highlight.dart';
 import '../ui/design/design.dart';
 import '../ui/theme.dart';
 
-/// The picture, and the caption that only a picture earns.
+/// The picture, and the caption that goes with it.
 ///
-/// **The caption is tied to the decoded frame, not to the bytes.** It used to
-/// be tied to `image != null`, and that told the reader a lie for as long as
+/// The caption is tied to the decoded frame rather than to the bytes. It used
+/// to be tied to `image != null`, and that misreported for as long as
 /// the decode took: `Image.memory` resolves *asynchronously*, and a
 /// `RenderImage` with nothing to draw yet takes `constraints.smallest` — zero,
 /// under the loose constraints this column hands it. So the caption drew,
@@ -59,7 +59,7 @@ class RunScreenPicture extends StatelessWidget {
   /// The box the picture frames, in the app's own logical pixels — the
   /// [canvas] every rect is scaled against.
   ///
-  /// **The topmost rect in the tree, and that is not a guess.** The screenshot
+  /// The topmost rect in the tree, and that is not a guess. The screenshot
   /// RPC is handed the size `getLayoutExplorerNode` reads off the root — which
   /// is a `RenderView` and reports none, so the size that reaches it is the
   /// first *child* that does, the app's own bounds. The guest walk gives its
@@ -142,7 +142,7 @@ class RunScreenPicture extends StatelessWidget {
 
 /// The hovered node's box, over the picture.
 ///
-/// **The rect is scaled here rather than under a `FittedBox`.** The catalog
+/// The rect is scaled here rather than under a `FittedBox`. The catalog
 /// paints into a surface that *is* the guest's logical size, so its painter
 /// needs no transform — but this picture is the app shrunk into a third of a
 /// pane, and scaling the painter would take the label down with it to three

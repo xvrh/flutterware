@@ -11,7 +11,7 @@ import '../utils/run_dir.dart';
 /// Runs a declaration's `transformers:` and hands back the bytes a build would
 /// ship, cached by content.
 ///
-/// **Why the catalog cannot simply link the source.** A build spawns each
+/// Why the catalog cannot simply link the source. A build spawns each
 /// transformer over the file and bundles the *output*; the entry keeps the
 /// declared key, so `assets/logo.svg` in the app is the compiled vector, not the
 /// SVG. Serving the source resolves the key to the wrong bytes — the loader
@@ -19,7 +19,7 @@ import '../utils/run_dir.dart';
 /// it looks like an error. A blank icon with a healthy audit is the most
 /// expensive answer a preview tool can give, which is why this exists.
 ///
-/// **The invocation is `flutter_tools`' own** (`asset_transformer.dart`, 3.47):
+/// The invocation is `flutter_tools`' own (`asset_transformer.dart`, 3.47):
 /// `dart run <package> --input=<tmp> --output=<tmp> <args…>`, in the project
 /// directory, with `FLUTTER_BUILD_MODE` in the environment, each transformer's
 /// output chained into the next. Reproduced rather than approximated, because
@@ -91,7 +91,7 @@ class AssetTransformerRunner {
   /// Drops cache entries nothing has produced in [_keepFor], and scratch
   /// directories a killed process left behind.
   ///
-  /// **On a miss only**, which is what makes it free: the warm path — every
+  /// On a miss only, which is what makes it free: the warm path — every
   /// build of an unchanged project — does no extra I/O at all, and a cold path
   /// has just paid for a process, so one directory listing is nothing beside it.
   /// Once per runner, so a 200-asset first build sweeps once rather than 200
@@ -203,7 +203,7 @@ class AssetTransformerRunner {
   /// sha1 over the input bytes and, per transformer, its resolved package root
   /// and its arguments.
   ///
-  /// **The bytes, not the mtime**: a checkout that rewrites a file to its own
+  /// The bytes, not the mtime: a checkout that rewrites a file to its own
   /// content must not recompile the world. **The resolved root, not the package
   /// name**: a hosted root carries its version, so a consumer bumping the
   /// transformer gets a new key for free and a path dependency keys on where it
@@ -243,7 +243,7 @@ class AssetTransformerRunner {
 
 /// A transformer that exited non-zero, or produced no output file.
 ///
-/// **Raised rather than fallen back from.** Linking the source instead would
+/// Raised rather than fallen back from. Linking the source instead would
 /// put the wrong bytes at a key that resolves, which is the exact failure this
 /// whole mechanism exists to end — and it is how a blank icon shipped for
 /// months. A build fails on this too.

@@ -20,7 +20,7 @@ class _SessionPlugin implements DevbarPlugin, DevbarPanelSource {
   void dispose() {}
 }
 
-/// **A devbar is not always the app's outermost widget.** One scoped to
+/// A devbar is not always the app's outermost widget. One scoped to
 /// something that opens and closes — a session, an environment — is mounted
 /// long after `runApp`, and everything [Devbar] does on the way up was written
 /// for the other case.

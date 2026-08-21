@@ -90,7 +90,7 @@ class CompareOutcome {
 /// Runs a whole comparison — both halves, the artifact, and whatever outputs
 /// [options] asked for.
 ///
-/// **The one orchestration, however it is reached.** `fw compare`, the
+/// The one orchestration, however it is reached. `fw compare`, the
 /// `compare` action an agent invokes, and anything later all call this; the
 /// order inside is the design and it is visible in the progress: the SDK check
 /// refuses before anything is checked out, the skip rule decides before

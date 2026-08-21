@@ -6,7 +6,7 @@
 /// list, which has to notice a `_test.dart` appearing under `test/` while
 /// somebody watches the panel.
 ///
-/// The timing rules are the part worth having once. A debounce alone is not
+/// The timing rules are what this exists to get right once. A debounce alone is not
 /// enough — an agent writing steadily never offers the quiet moment a debounce
 /// waits for, so the screen would update either never or on every write — and a
 /// floor alone fires on the first event of a burst, before the burst is over.
@@ -35,7 +35,7 @@ Stream<String> watchDirectoryPaths(String path, {required bool recursive}) =>
 
 /// A recursive watch on [directory], reported as a coalesced "something moved".
 ///
-/// **Never throws, and never guesses.** A directory that is not there, a
+/// Never throws, and never guesses. A directory that is not there, a
 /// platform that refuses, a system out of watches: each costs one live signal
 /// and nothing else, reported through [onFailure] and visible as
 /// [isWatching] — so a surface that has silently stopped being live can say so

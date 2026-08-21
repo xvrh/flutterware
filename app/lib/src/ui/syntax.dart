@@ -1,14 +1,14 @@
 /// Source code, tokenised — the one place the vendored `highlight` is spoken
 /// to, and the one place a token class becomes a colour.
 ///
-/// **Tokens, not spans.** The tokeniser's answer is cached by callers that
+/// Tokens, not spans. The tokeniser's answer is cached by callers that
 /// know nothing about a `BuildContext`, and a `TextSpan` carries a `Color` from
 /// the palette — so a cache of spans is a cache that goes wrong the moment the
 /// window changes theme. What is cached is [Token]s, which are plain data; the
 /// colour is applied where the widget is built. It also makes the tokeniser
 /// testable without pumping anything.
 ///
-/// **The tokeniser is borrowed and the palette is not.** `highlight` ships
+/// The tokeniser is borrowed and the palette is not. `highlight` ships
 /// themes and none of them is this app's: they are picked for a light or a dark
 /// editor, and this app is both. So the colours come from [FwPalette] — the same
 /// greens and ambers the JSON view and the diff already use for the same kinds
@@ -95,7 +95,7 @@ class Token {
   String toString() => 'Token(${className ?? '-'}: $text)';
 }
 
-/// **A dozen and a half languages, not all 190.** `languages/all.dart` compiles
+/// A dozen and a half languages, not all 190. `languages/all.dart` compiles
 /// every definition `highlight` ships into the binary for a screen that will
 /// meet four of them. These are the ones a Flutter repository's diff actually
 /// contains; anything else is drawn plain, which is what the screen did before
@@ -193,7 +193,7 @@ class SyntaxState {
 
 /// [source] as [language], one list of [Token]s per line.
 ///
-/// **Parsed whole, then split** — never line by line. A string, a block comment
+/// Parsed whole, then split — never line by line. A string, a block comment
 /// and a raw string all span lines, and a per-line parse starts each one in the
 /// default state, so the second line of every comment comes back as code.
 ///
@@ -204,8 +204,8 @@ List<List<Token>> tokenizeLines(String source, {required String? language}) =>
 /// The same, resumably: [from] continues a previous chunk, and [SyntaxState] in
 /// the result continues this one.
 ///
-/// What this cannot fix is a construct that opened above text nobody has —
-/// a diff hunk starting inside a block comment, where the bytes above are not
+/// What this cannot fix is a construct that opened above text that is not
+/// available — a diff hunk starting inside a block comment, where the bytes above are not
 /// in the patch at all. Within one text, chunked or not, the answer is the same.
 ({List<List<Token>> lines, SyntaxState state}) tokenizeChunk(
   String source, {

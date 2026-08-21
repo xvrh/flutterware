@@ -7,7 +7,7 @@ import 'package:vm_service/vm_service_io.dart';
 /// A connection to one running app's VM service — the only channel the cockpit
 /// has once a launch is detached.
 ///
-/// **The two tiers are visible here.** `hotReload` and `hotRestart` are not VM
+/// The two tiers are visible here. `hotReload` and `hotRestart` are not VM
 /// capabilities: `flutter_tools` *registers* them as service methods on the
 /// app's VM service, so they exist exactly as long as the `flutter run` that
 /// registered them, and their real names are namespaced by the VM (`s0.`
@@ -61,7 +61,7 @@ class RunConnection {
 
   /// The app's own isolate among [isolates].
   ///
-  /// **A list, not a single thing.** An app is one isolate until something
+  /// A list, not a single thing. An app is one isolate until something
   /// spawns another — a sync engine, a database worker, a plugin that runs
   /// Dart on a second engine — and the first entry then stops being a safe
   /// guess. Everything this class calls (`ext.flutter.exit`, the drive
@@ -165,7 +165,7 @@ class RunConnection {
   /// Subscribes to the `Extension` stream, once, and answers when the VM has
   /// acknowledged it.
   ///
-  /// **Deliberately not part of [connect].** Flutter posts `Flutter.Frame` on
+  /// Deliberately not part of [connect]. Flutter posts `Flutter.Frame` on
   /// this stream for *every frame* it renders
   /// (`scheduler/binding.dart:_profileFramePostEvent`), so subscribing eagerly
   /// would drag sixty events a second across the wire for every connected run,

@@ -41,7 +41,7 @@ class SplashPlace {
   /// How big a screen to draw at — `?size=large-phone`. Null is each surface's
   /// own default.
   ///
-  /// **A size class, not a device id, and not `?device=`.** This axis moves all
+  /// A size class, not a device id, and not `?device=`. This axis moves all
   /// eight cells at once, and a device id cannot: naming an iPhone names a
   /// platform with it, so it can only ever apply to two tiles. Every surface
   /// resolves the class to its own hardware — see [splashDeviceIdFor] — which is

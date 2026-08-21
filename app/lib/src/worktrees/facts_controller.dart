@@ -10,13 +10,13 @@ import 'facts_store.dart';
 
 /// Holds the explorer's facts for the window, and decides when to re-probe.
 ///
-/// **The one Flutter-aware file in this directory.** Everything under it —
+/// The one Flutter-aware file in this directory. Everything under it —
 /// the model, the probe, the providers, the store, the text projection — is
 /// pure Dart, because `fw worktrees` links those and must not drag in Flutter.
 /// This is the GUI's wrapper around them, the same split as `PluginCore` and
 /// `NativePlugin`.
 ///
-/// **No polling timer.** Refreshing happens when the explorer becomes visible
+/// No polling timer. Refreshing happens when the explorer becomes visible
 /// and when the button is pressed. Filesystem watchers are the third trigger
 /// and are not here yet; when they land they call [refresh] like everything
 /// else, so nothing above this changes.
@@ -24,8 +24,8 @@ import 'facts_store.dart';
 /// It is a [SettleSource], which is not decoration: the explorer refreshes on
 /// becoming visible, so `fw capture fw:///worktrees` used to photograph the
 /// screen a beat *before* any fact arrived — fourteen rows of dashes, reported
-/// as `settled: true`. A picture of a screen that had not finished thinking is
-/// worse than no picture, because nothing in it says so.
+/// as `settled: true`. A picture of a screen that had not finished loading is
+/// worse than no picture, because nothing in it shows that.
 class WorktreeFactsController extends ChangeNotifier implements SettleSource {
   WorktreeFactsController({
     required this.repoRoot,
@@ -55,7 +55,7 @@ class WorktreeFactsController extends ChangeNotifier implements SettleSource {
 
   final WorktreeFactsProbe _probe;
 
-  /// **The repository's one store instance in this process.**
+  /// The repository's one store instance in this process.
   ///
   /// `save` merges with the file before writing, so a second opener — another
   /// Studio, a `fw` in a sibling worktree — no longer gets its writes
@@ -85,7 +85,7 @@ class WorktreeFactsController extends ChangeNotifier implements SettleSource {
 
   /// Re-probes every worktree.
   ///
-  /// **Coalesced, not queued.** A second call while one is in flight returns the
+  /// Coalesced, not queued. A second call while one is in flight returns the
   /// same future rather than starting a second sweep: the triggers are a screen
   /// appearing and a button, and both can fire twice in a frame.
   ///
@@ -120,7 +120,7 @@ class WorktreeFactsController extends ChangeNotifier implements SettleSource {
 
   /// Re-reads the agents and nothing else. What a session-file event triggers.
   ///
-  /// **Not coalesced with [refresh]**, deliberately: it is file IO with no
+  /// Not coalesced with [refresh], deliberately: it is file IO with no
   /// subprocesses behind it, and making it wait on a git sweep would give the
   /// one genuinely live cell the latency of the slowest one. It does skip while
   /// a full sweep is in flight, since that sweep is about to report newer
@@ -156,7 +156,7 @@ class WorktreeFactsController extends ChangeNotifier implements SettleSource {
 
   /// Notifies on a microtask rather than now.
   ///
-  /// **Because a refresh starts from `initState`.** Becoming visible is one of
+  /// Because a refresh starts from `initState`. Becoming visible is one of
   /// the refresh triggers, and the moment a screen knows it became visible is
   /// inside the build phase — where marking the shell dirty synchronously
   /// throws `setState() called during build`. Same reason and same fix as

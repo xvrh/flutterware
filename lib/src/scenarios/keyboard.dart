@@ -7,21 +7,21 @@ import 'staging.dart';
 
 /// The keyboard a scenario raises without being asked.
 ///
-/// **The point of the whole thing.** A scenario taps a field and photographs a
+/// The point of the whole thing. A scenario taps a field and photographs a
 /// screen no phone would ever show: 844 points tall, with a form the user is
 /// halfway through typing into. Everything a layout gets wrong about the other
 /// 508 is invisible in every tool we have. With this on, a flow that fills a
 /// form is a flow a phone could have performed, and its shots are pictures a
 /// phone could have taken.
 ///
-/// **No heuristics, because the framework already knows.** An `EditableText`
+/// No heuristics, because the framework already knows. An `EditableText`
 /// that takes focus asks the platform for a keyboard, and the test binding's
 /// stub records the ask — so [TestTextInput.isVisible] *is* the signal, with
 /// no cooperation from the app and nothing to guess at. The design's evidence
 /// and the SDK line numbers behind it are in
 /// `docs/superpowers/specs/2026-08-21-fake-keyboard-design.md`.
 ///
-/// **The numbers go on the view, not on a `MediaQuery`.** A widget can only
+/// The numbers go on the view, not on a `MediaQuery`. A widget can only
 /// tell the subtree beneath it; the view tells `MediaQuery.fromView`, which is
 /// where every `MediaQuery` in the app ultimately comes from — including the
 /// ones a nested `View`, a `MediaQuery.removePadding` or an overlay build for
@@ -36,7 +36,7 @@ class ScenarioKeyboard {
   /// A real iOS keyboard slides in over ~250ms and Gboard over ~220; one
   /// number for both, because a scenario is not measuring the animation, it is
   /// making sure the layout is seen meeting it. The clock is fake, so this
-  /// costs nothing — it buys a motion recording where the keyboard slides the
+  /// costs nothing, and the motion recording gets a keyboard that slides the
   /// way a phone's does instead of teleporting.
   static const raise = Duration(milliseconds: 250);
 
@@ -76,7 +76,7 @@ class ScenarioKeyboard {
   /// Where the slide is actually run — registered by the host widget in the
   /// pumped tree, and null when there is none.
   ///
-  /// **The animation is a real `Ticker`, and it has to be.** A `Settle` loop
+  /// The animation is a real `Ticker`, and it has to be. A `Settle` loop
   /// asks `hasScheduledFrame` *after* its pump, and a frame scheduled by
   /// writing the view has been consumed by then — so a slide driven from the
   /// between-frames hook alone stops one frame in, with the keyboard a quarter
@@ -87,7 +87,7 @@ class ScenarioKeyboard {
 
   /// Called by the host widget as it mounts and disposes.
   ///
-  /// **Nothing is applied here.** Mounting happens inside a build, and writing
+  /// Nothing is applied here. Mounting happens inside a build, and writing
   /// the view fires `onMetricsChanged`, which makes `MediaQuery.fromView` call
   /// `setState` — during a build of one of its own descendants. The next
   /// [step] applies it instead, from the between-frames hook where a metrics
@@ -95,7 +95,7 @@ class ScenarioKeyboard {
   void attach(void Function(double fraction, {required bool animate}) run) =>
       _run = run;
 
-  /// **[_height] is deliberately left alone.** It records what is on the
+  /// [_height] is deliberately left alone. It records what is on the
   /// *view*, and unmounting the tree does not take it off — the host is gone,
   /// so nothing can. Zeroing it here is what made a raised keyboard survive
   /// into the next branch of a `split`: [reset] then believed there was
@@ -141,8 +141,8 @@ class ScenarioKeyboard {
   /// Puts everything back — the view included.
   ///
   /// Called when a replay tears its tree down: a split's second branch starts
-  /// from a fresh app, and a keyboard left up would be over a form nobody has
-  /// touched yet.
+  /// from a fresh app, and a keyboard left up would sit over an untouched
+  /// form.
   void reset() {
     mode = KeyboardMode.auto;
     write(0);
@@ -173,7 +173,7 @@ class ScenarioKeyboard {
 
 /// The slab, and the ticker that slides it.
 ///
-/// **Both halves in one widget, because both need the tree.** The picture has
+/// Both halves in one widget, because both need the tree. The picture has
 /// to be somewhere; the animation has to be a real `Ticker`, and a ticker
 /// needs a `TickerProvider`, which is a thing only a `State` in the pumped
 /// tree has. What the ticker *writes* is the view — see [ScenarioKeyboard] —

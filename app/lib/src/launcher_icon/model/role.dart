@@ -53,7 +53,7 @@ enum IconTreatment {
   ///
   /// Android's status-bar rule since API 21. The cheapest rule to apply and the
   /// most valuable to show: a full-colour logo dropped in as a notification
-  /// icon becomes a white blob, and nothing in the toolchain says so.
+  /// icon becomes a white blob, and nothing in the toolchain warns about it.
   whiteSilhouette,
 
   /// The alpha channel filled with a colour the system picks, on a background
@@ -104,10 +104,10 @@ enum IconMask {
 
   /// Whether pixels outside the safe zone are actually **removed**.
   ///
-  /// The distinction the overlay depends on: a region that gets cut deserves to
-  /// be shown dimmed-out, and a region that merely breaks a convention deserves
-  /// an outline. Drawing the second like the first says the OS destroys
-  /// artwork it leaves alone.
+  /// The distinction the overlay depends on: a region that gets cut is shown
+  /// dimmed out, and a region that merely breaks a convention gets an outline.
+  /// Drawing the second like the first implies the OS destroys artwork it
+  /// leaves alone.
   bool get clips => switch (this) {
     IconMask.none || IconMask.macosGuide => false,
     IconMask.adaptive ||
@@ -163,7 +163,7 @@ const maskableSafeRadiusFraction = 2 / 5;
 /// Apple's 1024px template centres the icon body in 824px, leaving the rest as
 /// margin and shadow room. Nothing enforces it — a full-bleed icon builds and
 /// ships — it just reads as oversized beside every other icon in the Dock,
-/// which is precisely the kind of thing nobody notices in a file browser.
+/// which is not visible in a file browser.
 const macosArtworkFraction = 824 / 1024;
 
 /// One thing an OS shows, or refuses to.

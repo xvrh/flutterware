@@ -161,7 +161,7 @@ class AdbNativeDriver extends NativeDriver {
     );
   }
 
-  /// The limit worth knowing before it surprises somebody.
+  /// The limit worth knowing before it bites.
   ///
   /// `uiautomator dump` describes the **focused** window, not the screen.
   /// Anything that takes focus is therefore fully addressable — a permission
@@ -170,7 +170,7 @@ class AdbNativeDriver extends NativeDriver {
   /// one common thing that does not take focus, so its keys are absent from
   /// this tree even while it is plainly up in the screenshot.
   ///
-  /// Said on every observation rather than only when a keyboard is present,
+  /// Stated on every observation rather than only when a keyboard is present,
   /// because the confusing case is exactly the one where an agent is looking
   /// for something and cannot tell "not on screen" from "not in this window".
   static const _focusedWindowRule =

@@ -42,7 +42,7 @@ FileBodyKind fileBodyKind(String path) {
 }
 
 /// Which face of the file the body shows. Only kinds with two faces get the
-/// header toggle; for the rest the default is the whole story.
+/// header toggle; for the rest the default is all there is.
 enum FileBodyView { source, rendered }
 
 /// Whether [bytes] read as binary — git's own heuristic, a NUL in the first
@@ -85,7 +85,7 @@ final class FileTooLarge extends FileContent {
 
 /// Reads and remembers file content for one worktree's changes screen.
 ///
-/// **The key is everything that can change the answer**, so nothing ever
+/// The key is everything that can change the answer, so nothing ever
 /// invalidates: the disk side is keyed by mtime and size, which an edit
 /// changes and a re-probe does not; the revision side is keyed by the
 /// revision, which is immutable. This is what makes the viewer safe against

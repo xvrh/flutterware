@@ -83,7 +83,7 @@ class FwTableSort {
 /// Pure View: plain [rows] in, intent out via callbacks. No fetching, no global
 /// reads. Row height is fixed ([rowHeight]) — cells truncate rather than wrap.
 ///
-/// **Why not `DataTable`.** Material's builds every row eagerly and has no
+/// Why not `DataTable`. Material's builds every row eagerly and has no
 /// pinned header, so showing 170 dependencies meant a fixed-height `SizedBox`
 /// wrapping a horizontal `CustomScrollView` and hoping. This virtualizes.
 ///

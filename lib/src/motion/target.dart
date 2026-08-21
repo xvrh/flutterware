@@ -18,8 +18,8 @@ class Motion {
 
   /// `target.property` pairs read at a call site during the current build.
   ///
-  /// A panel shows one lane per entry here: tuned or not, somebody asked for
-  /// this value and it reaches a widget.
+  /// A panel shows one lane per entry here: tuned or not, the value was asked
+  /// for and it reaches a widget.
   final reads = <String>{};
 
   /// Pairs read by a blanket reader — [MotionBox] sweeps its whole frozen set
@@ -70,7 +70,7 @@ class Motion {
 
   /// Widgets that have said where a target is.
   ///
-  /// **Not build-scoped**, unlike [reads] and [named]: a widget registers when
+  /// Not build-scoped, unlike [reads] and [named]: a widget registers when
   /// it mounts and leaves when it is disposed, so this survives the
   /// [beginBuild] that clears the rest.
   ///
@@ -97,7 +97,7 @@ class Motion {
   /// pointed at it or nothing it points to has been laid out.
   ///
   /// The union rather than the first, because a target read once per row of a
-  /// list is several widgets and the honest answer is the box containing them.
+  /// list is several widgets, and the box containing them is the right answer.
   ///
   /// Transformed rather than measured: `getTransformTo(null)` walks the whole
   /// chain to the root, so a target inside a `MotionBox` reports where it has

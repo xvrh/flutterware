@@ -18,9 +18,9 @@ import '../ui/error_state.dart';
 /// The whole matrix at once: four surfaces, two themes, side by side — and,
 /// when one is selected, an inspector beside them rather than instead of them.
 ///
-/// Showing them together is the point. Any one of these is easy to get from a
-/// device; what nobody can hold in their head is that the same eight lines of
-/// YAML produce *these eight pictures*, and that two of them are usually not
+/// Showing them together is what makes it useful. Any one of these is easy to
+/// get from a device; what is hard to hold in your head is that the same eight
+/// lines of YAML produce *these eight pictures*, and that two of them are usually not
 /// what the author expected. Which is why selecting one no longer replaces the
 /// page: the comparison used to disappear at exactly the moment you got
 /// interested in one cell, and left a text link to get back.
@@ -203,7 +203,7 @@ SplashGeneratedState _stateOf(SplashConfigScan config) => !config.isGenerated
 
 /// The screen a surface draws at a given size.
 ///
-/// **One axis, eight honest cells.** The axis used to be a device id, which
+/// One axis, eight honest cells. The axis used to be a device id, which
 /// names a platform with it — so a chosen iPhone redrew the two iOS tiles and
 /// left the other six alone, which is a control that lies about what it does. A
 /// size class names no platform, and each surface resolves it to its own

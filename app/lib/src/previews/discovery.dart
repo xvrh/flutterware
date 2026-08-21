@@ -16,7 +16,7 @@ import 'catalog_entry.dart';
 class _FileScan {
   _FileScan({required this.modified});
 
-  /// When the file was last written, in microseconds. The whole of the cache
+  /// When the file was last written, in microseconds. This is the entire cache
   /// invalidation: a file whose mtime has not moved cannot have changed what it
   /// declares.
   final int modified;
@@ -41,8 +41,8 @@ class ScanResult {
   /// Whether any file was read this time.
   ///
   /// False means this is what the previous [CatalogScanner.scan] returned, file
-  /// for file, and a caller holding that result has nothing to do — **the whole
-  /// of what the fingerprint this replaced was for**. Fingerprinting listed and
+  /// for file, and a caller holding that result has nothing to do — which is
+  /// all the fingerprint this replaced was for. Fingerprinting listed and
   /// statted the roots to decide whether a scan was worth it, which was a good
   /// trade while a scan meant reading and parsing everything. It is not one now
   /// that a scan re-reads only what moved: the two cost the same (45ms against
@@ -99,8 +99,8 @@ class CatalogScanner {
 
   /// What each file yielded last time it was read, keyed by absolute path.
   ///
-  /// **What makes a rescan proportional to the edit rather than to the
-  /// package.** The scan root is the whole package now, so any `.dart` file
+  /// What makes a rescan proportional to the edit rather than to the
+  /// package. The scan root is the whole package now, so any `.dart` file
   /// being touched brings us here — `lib/main.dart` included, which you edit
   /// constantly — and a rescan sits at the head of `select`, on the hot-reload
   /// path. Re-reading and re-parsing everything there cost 57ms for this app
@@ -264,7 +264,7 @@ class CatalogScanner {
   /// Whether [directory] belongs to a package nested inside this one — a
   /// plugin's `example/`, a `packages/*` member of a workspace.
   ///
-  /// **A package boundary is where this scan stops**, which the widening to the
+  /// A package boundary is where this scan stops, which the widening to the
   /// whole package made a question worth asking: a nested package is a project
   /// in its own right, with its own configuration and its own previews, and a
   /// wrapper generated here would import its file by a path — a second copy of
@@ -434,7 +434,7 @@ class CatalogScanner {
   /// A file holding more than one entry gives its entries a group, so variants
   /// get a parent without anyone declaring one. `group:` overrides it.
   ///
-  /// **The file's name as written, never prettified.** This used to sentence-case
+  /// The file's name as written, never prettified. This used to sentence-case
   /// it — `avatar_tile.dart` became `Avatar tile` — which made one row in the
   /// tree follow a rule none of the others did: a directory folder, a declared
   /// `group:` and an entry's name are all shown exactly as their source spells
@@ -490,8 +490,8 @@ class CatalogScanner {
   /// getter, evaluated as Dart, while every entry the catalog knows about is
   /// resolved from the source before anything runs.
   ///
-  /// **Registered ones only**, which is the whole of what this can honestly
-  /// answer. Registered, a `MultiPreview` reaches the generated wrapper as
+  /// Registered ones only, which is all this can answer for.
+  /// Registered, a `MultiPreview` reaches the generated wrapper as
   /// `Preview get fwPreview => BrightnessPreview()` and fails to compile, pointing
   /// at generated code rather than at the declaration that caused it — so
   /// refusing here, by name, is strictly better than the same failure later.

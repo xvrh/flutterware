@@ -18,7 +18,7 @@
 /// tomorrow should survive tonight's restart. When a stopped session and its
 /// successor share the name, the panel prefers the one still running; a
 /// request's event id then resolves within whichever session is shown, which
-/// is the honest answer to an id from a process that no longer exists. A
+/// is the best available answer for an id from a process that is gone. A
 /// query's `<shapeKey>` hashes the *normalized* SQL, so it survives restarts
 /// outright.
 library;

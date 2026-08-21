@@ -165,7 +165,7 @@ const _maxFailures = 10;
 
 /// What `dart:io` says about a connection it handed off after an upgrade.
 ///
-/// **A message, not an API.** There is no flag on the profile record that says
+/// A message, not an API. There is no flag on the profile record that says
 /// "this became a WebSocket", and the upgrade path sets the same `error` field
 /// a refused connection does — so this string is the only thing separating the
 /// two. Matched exactly, and kept here with its reason, because a rename
@@ -180,7 +180,7 @@ bool networkIsUpgrade(HttpProfileRequestRef request) =>
 /// The status a row shows: the code, `ERR` for a failed request, null while
 /// in flight.
 ///
-/// **An upgraded connection is not a failed one.** Every WebSocket an app opens
+/// An upgraded connection is not a failed one. Every WebSocket an app opens
 /// goes through `HttpClient`, gets detached at the upgrade, and used to land
 /// here as `ERR` — so an app that talks over a socket showed a screen of red
 /// where nothing had gone wrong. The server's own answer to an upgrade is 101,

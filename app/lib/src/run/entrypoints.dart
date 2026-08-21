@@ -28,12 +28,11 @@ class EntrypointRef {
   final String name;
 
   /// The one line the config gave it. Null for a scanned entry point: a
-  /// description is something somebody wrote, never something guessed from a
-  /// file name.
+  /// description is written by hand, never guessed from a file name.
   final String? description;
 
   /// True when `tool/flutterware.dart` named it. A discovered entry point is
-  /// still launchable; the difference is that nobody vouched for it, and it
+  /// still launchable; the difference is that nothing declared it, and it
   /// carries no knobs.
   final bool declared;
 
@@ -63,8 +62,8 @@ class EntrypointRef {
   /// the wire from `flutter daemon`, and because both are optional there: a
   /// device that says nothing about itself is **allowed**. Hiding a connected
   /// phone over a field the daemon happened not to send would be the tool
-  /// inventing a restriction nobody declared, which is worse than offering a
-  /// device that turns out not to build.
+  /// inventing an undeclared restriction, which is worse than offering a device
+  /// that turns out not to build.
   bool allowsDevice({String? platformType, String? category}) {
     var allowed = allowedPlatforms;
     if (allowed.isEmpty) return true;
@@ -168,7 +167,7 @@ List<Knob> _knobsOf(Object? raw) => [
 
 /// Every `lib/*.dart` of [packageRoot] that declares a top-level `main()`.
 ///
-/// **Parsed, never resolved or compiled** — the posture the catalog and the
+/// Parsed, never resolved or compiled — the posture the catalog and the
 /// scenario scanner already take. A `void main()` is as syntactically visible
 /// as a `@Preview` annotation, and finding one costs a parse rather than a build.
 ///

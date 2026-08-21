@@ -10,10 +10,10 @@ import 'web_app_generator.dart';
 ///
 /// Two steps, and the second is just `flutter build web`: [WebAppGenerator]
 /// writes an app that browses every entry, and the tool compiles it. Nothing
-/// here talks to the compiler daemon or the embedder — a page is not a frame
-/// somebody captured, it is the previews themselves running in a browser.
+/// here talks to the compiler daemon or the embedder — a page is not a captured
+/// frame, it is the previews themselves running in a browser.
 ///
-/// **Built from the target package**, not from a generated package of its own.
+/// Built from the target package rather than from a generated package of its own.
 /// The package's `web/index.html`, its assets and its fonts are all declared
 /// there, and a build run from anywhere else would have to reproduce them —
 /// which is how a catalog page ends up missing exactly the images the previews are
@@ -36,7 +36,7 @@ class WebCatalogBuilder {
   /// output: regenerated every time and never worth committing.
   String get sourceDir => p.join(packageRoot, 'build', 'catalog', 'web_src');
 
-  /// Where the page goes when nobody says. Package-relative, and spelled with
+  /// Where the page goes by default. Package-relative, and spelled with
   /// `/` because it is also what the dialog puts in a text field and what the
   /// action's help says.
   static const defaultOutput = 'build/catalog/web';
@@ -120,7 +120,7 @@ class WebCatalogBuilder {
     );
   }
 
-  /// The compile in flight, so somebody can end it. Null when none is.
+  /// The compile in flight, so it can be cancelled. Null when none is.
   Process? _process;
   var _cancelled = false;
 

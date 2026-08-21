@@ -7,7 +7,7 @@ import 'shell.dart';
 
 /// The descriptor renderers, against fixtures.
 ///
-/// **These are the only place the renderers can be looked at without an app.**
+/// These are the only place the renderers can be looked at without an app.
 /// A panel normally arrives over a VM service from something running on a
 /// phone; here the descriptor is written by hand, so every shape it can take —
 /// a feed with nothing in it, a knob nobody has touched, an action mid-flight,

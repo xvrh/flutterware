@@ -20,7 +20,7 @@ const _hardFloor = '''
 
 /// Every file under [directory] that `git` would not consider ignored.
 ///
-/// **Ignores are read from [ignoreRoot] down**, exactly as git reads them from
+/// Ignores are read from [ignoreRoot] down, exactly as git reads them from
 /// the repository root down — so listing a workspace member honours the
 /// repository's own `.gitignore` even when the member has none. [ignoreRoot]
 /// defaults to the enclosing git repository ([gitRootOf]), and to [directory]
@@ -30,8 +30,8 @@ const _hardFloor = '''
 /// been added is listed (it is a source file that exists, which is what every
 /// caller here means), and symlinks are dropped rather than followed.
 ///
-/// **Pass `ignoreRoot: directory` for a self-contained package that merely
-/// happens to sit under a repository** — anything in the pub cache, or a copy
+/// Pass `ignoreRoot: directory` for a self-contained package that merely
+/// happens to sit under a repository — anything in the pub cache, or a copy
 /// being made of one. Inheritance is right for a directory inside the tree
 /// somebody is working on and wrong for one that is not: a home directory kept
 /// as a dotfiles repository ignoring `bin/` would otherwise silently drop
@@ -104,8 +104,8 @@ List<File> _walk(String root, String beneath) {
 /// The rules that apply *in* [directory]: its `.gitignore`, and at the walk
 /// root the hard floor and git's own exclude file as well.
 ///
-/// `.git/info/exclude` is where a clone records ignores that are nobody else's
-/// business, so a project relying on it looks like it has no ignores at all
+/// `.git/info/exclude` is where a clone records ignores it does not share, so a
+/// project relying on it looks like it has no ignores at all
 /// from `.gitignore` alone. A worktree's `.git` is a file and has no `info/`,
 /// which reads here as no exclude file rather than as an error.
 ///
@@ -115,8 +115,8 @@ List<File> _walk(String root, String beneath) {
 /// Recompiled on every walk, deliberately. A cache keyed by the ignore files'
 /// mtimes was written and measured against this: no difference at all. Compiling
 /// the patterns is not what a walk spends its time on — a walk with *no rules*
-/// over a larger tree costs the same as this one — so the cache was invalidation
-/// logic bought with nothing.
+/// over a larger tree costs the same as this one — so the cache was
+/// invalidation logic for no gain.
 Ignore? _ignoreFor(String directory, {required bool isRoot}) {
   var sources = [
     if (isRoot) File(p.join(directory, '.git', 'info', 'exclude')),

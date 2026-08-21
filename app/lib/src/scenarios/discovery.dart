@@ -39,8 +39,7 @@ class ScenarioScanResult {
   final List<ScenarioRef> scenarios;
 
   /// What the scan noticed but did not act on — a non-literal name it cannot
-  /// list, a duplicate. The tool never guesses, but it always reports what it
-  /// noticed.
+  /// list, a duplicate. Never guessed at, always reported.
   final List<String> diagnostics;
 }
 
@@ -120,14 +119,14 @@ class ScenarioScanner {
   /// scenario's address (`<package>/<file…>/<scenario>`), `run --scenario=`
   /// refuses without one, and the harness writes its artifacts under
   /// `<file>/<name>`. All three tell two `Overview`s in two files apart on
-  /// their own, so warning about them was a rule nothing in the tool actually
-  /// held — a suite that names the same screen once per feature file was
-  /// reading a warning it could do nothing useful about.
+  /// their own, so warning about them enforced a rule nothing in the tool
+  /// actually held — a suite that names the same screen once per feature file
+  /// got a warning it could do nothing about.
   ///
   /// Repeated *in one file* is the case where those three have nothing left to
-  /// choose by. Reported, not rejected: the run honours a name matching twice
-  /// by running both, which is the honest reading of a request that names only
-  /// what the panel displays.
+  /// choose by. Reported rather than rejected: the run honours a name matching
+  /// twice by running both, which is the right reading of a request that names
+  /// only what the panel displays.
   void _reportDuplicates(
     List<ScenarioRef> scenarios,
     List<String> diagnostics,

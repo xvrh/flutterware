@@ -99,7 +99,7 @@ class RunPlugin extends NativePlugin<RunCore> {
   Widget buildPanel(BuildContext context) => _RunPanel(this);
 }
 
-/// **Runs are the subjects, not devices.**
+/// Runs are the subjects here rather than devices.
 ///
 /// The panel was a list of devices with a run squeezed into each row. That
 /// fitted the first slice, strained in the second, and had nowhere to put the
@@ -128,7 +128,7 @@ class _RunPanelState extends State<_RunPanel> {
     _core.track();
   }
 
-  /// **A config reload swaps the core under a panel that stays mounted.**
+  /// A config reload swaps the core under a panel that stays mounted.
   ///
   /// Rebuilding the session builds a new [RunCore]; the widget above this one
   /// keeps its position, so Flutter reuses this `State` and `initState` never
@@ -388,7 +388,7 @@ class _RunViewState extends State<_RunView> {
   }
 }
 
-/// **Capability, not liveness.**
+/// Capability, not liveness.
 ///
 /// The S-L1 finding, made visible. Hot reload is registered by the `flutter
 /// run` and dies with it; the tree and the screenshots belong to the app and
@@ -570,7 +570,7 @@ class _RunHeader extends StatelessWidget {
 
 /// What the run can still be told to do, in three words and a colour.
 ///
-/// **Capability, not liveness** — the S-L1 finding made loud. An app whose
+/// Capability, not liveness — the S-L1 finding made loud. An app whose
 /// `flutter run` died keeps its tree and its screenshots and loses hot reload,
 /// and the row has to say which of those you have before you press anything.
 class _CapabilityPill extends StatelessWidget {
@@ -624,7 +624,7 @@ Widget _knobsTab(RunCore core, RunHandle handle) {
 
 /// Screen | Logs, written into the address.
 ///
-/// **The strip is the extension point.** `Network` and `Data` are devbar
+/// The strip is the extension point. `Network` and `Data` are devbar
 /// plugins reporting into the cockpit later, so it has to accept tabs this
 /// build does not know about — which is why the address carries a tab *name*
 /// and reading an unknown one falls back to the screen.
@@ -738,8 +738,8 @@ class _NotYet extends StatelessWidget {
           Text(state.label, style: context.type.body),
           const Gap(FwSpacing.xs),
           Text(
-            'Nothing can be read from an app that has not started. '
-            'A cold build is minutes, not seconds.',
+            'Nothing can be read until the app starts. A cold build can '
+            'take a few minutes.',
             textAlign: TextAlign.center,
             style: context.type.caption.copyWith(color: context.colors.mut2),
           ),
@@ -755,15 +755,15 @@ class _NotYet extends StatelessWidget {
 
 /// The picture and the widget tree, side by side — the design's Screen tab.
 ///
-/// **One reading, not two.** Both come off a single `getRootWidgetTree` in one
-/// object group, which is what merging `inspect` into one action bought: a live
-/// app animates and takes in data between calls, so two reads would put a tree
-/// beside a picture of a different frame.
+/// One reading rather than two. Both come off a single `getRootWidgetTree` in
+/// one object group, which is what merging `inspect` into one action allowed: a
+/// live app animates and takes in data between calls, so two reads would put a
+/// tree beside a picture of a different frame.
 ///
-/// **Not a live mirror, and it says so.** Each capture is a render and a PNG —
-/// 66ms on this Mac, 42 on a simulator — so polling one would be a cost paid
-/// continuously for a screen nobody is watching most of the time. The button is
-/// the honest version until somebody wants a mirror enough to pay for it.
+/// It is not a live mirror, and the UI shows that. Each capture is a render and
+/// a PNG — 66ms on this Mac, 42 on a simulator — so polling would run
+/// continuously for a screen that is mostly not being watched. A button is the
+/// right shape until a mirror is worth the cost.
 class _ScreenTab extends StatefulWidget {
   const _ScreenTab({
     super.key,
@@ -813,7 +813,7 @@ class _ScreenTabState extends State<_ScreenTab> {
 
   /// What the tree hovers, for the box drawn over the picture.
   ///
-  /// **Only a guest tree can be drawn.** The service extension carries no
+  /// Only a guest tree can be drawn. The service extension carries no
   /// position at all — `getLayoutExplorerNode` gives size and constraints,
   /// `parentData` is `<none>` — so a run the cockpit merely attached to has
   /// no rect to draw and the picture stays a picture. Nothing here tests for
@@ -891,7 +891,7 @@ class _ScreenTabState extends State<_ScreenTab> {
     }
   }
 
-  /// **After the frame, never inside it.** The page above draws the spinner in
+  /// After the frame, never inside it. The page above draws the spinner in
   /// its tab strip, so this is a `setState` on an *ancestor* — and [_read] is
   /// reached from `initState` and `didUpdateWidget`, both of which run while
   /// that ancestor is building. In debug the framework throws there, which
@@ -1055,12 +1055,12 @@ class _LogsTabState extends State<_LogsTab> {
   List<RunLogLine> _lines = const [];
   _FileRefresh? _refresh;
 
-  /// The platform log, once somebody has asked for it.
+  /// The platform log, once it has been asked for.
   ///
-  /// **A fetch, not a filter, and the tab says so by loading.** The other three
-  /// pills narrow a file this tab already holds; this one spends a `log show`
-  /// or an `adb logcat` against the device. Selecting it is the asking, and
-  /// selecting it again is how you refresh — there is nothing to poll, because
+  /// A fetch rather than a filter, which the tab shows by loading. The other
+  /// three pills narrow a file this tab already holds; this one spends a `log
+  /// show` or an `adb logcat` against the device. Selecting it is the request,
+  /// and selecting it again refreshes — there is nothing to poll, because
   /// unlike the launcher's log nothing here changes on disk.
   NativeLogRead? _native;
   var _readingNative = false;
@@ -1093,20 +1093,20 @@ class _LogsTabState extends State<_LogsTab> {
     super.dispose();
   }
 
-  /// **Not in `build`.** A log is a file, the panel rebuilds on every probe and
+  /// Not in `build`. A log is a file, the panel rebuilds on every probe and
   /// on every frame of any animation above it, and `RunCore.logOf` says in as
   /// many words why a panel must not read one from there. [_FileRefresh] is
-  /// the honest shape: the file changing is what makes this stale.
+  /// the right shape: the file changing is what makes this stale.
   void _reread() {
     if (!mounted) return;
     var lines = widget.core.readLogs(widget.handle, only: _only, tail: 2000);
     setState(() => _lines = lines);
   }
 
-  /// **Never on [_FileRefresh].** The launcher's log file changes constantly
-  /// while an app runs, and this spawns a process: hanging it off the same
-  /// callback would fire a `log show` every poll. It runs when somebody asks —
-  /// which is what selecting the filter is.
+  /// Never on [_FileRefresh]. The launcher's log file changes constantly while
+  /// an app runs, and this spawns a process: hanging it off the same callback
+  /// would fire a `log show` every poll. It runs on request — which is what
+  /// selecting the filter is.
   Future<void> _rereadNative() async {
     setState(() => _readingNative = true);
     var read = await widget.core.readNativeLogs(widget.handle, tail: 2000);
@@ -1592,7 +1592,7 @@ String _clock(String iso) {
 /// An earlier draft had a two-column workspace with a recents row; it was
 /// harder to follow than the four steps it was decorating.
 ///
-/// **The entry point comes first, and the fields below depend on it.** It was
+/// The entry point comes first, and the fields below depend on it. It was
 /// second, under the device, which had the dependency backwards: an entry point
 /// declaring `platforms: [mobile]` decides which devices are offerable and
 /// what flavor is pre-filled, so choosing it after them meant choosing them
@@ -1670,7 +1670,7 @@ class _NewRunPageState extends State<_NewRunPage> {
     _device ??= _pickDevice(preferred: last?.device);
   }
 
-  /// The declared flavor, unless [used] is somebody having overridden it.
+  /// The declared flavor, unless [used] records an override.
   ///
   /// Matching the declaration is not an override, so a run launched without
   /// touching the field reopens the page collapsed rather than expanded on a
@@ -1993,8 +1993,8 @@ class _DevicePicker extends StatelessWidget {
   /// Whether [devices] is the desk filtered by an entry point's declaration.
   ///
   /// Only the empty state needs it, and it needs it badly: "starting a flutter
-  /// daemon takes a few seconds" is a lie told to somebody whose desk is full
-  /// of machines this entry point said it cannot use.
+  /// daemon takes a few seconds" is wrong for a desk that is full of machines
+  /// this entry point said it cannot use.
   final bool restricted;
 
   @override
@@ -2090,8 +2090,8 @@ class _Desk extends StatefulWidget {
 }
 
 class _DeskState extends State<_Desk> {
-  /// Which emulator is being booted, so its row can say so and nobody can
-  /// press it twice into two boots of one machine.
+  /// Which emulator is being booted, so its row can show it and a second press
+  /// cannot start a second boot of one machine.
   final _booting = <String>{};
 
   RunCore get core => widget.core;
@@ -2238,7 +2238,7 @@ class _DeskState extends State<_Desk> {
   };
 }
 
-/// The `--flavor`: a line of text until somebody wants to change it.
+/// The `--flavor`: a line of text until it needs changing.
 ///
 /// A text box was the wrong shape for a field that is right before you look at
 /// it. The project has almost always said which flavor this entry point builds
@@ -2250,7 +2250,7 @@ class _DeskState extends State<_Desk> {
 /// running the one entry point under a second flavor without declaring it
 /// twice. Where the package declares its flavors ([vocabulary]), overriding is
 /// picking off that list rather than typing — the launch would refuse an
-/// unlisted word anyway, and a picker says so before the attempt. A platform
+/// unlisted word anyway, and a picker shows that before the attempt. A platform
 /// declared flavorless collapses the field to that one fact.
 class _FlavorField extends StatelessWidget {
   const _FlavorField({
@@ -2624,7 +2624,7 @@ class _Choice<T> {
 /// The New run page's picker: a trigger that reads like a field, and a popover
 /// of rows with room for a description.
 ///
-/// **Not `DropdownButtonFormField`.** Both pickers were one, which put a device
+/// Not `DropdownButtonFormField`. Both pickers were one, which put a device
 /// and an entry point through a control with one line of text and Material 3's
 /// own paddings. The design draws a bordered box — name, detail, caret —
 /// opening onto two-line rows, and `Kiosk` and `Onboarding` are unguessable

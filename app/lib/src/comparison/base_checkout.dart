@@ -8,7 +8,7 @@ import '../utils/run_git.dart';
 
 /// The other side of a comparison, on disk.
 ///
-/// **A build fixture, not state.** It is a `git worktree add --detach` at one
+/// A build fixture, not state. It is a `git worktree add --detach` at one
 /// commit, shared by every worktree and every comparison on the machine, and
 /// it may be deleted at any moment: what survives a comparison is the shot
 /// cache, which is content-addressed and does not care where the pictures were
@@ -179,9 +179,9 @@ class BaseCheckout {
 
   /// Removes this checkout and its registration.
   ///
-  /// Nothing calls this on a schedule yet. It exists because the class is
-  /// built on the claim that a base is disposable, and a claim with no way to
-  /// dispose is a claim nobody can check.
+  /// Nothing calls this on a schedule yet. It exists because the class is built
+  /// on the claim that a base is disposable, and a claim with no way to dispose
+  /// cannot be checked.
   Future<void> dispose({required String repoRoot}) =>
       _remove(repoRoot: repoRoot, path: path);
 

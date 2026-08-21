@@ -6,7 +6,7 @@ import 'package:flutter/widgets.dart';
 /// Delivers the guest's key events, which the framework otherwise parks
 /// forever.
 ///
-/// **Without this no key reaches a demo at all** — not a shortcut, not an
+/// Without this no key reaches a demo at all — not a shortcut, not an
 /// arrow, not a character. The reason is a handshake our embedder cannot take
 /// part in. `KeyEventManager.handleKeyData` receives what
 /// `FlutterEngineSendKeyEvent` sends, infers from that first event that it is

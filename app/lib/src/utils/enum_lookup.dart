@@ -37,13 +37,13 @@ class EnumValues {
 
 /// Finds an `enum`'s constants by parsing, without resolving the program.
 ///
-/// **Why not the analyzer.** Asking for a resolved unit answers this perfectly
+/// Why not the analyzer. Asking for a resolved unit answers this perfectly
 /// and costs 5.5s on an entry point that imports Flutter, 9.9s on this GUI's own
 /// (measured 2026-08-12, `2026-08-12-run-knobs-design.md` § E4). A launch form
 /// cannot pay that, and neither can a catalog scan that has deliberately stayed
 /// syntactic.
 ///
-/// **The bound is what makes it honest.** The search covers the file itself and
+/// The bound is what makes it honest. The search covers the file itself and
 /// the *exported namespace* of each of its direct imports — `export` followed
 /// transitively, because a barrel (`export 'src/backend.dart';`) is what people
 /// actually write, but `import` chains never. A name that is not there is
@@ -287,7 +287,7 @@ class EnumLookup {
 /// The packages whose source is in [packageRoot]'s checkout, as a resolver for
 /// `package:` URIs — and nothing that was fetched.
 ///
-/// **Why not simply the whole config.** A shared package is where a first-party
+/// Why not simply the whole config. A shared package is where a first-party
 /// enum hides — one `Backend` in one place, so two apps cannot disagree about
 /// what `staging` means — and following `path:` dependencies to reach it is a
 /// handful of small packages. Following everything else is not: an entry point

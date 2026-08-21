@@ -4,7 +4,7 @@
 /// to deal with, and the reason this file exists rather than a call to
 /// `tokenizeLines` from the row widget.
 ///
-/// **A hunk is two files interleaved.** Its `-` and `+` lines are alternative
+/// A hunk is two files interleaved. Its `-` and `+` lines are alternative
 /// versions of the same region, so feeding them to one tokeniser puts it in a
 /// state neither version of the file is ever in — a removed line that opens a
 /// quote the added line does not, and everything after it comes back as string.
@@ -17,7 +17,7 @@
 /// from its own side, and a context line — which is in both — takes the new
 /// one.
 ///
-/// **Each side is parsed forward in chunks, on demand.** Measured 2026-08-12:
+/// Each side is parsed forward in chunks, on demand. Measured 2026-08-12:
 /// ~0.28 ms per 1000 characters, so a whole added file — one hunk of a thousand
 /// lines — is most of a frame if it is parsed in one go. A chunk is
 /// [highlightChunkLines], and the tokeniser's own state is threaded from one to
@@ -25,13 +25,13 @@
 /// is therefore a scheduling decision and nothing else: no cap, no file that
 /// comes back grey, and no line whose colour depends on how you arrived at it.
 ///
-/// **Fixed boundaries, never the viewport.** Chunking by what is on screen
+/// Fixed boundaries, never the viewport. Chunking by what is on screen
 /// would make a line's colour depend on where the scroll happened to start —
 /// the same line grey inside a comment from one scroll position and code from
 /// another. Boundaries are line indices, so a line's colour is a property of
 /// the file.
 ///
-/// **A hunk is still a fragment**, and that is the one real limit: a hunk
+/// A hunk is still a fragment, and that is the one real limit: a hunk
 /// beginning inside a block comment starts the tokeniser in the wrong state and
 /// there is nothing in the patch to fix it with.
 ///
@@ -45,7 +45,7 @@ import 'patch_index.dart';
 
 /// How many lines are tokenised at once.
 ///
-/// **Measured 2026-08-12** on the vendored tokeniser, against
+/// Measured 2026-08-12 on the vendored tokeniser, against
 /// `database_panel_view.dart`: 0.29 ms for 20 lines, 1.60 ms for 200, 4.80 ms
 /// for 600, 9.25 ms for 1110 — near enough linear at ~0.28 ms per 1000
 /// characters. 200 keeps one chunk at about a tenth of a frame, which is small
@@ -111,7 +111,7 @@ class HunkTokens {
 
   static final none = HunkTokens._(const [], null, null);
 
-  /// **Parses on demand**, so a row that is never built costs nothing and the
+  /// Parses on demand, so a row that is never built costs nothing and the
   /// row that is built pays for at most one chunk.
   List<Token>? at(int index) {
     if (index < 0 || index >= _placed.length) return null;
@@ -123,7 +123,7 @@ class HunkTokens {
 
 /// Pairs [lines] to their two sides, ready to be tokenised as [language].
 ///
-/// **The old side is only built when there is something on it**, which is most
+/// The old side is only built when there is something on it, which is most
 /// of the saving in practice: a hunk of pure additions — what an agent writing
 /// new code produces — has no removed lines, so context and added both come
 /// from the new side and the second side never exists.
@@ -167,7 +167,7 @@ HunkTokens tokenizeHunk(List<DiffLine> lines, {required String? language}) {
 /// Tokenises hunks once and remembers them — the twin of [HunkLineCache], with
 /// the same lifetime and the same key.
 ///
-/// **Beside the line cache rather than inside it**, because they are wanted at
+/// Beside the line cache rather than inside it, because they are wanted at
 /// different moments: the lines are what the list measures itself with and are
 /// needed for every hunk it builds, while the tokens are only wanted once a row
 /// is actually painted, and are dropped wholesale for a file whose language

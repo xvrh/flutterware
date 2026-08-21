@@ -32,7 +32,7 @@ const translationsPluginId = 'flutterware.translations';
 /// free, because both halves were already needed.
 ///
 /// Holds to the two rules every core holds to: the constructor allocates
-/// nothing, and [report] only formats what somebody already caused to load.
+/// nothing, and [report] only formats what a previous call caused to load.
 /// Loading here is reading and parsing the catalog JSON — the run that
 /// produces the screens is behind the `export` action, where a caller chose it
 /// by name.
@@ -129,7 +129,7 @@ class TranslationsCore extends PluginCore {
   /// Every locale any of [path]'s catalogs has a file for, sorted.
   ///
   /// This is what an export runs across when the caller names no languages:
-  /// **the set the project actually ships**, which is the only set for which
+  /// the set the project actually ships, which is the only set for which
   /// "this locale is falling back" is a statement worth making.
   List<String> localesFor(String path) {
     var found = <String>{};
@@ -186,10 +186,10 @@ class TranslationsCore extends PluginCore {
   /// Every key the catalogs define, with what each locale says and the shot
   /// the last export found for it.
   ///
-  /// **Values come from the files, not from the export**, because the files are
-  /// what a person just edited and the export is from whenever it last ran. A
-  /// row whose text disagrees with its picture is the honest rendering of a
-  /// stale export.
+  /// Values come from the files rather than from the export, because the files
+  /// are what was just edited and the export is from whenever it last ran. A
+  /// row whose text disagrees with its picture is a stale export, shown as
+  /// one.
   List<TranslationRow> rowsFor(String path) {
     var catalogs = _cache[path];
     if (catalogs == null) return const [];
@@ -249,8 +249,8 @@ class TranslationsCore extends PluginCore {
 
   /// What a running export is doing right now — "measuring max lengths —
   /// +40%…" — for the strip that replaced its button with a spinner. A
-  /// measuring export is minutes, not seconds, and a silent spinner that long
-  /// reads as a hang.
+  /// measuring export takes minutes rather than seconds, and a silent spinner
+  /// that long reads as a hang.
   String? busyFor(String path) => _busy[path];
 
   @override
@@ -496,10 +496,10 @@ class TranslationsCore extends PluginCore {
 
   /// Runs the suite and writes the export.
   ///
-  /// **Re-runs rather than reading the last run**, for a reason the scenario
-  /// web export shares and one it does not. Shared: an export is dated and
-  /// shared, and may not be a picture of a suite as it stood at some earlier
-  /// moment nobody recorded. Its own: the questions worth asking are
+  /// Re-runs rather than reading the last run, for a reason the scenario web
+  /// export shares and one it does not. Shared: an export is dated and
+  /// distributed, and must not be a picture of the suite as it stood at some
+  /// earlier, unrecorded moment. Its own: the questions worth asking are
   /// cross-locale, and the last run was almost certainly one language.
   Future<TranslationExportResult> export(Map<String, Object?> arguments) async {
     var stopwatch = Stopwatch()..start();

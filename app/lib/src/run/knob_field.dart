@@ -7,12 +7,12 @@ import '../ui/tappable.dart';
 
 /// One knob: what it is on the left, what it is set to on the right.
 ///
-/// **One widget, two hosts** — the New run page fills these in before a launch,
+/// One widget, two hosts — the New run page fills these in before a launch,
 /// and the running app's Knobs tab edits the same knobs afterwards. A knob that
 /// looked like a text field in one place and a dropdown in the other would be
 /// two controls for one value.
 ///
-/// **Two columns, because a knob is a name and a value.** Stacked full-width
+/// Two columns, because a knob is a name and a value. Stacked full-width
 /// they read as an unfinished form: an 810px box holding `10.0.0.49`, and four
 /// of them with nothing lining up. The label column is fixed so the controls
 /// line up down the pane — the same reason [FieldRow] fixes its own, and the
@@ -22,7 +22,7 @@ import '../ui/tappable.dart';
 /// parameter is a switch even when nobody has set it, and an enum is a dropdown
 /// of its own constants rather than a field you can misspell into.
 ///
-/// **A kind that is not a picker can still have options.** `Knob('apiHost',
+/// A kind that is not a picker can still have options. `Knob('apiHost',
 /// from: ValueSource.hostAddresses)` is a `String` parameter — kind `string`,
 /// so a text field — and its whole reason for existing is the list underneath
 /// it: this machine's LAN addresses, so "point the app at my dev machine" is a
@@ -89,7 +89,7 @@ class _KnobFieldState extends State<KnobField> {
 
   RunKnobEntry get _knob => widget.knob;
 
-  /// Whether somebody has moved this knob off what it would be anyway.
+  /// Whether this knob has been moved off what it would be anyway.
   bool get _set => widget.value != null;
 
   /// A required knob with nothing set and nothing computed for it — the state

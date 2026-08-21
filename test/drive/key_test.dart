@@ -85,7 +85,7 @@ void main() {
     expect(fired, 0);
   });
 
-  /// **Nothing may be left held.** A key still down after the step is state the
+  /// Nothing may be left held. A key still down after the step is state the
   /// human inherits for the rest of the run, and it would make the next chord
   /// refuse.
   testWidgets('every key is released, modifiers in reverse', (tester) async {
@@ -122,7 +122,7 @@ void main() {
     expect(fired, 1);
   });
 
-  /// **A key does not type, and that is not a gap in this verb.** A character
+  /// A key does not type, and that is not a gap in this verb. A character
   /// reaches a text field through the platform's *text input*, never through a
   /// key event — the two merely accompany each other on a real keyboard. So
   /// `key('a')` into a focused field leaves it empty here and in a running app
@@ -146,7 +146,7 @@ void main() {
     expect(controller.text, isEmpty);
   });
 
-  /// **The refusal that stops the verb silently doing nothing.**
+  /// The refusal that stops the verb silently doing nothing.
   ///
   /// A keystroke dispatches from the primary focus *upwards*. With nothing
   /// focused that is the root scope, which sits above the app's `Shortcuts`, so
@@ -226,8 +226,8 @@ void main() {
     );
   });
 
-  /// **A key that exists but this platform cannot simulate is refused, not
-  /// crashed on.**
+  /// A key that exists but this platform cannot simulate is refused, not
+  /// crashed on.
   ///
   /// `getKeyData` builds the raw message from per-platform key tables that are
   /// much smaller than `knownPhysicalKeys`, and it reaches into three of them

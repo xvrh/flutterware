@@ -150,8 +150,8 @@ class CaptureButtonState extends State<CaptureButton> {
     }
   }
 
-  /// Failures only. A capture that worked says so by changing the icon; one
-  /// that did not has a reason, and a reason needs words.
+  /// Failures only. A capture that worked reports itself by changing the icon;
+  /// one that did not has a reason, and a reason needs words.
   void _complain(CaptureTarget target, String message) =>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not capture ${target.label}: $message')),

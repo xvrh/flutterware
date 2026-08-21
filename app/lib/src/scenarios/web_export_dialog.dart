@@ -13,8 +13,8 @@ import 'web_export.dart';
 
 /// Configures an export, runs it, and shows what it says while it does.
 ///
-/// **Calls [ScenariosCore.exportWeb] directly rather than going through
-/// `Session.invoke`,** for the reason the catalog's build dialog gives: the
+/// Calls [ScenariosCore.exportWeb] directly rather than going through
+/// `Session.invoke`, for the reason the catalog's build dialog gives: the
 /// behaviour is the core's either way, but an export runs the whole suite and
 /// may compile the viewer, and `Job` has no log or progress event to put those
 /// lines in.

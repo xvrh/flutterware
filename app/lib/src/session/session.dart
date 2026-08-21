@@ -42,7 +42,7 @@ import 'job.dart';
 /// rather than aspirational: the CLI does not reimplement the GUI's behaviour,
 /// it instantiates the same [PluginCore]s.
 ///
-/// **Laziness is subscription.** A widget subscribes for as long as it is
+/// Laziness is subscription. A widget subscribes for as long as it is
 /// mounted; `fw` subscribes for the duration of a request and releases. Same
 /// sources, same rule, no GUI required.
 ///
@@ -215,7 +215,7 @@ class Session {
   /// The manifest [cores] were built from, and what the next load is compared
   /// against.
   ///
-  /// **Here, not beside the session in whatever built it.** These cores *are*
+  /// Here, not beside the session in whatever built it. These cores *are*
   /// this manifest resolved; a copy kept elsewhere has to be written and cleared
   /// in step with them, which the reload path used to get wrong.
   final PluginManifest manifest;
@@ -304,7 +304,7 @@ class Session {
 
   /// Whether [next] declares exactly what these cores were built from.
   ///
-  /// **The one question a reload asks.** Everything else it might have asked —
+  /// The one question a reload asks. Everything else it might have asked —
   /// which plugin moved, whether one could be kept — was machinery for keeping
   /// state alive across a config change, and losing that state is the accepted
   /// price of having changed the config. What is *not* acceptable is paying it
@@ -354,15 +354,15 @@ class Session {
   /// Every plugin's contract. A pure read — nothing here starts work.
   List<PluginReport> get reports => [for (var core in cores) core.report];
 
-  /// Runs one plugin action. **The only way an action is ever run.**
+  /// Runs one plugin action, and the only way an action is ever run.
   ///
   /// `fw` and the MCP server both go through here, which is what makes the
   /// parity rule checkable rather than aspirational: a capability those two can
   /// reach that is not a declared [PluginAction] is not expressible, because
   /// there is no other door.
   ///
-  /// **The GUI is not a third caller.** A panel holds its core and calls it, so
-  /// what keeps the surfaces honest there is not this method but the split
+  /// The GUI is not a third caller. A panel holds its core and calls it, so
+  /// what keeps the surfaces in step there is not this method but the split
   /// described on `NativePlugin` — the behaviour belongs to the core either way.
   ///
   /// It is also the seam. Recording the run, joining two clients onto one
@@ -372,13 +372,13 @@ class Session {
   ///
   /// [plugin] may be a full id or its last dotted segment.
   ///
-  /// **Throws for an unknown plugin; records an unknown action as a failed
-  /// job.** The line is the same one [Address] draws: the framework owns the
+  /// Throws for an unknown plugin; records an unknown action as a failed
+  /// job. The line is the same one [Address] draws: the framework owns the
   /// namespace up to and including the plugin, and everything past it belongs
   /// to the plugin. Naming a plugin that does not exist means no run happened
   /// and there is nothing to write down. Naming a bad action is a real
   /// invocation of a real plugin that came back with an error, which is worth
-  /// recording — an agent guessing action names leaves a trail that says so.
+  /// recording — an agent guessing action names leaves a visible trail.
   Job invoke(
     String plugin,
     String action, {
@@ -422,7 +422,7 @@ class Session {
   /// a plugin asking `arguments['loud'] == true` gets false — silently, and
   /// only on the CLI, while the same call over MCP (where JSON carries a real
   /// bool) works. Found by the surface-parity test rather than by a person,
-  /// which is the point of having one.
+  /// which is what that test is for.
   ///
   /// So the declared `ActionParameterKind` is applied here, once, at the single
   /// door — rather than in each renderer, or by hand in every core. A parameter
@@ -493,7 +493,7 @@ class Session {
 
   /// The refusal for an argument naming a parameter the action does not have.
   ///
-  /// **Silence was the expensive failure here.** `describe --entry=… --axes=true`
+  /// Silence was the expensive failure here. `describe --entry=… --axes=true`
   /// is a call somebody really made; the parameter is `with-axes`. The argument
   /// was dropped and the answer came back well-formed with no `axes` field —
   /// which is precisely what a *correct* call returns for an entry that has no
@@ -557,8 +557,8 @@ class Session {
   /// An action's `returns` is not a comment: the capability document resolves
   /// it statically and publishes that class's fields as the shape callers can
   /// expect. So a mismatch is not a style problem, it is a document describing
-  /// a response nobody sends — and the cheapest moment to notice is the run
-  /// that produced it, on whichever surface asked.
+  /// a response that is never sent — and the cheapest moment to notice is the
+  /// run that produced it, on whichever surface asked.
   ///
   /// Exact rather than `is`: a subclass would serialise fields the published
   /// shape does not mention, which is the same failure one layer quieter. (A

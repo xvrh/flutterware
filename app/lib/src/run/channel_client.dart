@@ -18,7 +18,7 @@ final _logger = Logger('run_channels');
 /// The cockpit's end of an app's channels — the host half of
 /// `lib/src/server/vm_transport.dart`.
 ///
-/// **Pull, plus a nudge.** Every exchange is one `ext.flutterware.channel`
+/// Pull, plus a nudge. Every exchange is one `ext.flutterware.channel`
 /// call: it carries at most one outgoing frame and returns whatever the app
 /// had queued. Between calls the app posts a payload-free nudge on the
 /// `Extension` stream, and this pulls. Nothing streams; nothing polls.

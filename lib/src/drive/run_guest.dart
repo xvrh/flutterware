@@ -14,7 +14,7 @@ import 'human_actions.dart';
 /// Installs the run guest around a user app's `main` — what the generated
 /// run entrypoint calls.
 ///
-/// **The whole of main runs inside the log-capturing zone, binding and all** —
+/// The whole of main runs inside the log-capturing zone, binding and all —
 /// same rule as the previews entrypoint, and just as irreversible:
 /// `PlatformDispatcher.onBeginFrame` captures `Zone.current` when it is set,
 /// and the binding sets it in `initInstances`. A zone started after

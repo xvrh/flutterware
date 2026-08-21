@@ -9,7 +9,7 @@ import 'package:path/path.dart' as p;
 /// where they can be looked at — the "did anybody watch it run" check that a
 /// green assertion cannot make.
 ///
-/// **Not part of the suite** (no `_test` suffix). Run it on purpose:
+/// Not part of the suite (no `_test` suffix). Run it on purpose:
 ///
 /// ```sh
 /// cd app && fvm flutter test test/scenarios/manual_motion_dump.dart

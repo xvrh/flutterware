@@ -15,8 +15,8 @@ import 'protocol.dart';
 /// than three copies of it: a screenshot must not require a running GUI, and a
 /// second consumer must not repeat the first one's work.
 ///
-/// So [connect] connects before it considers spawning. Whoever arrives first
-/// pays for the scan, the bundle, the host and the cold compile; everyone after
+/// So [connect] connects before it considers spawning. The first caller pays
+/// for the scan, the bundle, the host and the cold compile; every one after
 /// gets a compiler that already holds the whole catalog in memory.
 ///
 /// (It was once also a containment measure: `package:frontend_server_client`
@@ -52,7 +52,7 @@ class CompilerDaemonClient {
 
   /// The reply each in-flight [select] is waiting for, by request id.
   ///
-  /// **Futures rather than a filtered stream.** This used to be
+  /// Futures rather than a filtered stream. This used to be
   /// `_responses.where(…).first` over `socket.asBroadcastStream()`, and a
   /// broadcast stream *drops* what arrives while nobody is listening — verified,
   /// not assumed. Registering a completer before the request is written closes
@@ -71,9 +71,9 @@ class CompilerDaemonClient {
   /// bundle that already moved with them.
   final _assetsChanges = StreamController<AssetsChanged>.broadcast();
 
-  /// The most recent [CatalogChanged], whether or not anyone was listening.
+  /// The most recent [CatalogChanged], whether or not anything was listening.
   ///
-  /// **State, not a replayed event**, and the distinction is the whole point.
+  /// State rather than a replayed event, and the distinction matters.
   /// This message is a snapshot — the servable set and the quarantine — so a
   /// caller that subscribed after one landed does not need the event, it needs
   /// the value. There is a real window between [connect] returning and a caller
@@ -94,7 +94,7 @@ class CompilerDaemonClient {
   /// Why the connection ended, once it has.
   String? _gone;
 
-  /// Connects to the daemon for [config], starting one if nobody is serving.
+  /// Connects to the daemon for [config], starting one if none is serving.
   ///
   /// [dartExecutable] must be a real Dart VM — pass the Flutter SDK's `dart`.
   static Future<(CompilerDaemonClient, DaemonReady)> connect({
@@ -561,9 +561,10 @@ class CompilerDaemonClient {
 
   /// The failure a daemon recorded on its way out, if it left one.
   ///
-  /// **Read once.** The file is deleted as it is read, so it answers the client
-  /// that was waiting for it and nobody else — a marker left lying around would
-  /// be found by the next connect and reported as that daemon's failure.
+  /// Read once. The file is deleted as it is read, so it answers the client
+  /// that was waiting for it and nothing else — a marker left lying around
+  /// would be found by the next connect and reported as that daemon's
+  /// failure.
   ///
   /// A marker that cannot be parsed is still a failure, and its raw text is
   /// more useful than silence: something wrote it, and whatever it says is
@@ -608,7 +609,7 @@ const _kernelRejected = "Can't load Kernel binary";
 
 /// Reads the daemon log forward, from wherever the last read stopped.
 ///
-/// **A cursor rather than a function of the whole tail**, because the poll loop
+/// A cursor rather than a function of the whole tail, because the poll loop
 /// that uses this runs every 25ms for up to 30 seconds: re-reading, re-decoding
 /// and re-splitting everything the daemon has written so far, on every one of
 /// up to 1200 iterations, is quadratic in how much it writes while starting.
@@ -617,8 +618,8 @@ const _kernelRejected = "Can't load Kernel binary";
 ///
 /// Constructed *before* the spawn, so it opens at the end of whatever previous
 /// daemons left behind. The file is appended to across runs, and a refusal that
-/// bricked the last start read as this one's would tear down a working daemon
-/// to fix a problem somebody has already fixed.
+/// bricked the last start, read as this one's, would tear down a working daemon
+/// over a problem already fixed.
 ///
 /// Public for the same reason [readDaemonDepfile] is: what can go wrong here is
 /// the bookkeeping — a cursor measured in the wrong units, a line split across
@@ -703,7 +704,7 @@ class DaemonLog {
 
 /// The VM refused to load the daemon's kernel snapshot.
 ///
-/// **A cache to invalidate, not a failure to report**, and the distinction is
+/// A cache to invalidate, not a failure to report, and the distinction is
 /// the whole reason this has a type of its own. A kernel carries the identity
 /// of the SDK that produced it and the VM checks it on the way in, so "refused"
 /// says nothing about the daemon or the project — it says the bytes on disk are
@@ -877,8 +878,8 @@ class DartSdkIdentity {
 /// at. Both are tried rather than either being required, so a caller passing
 /// the wrapper gets a real identity instead of quietly falling back to the path.
 ///
-/// **The bundled SDK is offered first, and the order is the whole correctness
-/// of this.** `bin/cache/dart-sdk` exists only where it means what it says,
+/// The bundled SDK is offered first, and the order is the whole correctness
+/// of this. `bin/cache/dart-sdk` exists only where it means what it says,
 /// whereas the other candidate is `<flutter>` itself for a wrapper path — and a
 /// Flutter checkout shipped a `version` file of its own until recently. Asking
 /// the vaguer question first read that file on any older checkout and returned
@@ -1166,7 +1167,7 @@ Future<_DaemonLaunch> _ensureCompiled({
 
 /// The most recently modified file the daemon is built from.
 ///
-/// **The compiler's list, not ours.** `dart compile kernel --depfile` writes
+/// The compiler's list, not ours. `dart compile kernel --depfile` writes
 /// exactly what it read, so the closure is maintained by the thing that knows
 /// it. The hand-written [_daemonSources] guess missed
 /// `lib/src/utils/run_dir.dart` and `lib/src/assets/model/asset_catalog.dart` —
@@ -1179,7 +1180,7 @@ Future<_DaemonLaunch> _ensureCompiled({
 /// Cheaper than the guess, too: the depfile names ~756 files, of which ~21 are
 /// ours, against a recursive walk of two directory trees.
 ///
-/// **Ours means under the workspace root**, and the root is taken from the
+/// Ours means under the workspace root, and the root is taken from the
 /// depfile itself — the `package_config.json` it lists is by definition at the
 /// root of the resolution that built the daemon. Everything outside is the SDK
 /// or the pub cache: immutable by construction, since the way you change one is

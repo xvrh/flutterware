@@ -278,7 +278,7 @@ Widget demo({String? host, Backend? backend}) => Placeholder();
     });
   });
 
-  /// **A default that is a reference, which is the ordinary shape.** Reported
+  /// A default that is a reference, which is the ordinary shape. Reported
   /// by a consumer: the values knobs replace are usually already
   /// `String.fromEnvironment` constants, because that is what a `--dart-define`
   /// build reads — so the default is a `const` reference rather than a literal,

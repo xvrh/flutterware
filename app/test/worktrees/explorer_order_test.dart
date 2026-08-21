@@ -6,7 +6,7 @@ import 'package:flutterware_app/src/worktrees/explorer_row.dart';
 import 'package:flutterware_app/src/worktrees/explorer_screen.dart';
 import 'package:flutterware_app/src/worktrees/facts.dart';
 
-/// **The list must not move while you are reading it.**
+/// The list must not move while you are reading it.
 ///
 /// This became a real complaint the day the watchers landed: with two agents
 /// working, the rows swapped every couple of seconds and were hard to read or

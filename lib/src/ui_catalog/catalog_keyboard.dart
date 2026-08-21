@@ -12,7 +12,7 @@ import 'keyboard.dart';
 /// The guest's keyboard: what the app asks for, what the host allows, and how
 /// tall the answer is.
 ///
-/// **Two facts arriving from opposite directions**, which is the shape of the
+/// Two facts arriving from opposite directions, which is the shape of the
 /// whole feature. The app's opinion comes up from the framework — a field took
 /// focus, so [GuestTextInput.showing] flipped — and it knows nothing about
 /// which phone it is on. The measurement comes down from the host, which knows

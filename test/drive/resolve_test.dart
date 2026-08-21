@@ -174,7 +174,7 @@ void main() {
     expect(finder.evaluate(), hasLength(1));
   });
 
-  /// **Reported by a consumer driving a login screen.** The screenshot in the
+  /// Reported by a consumer driving a login screen. The screenshot in the
   /// same reply rendered bullets and the `texts` beside it carried the
   /// password in clear — into the agent's transcript, into any log that
   /// transcript reaches, and onto disk in the run's journal and in a
@@ -505,7 +505,7 @@ void main() {
     await tester.tap(finder, warnIfMissed: true);
   });
 
-  /// **Reported by a consumer driving a form.** `item:` is documented as the
+  /// Reported by a consumer driving a form. `item:` is documented as the
   /// way to reach a control with no words, a field whose label floats above
   /// it is exactly that, and `enterText` on one refused with "contains 0 text
   /// fields" — about a field the reply's own screen had just listed.
@@ -550,7 +550,7 @@ void main() {
     expect(editableWithin(find.text('Sign in')).evaluate(), isEmpty);
   });
 
-  /// **Reported alongside the one above.** A `labelText` is a visible string,
+  /// Reported alongside the one above. A `labelText` is a visible string,
   /// so the bare target matches it, and the generic covered sentence sent the
   /// reader looking for whatever was on top of the field they were aiming at.
   testWidgets("a field label is refused with the field's own centre", (
@@ -604,7 +604,7 @@ void main() {
     semantics.dispose();
   });
 
-  /// **The live GUI disproved the first version of this message**, which
+  /// The live GUI disproved the first version of this message, which
   /// offered `{"label": …}` for whatever it read off the decoration: on the
   /// studio's own filter field the offered label found nothing, because a
   /// word had just been typed into it. So the string is resolved before it is

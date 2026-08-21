@@ -144,7 +144,7 @@ class AppDebugPortEvent implements Event {
   final int port;
   final Uri wsUri;
 
-  /// **Absent on web, and nothing here reads it.** `flutter run --machine`
+  /// Absent on web, and nothing here reads it. `flutter run --machine`
   /// builds this key with a null-aware map entry, so a runner that leaves
   /// `baseUri` unset omits it entirely — and the web runner is one, where the
   /// mobile and desktop path sets it. Declared non-null, the generated parse

@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 /// Counts what the demo scrolls, so [GuestWatch] can see the one kind of
 /// staleness its other tiers are blind to by construction.
 ///
-/// **Why the shape hash cannot see a scroll.** Scrolling changes offsets and
+/// Why the shape hash cannot see a scroll: scrolling changes offsets and
 /// nothing else: the same widgets at the same depths, and the demo's own box
 /// the size it always was. So the structure tier hashes the same number, the
 /// resize tier reads the same size, and the tree the host is holding goes on
@@ -12,14 +12,14 @@ import 'package:flutter/widgets.dart';
 /// identical rows is the worst case rather than the best: recycling its items
 /// leaves even the element shape identical.
 ///
-/// **Why a counter and not a flag.** The watch decides everything by comparing
-/// this frame against the last one. A boolean would need somebody to clear it,
-/// and whoever cleared it would race the frame that set it; a number that only
-/// goes up is the same comparison the other tiers already make.
+/// Why a counter and not a flag: the watch decides everything by comparing
+/// this frame against the last one. A boolean would need clearing, and whatever
+/// cleared it would race the frame that set it; a number that only goes up is
+/// the same comparison the other tiers already make.
 ///
-/// **Why every notification and not only the ends.** A fling reports on every
-/// frame of itself, and that is the point: the host waits for the scroll to
-/// *stop* before paying for a tree read, so it needs to be told the thing is
+/// Why every notification and not only the ends: a fling reports on every
+/// frame of itself, and that is what is needed — the host waits for the scroll
+/// to *stop* before paying for a tree read, so it has to know the thing is
 /// still moving. Counting only the start and the end would have the host read
 /// once in the middle of a fling — a walk it would then have to do again.
 ///

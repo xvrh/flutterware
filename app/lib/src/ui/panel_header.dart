@@ -12,7 +12,7 @@ const panelGutter = FwSpacing.xxl;
 
 /// The top of a panel: what is being looked at, and what can be done to it.
 ///
-/// **The title names what varies, never the plugin.** The rail already says
+/// The title names what varies, never the plugin. The rail already says
 /// "Splash screen"; repeating it here spends the largest type on the one thing
 /// the reader already knows. What varies is which package, which worktree,
 /// which dependency — so that is what the eye should land on. The rule is the
@@ -50,7 +50,7 @@ class FwPanelHeader extends StatelessWidget {
   final Widget? badge;
 
   /// Provenance, joined with a middot: which file, read when, from where.
-  /// Empty for a panel whose title is the whole story.
+  /// Empty for a panel whose title says it all.
   final List<String> subtitle;
 
   /// Renders [subtitle] selectable. For a path — the thing most likely to be

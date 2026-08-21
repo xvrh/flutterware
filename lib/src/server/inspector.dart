@@ -22,7 +22,7 @@ typedef ServerCommandHandler = InspectorCommandHandler;
 /// interceptor, a log listener — are copy-paste snippets over these four,
 /// deliberately not code in this package (spec decision 5).
 ///
-/// **There is no init call.** The first reported event activates the
+/// There is no init call. The first reported event activates the
 /// inspector: it binds a unix socket in `~/.flutterware/run`, publishes a
 /// `srv-*.json` handle, and replays its ring to whoever attaches. When the
 /// gates say no — a release build, a machine without a run dir,
@@ -224,7 +224,7 @@ class _SocketPeer implements InspectorPeer {
 /// The machinery behind [FlutterwareServer], constructible directly so tests
 /// can point it at a temp dir instead of faking the gates.
 ///
-/// **This class is now only the transport**: a unix socket in the run dir, a
+/// This class is now only the transport: a unix socket in the run dir, a
 /// `srv-*.json` handle beside it, and the predecessor cleanup that makes a
 /// restart self-healing. The ring, the channels, the handlers, the detail
 /// store and the attach handshake are [InspectorCore], which knows nothing

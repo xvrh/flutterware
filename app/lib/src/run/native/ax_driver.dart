@@ -17,13 +17,13 @@ import 'native_driver.dart';
 /// the keyboard, system dialogs — and a macOS app is the same API pointed at a
 /// different pid.
 ///
-/// **Scope differs sharply between the two, and the tool says so.** On the
+/// Scope differs sharply between the two, and the tool reports which. On the
 /// simulator this reads the app under test: measured, the complete Flutter
 /// screen with labels and frames, no guest and no semantics handshake. On
 /// macOS the brief is *native chrome* — menus, dialogs, save panels, other
 /// apps — and a Flutter app's own widgets usually do not appear.
 ///
-/// **Usually, not never** — the first version of this comment said never, and
+/// Usually, not never — the first version of this comment said never, and
 /// it was wrong. The framework says the rule itself when asked for a
 /// semantics tree it has not built: *"the framework only generates semantics
 /// when asked to do so by the platform"*. Flutterware's own
@@ -38,7 +38,7 @@ import 'native_driver.dart';
 ///
 /// Not turned into a feature, deliberately: the same app, given the same
 /// treatment, published in one run and refused in the next, so there is no
-/// recipe honest enough to put behind a verb. The risk of leaving it is
+/// reliable recipe to put behind a verb. The risk of leaving it is
 /// one-directional — an agent either sees the chrome it came for, or that
 /// plus Flutter content it can also use.
 ///
@@ -120,13 +120,13 @@ class AxNativeDriver extends NativeDriver {
     return reply;
   }
 
-  /// What to tell somebody whose helper cannot see anything.
+  /// What to report when the helper cannot see anything.
   ///
   /// Names the app the grant actually belongs to rather than the helper: macOS
   /// attaches accessibility permission to the *responsible* process — whatever
   /// spawned this — so "flutterware" or the user's terminal is what appears in
-  /// System Settings, and telling them to look for `ax_helper` would send them
-  /// hunting for a row that does not exist.
+  /// System Settings, and pointing at `ax_helper` would send the reader hunting
+  /// for a row that does not exist.
   static String get _untrusted {
     var owner = Platform.environment['TERM_PROGRAM'] ?? 'the app running this';
     return 'macOS has not granted accessibility permission, so the native '
@@ -158,8 +158,8 @@ class AxNativeDriver extends NativeDriver {
                 "panels, other applications. A Flutter app's own widgets "
                 'usually do not appear: the framework builds a semantics tree '
                 'only when the *platform* asks, and nothing flutterware does '
-                'asks it. So a tree that is just a window title is the normal '
-                'case, not a fault — address the app by dropping `layer`. '
+                'asks it. A tree that is just a window title is expected here '
+                '— address the app by dropping `layer`. '
                 'Some apps do publish (an assistive client or VoiceOver '
                 'turned it on for that process); if you see Flutter content '
                 'below, it is real and you can use it.'

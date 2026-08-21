@@ -9,8 +9,8 @@ import 'package:flutter/services.dart';
 /// - the catalog panel's `⌘R` reload and `⌘⇧C` copy-preview, and
 /// - the shell's `⌘B` sidebar, `⌘K` search and `⌘⇧[` / `⌘⇧]` worktree cycle.
 ///
-/// **Reserving every command chord instead — which is what this used to do —
-/// costs the demo far more than it looks.** It takes ⌘A, ⌘C, ⌘V and ⌘Z, so a
+/// Reserving every command chord instead — which is what this used to do —
+/// costs the demo far more than it looks. It takes ⌘A, ⌘C, ⌘V and ⌘Z, so a
 /// field cannot be selected into or pasted into; and because the modifier keys
 /// are themselves chords once held, the guest never learns ⌘ is down, so a
 /// demo's own shortcuts cannot fire either.

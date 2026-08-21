@@ -10,7 +10,7 @@
 ///   screenshots to a translation service is a few lines rather than a map
 ///   walk.
 ///
-/// **Plain Dart on purpose — nothing here may import `package:flutter`.** The
+/// Plain Dart on purpose — nothing here may import `package:flutter`. The
 /// script that talks to a translation service runs under a bare `dart run`,
 /// exactly like `tool/flutterware.dart` does.
 ///

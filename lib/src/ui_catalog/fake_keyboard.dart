@@ -1,13 +1,13 @@
 /// The keyboard that is not there: what a screen loses when one comes up, and
-/// the slab that says so.
+/// the slab that stands in for it.
 ///
-/// **Painted, never built.** A keyboard composed of widgets would put key caps
+/// Painted, never built. A keyboard composed of widgets would put key caps
 /// in front of `find.text`, a hundred nodes into the semantics and transcript
 /// audits, and a wall of junk into `screen()`. One [CustomPainter] under an
 /// [ExcludeSemantics] is one leaf, one paint call, and invisible to every
 /// finder.
 ///
-/// **No glyphs.** Letters would need a font that differs between the previews
+/// No glyphs. Letters would need a font that differs between the previews
 /// harness and a bare `flutter test`, and a per-locale layout to not be a lie.
 /// Rows of rounded rectangles say *keyboard* without claiming a language.
 ///
@@ -86,7 +86,7 @@ class FakeKeyboard extends StatelessWidget {
 
 /// The slab alone, over [child], with none of the arithmetic.
 ///
-/// **Its own widget because the two lanes divide the work differently.** In a
+/// Its own widget because the two lanes divide the work differently. In a
 /// preview the numbers are a `MediaQuery` this package writes, so [FakeKeyboard]
 /// does both halves in one place. In a scenario they are the *view's* — set on
 /// the binding's test values exactly as a real embedder would report them, so

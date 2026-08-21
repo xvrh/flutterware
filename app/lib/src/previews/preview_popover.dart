@@ -8,7 +8,7 @@ import 'catalog_entry.dart';
 import 'thumbnails.dart';
 
 ///
-/// **Beside it, rather than on the canvas.** The canvas is where a *click*
+/// Beside it, rather than on the canvas. The canvas is where a *click*
 /// lands, so a hover that changed it read as a commitment nobody made — and it
 /// is 500 pixels from the pointer, with nothing between the two to connect
 /// them. This is at the hand, it points at the row it belongs to, and it leaves

@@ -30,7 +30,7 @@ String describeDevice(Device device) =>
 
 /// The device an address names, or the panel when it names none.
 ///
-/// **The one place a device comes from.** Nothing holds one: it is a function
+/// The one place a device comes from. Nothing holds one: it is a function
 /// of the address, recomputed wherever it is needed. That is what stops the
 /// picker and the address from being two copies of the same fact chasing each
 /// other a frame apart.
@@ -38,8 +38,8 @@ String describeDevice(Device device) =>
 /// [fitDeviceId] and an absent parameter both resolve to the panel. They used
 /// to differ: an entry could declare a form factor, and "fit" was how you said
 /// *no* frame rather than *no opinion*. With the declaration gone there is one
-/// answer, and the distinction is kept in the address only because a device
-/// somebody chose should survive a reload.
+/// answer, and the distinction is kept in the address only because a chosen
+/// device should survive a reload.
 Device? resolveDevice(String? param) =>
     param == null ? null : deviceById(param);
 
@@ -52,10 +52,9 @@ const orientationParameterDoc =
     'Which way up the device is — `portrait` (the default) or `landscape`. '
     'An axis on top of `device` rather than a device of its own, so `ipad` '
     'plus `landscape` is the same iPad on its side: the screen trades width '
-    'for height and the safe areas become the ones that device declares for '
-    'landscape, which is not a permutation of the portrait four — a phone '
-    'loses its status bar rather than moving it. Ignored by anything that '
-    'cannot turn, which is every desktop size and `fit`.';
+    'for height, and the safe areas become the ones that device declares for '
+    'landscape (a phone loses its status bar rather than moving it). Ignored '
+    'by anything that cannot turn, which is every desktop size and `fit`.';
 
 /// The orientation an address names, or null when it names none — which means
 /// portrait.

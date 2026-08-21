@@ -1,7 +1,7 @@
 /// Brewline with a devbar on it — the sample for driving an app from outside
 /// itself.
 ///
-/// **What this exists to show.** A push notification is the canonical thing
+/// What this exists to show. A push notification is the canonical thing
 /// you cannot get at: it needs a backend, a registration token and somebody
 /// willing to send you one while you are looking at the screen. Here it is one
 /// call — from a button in the in-app overlay, from the cockpit's App tab,

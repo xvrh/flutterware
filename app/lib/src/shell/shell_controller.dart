@@ -103,7 +103,7 @@ class ShellController extends ChangeNotifier {
 
   /// How the explorer's facts are built, once the main checkout is known.
   ///
-  /// **Injectable because the default writes to the real `~/.flutterware`.**
+  /// Injectable because the default writes to the real `~/.flutterware`.
   /// Opening a worktree records the "you opened this" clock, so a widget test
   /// that pumped the shell was touching the developer's home directory — and
   /// would have raced any other test doing the same.
@@ -131,7 +131,7 @@ class ShellController extends ChangeNotifier {
 
   /// Every open worktree, in the order they were opened.
   ///
-  /// **One map, not nine.** This was nine collections keyed by the same path —
+  /// One map, not nine. This was nine collections keyed by the same path —
   /// session, workspace, error, remembered address, load generation, manifest,
   /// log, watcher, pending flag — with a 24-line `_closeAt` that had to remember
   /// every one of them. Nothing typed the relationship; a tenth piece of
@@ -141,7 +141,7 @@ class ShellController extends ChangeNotifier {
   final _open = <String, _Open>{};
 
   /// The directory whose changes reach [worktree], or null when nothing is
-  /// watched — the honest answer to "why did it not notice my edit".
+  /// watched — the answer to "why did it not notice my edit".
   String? watchingFor(Worktree worktree) =>
       _open[worktree.path]?.watcher?.watching;
 
@@ -206,7 +206,7 @@ class ShellController extends ChangeNotifier {
     );
   }
 
-  /// **Where the shell is.** The one piece of navigation state; everything
+  /// Where the shell is. The one piece of navigation state; everything
   /// below is read off it, and every way of moving is a write to it.
   ///
   /// Always present, though it may name nothing — `fw:///` before the first
@@ -282,7 +282,7 @@ class ShellController extends ChangeNotifier {
   /// The worktree [name] refers to, by [Worktree.name] first and by branch
   /// second.
   ///
-  /// **Forgiving input, canonical output.** Nothing ever *writes* a branch into
+  /// Forgiving input, canonical output. Nothing ever *writes* a branch into
   /// an address — that would be an address that silently retargets when the
   /// branch is checked out somewhere else. But a branch is what a tab shows and
   /// therefore what someone types, so an address naming one still lands.
@@ -319,7 +319,7 @@ class ShellController extends ChangeNotifier {
   /// Watches the repository, so the explorer is a cockpit rather than a
   /// snapshot.
   ///
-  /// **The shell does this rather than the facts controller** because a git
+  /// The shell does this rather than the facts controller because a git
   /// event can mean a worktree appeared, and the list of worktrees is the
   /// shell's. So a git event is a rescan *and* a re-probe: `git worktree list`
   /// is 10 ms, which is noise beside the sweep that follows it, and it is what
@@ -405,7 +405,7 @@ class ShellController extends ChangeNotifier {
   /// True while the address names the shell's own changes screen.
   bool get isChangesScreen => address.plugin == Address.shellChanges;
 
-  /// **The worktree the address names, open or not.**
+  /// The worktree the address names, open or not.
   ///
   /// [selected] deliberately resolves `among: openWorktrees`, because every
   /// other screen in the window needs a session and a worktree without one has
@@ -427,7 +427,7 @@ class ShellController extends ChangeNotifier {
   /// not be able to disagree.
   bool get inWorktreesSpace => isExplorer || isUnopenedScreen;
 
-  /// A shell-owned screen showing a worktree nobody has opened.
+  /// A shell-owned screen showing a worktree that is not open.
   bool get isUnopenedScreen {
     var worktree = addressedWorktree;
     return Address.shellSessionless.contains(address.plugin) &&
@@ -497,7 +497,7 @@ class ShellController extends ChangeNotifier {
     return id;
   }
 
-  /// **What the window is showing in the plugin slot**, whether or not it is a
+  /// What the window is showing in the plugin slot, whether or not it is a
   /// plugin.
   ///
   /// [selectedPluginId] answers a narrower question — *which plugin's panel is
@@ -605,7 +605,7 @@ class ShellController extends ChangeNotifier {
   /// Discovers the project's worktrees and opens **only** the one the app was
   /// launched in. Everything else is opened deliberately from the switcher.
   ///
-  /// **The launch worktree is the one that *contains* the launch directory**,
+  /// The launch worktree is the one that *contains* the launch directory,
   /// not the one whose path equals it. A launch directory is hardly ever a
   /// checkout root: it is a package, or a nested project with a config of its
   /// own, and `findRepoRoot` deliberately stops at that nested config rather
@@ -747,13 +747,13 @@ class ShellController extends ChangeNotifier {
 
   /// Re-runs the selected worktree's config and applies whatever moved.
   ///
-  /// **Never refuses.** A reload used to answer to the same teardown guards a
+  /// Never refuses. A reload used to answer to the same teardown guards a
   /// close does, and defer itself until they cleared — a whole mechanism
   /// protecting state that a config change is allowed to cost. Closing still
   /// asks, because closing is a deliberate act on a worktree; reloading is what
   /// the file you just saved asked for.
   ///
-  /// **Does not release anything up front.** Whether the graph pays for a
+  /// Does not release anything up front. Whether the graph pays for a
   /// reload is decided after the config has run and been compared; releasing
   /// first would make a config that fails to compile cost the whole worktree.
   Future<bool> reloadConfig() async {
@@ -765,7 +765,7 @@ class ShellController extends ChangeNotifier {
 
   /// Runs a worktree's config and applies whatever moved.
   ///
-  /// **One exit.** Every branch below produces a [ConfigLoad] and returns it;
+  /// One exit. Every branch below produces a [ConfigLoad] and returns it;
   /// this method records it and notifies, once. It used to be seven exits each
   /// repeating `record(...); notifyListeners(); return;`, which made "every load
   /// leaves exactly one row and one notification" a rule you had to remember
@@ -794,7 +794,7 @@ class ShellController extends ChangeNotifier {
   /// - **failed** — nothing is torn down. The error surfaces and every plugin
   ///   keeps running, because a half-written file must not cost a worktree.
   /// - **unchanged** — the config declared what was already there, so not one
-  ///   object moves. This is the whole point; everything else is bookkeeping.
+  ///   object moves. This is the case that matters; the rest is bookkeeping.
   /// - **built** / **rebuilt** — the graph is thrown away and made again.
   Future<ConfigLoad?> _apply(
     _Open open,
@@ -921,7 +921,7 @@ class ShellController extends ChangeNotifier {
   /// Re-derives the errors about things the config named that are not there:
   /// a package, and the icon [ProjectIdentity] points at.
   ///
-  /// **Run on every load, including one that changed nothing.** These are the
+  /// Run on every load, including one that changed nothing. These are the
   /// errors whose truth lives on disk rather than in the config, so a load that
   /// skipped them would either keep a warning about a package you have since
   /// created, or — worse — drop a warning that is still true, because the load
@@ -990,10 +990,10 @@ class ShellController extends ChangeNotifier {
     return _open[path]?.remembered ?? Address(worktree: worktree.name);
   }
 
-  /// **The one way the shell moves.** Every `select…` below is a call to this,
+  /// The one way the shell moves. Every `select…` below is a call to this,
   /// and so is opening a search hit or a pasted address.
   ///
-  /// **Opening is the navigation.** An address naming a closed worktree opens
+  /// Opening is the navigation. An address naming a closed worktree opens
   /// it and lands inside it. This used to refuse, on the grounds that opening
   /// costs a subprocess and should be a deliberate act — but the cost is the
   /// user's to spend and they spent it by naming the worktree, and refusing to
@@ -1003,8 +1003,8 @@ class ShellController extends ChangeNotifier {
   /// starts, and everything under them draws a loader until the session lands —
   /// which is what [open] already did, and is why nothing here has to wait.
   ///
-  /// A name matching no worktree git reports is the one refusal left, and it
-  /// says so rather than returning nothing: something that lets you type an
+  /// A name matching no worktree git reports is the one refusal left, and it is
+  /// reported rather than returning nothing: anything that lets you type an
   /// address has to explain what happened to it.
   ///
   /// The address is remembered against its worktree on the way through, so a
@@ -1112,7 +1112,7 @@ class ShellController extends ChangeNotifier {
     go(Address(worktree: name, plugin: pluginId, segments: [childId]));
   }
 
-  /// **The same place, in another checkout.**
+  /// The same place, in another checkout.
   ///
   /// Everything except the worktree rides along — the plugin, the package, the
   /// entry, the device, the theme, the knobs — because all of it is in the one
@@ -1132,7 +1132,7 @@ class ShellController extends ChangeNotifier {
 
   /// Flicks to the next open worktree, keeping the address. Negative goes back.
   ///
-  /// **Open ones only**, which is the difference between this and picking from
+  /// Open ones only, which is the difference between this and picking from
   /// the switcher. A keystroke that spawned a config subprocess would be a
   /// keystroke you learn not to press; the ones already open are free, and with
   /// two of them this is the A/B flick the whole feature is for. Opening a
@@ -1147,7 +1147,7 @@ class ShellController extends ChangeNotifier {
     return goToWorktree(open[(index + delta) % open.length]);
   }
 
-  /// **Silent after disposal, rather than throwing.**
+  /// Silent after disposal, rather than throwing.
   ///
   /// Half of what this class does is asynchronous and started by something
   /// outside it — a config save, a filesystem event, a config load that is still
@@ -1199,7 +1199,7 @@ enum GoResult {
 
 /// Everything one open worktree holds.
 ///
-/// **The reason this type exists is teardown.** As nine maps keyed by path, the
+/// The reason this type exists is teardown. As nine maps keyed by path, the
 /// contract "closing a worktree releases all of it" lived in one method that had
 /// to name every one of them, and the tenth thing anyone added would have been a
 /// leak with no test to notice. Here it is [close], and a new field joins it by

@@ -5,7 +5,7 @@
 /// rendered by the cockpit, by `fw` and by MCP from one description, and by
 /// the in-app overlay from the same one, so the two surfaces cannot drift.
 ///
-/// **Almost none of this vocabulary is new, and that is deliberate.** Commands
+/// Almost none of this vocabulary is new, and that is deliberate. Commands
 /// are [PluginAction] — the same objects a host-side flutterware plugin
 /// declares, already rendered as a form by the GUI, as flags by `fw` and as a
 /// schema by MCP. Knobs are [KnobDescriptor] — the same objects the ui_catalog
@@ -152,8 +152,8 @@ class StateDescriptor {
   final String? description;
 
   /// The keys worth showing, in order. Empty means "show whatever comes back",
-  /// which is the honest answer for something like package info that a
-  /// renderer has no business curating.
+  /// which is the right answer for something like package info that a renderer
+  /// should not curate.
   final List<FieldDescriptor> fields;
 
   Map<String, Object?> toJson() => {

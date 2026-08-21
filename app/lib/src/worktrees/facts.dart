@@ -1,9 +1,9 @@
-/// What the explorer knows about one worktree — **all of it plain data**.
+/// What the explorer knows about one worktree, all of it plain data.
 ///
 /// Deliberately not a `WorktreeSession`. A session exists only while a worktree
 /// is open, because it costs a config subprocess; these facts are shell-owned
 /// probes that never run project code, so they read the same for a checkout
-/// nobody has opened. That split is what makes a screen listing *every*
+/// that has never been opened. That split is what makes a screen listing *every*
 /// worktree possible at all — see
 /// `docs/superpowers/specs/2026-08-10-worktree-explorer-view-design.md` §1.
 ///
@@ -28,7 +28,7 @@ enum FactState {
   /// The probe ran and broke. Transient — retried on the next refresh.
   failed,
 
-  /// **There is nothing here to know, and there never will be.** No `gh`
+  /// There is nothing here to know, and there never will be. No `gh`
   /// installed, no remote, no agent session for this checkout.
   ///
   /// Distinct from [failed] on purpose: collapsing the two gives a red cell
@@ -197,7 +197,7 @@ enum AgentState {
 
 /// A coding agent's session, read from files on disk.
 ///
-/// **File-only, and it cannot be more than that.** Nothing here distinguishes
+/// File-only, and it cannot be more than that. Nothing here distinguishes
 /// "the agent is running" from "the agent was killed mid-turn" — a stale
 /// [AgentState.working] decays to [AgentState.idle] by age. Do not read the
 /// working state as a liveness guarantee.
@@ -242,7 +242,7 @@ enum ChecksState { none, pending, passing, failing }
 /// working on. So the question is never "should I review this" but "is somebody
 /// waiting on me", and [changesRequested] is the only value that means yes.
 enum ReviewState {
-  /// Nobody has reviewed, and nothing is asking anybody to.
+  /// Nothing has been reviewed, and nothing is waiting on a review.
   none,
 
   /// A review is required or requested, and the ball is in someone else's
@@ -366,7 +366,7 @@ class WorktreeFacts {
 
   /// What this checkout's dev stack was last seen doing.
   ///
-  /// **The one fact here the shell does not compute.** Everything else on this
+  /// The one fact here the shell does not compute. Everything else on this
   /// screen is a git call or a file the shell itself wrote; a stack's state
   /// belongs to the project and costs a subprocess to find out. So this is read
   /// from the cache a session left behind — a fact that happened, drawn with
@@ -390,7 +390,7 @@ class WorktreeFacts {
     stack: stack ?? this.stack,
   );
 
-  /// **Will this worktree fail to progress until you act?**
+  /// Will this worktree fail to progress until you act?
   ///
   /// Not a count of agents and not a count of worktrees — that is what makes it
   /// worth a permanent badge on the pinned tab rather than a number you learn

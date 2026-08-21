@@ -6,7 +6,7 @@
 /// on the project's `minSdk`. Reading those three answers "is this file dead?",
 /// which nothing else in the toolchain will tell you.
 ///
-/// **These are reads of the project, not of a generator's config.** Nothing here
+/// These are reads of the project, not of a generator's config. Nothing here
 /// opens `icons_launcher.yaml` or `flutter_launcher_icons.yaml` — the whole
 /// point is that the answer is the same however the files got there.
 ///
@@ -66,8 +66,8 @@ class AndroidWiring {
     this.backgroundColor,
   });
 
-  /// Null when it could not be determined — which is a legitimate answer, not a
-  /// failure. See [readMinSdk].
+  /// Null when it could not be determined, which is a legitimate answer rather
+  /// than a failure. See [readMinSdk].
   final int? minSdk;
 
   /// Which file [minSdk] came from, so a surprising number is traceable.

@@ -1,7 +1,7 @@
 /// How the asset inspector writes itself into an address, and how it reads
 /// itself back out.
 ///
-/// **Both directions in one file**, for the same reason the catalog keeps them
+/// Both directions in one file, for the same reason the catalog keeps them
 /// together: the address is written by search, by the list, and by whoever
 /// pastes one; it is read by the panel deciding what to show. Drift between the
 /// two does not throw — it navigates you to a different asset.

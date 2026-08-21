@@ -62,7 +62,7 @@ void main() {
     );
   });
 
-  /// **The sign is the wheel's, not the finger's.** The delta is added to the
+  /// The sign is the wheel's, not the finger's. The delta is added to the
   /// scroll offset, so positive `dy` moves *down* the list — where `drag` wants
   /// a negative `dy` to achieve the same thing. Both conventions belong to the
   /// platform; getting them backwards is the one mistake this verb invites.

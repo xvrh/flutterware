@@ -1,7 +1,7 @@
 /// What a project *writes*, per plugin — the half of this tool that is Dart in
-/// somebody else's repository rather than an action to invoke.
+/// the consuming repository rather than an action to invoke.
 ///
-/// **Why this is hand-written when everything around it is generated.** The
+/// Why this is hand-written when everything around it is generated: the
 /// action shapes come out of the analyzer because they describe types this
 /// build declares. These describe types a *project* declares, and rules the
 /// scanner applies to a project's source: which annotation arguments are read

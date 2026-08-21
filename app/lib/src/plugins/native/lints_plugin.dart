@@ -487,7 +487,7 @@ class _FilesStrip extends StatelessWidget {
 }
 
 /// The selected file's chain, whole — the cards truncate it, and a chain that
-/// is only ever visible truncated is a chain nobody can actually read.
+/// is only ever visible truncated cannot be read.
 class _FileDetailLine extends StatelessWidget {
   const _FileDetailLine({required this.file});
 

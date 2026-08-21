@@ -9,7 +9,7 @@ import 'package:vm_service/vm_service.dart';
 
 /// Which isolate the drive transaction is addressed to.
 ///
-/// **An app is one isolate right up until it is not.** A sync engine, a
+/// An app is one isolate right up until it is not. A sync engine, a
 /// database worker or a plugin running Dart on a second engine puts another
 /// one in `getVM()`, and the guest is in exactly one of them. Measured against
 /// a live app: asking the wrong isolate for `ext.flutterware.act` answers

@@ -67,8 +67,7 @@ class InspectLogLine {
   ///
   /// The guest's rather than the host's, deliberately: this is when the demo
   /// printed, not when a reader got round to asking. The two differ by a poll
-  /// interval, and the whole point of a timestamp is to say what happened
-  /// before what.
+  /// interval, which is enough to reorder the lines.
   final int at;
 
   static InspectLogLine fromJson(Map<String, Object?> json) => InspectLogLine(
@@ -101,7 +100,7 @@ const maxStepLogLines = 50;
 
 /// [lines], trimmed to what a step's reply can afford — and saying so.
 ///
-/// **Nothing is dropped silently.** A reply that quietly shortened its own
+/// Nothing is dropped silently. A reply that quietly shortened its own
 /// evidence would be worse than one that costs too much: the reader would draw
 /// conclusions from a log it believed was complete. So an over-long line keeps
 /// its head and admits its tail, and an over-long step keeps its most recent

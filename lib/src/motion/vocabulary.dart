@@ -182,7 +182,7 @@ final motionVocabularyByName = {
 ///
 /// Growing [motionVocabulary] later must not silently change what code already
 /// written does. Anything outside this set stays a read at the call site, which
-/// is the honest signal that it is doing something structural.
+/// is the clearest signal that it is doing something structural.
 const motionBoxProps = <String>[
   'opacity',
   'translateX',

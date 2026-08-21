@@ -6,10 +6,10 @@ import 'package:flutter/widgets.dart';
 
 /// Which entry the guest is showing, and how it is told to show another.
 ///
-/// **The whole catalog is already in the program.** The generated entrypoint
+/// The whole catalog is already in the program. The generated entrypoint
 /// imports every entry's wrapper — that is what makes one compiler safe to
 /// share — so the running guest can build any of them without being sent
-/// anything. Until this existed nobody used that: the entrypoint named one
+/// anything. That went unused until this existed: the entrypoint named one
 /// entry in a getter, and switching meant regenerating the file, recompiling
 /// it and hot-reloading the guest. Measured on a 100-entry catalog, that was
 /// 45ms of compile and 302ms of reload and reassemble, per entry, to move an
@@ -20,7 +20,7 @@ import 'package:flutter/widgets.dart';
 /// remount — [CatalogGuest] resets the knobs, the axes, the errors and the
 /// logs off the same `entryId` change either way.
 ///
-/// **A reload still wins.** The entrypoint on disk names an entry, and the
+/// A reload still wins. The entrypoint on disk names an entry, and the
 /// panel switches demos by rewriting that name and reloading — so a runtime
 /// switch only holds while the file has not moved under it. The rebase is a
 /// plain assignment in `didUpdateWidget`, which is both the moment the new

@@ -25,7 +25,7 @@ import 'runner.dart';
 /// and then the comparison reports entries that only ever existed in the
 /// asking.
 ///
-/// **Renders under `flutter_tester`, the audit's lane, not the embedder.**
+/// Renders under `flutter_tester`, the audit's lane, not the embedder.
 /// The embedder renders in real time, which is right for a panel somebody is
 /// looking at and wrong here twice over: a catalog-wide render pays real
 /// seconds per animating entry where fake clock costs microseconds, and a

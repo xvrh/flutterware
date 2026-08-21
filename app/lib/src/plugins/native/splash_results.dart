@@ -56,7 +56,7 @@ class SplashDescribeResult implements PluginResult {
   /// [placement] was read back from the files `create` wrote, rather than
   /// derived from the config.
   ///
-  /// **The first thing a caller should look at.** A false here means the answer
+  /// The first thing a caller should look at. A false here means the answer
   /// is this plugin's reading of a third-party generator's rules — useful, and
   /// not the same kind of claim. The properties below are config either way.
   final bool generated;
@@ -269,7 +269,7 @@ class SplashArtifactEntry {
 
   /// The size it occupies on screen. **Android only** — the rule is checked
   /// against the generator there and nowhere else, so the other platforms get
-  /// null rather than a number nobody has verified.
+  /// null rather than an unverified number.
   final double? logicalWidth;
 
   final String modified;

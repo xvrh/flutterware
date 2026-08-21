@@ -22,8 +22,8 @@ final _logger = Logger('run_panels');
 /// The app's own panels, in the cockpit — the Screen tab's counterpart for
 /// everything the app chose to report about itself.
 ///
-/// **The Screen of a run is what flutterware can see; this is what the app
-/// says.** It attaches to the channels the run guest installed, lists whatever
+/// The Screen of a run is what flutterware can see; this is what the app
+/// says. It attaches to the channels the run guest installed, lists whatever
 /// devbar plugins declared themselves, and renders each from its descriptor
 /// with the same widgets the in-app overlay uses.
 class PanelsTab extends StatefulWidget {
@@ -154,8 +154,8 @@ class _PanelsTabState extends State<PanelsTab> {
   }
 
   /// Pushes what the host remembers before reading anything, so the first list
-  /// already shows the values somebody asked for rather than flickering
-  /// through the defaults.
+  /// already shows the requested values rather than flickering through the
+  /// defaults.
   Future<void> _applyWishes() async {
     var wishes = widget.memory.wishes(_projectKey);
     if (wishes.isEmpty) return;

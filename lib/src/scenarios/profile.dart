@@ -16,7 +16,7 @@ import 'shots.dart';
 /// mobile folder and a desktop folder can say different things without either
 /// knowing about the other).
 ///
-/// **The list is the offered set, and its head is the default.** The GUI shows
+/// The list is the offered set, and its head is the default. The GUI shows
 /// all of it; a bare `flutter test` takes the first. That is one list doing
 /// both jobs, and it is why "show every phone in the picker but run two in CI"
 /// is not a contradiction — CI brings its own list, and a profile never
@@ -46,7 +46,7 @@ class ScenarioProfile {
   final String name;
 
   /// The devices this folder's scenarios are worth looking at on. The first is
-  /// what a run picks when nobody chose.
+  /// what a run picks when none is named.
   final List<Device> devices;
 
   /// The locale tags, first one likewise. Empty means the platform default,
@@ -80,12 +80,12 @@ class ScenarioAssignment {
   /// once, here, and everything downstream reads plain geometry off it.
   Device? get orientedDevice => device?.oriented(orientation);
 
-  /// Whether this point departs from portrait — the only case that earns a
-  /// segment in a name.
+  /// Whether this point departs from portrait — the only case that adds a
+  /// segment to a name.
   ///
-  /// **Portrait writes nothing.** A name that grew a `-portrait` would move
+  /// Portrait writes nothing. A name that grew a `-portrait` would move
   /// every artifact path that exists today, in every project, to record the
-  /// default. Landscape is the departure, so landscape is what gets said.
+  /// default. Landscape is the departure, so only landscape is named.
   bool get _landscape =>
       orientation == ScreenOrientation.landscape &&
       (device?.canRotate ?? false);
@@ -215,7 +215,7 @@ Future<void> runScenarios(
 /// Whether the folder being declared right now wants the software keyboard,
 /// or null where it said nothing — which is on.
 ///
-/// **On by default, and one switch turns it off.** A scenario that taps a
+/// On by default, and one switch turns it off. A scenario that taps a
 /// field now renders with a keyboard over the bottom third of the screen, the
 /// way a phone would, so a suite adopting this version sees its pictures move
 /// from the first tap on a field onward — once. `keyboard: false` restores the

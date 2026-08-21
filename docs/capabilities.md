@@ -399,7 +399,7 @@ packages: List<RunEntrypointPackage>
       label: String?
       description: String?
       kind: String?   # `string`, `boolean`, `integer`, `number` or `picker` — how it draws.
-      default: String?   # What the launch uses when nobody says otherwise: a script's answer when one was computed, else the parameter's own default.
+      default: String?   # What the launch uses when nothing overrides it: a script's answer when one was computed, else the parameter's own default.
       defaultSource: String?   # How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.
       options: List<String>   # Everything worth offering — an enum's constants, this machine's addresses, a list a project script printed, or what the config wrote.
       problem: String?   # What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.
@@ -643,7 +643,7 @@ entrypoint: String
 path: String   # Where the PNG was written.
 bytes: int
 ms: int
-note: String?   # Said out loud when the picture may not be the whole story — a run with platform views in it, which Flutter's layer tree cannot photograph.
+note: String?   # Stated when the picture may be incomplete — a run with platform views in it, which Flutter's layer tree cannot photograph.
 ```
 
 | parameter | kind | required | default | |
@@ -1404,7 +1404,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
 | `output` | string | no | — | Where step artifacts are written, worktree-relative unless absolute; a fresh directory under the package's build/ when omitted. run.json lands in the same directory as the images it names. |
 | `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted lets each scenario run as its own folder says — the first device of the profile its `flutter_test_config.dart` declares, or iphone-13 where a folder declares none. `fit` means the bare 800×600 test surface. The same vocabulary Previews frames with. |
-| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height and the safe areas become the ones that device declares for landscape, which is not a permutation of the portrait four — a phone loses its status bar rather than moving it. Ignored by anything that cannot turn, which is every desktop size and `fit`. Applies to whatever device the run ends up as, including one a folder's profile chose rather than this call. |
+| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height, and the safe areas become the ones that device declares for landscape (a phone loses its status bar rather than moving it). Ignored by anything that cannot turn, which is every desktop size and `fit`. Applies to whatever device the run ends up as, including one a folder's profile chose rather than this call. |
 | `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale and as the scenario's own assignment (`s.assignment?.language`), the same pair `FW_LANGUAGES` sets under `flutter test` |
 | `devices` | string | no | — | A comma-separated matrix — `iphone-se,android-tall`. Runs everything once per device, each into its own `<output>/<device>-<language>/` directory with an `index.json` beside them. The same plural vocabulary as `flutter test --dart-define=fw.devices=`. Overrides `device`. |
 | `languages` | string | no | — | The other half of the matrix — `en,fr,de`. Crossed with `devices`, and overrides `language`. |
@@ -1608,7 +1608,7 @@ Returns `IconInventoryResult`:
 package: String
 address: String   # The address of this package, pasteable back into the shell.
 flavor: String?   # Which flavor this reports on, or null for the default.
-flavors: List<IconFlavorEntry>   # Every flavor the package has, and what says so.
+flavors: List<IconFlavorEntry>   # Every flavor the package has, and what declares it.
   name: String
   sources: List<String>   # Some of `config`, `androidSourceSet`, `iosCatalog`.
 iosCatalog: String   # `none`, `appIconSet`, `iconComposer` or `both`.
@@ -2114,7 +2114,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 | `output` | string | no | — | Where to write the PNG; a build path when omitted |
 | `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the preview asked for while it built — a preview calling `context.knobs.string("label", "Hello")` declares one named `label` — so the names come from the preview itself and differ per entry. Read them with `describe --entry=<id> --with-knobs=true`. Each value is coerced to the kind the preview declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. Recorded on the address, so two settings are two artifacts rather than one file written twice. |
 | `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the preview reads the phone from `MediaQuery` rather than a rectangle. Omitted takes the package's declared `device:`, and a plain rectangle when it declares none. The same value the GUI writes as `?device=`, so an address captured here reopens framed the way it was shot. |
-| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height and the safe areas become the ones that device declares for landscape, which is not a permutation of the portrait four — a phone loses its status bar rather than moving it. Ignored by anything that cannot turn, which is every desktop size and `fit`. |
+| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height, and the safe areas become the ones that device declares for landscape (a phone loses its status bar rather than moving it). Ignored by anything that cannot turn, which is every desktop size and `fit`. |
 | `keyboard` | choice | no | — | Whether the software keyboard is up — `auto` (the default), `up` or `down`. **`auto` is not off**: the preview raises a keyboard exactly when the widget asks for one, the way a phone does, so an entry that autofocuses a field is already rendered with 336 points less screen. `up` holds one up with nothing focused, which is how to ask *what does this layout do with a third of the screen gone* without hunting for a field to tap. The height is measured per device and per orientation — a phone's landscape keyboard is shorter than its portrait one, an iPad's is taller — and it is reported in the `MediaQuery` the way a real embedder reports it: the insets rise, the bottom safe area is eaten, `viewPadding` still remembers the device. Ignored by anything with no measured keyboard, which is every desktop size and `fit`. |
 | `width` | integer | no | — | Override the viewport, whatever it would otherwise have been — the package's declared `device:`, the one this call named, or the plain rectangle. This is how to ask for a size no device has; on a device it stretches the screen rather than dropping its ratio, its notch and its safe areas. |
 | `height` | integer | no | — | Override the viewport, whatever it would otherwise have been — the package's declared `device:`, the one this call named, or the plain rectangle. This is how to ask for a size no device has; on a device it stretches the screen rather than dropping its ratio, its notch and its safe areas. |
@@ -2213,7 +2213,7 @@ next: String?   # One line naming what else can be asked of this frame.
 | `output` | string | no | — | Where to write the PNG; a build path derived from the address when omitted, the same as `screenshot` uses |
 | `annotate` | boolean | no | false | Draw a box and its node id over every widget of the screenshot. Now genuinely the same tree as the one reported rather than a second reading that happened to agree, which was the point of having it. |
 | `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the preview reads the phone from `MediaQuery` rather than a rectangle. Omitted takes the package's declared `device:`, and a plain rectangle when it declares none. **This is what makes "why does it look wrong on a phone" one render**: the tree, the constraints and the picture all describe the same framed build. Forces a render, like any other change to what is drawn. |
-| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height and the safe areas become the ones that device declares for landscape, which is not a permutation of the portrait four — a phone loses its status bar rather than moving it. Ignored by anything that cannot turn, which is every desktop size and `fit`. |
+| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height, and the safe areas become the ones that device declares for landscape (a phone loses its status bar rather than moving it). Ignored by anything that cannot turn, which is every desktop size and `fit`. |
 | `keyboard` | choice | no | — | Whether the software keyboard is up — `auto` (the default), `up` or `down`. **`auto` is not off**: the preview raises a keyboard exactly when the widget asks for one, the way a phone does, so an entry that autofocuses a field is already rendered with 336 points less screen. `up` holds one up with nothing focused, which is how to ask *what does this layout do with a third of the screen gone* without hunting for a field to tap. The height is measured per device and per orientation — a phone's landscape keyboard is shorter than its portrait one, an iPad's is taller — and it is reported in the `MediaQuery` the way a real embedder reports it: the insets rise, the bottom safe area is eaten, `viewPadding` still remembers the device. Ignored by anything with no measured keyboard, which is every desktop size and `fit`. |
 | `width` | integer | no | — | Override the viewport width — how to ask for a size no device has, and on a device it stretches the screen rather than dropping its ratio and its notch |
 | `height` | integer | no | — | See width |
@@ -2260,7 +2260,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 | `path` | string | no | — | A directory or one file — `demo/settings`, `demo/settings/tile.dart`. Either package-relative or worktree-relative; both are accepted because an entry id is the first and a shell tab-completes the second. |
 | `device` | choice | no | — | Render every entry as this device instead of the canvas each one declares — how to ask whether the whole catalog survives a small phone. Omitted is the right answer for CI: each entry is framed as its own subtree declared, and an entry under no canvas gets the plain rectangle. |
-| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height and the safe areas become the ones that device declares for landscape, which is not a permutation of the portrait four — a phone loses its status bar rather than moving it. Ignored by anything that cannot turn, which is every desktop size and `fit`. |
+| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height, and the safe areas become the ones that device declares for landscape (a phone loses its status bar rather than moving it). Ignored by anything that cannot turn, which is every desktop size and `fit`. |
 
 #### `build-web` — Build a web page
 
@@ -2361,7 +2361,7 @@ keysSeen: int   # How many of them this run put on a screen.
 occurrences: int   # Every place a key was seen — the sum over all keys, and roughly what a service push will cost in calls.
 shots: int   # Frames written, deduplicated: several keys on one screen cost one file.
 missingShots: int   # Frames a step named that were not on disk.
-fallingBack: int   # Places the app showed the source language to somebody who asked for another one.
+fallingBack: int   # Places the app showed the source language to a reader who asked for another one.
 disagrees: int   # Places the files and the run disagree — usually a stale build.
 notReached: int   # Declared keys this run never asked for.
 absentFromCatalog: int   # Keys the app read that no declared catalog defines.

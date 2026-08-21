@@ -42,7 +42,7 @@ class ScenarioWebExporter {
   /// What the run's artifact paths are relative to.
   final String worktreeRoot;
 
-  /// Where the page goes when nobody says. Package-relative, and spelled with
+  /// Where the page goes by default. Package-relative, and spelled with
   /// `/` because it is also what the dialog puts in a text field and what the
   /// action's help says.
   static const defaultOutput = 'build/scenarios/web';

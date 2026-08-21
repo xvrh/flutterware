@@ -6,7 +6,7 @@
 /// plugin of every mounted devbar becomes a panel, and stops being one when the
 /// devbar unmounts.
 ///
-/// **Nothing here runs outside flutterware.** Mirroring is gated on
+/// Nothing here runs outside flutterware. Mirroring is gated on
 /// [GuestChannels.installed], so an app carrying a devbar for its own sake —
 /// a tester's build, a phone in someone's hand — pays nothing and keeps the
 /// overlay as its only surface.
@@ -53,9 +53,9 @@ class DevbarBridge {
   /// which is not always [DevbarPanelSource.panelId], because [_freeId] steps
   /// aside for a panel already using that name.
   ///
-  /// Null when nothing is watching, which is the whole of what a caller has to
-  /// remember: hold the answer, hand it back to [remove], and an app running
-  /// outside flutterware has quietly done nothing.
+  /// Null when nothing is watching, which is all a caller has to handle: hold
+  /// the answer, hand it back to [remove], and an app running outside
+  /// flutterware has quietly done nothing.
   ///
   /// The other door into this is [mount], for the panels a devbar's own
   /// plugins declare. This one is for [AddDevbarPanel] — a panel that belongs

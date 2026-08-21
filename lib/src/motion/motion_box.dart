@@ -18,14 +18,14 @@ import 'target.dart';
 /// same getters, so a host watching which properties are wired sees exactly
 /// what it would have seen written out by hand.
 ///
-/// **What it applies is frozen**, and is the whole of it:
+/// What it applies is frozen, and is the whole of it:
 ///
 /// `opacity`, `translateX`, `translateY`, `scale`, `scaleX`, `scaleY`,
 /// `rotate`, `blur`.
 ///
 /// Growing the vocabulary later must never change what code already written
 /// does, so nothing is ever added to that list. Anything outside it stays a
-/// read at the call site — which is the honest signal that it is doing
+/// read at the call site — which is the clearest signal that it is doing
 /// something structural rather than cosmetic.
 ///
 /// Each layer is skipped when its property is at rest, so a target that only

@@ -25,7 +25,7 @@ var _claims = 0;
 /// every file the run writes into it — and cannot be aged by a test.
 const _stamp = '.claim';
 
-/// A directory under [comparisonBuildRoot] nobody else is using, relative to
+/// A directory under [comparisonBuildRoot] that no other run holds, relative to
 /// [packageRoot]. Release it with [releaseComparisonBuildDirectory] when the
 /// runner built in it is disposed.
 ///
@@ -33,8 +33,8 @@ const _stamp = '.claim';
 /// comparison runs minutes at the very worst, so a day-old claim has no
 /// living owner — and the sweep needs no registry of its own, just the
 /// stamp's age. Swept on claim rather than on a schedule because a schedule
-/// is a caller somebody has to remember to wire; this one cannot be
-/// forgotten. Anything under the root *without* a stamp is not a claim and
+/// needs a caller wired up and remembered; this one cannot be forgotten.
+/// Anything under the root *without* a stamp is not a claim and
 /// not this sweep's to touch.
 String claimComparisonBuildDirectory(String packageRoot) {
   var root = Directory(p.join(packageRoot, comparisonBuildRoot));

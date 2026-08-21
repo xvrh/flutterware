@@ -17,7 +17,7 @@ const launcherIconPluginId = 'flutterware.launcher_icon';
 /// Every launcher icon a package has, and what each operating system does with
 /// it.
 ///
-/// The subject is **what the OS shows, not what a generator wrote**. Nothing
+/// The subject is what the OS shows rather than what a generator wrote. Nothing
 /// here opens `icons_launcher.yaml` or `flutter_launcher_icons.yaml`, and
 /// nothing here can run a generator: a config is one project's way of
 /// producing these files, and an agent reads it better than a transcription
@@ -25,12 +25,12 @@ const launcherIconPluginId = 'flutterware.launcher_icon';
 /// all — the files, the project's own wiring, and the platform rules that
 /// decide which of them a user ever sees.
 ///
-/// That independence is the feature. This reads the same on a project that
+/// That independence is deliberate. This reads the same on a project that
 /// generated its icons, one that drew them by hand, and one that let Xcode do
 /// it.
 ///
 /// Holds to the two rules every core holds to: the constructor allocates
-/// nothing, and [report] only formats what somebody already caused to load.
+/// nothing, and [report] only formats what a previous call caused to load.
 /// Loading is listing directories and reading image headers.
 class LauncherIconCore extends PluginCore {
   LauncherIconCore(super.host);
@@ -86,9 +86,9 @@ class LauncherIconCore extends PluginCore {
   void invalidate(String path, {String? flavor}) =>
       _cache.invalidate((path, flavor));
 
-  /// Reads the tree again, and **completes when the new scan is in**.
+  /// Reads the tree again, and completes when the new scan is in.
   ///
-  /// [track] is fire-and-forget, which is right for mounting — nobody is
+  /// [track] is fire-and-forget, which is right for mounting — nothing is
   /// waiting — and wrong for a button, where the thing that pressed it wants to
   /// show the result. Returning the future lets the caller await rather than
   /// depend on some ancestor happening to listen for the change.
@@ -367,7 +367,7 @@ class LauncherIconCore extends PluginCore {
   /// A flavor as one readable phrase — the name, and what is behind it when
   /// that is not everything.
   ///
-  /// The qualification is the point. "dev (configured, not generated)" is a
+  /// The qualification is what matters. "dev (configured, not generated)" is a
   /// different instruction from "dev", and the bare name was the only thing
   /// this could ever say back when a flavor was a directory listing.
   static String _flavorSummary(IconFlavor flavor) {

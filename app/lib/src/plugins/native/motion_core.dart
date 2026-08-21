@@ -24,8 +24,8 @@ const motionPluginId = 'flutterware.motion';
 /// Motions per declared package: the syntactic scan projected into the report
 /// and the `list` action.
 ///
-/// Follows the dependencies core's rule: **nothing here starts work.** The
-/// constructor allocates nothing and [report] only reads what somebody already
+/// Follows the dependencies core's rule: nothing here starts work. The
+/// constructor allocates nothing and [report] only reads what a previous call
 /// caused to scan. Scanning begins in [track], which the panel calls on mount
 /// and `fw` calls for the duration of a request.
 ///
@@ -103,10 +103,10 @@ class MotionCore extends PluginCore {
 
   /// Writes [targets] into the values file beside [motionFile].
   ///
-  /// **Refuses when the file was not fully understood.** That is the whole of
-  /// blast radius zero: this rewrites one expression in one file it owns, and
-  /// where it cannot reproduce what it read it writes nothing at all rather
-  /// than dropping the part it did not follow.
+  /// Refuses when the file was not fully understood. This rewrites one
+  /// expression in one file it owns, and where it cannot reproduce what it read
+  /// it writes nothing at all rather than dropping the part it did not
+  /// follow.
   List<MotionFileProblem> writeValues(
     String package,
     String motionFile,

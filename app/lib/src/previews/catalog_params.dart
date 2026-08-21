@@ -1,7 +1,7 @@
 /// How a demo's knobs and a shell's axes are written into an address, and read
 /// back out.
 ///
-/// **One encoder for both**, because they are the same thing seen twice: a
+/// One encoder for both, because they are the same thing seen twice: a
 /// [KnobDescriptor] declared by running the project's own code. What separates
 /// them is where they are declared and how long they live — an axis belongs to
 /// the shell and survives moving between entries, a knob belongs to the entry
@@ -47,7 +47,7 @@ String paramKeyFor(KnobDescriptor param) => paramSlug(param.name);
 
 /// What an address should say for [value] of [param], or null when it is on
 /// the default the demo wrote — which is written as *nothing*, so an address
-/// only ever names what somebody actually chose.
+/// only ever names a deliberate choice.
 ///
 /// Silence carrying the default is what lets a demo change its own mind about
 /// one without silently reinterpreting every link ever saved.
@@ -100,11 +100,11 @@ Object? paramOptionFor(KnobDescriptor param, String slug) {
 ///
 /// A function of the address and the *declaration* — never of
 /// [KnobDescriptor.value], which is only what the guest last confirmed. That is
-/// the whole of the optimistic update: a control follows the pointer at once,
+/// all the optimistic update amounts to: a control follows the pointer at once,
 /// the report catching up a round trip later changes nothing on screen, and
 /// nothing is mutated to achieve it.
 ///
-/// **Silence means the default**, because silence is how a default is written:
+/// Silence means the default, because silence is how a default is written:
 /// [paramValueSlug] returns null for it, so choosing Light removes the parameter
 /// rather than spelling it out. Falling back to the confirmed value instead
 /// looked reasonable and was the bug — the report still said `Dark mode`, so

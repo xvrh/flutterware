@@ -1289,7 +1289,7 @@ void main() {
     });
   });
 
-  /// **The screen that renders for a checkout nobody has opened.** Every other
+  /// The screen that renders for a checkout nobody has opened. Every other
   /// place in the window needs a session; this one reads git, so the chrome
   /// around it has to admit that there is no tab to be in.
   group('the changes screen, on a closed worktree', () {

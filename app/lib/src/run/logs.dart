@@ -7,13 +7,13 @@ import '../utils/daemon/protocol.dart';
 ///
 /// The split matters more than it looks. A launcher log interleaves the build
 /// — Xcode noise, CocoaPods advice, progress lines — with what the app itself
-/// printed, and they are answers to different questions. Somebody debugging
-/// their app wants [app] and nothing else; somebody debugging a launch that
-/// never came up wants [tool].
+/// printed, and they are answers to different questions. Debugging the app
+/// wants [app] and nothing else; debugging a launch that never came up wants
+/// [tool].
 enum RunLogSource {
   /// The app's own output.
   ///
-  /// **Recognised by the `flutter: ` prefix, not by an event.** This was
+  /// Recognised by the `flutter: ` prefix, not by an event. This was
   /// written against `app.log` first, which was wrong: `flutter run --machine`
   /// sends that event only when a stop or a restart fails. Everything the app
   /// prints goes to plain stdout with the same `flutter: ` prefix a plain
@@ -28,8 +28,8 @@ enum RunLogSource {
 
   /// The platform's own log, read by us rather than forwarded by the launcher.
   ///
-  /// **Not in the launcher's log file, and no amount of forwarding would put
-  /// it there.** `flutter run` reads the device log through a filter that keeps
+  /// Not in the launcher's log file, and no amount of forwarding would put
+  /// it there. `flutter run` reads the device log through a filter that keeps
   /// only the app's *main executable* and the engine, so every line a plugin's
   /// framework logs is dropped before it reaches anything we could read.
   /// `NativeLogSource` is what reads the platform log itself.
@@ -50,7 +50,7 @@ class RunLogLine {
   /// Not inferred from prose. A line containing the word "error" is extremely
   /// often a line about not having one, and no amount of it makes a line an
   /// error report. A fixed prefix written by one emitter is a different thing
-  /// from prose, which is the whole of why [_engineSeverity] is allowed here.
+  /// from prose, which is why [_engineSeverity] is allowed here.
   final bool error;
 
   Map<String, Object?> toJson() => {
@@ -62,7 +62,7 @@ class RunLogLine {
 
 /// Everything a run's launcher wrote, decoded.
 ///
-/// **The log is the source of truth, and it needs no VM service.** It is
+/// The log is the source of truth, and it needs no VM service. It is
 /// written by the detached `flutter run` from the moment it starts, so it
 /// covers the build — before any app exists to connect to — and it survives the
 /// app it describes. A crashed run is exactly the case where the logs matter
@@ -135,17 +135,17 @@ List<RunLogLine> readRunLog(
 /// The Flutter **engine**'s own severity prefix, as in
 /// `[ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: …`.
 ///
-/// **This is a format, not a word.** [RunLogLine.error] refuses to guess an
+/// This is a format rather than a word. [RunLogLine.error] refuses to guess an
 /// error from prose and should keep refusing; what is matched here is a fixed
 /// shape one emitter writes — severity, source file, line — which no sentence
 /// about not having an error produces by accident.
 ///
-/// It earns its place because of what it is the only record of. An app whose
+/// It is worth having because of what it is the only record of. An app whose
 /// `main` throws before `runApp` never reaches a `FlutterError`, never sends an
 /// `app.log`, and never produces a `daemon.logMessage`: the engine writes this
 /// one line straight to the process's stderr and the app then sits there,
 /// answering its VM service with nothing mounted. Without this, `errors: []`
-/// was the honest reading of a log that plainly contained the reason.
+/// was the correct reading of a log that plainly contained the reason.
 final _engineSeverity = RegExp(r'^\[(ERROR|FATAL):[^\]]*\]');
 
 /// What `flutter run` puts in front of a line the app printed.

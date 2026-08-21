@@ -1,6 +1,6 @@
 /// The splash as the *generated files* describe it, not as the config predicts.
 ///
-/// **There is no runtime code in a splash.** `flutter_native_splash:create` is a
+/// There is no runtime code in a splash. `flutter_native_splash:create` is a
 /// pure generator: it writes files and exits, and the OS inflates those files at
 /// launch. So the picture a device shows is fully determined by a recipe sitting
 /// in the repo, and every ingredient of it is readable.
@@ -20,8 +20,8 @@
 /// `background.png` rather than emitting a `<color>` drawable — so the whole
 /// legacy splash is three bitmaps, one gravity each, and one padding number.
 ///
-/// **This is the panel's answer, not a second opinion.** Everything else here
-/// reasons from the config through a hand-transcription of somebody else's
+/// This is the panel's answer rather than a second opinion. Everything else
+/// here reasons from the config through a hand-transcription of the generator's
 /// `cli_commands.dart`, and a transcription can be confidently wrong — several
 /// of them were, and the tests agreed with them, because the tests encoded the
 /// same reading. What is on disk cannot be wrong about what is on disk. So a
@@ -33,7 +33,7 @@
 /// two `<picture>` elements, so the colour, the dark media query, both srcsets
 /// and the placement classes are all in one place.
 ///
-/// **iOS is the exception, and permanently.** `LaunchScreen.storyboard` is
+/// iOS is the exception, permanently. `LaunchScreen.storyboard` is
 /// constraints — a layout engine, not a recipe — and recomposing it would mean
 /// implementing one. That surface stays predicted, and the panel says so on the
 /// tile rather than leaving it to be inferred.
@@ -301,8 +301,8 @@ SplashComposition? _recomposeAndroid12(
 String? _stripHash(String? value) => value?.replaceFirst('#', '').trim();
 
 /// A drawable's pixels as the dp Android draws them at — its own density bucket
-/// divided out. Null when either half is unknown, which is the honest answer and
-/// the one the renderer treats as "size me to the screen".
+/// divided out. Null when either half is unknown, which the renderer treats as
+/// "size me to the screen".
 double? _dp(int? pixels, String? density) {
   var scale = splashDensityScale(density);
   if (pixels == null || scale == null) return null;
@@ -313,7 +313,7 @@ double? _dp(int? pixels, String? density) {
 
 /// The whole web splash, read out of `web/index.html`.
 ///
-/// **There is no `style.css`.** Older versions of the generator wrote one and
+/// There is no `style.css`. Older versions of the generator wrote one and
 /// linked it; 2.4.x inlines everything — a `<style id="splash-screen-style">`
 /// and a `<script id="splash-screen-script">` appended to `<head>`, and up to
 /// two `<picture>` elements inserted at the top of `<body>` — and `_updateHtml`
@@ -548,7 +548,7 @@ String? _cssDarkBlock(String css) {
 
 /// One generated resource, resolved the way the platform resolves it.
 ///
-/// **`-night` falls back per file, not per folder.** A dark cell whose project
+/// `-night` falls back per file, not per folder. A dark cell whose project
 /// has no `drawable-night/launch_background.xml` is not a cell with no answer —
 /// it is the light splash, because that is the file Android will inflate. The
 /// same holds for `values-night-v31/styles.xml`. Reading only the qualified

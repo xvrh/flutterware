@@ -1,6 +1,6 @@
 /// Whether a branch has a pull request, read from the forge's own CLI.
 ///
-/// **CLI only, never a token.** `gh` and `glab` already hold the user's
+/// CLI only, never a token. `gh` and `glab` already hold the user's
 /// credentials, already know the host, and already handle enterprise
 /// installations and SSO. Asking for a token would mean storing one, refreshing
 /// one and being blamed for one — for a column.
@@ -49,7 +49,7 @@ class ForgeReport {
 abstract class ForgeProbe {
   /// Every pull request for the repository at [repoRoot], in one sweep.
   ///
-  /// **One call for the whole repository, not one per worktree.** Fourteen
+  /// One call for the whole repository, not one per worktree. Fourteen
   /// worktrees asking their own question would be fourteen round trips to a
   /// server; one list request covers all of them and is joined locally.
   Future<ForgeReport> probe(String repoRoot);
@@ -117,11 +117,11 @@ class GitHubForgeProbe implements ForgeProbe {
       'number,title,headRefName,isDraft,state,reviewDecision,url,'
       'statusCheckRollup';
 
-  /// A closed pull request is asked less. Its checks are history and nobody
-  /// acts on them; what matters is that the branch is done.
+  /// A closed pull request is asked less. Its checks are history; what matters
+  /// is that the branch is done.
   static const closedFields = 'number,title,headRefName,state,url';
 
-  /// **Measured, 2026-08-10, on a repository with 78 pull requests.** Cost
+  /// Measured, 2026-08-10, on a repository with 78 pull requests. Cost
   /// tracks the number returned, because the check rollup is expanded per pull
   /// request:
   ///
@@ -200,7 +200,7 @@ class GitHubForgeProbe implements ForgeProbe {
 
 /// GitLab, via `glab mr list -F json`.
 ///
-/// **Shaped from GitLab's documented merge-request payload, not measured.**
+/// Shaped from GitLab's documented merge-request payload rather than measured.
 /// Every other parser in this directory was checked against real output; this
 /// one could not be, for want of a GitLab checkout. It is written to the
 /// documented field names, it treats every one of them as optional, and it
@@ -312,7 +312,7 @@ ReviewState _githubReview(String? decision) => switch (decision) {
 
 /// Rolls `statusCheckRollup` up into one state and a count of what broke.
 ///
-/// **Verified against real output (2026-08-10):** entries are `CheckRun` with
+/// Verified against real output (2026-08-10): entries are `CheckRun` with
 /// `status` plus `conclusion`, or `StatusContext` with `state` — the older
 /// commit-status API, still emitted by anything integrating that way.
 ///

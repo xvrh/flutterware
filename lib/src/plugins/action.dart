@@ -31,7 +31,7 @@ class PluginAction {
   /// A `Type` rather than a name, because that is what can be *followed*: the
   /// capability document resolves this literal statically and walks the class's
   /// fields, so the published shape of a result is the class itself and cannot
-  /// drift from it. A string would document a promise nobody could check.
+  /// drift from it. A string would document a promise nothing could check.
   ///
   /// It is also checked at run time — an action that declares one and returns
   /// something else fails the way any other broken invocation does, rather than

@@ -69,8 +69,8 @@ class CatalogPackageEntries {
   /// [entries] arranged the way the catalog is meant to be read: folders, then
   /// a level per file that holds several entries, then the entries.
   ///
-  /// **Reported rather than left to be rebuilt, because a rebuilt one is wrong
-  /// quietly.** Everything needed to derive this was already in [entries] and
+  /// Reported rather than left to be rebuilt, because a rebuilt one is wrong
+  /// quietly. Everything needed to derive this was already in [entries] and
   /// the arrangement rules were not — the shared leading directories are
   /// dropped, folders sort before entries, both alphabetically, and a folder's
   /// label is the directory segment as written while a derived group's is
@@ -103,7 +103,7 @@ class CatalogPackageEntries {
 /// already in the flat list under that id — a tree that repeated the payload
 /// would be a second answer to keep in agreement with the first.
 ///
-/// **Not `CatalogTreeNode`**, which this plugin already uses for a node of the
+/// Not `CatalogTreeNode`, which this plugin already uses for a node of the
 /// *widget* tree an entry renders. Two trees, and the shape names are published
 /// in `docs/capabilities.md`, where one of them would have quietly become the
 /// other.
@@ -195,7 +195,7 @@ class CatalogEntrySummary {
   /// What a `screenshot` of this entry that names no device will be framed as
   /// — the head of [devices], absent when it is the plain rectangle.
   ///
-  /// **Reported because the canvas is otherwise invisible**, and an invisible
+  /// Reported because the canvas is otherwise invisible, and an invisible
   /// default is how a picture ends up wrong without looking wrong. A caller
   /// reading this list can see that one entry is a phone and its neighbour a
   /// desktop, which is the fact the declaration exists to carry — and hand the
@@ -494,7 +494,7 @@ class CatalogRenderError {
 /// `inspect` — one rendered build, and every projection of it that was asked
 /// for.
 ///
-/// **The one result shape that replaced four.** `tree`, `find`, `at` and
+/// The one result shape that replaced four. `tree`, `find`, `at` and
 /// `errors` were not four capabilities; they were four questions about the same
 /// frame, each paying its own compile, guest launch and render to answer one of
 /// them. Three questions was three renders, and for an agent in a UI edit loop
@@ -539,7 +539,7 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
   /// anything they reached by clicking — and `render` when this call built and
   /// drew its own copy.
   ///
-  /// **Always present, not only on the interesting case.** A caller that gets
+  /// Always present, not only on the interesting case. A caller that gets
   /// two different answers to the same invocation has to be able to see why,
   /// and an absent field is not an answer.
   ///
@@ -555,7 +555,7 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
 
   /// Whether it rendered without the framework reporting anything.
   ///
-  /// **Present on every answer, whatever else was asked**, because it is the
+  /// Present on every answer, whatever else was asked, because it is the
   /// question behind asking at all — and because with no flags at all it *is*
   /// the answer. Stated rather than left to be inferred from an empty list: the
   /// question people ask is "is this one broken", and a caller should not have
@@ -572,7 +572,7 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
   /// What rendered: the things that carry words or respond to touch, nested
   /// under the layout's branch points, with their boxes and their state.
   ///
-  /// **The default answer now.** `inspect` used to report only whether the
+  /// The default answer now. `inspect` used to report only whether the
   /// framework complained, which says a build happened and nothing about what
   /// it drew; this is a rough picture of the screen in a few hundred tokens,
   /// and the handle for deciding what to ask next.
@@ -605,7 +605,7 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
   /// The chain under `--at`, outermost first — the thing under a cursor is
   /// usually a `Text` and the thing meant is the button around it.
   ///
-  /// **Filtered and capped**, like every other query here. The raw chain is
+  /// Filtered and capped, like every other query here. The raw chain is
   /// measured at 35 nodes and 1258 tokens, of which the outer twenty are the
   /// wrapper run that sits under every point of every screen; the innermost
   /// eight carry the answer.
@@ -654,7 +654,7 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
 
   /// [screenshot], where a surface that can render a picture will look for it.
   ///
-  /// **Without this the flag quietly did half its job.** `screenshot` returns an
+  /// Without this the flag quietly did half its job. `screenshot` returns an
   /// `Artifact` as its whole value, so MCP turns it into an image and the agent
   /// sees the widget; `inspect --screenshot` carries one in a *field*, which
   /// reaches `JobResult.artifacts` only through this interface — so it came back
@@ -705,7 +705,8 @@ class CatalogAuditResult implements PluginResult, ReportsFailure {
   /// Only the ones with something to say.
   ///
   /// A passing entry contributes to [checked] and nothing else: an audit of a
-  /// healthy repo should be a line, not a page, or nobody runs it twice.
+  /// healthy repo should be a line rather than a page, or it will not be run
+  /// twice.
   final List<CatalogAuditEntry> entries;
 
   /// Packages that could not be audited at all, which is not the same as a
@@ -760,7 +761,7 @@ class CatalogAuditEntry {
   /// the call named for the whole run. Absent for the plain rectangle, and for
   /// an entry that never compiled and so was never framed at all.
   ///
-  /// **An overflow is a fact about a size.** A row that does not say which one
+  /// An overflow is a fact about a size. A row that does not say which one
   /// cannot be reproduced without guessing the device back, and cannot be told
   /// apart from a row that was framed wrong — which is the failure the canvas
   /// declaration exists to prevent and would be invisible here.

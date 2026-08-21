@@ -1,7 +1,7 @@
 /// What the preview sits *on*, and what marks where it ends.
 ///
-/// **The problem this solves.** Staged as a phone the guest reads as somebody
-/// else's app, because the silhouette turns it into an object sitting on a
+/// The problem this solves: staged as a phone, the guest reads as a separate
+/// app, because the silhouette turns it into an object sitting on a
 /// ground. Staged as `Fit` — or as a phone with the body switched off — it read
 /// as another page of the studio: same white, same design system, edges flush
 /// with the pane's own chrome, and a demo's `Reload` button two pixels from a
@@ -39,7 +39,7 @@ const stageInset = FwSpacing.lg;
 /// it is supposed to sit behind. Blending ink into the panel moves the right
 /// way in both.
 ///
-/// **How deep.** 5.5% was the first guess and it measured `#EBECEE` — a real
+/// How deep. 5.5% was the first guess and it measured `#EBECEE` — a real
 /// step, and invisible in use: against a 393pt white phone the eye reads the
 /// whole stage as white and the margin as a rendering artefact. A ground has to
 /// be as far below the specimen as the specimen is above it, which is where
@@ -49,7 +49,7 @@ Color stageGroundColor(FwPalette colors) =>
 
 /// Paints the ground behind the whole stage.
 ///
-/// **Outside the zoom transform**, so the specimen moves over the ground rather
+/// Outside the zoom transform, so the specimen moves over the ground rather
 /// than dragging it along — magnifying is leaning towards the phone, and a
 /// table that leaned with it would say the opposite.
 class StageGround extends StatelessWidget {
@@ -70,7 +70,7 @@ class StageGround extends StatelessWidget {
 /// Drawn only where nothing else already draws one: a device body *is* this,
 /// and a border inside a silhouette would be a second frame a millimetre in.
 ///
-/// **`foregroundDecoration` for the border, not a clip.** The child is a
+/// `foregroundDecoration` for the border, not a clip. The child is a
 /// `Texture` — an external layer — and painting the line over its edge asks
 /// nothing of the compositor, where clipping it to a rounded rect asks
 /// something that has to be verified per platform.
@@ -124,7 +124,7 @@ class StageSpecimen extends StatelessWidget {
 
 /// The one control the keyboard has: a key that takes it away.
 ///
-/// **Drawn by the host, over the guest's own pixels**, and that split is the
+/// Drawn by the host, over the guest's own pixels, and that split is the
 /// design rather than an accident of where it was easy to put. The slab is
 /// inside the guest so that every capture already contains a keyboard; this is
 /// a tool affordance, and a tool affordance inside the guest would be in every
@@ -135,7 +135,7 @@ class StageSpecimen extends StatelessWidget {
 /// scales with the specimen: magnify the stage and the key grows with the
 /// keyboard it is on, which is what it would do if it were painted there.
 ///
-/// **Pressing it is not a mode change.** [onDismiss] tells the guest its text
+/// Pressing it is not a mode change. [onDismiss] tells the guest its text
 /// input connection went away — what a platform sends when the user closes the
 /// IME without touching the app — so the field unfocuses and the keyboard
 /// comes down *because the view dismissed it*. Making the artwork vanish

@@ -51,7 +51,7 @@ String? flutterwareDirOverride;
 /// `<key>.failed` is swept on the same rule. It is normally consumed by the
 /// client waiting for it, but a client that had already connected hears the
 /// failure over the socket and never reads the file — so it is orphaned exactly
-/// when a daemon fails with somebody attached.
+/// when a daemon fails with a client attached.
 ///
 /// Two rules, and the difference between them is what makes this safe to run
 /// while other flutterware processes are up:
@@ -69,8 +69,8 @@ String? flutterwareDirOverride;
 /// Guest sockets (`g-*`, `shot-*`, and the spikes) are aged out without a
 /// connect test. Unlinking a unix socket does not disturb connections already
 /// established on it, so the cost of being wrong about a guest is that nobody
-/// new can reach it — and a guest that has been up for [keepFor] is not a guest,
-/// it is a leak. They are not probed because a guest's IPC socket expects a
+/// new can reach it — and a guest that has been up for [keepFor] is a leak
+/// rather than a guest. They are not probed because a guest's IPC socket expects a
 /// protocol, not a knock.
 ///
 /// Frame-scratch directories (`cap-*`) age out the same way. A session that
@@ -79,9 +79,9 @@ String? flutterwareDirOverride;
 /// a capture does both per frame, so a directory old enough to sweep belongs
 /// to nothing.
 ///
-/// **`srv-*` sockets get the daemon rule, not the guest rule.** The guest
+/// `srv-*` sockets get the daemon rule rather than the guest rule. The guest
 /// rationale inverts for an inspected server: a dev server running since
-/// Monday is normal, and aging its socket out would cascade into a lie —
+/// Monday is normal, and aging its socket out would cascade —
 /// nothing new could connect, so the next attacher would delete its handle as
 /// dead, and the server would vanish from every list while still running. The
 /// knock is free by protocol: an inspected server writes nothing to a
@@ -94,8 +94,8 @@ String? flutterwareDirOverride;
 /// under names that change — so an old one is swept with its socket, and kept
 /// while its socket still answers.
 ///
-/// **`app-*.json` — a run's handle — is kept while its launcher is alive, and
-/// aged out otherwise.** It has no socket here to knock on: it points at a VM
+/// `app-*.json` — a run's handle — is kept while its launcher is alive, and
+/// aged out otherwise. It has no socket here to knock on: it points at a VM
 /// service on a device, and deciding it properly means an async websocket
 /// connect, which this sweeper is the wrong place for. The run plugin does that
 /// probe continuously while anything is watching, so this only catches what a
@@ -243,7 +243,7 @@ bool _sweptThisProcess = false;
 
 /// [sweepRunDir], at most once in the life of this process.
 ///
-/// **For callers on a hot path.** The sweep walks the directory and stats every
+/// For callers on a hot path. The sweep walks the directory and stats every
 /// entry; a long-lived GUI that launched a run every few minutes would pay that
 /// repeatedly to find nothing, because the litter it is looking for is left by
 /// processes that have already died. Once per process is what a launcher wants,
@@ -318,8 +318,8 @@ bool isProcessAlive(int pid) {
 /// [recordedAt], rather than a newer one wearing a recycled number.
 ///
 /// The tie-breaker is the process's own age: a launcher recorded at T cannot
-/// have started after T, so a process younger than the record is somebody
-/// else. Believing a recycled pid compounds badly in both directions — `stop`
+/// have started after T, so a process younger than the record is a different
+/// one. Believing a recycled pid compounds badly in both directions — `stop`
 /// would SIGTERM whatever unrelated process holds the number now, and a dead
 /// run whose pid was recycled reads as alive forever, pinning its device as
 /// busy in every worktree and shielding its handle from every sweep.

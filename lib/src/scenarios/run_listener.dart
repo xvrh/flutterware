@@ -79,8 +79,7 @@ class ScenarioStepCapture {
   final List<String> tags;
 
   /// What this step is a picture of. A document and a notification carry no
-  /// [bytes] and no [texts]: neither has a frame, which is why neither pays
-  /// for a render.
+  /// [bytes] and no [texts]: neither has a frame, so neither is rendered.
   final ScenarioCaptureKind kind;
 
   /// The image, in [format]: `png`, or `raw` — bare rgba8888 rows,
@@ -184,7 +183,7 @@ class ScenarioStepCapture {
   /// How tall the software keyboard was when the frame was taken, in logical
   /// pixels, or null when it was down.
   ///
-  /// **A note about the screen, not a node in it.** A real phone's keyboard is
+  /// A note about the screen, not a node in it. A real phone's keyboard is
   /// not in the app's tree either; the only reason to say it at all is that
   /// an agent looking at a shot with the bottom third gone cannot otherwise
   /// tell why.

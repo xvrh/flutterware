@@ -60,8 +60,8 @@ class ScenarioFlowView extends StatefulWidget {
   final ImageProvider? appIcon;
 
   /// The transform a fresh page starts from: zoomed out and a little inset,
-  /// like dev_studio's run view — the first glance is the whole flow, not
-  /// one giant phone.
+  /// like dev_studio's run view — the first glance is the whole flow rather
+  /// than one giant phone.
   static Matrix4 initialTransform() =>
       (Matrix4.identity() * 0.5 as Matrix4)
         ..translateByDouble(50.0, 100.0, 0, 1);
@@ -346,7 +346,7 @@ class _BeatNode extends StatelessWidget {
 /// One step on the canvas — and, when the run recorded it, the transition
 /// that arrived at it.
 ///
-/// **Playing the arrow means playing the node.** The frames end on the very
+/// Playing the arrow means playing the node. The frames end on the very
 /// screenshot the node is already showing, so a pointer entering the node
 /// rewinds it and lets it run forward into the picture that was there all
 /// along: no popover, no player chrome, no layout moving on a canvas that is

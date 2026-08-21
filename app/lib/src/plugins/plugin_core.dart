@@ -30,7 +30,7 @@ abstract class PluginCore {
 
   /// Everything this plugin currently says about itself.
   ///
-  /// **A pure read of cached state — it must never start work.** That is what
+  /// A pure read of cached state — it must never start work. That is what
   /// makes it safe for the sidebar, a tab glyph, `fw` and an agent to call it
   /// for every plugin × package × worktree. A plugin with nothing cached
   /// reports "not computed" rather than computing on the spot.
@@ -50,9 +50,9 @@ abstract class PluginCore {
 
   /// The refusal for an action a plugin does not declare.
   ///
-  /// **Shared, because the session refuses before dispatch and this refuses
-  /// after it**, and two spellings of one sentence is how a caller learns that
-  /// the answer depends on which door they came through. The session's check
+  /// Shared, because the session refuses before dispatch and this refuses after
+  /// it, and two spellings of one sentence would make the answer look like it
+  /// depends on which door the caller came through. The session's check
   /// is the one that matters — see `Session.invoke` — and this stays as the
   /// backstop for a core invoked directly.
   static ArgumentError unknownAction(
@@ -71,7 +71,7 @@ abstract class PluginCore {
 
   /// What this plugin has that matches [query].
   ///
-  /// **A pure read, like [report], and for the same reason** — it is called for
+  /// A pure read, like [report], and for the same reason — it is called for
   /// every plugin on every keystroke. Loading happens once when a search
   /// surface opens, through [computeAll]; by the time this runs there is
   /// nothing left to fetch.
@@ -94,7 +94,7 @@ abstract class PluginCore {
   /// It exists because a widget subscribing is what normally starts work, and
   /// `fw` and MCP have no widget. Both call this before reporting.
   ///
-  /// **The budget is parsing.** Read files, parse them, cache the result. Do
+  /// The budget is parsing. Read files, parse them, cache the result. Do
   /// not compile, spawn a process, open a socket or hit the network — that
   /// work belongs behind an action, where a caller chose it by name and can be
   /// told what it costs. The two first-party cores hold to this: the catalog

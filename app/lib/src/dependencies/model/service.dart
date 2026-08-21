@@ -167,7 +167,7 @@ class NotOnPubDev implements Exception {
 
 /// How one package declares another.
 ///
-/// Per-member, which is the whole point. `pub deps` reports a workspace-wide
+/// Per-member, deliberately. `pub deps` reports a workspace-wide
 /// `kind` that folds every member's answer into one value, so a package that is
 /// direct for `app` reads as direct while you are looking at
 /// `examples/example`, which may not depend on it at all.
@@ -193,7 +193,7 @@ enum DependencyKind {
 class Dependencies implements Disposable {
   /// [packages] is sorted by name on the way in, so every list this hands out
   /// is stable. Reachability is computed by traversal, and traversal order is
-  /// an implementation detail nobody should be able to see in a table.
+  /// an implementation detail that must not show up in a table.
   Dependencies({
     required this.rootPubspec,
     required this.memberName,
@@ -369,12 +369,12 @@ class Dependency implements Disposable {
   final LockDependency? lock;
 
   /// Where it came from, with the git ref or relative path filled in. Never
-  /// null: a source nobody recognised still reports itself, rather than
-  /// rendering as the blank cell every workspace member used to get.
+  /// null: an unrecognised source still reports itself, rather than rendering
+  /// as the blank cell every workspace member used to get.
   final PackageOrigin origin;
 
   /// What this package's consumer declared, as written — `^1.2.0`, `any`. Null
-  /// for a transitive dependency, which nobody here declared.
+  /// for a transitive dependency, which nothing here declared.
   final String? constraint;
 
   /// Where the package is on disk, or null when the package config does not

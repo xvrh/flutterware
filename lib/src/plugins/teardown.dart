@@ -5,9 +5,9 @@ enum TeardownPhase { apps, infra, cleanup }
 /// One checkable step in the "close this worktree" checklist.
 ///
 /// [enabled], [checked] and [detail] are resolved against live plugin state
-/// when the dialog opens, so the checklist reflects reality rather than
-/// registration time — which is why they are values here, not closures: the
-/// plugin runtime evaluates them and hands over the result.
+/// when the dialog opens, so the checklist reflects the current state rather
+/// than registration time. That is why they are values here rather than
+/// closures: the plugin runtime evaluates them and hands over the result.
 class TeardownStep {
   const TeardownStep(
     this.id,
@@ -20,7 +20,7 @@ class TeardownStep {
     this.phase = TeardownPhase.cleanup,
   });
 
-  /// **An action id on the same plugin** — this is what makes a step
+  /// An action id on the same plugin — this is what makes a step
   /// executable while staying pure data.
   ///
   /// The design this came from held a closure (`teardown('…', () => sh(…))`),

@@ -10,7 +10,7 @@ import '../support/dart_executable.dart';
 /// Running a declaration's `transformers:` so the bundle serves the bytes a
 /// build would ship, rather than the source the loader cannot decode.
 ///
-/// **The transformers here are real processes**, tiny Dart programs written per
+/// The transformers here are real processes, tiny Dart programs written per
 /// test and resolved as path dependencies of a real fixture project. A fake
 /// would test the cache and not the thing worth testing — that the contract
 /// `flutter_tools` spawns against (`dart run <package>`, `--input`, `--output`,

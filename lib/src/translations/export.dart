@@ -7,7 +7,7 @@
 /// the alternative — every consumer digging through the same nested maps — is
 /// the same fragile code written once per project.
 ///
-/// **This is published API.** A field renamed here breaks somebody's script,
+/// This is published API. A field renamed here breaks somebody's script,
 /// which is why [translationExportVersion] exists and why [TranslationExport.read]
 /// refuses a major it does not know rather than handing back a half-decoded
 /// object.
@@ -515,7 +515,7 @@ class ExportFindings {
     this.expansionBreaks = const [],
   });
 
-  /// Every place the app showed the source language to somebody who asked for
+  /// Every place the app showed the source language to a reader who asked for
   /// another one. The most valuable list here.
   final List<ExportedLocaleFinding> fallingBack;
 
@@ -640,8 +640,8 @@ class TranslationExport {
   /// Reads the `keys.json` in [directory].
   ///
   /// Throws [FormatException] when the directory holds no export, or holds one
-  /// this version cannot read. Both name what was found and what was expected:
-  /// the reader of this message is looking at somebody else's build output.
+  /// this version cannot read. Both name what was found and what was expected,
+  /// since the reader is usually looking at build output from elsewhere.
   static Future<TranslationExport> read(String directory) async {
     var file = File(
       '$directory${Platform.pathSeparator}$translationExportFile',

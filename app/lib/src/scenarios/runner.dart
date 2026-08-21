@@ -30,7 +30,7 @@ class ScenarioListing {
   final String? profile;
 
   /// What that profile offers — the picker's list, and the first of each is
-  /// what a run takes when nobody chose.
+  /// what a run takes when none is named.
   final List<String> devices;
   final List<String> languages;
   final List<String> orientations;

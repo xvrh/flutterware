@@ -3,7 +3,7 @@ import 'tree_diff.dart';
 
 /// One thing compared, on every channel that had something to say.
 ///
-/// **Channels rather than "a picture plus some extras."** Pixels have a
+/// Channels rather than "a picture plus some extras." Pixels have a
 /// threshold, texts are exact, and the events channel that is coming will need
 /// field masks for tokens and timestamps. Making each channel own its own
 /// rules now is what lets a new one land later without reopening the kernel —
@@ -41,7 +41,7 @@ class ComparedItem {
 
   /// Where the two frames are filed, as `ShotCache` keys.
   ///
-  /// **The verdict is not the picture, and a reader wants both.** Without this
+  /// The verdict is not the picture, and a reader wants both. Without this
   /// a comparison could say a preview changed by 0.38% and nothing anywhere
   /// could show it: the keys are computed inside the runner from a closure
   /// fingerprint nobody outside can reproduce. They go in the artifact too, so
@@ -104,11 +104,11 @@ class ComparedItem {
 
   /// Assembles the verdict from the channels.
   ///
-  /// The ladder is severity, not arithmetic. **A head that fails to render
-  /// outranks everything**: it is the one result the tool exists to catch, and
-  /// a percentage next to it would be answering a smaller question. A base
-  /// that fails is the opposite — it says the entry was already broken before
-  /// this branch, which is worth saying once and quietly.
+  /// The ladder is severity rather than arithmetic. A head that fails to render
+  /// outranks everything: it is the result the tool exists to catch, and a
+  /// percentage next to it would answer a smaller question. A base that fails
+  /// is the opposite — it means the entry was already broken before this
+  /// branch, which is worth stating once and quietly.
   static ComparedItem of({
     required String id,
     String? label,
@@ -194,9 +194,9 @@ enum ComparedState {
   /// so a report can say how much work it did not do.
   skipped;
 
-  /// True for the states worth drawing attention to. [same] and [skipped] are
-  /// the answer "nothing to see", and a list that shouts it is a list nobody
-  /// reads to the end.
+  /// True for the states worth drawing attention to. [same] and [skipped] mean
+  /// "nothing to see", and a list that highlights those does not get read to
+  /// the end.
   bool get isFinding => this != same && this != skipped;
 }
 
@@ -320,7 +320,7 @@ class TextChannel {
 /// analytics call, an N+1 that appeared because somebody moved a fetch into a
 /// builder. None of those change a pixel, and all of them are regressions.
 ///
-/// **Masked before compared**, and that is the whole reason this is a channel
+/// Masked before compared, and that is the whole reason this is a channel
 /// with rules of its own rather than a list diff. A request carries a token, a
 /// timestamp and a request id; compare them raw and every transition differs
 /// every time. What survives masking is what a reader meant by "the same

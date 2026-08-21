@@ -2148,7 +2148,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'flavors',
         'type': 'List<IconFlavorEntry>',
-        'doc': 'Every flavor the package has, and what says so.',
+        'doc': 'Every flavor the package has, and what declares it.',
         'shape': <String, Object?>{
           'type': 'IconFlavorEntry',
           'fields': <Object?>[
@@ -3698,7 +3698,7 @@ final resultShapes = <String, ResultShape>{
               'type': 'String',
               'optional': true,
               'doc':
-                  'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
+                  'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
             },
             <String, Object?>{
               'name': 'defaultSource',
@@ -3840,7 +3840,7 @@ final resultShapes = <String, ResultShape>{
                     'type': 'String',
                     'optional': true,
                     'doc':
-                        'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
+                        'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
                   },
                   <String, Object?>{
                     'name': 'defaultSource',
@@ -3991,7 +3991,7 @@ final resultShapes = <String, ResultShape>{
                           'type': 'String',
                           'optional': true,
                           'doc':
-                              'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
+                              'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
                         },
                         <String, Object?>{
                           'name': 'defaultSource',
@@ -4226,7 +4226,7 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc':
-            'What the launch uses when nobody says otherwise: a script\'s answer when one was computed, else the parameter\'s own default.',
+            'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
       },
       <String, Object?>{
         'name': 'defaultSource',
@@ -4519,7 +4519,7 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc':
-            'Said out loud when the picture may not be the whole story — a run with platform views in it, which Flutter\'s layer tree cannot photograph.',
+            'Stated when the picture may be incomplete — a run with platform views in it, which Flutter\'s layer tree cannot photograph.',
       },
     ],
   }),
@@ -6788,7 +6788,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'fallingBack',
         'type': 'int',
         'doc':
-            'Places the app showed the source language to somebody who asked for another one.',
+            'Places the app showed the source language to a reader who asked for another one.',
       },
       <String, Object?>{
         'name': 'disagrees',

@@ -1,15 +1,15 @@
 /// Whether a splash survives the range of screens it will actually meet.
 ///
-/// **The question the preview could not answer.** Every other rule in this
+/// The question the preview could not answer. Every other rule in this
 /// plugin is about what the generator does with the config; this one is about
 /// what happens afterwards, on a phone whose screen is not the one the tile was
 /// drawn at. A 1024px source is 256dp, which is comfortable on the 412dp phone
 /// most people are holding and clipped on a 360dp one — and nothing in a config
 /// says so.
 ///
-/// It is a sweep rather than a picture on purpose. Making somebody click through
-/// eighteen devices looking for the broken one is not an answer; computing which
-/// devices break and naming them is. The picture then follows, because the
+/// It is a sweep rather than a picture on purpose. Clicking through eighteen
+/// devices looking for the broken one is not an answer; computing which devices
+/// break and naming them is. The picture then follows, because the
 /// finding carries the device and the panel can go there.
 ///
 /// Pure arithmetic over [Devices.all] — no rendering, no Flutter — so `fw` and
@@ -82,7 +82,7 @@ List<Device> splashDevicesFor(SplashSurface surface) {
 /// The size a layer is actually drawn at on a screen of [screenWidth] ×
 /// [screenHeight].
 ///
-/// **The renderer calls this too.** `SplashRender` used to do the same
+/// The renderer calls this too. `SplashRender` used to do the same
 /// arithmetic inline, which meant the picture and any claim about the picture
 /// were two implementations of one rule — and the first time they disagreed the
 /// warning would be the one nobody believed.
@@ -119,8 +119,8 @@ List<Device> splashDevicesFor(SplashSurface surface) {
 
 /// Every device [composition] does not fit on, worst first.
 ///
-/// Empty is the ordinary answer and the one most configs get. That is the point
-/// of computing it rather than showing it: a rule that fires on everything gets
+/// Empty is the ordinary answer and the one most configs get. That is why it is
+/// computed rather than shown: a rule that fires on everything gets
 /// ignored, and this one fires on the projects that are actually about to ship
 /// a clipped logo.
 List<SplashFitFinding> checkSplashFit(SplashComposition composition) {

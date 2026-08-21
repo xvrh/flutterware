@@ -34,7 +34,7 @@ enum SplashGeneratedState {
 ///
 /// A view — every value arrives as data and every action leaves as a callback.
 ///
-/// **The package is the title, not the config file.** The rail already says
+/// The package is the title rather than the config file. The rail already says
 /// "Splash screen", so repeating the subject here would spend the largest type
 /// on the one thing the reader already knows. What varies is which package and
 /// which flavor, so those are what the eye lands on; the file it was read from
@@ -152,13 +152,13 @@ class _StatusPill extends StatelessWidget {
 /// buttons, rather than the accent-coloured text links this panel used to call
 /// controls.
 ///
-/// **The size switcher is here rather than on the inspector**, because it moves
+/// The size switcher is here rather than on the inspector, because it moves
 /// all eight cells and belongs over all eight. It could not, while the axis was
 /// a device id: a device names a platform with it, so a chosen iPhone redrew two
 /// tiles and quietly ignored six. A size class names none — see
 /// [SplashScreenSize].
 ///
-/// **Nothing here writes to the project.** There was a
+/// Nothing here writes to the project. There was a
 /// `Run flutter_native_splash:create` button for a while. It threw away
 /// everything that would have made it trustworthy — `generate` returns the
 /// generator's own stdout and stderr precisely because they name the file it

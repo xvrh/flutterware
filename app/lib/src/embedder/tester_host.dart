@@ -61,7 +61,7 @@ abstract class TesterProgram {
 /// Deliberately Flutter-free: `fw` links this, and the purity guardrail
 /// (`entry_point_purity_test.dart`) holds it to that.
 ///
-/// **Not passing `--use-test-fonts` / `--disable-asset-fonts`** — the two flags
+/// Not passing `--use-test-fonts` / `--disable-asset-fonts` — the two flags
 /// `flutter test` always passes — is what makes this render real fonts, where a
 /// program run under `flutter test` measures unstyled text in the test font and
 /// reports overflows that never happened. Spawning the tester ourselves is the

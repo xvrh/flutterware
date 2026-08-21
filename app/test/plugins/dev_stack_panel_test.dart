@@ -18,7 +18,7 @@ import 'package:flutterware_app/src/utils/run_dir.dart';
 /// The one part of the panel that is not the shared block: the row that runs a
 /// command taking an argument.
 ///
-/// **Written because the panel had no such row.** `DevStackBlock` deliberately
+/// Written because the panel had no such row. `DevStackBlock` deliberately
 /// leaves an argument-taking command out of its links — a link is one click and
 /// there is nothing to click *with* — and the panel it deferred to did not ask
 /// for the value either, so a declared command was reachable from `fw` and from

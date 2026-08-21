@@ -82,7 +82,7 @@ class ScenarioPanelRun {
 }
 
 /// The panel's word for what a runner log line means, or null for a line that
-/// means nothing to somebody watching a spinner.
+/// means nothing to a reader watching a spinner.
 ///
 /// A thin dressing over [readTesterPhase], which is where the reading — and
 /// the rule that keeps the guest's own console out of a caption — lives. What
@@ -114,8 +114,8 @@ String? scenarioRunnerPhase(String line) {
 /// [ScenarioRunner], and the panel's per-scenario run state on the same
 /// runner; see `docs/superpowers/specs/2026-07-30-scenarios-design.md`.
 ///
-/// Follows the dependencies core's rule: **nothing here starts work.** The
-/// constructor allocates nothing and [report] only reads what somebody already
+/// Follows the dependencies core's rule: nothing here starts work. The
+/// constructor allocates nothing and [report] only reads what a previous call
 /// caused to scan. Scanning begins in [track], which the panel calls on mount
 /// and `fw` calls for the duration of a request.
 class ScenariosCore extends PluginCore {
@@ -313,15 +313,15 @@ class ScenariosCore extends PluginCore {
 
   /// Whether panel runs record the motion of every transition.
   ///
-  /// On, because a recording you have to ask for is a recording nobody
-  /// discovers: the whole feature is hovering an arrow and watching what
-  /// happened. It costs the panel about 70ms a transition — measured, at the
+  /// On, because a recording you have to ask for goes undiscovered: the feature
+  /// is hovering an arrow and watching what happened. It costs the panel about
+  /// 70ms a transition — measured, at the
   /// 30fps half-scale settings below — and the switch is here for the run
   /// where that is 70ms too many.
   ///
   /// Panel-only, deliberately. `fw run scenarios` and the MCP surface never
-  /// record: nothing on the other end of those can watch a movie, and the
-  /// frames would be artifacts nobody opens.
+  /// record: nothing on the other end of those can watch a movie, so the frames
+  /// would be artifacts no one opens.
   var recordMotion = true;
 
   void setRecordMotion(bool value) {
@@ -489,7 +489,7 @@ class ScenariosCore extends PluginCore {
 
   /// Replaces the cached listing after a run, so an edited
   /// `flutter_test_config.dart` or a re-tagged scenario shows up without a
-  /// restart. Only for a package somebody already asked about.
+  /// restart. Only for a package that has already been asked about.
   void _relist(String path) {
     if (!_listings.containsKey(path)) return;
     _listings[path] = _runnerFor(path)
@@ -514,8 +514,8 @@ class ScenariosCore extends PluginCore {
   /// pane's refresh button.
   ///
   /// A relisting is only queued for a package that has already got one, which
-  /// is [_relist]'s rule and the reason this is safe to press: nobody pays for
-  /// a harness compile by pressing refresh on a suite they have not opened.
+  /// is [_relist]'s rule and the reason this is safe to press: refreshing a
+  /// suite you have not opened does not trigger a harness compile.
   void refresh(String path) {
     _rescan(path);
     _relist(path);
@@ -1566,7 +1566,7 @@ class ScenariosCore extends PluginCore {
 
   /// One archived step, answered.
   ///
-  /// **The reader half of the archive.** A run has written four legs per step
+  /// The reader half of the archive. A run has written four legs per step
   /// for two milestones and handed back paths; an agent debugging a red
   /// scenario got one inlined frame and a pile of file names. This opens the
   /// tree beside the picture and answers the same questions the live surfaces
@@ -1775,7 +1775,7 @@ class ScenariosCore extends PluginCore {
 
   /// The lens named for this call, or `act`.
   ///
-  /// Per call and not pinnable, unlike the run plugin's. A pin pays for itself
+  /// Per call and not pinnable, unlike the run plugin's. A pin earns its keep
   /// in a loop against one long-lived subject; a scenario read names its
   /// capture afresh every time, so a pin here would be hidden state with no
   /// loop to amortise it.
@@ -1818,7 +1818,7 @@ class ScenariosCore extends PluginCore {
 
   /// Which capture the call meant.
   ///
-  /// **One parameter with a browse ladder, not four selectors.** A path names
+  /// One parameter with a browse ladder rather than four selectors. A path names
   /// a capture; a directory refuses with what is in it; an index counts into
   /// a run; nothing at all takes the failing step, which is the read that
   /// happens most. Every refusal lists the values that would have worked,
@@ -2366,7 +2366,7 @@ class ScenariosCore extends PluginCore {
 
   /// The scenarios of one package, or of every declared package.
   ///
-  /// **Loads what it needs** — a report may never start work; an action asked
+  /// Loads what it needs — a report may never start work; an action asked
   /// for by name may, and must.
   Future<ScenarioListResult> _list(Map<String, Object?> arguments) async {
     var paths = _requested(arguments);
@@ -2805,11 +2805,11 @@ class ScenariosCore extends PluginCore {
 
   /// Runs the scenarios and writes the result as a page.
   ///
-  /// **Re-runs rather than publishing the last run.** A page is dated, shared,
-  /// and read by people who cannot check it — the one thing it may not be is a
-  /// picture of a suite as it stood at some earlier moment nobody recorded.
-  /// Which is also why every selector and axis `run` takes is taken here: what
-  /// to run is the whole question the export asks.
+  /// Re-runs rather than publishing the last run. A page is dated, shared, and
+  /// read by people who cannot check it, so it must not be a picture of the
+  /// suite as it stood at some earlier, unrecorded moment. That is also why
+  /// every selector and axis `run` takes is taken here: what to run is the
+  /// question the export asks.
   ///
   /// Takes the same argument map the action does, so the command the dialog
   /// echoes is the call the button makes.
@@ -2988,7 +2988,7 @@ class ScenariosCore extends PluginCore {
 
   /// Which orientations [device] actually contributes to the matrix.
   ///
-  /// **One point, not two, for anything that cannot turn.** Crossing a desktop
+  /// One point, not two, for anything that cannot turn. Crossing a desktop
   /// or the bare surface with both orientations would run it twice for
   /// byte-identical pixels — a doubled CI bill for a picture nobody asked for
   /// twice. The same rule the bare `flutter test` lane applies in

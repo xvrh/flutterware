@@ -10,7 +10,7 @@ import 'changes_config_cache.dart';
 import 'patch_index.dart';
 import 'ranking.dart';
 
-/// The bounds. Every one is checked **before** the work it bounds, and every
+/// The bounds. Every one is checked *before* the work it bounds, and every
 /// one is visible when it bites: a screen that quietly drops files is worse
 /// than one that refuses, because you cannot tell which it did.
 class ChangesLimits {
@@ -39,13 +39,14 @@ enum BaseSource {
   /// Named by the project's `ChangesConfig`.
   configured,
 
-  /// None of the above resolved. Nothing is diffed against a guess.
+  /// None of the above resolved. Nothing is diffed against an unresolved
+  /// base.
   none,
 }
 
 /// An untracked path, exactly as git reported it.
 ///
-/// **A directory is one entry and is never walked.** git's default untracked
+/// A directory is one entry and is never walked. git's default untracked
 /// mode reports the topmost wholly-untracked directory and stops there, which
 /// is what keeps a stray `build/` — 30,000 files, and un-ignored the moment you
 /// switch to a branch whose `.gitignore` does not cover it — from becoming
@@ -123,13 +124,13 @@ class ChangeSet {
 
   /// Whether the project declared any `attention:` globs at all.
   ///
-  /// **Distinct from "nothing was pinned".** There are no built-in attention
-  /// rules — flutterware cannot know what matters in somebody else's
-  /// repository — so a project that has never written any gets an empty
-  /// *Important* tab and no explanation, which reads as a feature that does not
-  /// work. This is what lets that tab say how to write one. A project that
-  /// *has* rules and matched none of them is told only that: two silences, and
-  /// telling them apart is the whole reason this field exists.
+  /// Distinct from "nothing was pinned". There are no built-in attention rules
+  /// — flutterware cannot know what matters in a given repository — so a
+  /// project that has never written any gets an empty *Important* tab and no
+  /// explanation, which reads as a feature that does not work. This is what
+  /// lets that tab say how to write one. A project that *has* rules and matched
+  /// none of them is told only that: telling those two silences apart is why
+  /// this field exists.
   final bool attentionConfigured;
 
   final Ranking? _ranking;
@@ -139,8 +140,8 @@ class ChangeSet {
   /// Computed by the probe, on the isolate that already did the reading rather
   /// than on the one that has to paint at 60 Hz.
   ///
-  /// **Every file is in here, in one tier or another.** A ranking that can lose
-  /// a file is a ranking nobody can trust.
+  /// Every file is in here, in one tier or another. A ranking that can lose a
+  /// file cannot be trusted.
   Ranking get ranking =>
       _ranking ??
       Ranking([
@@ -179,7 +180,7 @@ class ChangeSet {
 
   /// Whether [other] would draw the same screen.
   ///
-  /// **Deliberately not `==`.** A [ChangeSet] is not a value — it carries half
+  /// Deliberately not `==`. A [ChangeSet] is not a value — it carries half
   /// a megabyte of patch and a lazily decoded view of it — and nothing wants it
   /// as a map key. This asks the one question the live screen has: *did the
   /// answer move?* The live watcher re-probes every time an agent saves, and
@@ -188,10 +189,10 @@ class ChangeSet {
   /// means the decoded text of every expanded hunk survives, and the screen
   /// does not rebuild at all.
   ///
-  /// **The patch bytes are compared, in full.** Measured on this machine: 188 µs
+  /// The patch bytes are compared, in full. Measured on this machine: 188 µs
   /// for the 473 KB of a 53-file branch, which is a ninth of a frame, at most
   /// once every two seconds. Hashing it in the isolate would be faster and
-  /// would put a digest nobody else wants into the model.
+  /// would put a digest nothing else needs into the model.
   ///
   /// Equal bytes make [changed] equal by construction — the file list is
   /// indexed *from* them — so only what is not derived from the patch is

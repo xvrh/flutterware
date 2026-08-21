@@ -65,7 +65,7 @@ class TranslationPlace {
 /// Deliberately short. Five finding lists were proposed and four did not hold
 /// up: a suite that already fails on real overflow says everything about
 /// overflow, and a list of every key a run did not reach is a coverage number
-/// rather than a worklist. What is left is the pair somebody acts on.
+/// rather than a worklist. What is left is the pair that gets acted on.
 enum TranslationFilter {
   all('all'),
 
@@ -109,8 +109,8 @@ List<String> translationSegments(
 /// The axes for a table's current view.
 ///
 /// Absent rather than spelled out when they are the default, so the plain
-/// address of a package stays plain — an address that names every default is
-/// one nobody can read at a glance.
+/// address of a package stays plain — an address that names every default
+/// cannot be read at a glance.
 Map<String, String> translationAxes({
   String? locale,
   TranslationFilter filter = TranslationFilter.all,

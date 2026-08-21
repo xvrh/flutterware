@@ -87,7 +87,7 @@ class DependencyEntry {
 
   /// `hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.
   ///
-  /// **Never null.** It used to be read off a lockfile entry that is absent for
+  /// Never null. It used to be read off a lockfile entry that is absent for
   /// every member of a pub workspace, so every package of a workspace reported
   /// no source at all.
   final String source;

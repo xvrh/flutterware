@@ -6,7 +6,7 @@ import 'values_file.dart';
 
 /// What `+` puts on an empty lane.
 ///
-/// **An editor decision, not a runtime one**, which is why it lives here and not
+/// An editor decision, not a runtime one, which is why it lives here and not
 /// in the published vocabulary. `MotionProp` says what a property *is* — its
 /// kind, its resting value, where a slider should sit. What a newly created span
 /// should open at is a matter of taste about authoring, and a runtime that
@@ -49,8 +49,8 @@ const _debuts = <String, (double, double)>{
 
 /// The colour a new colour span opens at, both ends.
 ///
-/// A flat span, and the honest reason is that we cannot do better: a colour has
-/// no identity, so nothing here knows what the widget is currently painted —
+/// A flat span, because nothing better is available: a colour has no identity,
+/// so nothing here knows what the widget is currently painted —
 /// the guest can only report a value for a property something already tunes.
 /// Opening flat says "you set both ends" rather than guessing a ramp.
 const _newColor = MotionColor(0xFFBFC6C4);
@@ -90,8 +90,8 @@ MotionSpan? newSpanFor(String property, {int? durationMs}) {
 
 /// The span inserted when a lane that is already tuned gets another one.
 ///
-/// **It starts at the playhead and its `from` is what the property is worth
-/// there**, which is the whole reason to insert at the playhead rather than at
+/// It starts at the playhead and its `from` is what the property is worth
+/// there, which is the whole reason to insert at the playhead rather than at
 /// the end: nothing on screen jumps when the span appears, so what you judge
 /// afterwards is the change you asked for rather than a discontinuity you did
 /// not. It runs to whatever comes next — the following span's start, or the end
@@ -138,7 +138,7 @@ MotionSpan? spanAt({
 
 /// Where `+` actually puts a span on a lane that already has one.
 ///
-/// **Prefers the playhead**, because that is where you are looking and the span
+/// Prefers the playhead, because that is where you are looking and the span
 /// can open at the value the property already has there. Falls back to the
 /// widest stretch of free time when the playhead will not do — and that is not
 /// an edge case: a motion that has just finished playing leaves the playhead at
@@ -178,7 +178,7 @@ MotionSpan? spanFor({
 /// lane is covered end to end.
 ///
 /// Sorted and swept rather than trusting the order: the spans come from a file
-/// somebody may have hand-edited, and an unsorted list would report a gap that
+/// that may have been hand-edited, and an unsorted list would report a gap that
 /// is really an overlap.
 int? widestGap(List<(int, int)> existing, int durationMs) {
   var sorted = [...existing]..sort((a, b) => a.$1.compareTo(b.$1));
@@ -218,7 +218,7 @@ MotionLiteral _awayFrom(MotionLiteral current, MotionSpan debut) {
 
 /// [targets] with [span] inserted into [property], in start order.
 ///
-/// **The order is not cosmetic.** `evaluateSegments` reads `first` and `last`
+/// The order is not cosmetic. `evaluateSegments` reads `first` and `last`
 /// for its before-the-start and after-the-end rules, so a span appended out of
 /// order would make the property hold the wrong value at both ends of the
 /// motion — a bug visible only outside the spans, which is exactly where nobody

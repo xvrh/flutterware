@@ -84,7 +84,7 @@ class _DriveNavigatorScopeState extends State<DriveNavigatorScope> {
     }
   }
 
-  /// **Only if the handler is still ours.**
+  /// Only if the handler is still ours.
   ///
   /// Flutter builds a subtree's replacement before retiring the old one, so a
   /// rebuild that moves this scope — a window resize was enough — runs the new

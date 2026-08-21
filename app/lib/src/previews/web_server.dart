@@ -12,7 +12,7 @@ import 'package:shelf/shelf_io.dart' as io;
 /// cross-origin from a file. So there has to be a server, and this is the
 /// smallest one that works.
 ///
-/// **Hand-rolled rather than `shelf_static`.** The CLI compiles this app on the
+/// Hand-rolled rather than `shelf_static`. The CLI compiles this app on the
 /// user's machine at first run, so a dependency is a thing everyone installing
 /// flutterware has to fetch and build. What is needed here is one directory,
 /// read-only, on loopback, with content types — not the package's symlink
@@ -38,7 +38,7 @@ class CatalogWebServer {
 
   /// Binds an ephemeral port on loopback.
   ///
-  /// **Loopback, never `anyIPv4`.** A catalog is unreleased UI: it is a picture
+  /// Loopback, never `anyIPv4`. A catalog is unreleased UI: it is a picture
   /// of what a product is about to look like, and binding it to every interface
   /// publishes that to whatever network the machine is on. Someone who wants
   /// that can copy the directory to a host that is meant to be public.

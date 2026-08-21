@@ -129,7 +129,7 @@ String bytesLabel(int length) {
 
 /// An image's body: the working-tree side, the base side, or both.
 ///
-/// **Which sides exist is the status.** Added and untracked have no base;
+/// Which sides exist is the status. Added and untracked have no base;
 /// deleted has no working tree; modified and renamed have both and draw them
 /// side by side — each captioned with its dimensions and byte size, which for
 /// two versions of one asset is usually the whole answer.

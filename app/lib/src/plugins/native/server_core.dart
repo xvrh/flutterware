@@ -340,13 +340,12 @@ class ServerCore extends PluginCore {
   /// The newest [last] of [matched], shaped, and — when asked — each with its
   /// captured headers and bodies hung off it.
   ///
-  /// **The details budget is here rather than in a smaller default `last`.**
+  /// The details budget is here rather than in a smaller default `last`.
   /// One captured body can be 32 KB and most are a few hundred bytes, so a
   /// count cannot bound the answer, and a count small enough to try would make
   /// the common case useless. Newest first until the budget is gone, and then
-  /// the reply says how many went without: a truncation nobody is told about
-  /// reads as "there was nothing there", which is the failure this whole
-  /// plugin keeps being redesigned around.
+  /// the reply says how many went without: an unreported truncation reads as
+  /// "there was nothing there".
   static Future<Map<String, Object?>> _page(
     ServerAttachClient client,
     List<ServerEvent> matched, {
@@ -470,7 +469,7 @@ class ServerCore extends PluginCore {
   /// `30s`, `10m`, `2h`, `1d`, or an ISO-8601 instant, as the moment to count
   /// from. Null for an absent argument.
   ///
-  /// **Anything else is refused.** A `since` that silently did nothing would
+  /// Anything else is refused. A `since` that silently did nothing would
   /// hand back the whole ring wearing the shape of a filtered answer, which is
   /// the same failure the undeclared-parameter refusal exists for.
   static DateTime? _sinceArgument(Object? value) {
@@ -809,8 +808,8 @@ String _shellQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";
 /// attached and [ServerRequestException] when the server has no such handler
 /// or the handler failed; the panel shows both as text, not as crashes.
 ///
-/// **Takes the occurrence, not the query text, because the text alone does not
-/// run.** A bound statement is reported as the driver received it — `$1`,
+/// Takes the occurrence, not the query text, because the text alone does not
+/// run. A bound statement is reported as the driver received it — `$1`,
 /// `@name`, `?` still in place — and that is deliberate: [normalizeSql] groups
 /// by shape, and an N+1 is precisely a set of queries differing only in their
 /// literals. But `EXPLAIN` on such a text fails, because a parameter has no

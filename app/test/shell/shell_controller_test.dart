@@ -890,7 +890,7 @@ void main() {
     });
   });
 
-  /// **The one destination that does not open what it names.**
+  /// The one destination that does not open what it names.
   ///
   /// Every other address in the shell needs a session to render, so `go` opens
   /// the worktree it is pointed at. The changes screen reads git rather than

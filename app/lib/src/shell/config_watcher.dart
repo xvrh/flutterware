@@ -9,7 +9,7 @@ import '../plugins/manifest_loader.dart';
 
 /// Fires when a worktree's `tool/flutterware.dart` changes on disk.
 ///
-/// **Small on purpose.** It is the last piece of the reload work and the least
+/// Small on purpose. It is the last piece of the reload work and the least
 /// of it: everything that makes an automatic reload safe — a failed load
 /// changing nothing, an unchanged manifest costing nothing, only the plugins
 /// whose declaration moved being rebuilt — is in the reload itself, and was
@@ -53,7 +53,7 @@ class ConfigWatcher {
 
   final Duration debounce;
 
-  /// Reports a reload that threw. There is nobody to rethrow *to* — [_fire]
+  /// Reports a reload that threw. There is nothing to rethrow *to* — [_fire]
   /// runs from a timer — so an unreported failure here would be genuinely
   /// silent, which is the one outcome this class must not produce.
   final void Function(Object error)? onError;

@@ -27,7 +27,7 @@ import 'package:collection/collection.dart';
 /// parameter — which is what makes an address with its axes resolved a complete
 /// capture spec rather than an under-specified one.
 ///
-/// **Only [project] is the URI authority; everything else is a path segment.**
+/// Only [project] is the URI authority; everything else is a path segment.
 /// That is what lets `Uri.parse` agree with this parser instead of contradicting
 /// it — an authority is lowercased and a worktree name may have capitals. There
 /// is a test that asserts the agreement.
@@ -68,7 +68,7 @@ class Address {
   /// Reserved on the same terms as [shellConfig], and in the plugin slot for the
   /// same reason: one thing per worktree, mounted where a panel mounts.
   ///
-  /// **The one that is different in kind**, and the difference is the point: it
+  /// The one that is different in kind: it
   /// reads git rather than the project, so unlike every other id in this slot it
   /// renders for a worktree that is **not open**. Naming it must therefore not
   /// spend a config subprocess — see `ShellController.go`.

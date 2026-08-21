@@ -30,7 +30,7 @@ import 'package:path/path.dart' as p;
 
 /// The Screen tab, mounted for real against a fake reading.
 ///
-/// **This exists because a `capture` did not catch the bug it guards.** The
+/// This exists because a `capture` did not catch the bug it guards. The
 /// pane reads on mount and tells the page above it so the strip can show a
 /// spinner — a `setState` on an *ancestor*, from inside `initState`. Debug
 /// throws there and the read never started; release compiles the assertion out

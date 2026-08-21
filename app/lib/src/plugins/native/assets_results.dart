@@ -272,8 +272,8 @@ class AssetAuditResult implements PluginResult, ReportsFailure {
   /// Every byte in the audited bundles.
   final int bytes;
 
-  /// Only what is wrong. A clean repo audits to a line, not a page, or nobody
-  /// runs it twice.
+  /// Only what is wrong. A clean repo audits to a line rather than a page, or
+  /// it will not be run twice.
   final List<AssetFinding> findings;
 
   /// Packages that could not be scanned at all, which is not the same as a

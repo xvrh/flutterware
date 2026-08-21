@@ -12,7 +12,7 @@
 /// recognised by its `.dart` suffix, which is what makes the values identifier
 /// after it unambiguous.
 ///
-/// **The playhead rides above the segments, as `?t=`.** It is an axis, not a
+/// The playhead rides above the segments, as `?t=`. It is an axis, not a
 /// place: `t` is to a motion what `device` and `language` are to a scenario, and
 /// the rule that a screenshot is under-specified without its axis assignment is
 /// exactly why it has to be in the address at all. Park the playhead at 0.42,

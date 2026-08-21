@@ -106,7 +106,7 @@ class ScreenItem {
 
   /// This item's number in the screen, counted in reading order.
   ///
-  /// **A position in this reply, not an identity that outlives it.** There is
+  /// A position in this reply, not an identity that outlives it. There is
   /// deliberately no node id here: an id is a position in a tree that has since
   /// moved, and a re-query against a live app answers with today's geometry
   /// under yesterday's name. Drill down by [box] centre with `at`, or by words
@@ -162,8 +162,8 @@ class ScreenItem {
 
 /// A branch point in the layout — a pane, a bar, a list.
 ///
-/// Not a widget anybody named: it is where the screen's items *fork*, which is
-/// what makes the reply read as a layout rather than as a list. See
+/// Not a named widget: it is where the screen's items *fork*, which is what
+/// makes the reply read as a layout rather than as a list. See
 /// [Screen.of].
 class ScreenRegion {
   const ScreenRegion({
@@ -259,8 +259,8 @@ class Screen {
 
   /// [of], for a caller whose answer is worth more than its screen.
   ///
-  /// **A projection is a decoration on an observation, and a decoration may
-  /// not take the observation down.** Measured the hard way: one `.single`
+  /// A projection is a decoration on an observation, and a decoration may
+  /// not take the observation down. Measured the hard way: one `.single`
   /// over a fork that had two children turned every `act` on a perfectly
   /// ordinary screen into `Bad state: Too many elements` — no verb result, no
   /// picture, no journal entry, and a message naming neither the screen nor
@@ -304,7 +304,7 @@ class Screen {
 
   /// The screen [tree] describes.
   ///
-  /// **Built from the unfiltered tree**, which is not an oversight: the noise
+  /// Built from the unfiltered tree, which is not an oversight: the noise
   /// filter drops a node that shares its only child's box, and measured on the
   /// flutterware GUI that removes 29 of 32 interactive widgets — an `InkWell`
   /// carries neither words nor properties, so it loses every tie. The

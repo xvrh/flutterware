@@ -23,7 +23,7 @@ import 'changes_probe.dart';
 
 /// One worktree's delta, loaded and reloadable.
 ///
-/// **Stale-then-fresh, never empty-then-full**: [value] keeps the last answer
+/// Stale-then-fresh, never empty-then-full: [value] keeps the last answer
 /// while the next one is computed, so a reload never blanks the screen. The
 /// first load is the only one with nothing to show, and it shows the worktree's
 /// identity rather than a spinner over an empty page.
@@ -43,7 +43,7 @@ class ChangesController extends ChangeNotifier {
   /// Null when the shell has not worked one out, in which case **nothing is
   /// ranked at all** — not "ranked by defaults". There are no built-in rules
   /// in either direction any more, so a missing key means an empty *Important*
-  /// tab, which is the same thing a worktree nobody has opened shows.
+  /// tab, the same as an unopened worktree shows.
   final String? repoRoot;
 
   final Future<ChangeSet> Function(String path)? _load;
@@ -83,7 +83,7 @@ class ChangesController extends ChangeNotifier {
   DateTime? get readAt => _readAt;
   DateTime? _readAt;
 
-  /// **Live, and not by polling.** One recursive watch on this checkout's
+  /// Live, and not by polling. One recursive watch on this checkout's
   /// working tree — the [WorkingTreeWatcher] exception to the explorer's rule —
   /// plus [gitMoved] for the half a working tree cannot see: staging and
   /// committing write a linked worktree's index somewhere else entirely.
@@ -115,7 +115,7 @@ class ChangesController extends ChangeNotifier {
 
   /// Idempotent: callers refresh without knowing what is already running.
   ///
-  /// **A call that arrives mid-probe is remembered, not dropped.** It used to
+  /// A call that arrives mid-probe is remembered rather than dropped. It used to
   /// join the running one and return its answer, which is fine for a button
   /// pressed twice and wrong for a watcher: the save that fired it landed
   /// *after* that probe read the disk, so joining reports the state before the

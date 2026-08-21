@@ -63,9 +63,9 @@ class AddressAspect {
 /// A window onto the address: the part one level of the tree can see.
 ///
 /// Two kinds of eating, because the address has two kinds of state.
-/// **Segments are eaten positionally** — a level consumes a prefix and hands
+/// Segments are eaten positionally — a level consumes a prefix and hands
 /// the rest down, so nothing below it needs to know how deep it sits.
-/// **Parameters are eaten by namespace** — `knob.count` belongs to whichever
+/// Parameters are eaten by namespace — `knob.count` belongs to whichever
 /// level declared `knob`, wherever that level happens to be.
 ///
 /// Where a namespace sits in the tree is what decides how long its values live.
@@ -168,9 +168,9 @@ class AddressHandle {
 
   /// Replaces this level's segments, keeping everything above.
   ///
-  /// Deeper segments go with them, and that is the point rather than a
-  /// limitation: changing the package cannot leave the previous package's entry
-  /// behind, because it names nothing there.
+  /// Deeper segments go with them, deliberately: changing the package cannot
+  /// leave the previous package's entry behind, because it names nothing
+  /// there.
   void setSegments(List<String> segments) => update(segments: segments);
 
   /// Sets one parameter in this level's namespace. Null removes it.
@@ -419,8 +419,8 @@ class _AddressModel extends InheritedModel<AddressAspect> {
   }
 }
 
-/// Whether [aspect] reads differently between two views. The whole of the
-/// granularity, in one function.
+/// Whether [aspect] reads differently between two views. All of the
+/// granularity lives in this one function.
 bool _changed(AddressView before, AddressView after, AddressAspect aspect) {
   var key = aspect._key;
   if (key == 'whole') return before != after;

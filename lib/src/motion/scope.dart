@@ -72,7 +72,7 @@ class MotionScopeState extends State<MotionScope>
   Set<String> get reads => _motion.reads;
 
   /// Properties a blanket reader swept — available on a target, but not
-  /// evidence that anybody wired them. See [Motion.offered].
+  /// evidence that anything wired them. See [Motion.offered].
   @override
   Set<String> get offered => _motion.offered;
 

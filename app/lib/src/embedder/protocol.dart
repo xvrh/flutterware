@@ -57,8 +57,8 @@ class ReadyMessage extends EmbedderMessage {
 /// GUI to guest: write the next composited frame to [path].
 ///
 /// The guest schedules a frame itself, so this works on a static scene, and
-/// answers with [CapturedMessage] once the file is complete. That ack is the
-/// point — a caller cannot otherwise tell when the bytes have landed.
+/// answers with [CapturedMessage] once the file is complete. The ack is what
+/// tells a caller the bytes have landed.
 class CaptureMessage extends EmbedderMessage {
   const CaptureMessage(this.path);
 
@@ -172,7 +172,7 @@ class PointerEventMessage extends EmbedderMessage {
 
   /// Whether this is a finger rather than a mouse.
   ///
-  /// **Not cosmetic, and not inferable in the guest.** The framework asks what
+  /// Not cosmetic, and not inferable in the guest. The framework asks what
   /// kind of pointer an event came from before it decides what it means — a
   /// tap outside a text field dismisses the keyboard from a mouse and leaves
   /// it up from a finger — so a phone driven by mouse events behaves like a

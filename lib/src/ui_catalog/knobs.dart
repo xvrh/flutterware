@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 
 /// The controls an entry declares by asking for them while it builds.
 ///
-/// **A knob is a read with a default, not a declaration.** Nothing registers
+/// A knob is a read with a default, not a declaration. Nothing registers
 /// one: `context.knobs.bool('Edit mode', false)` *is* the declaration, and the
 /// same call answers with `false` where nothing is hosting — a real app, a
 /// test, Flutter's own previewer. That is what makes it safe to leave in a

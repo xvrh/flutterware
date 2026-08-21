@@ -56,13 +56,13 @@ class ScenarioBrowsing extends ChangeNotifier {
   /// everything stays visible — most files here hold a scenario or two, and
   /// folding those trades a row for a click.
   ///
-  /// **Decided once, not re-applied.** After this, the fold is whatever the
+  /// Decided once, not re-applied. After this, the fold is whatever the
   /// person browsing made it, including all the way open. A branch that turns
   /// up later — a file written while the panel is open — is open in a folded
   /// tree, since the closed set names what existed when the decision was
   /// taken. Which is the right accident: the newest thing is the visible one.
   ///
-  /// **Deliberately without a notification.** The caller is the build that
+  /// Deliberately without a notification. The caller is the build that
   /// lays the rows out and reads [isOpen] a few lines further down, so the
   /// answer is already used by the frame that asked for it. Notifying from
   /// inside a build is a `markNeedsBuild` during build, and deferring the
@@ -85,7 +85,7 @@ class ScenarioBrowsing extends ChangeNotifier {
 
   /// Opens [branchIds] for a selection that has just arrived, once.
   ///
-  /// **An action taken once, not a rule applied on every build.** Held open
+  /// An action taken once, not a rule applied on every build. Held open
   /// for as long as it is selected, the file around your selection cannot be
   /// closed at all: the click lands in [_closed], the row does not move, and
   /// the only visible effect anywhere is the collapse-all button quietly

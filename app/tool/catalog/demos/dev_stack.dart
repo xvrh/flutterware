@@ -19,7 +19,7 @@ import 'shell.dart';
 
 /// The dev stack, in the states it has to survive.
 ///
-/// **A stack needs a stack**, which is why these exist: the plugin's whole
+/// A stack needs a stack, which is why these exist: the plugin's whole
 /// subject is a docker project this repo does not have, so without a stand-in
 /// the panel can only be looked at inside a project that declares one. Each
 /// preview below wires a real [DevStackCore] to a scripted `runProcess`, so the

@@ -53,14 +53,14 @@ class PluginManifest {
   /// What the project says about ranking its own changes, or null when it says
   /// nothing.
   ///
-  /// **Not a plugin**, for the same reason the screen it feeds is not one: it
+  /// Not a plugin, for the same reason the screen it feeds is not one: it
   /// has to be readable for a worktree with no session, which is precisely a
   /// worktree whose plugins have not been resolved.
   final ChangesConfig? changes;
 
   /// Which package stands for the repository, or null when it says nothing.
   ///
-  /// **Not a plugin**, for the same reason [changes] is not: it describes the
+  /// Not a plugin, for the same reason [changes] is not: it describes the
   /// project rather than something mounted in it, and the window that needs it
   /// has to be identifiable before any plugin has resolved.
   final ProjectIdentity? identity;
@@ -165,7 +165,7 @@ class FlutterwareConfig {
 
   /// Declares how this project's changes should be ranked. See [ChangesConfig].
   ///
-  /// **Refused twice rather than merged or overwritten.** Two calls would be a
+  /// Refused twice rather than merged or overwritten. Two calls would be a
   /// config with two answers, and either resolution loses one of them silently
   /// — which is the failure mode that killed the standalone package list.
   void changes(ChangesConfig config) {
@@ -180,7 +180,7 @@ class FlutterwareConfig {
 
   /// Declares which package stands for this repository. See [ProjectIdentity].
   ///
-  /// **Refused twice, like [changes] and for the same reason.** A repository
+  /// Refused twice, like [changes] and for the same reason. A repository
   /// has one face; two calls are a config with two answers, and either
   /// resolution drops one of them without a word.
   void identity(ProjectIdentity config) {
@@ -229,8 +229,8 @@ class FlutterwareConfig {
 
 /// The package path [config] names twice, or null when each one is named once.
 ///
-/// **The path is the identity of a per-package entry, everywhere below this
-/// file** — a plugin's report children are keyed on it, `fw:///` addresses
+/// The path is the identity of a per-package entry, everywhere below this
+/// file — a plugin's report children are keyed on it, `fw:///` addresses
 /// carry it, and the previews compiler hashes it into a daemon address. So two
 /// entries naming one package are not two things the tool could tell apart if
 /// it tried: the second one's options are simply unreachable. What actually
@@ -252,9 +252,9 @@ String? _duplicatePackagePath(Map<String, Object?> config) {
 }
 
 /// Names the way out as well as the fault, because "declared twice" on its own
-/// reads as a typo and the case that gets here usually is not one: it is
-/// somebody asking for two configurations of one package. That is a real wish,
-/// and the plugin's own options are where it has to be granted.
+/// reads as a typo and the case that gets here usually is not one: it is a
+/// request for two configurations of one package. That is a reasonable thing to
+/// want, and the plugin's own options are where it is expressed.
 String _duplicatePackageMessage(String pluginId, String path) =>
     'Plugin "$pluginId" declares package "$path" twice. A package may be '
     'named once per plugin — put every option for it in one entry.';

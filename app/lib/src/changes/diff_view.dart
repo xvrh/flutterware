@@ -24,7 +24,7 @@ import 'patch_index.dart';
 /// The full-width version this replaces put the whole path on one line with a
 /// ruler and two 46 px count columns, which is a row that only reads at 1200 px.
 ///
-/// **The directory is not a note.** It was, briefly, and it was the last of
+/// The directory is not a note. It was, briefly, and it was the last of
 /// them — behind `binary` — in one `·`-joined line, which
 /// made *where a file lives* the first thing ellipsised away. Three lines of a
 /// list like that and you cannot tell `app/lib/src/changes/ranking.dart` from
@@ -177,7 +177,7 @@ class IndexFileRow extends StatelessWidget {
   /// in a `·`-joined string behind the other flags, where it was the first
   /// thing to be ellipsised away.
   ///
-  /// **Whether a file is committed yet is not one of these.** It is a fact
+  /// Whether a file is committed yet is not one of these. It is a fact
   /// about the reader's git state rather than about the change, and this list
   /// is what you scan to decide which file to open — a question it never
   /// answers. The summary above the list still counts them.
@@ -259,7 +259,7 @@ class HunkHeaderLine extends StatelessWidget {
 
 /// One line of an expanded hunk, decoded on demand.
 ///
-/// **The header is a prediction; the content is the truth.** Row extents come
+/// The header is a prediction; the content is the truth. Row extents come
 /// from `HunkSpan.displayLines`, which is arithmetic on the `@@` counts — that
 /// is what lets the list size itself before decoding anything. A patch whose
 /// header disagrees with its body (truncated mid-hunk, or written by something
@@ -302,8 +302,8 @@ class HunkLineView extends StatelessWidget {
   final bool selected;
 
   /// Where this line's colours come from, or null for a file nothing here
-  /// reads. **Asked for per row, computed per hunk** — the first row of a hunk
-  /// to be built pays for the whole hunk and every row after it is a lookup.
+  /// reads. Asked for per row, computed per hunk — the first row of a hunk to
+  /// be built pays for the whole hunk and every row after it is a lookup.
   final HunkTokenCache? tokens;
 
   @override
@@ -338,12 +338,12 @@ class HunkLineView extends StatelessWidget {
 
 /// One line of a diff.
 ///
-/// **Tinted by kind, and marked by a glyph.** The tint alone would fail for the
+/// Tinted by kind, and marked by a glyph. The tint alone would fail for the
 /// ~8% of men with red-green colour blindness, and the glyph alone would make a
 /// block of additions hard to see at a glance; together neither is load-bearing
 /// on its own.
 ///
-/// **Syntax colour is a third channel and does not compete with those two.**
+/// Syntax colour is a third channel and does not compete with those two.
 /// What says *added* is the row's wash and the `+`; what the tokens say is
 /// which word is a keyword. So the row keeps its tint, and a token the
 /// highlighter had no opinion about keeps the row's own ink rather than being
@@ -382,7 +382,7 @@ class DiffLineView extends StatefulWidget {
 }
 
 class _DiffLineViewState extends State<DiffLineView> {
-  /// **Hover, not a tap target on the row.** The row holds selectable text and
+  /// Hover, not a tap target on the row. The row holds selectable text and
   /// a tap handler over all of it would eat the drag that selects a line — so
   /// only the margin is pressable, and hover is what reveals it.
   var _hovered = false;
@@ -449,7 +449,7 @@ class _DiffLineViewState extends State<DiffLineView> {
 
 /// A line's text, shifted by the body's shared horizontal offset.
 ///
-/// **Translated inside a clip, not put in a scroll view.** Every row must move
+/// Translated inside a clip, not put in a scroll view. Every row must move
 /// by the same amount or the columns stop lining up, and a scroll view per row
 /// cannot promise that: a short line's own extent is zero, so it would stay
 /// put while its neighbours moved. Here the text is laid out at its natural
@@ -536,12 +536,12 @@ double diffLineHeight(TextStyle style) =>
 
 /// The `+` in the left margin.
 ///
-/// **Its width is always taken**, hovered or not. Revealing the affordance by
+/// Its width is always taken, hovered or not. Revealing the affordance by
 /// making room for it would shift every line of the diff sideways as the
 /// pointer moved down the file, which is the sort of motion that makes a list
 /// feel broken even when nothing is wrong.
 ///
-/// **The strip is always pressable; only the glyph waits for hover.** Gating
+/// The strip is always pressable; only the glyph waits for hover. Gating
 /// the *target* on hover made this the one control on the screen that neither a
 /// widget test nor the drive tools could reach — neither has a hover verb — so
 /// the whole gesture could only ever be verified by a human with a mouse.
@@ -605,9 +605,9 @@ class _AddComment extends StatelessWidget {
 /// The body's horizontal scrollbar: a thumb you can drag, and the only thing on
 /// the screen that says there is more line out there.
 ///
-/// **It appears only when it has somewhere to go**, and it sits under the rows
+/// It appears only when it has somewhere to go, and it sits under the rows
 /// rather than over them: a diff's last line is as readable as its first, and a
-/// bar floating over it would cover exactly the text somebody scrolled to see.
+/// bar floating over it would cover exactly the text that was scrolled to.
 class DiffScrollBar extends StatelessWidget {
   const DiffScrollBar({required this.model, super.key});
 
@@ -780,8 +780,8 @@ class IndexUntrackedRow extends StatelessWidget {
 /// Monospace, because a diff is columns: an indent that does not line up with
 /// the line above it is a diff you cannot read.
 ///
-/// **Built on `mono`, which is body text, and not on `micro`, which is a
-/// label.** It was `micro` plus a family override, and `micro` is defined as
+/// Built on `mono`, which is body text, and not on `micro`, which is a
+/// label. It was `micro` plus a family override, and `micro` is defined as
 /// `10.5, weight: strong, color: mut, letterSpacing: 0.2` — the face the app
 /// uses for `PLUGINS`. So every line of code on the screen was rendered at the
 /// smallest step in the ramp, in semibold, in a muted grey, with tracking added
@@ -805,7 +805,7 @@ const diffChromeWidth =
 
 /// Where the body is scrolled to horizontally, shared by every row.
 ///
-/// **One offset for all the rows, not a scroll view each.** The lines of a diff
+/// One offset for all the rows, not a scroll view each. The lines of a diff
 /// are columns; if each row scrolled by its own amount — or if short rows
 /// clamped at their own width while long ones kept going — the indentation
 /// would stop lining up, which is the one thing the monospace is for. So the

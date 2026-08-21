@@ -429,7 +429,7 @@ class DaemonConfig {
   factory DaemonConfig.fromJson(Map<String, dynamic> json) =>
       _$DaemonConfigFromJson(json);
 
-  /// **The one place a config is built for a declared package.** Every renderer
+  /// The one place a config is built for a declared package. Every renderer
   /// goes through here — the GUI's [CatalogSession], `fw`'s [HeadlessCatalog],
   /// and an agent over MCP.
   ///

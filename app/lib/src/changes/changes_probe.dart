@@ -78,7 +78,7 @@ class ChangesProbe {
     'color.ui=never',
   ];
 
-  /// **`--no-optional-locks` on everything.** It exists for tools that poll.
+  /// `--no-optional-locks` on everything. It exists for tools that poll.
   /// Without it a refresh rewrites the worktree's index and flutterware fights
   /// the user's own git for the lock.
   Future<GitOutput> _git(String directory, List<String> arguments) => _run(
@@ -103,7 +103,7 @@ class ChangesProbe {
   /// its globs feed [rankChanges]. [configState] is only carried through to the
   /// header, which says something when the rules are stale.
   ///
-  /// **Reading the store is this method's job, not its caller's.** It runs on
+  /// Reading the store is this method's job, not its caller's. It runs on
   /// an isolate that is already doing file and process work; resolving the
   /// config on the UI isolate to hand it in would put a synchronous JSON read
   /// on the frame that opens the screen.
@@ -207,7 +207,7 @@ class ChangesProbe {
   /// A separate call rather than a slice, because a caller that named one file
   /// should not pay for the whole diff to reach it.
   ///
-  /// **A rename needs both of its paths named, or it is not a rename.** git
+  /// A rename needs both of its paths named, or it is not a rename. git
   /// detects renames over the *filtered* set, so `diff -M <range> -- new.dart`
   /// cannot see `old.dart` and reports a brand new file whose every line was
   /// added — which is the single most misleading thing this command could say
@@ -314,7 +314,7 @@ class ChangesProbe {
     return _splitNul(result.stdout).toSet();
   }
 
-  /// **`--untracked-files=normal`, which is git's default and is load-bearing.**
+  /// `--untracked-files=normal`, which is git's default and is load-bearing.
   ///
   /// git reports the topmost wholly-untracked directory and does not descend.
   /// Measured against the case this is written for — a package built on one

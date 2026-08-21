@@ -1,7 +1,7 @@
 /// Magnifying the preview: one transform over the whole staged device, and the
 /// guest's pixel ratio following it.
 ///
-/// **The magnification is the stage's, and the sharpness is the guest's.** An
+/// The magnification is the stage's, and the sharpness is the guest's. An
 /// `InteractiveViewer` scales everything on the stage — the phone body, the
 /// notch, the screen — which is what makes zooming *into a framed preview* look
 /// like zooming into a photograph of a phone rather than into a rectangle that
@@ -10,7 +10,7 @@
 /// on the same screen it always had and simply renders more pixels into it, and
 /// the texture that comes back has as many pixels as the stage is now drawing.
 ///
-/// **Layout is untouched, which is the whole promise.** Only [guestRatioFor]
+/// Layout is untouched, which is the whole promise. Only [guestRatioFor]
 /// moves; the logical size the guest is given never does. So `MediaQuery.size`,
 /// every breakpoint and every `LayoutBuilder` inside the demo read exactly what
 /// they read at 1×, and nothing about magnifying can change what the preview is
@@ -25,14 +25,14 @@ import 'package:flutter/widgets.dart';
 
 /// How many device pixels the guest may be asked to render.
 ///
-/// **This is the one real cost of zooming the frame.** Magnifying the body
+/// This is the one real cost of zooming the frame. Magnifying the body
 /// means the screen inside it grows too, and every pixel of that screen has to
 /// exist somewhere — the guest renders its whole surface, not the part that
 /// happens to be on your monitor. So the bytes go up with the square of the
 /// scale: an iPhone 16 is 3.0 Mpx at 1× and 48 Mpx at 4×.
 ///
 /// 64 Mpx is ~256 MB of texture, which is where the trade stops being worth it.
-/// **Nothing stops zooming there** — the ratio simply stops climbing and the
+/// Nothing stops zooming there — the ratio simply stops climbing and the
 /// picture goes gradually soft, the way any viewer does past its source
 /// resolution. That is a much better wall than a gesture that refuses.
 const zoomPixelBudget = 64 * 1000 * 1000;
@@ -58,7 +58,7 @@ double guestRatioFor(Size logical, double deviceRatio, double scale) {
 
 /// Pan and zoom over the whole stage.
 ///
-/// **Nothing below this rebuilds while you zoom.** The transform lives above
+/// Nothing below this rebuilds while you zoom. The transform lives above
 /// the child and the guest's ratio is pushed by a listener, so a gesture moves
 /// one matrix and sends at most one resize — where an earlier cut rebuilt the
 /// body, the texture and a `LayoutBuilder` on every frame of a pinch, which is
@@ -157,7 +157,7 @@ class _ZoomableStageState extends State<ZoomableStage> {
   ///
   /// Multiplicative, because zoom is: 1×→2× and 8×→16× are the same flick.
   ///
-  /// **A mouse and a trackpad are not the same device here.** A trackpad sends
+  /// A mouse and a trackpad are not the same device here. A trackpad sends
   /// a stream of small deltas at frame rate, so anything continuous feels
   /// smooth; a wheel sends one lump of ~100 per notch, and at the rate that
   /// suits a trackpad each notch is a 1.5× jump — which reads as the zoom
@@ -248,7 +248,7 @@ bool _isIdentity(Matrix4 matrix) => matrix == Matrix4.identity();
 
 /// Whether [event] belongs to the stage rather than to the demo.
 ///
-/// **One predicate, read by both sides**, because the two answers have to agree
+/// One predicate, read by both sides, because the two answers have to agree
 /// exactly: the stage acts on what this claims, and the demo is denied what
 /// this claims, and a rule written twice is a rule that drifts. The first
 /// version of it drifted immediately — the demo was denied *every* trackpad

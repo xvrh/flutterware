@@ -45,7 +45,7 @@ class NativeSession {
   /// Split from [driver] because of where it is asked: a drive-layer refusal
   /// mentions the native layer only if there is one, and that question must
   /// not cost the caller a Swift compile. Identity is cheap to establish;
-  /// the helper is built when somebody actually asks for the layer.
+  /// the helper is built when the layer is actually asked for.
   /// Set by tests, so the drive path can be exercised without a device.
   bool? debugAvailable;
 
@@ -70,7 +70,7 @@ class NativeSession {
   /// Held here because it is the same identity question [driver] answers —
   /// which device is this, really — and the answers are the same three:
   /// `adb` owns the serial, it is a booted simulator, or it is a macOS bundle.
-  /// **It costs no Swift compile**, unlike [driver]: reading a log needs the
+  /// It costs no Swift compile, unlike [driver]: reading a log needs the
   /// device's name, not the accessibility helper.
   ///
   /// A physical iOS device is deliberately not one of them. Its log comes off
@@ -166,16 +166,16 @@ class NativeSession {
 
   /// The bundle this run launched, as a path.
   ///
-  /// A **path**, not a product name, and the difference is a bug this found
+  /// A path rather than a product name, and the difference is a bug this found
   /// the moment it ran: two worktrees building the same package produce two
   /// running apps with the same name, and picking by name attached the driver
-  /// to somebody else's window. It is the machine-global selection hole the
+  /// to the wrong window. It is the machine-global selection hole the
   /// drive layer already closed with `ownHandles`, met again one layer down —
   /// and the same answer applies, that only this checkout's run is a drivable
   /// subject. The build directory under this worktree is what makes it this
   /// checkout's.
   ///
-  /// **Which build directory, though, is not the build's to choose.** Xcode
+  /// Which build directory, though, is not the build's to choose. Xcode
   /// keeps one directory per configuration under `Products`, and a checkout
   /// that has ever been released keeps `Release` next to `Debug` forever. The
   /// first version of this walked those directories and took the first `.app`

@@ -33,8 +33,8 @@ enum MotionEditorShape {
 }
 
 /// A slider earns its place only when the range is small enough that a position
-/// along it means something. `translateX` is soft-bounded to ±200 and a slider
-/// there would say nothing a nudge does not say better.
+/// along it means something. `translateX` is soft-bounded to ±200, where a
+/// nudge is more useful than a slider.
 const _sliderRange = 2.0;
 
 class MotionNumberShape {

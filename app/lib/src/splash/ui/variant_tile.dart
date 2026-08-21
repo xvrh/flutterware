@@ -12,13 +12,13 @@ import 'splash_render.dart';
 /// One cell of the matrix: a splash at device scale, its name, and where the
 /// picture came from.
 ///
-/// **Two lines, and they used to be six.** The tile carried the whole
+/// Two lines, and they used to be six. The tile carried the whole
 /// resolution — a colour swatch and its key, the image and its key, the
 /// branding and its key, the placement sentence — because those lines were the
 /// editor's click targets. The editor is gone, and eight tiles of wrapped grey
 /// text were competing with the eight pictures they were under. The values
-/// moved to `SplashCellInspector`, where they are a table and where somebody
-/// has actually come to read them.
+/// moved to `SplashCellInspector`, where they are a table and where a reader
+/// has gone looking for them.
 ///
 /// What is left is what changes how you read the picture rather than what is
 /// in it: that the platform is off, that dark resolved nothing, that Android is
@@ -185,7 +185,7 @@ class _Note extends StatelessWidget {
 
 /// Where the picture above came from, on every tile without exception.
 ///
-/// **Both states are labelled, not just the weak one.** A line that appears only
+/// Both states are labelled, not just the weak one. A line that appears only
 /// on predictions reads as a warning badge, and its absence reads as nothing at
 /// all rather than as "this one is real" — which leaves the reader unable to
 /// tell a checked cell from an unlabelled one. Saying both costs one micro line

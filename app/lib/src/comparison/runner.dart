@@ -143,7 +143,7 @@ class ComparisonPlan {
 
 /// One side could not render *anything* — it did not compile.
 ///
-/// **One finding, not one per entry.** This used to be mapped onto every entry
+/// One finding, not one per entry. This used to be mapped onto every entry
 /// the side was asked for, on the reasoning that a per-entry verdict lands on
 /// the severity ladder rather than ending the comparison. Measured against a
 /// base whose catalog did not compile, that reasoning produced twenty-four
@@ -229,7 +229,7 @@ class ComparisonRunner {
 
   /// Everything that can be decided without rendering anything.
   ///
-  /// **The whole skip rule, and none of the rendering.** Split out of [run]
+  /// The whole skip rule, and none of the rendering. Split out of [run]
   /// because it is what makes a screen honest while it fills: every row that is
   /// added, removed or skipped is already settled here, so the list draws its
   /// full shape immediately and only the pictures arrive late.
@@ -238,7 +238,7 @@ class ComparisonRunner {
   /// opened. It was, and the price was the problem — see
   /// [ComparisonController].
   ///
-  /// **The deciding runs on an isolate**, because its size is the *project's*
+  /// The deciding runs on an isolate, because its size is the *project's*
   /// and not ours: one sha1 per file in every entry's closure, plus the asset
   /// tree. This was once measured at 142ms, on this repository, which has a
   /// handful of previews and no assets to speak of; a real catalog of 90
@@ -330,12 +330,12 @@ class ComparisonRunner {
   /// Takes a plan when the caller already made one, since remaking it would
   /// hash every closure a second time to reach the same answer.
   ///
-  /// **A verdict lands the moment it is answerable, not when the run ends.**
+  /// A verdict lands the moment it is answerable rather than when the run ends.
   /// The settled rows come first, in a burst; an entry both sides already have
   /// cached is diffed before any render starts; and during the head pass each
   /// frame is diffed as it lands, because by then the base side is final. What
   /// waits until the end is only what has to: entries whose head render
-  /// *failed* produce no frame, so their rows are the last to be said.
+  /// *failed* produce no frame, so their rows come last.
   Future<ComparisonResult> run({ComparisonPlan? from}) async {
     var watch = Stopwatch()..start();
     cancel?.check();

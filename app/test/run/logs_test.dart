@@ -165,7 +165,7 @@ void main() {
   });
 
   group('the engine says it threw', () {
-    /// **The shape a consumer hit.** A `main` that awaited a config fetch
+    /// The shape a consumer hit. A `main` that awaited a config fetch
     /// against a dead port threw before `runApp`, and the app then sat there
     /// answering its VM service with nothing mounted. No `FlutterError`, no
     /// `app.log`, no `daemon.logMessage` — the engine writes this straight to

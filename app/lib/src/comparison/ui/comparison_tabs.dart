@@ -35,7 +35,7 @@ const filesTabId = 'files';
 /// Every tab id, so a reader of the address can tell a tab from a file path.
 const comparisonTabIds = {filesTabId, 'previews', 'scenarios'};
 
-/// **`fw:///worktrees/<worktree>/changes`** — what this branch did.
+/// `fw:///worktrees/<worktree>/changes` — what this branch did.
 ///
 /// Three renderings of one delta against one base: the files that changed,
 /// what the previews look like on either side, and what the scenarios do.
@@ -43,28 +43,28 @@ const comparisonTabIds = {filesTabId, 'previews', 'scenarios'};
 /// in as [files], because it is a screen of its own with its own master,
 /// detail and index tabs.
 ///
-/// **Not its own space, and the reversal is the interesting part.** The design
+/// Not its own space, and the reversal is the interesting part. The design
 /// doc argued for one, from the premise that a comparison spans two plugins and
 /// needs a session on both sides — which is a fact about the *runner*, and one
 /// `fw compare` disproves by running with no session on the base at all. What a
 /// comparison spans is not what a screen belongs to. The case that matters is
 /// this work against its base, which is a fact about one worktree.
 ///
-/// **Files is free and the other two cost seconds**, and that is why they are
+/// Files is free and the other two cost seconds, and that is why they are
 /// tabs on one panel rather than a place of their own: behind a tab on the
 /// screen you already open to read a diff, the expensive halves get discovered.
 /// Somewhere else they would have to be remembered, and a feature that has to
 /// be remembered is used twice.
 ///
-/// **Nothing runs on tab focus.** Selecting a tab shows what the last run
+/// Nothing runs on tab focus. Selecting a tab shows what the last run
 /// concluded — kept on disk between sessions — and one explicit Compare press
 /// per half is what starts the machinery. See [ComparisonController] for why
 /// the auto-run was retired.
 ///
-/// **The file half renders without a session and these two cannot.** It reads
-/// git; they need the previews and scenarios cores, which need a resolved
-/// config. So a checkout nobody has opened gets the files tab and no others,
-/// which is the honest shape rather than a tab that would explain itself.
+/// The file half renders without a session and these two cannot. It reads git;
+/// they need the previews and scenarios cores, which need a resolved config. So
+/// an unopened checkout gets the files tab and no others, rather than tabs that
+/// could only explain why they are empty.
 class ComparisonTabs extends StatefulWidget {
   const ComparisonTabs({
     super.key,
@@ -144,8 +144,7 @@ class _ComparisonTabsState extends State<ComparisonTabs>
   ///
   /// Answered from the same state the screen draws from, as [SettleSource]
   /// requires. An idle half is *not* busy — its kept results are the screen —
-  /// so a capture waits only while a half somebody started is preparing or
-  /// running.
+  /// so a capture waits only while a started half is preparing or running.
   @override
   String? get busyWith {
     if (_loading) return 'opening the comparison';
@@ -235,7 +234,7 @@ class _ComparisonTabsState extends State<ComparisonTabs>
 
   /// The tab named by the address's first segment.
   ///
-  /// **Anything that is not a tab id is a file path**, which is what makes the
+  /// Anything that is not a tab id is a file path, which is what makes the
   /// grammar backwards compatible: `changes/app/lib/foo.dart` was a whole
   /// address before there were tabs, and it still means the file diff. New
   /// addresses spell it `changes/files/app/lib/foo.dart`, because a repository
@@ -329,8 +328,8 @@ class _Tab {
 ///
 /// A tab carries its half's finding count once that half has an answer —
 /// which, with the last run kept on disk, it usually has for free. What it
-/// still does not carry is a *price*: pricing a click nobody made was tried,
-/// cost about what the work costs, and was removed. See
+/// still does not carry is a *price*: pricing a click before it is made was
+/// tried, cost about what the work costs, and was removed. See
 /// [ComparisonController].
 class _TabStrip extends StatelessWidget {
   const _TabStrip({

@@ -1348,7 +1348,7 @@ class _Session {
 
   /// Writes one response, or drops it if the client is not there to read it.
   ///
-  /// **Every failure mode of a departed client, not just [SocketException].** A
+  /// Every failure mode of a departed client, not just [SocketException]. A
   /// closed `IOSink` throws `StateError`, and this is called while iterating
   /// every session to broadcast a [CatalogChanged] — so one client that left
   /// between the compile and the broadcast used to abort the broadcast for

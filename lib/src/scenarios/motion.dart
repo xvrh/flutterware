@@ -105,8 +105,8 @@ class ScenarioMotionRecorder {
   final _frames = <ui.Image>[];
 
   /// Frames refused by [MotionRecording.maxFrames]. Reported rather than
-  /// swallowed: a recording that stops in the middle of a movement should say
-  /// it was cut off, not look like the animation ended there.
+  /// swallowed, so a recording cut off mid-movement does not look like an
+  /// animation that ended there.
   var _dropped = 0;
 
   Duration get interval => settings.interval;
@@ -158,7 +158,7 @@ class ScenarioMotionRecorder {
   /// The frames' bytes, their pixel size, and how many were dropped. Empties
   /// the recorder and disposes the handles.
   ///
-  /// **Must be called inside `runAsync`** — this is where the rasterization
+  /// Must be called inside `runAsync` — this is where the rasterization
   /// deferred by [capture] is actually paid, and it is asynchronous.
   ///
   /// [raw] follows the step's own format for the same reason the step has the

@@ -30,7 +30,7 @@ bool _boundary(String ch) =>
 /// empty query to yield nothing check for it themselves, since "show me all"
 /// and "show me nothing" are both legitimate answers depending on the surface.
 ///
-/// **It is greedy, and takes the first subsequence rather than the best one.**
+/// It is greedy, and takes the first subsequence rather than the best one.
 /// In `a.dart#team` a query of `t` lands in `dart` and never reaches the symbol,
 /// so the boundary bonus it would have earned there is lost. Finding the best
 /// placement means backtracking over every candidate — worth doing when ranking

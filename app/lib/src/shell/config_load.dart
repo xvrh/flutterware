@@ -5,13 +5,13 @@ enum ConfigLoadOutcome {
 
   /// It ran, and declared exactly what was already there.
   ///
-  /// **The case the whole feature turns on.** A reload that rebuilds everything
+  /// The case the feature turns on. A reload that rebuilds everything
   /// is fine — losing a compiled catalog to a config change is the price of
   /// having changed the config. Paying it for a comment is not, so "nothing
   /// moved" has to be exact.
   ///
-  /// It also has to be *reported*, not inferred from silence: a no-op reload and
-  /// a watcher that is not working look identical otherwise.
+  /// It also has to be *reported* rather than inferred from silence: a no-op
+  /// reload and a watcher that is not working look identical otherwise.
   unchanged,
 
   /// The config declared something different, so the graph was rebuilt.

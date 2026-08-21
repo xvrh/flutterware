@@ -263,7 +263,7 @@ class _Grip extends StatelessWidget {
 /// Shared because three panes now sit beside or above each other on this
 /// surface — the dock over its canvas, the tree beside its detail, and the run
 /// page's picture beside both — and a grip that behaves differently in one of
-/// them is a grip somebody has to learn twice.
+/// them has to be learned twice.
 class InspectSplitGrip extends StatelessWidget {
   const InspectSplitGrip({super.key, required this.axis, required this.onDrag});
 

@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Loads every font the asset bundle's `FontManifest.json` declares — the
 /// project's own families plus `MaterialIcons`.
 ///
-/// **Both scenario lanes come through here**, because a scenario that measures
+/// Both scenario lanes come through here, because a scenario that measures
 /// text in the fallback font is wrong in the one way nothing catches: it still
 /// renders, still passes most assertions, and reports the few that do not as
 /// `RenderFlex overflowed by 3.5 pixels` — a layout regression that never
@@ -38,7 +38,7 @@ void resetScenarioFontsForTest() {
 /// Registers real Roboto under the platform-default family names — the text
 /// that names **no** family, which is most of an app.
 ///
-/// **The `flutter test` lane only**, called from `runScenarios` after the
+/// The `flutter test` lane only, called from `runScenarios` after the
 /// probe returns, which is the one path the flutterware harness never takes.
 /// That lane's tester runs with `--use-test-fonts`, hardcoded, so a family
 /// nobody loads real bytes for draws every glyph as a filled box *and

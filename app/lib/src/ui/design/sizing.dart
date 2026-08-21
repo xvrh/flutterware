@@ -1,12 +1,12 @@
 /// The icon ramp.
 ///
-/// **Static const, deliberately — not a [FwTokens] axis like the palette and the
-/// radii.** Two reasons, and the second is the decisive one. An icon size is
+/// Static const, deliberately — not a [FwTokens] axis like the palette and the
+/// radii. Two reasons, and the second is the decisive one. An icon size is
 /// structural rather than expressive: a theme changes what things look like, not
 /// how big a chevron is. And `const Icon(Icons.close, size: FwIconSize.sm)` only
 /// stays const while the size is a compile-time constant — the same reason
 /// [FwSpacing] is static, which 649 lines in this app depend on. A themeable
-/// size axis would buy density nobody has asked for and cost const-ness
+/// size axis would add density no one has asked for and cost const-ness
 /// everywhere.
 ///
 /// The five steps are the ones already in use, not an invention: 12, 14, 16, 18

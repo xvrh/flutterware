@@ -64,10 +64,10 @@ class CatalogView extends StatefulWidget {
   /// The stage's pan and zoom, when something above wants it to outlive this
   /// widget.
   ///
-  /// **Because the panel is keyed on the session and a package is a session.**
-  /// Moving between two packages remounts everything here, and a magnification
-  /// that evaporated on the way would be a zoom you cannot use while comparing
-  /// the same control in two places. Null means nobody cares — the standalone
+  /// The panel is keyed on the session and a package is a session, so moving
+  /// between two packages remounts everything here, and a magnification that
+  /// evaporated on the way would be a zoom you cannot use while comparing the
+  /// same control in two places. Null means no caller needs it — the standalone
   /// catalog entry point — and one is made and disposed here.
   final TransformationController? zoom;
 
@@ -249,7 +249,7 @@ class _CatalogViewState extends State<CatalogView> {
 
   /// The stage has taken the drag, or given it back.
   ///
-  /// **The cancel is the point.** The demo was told about a finger going down
+  /// The cancel is the point. The demo was told about a finger going down
   /// and is holding whatever that pressed; simply withholding the rest of the
   /// gesture leaves it pressed for ever — a button lit, an ink ripple that
   /// never settles, a `Draggable` stuck to nothing. Cancel is what a framework
@@ -836,7 +836,7 @@ class _CatalogViewState extends State<CatalogView> {
 
   /// The guest's picture with the highlight drawn over it.
   ///
-  /// **Inside the texture's own box**, which is the whole trick: node rects
+  /// Inside the texture's own box, which is the whole trick: node rects
   /// are in the guest's logical coordinates and this box *is* the guest's
   /// logical size, so the painter needs no transform — and it inherits the
   /// `FittedBox` and the `DeviceFrame` above it, so the highlight stays put
@@ -1599,8 +1599,8 @@ class _Axis extends StatelessWidget {
   final KnobDescriptor axis;
 
   /// What the address asked for, which wins over the guest's own report while
-  /// the two disagree — see [axisDisplayValue]. That is the whole of the
-  /// optimistic update, and it mutates nothing.
+  /// the two disagree — see [axisDisplayValue]. That is all the optimistic
+  /// update amounts to, and it mutates nothing.
   final Map<String, String> selections;
 
   /// Writes the choice into the address, and stops there. The guest is told
@@ -2088,10 +2088,10 @@ class BusyDot extends StatefulWidget {
   /// What the session is doing, or null when it is idle.
   final String? busy;
 
-  /// Longer than a warm switch, shorter than a wait you would question.
+  /// Longer than a warm switch, shorter than a noticeable wait.
   ///
   /// The session's own floor, not a second one that happens to agree with it:
-  /// two clocks over the same event drift the moment somebody tunes one.
+  /// two clocks over the same event drift the moment either is tuned.
   static const appearsAfter = CatalogSession.busyAppearsAfter;
 
   @override
@@ -2257,7 +2257,7 @@ class _FilterFieldState extends State<_FilterField> {
 
 /// The entry you asked for, on its way, over the one you were looking at.
 ///
-/// **Only ever the slow path** — see [CatalogSession.compilingSwitch]. The
+/// Only ever the slow path — see [CatalogSession.compilingSwitch]. The
 /// guest switches most entries by itself in a frame and this never appears for
 /// those; what is left is a first compile, a demo whose sources have moved, and
 /// a quarantined entry being retried, none of them quick enough to leave the
@@ -2553,7 +2553,7 @@ ScreenOrientation? _orientationOf(
 /// Whether the keyboard is following the demo or the person looking at it,
 /// read from the same un-namespaced level as [_deviceOf].
 ///
-/// **A staging axis, so it is on the address**, which is what makes a link, a
+/// A staging axis, so it is on the address, which is what makes a link, a
 /// screenshot and the panel agree about a picture with a keyboard in it.
 ///
 /// Falls back to what the canvas declared with no condition attached, unlike

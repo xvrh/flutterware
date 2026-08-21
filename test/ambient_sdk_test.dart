@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-/// **The SDK is the one the invocation named, and nothing may reach past it.**
+/// The SDK is the one the invocation named, and nothing may reach past it.
 ///
 /// `dart run flutterware` arrives through the user's own `dart` — fvm, mise,
 /// asdf, or a path they typed — and that choice is the whole answer. A spawn of

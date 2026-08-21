@@ -19,7 +19,7 @@ final _devbarStates = <DevbarState>[];
 
 /// Wrapper around the application to add a hidden developer UI beneath it.
 ///
-/// **Two jobs, which used to be one.** It is the *plugin host* — where plugins
+/// Two jobs, which used to be one. It is the *plugin host* — where plugins
 /// are constructed, and therefore where they are declared — and it is the
 /// *in-app overlay*. Under flutterware the overlay is not wanted: the cockpit
 /// is the surface, and the plugins report to it over the channels
@@ -32,7 +32,7 @@ class Devbar extends StatefulWidget {
 
   /// Hold the plugins and draw nothing at all.
   ///
-  /// **Not the same as `overlayVisible: false`,** which only hides the button.
+  /// Not the same as `overlayVisible: false`, which only hides the button.
   /// That leaves the overlay's `Stack`, its dialog and toast layers and
   /// [DevbarAppWrapper]'s `Container`/`FittedBox` in the tree.
   /// With the panel shut and no plugin contributing a button those paint the
@@ -142,14 +142,14 @@ class DevbarState extends State<Devbar> {
 
   /// Routes what the app reported into whichever tab shows that channel.
   ///
-  /// **Only the channels the devbar has no source of its own for.** `log` is
+  /// Only the channels the devbar has no source of its own for. `log` is
   /// left out on purpose: [LoggerPlugin] listens on `Logger.root` directly, so
   /// routing reported log events here would show every record twice. `print`,
   /// `platform` and `system` have no tab at all — they are a scenario's
   /// reading of a run, and nothing collects them in a live app.
   ///
   /// A channel whose plugin is not in this devbar's list is dropped, like any
-  /// other report nobody is listening for.
+  /// other report with no listener.
   void _onAppEvent(AppEvent event) {
     switch (event.channel) {
       case AppChannel.network:

@@ -110,7 +110,7 @@ class ScenariosPlan {
 
 /// Runs the scenario half: decide, replay what is left, align, report.
 ///
-/// **Lifted out of `fw compare`, where it was the only copy.** The GUI needs
+/// Lifted out of `fw compare`, where it was the only copy. The GUI needs
 /// the same decisions the CLI makes, and a second implementation of those in a
 /// panel is two answers to one question. It mirrors `ComparisonRunner`
 /// deliberately, down to [plan] and [run], because a caller holding both halves
@@ -224,7 +224,7 @@ class ScenariosRunner {
 
   /// Replays what [plan] left and aligns the two runs.
   ///
-  /// **One scenario on both sides before the next.** A scenario is a process;
+  /// One scenario on both sides before the next. A scenario is a process;
   /// replaying the whole head side and then the whole base side would double
   /// the time before the first row could be answered, and the first row is what
   /// a reader is waiting for.

@@ -78,8 +78,9 @@ List<String> findTestConfigs(String packageRoot, List<String> files) {
 ///
 /// Package-relative, `''` for the package root. Also **the identity of a pool
 /// of scenarios**, which is what the panel remembers a device against: two
-/// folders configured differently are two pools, and the folder path says so
-/// without anybody having to compile the config to read its profile's name.
+/// folders configured differently are two pools, and the folder path is enough
+/// to tell them apart without compiling the config to read its profile's
+/// name.
 String? testConfigFolderFor(String packageRoot, String file) {
   var directory = p.url.dirname(file);
   while (true) {

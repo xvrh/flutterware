@@ -14,8 +14,8 @@ void main() {
     expect(_command(flavor: 'dev'), containsAllInOrder(['--flavor', 'dev']));
   });
 
-  /// **Reported by a consumer whose every Chrome launch opened with the
-  /// deprecation warning.** The flavor here is usually not something anyone
+  /// Reported by a consumer whose every Chrome launch opened with the
+  /// deprecation warning. The flavor here is usually not something anyone
   /// typed — it is the pubspec's `flutter: default-flavor:`, resolved and
   /// promoted to an explicit flag. That field exists precisely because web
   /// takes no `--flavor`; it is how a web build gets `appFlavor` populated at

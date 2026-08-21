@@ -21,7 +21,7 @@ import 'shell.dart';
 /// be drawn for a project that does not exist — which is the whole reason these
 /// are views rather than screens.
 ///
-/// **One thing cannot be here: a picture with pixels in it.** A layer needs a
+/// One thing cannot be here: a picture with pixels in it. A layer needs a
 /// real file on disk to paint, so every composition below is colour and
 /// geometry. The images are exercised by running the app against
 /// `examples/example`, which is generated and has all four surfaces.
@@ -128,9 +128,9 @@ class _Tiles extends StatelessWidget {
             picture: SplashPicture.predicted(
               _composition(theme: SplashTheme.dark, background: 0xFF101418),
               reason:
-                  'Predicted from the config. iOS is the one surface that '
-                  'cannot be read back — LaunchScreen.storyboard is '
-                  'constraints, not a recipe.',
+                  'Predicted from the config. iOS cannot be read back — '
+                  'LaunchScreen.storyboard describes constraints, not the '
+                  'finished image.',
             ),
             resolution: _resolution(theme: SplashTheme.dark),
             problems: const [],

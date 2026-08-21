@@ -10,7 +10,7 @@ import 'package:flutterware/src/inspect/screen.dart';
 /// of the same nodes, and answering them from separate reads would be
 /// answering about separate moments.
 ///
-/// **Shared by run, previews and scenarios.** Each surface answers a different
+/// Shared by run, previews and scenarios. Each surface answers a different
 /// question to get *which* tree — a live app, an entry it re-renders, a step
 /// of a finished run — and from there the grammar is identical: same parameter
 /// names, same reply shape, one implementation over [InspectTree]. The
@@ -70,7 +70,7 @@ class ScreenRead {
 
   /// One node, flat.
   ///
-  /// **Without its children, which is the whole point.** `find` and `at`
+  /// Without its children, which is the whole point. `find` and `at`
   /// return nodes out of the middle of a tree, and a node serialised whole
   /// carries its subtree: measured, `find "Watching"` matched a container near
   /// the root and came back as 36,512 tokens — a hundred times the tree it was

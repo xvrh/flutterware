@@ -34,9 +34,9 @@ class DesktopGui {
   /// Runs `flutter build`, with its output in [log] rather than the terminal.
   ///
   /// Thirty-eight seconds of Xcode is identical on every successful run, so
-  /// forwarding it spends the user's whole first impression on output nobody
-  /// reads. What they need is that it started, roughly how long it takes, and —
-  /// on the run that fails — the end of it.
+  /// forwarding it spends the user's whole first impression on output they
+  /// will not read. What they need is that it started, roughly how long it
+  /// takes, and — on the run that fails — the end of it.
   Future<ProcessLog> build({bool verbose = false}) => runLogged(
     flutter,
     ['build', Platform.operatingSystem, '--release'],

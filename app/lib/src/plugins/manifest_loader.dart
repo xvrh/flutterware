@@ -63,7 +63,7 @@ class ManifestLoader {
 
   /// How long the config gets before it is killed and reported.
   ///
-  /// **A config is user code and can hang** — an accidental infinite loop, a
+  /// A config is user code and can hang — an accidental infinite loop, a
   /// read from stdin, an `await` on something that never arrives. Without a
   /// deadline that is not a slow reload, it is a permanent one: `fw` waits at
   /// the terminal forever, and in the GUI the watcher treats a reload as still
@@ -199,14 +199,14 @@ class ManifestLoader {
   /// `package_config.json` names a `flutterRoot`, but only as of whenever pub
   /// last ran, so switching without resolving would otherwise go unnoticed.
   ///
-  /// **Keyed on content, not mtime.** `pub get` rewrites
+  /// Keyed on content, not mtime. `pub get` rewrites
   /// `package_config.json` whether or not resolution moved, and the
   /// Dependencies plugin runs `pub get` itself — so a stat-based key made
   /// *using* flutterware invalidate flutterware's own cache, and every
   /// following command paid the ~450ms compile again. Content survives that,
   /// and survives a checkout or a stash that restores a file byte for byte.
   ///
-  /// **Keyed on the whole compiled closure, not just the config file.**
+  /// Keyed on the whole compiled closure, not just the config file.
   /// `dart compile kernel` bundles every library the config reaches, so a key
   /// naming only `tool/flutterware.dart` went stale the moment a declaration
   /// moved in a file it imports — and the config would then keep reporting the

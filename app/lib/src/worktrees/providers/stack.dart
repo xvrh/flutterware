@@ -1,7 +1,7 @@
 /// What each checkout's dev stack was last seen doing, read from the run dir.
 ///
-/// **A file read, and only ever a file read.** Every other answer in this
-/// screen is available for a checkout nobody has opened, because the shell
+/// A file read, and only ever a file read. Every other answer in this
+/// screen is available for an unopened checkout, because the shell
 /// computes it — but a stack's state belongs to the *project*, and finding it
 /// out means running the project's own probe. Doing that per row would spawn
 /// one subprocess per worktree per refresh, which is exactly the cost the
@@ -15,7 +15,7 @@
 /// Two consequences worth stating plainly, because they look like bugs
 /// otherwise:
 ///
-/// - **A worktree you have never opened shows nothing**, even if it declares a
+/// - **A worktree that has never been opened shows nothing**, even if it declares a
 ///   stack. Nothing has ever looked, and finding out would mean running its
 ///   config and its probe.
 /// - **A reading can be out of date.** Someone tearing a stack down from a
@@ -40,8 +40,8 @@ abstract class StackProbe {
 ///
 /// Comfortably longer than any sane poll interval — a worktree open in a tab
 /// re-reads every ten or fifteen seconds — so in practice this separates *a
-/// session is watching this stack right now* from *this is the last thing
-/// anybody saw*.
+/// session is watching this stack right now* from *this is the last reading
+/// taken*.
 const stackFreshFor = Duration(minutes: 1);
 
 class RunDirStackProbe implements StackProbe {

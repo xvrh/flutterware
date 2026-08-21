@@ -23,11 +23,11 @@
 ///
 /// Two things follow from that shape, and both are deliberate.
 ///
-/// **A motion is a pure function of its playhead.** `evaluate(t) → values`, no
+/// A motion is a pure function of its playhead. `evaluate(t) → values`, no
 /// wall clock in the model. It is what makes scrubbing, playing, capture at an
 /// arbitrary `t`, and a golden frame the same code path rather than four.
 ///
-/// **The tuned numbers live in a file no human writes.** Structure comes from
+/// The tuned numbers live in a file no human writes. Structure comes from
 /// your code, values come from `<screen>.motion.dart`, and the editor rewrites
 /// that file whole and touches nothing else. With no such file, every property
 /// falls back to its resting value and the code still runs — the tool is

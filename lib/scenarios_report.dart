@@ -17,11 +17,11 @@
 ///   types the `.events.json` a step points at; [ScenarioRunReport.events]
 ///   does the read.
 ///
-/// **This is published API.** A field renamed here breaks somebody's script,
+/// This is published API. A field renamed here breaks somebody's script,
 /// which is why [scenarioRunReportVersion] exists and why the readers refuse
 /// a major they do not know rather than handing back a half-decoded object.
 ///
-/// **Plain Dart on purpose — nothing here may import `package:flutter`.** The
+/// Plain Dart on purpose — nothing here may import `package:flutter`. The
 /// script that consumes a run executes under a bare `dart run`, exactly like
 /// `tool/flutterware.dart` does.
 library;

@@ -162,7 +162,7 @@ class ScenarioComparison {
 
   /// Compares two runs of one scenario.
   ///
-  /// **Pass and fail outrank every pixel.** A scenario that stopped completing
+  /// Pass and fail outrank every pixel. A scenario that stopped completing
   /// is the most valuable thing this tool can say, and a percentage next to it
   /// would be answering a smaller question — so a failure that appeared is the
   /// verdict, whatever the steps before it look like.

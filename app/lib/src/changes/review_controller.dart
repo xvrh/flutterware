@@ -22,11 +22,10 @@ import 'review_store.dart';
 /// in-memory list that the file is a backup of, because two such lists on one
 /// machine is exactly the divergence the append-only format exists to avoid.
 ///
-/// **It watches the file.** The agent writes resolutions into this log while
-/// the window is open — that is the point of the feature — so a controller that
-/// only re-read on its own writes would spend most of a session showing a state
-/// nobody is in any more, and the receipt this feature exists to give you is
-/// the thing you would not see.
+/// It watches the file. The agent writes resolutions into this log while the
+/// window is open — that is what the feature is for — so a controller that only
+/// re-read on its own writes would spend most of a session showing a state that
+/// has moved on, hiding the receipt this feature exists to give you.
 class ReviewController extends ChangeNotifier {
   ReviewController({
     required String worktreePath,
@@ -90,7 +89,7 @@ class ReviewController extends ChangeNotifier {
 
   /// Records that the Review tab has been looked at.
   ///
-  /// **Once per visit, and only when there is something to mark.** A log with
+  /// Once per visit, and only when there is something to mark. A log with
   /// no unseen agent resolution in it learns nothing from another line, and
   /// this is called from a widget's lifecycle: the version that wrote
   /// unconditionally appended one line per tab switch, forever.
@@ -106,15 +105,15 @@ class ReviewController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// **The parent, not the file.** A watch cannot be placed on something that
-  /// does not exist, and a checkout nobody has commented on has no log until
-  /// the first note. The directory is this checkout's own — see
+  /// The parent, not the file. A watch cannot be placed on something that does
+  /// not exist, and a checkout with no comments has no log until the first
+  /// note. The directory is this checkout's own — see
   /// [ReviewStore.fileFor] — so the traffic is this log and its neighbours,
   /// not a tree.
   ///
-  /// **And it does not create it.** Creating the directory to watch it would
-  /// mean every screen ever opened leaves a permanent empty directory under
-  /// `~/.flutterware`, one per checkout, for a review nobody wrote. Writing the
+  /// And it does not create it. Creating the directory to watch it would mean
+  /// every screen ever opened leaves a permanent empty directory under
+  /// `~/.flutterware`, one per checkout, for a review that was never written. Writing the
   /// first note creates it, and [_apply] arms the watch then.
   void _watch() {
     var parent = _store.file.parent;

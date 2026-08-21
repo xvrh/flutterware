@@ -7,7 +7,7 @@ import 'package:flutterware_app/src/worktrees/facts.dart';
 
 /// The row's hover-only controls, and the one that has to outlive the hover.
 ///
-/// **Written after "Remove worktree… disappears before I can click it".** The
+/// Written after "Remove worktree… disappears before I can click it". The
 /// controls are hover-only by design — a button beside every row is a wall
 /// rather than a list — but a menu opens into an *overlay*, and moving the
 /// pointer from the trigger to the item leaves the row. Hover ends, the trigger

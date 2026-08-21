@@ -8,25 +8,25 @@ import 'knob_field.dart';
 
 /// The knobs of the run being shown, editable, with **Restart to apply**.
 ///
-/// **This is what makes the measurement reachable.** The launch form lives on
+/// This is what makes the measurement reachable. The launch form lives on
 /// the New run page, and the only route back to it is Stop — which is a
 /// relaunch, which is the rebuild this design exists to remove. Editing here
 /// costs a wrapper rewrite and a hot restart: 262ms on desktop, 3.07s on an
 /// Android emulator.
 ///
-/// **The bar is pinned, not the last thing in the list.** A knob is a short
+/// The bar is pinned rather than last in the list. A knob is a short
 /// list today and an app with eight of them is ordinary; a button that scrolls
 /// away is a button you have to go and find, and the sentence beside it is the
 /// cost of pressing it. Both belong where the decision is made.
 ///
 /// Two things it deliberately does not do:
 ///
-/// - **It does not restart on its own.** Losing the cart because somebody typed
-///   in a field is a surprise a cockpit should not spring, so the button is the
-///   consent.
+/// - **It does not restart on its own.** Losing the app's state because a field
+///   was typed in is a surprise a cockpit should not spring, so the button is
+///   the consent.
 /// - **It does not apply live.** A value reaches the app only through `main`,
 ///   so showing a new one while the process holds the old would look correct
-///   and be wrong. Until the restart lands, the edit is *pending* and says so.
+///   and be wrong. Until the restart lands, the edit is marked *pending*.
 class KnobsTab extends StatefulWidget {
   const KnobsTab({
     super.key,

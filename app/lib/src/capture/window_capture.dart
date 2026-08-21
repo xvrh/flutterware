@@ -7,8 +7,8 @@ import '../embedder/embedded_engine.dart';
 
 /// A picture of the window, guests included.
 ///
-/// **Two captures composited, because the guest is not in the host's layer
-/// tree.** A catalog panel shows its guest through `Texture(textureId:)`, an
+/// Two captures composited, because the guest is not in the host's layer
+/// tree. A catalog panel shows its guest through `Texture(textureId:)`, an
 /// external texture the platform compositor resolves at raster time;
 /// `RenderRepaintBoundary.toImage` rasterizes a layer tree offscreen. Measured
 /// on macOS: the texture's rect comes back fully transparent, every sample,

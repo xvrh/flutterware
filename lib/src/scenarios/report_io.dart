@@ -48,8 +48,8 @@ class ScenarioRunReport {
   /// worktree's root.
   ///
   /// Throws [FormatException] when the directory holds no report, or holds one
-  /// this version cannot read. Both name what was found and what was expected:
-  /// the reader of this message is looking at somebody else's build output.
+  /// this version cannot read. Both name what was found and what was expected,
+  /// since the reader is usually looking at build output from elsewhere.
   static Future<ScenarioRunReport> read(
     String directory, {
     String root = '.',

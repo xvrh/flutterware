@@ -52,7 +52,7 @@ typedef BundleSync = ({bool changed, bool fontsChanged});
 /// tool's exact invocation and cached per engine revision, so only the first
 /// build after an SDK update pays the ~250ms per shader.
 ///
-/// **In place, and never delete-and-recreate.** The engine opens every asset
+/// In place, and never delete-and-recreate. The engine opens every asset
 /// relative to a file descriptor of this directory, so replacing the
 /// directory makes a *running* guest unable to load anything — measured in
 /// the 2026-07-30 mid-session spike as `Unable to load asset:
@@ -64,7 +64,7 @@ typedef BundleSync = ({bool changed, bool fontsChanged});
 /// puts it there, and deleting it would leave every attaching session a
 /// dangling kernel.
 ///
-/// **Which keys resolve to which files is not decided here** — [AssetCatalog]
+/// Which keys resolve to which files is not decided here — [AssetCatalog]
 /// decides it, and the asset inspector reads the same answer. What is left in
 /// this class is the encoding: manifests in the shapes the engine expects, and
 /// a symlink per payload.
@@ -108,7 +108,7 @@ class AssetBundleBuilder {
   /// path — empty when nothing in the catalog declares a transformer, which is
   /// the ordinary project and costs one `isEmpty` check.
   ///
-  /// **Run here rather than inside [_linkPayloads]** because it is the one part
+  /// Run here rather than inside [_linkPayloads] because it is the one part
   /// of a bundle build that is neither cheap nor synchronous: a cold cache
   /// spawns a process per asset. Pooled [AssetTransformerRunner.concurrency]
   /// wide, so a catalog of 21 vectors costs ~0.7s once instead of ~2.5s, and

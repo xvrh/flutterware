@@ -25,7 +25,7 @@ const addressBarHeight = 24.0;
 /// Tabs are aimed at; this is glanced at, and a full-width strip also means the
 /// address rarely needs shortening at all.
 ///
-/// **The readout is a row of independently live parts.** The bar used to be one
+/// The readout is a row of independently live parts. The bar used to be one
 /// tap target that opened the editor, with the worktree chevron as the single
 /// exception; the second live part would have been a mode you discover by being
 /// surprised, so editing got its own affordance instead — the `edit` button on

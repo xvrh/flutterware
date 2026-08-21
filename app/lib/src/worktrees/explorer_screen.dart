@@ -33,7 +33,7 @@ class ExplorerEntry {
 
   /// The label-priority stack, resolved.
   ///
-  /// **Open question** (inherited from the 2026-05-18 plugin design, and this is
+  /// Open question (inherited from the 2026-05-18 plugin design, and this is
   /// the first surface where both are routinely present): an agent title and a
   /// PR title both want to be the name. The rule here is that a *live* agent
   /// wins — while it is working or waiting, its title is what the worktree is
@@ -130,7 +130,7 @@ class WorktreeExplorerView extends StatefulWidget {
 class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
   /// Which rows are showing their detail.
   ///
-  /// **A set, not one at a time.** Comparing two checkouts is the reason this
+  /// A set, not one at a time. Comparing two checkouts is the reason this
   /// screen exists, and a detail that closed the moment you opened another one
   /// would turn the comparison into a memory test.
   final _expanded = <String>{};
@@ -147,7 +147,7 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
 
   /// Which row's changes popover is open, if any.
   ///
-  /// **One at a time**, unlike [_expanded]. A detail is comparable and a ranked
+  /// One at a time, unlike [_expanded]. A detail is comparable and a ranked
   /// file list is not, so the set that makes the explorer worth having would
   /// make this one unreadable.
 
@@ -373,7 +373,7 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
     return rows;
   }
 
-  /// **A total order, in every mode.** `List.sort` is not stable in Dart, so a
+  /// A total order, in every mode. `List.sort` is not stable in Dart, so a
   /// comparator that returns 0 for two rows lets them trade places on any
   /// rebuild — and with watchers running, rebuilds happen every couple of
   /// seconds. Every mode therefore ends at the path, which nothing can change.
@@ -405,9 +405,9 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
 
 /// What the keyboard does, said once, quietly.
 ///
-/// A keyboard nobody can discover is a keyboard nobody uses — and ⌘↵ in
-/// particular is not guessable. One muted strip costs 22 pixels and is the whole
-/// documentation.
+/// An undiscoverable shortcut goes unused — and ⌘↵ in particular is not
+/// guessable. One muted strip costs 22 pixels and is all the documentation
+/// there is.
 class _KeyHints extends StatelessWidget {
   const _KeyHints();
 

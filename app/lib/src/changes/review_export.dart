@@ -1,11 +1,11 @@
 /// Taking the outstanding notes somewhere else.
 ///
-/// **The markdown is the artefact; the routes are two ways of moving it.** The
+/// The markdown is the artefact; the routes are two ways of moving it. The
 /// clipboard and a file render the identical text — see [reviewMarkdown] — so
 /// there is one format to keep readable, one to test, and no way for the thing
 /// you previewed to differ from the thing that left.
 ///
-/// **Exporting changes nothing on its own.** It used to be the gesture that
+/// Exporting changes nothing on its own. It used to be the gesture that
 /// closed a batch, back when the recipient was a colleague in another window
 /// and *it left* was the only fact we could honestly record. The recipient is
 /// now usually an agent inside this checkout, which reads the log itself and
@@ -87,7 +87,7 @@ class _ExportSheetState extends State<_ExportSheet> {
 
   /// Whether to tick the exported notes off on the way out.
   ///
-  /// **Off by default**, because the common reader is the agent in this
+  /// Off by default, because the common reader is the agent in this
   /// checkout, which resolves what it deals with and says what it did — and
   /// pre-resolving would throw that answer away before it was written. You turn
   /// it on for the case it is for: a reader that will never report back.
@@ -252,7 +252,7 @@ class _ExportSheetState extends State<_ExportSheet> {
                   const Gap(FwSpacing.sm),
                   Flexible(
                     child: Text(
-                      'Resolve them too — nobody is going to report back',
+                      'Resolve them too — no reply comes back',
                       style: context.type.caption.copyWith(
                         color: _resolve ? colors.ink : colors.mut2,
                       ),
@@ -334,7 +334,7 @@ class _Label extends StatelessWidget {
 
 /// One of the two ways the notes can leave.
 ///
-/// **A card, not a band.** The chosen one was a full-bleed accent stripe across
+/// A card, not a band. The chosen one was a full-bleed accent stripe across
 /// the dialog and the other was bare text on the background, so the two options
 /// did not look like two of anything — only the radio glyph said they were a
 /// pair. Bordered and inset, they are the same object in two states, which is

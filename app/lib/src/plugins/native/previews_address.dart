@@ -1,7 +1,7 @@
 /// How Previews writes itself into an address, and how it reads itself
 /// back out.
 ///
-/// **Both directions in one file, on purpose.** The address is written by
+/// Both directions in one file, on purpose. The address is written by
 /// search (so a hit is somewhere real), by the tree (so clicking an entry is
 /// navigation), and by whoever pastes one; it is read by the panel deciding
 /// what to show. If encode and decode lived apart they would drift, and the
@@ -65,7 +65,7 @@ CatalogPlace? catalogPlace(List<String> segments) {
 /// Whether the address has *moved*, and so has something new to ask of the
 /// session.
 ///
-/// The whole of a bug that took three attempts to find, so it is named rather
+/// This was a bug that took three attempts to find, so it is named rather
 /// than left inline. `didChangeDependencies` fires for its own reasons, not
 /// only when the address changes; and the address lags a local selection by a
 /// frame, because its write-back is a post-frame callback. Handing it over

@@ -53,7 +53,7 @@ class GuestErrors {
   /// replacing that would trade a red test for a queryable one. The preview
   /// harness chains onto it for the length of a single entry and calls this.
   ///
-  /// Same buffer either way, which is the point: the embedder guest and the
+  /// Same buffer either way, deliberately: the embedder guest and the
   /// tester harness report the same errors, deduplicated by the same key and
   /// counted the same way, so their audits are comparable row for row.
   void report(FlutterErrorDetails details) {
@@ -106,7 +106,7 @@ class GuestErrors {
   /// reason: carrying one entry's failures into the next reports a demo as
   /// broken because the one before it was.
   ///
-  /// **Only on a change of entry**, because this runs from `didUpdateWidget`
+  /// Only on a change of entry, because this runs from `didUpdateWidget`
   /// and therefore on every rebuild — turning a knob would otherwise wipe the
   /// record of the throw the previous knob caused. Which leaves reloading *the
   /// same* entry with nothing to clear it, and that is what [clear] is for.
@@ -118,10 +118,10 @@ class GuestErrors {
 
   /// Forgets everything, keeping the entry.
   ///
-  /// **The host decides when, because only the host knows what it just asked
-  /// for.** This is a record of what has been reported, not a reading of what
+  /// The host decides when, because only the host knows what it just asked
+  /// for. This is a record of what has been reported, not a reading of what
   /// is wrong now — nothing arrives to say an overflow *stopped*, so a demo
-  /// that overflowed once goes on saying so until somebody forgets it. That is
+  /// that overflowed once keeps reporting it until this is called. That is
   /// right for a log and wrong for a panel headed Problems: you fix the
   /// overflow, reload, and the fixed problem is still listed.
   ///

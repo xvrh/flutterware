@@ -679,7 +679,7 @@ class _AddRow extends StatelessWidget {
 
 /// A lane's spans, draggable.
 ///
-/// **The drag is held here and written once.** Every pointer sample used to be
+/// The drag is held here and written once. Every pointer sample used to be
 /// a file read, a file write, a reload and a refresh — at roughly 1.5ms per
 /// pixel on a 900ms motion that is a write on nearly every sample, sixty times
 /// a second, and sixty entries in your editor's undo history for one gesture.
@@ -867,7 +867,7 @@ class _SpanPainter extends CustomPainter {
   final Color tone;
 
   /// A property nothing tunes has no span to draw, so the lane is the outline
-  /// of where one would go — which is the whole of the creation path.
+  /// of where one would go — which is also how a span gets created.
   final bool dashed;
 
   final Color outline;
@@ -1155,7 +1155,7 @@ class MotionInspector extends StatelessWidget {
 ///
 /// One place decides colour-or-number, and `property_editor.dart` decides the
 /// rest off the vocabulary — so adding a property to the closed set gives it an
-/// editor without anybody touching this file.
+/// editor without touching this file.
 /// A tuned value, with whatever control its property earns.
 class _ValueEditor extends StatelessWidget {
   const _ValueEditor({
@@ -1202,13 +1202,13 @@ class _ValueEditor extends StatelessWidget {
 
 /// A number, its control, and the one copy of the value they are both showing.
 ///
-/// **The in-flight value lives here, not in the controls.** A slider and the
+/// The in-flight value lives here, not in the controls. A slider and the
 /// number above it are two views of one thing; holding the dragged value in
 /// each left them disagreeing for the length of every drag — the slider moved
 /// and the number sat still, because the number was still showing what the file
 /// said.
 ///
-/// **And it is released only once the write has landed.** Clearing on pointer-up
+/// And it is released only once the write has landed. Clearing on pointer-up
 /// dropped back to the file's value for the frames between committing and the
 /// reload arriving, which is a flash of the old number on every single edit. It
 /// is the same rule the span drag already followed and the reason its comment
@@ -1314,8 +1314,8 @@ class _ScrubNumber extends StatefulWidget {
   final double value;
   final MotionNumberShape shape;
 
-  /// Whether a drag is in flight anywhere in this editor, so the border says so
-  /// even when the drag is on the slider.
+  /// Whether a drag is in flight anywhere in this editor, so the border can
+  /// show it even when the drag is on the slider.
   final bool held;
 
   final ValueChanged<double> onChanged;
@@ -1808,8 +1808,8 @@ class _CurvePicker extends StatelessWidget {
 /// The easing, plotted from the curve the file names.
 ///
 /// It plots by *sampling the curve itself* rather than by drawing stored
-/// control points, so a name this runtime cannot resolve draws nothing and says
-/// so — which is the same answer the writer would give.
+/// control points, so a name this runtime cannot resolve draws nothing and
+/// reports it — the same answer the writer would give.
 class _CurveBox extends StatelessWidget {
   const _CurveBox(this.name);
 

@@ -25,7 +25,7 @@ class DaemonAddress {
   /// thinking about sharing should split the daemon, not silently hand a client
   /// someone else's compiler.
   ///
-  /// **That rule is right for one service and inverts for several.** It works
+  /// That rule is right for one service and inverts for several. It works
   /// here because the process *is* the compiler, so "would produce a different
   /// kernel" and "should be a different process" are the same question. The day
   /// this process hosts a second service — a test runner, a resident analyzer —

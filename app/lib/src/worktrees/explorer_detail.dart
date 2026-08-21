@@ -7,7 +7,7 @@ import 'facts.dart';
 
 /// What a row says when you ask it to say more.
 ///
-/// **Detail in place, not a destination.** Everything here is already in the
+/// Detail in place, not a destination. Everything here is already in the
 /// facts, so expanding costs nothing and navigates nowhere — which is what lets
 /// you interrogate a checkout you have not opened.
 ///

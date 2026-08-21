@@ -25,8 +25,8 @@ import 'skip.dart';
 
 /// A comparison's world, built from an open worktree.
 ///
-/// **The same runners `fw compare` drives, wired to a session instead of a
-/// command line.** Nothing here decides anything: which entries are new, what
+/// The same runners `fw compare` drives, wired to a session instead of a
+/// command line. Nothing here decides anything: which entries are new, what
 /// nothing touched, what order rows rank in are all the runners' business, and
 /// this is the adapter that hands them a checkout, an SDK and a cache. A panel
 /// that made any of those calls itself would be a second answer to a question

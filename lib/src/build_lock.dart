@@ -18,9 +18,9 @@ import 'dart:io';
 /// machine never sees either, because it never has two *cold* runs at once;
 /// a CI runner with parallel jobs has nothing but.
 ///
-/// Blocking is the point. The loser is not looking for something else to do —
+/// Blocking is deliberate. The loser is not looking for something else to do —
 /// it wants exactly the artifacts the winner is producing, so waiting them out
-/// and then finding the work already done is the outcome, not the consolation.
+/// and then finding the work already done is the desired outcome.
 ///
 /// No in-process queue, unlike `BaseCheckout.ensure`, which needs one because
 /// the OS lock is advisory per *process* and two `ensure` calls inside one GUI

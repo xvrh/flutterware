@@ -12,7 +12,7 @@ import 'package:path/path.dart' as p;
 
 /// Reads the shape of every action's result straight out of the source.
 ///
-/// **Build-time only.** This resolves a package with the analyzer, which costs
+/// Build-time only. This resolves a package with the analyzer, which costs
 /// seconds and pulls in a compiler — `tool/generate_capabilities.dart` runs it
 /// and writes the answers into `action_shapes.generated.dart`, which is what
 /// `fw` and the MCP server read. Nothing on a request path imports this.
@@ -184,15 +184,15 @@ class ShapeExtractor {
   static bool _gates(ClassElement type) =>
       type.allSupertypes.any((s) => s.element.name == 'ReportsFailure');
 
-  /// The class behind a field's type, when we can honestly claim to know its
-  /// wire shape — following `List<T>` into `T`.
+  /// The class behind a field's type, when its wire shape is actually known —
+  /// following `List<T>` into `T`.
   ///
   /// Two ways to qualify, and both describe what is *sent*. A
   /// `@JsonSerializable` class generates its keys from its fields, so reading
-  /// the fields is honest. A class with a hand-written `toJson` is read from
+  /// the fields is accurate. A class with a hand-written `toJson` is read from
   /// that method's map literal instead — `Artifact` turns an `Address` into a
-  /// string, and only the map says so. A class with neither gets nothing,
-  /// which is still better than a shape nobody sends.
+  /// string, and only the map records that. A class with neither gets nothing,
+  /// which is still better than a shape that is never sent.
   ClassElement? _walkable(DartType type) {
     if (type is! InterfaceType) return null;
     if (type.element.name == 'List' && type.typeArguments.isNotEmpty) {

@@ -38,7 +38,7 @@ Future<void> showShellSearch(BuildContext context, ShellController shell) {
 /// The Screen behind [CommandPalette]: it warms the index, runs the query
 /// for the selected worktree, and turns the chosen hit into navigation.
 ///
-/// Opening is the intent that pays for loading. Every keystroke after that
+/// Opening the palette is what triggers loading. Every keystroke after that
 /// filters what is already in memory — not because a rule forbids more, but
 /// because the scans are cached and idempotent, so redoing them per character
 /// would be work with no result.
@@ -96,13 +96,13 @@ class _ShellSearchState extends State<ShellSearch> {
     return groupHits(hits);
   }
 
-  /// Hands the hit's address to the shell, which is the whole of it.
+  /// Hands the hit's address to the shell, and nothing more.
   ///
   /// Not a branch per kind of result, and no longer a translation into
   /// `select…` calls: the address *is* the instruction, and the shell's state
   /// is an address, so opening a hit is one write. Segments the shell does not
   /// understand ride along rather than being dropped — it reads the first as a
-  /// child and leaves the rest for whoever owns them.
+  /// child and leaves the rest for whatever owns them.
   void _open(SearchHit hit) {
     widget.onDismiss();
     widget.shell.go(hit.address);

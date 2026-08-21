@@ -40,11 +40,11 @@ const driftMessage =
 
 /// A comment as it appears in the diff, under the line it is about.
 ///
-/// **The left edge is the accent bar**, the same 2 px device the index uses for
+/// The left edge is the accent bar, the same 2 px device the index uses for
 /// a pinned file: at a glance down a long diff it says *somebody wrote here*
 /// without needing to be read.
 ///
-/// **It shows what it captured.** The quote is the whole design — a note
+/// It shows what it captured. The quote is the whole design — a note
 /// carries the code it was written about so the agent may keep editing while
 /// you type — and for one release it was the one thing on this screen you could
 /// not see: written into the comment, rendered only in the markdown.
@@ -74,7 +74,7 @@ class ReviewThread extends StatelessWidget {
 
   /// Whether the file moved after this was written.
   ///
-  /// **Ignored once the note is resolved.** On a note the agent dealt with, the
+  /// Ignored once the note is resolved. On a note the agent dealt with, the
   /// file changing is the work landing — the warning would be on every one of
   /// them, and a warning that is always on is not a warning. See [_drifting].
   final bool drifted;
@@ -196,13 +196,13 @@ class ReviewThread extends StatelessWidget {
 
 /// The answer, under the note it answers.
 ///
-/// **Who, then what they said.** *The agent says it did this* and *I ticked
+/// Who, then what they said. *The agent says it did this* and *I ticked
 /// this off* are different claims, and the actor is the only thing that tells
 /// them apart — a message alone reads as authoritative whoever wrote it.
 ///
 /// The agent's is drawn in the accent. Yours is not: you already know what you
 /// decided, and colouring both makes the colour mean *resolved* rather than
-/// *somebody answered you*.
+/// *the agent answered*.
 class ReviewResolutionNote extends StatelessWidget {
   const ReviewResolutionNote(this.resolution, {super.key});
 
@@ -296,7 +296,7 @@ class ReviewQuote extends StatelessWidget {
 
 /// A note that has just been deleted, and can still be taken back.
 ///
-/// **The delete is not written yet.** It stands in the deleted note's place
+/// The delete is not written yet. It stands in the deleted note's place
 /// until the window closes, and only then does the tombstone reach the log —
 /// so taking it back costs nothing and restores the note exactly, in the
 /// position it held. Delete was a single click on a 10.5 px text link beside
@@ -379,7 +379,7 @@ class _Action extends StatelessWidget {
 
 /// The box you write a comment in.
 ///
-/// **It shows its anchor and the code it is about to capture**, in that order,
+/// It shows its anchor and the code it is about to capture, in that order,
 /// above the text. That is the entire staleness contract, put where you accept
 /// it rather than in a doc nobody opens: *these three lines, as they are now,
 /// travel with what you are about to write.* It said `3 lines captured`, which
@@ -387,7 +387,7 @@ class _Action extends StatelessWidget {
 /// diff has just tinted behind the box, so naming them and not showing them
 /// made the reader count rows to check.
 ///
-/// **One border, not two.** The box had an accent outline and the field inside
+/// One border, not two. The box had an accent outline and the field inside
 /// it had another, so writing a note happened inside two concentric blue
 /// rectangles four pixels apart. The box *is* the field: the outline is the
 /// focus, and the input draws none of its own.
@@ -414,9 +414,9 @@ class ReviewComposer extends StatefulWidget {
   /// The code that will travel with this comment. Empty for a file or review
   /// anchor, which quote nothing.
   ///
-  /// While **editing**, this is the quote the comment already carries rather
-  /// than a fresh read of the patch — the whole point of storing it is that it
-  /// does not change under you, and rewriting the body is not re-capturing.
+  /// While *editing*, this is the quote the comment already carries rather
+  /// than a fresh read of the patch — it is stored precisely so it does not
+  /// change under you, and rewriting the body is not re-capturing.
   final List<String> quote;
 
   /// Whether this is rewriting an existing comment rather than adding one.
@@ -607,13 +607,13 @@ class _ReviewComposerState extends State<ReviewComposer> {
 
 /// A comment's row in the index.
 ///
-/// **Numbered, while it is outstanding.** A number is what lets you say *the
+/// Numbered, while it is outstanding. A number is what lets you say *the
 /// third one* to the agent — the one thing the anchor cannot do when three
 /// comments sit on one file. A resolved note leaves the numbering rather than
 /// renumbering the rest, so *the third one* means one note for a whole session;
 /// [number] is null there and the slot carries a tick instead.
 ///
-/// **A row, not a paragraph.** Three notes with a two-line body and a line of
+/// A row, not a paragraph. Three notes with a two-line body and a line of
 /// code each ran together into one block of text: nothing said where one ended
 /// and the next began except a faint digit in the margin, while the threads
 /// they mirror had become composed objects. It carries the same four things a

@@ -1,11 +1,11 @@
 /// Makes the explorer live, without a polling timer anywhere.
 ///
-/// **Four directories cover fourteen worktrees.** A linked worktree's HEAD and
+/// Four directories cover fourteen worktrees. A linked worktree's HEAD and
 /// index are not in the checkout — they live in `<main>/.git/worktrees/<name>/`
 /// — so one recursive watch there sees every linked checkout at once. Branches
 /// are shared, so one watch on `refs/heads/` sees every commit from anywhere.
 ///
-/// **Verified end to end on a scratch repository (2026-08-10)** — not "which
+/// Verified end to end on a scratch repository (2026-08-10) — not "which
 /// files git wrote", but which of these watches actually *fired*, with real
 /// `Directory.watch` streams and a linked worktree on a slashed branch:
 ///
@@ -27,7 +27,7 @@
 ///   under `refs/heads`, and a non-recursive watch would have seen nothing at
 ///   all on this repository, where every branch is named `claude/…`. It is the
 ///   sort of miss that looks like "watching does not work on my machine".
-/// - **Editing a file touches nothing at all**, which is the honest gap:
+/// - **Editing a file touches nothing at all**, which is the real gap:
 ///   dirty counts cannot be event-driven, and watching fourteen working trees
 ///   recursively is exactly the cost this design exists to avoid. Dirty
 ///   refreshes on visibility and on demand. It is also the least urgent cell —
@@ -36,7 +36,7 @@
 /// [WorkingTreeWatcher] is that gap's scoped exception, for the one screen
 /// where the file being edited *is* the subject.
 ///
-/// **Never `.git` recursively.** `objects/` churns on every fetch, and a watch
+/// Never `.git` recursively. `objects/` churns on every fetch, and a watch
 /// that recursed into it would spend the day reporting packfiles. The top level
 /// is watched flat, which is enough for the main checkout's own HEAD and index.
 ///
@@ -62,7 +62,7 @@
 /// predicate and keeps only `stack-*`, which is the one thing in there that
 /// says anything about a checkout.
 ///
-/// **Measured, because the filter is the whole reason this is affordable.**
+/// Measured, because the filter is the whole reason this is affordable.
 /// Thirty seconds on a directory holding 123 files, with a server logging and
 /// a stack being probed:
 ///
@@ -78,7 +78,7 @@
 /// worktree and no subprocesses at all.
 ///
 /// The filter also catches something the platform does that is easy to miss:
-/// **macOS emits an event naming the watched directory itself**, both when the
+/// macOS emits an event naming the watched directory itself, both when the
 /// watch registers and alongside the per-file events. Its basename is the
 /// directory's, so it never looks like a stack file.
 library;
@@ -104,7 +104,7 @@ enum WorktreeChange {
   /// A dev stack's cached reading was rewritten — by another window, or by
   /// `fw run dev_stack start` in a terminal.
   ///
-  /// **Rarer than it sounds, and that is by design.** A stack is only probed
+  /// Rarer than it sounds, and that is by design. A stack is only probed
   /// while one of its surfaces is mounted, so sitting on the explorer produces
   /// no writes at all. What this catches is the case nothing else can: the
   /// state changing while you are looking at a screen that is not the one
@@ -289,7 +289,7 @@ class WorktreeWatcher {
 /// you have to press refresh on to see what an agent did is one you stop
 /// trusting.
 ///
-/// **Measured on this repository (2026-08-11)**, a 2.3 GB checkout, with real
+/// Measured on this repository (2026-08-11), a 2.3 GB checkout, with real
 /// `Directory.watch` streams:
 ///
 /// | operation | this watch |
@@ -315,7 +315,7 @@ class WorktreeWatcher {
 ///   Adding a git watch here would be a second watch on the same directory for
 ///   the same event.
 ///
-/// **`.git` is filtered out**, which matters most for the *main* checkout,
+/// `.git` is filtered out, which matters most for the *main* checkout,
 /// where it sits inside the tree being watched. `objects/` churns on every
 /// fetch, and recursing into it would spend the day reporting packfiles — the
 /// same rule, and the same reason, as the class above.
@@ -343,8 +343,8 @@ class WorkingTreeWatcher {
   /// writing continuously never offers a quiet moment, so a debounce alone
   /// would either never fire or fire on every write.
   ///
-  /// **Longer than the explorer's, because a fire here costs incomparably
-  /// more**: that one re-reads a small file per worktree, this one spawns an
+  /// Longer than the explorer's, because a fire here costs incomparably
+  /// more: that one re-reads a small file per worktree, this one spawns an
   /// isolate and half a dozen git subprocesses including the whole `git diff`.
   ///
   /// It is also nearly free to lengthen. After any quiet moment the floor has

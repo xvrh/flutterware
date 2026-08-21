@@ -10,7 +10,7 @@ import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
-/// **Declared is what makes an action invocable, not implemented.**
+/// Declared is what makes an action invocable, not implemented.
 ///
 /// The argument check is keyed on an action's declaration, so a core whose
 /// `invoke` handles an id it never declared was exempt from it altogether: the

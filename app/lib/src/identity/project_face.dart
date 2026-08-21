@@ -11,7 +11,7 @@ import 'package:path/path.dart' as p;
 /// project already has is the one it ships. So this reads it rather than
 /// inventing a mark.
 ///
-/// **A path, not a search.** This used to walk the declared package's platform
+/// A path, not a search. This used to walk the declared package's platform
 /// directories and take the largest icon that was not a `flutter create`
 /// default, recognised by hashing against a list of template files. That list is
 /// a promise about somebody else's repository, and it expired: a mobile app

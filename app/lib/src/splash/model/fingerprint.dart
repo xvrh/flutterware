@@ -1,6 +1,6 @@
 /// Whether the scan on screen is still the scan the disk would produce.
 ///
-/// **Polled, not watched, and that is a decision rather than a shortcut.** The
+/// Polled, not watched, and that is a decision rather than a shortcut. The
 /// reasons are specific to this plugin and are worth keeping next to the code,
 /// because `ConfigWatcher` sits two directories away doing the opposite:
 ///

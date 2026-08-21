@@ -9,7 +9,7 @@ import 'flutter_cache.dart';
 /// Where `FlutterEmbedder.framework` for [revision] lives: once per machine,
 /// under `~/.flutterware/engine/<revision>/`.
 ///
-/// **Not under the package.** It used to be `<appPackageRoot>/.engine`, and a
+/// Not under the package. It used to be `<appPackageRoot>/.engine`, and a
 /// hosted install unpacks `app/` per project — under
 /// `~/.flutterware/<sha1(packageRoot)>/` — so every project downloaded and kept
 /// its own copy of a 93MB artifact that depends on nothing but the engine

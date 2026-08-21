@@ -144,7 +144,7 @@ class Drive {
 
   /// Two taps in the same place, close enough together to read as one gesture.
   ///
-  /// **The gap between them is real elapsed time and cannot be skipped.**
+  /// The gap between them is real elapsed time and cannot be skipped.
   /// `DoubleTapGestureRecognizer` *restarts* rather than fires when the second
   /// tap arrives inside `kDoubleTapMinTime` — 40ms, there because a touch
   /// screen reports one long touch intermittently and that rule is what tells
@@ -216,7 +216,7 @@ class Drive {
   /// other widget — a hover is how "does this control explain itself" becomes
   /// a question with a machine-readable answer.
   ///
-  /// **[hold] is real elapsed time, and that is the whole of why it exists.**
+  /// [hold] is real elapsed time, which is why it exists at all.
   /// A settle waits on frames, tickers and image decodes; the interesting half
   /// of a hover is very often a `Timer` — `Tooltip.waitDuration` — which
   /// schedules none of the three until it fires. Measured on an app whose theme
@@ -224,12 +224,12 @@ class Drive {
   /// tooltip on screen, every time. See [_holdForHover] for what the hold
   /// actually watches.
   ///
-  /// **The pointer stays where it is put.** A mouse does not leave the screen
+  /// The pointer stays where it is put. A mouse does not leave the screen
   /// because you pressed a key, so the hover outlives its step: a `tap` that
-  /// follows still sees the control hovered, which is the point when the thing
-  /// to tap only appears on hover — and a `navigate` that follows leaves
-  /// whatever is now under that coordinate hovered, which is not. [unhover] is
-  /// the other half of the verb, not garnish.
+  /// follows still sees the control hovered, which is what you want when the
+  /// thing to tap only appears on hover — and a `navigate` that follows leaves
+  /// whatever is now under that coordinate hovered, which is not. Call
+  /// [unhover] to end it.
   Future<DriveStep> hover(dynamic target, {Duration? hold, Duration? settle}) {
     return _act('hover', target, settle, (finder) async {
       await controller.sendEventToBinding(
@@ -269,14 +269,14 @@ class Drive {
 
   /// Turns the mouse wheel over [target].
   ///
-  /// **Not a nicer [drag], and not [scrollTo].** A wheel turn is a pointer
+  /// Not a nicer [drag], and not [scrollTo]. A wheel turn is a pointer
   /// *signal*: the framework hit-tests it to whatever is under the pointer and
   /// hands it to that, so this is the verb that makes "scroll *this* pane"
   /// expressible. [scrollTo] picks a `Scrollable` and walks it, which is the
   /// right thing when the question is "get X on screen" and the wrong thing
   /// when the page has three scrollables and you mean the middle one.
   ///
-  /// **[by] is a wheel, not a finger, and the sign is the other way round.**
+  /// [by] is a wheel, not a finger, and the sign is the other way round.
   /// The delta is added to the scroll offset, so a positive `dy` moves *down*
   /// the list — where [drag]'s negative `dy` moves the finger up the screen to
   /// achieve the same thing. Both conventions are the platform's; neither is
@@ -301,7 +301,7 @@ class Drive {
 
   /// The synthetic mouse, made on first use.
   ///
-  /// **Its device id is deliberately not one an embedder produces.** Every
+  /// Its device id is deliberately not one an embedder produces. Every
   /// desktop embedder numbers its real mouse 0; [MouseTracker] keeps one state
   /// per device and asserts that an added event only ever follows a removed
   /// one. Sharing the human's device would make [unhover] delete a state the
@@ -334,8 +334,8 @@ class Drive {
   /// this simply holds the full budget — and the caller's settle, which runs
   /// after every hold, sees the finished screen either way.
   ///
-  /// **[budget] covers both phases, which is why the clock starts before the
-  /// settle.** The two used to have a budget each, and a hover that landed
+  /// [budget] covers both phases, which is why the clock starts before the
+  /// settle. The two used to have a budget each, and a hover that landed
   /// mid-route-transition paid twice: the settle spent the whole 600ms on the
   /// transition, the poll then found the app quiet and spent 600ms more. What
   /// the caller asked for is how long the pointer is held there, and the
@@ -365,8 +365,8 @@ class Drive {
   }
 
   /// Scrolls until [target] is on screen. Same contract as the scenario verb:
-  /// the target may match nothing yet — being off screen is the whole point —
-  /// and a target already on screen is a no-op, whether or not anything
+  /// the target may match nothing yet — being off screen is the reason to call
+  /// it — and a target already on screen is a no-op, whether or not anything
   /// scrolls.
   Future<DriveStep> scrollTo(
     dynamic target, {
@@ -449,16 +449,16 @@ class Drive {
   /// Focuses the field at [target] and sets [text] as one editing value, the
   /// way a widget reports an edit the user made.
   ///
-  /// **Both halves have to be told, and that is the whole reason this is not
-  /// `TextInput.updateEditingValue`.** That call is control-side: it pushes a
+  /// Both halves have to be told, which is why this is not
+  /// `TextInput.updateEditingValue`. That call is control-side: it pushes a
   /// value *into* the framework, and the platform's own editing state — the
   /// `UITextField`/`InputConnection` shadow the IME edits against — never
   /// hears about it. Measured on both an iOS simulator and an Android
   /// emulator (2026-08-11): after the agent wrote a sentence, the human's
   /// next keystroke on the soft keyboard *replaced* it, because as far as the
   /// platform knew the field was still empty. On a desktop with no soft
-  /// keyboard nobody noticed; on a phone it breaks co-driving, which is the
-  /// workflow this surface exists for.
+  /// keyboard this goes unnoticed; on a phone it breaks co-driving, which is
+  /// the workflow this surface exists for.
   ///
   /// [EditableTextState.userUpdateTextEditingValue] is the framework's own
   /// name for "a user edit that did not come from the platform": it runs the
@@ -503,7 +503,7 @@ class Drive {
   /// checks for. A Mac shortcut and its Windows/Linux twin are different chords:
   /// `meta+k` and `control+k`.
   ///
-  /// **This is for shortcuts and navigation, not for typing.** A character
+  /// This is for shortcuts and navigation, not for typing. A character
   /// does not reach a text field through a key event on any platform — the
   /// platform's text input sends the edit, and the key event is a separate
   /// thing that happens to accompany it. So `key('a')` into a focused
@@ -511,8 +511,8 @@ class Drive {
   /// verb that types. What this is for is `escape`, `tab`, the arrows,
   /// `enter`, and every `Shortcuts` binding the app declares.
   ///
-  /// **`flutter_test`'s `simulateKeyDownEvent` cannot be used here**, which is
-  /// why this reimplements it. It always also sends the raw key message, and it
+  /// `flutter_test`'s `simulateKeyDownEvent` cannot be used here, which is why
+  /// this reimplements it. It always also sends the raw key message, and it
   /// sends it through `TestDefaultBinaryMessengerBinding.instance` — which, in a
   /// process whose binding is the real `WidgetsFlutterBinding`, throws
   /// `'_debugInitializedType == null': is not true`. Measured, first attempt.
@@ -618,7 +618,7 @@ class Drive {
   /// `KeyData` first, then the raw `flutter/keyevent` message. Answers whether
   /// anything took it.
   ///
-  /// **Both halves are required, and that is the whole finding.**
+  /// Both halves are required, and that is the whole finding.
   /// `KeyEventManager.handleKeyData` does not dispatch a non-synthesized event —
   /// it *queues* it and waits for the raw message that always follows on a real
   /// platform. Measured: `metaLeft` + `keyK` through `handleKeyData` alone
@@ -744,7 +744,7 @@ class Drive {
 
   /// Refuses a key this platform's tables cannot produce a keystroke for.
   ///
-  /// **[_physicalKey] is not this check, and cannot be.** It answers from
+  /// [_physicalKey] is not this check, and cannot be. It answers from
   /// `knownPhysicalKeys` — every key on every keyboard — because that is the
   /// right set for the `usbHidUsage` the `KeyData` half needs. The raw half is
   /// built by `KeyEventSimulator.getKeyData` out of the *per-platform* tables,
@@ -757,12 +757,12 @@ class Drive {
   /// then throw `Failed assertion … not found in android physical key map`
   /// from inside `flutter_test`. That is an `AssertionError`, not a
   /// [TargetError], so it escapes the guest's refusal path entirely and comes
-  /// back as a bare stack trace with no screen attached to it — the worst
-  /// answer available for a caller who only mistyped a key name.
+  /// back as a bare stack trace with no screen attached to it, which is a poor
+  /// answer for a caller who only mistyped a key name.
   ///
   /// Rather than reimplement three private lookups that would then drift, this
   /// asks the same function the send will ask, and turns whatever it throws
-  /// into the refusal the caller deserved. `getKeyData` reads state and
+  /// into a refusal the caller can act on. `getKeyData` reads state and
   /// mutates none, so calling it twice costs a map scan and nothing else.
   static void _checkSimulatable(LogicalKeyboardKey key) {
     try {

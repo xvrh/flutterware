@@ -16,7 +16,7 @@ import '../utils/run_dir.dart';
 /// about each other."* That sentence was written about the compiler daemon.
 /// This is it one level up, about the running guest.
 ///
-/// **Keyed on the project root alone**, not on a [DaemonConfig]. The two sides
+/// Keyed on the project root alone, not on a [DaemonConfig]. The two sides
 /// build different configs for the same package today — the GUI's
 /// `appPackageRoot` is the app tool directory, `fw`'s is the package itself —
 /// so a config-derived key would never match. The project root is what both
@@ -51,7 +51,7 @@ class LiveSession {
     'pid': pid,
   };
 
-  /// **Deliberately does not carry the entry on screen.** It changes every time
+  /// Deliberately does not carry the entry on screen. It changes every time
   /// someone clicks, and a file kept in step with a browsing user is a file
   /// that is wrong for the moment between the click and the write. The guest
   /// knows which entry it is holding and is asked.
@@ -97,7 +97,7 @@ class LiveSession {
 /// Connects to the session published for [projectRoot], or null when there is
 /// none to connect to.
 ///
-/// **Liveness is decided by connecting**, not by checking a pid. A GUI that
+/// Liveness is decided by connecting, not by checking a pid. A GUI that
 /// crashed cannot delete its own file, and Dart offers no way to probe a pid
 /// without signalling it — where trying the URI answers the only question that
 /// matters, which is whether the guest will talk. A handle that will not

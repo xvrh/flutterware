@@ -21,8 +21,8 @@ class CompileBlame {
   /// generated entrypoint, something in the app itself.
   ///
   /// Nothing can be dropped to fix these, so a compile that produces only these
-  /// stays fatal. Saying so beats quietly serving a catalog that is missing
-  /// entries for reasons nobody reported.
+  /// stays fatal. Reporting it beats quietly serving a catalog that is missing
+  /// entries for unreported reasons.
   final Set<String> unattributed;
 
   bool get isEmpty => entryIds.isEmpty;

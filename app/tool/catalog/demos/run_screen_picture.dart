@@ -11,7 +11,7 @@ import 'app_theme.dart';
 
 /// The run cockpit's picture pane, with the hovered node's box over it.
 ///
-/// **What this is for.** The box is drawn by hovering a row in the tree beside
+/// What this is for. The box is drawn by hovering a row in the tree beside
 /// it, and a hover is the one thing the drive loop cannot produce — so in the
 /// running studio there is no way to *look* at this at all without a hand on
 /// the mouse. Here the highlight is a `ValueNotifier` set to a node id, which

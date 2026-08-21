@@ -90,7 +90,7 @@ class PreviewEntry {
 /// Runs every preview in a package as a widget test, and answers what each one
 /// reported.
 ///
-/// **The same widgets, the same errors, a different engine.** Each entry is
+/// The same widgets, the same errors, a different engine. Each entry is
 /// mounted under [CatalogGuest] and its annotation's `wrapper`, exactly as the
 /// embedder guest's entrypoint mounts it, and errors are collected into
 /// [GuestErrors] — the same buffer, the same dedup key, the same counts. What
@@ -99,7 +99,7 @@ class PreviewEntry {
 /// catalog-wide render from minutes to seconds: a demo that animates for ever
 /// costs a few microseconds of fake clock instead of a three-second wait.
 ///
-/// **Two lanes off one generated file**, told apart by whether a test runner is
+/// Two lanes off one generated file, told apart by whether a test runner is
 /// already declaring:
 ///
 /// - `Declarer.current == null` — nobody is. This was launched as a bare

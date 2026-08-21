@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-/// **Every git flutterware spawns must be immune to an inherited `GIT_DIR`.**
+/// Every git flutterware spawns must be immune to an inherited `GIT_DIR`.
 ///
 /// A git hook exports `GIT_DIR` to everything it runs, and `GIT_DIR` overrides
 /// git's directory discovery — the working directory and `-C` both lose to it.

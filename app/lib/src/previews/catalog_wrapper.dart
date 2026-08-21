@@ -143,7 +143,7 @@ Widget Function() get fwBuilder => fw$index.${entry.symbol};
 
   /// How the wrapper names [target] in an import directive.
   ///
-  /// **Anything under `lib/` is named by its `package:` URI, never relatively.**
+  /// Anything under `lib/` is named by its `package:` URI, never relatively.
   /// The same file reached both ways is *two libraries* to the compiler, with
   /// separate copies of every class in it — so a demo imported relatively here
   /// while the rest of the app reaches it as `package:x/…` yields a widget

@@ -781,7 +781,7 @@ void main() {
   });
 
   group('a command that does not come back', () {
-    /// **The wedge, which is the bug and not the hang.** `_busy` is what makes
+    /// The wedge, which is the bug and not the hang. `_busy` is what makes
     /// the next transition refuse, so a command that never returns did not fail
     /// on its own — it took every later `start`, `stop` and command with it for
     /// the rest of the session. `logs --follow` declared as an ordinary command

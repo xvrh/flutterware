@@ -71,7 +71,7 @@ class _ElementsViewState extends State<ElementsView> {
 
   /// Whether to show the wrappers too.
   ///
-  /// **Off, so this pane says what the drive verbs say.** An agent's `tree` has
+  /// Off, so this pane says what the drive verbs say. An agent's `tree` has
   /// dropped the scaffolding since the noise filter landed, and this pane had
   /// not learned to: it opened on fifteen levels of `AppDevbar → Devbar →
   /// FutureBuilder → Builder → FeatureFlags → …` before the first widget anyone
@@ -718,7 +718,7 @@ class _Detail extends StatelessWidget {
 /// The style block: what this widget set, then what it inherited, in that
 /// order and divided by a rule that says which is which.
 ///
-/// **Grouping replaced a per-row badge, and the badge had two problems.** It
+/// Grouping replaced a per-row badge, and the badge had two problems. It
 /// said `set here` four times down a 170px column on an ordinary label — a
 /// checklist rendered as decoration — and, worse, it distinguished nothing in
 /// the case a reader most needs it: a widget written
@@ -798,7 +798,7 @@ int _styleRank(String name) {
 /// the name of the base is the last word in it — which is the part everybody
 /// was reading it *for*.
 ///
-/// **It recognises a shape; it knows no vocabulary.** No list of Material slot
+/// It recognises a shape; it knows no vocabulary. No list of Material slot
 /// names, so an app that labels its own styles is read the same way. The
 /// tokens that are not names — the `2021` of a type-ramp year — are dropped,
 /// and `unknown`, which is what the framework writes for a `TextStyle` literal
@@ -830,7 +830,7 @@ final _name = RegExp(r'^[a-zA-Z][a-zA-Z0-9]*$');
 
 /// The widget's own properties, minus the ones the style block already showed.
 ///
-/// **Subtraction, because the two blocks were saying the same thing twice.**
+/// Subtraction, because the two blocks were saying the same thing twice.
 /// Measured on a label written the way this app writes them —
 /// `style: TextStyle(fontSize: 13, fontWeight: w400, color: …, letterSpacing:
 /// 0)` — four of fourteen rows were a key and a value repeated verbatim:
@@ -853,7 +853,7 @@ Map<String, String> _widgetRows(InspectNode node) => {
 /// of an 88-character provenance label anybody was reading. The rest of the
 /// label, and the two columns the pane has no width for, live one click away.
 ///
-/// **Click, not hover.** `HoverCard` exists for things a pointer brushes past
+/// Click, not hover. `HoverCard` exists for things a pointer brushes past
 /// on its way somewhere else; this is a read you go looking for, and its own
 /// doc records what happens when one target carries two interactions.
 class _OriginRow extends StatelessWidget {
@@ -922,7 +922,7 @@ class _OriginRow extends StatelessWidget {
 
 /// The three-way merge: what was in scope, what this widget said, what won.
 ///
-/// **The middle column is the reason this exists.** The pane can already show
+/// The middle column is the reason this exists. The pane can already show
 /// the first and the last — grouped either side of the `inherited` rule — but
 /// not both for the *same* field, and that overlap is where the interesting
 /// answers are: the theme offered 14 and this widget asked for 13, or the

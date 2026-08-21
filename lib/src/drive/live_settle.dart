@@ -16,7 +16,7 @@ class LiveSettleResult {
   /// animation, a spinner. Reported, never thrown: the caller always gets its
   /// observation back.
   ///
-  /// **It answers "is the app painting", which is not "is the screen ready".**
+  /// It answers "is the app painting", which is not "is the screen ready".
   /// The only things it can see are the ones below: a scheduled frame, a
   /// running ticker, an image being decoded. A `Future` waiting on the
   /// network, a file or an isolate schedules none of them, so a screen that

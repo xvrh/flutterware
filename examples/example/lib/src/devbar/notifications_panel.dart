@@ -1,7 +1,7 @@
 /// A command plugin: everything about push notifications that a developer —
 /// or an agent — needs to reach from outside the app.
 ///
-/// **This is the sample that argues for the whole bridge.** A push is the
+/// This is the sample that argues for the whole bridge. A push is the
 /// canonical thing you cannot test: it needs a backend, a device token, and
 /// somebody willing to send you one at the moment you are looking at the
 /// screen. Everything below reaches that code path directly, in about a
@@ -255,7 +255,7 @@ class NotificationsPlugin implements DevbarPlugin, DevbarPanelSource {
 
 /// The overlay's tab — [PanelView] over this plugin's own descriptor.
 ///
-/// **One declaration, two hosts.** Nothing here knows what the panel contains;
+/// One declaration, two hosts. Nothing here knows what the panel contains;
 /// it renders whatever `describePanel` registered, and hands every interaction
 /// straight to the code the wire handlers call. So an app running on a phone
 /// with no flutterware attached gets the identical screen the cockpit shows,

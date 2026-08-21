@@ -1,14 +1,14 @@
 /// Where review comments live between launches.
 ///
-/// **An append-only log, one file per checkout.** Not a field in
+/// An append-only log, one file per checkout. Not a field in
 /// `worktrees.json`: that file is read-whole and written-whole by every
 /// flutterware process on the repository, and it has a documented history of
-/// one window reverting another's writes. A line appended to a log cannot
-/// revert a line somebody else appended — the failure mode is bounded to *my
-/// window has not noticed yours yet*, which a re-read fixes, rather than *your
-/// six comments are gone*, which nothing fixes.
+/// one window reverting another's writes. An appended line cannot revert
+/// another appended line — the failure mode is bounded to *my window has not
+/// noticed yours yet*, which a re-read fixes, rather than *your six comments
+/// are gone*, which nothing fixes.
 ///
-/// **Keyed by the worktree, not by the repository.** Elsewhere in the app that
+/// Keyed by the worktree rather than by the repository. Elsewhere in the app that
 /// would be the wrong way round — per-project identity keys on the main
 /// checkout — but a review is of *this* branch's delta against *its* base.
 /// Two worktrees of one repository are two different reviews, and merging them
@@ -46,7 +46,7 @@ class ReviewStore {
 
   /// Everything the log says, folded.
   ///
-  /// **Never throws.** A log that will not parse is an empty log — the same
+  /// Never throws. A log that will not parse is an empty log — the same
   /// rule the facts cache follows, and for a stronger reason: this screen is
   /// how you look at a checkout, and refusing to draw it because a note file
   /// was truncated would be a worse program than one that had never stored
@@ -69,7 +69,7 @@ class ReviewStore {
 
   /// Appends [events] and returns the log as it now reads.
   ///
-  /// The re-read is the point: it folds in whatever another window appended
+  /// The re-read is deliberate: it folds in whatever another window appended
   /// since this one last looked, at no cost worth measuring — these files are
   /// kilobytes, and this runs when you press a button rather than per frame.
   ReviewState append(List<ReviewEvent> events) {

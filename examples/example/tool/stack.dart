@@ -1,6 +1,6 @@
 /// The example project's dev stack, as a CLI the project owns.
 ///
-/// **This file is not part of flutterware.** It is the thing a `DevStack`
+/// This file is not part of flutterware. It is the thing a `DevStack`
 /// declaration points *at* — the `docker compose` wrapper, the `bin/dev`
 /// script, the `make dev` a project already has. flutterware runs
 /// `status --json` to find out what is going on and runs `up` / `down` when
@@ -38,7 +38,7 @@ final _logFile = File('$_dir/server.log');
 /// How long a launched-but-not-yet-answering server is called `starting`
 /// before it is called `down`.
 ///
-/// **A clock rather than a liveness check**, because there is no
+/// A clock rather than a liveness check, because there is no
 /// platform-independent way to ask whether a pid is still alive — Dart can send
 /// a signal but not the null signal, and `kill -0` is not a thing on Windows.
 /// Being wrong here costs one wrong word for a few seconds; being wrong about
@@ -190,7 +190,7 @@ Future<int> _status({required bool json}) async {
 
 /// The one place the state is decided. Everything else asks this.
 ///
-/// **The port is the authority, not the state file.** A stack you started in a
+/// The port is the authority, not the state file. A stack you started in a
 /// terminal and a stack the button started have to read identically, and only
 /// the port knows about both. The state file adds two things the port cannot
 /// say: which pid to signal, and whether a refused connection means "not

@@ -1,9 +1,8 @@
 /// The wire shape of what an action returns.
 ///
-/// Extracted from the `PluginResult` class an action declares in `returns:` —
-/// nobody writes one of these by hand, which is the point. A schema somebody
-/// maintains alongside the code is a schema that disagrees with it by the third
-/// field; a schema *read from* the code cannot.
+/// Extracted from the `PluginResult` class an action declares in `returns:`,
+/// never written by hand. A schema maintained alongside the code disagrees with
+/// it by the third field; a schema *read from* the code cannot.
 ///
 /// It carries what a sample of real output never could: which fields are
 /// optional. "This package has no error" and "this package cannot have one"

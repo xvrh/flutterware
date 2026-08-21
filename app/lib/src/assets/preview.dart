@@ -27,7 +27,7 @@ enum PreviewBackground {
 
 /// One asset, drawn.
 ///
-/// **Takes bytes, not a path.** The read is the screen's job, which keeps this
+/// Takes bytes, not a path. The read is the screen's job, which keeps this
 /// widget demoable from a catalog entry with no filesystem behind it — and
 /// keeps the three formats that need bytes anyway (`SvgPicture.memory`,
 /// `LottieComposition.fromBytes`, `FontLoader`) from being the odd ones out.
@@ -160,7 +160,7 @@ void _evictFailedDecode(Uint8List bytes) {
 ///
 /// `InteractiveViewer` supplies the clip and the panning. The scale comes from
 /// the toolbar rather than from a pinch, because zoom is in the address and a
-/// gesture that changed it silently would put a number nobody chose into a
+/// gesture that changed it silently would put an unchosen number into a
 /// link. `Image`'s own `filterQuality` still governs sampling under this
 /// transform, so magnified pixels stay square.
 class _Zoomed extends StatefulWidget {

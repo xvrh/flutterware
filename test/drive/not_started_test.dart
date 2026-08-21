@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/src/drive/guest_drive.dart';
 
-/// **The window between the binding and `runApp`, which some apps never leave.**
+/// The window between the binding and `runApp`, which some apps never leave.
 ///
 /// The generated wrapper installs the guest *around* the app's `main`, so
 /// `ext.flutterware.act` is registered and answering before a single widget is
@@ -14,7 +14,7 @@ import 'package:flutterware/src/drive/guest_drive.dart';
 /// finder that `observe` runs. That is the worst sentence available — it names
 /// flutterware for a failure in the app, and a consumer lost real time to it.
 ///
-/// **Plain `test`, not `testWidgets`, and that is the point.** The test binding
+/// Plain `test`, not `testWidgets`, and that is the point. The test binding
 /// mounts a `[root]` element of its own before the first `pumpWidget`, so
 /// inside `testWidgets` this state cannot be reached at all; with only the
 /// binding ensured, `rootElement` is null and `renderViews` is empty, which is

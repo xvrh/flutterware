@@ -20,7 +20,7 @@ import 'package:path/path.dart' as p;
 
 /// The explorer's stack column.
 ///
-/// **The screen answers "which of my checkouts is holding the port block".**
+/// The screen answers "which of my checkouts is holding the port block".
 /// That question is the whole reason per-worktree port allocation exists, and
 /// until this column there was no way to ask it except to open eight checkouts
 /// one at a time.

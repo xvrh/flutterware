@@ -19,7 +19,7 @@ Key previewRowKey(String id) => ValueKey('comparison.preview.$id');
 
 /// The previews half: every entry on the left, two frames on the right.
 ///
-/// **Master and detail rather than a wall of thumbnails.** A catalog is
+/// Master and detail rather than a wall of thumbnails. A catalog is
 /// hundreds of entries and a comparison is interested in the handful that
 /// moved; a grid spends its whole area on the ones that did not, and gives the
 /// two frames you actually care about a hundred pixels each.
@@ -155,7 +155,7 @@ class _PreviewsTabState extends State<PreviewsTab> {
 
 /// Every entry, worst first.
 ///
-/// **Findings first, then the rest under a divider.** A list that hides what it
+/// Findings first, then the rest under a divider. A list that hides what it
 /// looked at cannot be told from a list that did not look — and the entries
 /// that came out identical are still the answer to "did you check this one".
 class _Index extends StatelessWidget {

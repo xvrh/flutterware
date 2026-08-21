@@ -79,7 +79,7 @@ class TranslationExportResult implements PluginResult, ReportsFailure {
   /// artifacts were cleaned up underneath the export.
   final int missingShots;
 
-  /// Places the app showed the source language to somebody who asked for
+  /// Places the app showed the source language to a reader who asked for
   /// another one.
   final int fallingBack;
 

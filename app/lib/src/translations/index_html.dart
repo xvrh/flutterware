@@ -348,8 +348,8 @@ function renderFindings(host) {
       rows.map(r => [r.text, r.source || '—', r.scenario, r.step])));
   } else {
     host.appendChild(el('p', 'sub', tab === 'notReached'
-      ? 'Declared, and this run never asked for them. A key behind a screen ' +
-        'nobody wrote a scenario for is not a dead key.'
+      ? 'Declared, and this run never asked for them. A key may still be ' +
+        'in use on a screen no scenario covers.'
       : 'Read by the app, and no declared catalog defines them.'));
     host.appendChild(table(['Key'],
       rows.map(r => [r.catalog + '/' + r.key])));

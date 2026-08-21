@@ -1,8 +1,8 @@
 /// Something the window is doing that a capture must not photograph through.
 ///
-/// **Busy is what gets declared, not ready.** The inverse — every panel
-/// announcing when it is finished — makes a plugin that never announces hang
-/// the capture forever, and a plugin author who forgets is the common case. A
+/// Busy is what gets declared, not ready. The inverse — every panel announcing
+/// when it is finished — makes a plugin that never announces hang the capture
+/// forever, and forgetting to announce is the common case. A
 /// plugin that never registers here is treated as settled, so forgetting costs
 /// a picture taken slightly early rather than a script that never returns.
 abstract interface class SettleSource {
@@ -22,7 +22,7 @@ typedef SettleOutcome = ({bool settled, List<String> waitingOn});
 /// so the question "is this worth photographing yet" spans whatever happens to
 /// be mounted.
 ///
-/// **Pure Dart, and it has to stay that way.** `AppContext` is on `bin/fw.dart`
+/// Pure Dart, and it has to stay that way. `AppContext` is on `bin/fw.dart`
 /// and `bin/mcp.dart`'s import closure, so a `package:flutter` import here
 /// makes the CLI unlinkable — which `entry_point_purity_test.dart` reported
 /// within seconds of this file first importing `scheduler.dart`. The waiting,

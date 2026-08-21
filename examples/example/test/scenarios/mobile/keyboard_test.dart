@@ -3,7 +3,7 @@ import 'package:flutterware_example/shop/shop_app.dart';
 
 /// Naming the cup, on a phone, with the keyboard where a phone would put it.
 ///
-/// **This is what the feature is for.** Every other scenario in this folder
+/// This is what the feature is for. Every other scenario in this folder
 /// photographs the cart screen at its full 852 points and calls that the
 /// picture; on a real phone the moment somebody touches that field the screen
 /// is 516, the button they are reaching for has moved, and whether the layout

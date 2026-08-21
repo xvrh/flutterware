@@ -19,7 +19,7 @@ import 'app_theme.dart';
 /// 2026-08-13: 23 empty, 16 loading, 12 error — and until now the only way to
 /// look at one was to make a panel fail.
 
-/// **The alignment check.** Three states stacked, so a drifted gap or icon size
+/// The alignment check. Three states stacked, so a drifted gap or icon size
 /// in any one of them is a step in a line that should be straight.
 @Preview(name: 'The triad, stacked', group: 'States', wrapper: wrapInAppTheme)
 Widget triad() => const _Stack(
@@ -68,7 +68,7 @@ Widget empty() => _Stack(
   ],
 );
 
-/// **The reason `ErrorState` is not just `EmptyState` with a red icon.** Its
+/// The reason `ErrorState` is not just `EmptyState` with a red icon. Its
 /// message is selectable: try to drag-select the path in the second entry, then
 /// try the same in any empty state above. An error message is a thing you paste
 /// into a terminal or a bug.
@@ -95,7 +95,7 @@ Widget error() => _Stack(
 @Preview(name: 'Error · dark', group: 'States', wrapper: wrapInDarkTheme)
 Widget errorDark() => error();
 
-/// **A long message with nothing to wrap on** — a stack trace, a resolved
+/// A long message with nothing to wrap on — a stack trace, a resolved
 /// constraint, a base64 token. Centred text has no good answer to this, so the
 /// answer has to be visible rather than assumed.
 @Preview(name: 'Error · long message', group: 'States', wrapper: wrapInAppTheme)

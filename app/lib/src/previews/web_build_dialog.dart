@@ -12,8 +12,8 @@ import 'web_build.dart';
 
 /// Configures a web build, runs it, and shows what the tool says while it does.
 ///
-/// **It calls [PreviewsCore.buildWeb] directly rather than going through
-/// `Session.invoke`.** The behaviour is still the core's — `fw` reaches the same
+/// It calls [PreviewsCore.buildWeb] directly rather than going through
+/// `Session.invoke`. The behaviour is still the core's — `fw` reaches the same
 /// method by its own route, and the `build-web` action is that route. What the
 /// action cannot carry is the thing this exists for: a build takes tens of
 /// seconds, and `Job` has no log or progress event to put those lines in (see
@@ -345,8 +345,8 @@ class _Field extends StatelessWidget {
 
 /// The same build as a command, with a way to take it.
 ///
-/// Deliberately not a disabled-looking hint: it is the real invocation, and the
-/// point is that somebody reads it once and knows this is scriptable.
+/// Deliberately not a disabled-looking hint: it is the real invocation, so that
+/// reading it once is enough to know this is scriptable.
 class _CommandLine extends StatefulWidget {
   const _CommandLine({required this.command});
 

@@ -10,7 +10,7 @@ import '../../ui/empty_state.dart';
 
 /// The five ways of looking at two frames.
 ///
-/// **Five, because each answers a question the others cannot.** Side by side
+/// Five, because each answers a question the others cannot. Side by side
 /// says what each one *is* — with the changed regions outlined on the head, so
 /// the subtle change is pointed at rather than hunted; the slider says where a
 /// boundary falls; onion says
@@ -80,10 +80,9 @@ class _ComparisonStageState extends State<ComparisonStage> {
     if (old.mode != widget.mode) _syncBlink();
   }
 
-  /// **Only while blink is showing.** A timer left running behind another mode
+  /// Only while blink is showing. A timer left running behind another mode
   /// rebuilds the whole detail pane twice a second for nothing, which on a
-  /// panel that also holds a live list is the kind of cost nobody attributes to
-  /// the thing that caused it.
+  /// panel that also holds a live list is hard to trace back to its cause.
   void _syncBlink() {
     _blink?.cancel();
     _blink = null;
@@ -357,7 +356,7 @@ class _LeftFraction extends CustomClipper<Rect> {
 
 /// The head frame with the changed regions boxed on it.
 ///
-/// **Boxes on the picture rather than a heat map.** A reader wants to know
+/// Boxes on the picture rather than a heat map. A reader wants to know
 /// where to look, and the answer has to stay legible against whatever the
 /// preview happens to be — an overlay that tints changed pixels disappears on
 /// a dark screen and swamps a light one.

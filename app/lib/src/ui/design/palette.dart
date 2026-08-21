@@ -37,7 +37,7 @@ class FwPalette {
   /// label, a table header that is the current sort.
   final Color ink2;
 
-  /// **The workhorse muted.** Captions, field labels, the words of an inactive
+  /// The workhorse muted. Captions, field labels, the words of an inactive
   /// control, a running state. If a thing is muted and you have no reason to
   /// pick another step, it is this one — 207 of the 487 muted uses are.
   final Color mut;

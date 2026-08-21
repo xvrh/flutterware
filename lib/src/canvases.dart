@@ -31,7 +31,7 @@ import 'devices.dart';
 /// desktop ones open on the plain resizable rectangle with those two window
 /// sizes offered beside it.
 ///
-/// **Named `PreviewCanvas` rather than `Canvas` because of `dart:ui`.** A test
+/// Named `PreviewCanvas` rather than `Canvas` because of `dart:ui`. A test
 /// importing `package:flutterware/flutter_test.dart` has Flutter's `Canvas` in
 /// scope through `package:flutter_test`, and two exported `Canvas`es are an
 /// ambiguous name in every file that imports both — which is precisely the file
@@ -54,7 +54,7 @@ class PreviewCanvas {
   /// Matched on segment boundaries, never as raw text — `src/mobile` covers
   /// `src/mobile/tile.dart` and pointedly not `src/mobile_legacy/tile.dart`.
   ///
-  /// **A file is a legal prefix**, and supported rather than incidental: the
+  /// A file is a legal prefix, and supported rather than incidental: the
   /// last segment of a path is a file, so `src/mobile/tile.dart` covers exactly
   /// the entries in that one file. It is how a single preview differs from its
   /// neighbours without giving it a directory of its own. This said "a
@@ -65,7 +65,7 @@ class PreviewCanvas {
 
   /// The devices these entries are worth looking at on.
   ///
-  /// **The list is the offered set, and its head is the default** — the same
+  /// The list is the offered set, and its head is the default — the same
   /// sentence `ScenarioProfile` is built on, deliberately, because previews are
   /// asking that tool's question in a different vocabulary. A card with a
   /// breakpoint in it is meant to survive a small phone *and* a large one, and
@@ -86,7 +86,7 @@ class PreviewCanvas {
   /// Whether the entries under here are worth seeing with a keyboard up, head
   /// first, likewise.
   ///
-  /// **A staging axis in previews and a policy in scenarios**, and the reason
+  /// A staging axis in previews and a policy in scenarios, and the reason
   /// is that nothing in a preview focuses on its own: a form rendered cold has
   /// no field selected, so the only way a matrix covers the smaller screen is
   /// to cross it. A scenario taps the field itself and the keyboard follows,
@@ -112,10 +112,10 @@ class PreviewCanvas {
 
   /// What one picture of an entry under this canvas is framed as.
   ///
-  /// **A desktop size is offered, never staged.** A phone's screen is the
-  /// constraint the layout has to survive, so staging it is the whole point; a
-  /// desktop window has no true size, because the person using it drags the
-  /// corner. The honest default stage for a desktop subtree is therefore the
+  /// A desktop size is offered, never staged. A phone's screen is a
+  /// constraint the layout has to survive, so staging it matters; a desktop
+  /// window has no true size, because the person using it drags the corner.
+  /// The default stage for a desktop subtree is therefore the
   /// resizable one — the plain rectangle, at 1:1 — and the declared window sizes
   /// stay in the picker, one click away, for when the question is "does this
   /// hold together at 1600 wide".
@@ -123,8 +123,8 @@ class PreviewCanvas {
   /// It is also what you can actually look at. A declared window staged in a
   /// panel narrower than itself is scaled down to fit: measured on this GUI, a
   /// 1600-wide window in a 490-wide pane is shown at 30%, where type, hairlines
-  /// and hit targets are all unjudgeable. A preview nobody can read is not a
-  /// preview.
+  /// and hit targets are all unjudgeable. A preview that cannot be read is not
+  /// serving its purpose.
   ///
   /// The rule costs the case of an app that genuinely wants its big stage on
   /// arrival — a kiosk, a wall dashboard. That is one click and it sticks: the
@@ -161,7 +161,7 @@ class PreviewCanvas {
 
   /// Reads back what [toJson] wrote.
   ///
-  /// **An id this build has no device for is dropped, not refused.** This is
+  /// An id this build has no device for is dropped, not refused. This is
   /// read on the way to drawing something rather than while checking a command
   /// line, and the config is written against the `flutterware` the *project*
   /// pins — which can run ahead of the GUI reading its manifest. A device we
@@ -195,7 +195,7 @@ class PreviewCanvas {
 /// The rectangle an entry under no canvas is framed as, in logical pixels at a
 /// ratio of 1.
 ///
-/// **Both backends have to agree about it**, which is why it is one constant
+/// Both backends have to agree about it, which is why it is one constant
 /// and not two. The embedder guest reads it as `CaptureViewport.panel` and the
 /// tester harness stages it when [canvasFor] finds nothing; a harness that
 /// simply left the test surface alone would judge the same entry on
@@ -206,7 +206,7 @@ const previewPanelHeight = 700;
 
 /// The canvas that applies to [path], or null when none of them does.
 ///
-/// **Longest prefix wins**, which is what makes the list ordered data rather
+/// Longest prefix wins, which is what makes the list ordered data rather
 /// than a rule set with precedence to learn: declare nothing and get the plain
 /// rectangle, declare one line and the package has a shape, declare a third
 /// when one subtree really is 1920 wide. Declaration order breaks a tie between

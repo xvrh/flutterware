@@ -36,8 +36,8 @@ class LiveRegion {
   /// Paints the region and keeps it current.
   ///
   /// [every] is the repaint interval, not a frame rate: nothing here animates
-  /// faster than a spinner, and a terminal being written to five times a second
-  /// is already more than a person can read.
+  /// faster than a spinner, and a terminal redrawn five times a second is
+  /// already faster than it can be read.
   void start({Duration every = const Duration(milliseconds: 200)}) {
     if (_ticker != null) return;
     _paint();
@@ -76,7 +76,7 @@ class LiveRegion {
   /// The other ending. A region that was showing progress has nothing worth
   /// preserving, but one that was showing a result does — which stage failed,
   /// what each one cost — and erasing it to print the same thing again is how
-  /// a transcript ends up missing the only frame anybody wanted.
+  /// a transcript ends up missing the frame that mattered.
   void settle({Iterable<String> trailing = const []}) {
     _ticker?.cancel();
     _ticker = null;

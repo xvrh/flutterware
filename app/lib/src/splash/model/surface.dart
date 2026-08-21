@@ -270,7 +270,7 @@ String? defaultSplashDeviceId(SplashSurface surface) => switch (surface) {
 
 /// How big a screen to draw every cell at — the matrix's one size axis.
 ///
-/// **A class, not a device, and that is the whole point.** Naming a device names
+/// A class, not a device, and that is the whole point. Naming a device names
 /// a platform with it: an iPhone SE cannot be a canvas for the Android row, so a
 /// picker offering nineteen devices over eight tiles moved two of them and
 /// silently ignored the rest. A size class belongs to no platform, so one
@@ -303,9 +303,9 @@ enum SplashScreenSize {
 /// The screen [size] means on [surface] — a real device, with real insets.
 ///
 /// Null [size] is each surface's own default, which is what the matrix shows
-/// until somebody picks something.
+/// until a device is picked.
 ///
-/// **Web borrows the iOS dimensions and none of its hardware.** A browser on a
+/// Web borrows the iOS dimensions and none of its hardware. A browser on a
 /// phone is a real place a web splash is seen, and the viewport is the only
 /// thing that matters there — so the tile takes the size and draws no safe
 /// areas, because a browser has no notch.

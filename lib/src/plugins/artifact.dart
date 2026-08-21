@@ -80,9 +80,9 @@ class Artifact implements PluginResult {
 /// at. The data still travels; these ride alongside, so a surface that can
 /// show an image shows it and one that cannot is no worse off.
 ///
-/// Keep it to what the caller actually needs to see. Every artifact here is a
-/// picture an agent pays for in context, so a run returns the frame that
-/// explains the failure — not all fifty.
+/// Keep it to what the caller actually needs to see. Every artifact here costs
+/// an agent context, so a run returns the frame that explains the failure
+/// rather than all fifty.
 abstract interface class ProducesArtifacts {
   List<Artifact> get artifacts;
 }

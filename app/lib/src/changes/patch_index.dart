@@ -1,8 +1,8 @@
-/// A unified diff, **indexed rather than parsed**.
+/// A unified diff, indexed rather than parsed.
 ///
 /// The screen this feeds needs the file list, the per-file counts and every
 /// hunk's position before it paints anything, and needs a file's *text* only
-/// when somebody expands that file. Measured on this repository, a realistic
+/// when that file is expanded. Measured on this repository, a realistic
 /// agent branch is 470–520 KB of patch and the worst range tried was 3.6 MB —
 /// all of it produced by git in well under 100 ms. Decoding that into Dart
 /// strings is the expensive half, so this scans the bytes, records offsets, and
@@ -122,7 +122,7 @@ class PatchIndex {
 
   /// This file's patch, decoded on demand.
   ///
-  /// **Malformed UTF-8 is replaced, never thrown on.** A patch is whatever was
+  /// Malformed UTF-8 is replaced, never thrown on. A patch is whatever was
   /// in the user's files, and a lone invalid byte in one line must not cost the
   /// whole view — the alternative is a screen that works until somebody commits
   /// a latin-1 file.
@@ -427,7 +427,7 @@ class _HunkHeader {
 
 /// Parses `@@ -a,b +c,d @@ context`.
 ///
-/// **An omitted count means 1**, not 0 — `@@ -1 +1 @@` is a one-line change and
+/// An omitted count means 1, not 0 — `@@ -1 +1 @@` is a one-line change and
 /// reading it as zero would end the hunk before its content and hand the rest
 /// of the file to the header parser.
 _HunkHeader? _parseHunkHeader(Uint8List bytes, int start, int end) {

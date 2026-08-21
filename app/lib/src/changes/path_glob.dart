@@ -37,7 +37,7 @@ class PathGlobSet {
   /// The first pattern matching [path] — repository-relative, `/`-separated —
   /// or null.
   ///
-  /// **First rather than any**, because the caller shows it: a row that says
+  /// First rather than any, because the caller shows it: a row that says
   /// *pinned by* has to name one rule, and naming the earliest one makes the
   /// answer a function of the order the user wrote them in.
   ///

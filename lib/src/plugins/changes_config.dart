@@ -13,7 +13,7 @@
 /// });
 /// ```
 ///
-/// **There is no second config file and no second way of reading this one.**
+/// There is no second config file and no second way of reading this one.
 /// The Dart config is the point: static analysis, autocomplete, and a type
 /// error instead of a typo that silently matches nothing.
 ///
@@ -30,7 +30,7 @@ class ChangesConfig {
   /// tab. Each pinned row names the pattern that pinned it, so precedence is
   /// inspectable rather than magic.
   ///
-  /// **There is no built-in list, and there must not be one.** flutterware
+  /// There is no built-in list, and there must not be one. flutterware
   /// does not know what matters in your repository, and putting a file under a
   /// heading that says *look here first* is a claim only you can make.
   ///
@@ -43,7 +43,7 @@ class ChangesConfig {
   ///
   /// Only needed when inference fails: `origin/HEAD`, then `main`, then
   /// `master` is tried first, and a worktree where one of those resolves does
-  /// not need this. Nothing is ever diffed against a guess.
+  /// not need this. Nothing is diffed against an unresolved base.
   final String? base;
 
   bool get isEmpty => attention.isEmpty && base == null;
@@ -53,7 +53,7 @@ class ChangesConfig {
     'base': ?base,
   };
 
-  /// **Tolerant of everything except a wrong shape.** This is read back from a
+  /// Tolerant of everything except a wrong shape. This is read back from a
   /// cache file that a previous version of flutterware wrote, so an entry that
   /// is not a string is dropped rather than thrown on — the alternative is a
   /// screen that refuses to rank because one list had a number in it.
@@ -62,7 +62,7 @@ class ChangesConfig {
     base: json['base'] as String?,
   );
 
-  /// **A type test, never a cast.** `as String?` would throw on the entry it is
+  /// A type test, never a cast. `as String?` would throw on the entry it is
   /// supposed to be tolerating, which is a tolerance that only holds for input
   /// that never needed it — and a value that is not a list at all must not
   /// throw either.

@@ -4,9 +4,9 @@ library;
 import 'bridge.dart';
 import 'panel_source.dart';
 
-/// Serves a panel for as long as somebody holds the handle.
+/// Serves a panel for as long as the handle is held.
 ///
-/// **The imperative half of `AddDevbarPanel`,** the same way
+/// The imperative half of `AddDevbarPanel`, the same way
 /// `UiService.addButton` is the imperative half of `AddDevbarButton`. The
 /// widget is the wrapper: it calls this in `initState` and removes in
 /// `dispose`.
@@ -16,7 +16,7 @@ import 'panel_source.dart';
 /// _panel.remove();                                          // at logout
 /// ```
 ///
-/// **Which half to use is a question about the scope, not about taste.** A
+/// Which half to use is a question about the scope, not about taste. A
 /// panel belonging to a subtree — a signed-in shell, a checkout flow — should
 /// be declared where that subtree is, and the widget makes forgetting to
 /// remove it impossible. A panel belonging to a *service* — a session opened
@@ -40,11 +40,11 @@ class DevbarPanels {
 
 /// One panel being served, and the only way to stop.
 ///
-/// **A handle nobody removes is a panel that outlives what it describes** —
+/// A handle that is never removed leaves a panel outliving what it describes —
 /// still listed, still answering, its handlers closed over a database that was
-/// closed at logout. Nothing shouts about it: the visible symptom is the *next*
-/// one arriving as `db:main#2`, because the id it wanted is still taken. That
-/// is the cost of the imperative half, and the whole of why the widget exists.
+/// closed at logout. Nothing reports it: the visible symptom is the *next* one
+/// arriving as `db:main#2`, because the id it wanted is still taken. That is
+/// the cost of the imperative half, and why the widget exists.
 class DevbarPanelHandle {
   DevbarPanelHandle._(this.id);
 

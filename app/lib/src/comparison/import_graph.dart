@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 
 /// What each entry reads, worked out by following its imports.
 ///
-/// **Why not ask the compiler.** The daemon knows exactly what it read — and
+/// Why not ask the compiler. The daemon knows exactly what it read — and
 /// cannot attribute it. Its program is the *generated entrypoint*, which
 /// imports a wrapper for every entry visited so far, so the source set it
 /// reports is the union of all of them; the per-compile `+`/`-` diff is a

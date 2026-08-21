@@ -41,7 +41,7 @@ void main() {
       expect(singles, 0, reason: 'one gesture, not two');
     });
 
-    /// **The gap is the whole verb.** Below `kDoubleTapMinTime` the recognizer
+    /// The gap is the whole verb. Below `kDoubleTapMinTime` the recognizer
     /// treats the second tap as a restarted first one — touch screens report a
     /// single touch intermittently, and that rule is what tells the two apart.
     /// A zero gap is what a naive "tap twice" implementation does, so it is
@@ -149,7 +149,7 @@ void main() {
       expect(hovering, isFalse);
     });
 
-    /// **The pointer must come back up.** `TestPointer` asserts a hover is only
+    /// The pointer must come back up. `TestPointer` asserts a hover is only
     /// generated while it is up, so one click that left it down would wedge
     /// every later mouse verb for the life of the run.
     testWidgets('the button is released, so a later hover still works', (

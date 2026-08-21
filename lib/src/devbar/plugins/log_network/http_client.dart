@@ -6,7 +6,7 @@ import '../../../app_events/events.dart';
 
 /// An `http.Client` that shows every request it carries.
 ///
-/// **It reports to both surfaces, and a project wires neither.** Every mounted
+/// It reports to both surfaces, and a project wires neither. Every mounted
 /// devbar gets the exchange in two halves, so its Network tab shows a request
 /// while it is still in flight. A scenario run gets it in one piece when it is
 /// over, on the step's Events pane — which is why a suite whose fakes sit

@@ -50,8 +50,8 @@ import 'previews_core.dart' show PreviewsCore;
 const runPluginId = 'flutterware.run';
 
 /// How many dead runs to keep the reason for. Enough to cover a morning of
-/// fighting one signing problem across two devices, and far short of a list
-/// nobody reads.
+/// fighting one signing problem across two devices, and far short of a list too
+/// long to read.
 const _maxRememberedFailures = 8;
 
 /// Which devices exist, which are already running something — from any
@@ -67,19 +67,19 @@ const _maxRememberedFailures = 8;
 ///   to `devices.json`, and a cold `fw` reads that file **and says how old it
 ///   is**. A run is a fact that happened; it gets old, it does not become
 ///   wrong.
-/// - **Occupancy** comes from the `app-*.json` handles in the run dir. Nobody
-///   coordinates: a run announces itself in a file, anything that wants to
+/// - **Occupancy** comes from the `app-*.json` handles in the run dir. There is
+///   no coordinator: a run announces itself in a file, anything that wants to
 ///   know connects to find out whether it is still there, and a handle nothing
-///   answers is deleted by whoever noticed.
+///   answers is deleted by the process that noticed.
 ///
 /// A launch is the third: a detached `flutter run --machine` whose output goes
-/// to a log file beside its handle. Nobody waits on it, and the handle is a
+/// to a log file beside its handle. Nothing waits on it, and the handle is a
 /// *cache* of what the log says — so any process can bring one up to date and
 /// then drive the app, whether or not it was there when the app started.
 ///
 /// Holds to the [PluginCore.computeAll] budget: this class reads files and
-/// nothing else until somebody either mounts the panel ([track]) or names an
-/// action. Sockets, subprocesses and the daemon live behind both.
+/// nothing else until the panel is mounted ([track]) or an action is named.
+/// Sockets, subprocesses and the daemon live behind both.
 class RunCore extends PluginCore {
   RunCore(super.host);
 
@@ -115,8 +115,8 @@ class RunCore extends PluginCore {
 
   /// True while a device list is on its way and has not arrived.
   ///
-  /// **[_tracking] is the whole point of this, and leaving it out cost every
-  /// `fw capture` on this repo its entire timeout.** A capture process opens
+  /// [_tracking] is the whole point of this, and leaving it out cost every
+  /// `fw capture` on this repo its entire timeout. A capture process opens
   /// the shell, goes to one panel and photographs it; it never mounts the Run
   /// panel, so it never calls [track], so no daemon is ever started and
   /// [devices] stays empty forever. The condition this replaces —
@@ -226,8 +226,8 @@ class RunCore extends PluginCore {
   /// [path]'s `flutter: default-flavor:`, when its pubspec declares one.
   ///
   /// Cached beside the entry points because it is read the same way, at the
-  /// same moment, and answers the same question: what would be built if nobody
-  /// filled anything in.
+  /// same moment, and answers the same question: what would be built with
+  /// nothing filled in.
   String? defaultFlavorFor(String path) => _defaultFlavors[path];
 
   final _defaultFlavors = <String, String?>{};
@@ -251,7 +251,7 @@ class RunCore extends PluginCore {
   /// The knobs to offer for [entry] — the signature's, annotated by the
   /// config's.
   ///
-  /// **No authority rule, because the two halves answer different questions.**
+  /// No authority rule, because the two halves answer different questions.
   /// A signature cannot be wrong about what its own `main` accepts, so it is
   /// the list; the config only says what a signature cannot — a computed value,
   /// a human label, options for a type that cannot enumerate itself. This is
@@ -339,12 +339,12 @@ class RunCore extends PluginCore {
 
   /// What each [ScriptSource] said last time it was asked, by script and args.
   ///
-  /// **Not filled by [computeAll], unlike everything else here**, because
+  /// Not filled by [computeAll], unlike everything else here, because
   /// asking means running a process and `computeAll` may not. Filled by
   /// [resolveScriptSources], which the surfaces that chose to pay for it call:
   /// the `entrypoints` action, the panel on mount, and every launch.
   ///
-  /// **Not keyed on the script's content**, deliberately. The answer changes
+  /// Not keyed on the script's content, deliberately. The answer changes
   /// when the dev stack goes up or down, which does not touch the file — a
   /// cache that invalidated on the source would hold a port from before the
   /// stack moved and be confident about it.
@@ -398,7 +398,7 @@ class RunCore extends PluginCore {
   ///
   /// A syscall rather than a socket, and it is here rather than behind an
   /// action because "which address can the phone reach me at" is the answer a
-  /// define has to offer *before* anybody presses anything.
+  /// define has to offer *before* the launch.
   ///
   /// No attempt to guess which one is *the* address. Nothing here can tell a
   /// Wi-Fi address from a VPN's without asking the network, which is precisely
@@ -466,8 +466,8 @@ class RunCore extends PluginCore {
     );
   }
 
-  /// Takes this core's one lease on the shared daemon, starting it if nobody
-  /// else has.
+  /// Takes this core's one lease on the shared daemon, starting it if it is not
+  /// already up.
   ///
   /// One lease per core, however many times this is called: [track] and the
   /// `devices --refresh` action both want a daemon, and counting each of them
@@ -558,7 +558,7 @@ class RunCore extends PluginCore {
     failure.write(runDirProvider());
   }
 
-  /// Forgets a failure, for when somebody has read it.
+  /// Forgets a failure, once it has been read.
   void dismissFailure(String key) {
     RunFailure.forget(runDirProvider(), key);
     if (_failures.remove(key) != null) notifyChanged();
@@ -1547,7 +1547,7 @@ class RunCore extends PluginCore {
 
   /// The launcher's line for a launch this process is waiting out.
   ///
-  /// **Because nothing else is watching.** The rail's row fills in from the
+  /// Because nothing else is watching. The rail's row fills in from the
   /// probe loop, which only runs where something subscribed — the GUI. A
   /// headless `launch` waits ninety seconds with a live log in front of it and
   /// used to publish none of it, so `fw` and an agent both watched a blank
@@ -1597,10 +1597,11 @@ class RunCore extends PluginCore {
     if (!device.isConnected) 'not connected',
   ].join(' · ');
 
-  /// The ledger is machine-wide, so this list holds runs no one here started.
-  /// The worktree name alone does not say so — a reader who does not already
-  /// know every checkout on the machine reads an unrelated repository's app as
-  /// one of this project's, under a heading that says Running.
+  /// The ledger is machine-wide, so this list holds runs this worktree did not
+  /// start. The worktree name alone does not make that clear — a reader who
+  /// does not already know every checkout on the machine reads an unrelated
+  /// repository's app as one of this project's, under a heading that says
+  /// Running.
   String _handleDetail(RunHandle handle) {
     var probe = probeOf(handle);
     return [
@@ -1639,16 +1640,15 @@ class RunCore extends PluginCore {
   /// One step per app this worktree launched, so closing the checkout does
   /// not leave one running on a phone with nothing able to reach it.
   ///
-  /// **One step per app rather than one "stop 3 apps" row**, which is what
+  /// One step per app rather than one "stop 3 apps" row, which is what
   /// [TeardownStep.arguments] is for: each row names its own device and says
   /// how long it has been up, and one can be left ticked while another is not.
   /// A lumped row can only be taken or left whole, and the reason to leave one
-  /// running — it is on a phone somebody is holding — applies to one app and
-  /// not the rest.
+  /// running — it is on a phone in use — applies to one app and not the rest.
   ///
   /// Scoped to *this* worktree. The ledger is deliberately every worktree's, so
   /// that a device held by another checkout is visible; a teardown that stopped
-  /// those too would be closing one tab and killing somebody else's run.
+  /// those too would close one tab and kill an unrelated run.
   List<TeardownStep> get _teardown => [
     for (var handle in ownHandles)
       TeardownStep(
@@ -2080,7 +2080,7 @@ class RunCore extends PluginCore {
   /// Asks the script sources among [defines], concurrently, and records what
   /// they said.
   ///
-  /// **Takes the defines rather than reading them off this core**, which is
+  /// Takes the defines rather than reading them off this core, which is
   /// what makes it safe to call from [launch]. The sweep above walks
   /// `entrypointsFor`, which is empty until `computeAll` has run — so a launch
   /// that relied on it would find no source to ask, then refuse itself for a
@@ -2125,7 +2125,7 @@ class RunCore extends PluginCore {
   /// The declaration [handle] was launched from, or null if this worktree has
   /// none matching.
   ///
-  /// **By name first, then path.** #119 made "declare one file several times
+  /// By name first, then path. #119 made "declare one file several times
   /// under different names" the documented way to run one app against several
   /// configurations, so a path matches several entry points and only the name
   /// separates them. Their *signatures* are identical — it is the same file —
@@ -2153,7 +2153,7 @@ class RunCore extends PluginCore {
   /// Every line to show for [entry] — its knobs, plus one per parameter that
   /// cannot be one, saying why.
   ///
-  /// **One list, three surfaces.** The `entrypoints` action, the running app's
+  /// One list, three surfaces. The `entrypoints` action, the running app's
   /// Knobs tab and the New run form each built this loop themselves, so a line
   /// added to one appeared on one. A `required` parameter is exactly such a
   /// line: it is not a knob, it is the reason there will be no launch, and all
@@ -2264,7 +2264,7 @@ class RunCore extends PluginCore {
   /// Why a launch of [entry] with [values] cannot go ahead — the `required`
   /// knobs nothing has chosen a value for — or null when it can.
   ///
-  /// **Composed in one place because two surfaces say it**, the rule
+  /// Composed in one place because two surfaces say it, the rule
   /// [_undrawable] already follows: the New run page greys Start out with this
   /// sentence beside it, and `launch` throws it. A form offering a button the
   /// action would refuse is the tool disagreeing with itself, and the disagreement
@@ -2483,7 +2483,7 @@ class RunCore extends PluginCore {
   /// [defines] is what the caller *chose*; the defaults and anything a script
   /// source computes are filled in here, so both surfaces bake in the same set.
   ///
-  /// **[knobs] are checked here, not in the action.** They used to be, on the
+  /// [knobs] are checked here rather than in the action. They used to be, on the
   /// grounds that the panel builds its fields from the same list and so cannot
   /// invent a name — true of names, false of *values*. A text field for an `int`
   /// parameter accepts `eight` on a desktop keyboard, and the generator then
@@ -2606,7 +2606,7 @@ class RunCore extends PluginCore {
 
   /// What to say when more than one entry point answers to a selector.
   ///
-  /// **Never the paths.** The set this refusal exists for is usually one file
+  /// Never the paths. The set this refusal exists for is usually one file
   /// declared several times, so their paths are the *same string* and listing
   /// them offers a choice between identical options — which is what this
   /// message used to do. What separates the matches is the name within a
@@ -2634,7 +2634,7 @@ class RunCore extends PluginCore {
 
   /// Refuses a device [entry] declared it cannot run on.
   ///
-  /// Before the build rather than after it, which is the whole value: the
+  /// Before the build rather than after it, which is the value: the
   /// alternative is a Gradle or Xcode failure minutes later saying something
   /// true about the toolchain and nothing about the choice that caused it.
   ///
@@ -2735,12 +2735,12 @@ class RunCore extends PluginCore {
   /// The values a launch will pass `main`: what the caller gave, over what a
   /// source computed just now.
   ///
-  /// **A parameter's own default is deliberately not passed.** Writing it into
-  /// the wrapper would say "somebody chose this" about a value nobody touched,
-  /// and the parameter already falls back to it — the same reasoning
-  /// a define's scanned default was left alone for.
+  /// A parameter's own default is deliberately not passed. Writing it into the
+  /// wrapper would record a deliberate choice where none was made, and the
+  /// parameter already falls back to it — the same reasoning a define's scanned
+  /// default was left alone for.
   ///
-  /// **A source that could not answer refuses the launch**, as it does for a
+  /// A source that could not answer refuses the launch, as it does for a
   /// define and for the same reason: the value is compiled in, and an app built
   /// against the wrong port is indistinguishable from a correct one until it is
   /// talking to another worktree's database.
@@ -2879,10 +2879,10 @@ class RunCore extends PluginCore {
 
   /// The knobs [handle]'s entry point takes, or why they cannot be known.
   ///
-  /// **Empty and unknowable are different answers**, and the tab says so —
-  /// `unknown` is the sentence to show instead of the fields. Reporting an
+  /// Empty and unknowable are different answers, and the tab distinguishes them
+  /// — `unknown` is the sentence to show instead of the fields. Reporting an
   /// empty list for a run this core cannot read would claim the app takes no
-  /// knobs, which is a statement about somebody else's source.
+  /// knobs, about source it has not read.
   ///
   /// The worktree check is the one that matters and is easy to miss: another
   /// checkout of the same repo has the same package paths and the same entry
@@ -2923,13 +2923,13 @@ class RunCore extends PluginCore {
 
   /// Rewrites [handle]'s wrapper with [values] and hot restarts it.
   ///
-  /// **The whole point of the design, and the only place a human feels it.**
+  /// The whole point of the design, and the only place a human feels it.
   /// Changing a knob is a rewrite of one generated file plus a restart —
   /// measured at 262ms on desktop, 263ms on the iOS simulator and 3.07s on an
   /// Android emulator, against 29.6s and 38.6s to rebuild. Without this the only
   /// route back to the launch form is Stop, which is the rebuild.
   ///
-  /// **Restart, never reload.** A value passed to `main` moves only when `main`
+  /// Restart, never reload. A value passed to `main` moves only when `main`
   /// runs again, and reload does not re-run it — so a reload here would report
   /// success and change nothing.
   ///
@@ -3116,8 +3116,8 @@ class RunCore extends PluginCore {
 
   /// Asks the daemon what it could boot, for the desk.
   ///
-  /// Separate from [track] because it is a second round trip nobody needs to
-  /// open the panel, and the desk only shows when nothing is running.
+  /// Separate from [track] because it is a second round trip that opening the
+  /// panel does not need, and the desk only shows when nothing is running.
   Future<void> loadEmulators() async {
     var daemon = await _acquireDaemon();
     await daemon.refreshEmulators();
@@ -3199,14 +3199,14 @@ class RunCore extends PluginCore {
   /// What the last launch from this panel chose.
   ///
   /// Held here rather than in the page's state so it survives the page being
-  /// closed and reopened, which is the whole point: running the same thing
+  /// closed and reopened, which is the reason it is here: running the same thing
   /// again should be opening the page and pressing Start. Deliberately not
   /// persisted to disk — "what I ran a minute ago" is a fact about this
   /// session, and restoring it from last week would be a worse guess than the
   /// first device in the list.
   /// Knobs rather than defines: the form has no define fields any more, so
   /// recording them was recording a map that is always empty, and the values
-  /// somebody actually chose were the ones being dropped.
+  /// actually chosen were the ones being dropped.
   ({
     String device,
     String package,
@@ -3224,7 +3224,7 @@ class RunCore extends PluginCore {
   /// fires timers and takes in data between them — the tree would describe a
   /// screen the picture no longer shows.
   ///
-  /// **The app's own walk first, when it has one.** A run launched through
+  /// The app's own walk first, when it has one. A run launched through
   /// flutterware carries the guest, and the guest's tree is the one with boxes,
   /// properties and resolved text styles in it — everything the pane's detail
   /// side had to say "structure and source only" about. A run that has no
@@ -3289,7 +3289,7 @@ class RunCore extends PluginCore {
 
   /// Opens a connection for reading rather than for driving.
   ///
-  /// **Waits for no registration, and that is the point.** Reload and restart
+  /// Waits for no registration, and that is the point. Reload and restart
   /// have to wait for the `flutter run` to register them; the inspector is the
   /// *app's* own and exists the moment its isolate does. So everything built on
   /// this keeps working on a run whose launcher has died — the surviving half
@@ -3315,10 +3315,10 @@ class RunCore extends PluginCore {
 
   /// Attaches to the app's channels for the length of one action.
   ///
-  /// **A fresh attach per call, deliberately.** The alternative is a cached
-  /// attachment per handle, and the cost of that is a queue nobody is draining
-  /// between calls: the app would ring events for a peer that might never
-  /// return. Attaching costs one round trip and buys the ring's replay, which
+  /// A fresh attach per call, deliberately. The alternative is a cached
+  /// attachment per handle, and the cost of that is an undrained queue between
+  /// calls: the app would ring events for a peer that might never
+  /// return. Attaching costs one round trip and gives the ring's replay, which
   /// is what makes recent feed events readable at all from a stateless call.
   ///
   /// The peer id is unique per call for the same reason the cockpit's is
@@ -3656,8 +3656,8 @@ class RunCore extends PluginCore {
   }
 
   /// One file per run, overwritten. A screenshot is an observation of a
-  /// moment, and keeping every one would fill the run dir with pictures nobody
-  /// asked to keep; a caller that wants to keep one says where.
+  /// moment, and keeping every one would fill the run dir with unwanted
+  /// pictures; a caller that wants to keep one says where.
   ///
   /// `runHandleKey` already carries the `app-` stem the handle and the log
   /// share, so the picture joins them rather than starting a third naming
@@ -3823,7 +3823,7 @@ class RunCore extends PluginCore {
   /// The platform's own log for one run, bounded by the run's own lifetime.
   ///
   /// A device log is machine-wide and remembers days; this run is the only
-  /// slice of it anybody meant. [RunHandle.startedAt] is that bound, and it is
+  /// slice of it worth reading. [RunHandle.startedAt] is that bound, and it is
   /// already on the handle — which also makes the read cheap, because a
   /// narrower window is a faster `log show`.
   Future<NativeLogRead> readNativeLogs(RunHandle handle, {int? tail}) async {
@@ -3841,13 +3841,13 @@ class RunCore extends PluginCore {
     return source.read(since: handle.startedAt, tail: tail);
   }
 
-  /// The line that stops somebody concluding "nothing happened".
+  /// The line that stops a reader concluding "nothing happened".
   ///
-  /// **The failure this closes was silence.** A launch whose native half was
+  /// The failure this closes was silence. A launch whose native half was
   /// misbehaving answered `errors: []` and six lines of build narration, which
   /// reads as an uneventful, healthy run rather than as "look somewhere else"
   /// — and the somewhere else held the whole story. So a log read on a device
-  /// whose platform log we are *not* reading says so.
+  /// whose platform log we are *not* reading is labelled as such.
   ///
   /// Only where the omission bites. macOS pipes the app's stdout and stderr
   /// through the launcher already, so a note there would be noise on the inner
@@ -4230,7 +4230,7 @@ class RunCore extends PluginCore {
   ///
   /// 900 rather than 1200: ~810 image tokens against ~1440 and 143ms against
   /// 234, and this GUI's 10.5pt text is still legible at it. A caller that
-  /// needs the pixels says so.
+  /// needs the pixels asks for them.
   /// Reading or pinning the run's lens.
   Future<RunLensResult> _lensAction(Map<String, Object?> arguments) async {
     var handle = await _selectRunningApp(arguments);
@@ -4316,8 +4316,8 @@ class RunCore extends PluginCore {
   /// tap` and an `AXPress` both arrive as ordinary platform input, on the same
   /// global pointer route the human-action recorder watches. Without this,
   /// every native tap the agent makes appears twice in the story — once as its
-  /// own step, once as a phantom human's — and the Steps strip a human reviews
-  /// tells them somebody else was clicking.
+  /// own step, once as a phantom human's — and the Steps strip then reports
+  /// clicks that never happened.
   ///
   /// Windows rather than target sentences, because the two sides genuinely
   /// name things differently: the native layer resolved `"Increment"` while
@@ -4697,7 +4697,7 @@ class RunCore extends PluginCore {
   }
 
   /// An empty list has three different causes and they need three different
-  /// next steps — nothing plugged in, nobody has looked yet, or the cache is
+  /// next steps — nothing plugged in, nothing has looked yet, or the cache is
   /// stale and empty. An empty array with no note reads as the first.
   String? _devicesNote(List<DaemonDevice> devices, DeviceCache? cache) {
     if (devices.isNotEmpty) return null;
@@ -4781,7 +4781,7 @@ class _NativeEcho {
 
 /// One settled moment, written whole.
 ///
-/// **The archive, as distinct from the testimony.** Every step leaves the same
+/// The archive, as distinct from the testimony. Every step leaves the same
 /// four legs a scenario step leaves — the picture, the tree, the semantics, the
 /// texts — plus a manifest naming them, and it leaves them whatever the call
 /// asked to see. What the step *reported* is the journal entry's business
@@ -4939,7 +4939,7 @@ class _ItemMiss extends _ItemLookup {
 /// The point at the centre of screen item [wanted], from the last capture
 /// this run wrote.
 ///
-/// **Resolved from disk, not from memory.** Every surface here opens a fresh
+/// Resolved from disk, not from memory. Every surface here opens a fresh
 /// session per call, so "the screen you last saw" cannot live in a field; it
 /// lives in the run's journal, which is also what makes an item usable from
 /// `fw` after an MCP call took the observation.

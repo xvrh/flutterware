@@ -29,7 +29,7 @@ export 'motion_core.dart' show MotionCore, motionPluginId;
 /// The GUI half of the motion plugin: a band naming which motion you are on,
 /// that motion running in a live guest, and a sequencer under it.
 ///
-/// **The panel owns no truth.** The list comes from the core's syntactic scan,
+/// The panel owns no truth. The list comes from the core's syntactic scan,
 /// and everything under the preview — targets, properties, states, current
 /// values — comes from `ext.flutterware.motion.list` against the guest, which
 /// is the runtime deciding rather than the panel inferring.
@@ -155,7 +155,7 @@ class _MotionPanelState extends State<_MotionPanel> {
 /// The header: which motion, what the scan could not read, and which file the
 /// editor writes.
 ///
-/// **This replaces a 280px list down the left side.** The shell's address bar
+/// This replaces a 280px list down the left side. The shell's address bar
 /// already names the motion you are on, so a permanent list was the same
 /// identity twice — the argument that killed the separate target rail, one
 /// level up. The room goes to the stage and the inspector, which are the two
@@ -335,7 +335,7 @@ class _ScanGaps extends StatelessWidget {
 /// The one file the editor writes, named where you can see it.
 ///
 /// Blast radius zero is the promise the whole design rests on, and a promise
-/// nobody can see is one nobody can check.
+/// you cannot see is one you cannot check.
 class _ValuesFileBadge extends StatelessWidget {
   const _ValuesFileBadge(this.name);
 
@@ -396,7 +396,7 @@ class _MotionStageState extends State<_MotionStage> {
 
   /// Where the panel says the playhead is, or null while the guest drives.
   ///
-  /// **The panel owns the playhead whenever the motion is not playing.** The
+  /// The panel owns the playhead whenever the motion is not playing. The
   /// guest answers after the frame, so echoing it back would lag the finger;
   /// worse, releasing a drag used to hand ownership straight back, and a
   /// `MotionController` autoplays by default — so the guest's answer was
@@ -427,7 +427,7 @@ class _MotionStageState extends State<_MotionStage> {
   /// reference — the poll replaces the model underneath it every second.
   MotionSelection? _selection;
 
-  /// Whether the inspector is up, once somebody has said. Null means "whatever
+  /// Whether the inspector is up, once it has been set. Null means "whatever
   /// there is room for".
   bool? _showRail;
 
@@ -897,7 +897,7 @@ class _MotionStageState extends State<_MotionStage> {
 
 /// Play, restart, and the clock.
 ///
-/// **No slider.** The ruler scrubs across the sequencer's full width and every
+/// No slider. The ruler scrubs across the sequencer's full width and every
 /// collapsed group row scrubs with it, so a second control that could disagree
 /// with the playhead is one control too many. Loop and speed are the two
 /// affordances the concept has here that this does not, and both want a guest

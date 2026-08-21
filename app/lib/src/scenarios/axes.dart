@@ -5,7 +5,7 @@ import '../previews/devices.dart';
 /// the default form factor — an explicit [fitDeviceId] is how you ask for the
 /// bare test surface instead.
 ///
-/// **The last word, not the first.** A folder's `flutter_test_config.dart` is
+/// The last word, not the first. A folder's `flutter_test_config.dart` is
 /// asked before this, in the harness, where the profile is known — which is
 /// why an unspecified device travels as null all the way down rather than
 /// being resolved here.

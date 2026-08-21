@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/worktrees/facts.dart';
 import 'package:flutterware_app/src/worktrees/providers/forge.dart';
 
-/// **Captured from `gh pr list --json …` on 2026-08-10**, trimmed to two pull
+/// Captured from `gh pr list --json …` on 2026-08-10, trimmed to two pull
 /// requests and one check each. Not hand-written: every field name and every
 /// enum spelling below is one `gh` actually emitted, which is the only reason
 /// the parser can be trusted at all.

@@ -21,8 +21,8 @@ import 'runner.dart';
 /// directory has not removed the worktree, and a tab closing on it would be the
 /// app disagreeing with the disk.
 ///
-/// **[prepare] runs with the dialog already on screen.** Assembling a plan for a
-/// worktree nobody has open costs a config subprocess, a facts refresh and a
+/// [prepare] runs with the dialog already on screen. Assembling a plan for an
+/// unopened worktree costs a config subprocess, a facts refresh and a
 /// warm-up of every plugin — seconds, during which the first version showed
 /// nothing at all and the press looked ignored. Worse, the caller had to stay
 /// mounted across that wait to show anything afterwards, and the thing it was
@@ -270,7 +270,7 @@ class _TeardownDialogState extends State<_TeardownDialog> {
             ),
         ] else
           Text(
-            'Nothing can be removed while the above holds.',
+            'Nothing can be removed until the problems above are cleared.',
             style: type.body.copyWith(color: colors.mut),
           ),
       ],

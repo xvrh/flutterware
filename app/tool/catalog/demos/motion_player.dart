@@ -10,7 +10,7 @@ import 'shell.dart';
 /// A card that blooms into a player, and the counterpart to
 /// `motion_inbox.dart`.
 ///
-/// **There is not one `MotionBox` in this file.** Every property is read at the
+/// There is not one `MotionBox` in this file. Every property is read at the
 /// site that uses it — `art.width` on a `SizedBox`, `sheet.color` on a
 /// `BoxDecoration`, `reveal.progress` on an `Align.heightFactor` — which is the
 /// half of the API that has to hold up before the convenience wrapper is worth
@@ -18,7 +18,7 @@ import 'shell.dart';
 /// anywhere: the properties the box would have applied are exactly the ones it
 /// turned out not to need here.
 ///
-/// **Drag `t` to scrub, tap to expand or collapse.** Expanding and collapsing
+/// Drag `t` to scrub, tap to expand or collapse. Expanding and collapsing
 /// are the same numbers read forwards and backwards, so there is no second
 /// state to keep in sync — which is the practical consequence of a motion being
 /// a pure function of `t`.

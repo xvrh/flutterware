@@ -7,8 +7,8 @@ import 'package:path/path.dart' as p;
 
 /// What a [ScriptSource] said when it was asked, or why it could not be.
 ///
-/// The two good answers are different in kind, and the difference is the whole
-/// point of the feature. A script that prints **one thing** has *computed the
+/// The two good answers are different in kind, and that difference is the
+/// feature. A script that prints **one thing** has *computed the
 /// value* — the port this worktree was allocated — and that value is used. One
 /// that prints a **JSON array** has *listed the possibilities*, and those are
 /// offered to choose from. A config asking for a per-worktree port wants the
@@ -41,13 +41,13 @@ class ScriptOutcome {
 
 /// Runs [source] and reads what it printed.
 ///
-/// **[dartExecutable], never a name to look up.** The config names a script,
+/// [dartExecutable], never a name to look up. The config names a script,
 /// not a command, so there is nothing here to resolve against `PATH` — and that
 /// is deliberate: a `dart` on `PATH` is routinely older than the SDK a project
 /// pins, and a config file cannot know which one its reader has. This is the
 /// same `dart` that compiled and ran the config file itself.
 ///
-/// **Run from [worktreePath]**, so a relative path in the script means what it
+/// Run from [worktreePath], so a relative path in the script means what it
 /// means everywhere else in the project.
 ///
 /// The default [timeout] matches the one the config file itself gets, and for

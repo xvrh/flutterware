@@ -1,4 +1,4 @@
-/// Writing a survey out as a directory somebody else can use.
+/// Writing a survey out as a directory a translator can use.
 ///
 /// The output is deliberately boring: whole screenshots, one JSON index, and a
 /// page that reads it. Nothing is baked into the pixels — the highlight is
@@ -54,7 +54,7 @@ class TranslationExporter {
   /// What a run's artifact paths are relative to.
   final String worktreeRoot;
 
-  /// Where the export goes when nobody says. Package-relative, and spelled
+  /// Where the export goes by default. Package-relative, and spelled
   /// with `/` because it is also what an action's help prints.
   static const defaultOutput = 'build/translations';
 

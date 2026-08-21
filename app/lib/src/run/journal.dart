@@ -102,8 +102,8 @@ class JournalEntry {
   /// What this step actually handed back — `screen`, `tree`, `screenshot`,
   /// `find`, `at`, `styles`.
   ///
-  /// **This is where the scoping lives, and the reason the artifacts no longer
-  /// carry it.** A journal is testimony: it has to say what the step reported,
+  /// This is where the scoping lives, and the reason the artifacts no longer
+  /// carry it. A journal is testimony: it has to say what the step reported,
   /// or a reviewer reads a complete tree beside a step that returned two
   /// levels of one subtree and concludes the agent saw more than it did. The
   /// files beside it are the archive and hold the whole screen. One file
@@ -231,7 +231,7 @@ void appendJournal(RunHandle handle, JournalEntry entry) {
 }
 
 /// The entries, oldest first. A malformed line — a torn concurrent write — is
-/// skipped rather than fatal: the journal is a story, not a ledger.
+/// skipped rather than fatal: the journal is a narrative, not a ledger.
 List<JournalEntry> readJournal(RunHandle handle, {int? tail}) {
   var path = journalPathFor(handle);
   if (path == null) return const [];
