@@ -4718,6 +4718,25 @@ final resultShapes = <String, ResultShape>{
         'doc': 'How many nodes the tree has, whether or not it rode back.',
       },
       <String, Object?>{
+        'name': 'events',
+        'type': 'List<AppEvent>',
+        'optional': true,
+        'doc':
+            'What the app did on the way to this step, when it was asked for.',
+      },
+      <String, Object?>{
+        'name': 'eventCount',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'How many the step recorded, and on which channels — said whether or not [events] was asked for, because a read that does not advertise what it is sitting on cannot be drilled into by anyone who did not already know.',
+      },
+      <String, Object?>{
+        'name': 'eventChannels',
+        'type': 'Map<String, int>',
+        'optional': true,
+      },
+      <String, Object?>{
         'name': 'find',
         'type': 'List<Map<String, Object?>>',
         'optional': true,

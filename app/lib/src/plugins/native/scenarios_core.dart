@@ -5,6 +5,7 @@ import 'dart:isolate';
 
 import 'package:collection/collection.dart';
 import 'package:flutterware/plugins.dart';
+import 'package:flutterware/app_events.dart' show AppChannel, AppEvent;
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 import 'package:meta/meta.dart';
@@ -863,9 +864,10 @@ class ScenariosCore extends PluginCore {
               'touch, with their boxes and their state. Everything heavier is '
               'one flag on the same capture: `find` for where something is, '
               '`at` for what is under a point, `styles` for the type ramp, '
-              '`tree` for all of it. The same grammar `run act` answers with '
-              'on a live app — a `find` here and a `find` there differ in '
-              'which file was opened and in nothing you have to learn twice.',
+              '`tree` for all of it, `events` for what the app *did* on the '
+              'way here. The same grammar `run act` answers with on a live '
+              'app — a `find` here and a `find` there differ in which file '
+              'was opened and in nothing you have to learn twice.',
           parameters: [
             ActionParameter(
               'package',
@@ -974,6 +976,46 @@ class ScenariosCore extends PluginCore {
                   'The flat list of every string the step showed, as the '
                   'capture recorded it. The screen carries the same words '
                   'attached to what owns them; this is for grepping.',
+            ),
+            const ActionParameter(
+              'events',
+              'Events',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'What the app did on the way to this step — every request, '
+                  'query, analytics event, log line and platform call it '
+                  'reported, with the payload each carried. `eventCount` and '
+                  '`eventChannels` ride on every read whether or not you ask, '
+                  'so this is the flag to set when they say there is '
+                  'something worth seeing. `system` is left out unless '
+                  '`channel` names it: it is most of the volume and none of '
+                  'the signal.',
+            ),
+            const ActionParameter(
+              'channel',
+              'Channel',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Keep only these channels, comma-separated — `network`, '
+                  '`db`, `analytics`, `log`, `print`, `platform`, `system`, '
+                  'or whatever name a project reported under. Implies '
+                  '`events`. Naming `system` is the only way to see the '
+                  'framework chatter, which is excluded by default.',
+            ),
+            const ActionParameter(
+              'errors',
+              'Errors only',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'Keep only the events that are themselves a problem — a '
+                  '4xx/5xx, a severe log, a channel call that came back an '
+                  'error. Implies `events`. The first question to ask of a '
+                  'step that failed.',
             ),
             const ActionParameter(
               'tree',
@@ -1553,6 +1595,9 @@ class ScenariosCore extends PluginCore {
         p.extension(image) == '.png' &&
         File(p.join(host.worktree.path, image)).existsSync();
 
+    var record = _stepRecordFor(picked.base)?.$2;
+    var (:events, :eventsNote) = _eventsFor(picked, arguments);
+
     return ScenarioReadResult(
       step: _relative('${picked.base}.tree.json'),
       lens: lens.name,
@@ -1570,8 +1615,11 @@ class ScenariosCore extends PluginCore {
       find: read.find,
       at: read.at,
       styles: read.styles,
-      note: read.note,
-      next: ScreenRead.offer,
+      events: events,
+      eventCount: record?.eventCount,
+      eventChannels: record?.eventChannels,
+      note: read.note ?? eventsNote,
+      next: _offerFor(record),
       steps: picked.siblings,
       picture: showable
           ? Artifact(
@@ -1585,6 +1633,96 @@ class ScenariosCore extends PluginCore {
             )
           : null,
     );
+  }
+
+  /// What the app did on the way to this step, filtered how the call asked.
+  ///
+  /// Off unless asked: on a suite the payload is a fraction of the file and
+  /// the rest is `system` — measured on the example suite, 183 of 189 events
+  /// and 98% of 30KB — so handing it back unasked would cost every read what
+  /// one read in ten wants.
+  ///
+  /// `channel` and `errors` imply `events`, because a caller who named a
+  /// filter has already said what they want. So does pointing `step` at the
+  /// `.events.json` leg itself: that used to answer silently about the widget
+  /// tree instead, which is the one thing a reply must never do.
+  ({List<AppEvent>? events, String? eventsNote}) _eventsFor(
+    _PickedStep picked,
+    Map<String, Object?> arguments,
+  ) {
+    var channels = switch (arguments['channel']) {
+      String text when text.trim().isNotEmpty =>
+        text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toSet(),
+      _ => null,
+    };
+    var errorsOnly = ScreenRead.boolArgument(arguments['errors']);
+    var asked =
+        ScreenRead.boolArgument(arguments['events']) ||
+        channels != null ||
+        errorsOnly ||
+        (arguments['step'] as String?)?.endsWith('.events.json') == true;
+    if (!asked) return (events: null, eventsNote: null);
+
+    var file = File('${picked.base}.events.json');
+    if (!file.existsSync()) {
+      // Not an error: a quiet transition writes no file, and saying so beats
+      // an empty list the caller has to interpret.
+      return (
+        events: null,
+        eventsNote:
+            'This step recorded no events — nothing was reported on '
+            'the way to it.',
+      );
+    }
+
+    List<AppEvent> all;
+    try {
+      all = [
+        for (var event in jsonDecode(file.readAsStringSync()) as List)
+          AppEvent.fromJson((event as Map).cast<String, Object?>()),
+      ];
+    } on FormatException catch (e) {
+      return (
+        events: null,
+        eventsNote:
+            'Its events are not readable JSON ($e). Re-run the '
+            'scenario.',
+      );
+    }
+
+    var kept = [
+      for (var event in all)
+        if (channels?.contains(event.channel) ??
+            event.channel != AppChannel.system)
+          if (!errorsOnly || event.error) event,
+    ];
+    if (kept.isNotEmpty) return (events: kept, eventsNote: null);
+
+    // Empty after filtering is a real answer, and the reason matters: the
+    // step was busy and the filter excluded everything, or `system` is all
+    // there was and it is hidden by default.
+    var channelsSeen = {for (var event in all) event.channel}.toList()..sort();
+    return (
+      events: const [],
+      eventsNote:
+          'No event matched. This step recorded ${all.length} on '
+          '${channelsSeen.join(', ')}'
+          '${errorsOnly ? ', none of them flagged as an error' : ''}'
+          '${channels == null && channelsSeen.contains(AppChannel.system) ? " — `system` is hidden unless `channel` names it" : ''}.',
+    );
+  }
+
+  /// The `next` line, plus the events clause when this step has any.
+  ///
+  /// A schema read once at connection time is not where an agent looks on
+  /// step forty; the step that *has* events is where being told about them
+  /// lands.
+  static String _offerFor(ScenarioRunStep? record) {
+    var count = record?.eventCount ?? 0;
+    if (count == 0) return ScreenRead.offer;
+    var channels = record?.eventChannels?.keys.join(', ');
+    return '${ScreenRead.offer} · events: true for what the app did on the '
+        'way here ($count on ${channels ?? 'several channels'}).';
   }
 
   /// The lens named for this call, or `act`.

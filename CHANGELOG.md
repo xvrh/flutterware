@@ -43,6 +43,19 @@
   — it could not tell "the app did nothing" from "this project reports
   somewhere else".
 
+  **`scenarios read` can answer about them too.** `events: true` hands back
+  what the app did on the way to a step, with the payload each event carried;
+  `channel: network,db` narrows; `errors: true` keeps only the ones that are
+  themselves a problem. `system` is excluded unless `channel` names it — on
+  the example suite it is 183 of 189 events and 98% of the bytes. `eventCount`
+  and `eventChannels` ride on every read whether or not you ask, so a step
+  that has events says so before anyone knows to look, and the `next` line
+  names the flag. Pointing `step` at a `.events.json` leg used to answer
+  silently about the widget tree instead; it answers about events now.
+
+  `eventTitles` says when its cap bit, as a trailing `… N more`, rather than
+  handing back twelve of forty in silence.
+
   `addAppEventListener` is published too, for a project that wants a live
   surface of its own. Reporting cannot disturb the app that reports: a
   listener that throws is sent to the `Zone` and skipped rather than surfacing

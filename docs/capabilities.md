@@ -1422,10 +1422,10 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 
 #### `read` — Read a captured step
 
-Asks a step a run already captured what is on it. Every run writes four legs per step — the picture, the widget tree, the semantics and the texts — and until now handed back paths and nothing that could read them. With no flags this answers the question worth asking first: **what is on this screen**, as a nested list of the things that carry words or respond to touch, with their boxes and their state. Everything heavier is one flag on the same capture: `find` for where something is, `at` for what is under a point, `styles` for the type ramp, `tree` for all of it. The same grammar `run act` answers with on a live app — a `find` here and a `find` there differ in which file was opened and in nothing you have to learn twice.
+Asks a step a run already captured what is on it. Every run writes four legs per step — the picture, the widget tree, the semantics and the texts — and until now handed back paths and nothing that could read them. With no flags this answers the question worth asking first: **what is on this screen**, as a nested list of the things that carry words or respond to touch, with their boxes and their state. Everything heavier is one flag on the same capture: `find` for where something is, `at` for what is under a point, `styles` for the type ramp, `tree` for all of it, `events` for what the app *did* on the way here. The same grammar `run act` answers with on a live app — a `find` here and a `find` there differ in which file was opened and in nothing you have to learn twice.
 
 ```sh
-fw run scenarios read [--package=…] [--step=…] [--output=…] [--lens=…] [--screen=…] [--find=…] [--at=…] [--styles=…] [--texts=…] [--tree=…] [--treeRoot=…] [--treeDepth=…] [--treeNoise=…] [--screenshot=…]
+fw run scenarios read [--package=…] [--step=…] [--output=…] [--lens=…] [--screen=…] [--find=…] [--at=…] [--styles=…] [--texts=…] [--events=…] [--channel=…] [--errors=…] [--tree=…] [--treeRoot=…] [--treeDepth=…] [--treeNoise=…] [--screenshot=…]
 ```
 
 Returns `ScenarioReadResult`:
@@ -1442,6 +1442,9 @@ screen: Screen?   # What is on the screen, what can be acted on, and how it is l
 texts: List<String>?   # Every Text and text field of the step, as the capture recorded them.
 tree: Map<String, Object?>?   # The whole widget tree, compact.
 nodes: int?   # How many nodes the tree has, whether or not it rode back.
+events: List<AppEvent>?   # What the app did on the way to this step, when it was asked for.
+eventCount: int?   # How many the step recorded, and on which channels — said whether or not [events] was asked for, because a read that does not advertise what it is sitting on cannot be drilled into by anyone who did not already know.
+eventChannels: Map<String, int>?
 find: List<Map<String, Object?>>?
 at: List<Map<String, Object?>>?
 styles: List<InspectStyle>?
@@ -1461,6 +1464,9 @@ steps: List<String>   # The other captures of the same scenario, as bare file na
 | `at` | string | no | — | The chain of widgets under this point as `x,y`, innermost last — in the same logical pixels every box in this reply is in, so a point read off the screen lands here without a transform. |
 | `styles` | boolean | no | false | Every distinct text size, weight and colour on the step, most-used first with a sample of each. ~185 tokens, and it settles most typography arguments — two greys that should be one, a ramp with both 11.5 and 12.5 in it. |
 | `texts` | boolean | no | false | The flat list of every string the step showed, as the capture recorded it. The screen carries the same words attached to what owns them; this is for grepping. |
+| `events` | boolean | no | false | What the app did on the way to this step — every request, query, analytics event, log line and platform call it reported, with the payload each carried. `eventCount` and `eventChannels` ride on every read whether or not you ask, so this is the flag to set when they say there is something worth seeing. `system` is left out unless `channel` names it: it is most of the volume and none of the signal. |
+| `channel` | string | no | — | Keep only these channels, comma-separated — `network`, `db`, `analytics`, `log`, `print`, `platform`, `system`, or whatever name a project reported under. Implies `events`. Naming `system` is the only way to see the framework chatter, which is excluded by default. |
+| `errors` | boolean | no | false | Keep only the events that are themselves a problem — a 4xx/5xx, a severe log, a channel call that came back an error. Implies `events`. The first question to ask of a step that failed. |
 | `tree` | boolean | no | false | The whole widget tree. **~20,000 tokens** on a real screen — an order of magnitude past everything else here, and `find`, `at` and `styles` answer most of what anyone reads a tree for. Narrow it with `treeRoot` and `treeDepth`. |
 | `treeRoot` | string | no | — | Narrow `tree` to this node id and below. Ids come from tree shape, so one a `find` gave still names this node. |
 | `treeDepth` | integer | no | — | Stop `tree` this many levels below its root |

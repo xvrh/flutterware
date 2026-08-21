@@ -42,6 +42,32 @@ import '../translations/index.dart';
 /// a wall.
 const _maxInlineTitles = 12;
 
+/// The one-line summaries that ride inline on a step, capped.
+///
+/// The part an agent reasons about without opening a file. `system` is left
+/// out — it is the channel a reader filters away, and it is most of the
+/// volume: measured on the example suite, 183 of 189 events and 98% of the
+/// bytes.
+///
+/// **The cap says when it bit.** Handing back twelve of forty with nothing
+/// saying so reads as "the app did twelve things", and the arithmetic that
+/// would disprove it — `eventCount` minus the `system` count — needs the
+/// exclusion rule above to be known first. `scenarios read events: true`
+/// hands back the whole list, filtered how you ask.
+List<String>? inlineEventTitles(List<AppEvent> events) {
+  if (events.isEmpty) return null;
+  var titles = [
+    for (var event in events)
+      if (event.channel != AppChannel.system)
+        '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
+  ];
+  if (titles.length <= _maxInlineTitles) return titles;
+  return [
+    ...titles.take(_maxInlineTitles),
+    '… ${titles.length - _maxInlineTitles} more — scenarios read events: true',
+  ];
+}
+
 /// The scenario harness `main`, called by the generated entrypoint the runner
 /// compiles into `flutter_tester`:
 ///
@@ -970,16 +996,7 @@ Future<Map<String, Object?>> _runOne(
       events: capture.events.isNotEmpty ? '$base.events.json' : null,
       eventCount: capture.events.isNotEmpty ? capture.events.length : null,
       eventChannels: capture.events.isNotEmpty ? counts : null,
-      // The one-line summaries, inline and capped: the part an agent reasons
-      // about without opening a file. `system` is left out — it is the channel
-      // a reader filters away, and it is most of the volume.
-      eventTitles: capture.events.isEmpty
-          ? null
-          : [
-              for (var event in capture.events)
-                if (event.channel != AppChannel.system)
-                  '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
-            ].take(_maxInlineTitles).toList(),
+      eventTitles: inlineEventTitles(capture.events),
       eventsDropped: capture.eventsDropped > 0 ? capture.eventsDropped : null,
       settled: capture.settled,
       landed: capture.landed,
@@ -1128,16 +1145,7 @@ Future<Map<String, Object?>> _runOne(
       events: capture.events.isNotEmpty ? '$base.events.json' : null,
       eventCount: capture.events.isNotEmpty ? capture.events.length : null,
       eventChannels: capture.events.isNotEmpty ? counts : null,
-      // The one-line summaries, inline and capped: the part an agent
-      // reasons about without opening a file. `system` is left out — it is
-      // the channel a reader filters away, and it is most of the volume.
-      eventTitles: capture.events.isEmpty
-          ? null
-          : [
-              for (var event in capture.events)
-                if (event.channel != AppChannel.system)
-                  '${event.title}${event.detail == null ? '' : ' → ${event.detail}'}',
-            ].take(_maxInlineTitles).toList(),
+      eventTitles: inlineEventTitles(capture.events),
       eventsDropped: capture.eventsDropped > 0 ? capture.eventsDropped : null,
       frames: framesDir,
       frameCount: framesDir != null ? capture.motion.bytes.length : null,

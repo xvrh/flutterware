@@ -157,6 +157,52 @@ made by `AppEvent.custom` keeps its whole title as the path, which is the only
 honest reading of it. Reported rows take negative ids so a late `response(id)`
 meant for an in-flight `DevbarHttpClient` request can never land on one.
 
+## The agent surface: light was right, digging did not exist
+
+Audited after the unification landed, on the question of whether an agent
+running scenarios over MCP is handed the events lightly *and* can get at the
+rest. The first half was already right — `run` summarises each step as
+`eventCount`, `eventChannels`, `eventTitles` and the `events` path, and
+`steps: failing|all|none` bounds the volume. The second half was missing
+entirely, in four measured ways:
+
+- **`read` was blind to events.** The one action built for "ask this step
+  more" — `find`, `at`, `styles`, `tree` — could answer nothing about what the
+  app *did*.
+- **Pointing `read` at the `.events.json` leg silently answered about the
+  widget tree.** `_captureLegs` accepts that extension and `_baseOf` strips
+  it, so the reply came back about a different question than the one asked,
+  with `step` rewritten to `.tree.json`. A reply may refuse; it may not
+  substitute.
+- **`read` did not even carry the path**, so an agent starting from the
+  failing-step read — the read that happens most — had no pointer at all.
+- **The raw file was the only door, and it is mostly chatter.** Measured over
+  the example suite: 46 `.events.json` files, 30,459 bytes, of which 701 (2%)
+  is non-`system` — 183 framework events against 6 reported ones. No filter by
+  channel, none by `error`. `system` is the channel the GUI hides by default
+  and `eventTitles` already excludes; every consumer agreed it was noise
+  except the only door an agent had.
+
+Built as one flag lane on the existing grammar, so there is nothing new to
+learn: `events: true` for the payload, `channel: network,db` to narrow,
+`errors: true` for the ones that are themselves a problem. `system` is
+excluded unless `channel` names it, which is one parameter instead of two.
+`channel` and `errors` imply `events`, and so does pointing `step` at the
+events leg. A filter that matches nothing answers with an empty list and a
+note saying what the step *did* record, because going quiet is
+indistinguishable from a quiet step.
+
+`eventCount` and `eventChannels` ride on **every** read whether or not events
+were asked for, and the `next` line names the flag when the step has any —
+a schema read once at connection time is not where an agent looks on step
+forty.
+
+The same reasoning applies to the inline cap: `eventTitles` now ends with
+`… N more — scenarios read events: true` rather than truncating at twelve in
+silence. The count it reports is of the *titles*, after the `system`
+exclusion, because that is the number a reader would otherwise think they
+were seeing all of.
+
 ## Silence, which was the part that bit
 
 An Events pane fed by nothing showed `Nothing happened on the way to this

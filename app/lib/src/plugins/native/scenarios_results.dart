@@ -13,6 +13,10 @@ import 'package:json_annotation/json_annotation.dart';
 // page.
 // ignore: implementation_imports
 export 'package:flutterware/src/scenarios/report.dart';
+// The reported events themselves, for `read events: true`. Same reason as
+// above for the `src` path, and this half is plain Dart either way.
+// ignore: implementation_imports
+import 'package:flutterware/src/app_events/events.dart';
 
 part 'scenarios_results.g.dart';
 
@@ -308,6 +312,9 @@ class ScenarioReadResult implements PluginResult, ProducesArtifacts {
     this.next,
     this.steps = const [],
     this.picture,
+    this.events,
+    this.eventCount,
+    this.eventChannels,
   });
 
   /// The capture this answers about, worktree-relative — the value to pass
@@ -345,6 +352,23 @@ class ScenarioReadResult implements PluginResult, ProducesArtifacts {
 
   /// How many nodes the tree has, whether or not it rode back.
   final int? nodes;
+
+  /// What the app did on the way to this step, when it was asked for.
+  ///
+  /// The same leg-name convention `tree` follows: on a run's step it is the
+  /// **path** to the file, here it is the **contents**. `system` is left out
+  /// unless `channel` names it, because it is most of the volume and none of
+  /// the signal — 183 of 189 events on the example suite.
+  final List<AppEvent>? events;
+
+  /// How many the step recorded, and on which channels — said whether or not
+  /// [events] was asked for, because a read that does not advertise what it
+  /// is sitting on cannot be drilled into by anyone who did not already know.
+  ///
+  /// Counts the whole capture, `system` included, exactly as `run` reports
+  /// them; [events] is what a filter narrows.
+  final int? eventCount;
+  final Map<String, int>? eventChannels;
 
   final List<Map<String, Object?>>? find;
   final List<Map<String, Object?>>? at;
