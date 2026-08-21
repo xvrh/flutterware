@@ -748,10 +748,16 @@ class ScenarioTester {
     // searches down for the editable, and a point target — `Target.at`, and
     // the `item:` an agent spells it with — resolves to a render object below
     // it, where down finds nothing.
-    () async => tester.enterText(
-      editableWithin(await _resolve(target, 'enterText')),
-      text,
-    ),
+    () async {
+      var editable = editableWithin(await _resolve(target, 'enterText'));
+      // **The editable's box, not the finder's** — the one place this differs
+      // from `tap`. The verb acts on the editable whatever the target named,
+      // and the box is read for the text that is about to land in it, so the
+      // region the text lands in is the honest one. A point target would
+      // otherwise box the render object under the finger.
+      _aimAt(editable);
+      await tester.enterText(editable, text);
+    },
     verb: 'enterText',
     target: describeTarget(target),
   );
@@ -806,6 +812,7 @@ class ScenarioTester {
     shot,
     settle,
     () async {
+      var finder = finderForTarget(target);
       var scrollable = within == null
           ? find.byType(Scrollable)
           : find.descendant(
@@ -813,34 +820,54 @@ class ScenarioTester {
               matching: find.byType(Scrollable),
               matchRoot: true,
             );
-      if (scrollable.evaluate().isEmpty) {
+      // Held, not re-evaluated: a `Finder` caches nothing between calls, so
+      // every `evaluate()` walks the element tree from the root. This verb
+      // needs the same two answers three times over, and a walking scenario
+      // pays for them per step.
+      var scrollables = scrollable.evaluate();
+      if (scrollables.isEmpty) {
         var refusal = refusalWhenNothingScrolls(
-          finderForTarget(target),
+          finder,
           describeTarget(target),
           within,
           _messages,
         );
         // A target already on screen is the step's whole point achieved:
         // capture it there, scroll nothing. Which pages scroll varies with
-        // the device, so a walking scenario cannot know statically.
-        if (refusal == null) return;
+        // the device, so a walking scenario cannot know statically. It is
+        // still marked, because "already here" is what the verb did.
+        if (refusal == null) {
+          _aimAt(finder);
+          return;
+        }
         throw ScenarioTargetError(refusal.message);
       }
-      var finder = finderForTarget(target);
+      var onstage = finder.evaluate();
       // Built but behind the viewport: the walk only drags one way, so a
       // target the list has already scrolled past is unreachable however
       // long it walks. `Scrollable.ensureVisible` reads the target's own
       // position and jumps — both directions, both axes. The walk stays for
       // what it was built for: a lazy list whose target is not built yet.
-      if (finder.evaluate().isEmpty) {
-        if (scrolledPastTarget(finder, scrollable) case var behind?) {
-          await Scrollable.ensureVisible(behind);
-          await tester.pump();
-          // Not revealed means it was never in this viewport's reach — an
-          // `Offstage` under the list, say. The walk's own exhaustion
-          // message below is the one that says what to try.
-          if (finder.evaluate().isNotEmpty) return;
-        }
+      //
+      // Looked up here rather than after the mark, because the mark wants the
+      // same element and this is the expensive lookup of the two: it ignores
+      // `skipOffstage`, so it visits the whole tree rather than the onstage
+      // part of it.
+      var behind = onstage.isEmpty
+          ? scrolledPastTarget(finder, scrollable)
+          : null;
+      _aimAtScroll(
+        scrollables.first,
+        step,
+        at: behind ?? (onstage.length == 1 ? onstage.single : null),
+      );
+      if (behind != null) {
+        await Scrollable.ensureVisible(behind);
+        await tester.pump();
+        // Not revealed means it was never in this viewport's reach — an
+        // `Offstage` under the list, say. The walk's own exhaustion
+        // message below is the one that says what to try.
+        if (finder.evaluate().isNotEmpty) return;
       }
       try {
         await tester.scrollUntilVisible(
@@ -1109,7 +1136,7 @@ class ScenarioTester {
   /// Never throws. A picture of where the finger went is a nicety; a scenario
   /// that failed because it could not measure the thing it just tapped would
   /// be a bad trade.
-  void _aimAt(Finder finder, {Offset? by}) {
+  void _aimAt(Finder finder, {Offset? by, String? toward}) {
     var render = finder.evaluate().firstOrNull?.renderObject;
     if (render is! RenderBox || !render.hasSize || !render.attached) return;
     // The whole rect through the transform, for the reason `_layoutOf` gives
@@ -1127,6 +1154,127 @@ class ScenarioTester {
       height: bounds.height,
       dx: by?.dx,
       dy: by?.dy,
+      toward: toward,
+    );
+  }
+
+  /// The mark for a `scrollTo`: **the target where it stands** when it is
+  /// already wholly inside the viewport, and otherwise **the viewport and the
+  /// way to it**.
+  ///
+  /// Those are the two sentences the verb can make true, and which one it is
+  /// is decided by geometry rather than by whether the finder matches — a
+  /// target can be built, onstage and a thousand pixels above the pane, and
+  /// `dragUntilVisible` ends with an `ensureVisible` that will go and get it.
+  ///
+  /// The target's own box is deliberately not the mark in the travelling
+  /// case, and that is the thing this verb could most easily lie about: on
+  /// the frame the mark is drawn on it is off the screen, or not built at
+  /// all, so a ring would point at empty space.
+  ///
+  /// [pane] is the scrollable the walk will use and [at] the one element the
+  /// target resolved to — counting one the viewport has scrolled past, and
+  /// null when nothing has built it or several things match. Both are handed
+  /// in because both cost a walk of the whole element tree, and the caller
+  /// needed them anyway.
+  void _aimAtScroll(Element pane, double step, {Element? at}) {
+    var view = _boundsOf(pane.renderObject);
+    if (view == null) return;
+    var box = _boundsOf(at?.renderObject);
+    if (box != null && _within(view, box)) {
+      _aim = ScenarioAim(
+        x: box.left,
+        y: box.top,
+        width: box.width,
+        height: box.height,
+      );
+      return;
+    }
+    _aim = ScenarioAim(
+      x: view.left,
+      y: view.top,
+      width: view.width,
+      height: view.height,
+      toward: _towardOfBox(box, view) ?? _towardOfWalk(pane.widget, step),
+    );
+  }
+
+  /// Whether [box] sits wholly inside [view], its edges included.
+  ///
+  /// Not `Rect.contains`, which is half-open on the right and the bottom.
+  /// A list row is exactly as wide as the pane holding it, so its bottom-right
+  /// corner lands on the excluded edge and every full-width row would read as
+  /// being somewhere else on the screen — the mark would promise a scroll for
+  /// a row already under the reader's eyes.
+  bool _within(Rect view, Rect box) =>
+      box.left >= view.left &&
+      box.top >= view.top &&
+      box.right <= view.right &&
+      box.bottom <= view.bottom;
+
+  /// Which way [box] lies from [view] — the direction for a target the run
+  /// can actually see the position of, which beats the walk's own because the
+  /// jump goes where the element is rather than where the walk was pointed.
+  String? _towardOfBox(Rect? box, Rect view) {
+    if (box == null) return null;
+    var away = box.center - view.center;
+    if (away == Offset.zero) return null;
+    if (away.dy.abs() >= away.dx.abs()) return away.dy < 0 ? 'up' : 'down';
+    return away.dx < 0 ? 'left' : 'right';
+  }
+
+  /// Which way the walk will travel: the scrollable's own axis direction,
+  /// flipped when [step] is negative.
+  ///
+  /// `scrollUntilVisible` turns a positive delta into a finger moving
+  /// *against* the axis, which reveals what lies further along it — so a
+  /// positive step means the target is that way, which is the sentence a mark
+  /// on the frame before is making. The fallback for a target nothing has
+  /// built yet, where there is no box to read a direction off.
+  String? _towardOfWalk(Widget pane, double step) {
+    if (pane is! Scrollable) return null;
+    var direction = pane.axisDirection;
+    return (step >= 0 ? direction : flipAxisDirection(direction)).name;
+  }
+
+  /// A render object's box in the space every rect in a report is in, or null
+  /// when it has none to give.
+  Rect? _boundsOf(RenderObject? render) {
+    if (render is! RenderBox || !render.hasSize || !render.attached) {
+      return null;
+    }
+    return MatrixUtils.transformRect(
+      render.getTransformTo(null),
+      Offset.zero & render.size,
+    );
+  }
+
+  /// The band the keyboard is about to take or give back, for a verb that
+  /// moves it.
+  ///
+  /// [want] is the fraction the mode being set asks for, read *before* it is
+  /// applied — the slab writes the view as it lands, so anything measured
+  /// after the jump describes the screen the mark is not drawn on.
+  ///
+  /// Nothing at all on a stage with no keyboard, and nothing when the band is
+  /// already where the verb wants it: a mark promising a movement that does
+  /// not happen is worse than no mark.
+  void _aimAtKeyboard(double want) {
+    var rising = want > 0;
+    if (_keyboard.deviceHeight <= 0 || rising == _keyboard.up) return;
+    // The band arriving is the one the *field* asked for — a number pad is
+    // not as tall as the letters, and `deviceHeight` above is only the
+    // question of whether this stage has a keyboard at all. The band leaving
+    // is measured rather than asked for: it is already on the screen.
+    var height = rising ? _keyboard.targetHeight : _keyboard.height;
+    var size = tester.binding.renderViews.firstOrNull?.size;
+    if (height <= 0 || size == null) return;
+    _aim = ScenarioAim(
+      x: 0,
+      y: size.height - height,
+      width: size.width,
+      height: height,
+      toward: rising ? 'up' : 'down',
     );
   }
 
@@ -2226,7 +2374,10 @@ class ScenarioKeyboardVerbs {
   Future<void> dismiss({Shot? shot, Settle? settle}) => _s._step(
     shot,
     settle,
-    () async => _s._keyboard.dismiss(),
+    () async {
+      _s._aimAtKeyboard(0);
+      _s._keyboard.dismiss();
+    },
     verb: 'keyboard',
     target: 'dismiss',
   );
@@ -2239,7 +2390,10 @@ class ScenarioKeyboardVerbs {
   ) => _s._step(
     shot,
     settle,
-    () async => _s._keyboard.jumpTo(mode),
+    () async {
+      _s._aimAtKeyboard(_s._keyboard.wantedFor(mode));
+      _s._keyboard.jumpTo(mode);
+    },
     verb: 'keyboard',
     target: said,
   );
