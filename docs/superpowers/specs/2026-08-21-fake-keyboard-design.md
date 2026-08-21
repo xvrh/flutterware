@@ -476,11 +476,48 @@ keyboard taller than the device would raise — and a keyboard that is too tall
 is a false-failure generator in both directions at once, overflowing layouts
 that fit and covering buttons that a finger would reach.
 
-The first thing that pass should establish is how many *classes* there are
-rather than how many types: an iOS number, phone and decimal pad are a keypad
-and are visibly shorter than the QWERTY, while email, URL and name are the
-same QWERTY with a different bottom row. If that is two classes it is one more
-run of the same probe with a second field in it.
+### How many classes there are, measured 2026-08-21
+
+`tool/keyboard_type_probe.dart` — the sibling of the orientation probe, cycling
+fifteen input types in portrait. Three simulators and the Gboard emulator.
+**There is no single answer: the platforms do not even agree on the shape of
+the question.**
+
+| | Classes | The split |
+| --- | --- | --- |
+| iPhone 16 | **2** | 336 QWERTY · **291** keypad |
+| iPhone SE | **2** | 260 QWERTY · **216** keypad |
+| iPad Pro 13 | **1** | 405.5, every type |
+| Android · Gboard | **2** | 336.4 everything · **370.3** `visiblePassword` |
+
+The keypad class on iPhone is exactly three types — `phone`, `number` and
+`number.decimal` — and its membership is identical on both phones.
+
+Four things worth having measured rather than reasoned:
+
+- **The delta is 44–45 points, not the ~120 this section previously guessed.**
+  Constant across two phones of very different sizes rather than proportional
+  to them. That is a real gap and a much smaller one than the argument for
+  closing it assumed.
+- **`number.signed` is a QWERTY, not a keypad.** Allowing a minus sign gets the
+  full `numbersAndPunctuation` keyboard at full height, on both phones. A table
+  derived by reasoning would have put it with the other numbers.
+- **An iPad has no split at all.** It shows a full keyboard with a number row
+  for everything, so per-type heights buy *nothing* on a tablet — four of the
+  fourteen touch entries in the table.
+- **Android inverts the premise.** Gboard does not shrink for a keypad; it
+  swaps the layout and keeps the height. The one type that differs is
+  `visiblePassword`, and it is **taller** — so the single number we carry is
+  right for thirteen of fifteen types, and the one case it is wrong about
+  under-reports by 34 points. Under-reporting produces a false *pass*, which
+  is the harmless direction.
+
+So the pass that was described as "another measured number per device" is
+smaller than that: **one extra number per iOS phone**, reaching three input
+types, and nothing for tablets or for Android except one taller password
+keyboard. Two of the six are already measured above. It still owes the painter
+a keypad layout, because a 291-point band drawn with ten-key rows is a lying
+picture — and now only on iOS phones, for three types.
 
 ## What PR 3 did differently
 
