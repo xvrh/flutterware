@@ -112,6 +112,49 @@ pass), no capture. It is what a suite ported from raw widget tests maps a
 legacy `pumpAndSettle()` onto, and the wait to reach for after work you
 pumped through `s.tester` yourself.
 
+### A post-frame callback nothing schedules a frame for
+
+`WidgetsBinding.instance.addPostFrameCallback` does not request a frame — it
+appends to a list and waits for the next one, "whenever that may be, if ever"
+in the SDK's own words. And the test binding draws no frame at all for a pump
+with nothing scheduled. Put the two together and a callback registered while
+the tree is quiet **never runs**: not on the next verb, not on `s.settle()`,
+not on a raw `s.tester.pumpAndSettle()`, which loops on the same flag.
+
+Registered during a build it is fine — the frame in progress runs it at its
+end. Registered *outside* a frame it is stranded, and the shape that bites is
+an `initState` that awaits first:
+
+```dart
+Future<void> _load() async {
+  await repository.fetch();                    // the frame is long over here
+  WidgetsBinding.instance.addPostFrameCallback((_) => _reveal());
+}
+```
+
+The fix belongs in the app, because on a device that callback is equally
+waiting on somebody else to schedule a frame — it just usually gets one:
+
+```dart
+var binding = WidgetsBinding.instance;
+binding.addPostFrameCallback((_) => _reveal());
+binding.ensureVisualUpdate();                  // schedules one unless one is coming
+```
+
+Where the app is not yours to change, ask for the frame from the scenario:
+
+```dart
+s.tester.binding.scheduleFrame();
+await s.settle();
+```
+
+Nothing here is a scenario's doing — a plain widget test strands it the same
+way. What scenarios changes is that it strands it *reliably*: `tester.pumpWidget`
+leaves a frame scheduled and the stranded callback catches a ride on it, while
+every verb here settles to a quiet tree, so there is never a ride going. Put a
+`pumpAndSettle()` before the registration in a raw widget test and it stops
+firing there too.
+
 ## Shots
 
 By default every verb captures. `Shot('name')` names the picture; the unnamed
