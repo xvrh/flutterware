@@ -17,7 +17,7 @@ import 'package:crypto/crypto.dart';
 class ShotKey {
   /// What the *tooling* renders like, as opposed to what the code says.
   ///
-  /// **Bump this whenever a change to the renderer changes a pixel** — the
+  /// Bump this whenever a change to the renderer changes a pixel — the
   /// generated entrypoint, the capture settings, the guest's own setup. None of
   /// those are in the closure of the entry being rendered, so without it a
   /// picture taken by last week's generator is served against one taken by

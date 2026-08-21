@@ -4,7 +4,7 @@ import '../worktrees/facts.dart';
 
 /// Everything removing a worktree would do, assembled and not yet done.
 ///
-/// **Pure data, and no Flutter in this file.** The dialog is one renderer; `fw`
+/// Pure data, and no Flutter in this file. The dialog is one renderer; `fw`
 /// printing the same checklist before removing a checkout from a script is the
 /// other, and neither should be able to see a step the other cannot.
 ///
@@ -46,8 +46,8 @@ class TeardownPlan {
   final List<PlannedStep> steps;
 
   /// False when the plan was built without a session, so plugin steps and
-  /// guards are missing. The dialog says so rather than implying the checkout
-  /// is clean.
+  /// guards are missing. The dialog states that rather than implying the
+  /// checkout is clean.
   final bool sessionOpen;
 
   /// How much uncommitted work goes with the checkout, from the last git probe.
@@ -61,7 +61,7 @@ class TeardownPlan {
   /// True when removing this checkout destroys uncommitted work.
   bool get destroysUncommittedWork => uncommittedFiles > 0;
 
-  /// **Nothing may proceed.** The primary checkout, or uncommitted work.
+  /// Nothing may proceed. The primary checkout, or uncommitted work.
   bool get isBlocked => guards.any((guard) => guard.level == GuardLevel.block);
 
   List<Guard> get blockers => [
@@ -131,7 +131,7 @@ class TeardownPlan {
 
   /// The objections the shell raises on its own behalf.
   ///
-  /// **Only one thing blocks, and it is the one nothing can be done about.**
+  /// Only one thing blocks, and it is the one nothing can be done about.
   ///
   /// - **The primary checkout blocks**, because `Worktree.isMain` says it
   ///   "cannot be removed, so teardown must never offer to". Git will not do it
@@ -143,7 +143,7 @@ class TeardownPlan {
   ///   mid-task, and you may know better.
   ///
   /// Uncommitted work was a block in the first version, on the reasoning that
-  /// nothing should be able to destroy work no reflog can return. That was
+  /// nothing should destroy work no reflog can return. That was
   /// wrong about what this tool is *for*. The worktrees people need to remove
   /// are the abandoned ones, and an abandoned checkout has junk in it almost by
   /// definition — so a block on dirty files refuses precisely the case the

@@ -130,7 +130,7 @@ void main() {
     expect(text, isNot(contains('Unhandled')));
   });
 
-  /// **The outer layer had to learn what the inner one already knew.** A call
+  /// The outer layer had to learn what the inner one already knew. A call
   /// that misspells the *wrapper* key — `parameters:` for `arguments:` — used
   /// to run the action with its defaults and answer as if it had been asked,
   /// which is precisely the failure `Session._undeclared` exists to prevent one
@@ -352,7 +352,7 @@ void main() {
       expect(plugins.every((p) => p.containsKey('actions')), isTrue);
     });
 
-    /// **The instructions say to start here, so every session pays it.** The
+    /// The instructions say to start here, so every session pays it. The
     /// panel projection is the inventory and the inventory is nine tenths of
     /// the reply — measured on this repo at 19.2k of 21.7k characters, most of
     /// it rows naming every dependency of every package. `brief` answers the

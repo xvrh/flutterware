@@ -8,7 +8,7 @@ import 'app_theme.dart';
 
 /// The table, in the states it actually reaches.
 ///
-/// **The largest shared widget with no preview until now**, and the one that
+/// The largest shared widget with no preview until now, and the one that
 /// owned a real bug: below a certain width its flex widths clamp at each
 /// column's `minWidth`, so the table stops fitting and starts extending — three
 /// columns off the edge with no scrollbar drawn and no fade to say so. The
@@ -107,7 +107,7 @@ List<FwTableColumn<_Row>> _columns(BuildContext context) => [
 @Preview(name: 'Rows', group: 'Table', wrapper: wrapInAppTheme)
 Widget tableRows() => const _Table(rows: _rows);
 
-/// **The tight case, at the one width that matters.**
+/// The tight case, at the one width that matters.
 ///
 /// 800px is the whole content pane at `shellPaneMinimumSize` — both gutters
 /// removed. Below the minimum the shell scales rather than narrowing,

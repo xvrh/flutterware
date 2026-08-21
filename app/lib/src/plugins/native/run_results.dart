@@ -246,7 +246,7 @@ class RunEntrypointEntry {
   ///
   /// Absent when nothing declared one. Worth a field because the two are
   /// overridden with different confidence: a pubspec default is the project's
-  /// blanket answer, while an entry point's is a pairing somebody wrote down.
+  /// blanket answer, while an entry point's is a deliberate pairing.
   final String? flavorSource;
 
   /// [flavor] where the declaration varies it by platform, as written —
@@ -279,7 +279,7 @@ class RunEntrypointEntry {
 
 /// One knob an entry point's `main` takes.
 ///
-/// **Read off the signature, not from a config and not by running anything.**
+/// Read off the signature, not from a config and not by running anything.
 /// The name, the kind and the default are the parameter's own; a config can
 /// only add what a signature cannot say — a label, options for a type that
 /// cannot enumerate itself, or a value a project script works out.
@@ -314,7 +314,7 @@ class RunKnobEntry {
   /// case where there is no parameter to read a kind from.
   final String? kind;
 
-  /// What the launch uses when nobody says otherwise: a script's answer when
+  /// What the launch uses when nothing overrides it: a script's answer when
   /// one was computed, else the parameter's own default.
   @JsonKey(name: 'default')
   final String? defaultValue;
@@ -322,7 +322,7 @@ class RunKnobEntry {
   /// How the default is written, when it is a reference this cannot evaluate —
   /// `ServerUrls.localPort`.
   ///
-  /// **Present exactly when [defaultValue] is absent and a default exists**, so
+  /// Present exactly when [defaultValue] is absent and a default exists, so
   /// the two never disagree and neither ever stands in for the other. It is the
   /// answer to a form that showed a blank for a parameter with a default two
   /// lines away: the reader recognises what they wrote, and the value field
@@ -342,7 +342,7 @@ class RunKnobEntry {
   /// True when a launch that sets no value for this knob is refused — see
   /// [Knob.required].
   ///
-  /// **Absent rather than false**, which is why it goes through a converter: an
+  /// Absent rather than false, which is why it goes through a converter: an
   /// entry point's knobs are the longest thing in this reply and almost none of
   /// them are required, so a `"required": false` on every line would be paid
   /// for on every listing to say nothing.
@@ -513,7 +513,7 @@ class RunAppEntry {
   /// handle, log and journal are called on disk.
   ///
   /// Reported because the ambiguity refusal tells a caller to pass one, and a
-  /// refusal naming an argument nobody can look up is a dead end. The last
+  /// refusal naming an argument they cannot look up is a dead end. The last
   /// resort by design — a device and an entry point read better — but two
   /// Studios launched from one checkout onto one device differ in nothing
   /// else, not even the address they share.
@@ -592,8 +592,8 @@ class RunScreenshotResult implements PluginResult {
   final int bytes;
   final int ms;
 
-  /// Said out loud when the picture may not be the whole story — a run with
-  /// platform views in it, which Flutter's layer tree cannot photograph.
+  /// Stated when the picture may be incomplete — a run with platform views in
+  /// it, which Flutter's layer tree cannot photograph.
   final String? note;
 
   @override
@@ -698,8 +698,8 @@ class RunBootResult implements PluginResult {
   /// The daemon accepted the launch. Says nothing about whether it came up.
   final bool started;
 
-  /// The device id it appeared as, once it did. Null when the wait ran out —
-  /// which is not the same as a failure, and [note] says so.
+  /// The device id it appeared as, once it did. Null when the wait ran out,
+  /// which is not the same as a failure — see [note].
   final String? device;
   final String? deviceName;
 
@@ -713,14 +713,14 @@ class RunBootResult implements PluginResult {
 
 /// `inspect` — one reading of one run.
 ///
-/// **One action rather than three, and the reason is the app moves.** A tree
+/// One action rather than three, and the reason is the app moves. A tree
 /// read by one call and a picture taken by the next are two moments of a live
 /// app — two readings that happen to agree, or quietly do not. Everything here
 /// comes off a single connection, and the tree and the picture off a single
 /// inspector group. The catalog reached the same conclusion first; see
 /// `ui_catalog_core.dart`'s `inspect`.
 ///
-/// **Answers something even when the app is not up.** A cold build is minutes
+/// Answers something even when the app is not up. A cold build is minutes
 /// during which nothing can be asked of the app — and is exactly when the logs
 /// are the only thing worth reading. So [up] is a field rather than an error.
 @JsonSerializable(
@@ -804,8 +804,8 @@ class RunInspectResult implements PluginResult {
   /// The command the `native` lines came from, verbatim.
   ///
   /// Reported because the read it describes is one flutterware performs on the
-  /// caller's behalf against a source it does not own, and an answer nobody
-  /// can re-run by hand is an answer nobody can disagree with. Absent when the
+  /// caller's behalf against a source it does not own, and an answer that
+  /// cannot be re-run by hand cannot be checked. Absent when the
   /// platform log was not asked for, or when this device has none to read.
   final String? nativeLog;
 
@@ -894,7 +894,7 @@ class RunActResult implements PluginResult, ProducesArtifacts {
   /// False means the settle budget ran out with the app still animating — a
   /// spinner, an infinite animation. Reported, never thrown.
   ///
-  /// **True means nothing is painting, not that the screen is done.** The
+  /// True means nothing is painting, not that the screen is done. The
   /// settle waits on scheduled frames, tickers and image decodes; a pending
   /// network fetch or file read schedules none of those, so a screen that is
   /// still fetching its data reports `settled: true, frames: 0` while it says
@@ -927,8 +927,8 @@ class RunActResult implements PluginResult, ProducesArtifacts {
   ///
   /// Every step leaves the same four legs a scenario step leaves — the
   /// picture, the tree, the semantics, the texts — beside a
-  /// `<stamp>.capture.json` naming them, **whatever this reply chose to
-  /// return**. That is what makes a second question about a step possible:
+  /// `<stamp>.capture.json` naming them, whatever this reply chose to
+  /// return. That is what makes a second question about a step possible:
   /// the reply is a projection of the capture, not the only copy of it.
   final String? capture;
 
@@ -942,7 +942,7 @@ class RunActResult implements PluginResult, ProducesArtifacts {
 
   /// The screen: what is on it, what can be acted on, and how it is laid out.
   ///
-  /// **The default reply**, and the thing to read before anything else. About
+  /// The default reply, and the thing to read before anything else. About
   /// a twentieth of the tree's tokens, and it answers more — a tree cannot say
   /// which control is disabled or which tab is the current one. Pass
   /// `screen: false` to drop it.
@@ -990,7 +990,7 @@ class RunActResult implements PluginResult, ProducesArtifacts {
   /// The run's journal file this step was appended to — and the index of
   /// every capture this run has taken.
   ///
-  /// **Worth reading directly, if you can read files.** It is JSON-lines, one
+  /// Worth reading directly, if you can read files. It is JSON-lines, one
   /// object per step, each carrying that step's `capture` address and the
   /// absolute path of its picture, tree, semantics and texts. So "what did
   /// step 7 look like" and "which step changed this" are a file read away
@@ -1051,7 +1051,7 @@ class RunActResult implements PluginResult, ProducesArtifacts {
 /// `panels` — what the running app says it offers, from its own devbar
 /// plugins.
 ///
-/// **The descriptors travel raw.** They are already published JSON — the same
+/// The descriptors travel raw. They are already published JSON — the same
 /// `PanelDescriptor.toJson` the cockpit decodes — and re-modelling them here
 /// would be a second model of the app's declaration, kept in step by hand.
 /// `panel_client.dart` refuses that for the same reason.

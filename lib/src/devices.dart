@@ -22,7 +22,7 @@ enum DevicePlatform { ios, android, macos, windows, linux }
 /// entry for it would double the table per rotatable device and turn a
 /// 4-device × 2-orientation matrix into eight ids instead of two crossed lists.
 ///
-/// **One landscape, not two.** Real hardware has a left and a right, and they
+/// One landscape, not two. Real hardware has a left and a right, and they
 /// differ only in which side the cutout lands on — so a second value would
 /// double every matrix to buy a mirrored inset. This one is defined by a fixed
 /// physical side: **the cutout on the left**. Deliberately not "the leading
@@ -33,7 +33,7 @@ enum DevicePlatform { ios, android, macos, windows, linux }
 /// grammar, and it would be the mirror of this one rather than a new
 /// declaration.
 ///
-/// **Not `DeviceOrientation`**, which Flutter already defines in `services.dart`
+/// Not `DeviceOrientation`, which Flutter already defines in `services.dart`
 /// and therefore has in scope in every file that imports `material.dart`. A
 /// consumer declaring a profile would have had to hide one of the two to name
 /// the other, in the API whose whole job is to be nameable from a
@@ -48,7 +48,7 @@ enum ScreenOrientation { portrait, landscape }
 /// with less screen. See
 /// `docs/superpowers/specs/2026-08-21-fake-keyboard-design.md`.
 ///
-/// **Auto is not "off".** It is the whole feature: the app asks for a keyboard
+/// Auto is not "off". It is the whole feature: the app asks for a keyboard
 /// when a field takes focus and lets go of it when the view dismisses one, and
 /// that is what a phone does. The two forced states are for the layout with no
 /// field in it — *what does this do with 336 points less* — which nothing on
@@ -145,7 +145,7 @@ class Device {
   /// The safe areas when this device is on its side, or null for the swap-only
   /// case: width and height trade places and the insets stay where they are.
   ///
-  /// **Declared, not computed.** Permuting the four insets geometrically is
+  /// Declared, not computed. Permuting the four insets geometrically is
   /// wrong on exactly the devices it matters on. An iPhone in landscape *loses*
   /// its status bar rather than moving it — the top inset goes to 0, not to a
   /// side — the cutout inset lands on both sides, and the home indicator stays
@@ -160,7 +160,7 @@ class Device {
   /// How tall the software keyboard is on this device, in logical pixels — 0
   /// for a device that has none, which is every desktop size.
   ///
-  /// **Measured, not computed**, like [landscape] and for the same reason:
+  /// Measured, not computed, like [landscape] and for the same reason:
   /// there is no formula. A 375-wide phone with a home button gets 260 and a
   /// 375-wide phone with a notch gets a different number entirely, because the
   /// number includes whatever the platform puts under the keys.
@@ -188,7 +188,7 @@ class Device {
   /// This device as [orientation] shows it — itself for portrait, for null, and
   /// for anything that cannot rotate.
   ///
-  /// **The one place the orientation axis becomes geometry.** Everything
+  /// The one place the orientation axis becomes geometry. Everything
   /// downstream takes a [Device] and reads `width`, `height` and the insets —
   /// the capture viewport, the harness args, the silhouette, the splash sweep —
   /// so resolving the axis into a device here leaves all of them untouched.
@@ -228,14 +228,14 @@ class Device {
 /// the window happens to be.
 ///
 /// A value rather than an absent parameter, because picking it is a decision.
-/// Leaving it out means "nobody chose", which is what lets an entry's own
+/// Leaving it out means "not chosen", which is what lets an entry's own
 /// `formFactor` speak; `fit` means "I chose not to frame this", and those are
 /// different answers.
 const fitDeviceId = 'fit';
 
 /// The devices worth offering, which is not all of them.
 ///
-/// A picker with a hundred entries is a menu nobody reads. What a *layout*
+/// A picker with a hundred entries is unusable. What a *layout*
 /// meets is a handful of size classes — small, standard, large, tablet,
 /// desktop — so this is one of each per platform, named after a device that
 /// sits in that class.

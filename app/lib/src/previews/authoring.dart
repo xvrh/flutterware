@@ -1,4 +1,4 @@
-/// What to say to somebody who has no previews yet.
+/// What to show for a package with no previews yet.
 ///
 /// One string, in one place, reached by four surfaces: the `entries` result an
 /// agent reads, the panel's empty state, the sidebar's status, and the daemon's
@@ -16,11 +16,11 @@ const defaultCatalogRoot = '';
 
 /// Where `new` writes a scaffold, and the directory the hint's example names.
 ///
-/// **Not the scan root.** Nothing has to be here to be found; this is only the
-/// answer to "where should this file go" when nobody said. A package that
+/// Not the scan root. Nothing has to be here to be found; this is only the
+/// answer to "where should this file go" when nothing says. A package that
 /// declares `directory:` moves both at once — a narrowed scan and the place new
 /// files land are then the same directory, which is the only reading of that
-/// setting that does not surprise somebody.
+/// setting that is not surprising.
 const defaultAuthoringDirectory = 'demo';
 
 /// The annotations that mark an entry when a package registers none of its own.
@@ -130,7 +130,7 @@ const _dartReservedWords = {
 
 /// The symbol inside it — the file's slug, lowerCamelCased.
 ///
-/// **Must be a legal Dart identifier**, because the scaffold declares a
+/// Must be a legal Dart identifier, because the scaffold declares a
 /// top-level function with this name and the generated entrypoint imports it by
 /// name. Two things a preview's name can do that an identifier cannot: start with
 /// a digit (`404 page`), and be a reserved word — and `Switch` is close to the

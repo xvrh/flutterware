@@ -72,29 +72,29 @@ class SearchHit {
 /// typing `dash` finds the Dashboard entry rather than the plugin above it.
 const _weights = {SearchReason.plugin: 30, SearchReason.package: 20};
 
-/// Everywhere in [report] you could go that matches [query] — **without asking
-/// the plugin for anything**.
+/// Everywhere in [report] you could go that matches [query], without asking the
+/// plugin for anything.
 ///
 /// This is the baseline every plugin gets for free. `PluginReport` is already
 /// all data, so walking it means a plugin is searchable the day it reports,
 /// with no search code of its own.
 ///
-/// **Only destinations.** A result offers to take you somewhere, so a thing
-/// that names no somewhere is not a result. That rules out three kinds the
-/// report also carries:
+/// Only destinations. A result offers to take you somewhere, so a row that
+/// names no destination is not a result. That rules out three kinds the report
+/// also carries:
 ///
-/// - **Actions.** A verb, not a place. "Screenshot" in a list of places is a
+/// - **Actions.** A verb rather than a place. "Screenshot" in a list of places is a
 ///   category error, and running one off a fuzzy match is worse — some are
 ///   declared `danger`. Commands are a different surface (a `>` mode, the way
 ///   an editor separates go-to-file from run-command), not this one.
 /// - **Free text and fields.** A diagnostic or a label/value pair is output.
 ///   Matching it strands you on the plugin, which is the wrong page.
-/// - **Rows with no address.** The honest floor used to be "found, but not
+/// - **Rows with no address.** These used to be listed as "found, but not
 ///   followed". In use that reads as a broken result: you searched a specific
 ///   thing, something opened, and it was not that thing.
 ///
-/// So a plugin is as findable as it is addressable, which is the pressure worth
-/// having: the way in is to give rows an address, not to be listed anyway.
+/// So a plugin is as findable as it is addressable. The way in is to give rows
+/// an address, not to be listed without one.
 ///
 /// [worktree] is stamped into every address so hits stay distinguishable if a
 /// caller ever merges several.

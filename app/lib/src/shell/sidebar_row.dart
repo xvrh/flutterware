@@ -21,7 +21,7 @@ const _statusFloor = 48.0;
 /// row's fixtures — splits between a label and a status, given what each of
 /// them wants.
 ///
-/// **The label is served first, and served whole.** It gets its natural width
+/// The label is served first, and served whole. It gets its natural width
 /// and the status takes everything left, so `app · compiling the catalog…`
 /// reads in full instead of truncating beside three empty centimetres of rail.
 /// That was the cost of the flat cap this replaced: a constant cannot know
@@ -78,8 +78,8 @@ double _textWidth(BuildContext context, String text, TextStyle style) {
 /// because an unconditional one would pop a box repeating a status you are
 /// already reading, on every row of the rail.
 ///
-/// A plugin writes its own status — third-party ones included — so this is the
-/// wall rather than a courtesy. Before it, a plugin that put a runner's log
+/// A plugin writes its own status — third-party ones included — so this is
+/// enforced rather than assumed. Before it, a plugin that put a runner's log
 /// line here got the row: the sidebar showed `[tester] flutterw…` and the
 /// worktree switcher set the worktree's name one letter per line.
 class StatusText extends StatelessWidget {

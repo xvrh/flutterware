@@ -12,7 +12,7 @@ import 'artifacts.dart';
 /// convention every artifact path in a result follows, so a run can be read on
 /// another checkout without rewriting anything.
 ///
-/// **Reads synchronously and hands back a [SynchronousFuture].** The interface
+/// Reads synchronously and hands back a [SynchronousFuture]. The interface
 /// is asynchronous because the other implementation fetches over a network;
 /// this one opens files the harness wrote a moment ago, and going through the
 /// thread pool for them would put a frame — and in a widget test, a hang —

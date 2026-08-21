@@ -78,7 +78,7 @@ class SplashScan {
 
 /// One cell's picture, and where it came from.
 ///
-/// **The provenance is not a footnote, it is the confidence.** A picture read
+/// The provenance is not a footnote, it is the confidence. A picture read
 /// back from the generated files is what the device will show. A picture
 /// derived from the config is our reading of a third-party generator's rules,
 /// and this plugin has already shipped that reading backwards once. The two
@@ -121,7 +121,7 @@ class SplashConfigScan {
   /// What the generated files say each cell looks like, read once when the scan
   /// ran. Missing for a cell that had nothing to read back.
   ///
-  /// **Read here rather than on demand.** Recomposing parses `web/index.html`
+  /// Read here rather than on demand. Recomposing parses `web/index.html`
   /// and a stack of drawable XML off disk, and it used to happen inside
   /// [pictureFor] — which the panel calls nine times per build. That was 5.8ms
   /// of synchronous I/O on the UI isolate every time anything rebuilt, on a
@@ -181,9 +181,9 @@ class SplashConfigScan {
           : surface == SplashSurface.ios
           // Not "nothing was generated": there is plenty on disk, we simply
           // cannot read a storyboard back into a picture.
-          ? 'Predicted from the config. iOS is the one surface that cannot be '
-                'read back — LaunchScreen.storyboard is constraints, not a '
-                'recipe.'
+          ? 'Predicted from the config. iOS cannot be read back — '
+                'LaunchScreen.storyboard describes constraints, not the '
+                'finished image.'
           : 'Predicted from the config. Nothing was generated for this surface.',
     );
   }
@@ -224,7 +224,7 @@ SplashScan scanSplash({
 /// Finds every config the project has, and every file that looks like one but
 /// is not usable.
 ///
-/// **Every config lives under a top-level `flutter_native_splash:` key**,
+/// Every config lives under a top-level `flutter_native_splash:` key,
 /// including a standalone `flutter_native_splash.yaml` — the generator reads
 /// `yamlMap['flutter_native_splash']` whichever file it opened, and throws when
 /// that section is missing. A file whose keys sit at the root is therefore not
@@ -329,7 +329,7 @@ class _ConfigSearch {
 
 /// The launcher icon Android 12 falls back to, at the best density it has.
 ///
-/// **Not referenced by the config, and that is the point.** When
+/// Not referenced by the config, and that is the point. When
 /// `android_12.image` resolves nothing the generator writes no
 /// `windowSplashScreenAnimatedIcon`, and Android draws the app icon instead — so
 /// the honest preview of that cell is this file, not an empty rectangle.

@@ -16,7 +16,7 @@ import 'command_palette.dart' show wrapInAppTheme;
 
 /// Two directions for the launcher-icon panel, side by side.
 ///
-/// **Nothing here touches the filesystem.** Every icon is synthesised in
+/// Nothing here touches the filesystem. Every icon is synthesised in
 /// memory, which is what lets these views be looked at without finding a
 /// project that happens to have a monochrome layer — the exact gap that meant
 /// the plugin's marquee surfaces had never been seen rendered by anyone.

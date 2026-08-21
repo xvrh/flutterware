@@ -22,7 +22,7 @@ const _maxOutput = 8000;
 ///
 /// See `docs/superpowers/specs/2026-08-10-dev-stack-design.md`.
 ///
-/// **It owns no process.** Everything here runs one of the project's own
+/// It owns no process. Everything here runs one of the project's own
 /// commands and reads what came back — [DevStack.probe] to find out the state,
 /// `start` / `stop` to change it. That is the whole difference from a
 /// supervisor, and it is what makes a stack brought up in a terminal
@@ -65,7 +65,7 @@ class DevStackCore extends PluginCore {
 
   /// Runs a command and hands back (exitCode, combined output).
   ///
-  /// **Per instance, not static, and not test-only.** A static seam is one
+  /// Per instance, not static, and not test-only. A static seam is one
   /// global that every core in the process shares — fine for a test that builds
   /// one at a time, wrong for anything that does not: the catalog draws five
   /// stacks on one screen, each scripted differently, and they would overwrite
@@ -213,8 +213,8 @@ class DevStackCore extends PluginCore {
   /// How often the probe actually runs — the declaration, or slower when the
   /// probe has proven expensive.
   ///
-  /// **The declaration is a floor, not a promise, because only the last probe
-  /// knows what a probe costs.** A `Probe.script` pays a `dart run` every time:
+  /// The declaration is a floor, not a promise, because only the last probe
+  /// knows what a probe costs. A `Probe.script` pays a `dart run` every time:
   /// 0.3s on a small workspace, 4.6s measured on a large one with native-asset
   /// build hooks. At the default 10s that second case is a permanently busy
   /// core, and the project's only recourse was to write a bigger number into
@@ -245,7 +245,7 @@ class DevStackCore extends PluginCore {
   /// `RunCore` uses for a [ScriptSource], because two answers to "which dart"
   /// would be two behaviours for one word.
   ///
-  /// **`dart <path>`, not `dart run <path>`, which is what a person would type.**
+  /// `dart <path>`, not `dart run <path>`, which is what a person would type.
   /// `run` re-resolves the package graph and executes every build hook in it on
   /// every invocation — measured here at 0.33s against 0.28s for the direct
   /// form, and the gap is the hooks, so it grows with the project rather than
@@ -305,7 +305,7 @@ class DevStackCore extends PluginCore {
 
   /// Starts polling, and stops when the last watcher leaves.
   ///
-  /// **Reference-counted, unlike the other cores' `track()`.** Those start work
+  /// Reference-counted, unlike the other cores' `track()`. Those start work
   /// that runs until the worktree closes, which is right for a file watch that
   /// costs nothing to leave running. This spawns a subprocess every
   /// [pollInterval], so leaving it on for a worktree nobody is looking at would
@@ -350,7 +350,7 @@ class DevStackCore extends PluginCore {
   /// Runs the probe and adopts what it says. Does nothing while a transition is
   /// in flight — see [_busy].
   ///
-  /// **One probe at a time, and a second caller joins the first.** The poll
+  /// One probe at a time, and a second caller joins the first. The poll
   /// timer used to fire regardless of whether the last probe had come back, so
   /// a probe slower than the interval — which a `dart run` on a big workspace
   /// can be, measured at 4.6s where the default interval is 10s — left two
@@ -564,7 +564,7 @@ class DevStackCore extends PluginCore {
 
   /// Runs [command], holding the stack while it does.
   ///
-  /// **The timeout is on the wait, and it exists because the wait is a claim.**
+  /// The timeout is on the wait, and it exists because the wait is a claim.
   /// `_busy` is what makes the next `start` refuse, so a command that never
   /// returns did not merely fail — it took every later command with it, for the
   /// rest of the session, and the panel's controls with them. `logs --follow`
@@ -714,7 +714,7 @@ class DevStackCore extends PluginCore {
     _ => _reading,
   };
 
-  /// **A word, not a sentence.** The sidebar clamps a status to 100 logical
+  /// A word, not a sentence. The sidebar clamps a status to 100 logical
   /// pixels, so anything longer than about a dozen characters arrives
   /// ellipsised — and an ellipsis always eats the *end*, which is where the
   /// information was. `up · localhost:8080 · pid 493` rendered as
@@ -741,7 +741,7 @@ class DevStackCore extends PluginCore {
     StackState.unavailable => const Status.error("can't tell"),
   };
 
-  /// **A badge only when something needs you.**
+  /// A badge only when something needs you.
   ///
   /// A stack that is up is the normal state and gets no dot: a tab lit green
   /// every day is a tab you stop reading, which is the failure the explorer
@@ -891,8 +891,8 @@ class DevStackCore extends PluginCore {
 /// [run] as a line to show a human — the panel's "where this came from", a
 /// command's fallback description, the console's header.
 ///
-/// **A script is described as `dart …`, not with the absolute path to the SDK's
-/// binary.** The interpreter is 80 characters of `~/fvm/versions/…` that answer a
+/// A script is described as `dart …`, not with the absolute path to the SDK's
+/// binary. The interpreter is 80 characters of `~/fvm/versions/…` that answer a
 /// question nobody reading a panel is asking; what they want to know is which
 /// script ran with which arguments. The absolute path is what gets *spawned*, and
 /// that is a different question from what gets shown.

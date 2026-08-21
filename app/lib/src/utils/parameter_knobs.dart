@@ -5,7 +5,7 @@ import 'enum_lookup.dart';
 
 /// Turns a function's optional parameters into the knobs a panel can render.
 ///
-/// **The signature is the declaration.** A catalog demo and a run entry point
+/// The signature is the declaration. A catalog demo and a run entry point
 /// ask the identical question of the identical AST — *what can somebody vary
 /// here, and how should it be drawn* — so they ask it in one place.
 /// `docs/superpowers/specs/2026-07-27-knobs-static-and-runtime.md` left this
@@ -146,14 +146,14 @@ class ParameterKnob {
   /// The default clause **as written**, for a default this cannot evaluate —
   /// `ServerUrls.localPort`, `_port`, `defaultTimeout`.
   ///
-  /// **Set only when there is a default and no value for it**, which is what
+  /// Set only when there is a default and no value for it, which is what
   /// keeps it from being source text where a value belongs. A knob with a
   /// literal default has [KnobDescriptor.defaultValue] and this is null; a
   /// knob with no default at all has neither. The pair says the third thing:
   /// there *is* a default, here is how it is spelled, and nothing here can
   /// tell you what it comes to.
   ///
-  /// **A blank was the wrong answer to that**, and reported by a consumer
+  /// A blank was the wrong answer to that, and reported by a consumer
   /// whose entry points look like the common case rather than an exotic one:
   /// the values knobs replace are usually already `String.fromEnvironment`
   /// constants, because that is what a `--dart-define` build reads, and a

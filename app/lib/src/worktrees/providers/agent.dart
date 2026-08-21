@@ -1,6 +1,6 @@
 /// Whether a coding agent is working in a checkout, read from files on disk.
 ///
-/// **All of the unstable knowledge in this repository lives here.** The session
+/// All of the unstable knowledge in this repository lives here. The session
 /// format below is Claude Code's private business: it is undocumented, it will
 /// change, and nothing else may depend on its shape. What leaves this file is
 /// [AgentFacts], which is ours.
@@ -124,7 +124,7 @@ class ClaudeAgentProbe implements AgentProbe {
 
 /// `~/.claude/projects/<the worktree path, with `/`, `\`, `_` and `.` as `-`>`.
 ///
-/// **Derived by measurement, not from documentation.** Checked against every
+/// Derived by measurement, not from documentation. Checked against every
 /// directory on one machine (2026-08-10): of the 57 with a readable session,
 /// this rule reproduces 55 exactly. Separators alone reproduce far fewer —
 /// a checkout under `claude_worktrees/` lands in `claude-worktrees-…`, so
@@ -135,7 +135,7 @@ class ClaudeAgentProbe implements AgentProbe {
 /// whose recorded `cwd` is a *different* worktree, presumably resumed or
 /// copied. Which is the case [parseClaudeSession]'s `cwd` check exists for.
 ///
-/// **Lossy, and knowingly so.** A path that really contains a dash is
+/// Lossy, and knowingly so. A path that really contains a dash is
 /// indistinguishable from one containing a separator once encoded. Survivable
 /// because of what a wrong guess costs: the directory does not exist, the probe
 /// reports no agent, and the column disappears. A wrong *match* would be the

@@ -129,7 +129,7 @@ void main() {
   });
 
   group('report', () {
-    /// **`screenshot` was dispatched and never declared**, which made it
+    /// `screenshot` was dispatched and never declared, which made it
     /// invisible to `fw run run`, unanswerable by `--help`, and exempt from
     /// the argument check — that check is keyed on the declaration. A
     /// consumer's `screenshot --output=…` therefore wrote the default path and
@@ -1009,7 +1009,7 @@ void main({
       expect(knobs.every((k) => k.problem == null), isTrue);
     });
 
-    /// **The shape a consumer's entry points actually have.** The values knobs
+    /// The shape a consumer's entry points actually have. The values knobs
     /// replace are usually already `String.fromEnvironment` constants, because
     /// that is what a `--dart-define` build reads — and the same file being
     /// compiled by their server is what forces it, since bare literals would
@@ -3069,7 +3069,7 @@ RunHandle _writeHandle(
 /// Ends the launcher a successful `launch` started, and does not come back
 /// until it is gone.
 ///
-/// **A launch outlives the call that made it.** `launchApp` starts a *detached*
+/// A launch outlives the call that made it. `launchApp` starts a *detached*
 /// shell whose redirect opens the run's log with `>`, so the log is created by
 /// a process nothing waits for — and the `deleteSync(recursive: true)` in
 /// `tearDown` running beside it emptied the run directory, watched the shell

@@ -12,7 +12,7 @@
 /// itself is expected to stay at [protocolVersion] indefinitely — see
 /// `docs/superpowers/specs/2026-07-30-server-inspection-design.md`.
 ///
-/// **Pure Dart, and deliberately free of `dart:io`.** These frames travel over
+/// Pure Dart, and deliberately free of `dart:io`. These frames travel over
 /// a unix socket to a Dart server on the host *and* over the VM service to a
 /// Flutter app on a phone; only the rendezvous half — finding a server on this
 /// machine, `protocol.dart` — needs a filesystem. Splitting the two is what

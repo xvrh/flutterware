@@ -29,7 +29,7 @@ class TeardownProgress {
   TeardownOutcome outcome;
 
   /// What the step said. Kept for the ones that failed, which is the only time
-  /// anybody reads it.
+  /// it gets read.
   String output;
 }
 
@@ -38,12 +38,12 @@ enum TeardownFailureChoice { retry, skip, abort }
 
 /// Runs a [TeardownPlan]'s selected steps, then removes the checkout.
 ///
-/// **A plugin step is `Session.invoke`, nothing else.** The step's id names an
+/// A plugin step is `Session.invoke`, nothing else. The step's id names an
 /// action on the plugin that emitted it, so the checklist runs exactly what
 /// `fw run <plugin> <action>` runs. There is no second path to keep in step,
 /// and no capability a teardown can reach that the CLI cannot.
 ///
-/// **Removal is gated on the steps.** If a step failed and the user did not
+/// Removal is gated on the steps. If a step failed and the user did not
 /// explicitly continue past it, the checkout is left alone: a half-torn-down
 /// stack is recoverable, and a deleted worktree is not. That ordering is the
 /// single most important thing in this file.

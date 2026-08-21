@@ -34,8 +34,7 @@ class PreviewProgram extends TesterProgram {
   final String buildDirectory;
 
   /// Re-read on every sync, so a preview written while the harness is warm
-  /// restarts it rather than staying invisible until somebody reopens the
-  /// panel.
+  /// restarts it rather than staying invisible until the panel is reopened.
   final PreviewCatalog Function() read;
 
   /// Entries the compiler refused, and what it said. They are left out of the
@@ -174,7 +173,7 @@ class PreviewCaptureRow {
 /// each entry said.
 ///
 /// The embedder guest renders one entry at a time in real time, which is right
-/// for a panel somebody is looking at and wrong for a catalog-wide check: a
+/// for a panel being watched and wrong for a catalog-wide check: a
 /// demo that animates for ever costs three real seconds there and microseconds
 /// of fake clock here. What is *not* given up is fidelity — the harness spawns
 /// its own tester precisely so it can omit `--use-test-fonts`, mounts each
@@ -344,7 +343,7 @@ class PreviewTestRunner {
   /// tries again with the rest — the same bargain the catalog daemon strikes,
   /// and the reason an audit answers at all while something is broken.
   ///
-  /// Errors nobody declares an entry in — a shared helper, the app itself —
+  /// Errors in files that declare no entry — a shared helper, the app itself —
   /// cannot be fixed by dropping anything, so they stay fatal.
   Future<void> _bringUp({bool sync = true}) async {
     for (var round = 0; round < _blameRounds; round++) {

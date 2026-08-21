@@ -27,7 +27,7 @@ enum SplashConfigKind {
 
 /// One property resolved for a surface and a theme, carrying the key that won.
 ///
-/// The key is the point. A resolved colour on its own invites "but I set
+/// The key is what makes it useful. A resolved colour on its own invites "but I set
 /// `color`" — the key answers it, and is what the panel prints beside the value
 /// and what `describe` puts in its output.
 class Resolved<T extends Object> {
@@ -93,18 +93,18 @@ class SplashConfig {
   /// darkColor: darkColorAndroid ?? darkColor
   /// ```
   ///
-  /// **Light and dark are two independent two-step chains.** Dark never falls
+  /// Light and dark are two independent two-step chains. Dark never falls
   /// through to light — `color_dark_android ?? color_dark` and then nothing. A
   /// project that sets `color` and no `color_dark` resolves *nothing* for dark
   /// here.
   ///
-  /// **That is the config level, and it is only half the story.** The files the
+  /// That is the config level, and it is only half the story. The files the
   /// generator writes are platform *resources*, and every platform resolves a
   /// missing dark resource to the light one — so "nothing resolved" does not
   /// mean "nothing is shown". [resolveSplash] is where that second half lives,
   /// and reading this method as the whole answer is what produced the plugin's
-  /// most confident wrong claim. Nothing here should grow a fallback; the
-  /// distinction is the point.
+  /// most confident wrong claim. Nothing here should grow a fallback; keeping
+  /// the two apart is the whole job.
   Resolved<String> resolve(
     String base,
     SplashSurface surface,
@@ -146,7 +146,7 @@ class SplashConfig {
 
   /// The Android 12 icon.
   ///
-  /// **No fallback to the top-level `image`** — `android12Image` is read from
+  /// No fallback to the top-level `image` — `android12Image` is read from
   /// the section and nowhere else. This is the footgun: an app with a perfectly
   /// good `image:` and no `android_12:` section shows its *launcher icon* on
   /// every device from Android 12 on, because the generator then writes no

@@ -213,9 +213,9 @@ class TranslationSurvey {
 
   /// Keys the catalogs define that this run never asked for.
   ///
-  /// **Phrased as "not reached", never as "unused".** It is a statement about
-  /// the suite's coverage as much as about the product, and a key behind a
-  /// screen nobody wrote a scenario for is not a dead key.
+  /// Phrased as "not reached", never as "unused". It is a statement about the
+  /// suite's coverage as much as about the product: a key may still be in use
+  /// on a screen no scenario covers.
   List<({String catalog, String key})> keysNotReached() {
     var found = <({String catalog, String key})>[];
     for (var catalog in catalogs.values) {
@@ -255,8 +255,8 @@ class TranslationSurvey {
   /// Every key a target locale has no words for, and every key whose rendered
   /// words disagree with the file.
   ///
-  /// **The two halves come from different places, because only one source can
-  /// establish each.** Falling back is a fact about the *files*: the template
+  /// The two halves come from different places, because only one source can
+  /// establish each. Falling back is a fact about the *files*: the template
   /// has text, the target has none, so whatever renders there is the source
   /// language. It needs no run, which is why it is the same list the panel's
   /// empty cells show and why an export of one locale reports it in full.
@@ -324,7 +324,7 @@ class TranslationSurvey {
   /// The occurrence worth showing a translator, or null when a key was never
   /// seen.
   ///
-  /// **Ranked, not first-found.** A key appears on a loading screen, clipped
+  /// Ranked, not first-found. A key appears on a loading screen, clipped
   /// in a list, and once in the place it was designed for; only the last of
   /// those is worth a translator's time. In order: on screen at all, then not
   /// clipped, then the step succeeded, then the screen has other words on it
@@ -351,7 +351,7 @@ class TranslationSurvey {
     return ranked.first;
   }
 
-  /// **Prominence first, and prominence is a share of the screen.**
+  /// Prominence first, and prominence is a share of the screen.
   ///
   /// The weights were measured rather than guessed, on a suite that runs both
   /// phone and desktop scenarios. Two of them started out wrong and both

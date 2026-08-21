@@ -33,8 +33,8 @@ class GuestEntrypoint {
 /// project's ever meets it. Regenerated on every launch: it is derived state,
 /// and the entrypoint it wraps may have moved since last time.
 ///
-/// **Wrapping needs the entrypoint to be inside the package, and nothing
-/// more.** It used to require `lib/`, on the grounds that the wrapper needs a
+/// Wrapping needs the entrypoint to be inside the package, and nothing
+/// more. It used to require `lib/`, on the grounds that the wrapper needs a
 /// `package:` URI to import — but the wrapper sits inside the package, so a
 /// path reaches anything the package holds, and a file outside `lib/` has no
 /// `package:` spelling for a path to conflict with. [wrapperImportOf] draws
@@ -225,7 +225,7 @@ String? _literalFor(ParameterKnob knob, Object? value) {
 /// — a URL or a Windows path then arrives with no escaping to get wrong, which
 /// is the shape a knob's value tends to have.
 ///
-/// **A line break disqualifies both forms until it is escaped.** A single-quoted
+/// A line break disqualifies both forms until it is escaped. A single-quoted
 /// literal cannot span lines whether it is raw or not, so a value carrying one
 /// closed the string mid-way and left the wrapper unparseable — reported as a
 /// syntax error in generated source, about a value the user typed somewhere

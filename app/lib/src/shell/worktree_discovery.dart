@@ -30,13 +30,13 @@ class WorktreeDiscovery {
   /// spawning a process each to ask would cost far more than opening a
   /// one-line file.
   ///
-  /// **Synchronous on purpose.** A widget test drives fake time, so a real
+  /// Synchronous on purpose. A widget test drives fake time, so a real
   /// asynchronous read never completes inside one and `pumpAndSettle` waits
   /// forever — every test touching the shell would have to remember to stub
   /// this. One small read, after a subprocess spawn we already waited on, is
   /// not worth that.
   ///
-  /// **Null means the real file**, resolved at the call rather than defaulted in
+  /// Null means the real file, resolved at the call rather than defaulted in
   /// the constructor. A hot reload leaves new fields null on objects that
   /// already exist, and this one is built once when the shell is — so defaulting
   /// at construction meant reloading a change to this file threw

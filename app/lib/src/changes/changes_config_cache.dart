@@ -1,7 +1,7 @@
-/// Where a worktree's `ChangesConfig` comes from when nobody is running it.
+/// Where a worktree's `ChangesConfig` comes from when nothing is running it.
 ///
-/// The config is *executed*, like every other config in flutterware. The whole
-/// difficulty is that this screen has to rank a worktree **nobody has opened**,
+/// The config is *executed*, like every other config in flutterware. The
+/// difficulty is that this screen has to rank a worktree that is **not open**,
 /// and not opening it is exactly what "closed" means. So:
 ///
 /// > **One writer, one reader.** Whatever executes `tool/flutterware.dart`
@@ -21,7 +21,7 @@
 /// | closed, config file has moved | [ChangesConfigState.stale] | it, and says so |
 /// | never opened, or no config file | [ChangesConfigState.none] | nothing — no rules exist |
 ///
-/// **Not written into the checkout**, tempting as `.dart_tool/flutterware/` is
+/// Not written into the checkout, tempting as `.dart_tool/flutterware/` is
 /// — the kernel cache is already there. A worktree's `.gitignore` is
 /// *versioned*: switch to a branch that does not have the entry and a cache
 /// written inside the checkout becomes an untracked row on the very screen it
@@ -45,7 +45,7 @@ enum ChangesConfigState {
   fresh,
 
   /// The config file was edited after this value was computed. Still used —
-  /// yesterday's rules beat no rules — but the screen says so.
+  /// yesterday's rules beat no rules — but the screen flags it.
   stale,
 
   /// Nothing cached, or the project has no config file. Built-in defaults.
@@ -78,7 +78,7 @@ class ResolvedChangesConfig {
 /// Null when the worktree has no config file at all, which is a worktree with
 /// nothing to cache rather than one whose cache is empty.
 ///
-/// **mtime and size rather than content**, unlike the kernel cache next door.
+/// mtime and size rather than content, unlike the kernel cache next door.
 /// That one is keyed on content because `pub get` rewrites files without
 /// changing them and re-compiling costs half a second; this one costs a
 /// subprocess we are not going to run either way, so the cheap key is the right
@@ -121,7 +121,7 @@ ResolvedChangesConfig resolveChangesConfig(
 /// is still worth remembering: "this project says nothing" is an answer, and
 /// caching it is what stops a closed worktree looking permanently unknown.
 ///
-/// **Saves immediately.** The entry is only useful on a *later* launch, so
+/// Saves immediately. The entry is only useful on a *later* launch, so
 /// holding it in memory until something else happens to save the store is the
 /// one timing where it would reliably be lost.
 void rememberChangesConfig(

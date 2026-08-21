@@ -64,7 +64,7 @@ class InspectSource {
 
   /// `package:foo/bar.dart` for a path in a place packages are *kept*, or null.
   ///
-  /// **It recognises a layout; it does not resolve a package config.** The
+  /// It recognises a layout; it does not resolve a package config. The
   /// three it knows are the Flutter SDK (`…/packages/flutter/lib/…`), the pub
   /// cache (`…/hosted/pub.dev/provider-6.1.2/lib/…`) and the git cache
   /// (`…/git/foo-<sha>/lib/…`) — each one a marker segment away from certainty,
@@ -139,7 +139,7 @@ class InspectKey {
   /// Half-open range over the paragraph's plain text — what to highlight when
   /// showing a translator where their string is.
   ///
-  /// **Absent when the key was read off a widget property rather than a span.**
+  /// Absent when the key was read off a widget property rather than a span.
   /// A markdown source carries `**` that never reaches a glyph, so an offset
   /// into it would point at the wrong character; the whole node is the
   /// occurrence instead, which is the right crop for a paragraph anyway.
@@ -352,7 +352,7 @@ class InspectConstraints {
   final double minHeight;
   final double maxHeight;
 
-  /// **Unbounded is absent, not `Infinity`.** JSON has no infinity and
+  /// Unbounded is absent, not `Infinity`. JSON has no infinity and
   /// `jsonEncode` throws on one, which is not a theoretical corner: an
   /// unbounded `maxWidth` is what most of a real tree is laid out under, so
   /// the first entry with a `Column` in it failed to encode at all.
@@ -461,7 +461,7 @@ class InspectNode {
   /// The ambient style as [toJson] wrote it: a map, or `"same"` standing in
   /// for one byte-identical to [textStyle].
   ///
-  /// **Absent and `"same"` are different answers**, which is the whole reason
+  /// Absent and `"same"` are different answers, which is the whole reason
   /// the sentinel is a value rather than an omission: nothing captured means
   /// no reader looked, and the detail pane offers no merge card for it. A
   /// widget that set no style of its own captured plenty — it simply captured
@@ -523,7 +523,7 @@ class InspectNode {
   /// The node's identity, and the whole reason this type exists rather than
   /// the inspector's JSON being passed through.
   ///
-  /// **Derived from the tree's shape, never assigned.** The framework's ids
+  /// Derived from the tree's shape, never assigned. The framework's ids
   /// (`inspector-42`) are minted per object group, refcounted, and die with the
   /// process — which is fatal here, because every `fw` invocation and every MCP
   /// call opens a fresh session and holds nothing. An agent that reads a tree
@@ -612,7 +612,7 @@ class InspectNode {
   /// was already 13". An override that changes nothing is a line of source
   /// that could go, and that is a thing a design system wants told.
   ///
-  /// **Ambient, which is not always the same as inherited** — see
+  /// Ambient, which is not always the same as inherited — see
   /// [styleReplacesInherited]. Empty for everything that draws no text and for
   /// every reader outside the app.
   final Map<String, String> inheritedStyle;
@@ -635,7 +635,7 @@ class InspectNode {
   ///
   /// True for every text that sets no style of its own — most of them — where
   /// the resolved style *is* the ambient one. Measured on one scenario run:
-  /// **2215 of 22714 tree bytes, 9%**, spent writing the same seven pairs a
+  /// 2215 of 22714 tree bytes, 9%, spent writing the same seven pairs a
   /// second time.
   bool get _sameAsResolved =>
       inheritedStyle.length == textStyle.length &&
@@ -651,8 +651,8 @@ class InspectNode {
 
   /// This node's text spans that no catalog claimed — the words themselves.
   ///
-  /// The counterpart to [keys], and what makes "text nobody translated"
-  /// answerable rather than merely countable. Most of it is text that has no
+  /// The counterpart to [keys], and what makes "untranslated text" answerable
+  /// rather than merely countable. Most of it is text that has no
   /// key by construction — a formatted date, a person's name, a number — so
   /// this is a *list to classify*, never a list of defects.
   ///
@@ -665,9 +665,9 @@ class InspectNode {
   /// Whether this node's paragraph ran out of room — `maxLines` exceeded, so
   /// the words are ellipsised or clipped.
   ///
-  /// Read off the paragraph while it is already in hand. It is the whole of the
-  /// classic localisation bug: a label that fits in the language it was
-  /// designed in and does not fit in the next one. The matrix already runs the
+  /// Read off the paragraph while it is already in hand. This is the classic
+  /// localisation bug: a label that fits in the language it was designed in and
+  /// does not fit in the next one. The matrix already runs the
   /// language axis, so with this the question "which strings break in German"
   /// is a query rather than a feature.
   final bool textOverflowed;
@@ -702,7 +702,7 @@ class InspectNode {
   /// What a screen reader would call this, from the semantics node this
   /// widget's render object contributes to.
   ///
-  /// **Reached through the render tree, never by comparing rectangles.** A
+  /// Reached through the render tree, never by comparing rectangles. A
   /// semantics node and a widget's box are not the same rectangle and the
   /// mismatch goes both ways: a `Checkbox`'s node is smaller than the
   /// `CheckboxListTile` that owns it, and a `Tab`'s is **9.5× larger** than the
@@ -964,7 +964,7 @@ class InspectNode {
 
 /// How much of a tree a caller wants.
 ///
-/// **Every field narrows what is *reported*, never what is walked.** The walk
+/// Every field narrows what is *reported*, never what is walked. The walk
 /// costs the same either way — the ids are positions in the whole tree and
 /// have to stay that way, or a node id from one read would not name the same
 /// node in the next. So this is about the size of the answer, which on a real
@@ -1002,7 +1002,7 @@ class InspectFilter {
   /// screen: 436 nodes to 252, with `MouseRegion`, `GestureDetector`, `Gap`,
   /// `Expanded`, `InkWell` and `Builder` gone entirely.
   ///
-  /// **A dropped node takes its level with it, not its subtree.** Its children
+  /// A dropped node takes its level with it, not its subtree. Its children
   /// are hoisted to its parent, so ids stay what they always were and a child
   /// may now sit under a node that is not its parent — `0/3/1/0/2` directly
   /// under `0/3`. Ask for `noise: false` to see the levels in between.
@@ -1191,7 +1191,7 @@ class InspectTree {
   /// The deepest node whose box contains ([x], [y]), in the guest's own
   /// coordinates.
   ///
-  /// **An approximation of a hit test, and deliberately one.** It knows only
+  /// An approximation of a hit test, deliberately. It knows only
   /// rectangles: not transforms, not clips, not opacity, not `IgnorePointer`,
   /// and of two overlapping boxes at the same depth it takes the later, which
   /// is a guess at paint order rather than knowledge of it.
@@ -1206,8 +1206,8 @@ class InspectTree {
   /// a builder lays nothing out, and its child is the thing under the cursor.
   /// Every node is considered rather than only the children of one that
   /// contains the point, because a child can be laid out beyond its parent —
-  /// which is what an overflow *is*, and overflowing widgets are exactly the
-  /// ones somebody is pointing at.
+  /// which is what an overflow *is*, and an overflowing widget is exactly what
+  /// a pointer tends to be aimed at.
   ///
   /// Offstage nodes are skipped too, subtree and all: a route kept alive under
   /// the current one holds its old rects, which overlap the screen — and being
@@ -1245,7 +1245,7 @@ class InspectTree {
   /// Nodes whose type, description or semantics label contains [query],
   /// case-insensitively.
   ///
-  /// **What to reach for instead of reading a tree**, and the measurement is
+  /// What to reach for instead of reading a tree, and the measurement is
   /// lopsided enough to be worth stating: `find "Watching"` answers "what
   /// colour and size is that label" in 131 tokens where the whole tree is
   /// 19 500. It is also the way out of the `treeRoot` chicken-and-egg — an id
@@ -1286,14 +1286,14 @@ class InspectTree {
 
   /// Every distinct text style on screen, most-used first.
   ///
-  /// **An aggregate, because "what is the type ramp" is a table and not a list
-  /// of nodes.** Asking it as a search returned 63 hits, cost 2451 tokens and
+  /// An aggregate, because "what is the type ramp" is a table and not a list
+  /// of nodes. Asking it as a search returned 63 hits, cost 2451 tokens and
   /// was still truncated; this is the whole answer in about 185 — which makes
   /// it the cheapest question in the drill-down and the one that settles most
   /// design arguments (two greys that should be one, a ramp with 11.5 *and*
   /// 12.5 in it).
   ///
-  /// **Buckets on [InspectNode.textStyle], and that is a correction.** It used
+  /// Buckets on [InspectNode.textStyle], and that is a correction. It used
   /// to read [InspectNode.properties], which for a `Text` is the style its
   /// author wrote — so every text that took its size and colour from the theme
   /// had neither key and fell out of the ramp entirely. In a themed app that is
@@ -1413,9 +1413,9 @@ class InspectTree {
   /// Every node [selector] could mean — an **id** first, then a name matched
   /// the way [matching] matches.
   ///
-  /// One list rather than one node, because how to answer "several" is the
-  /// caller's business and not the same everywhere: a crop refuses and lists
-  /// them, a tree read might narrow to the outermost. What is not the caller's
+  /// One list rather than one node, because how to answer "several" is up to
+  /// the caller and differs per call site: a crop refuses and lists them, a
+  /// tree read might narrow to the outermost. What is not the caller's
   /// business is the *rule* — an id is exact and a name is a search — and
   /// having that written once is why this is here rather than in each of them.
   ///
@@ -1458,7 +1458,7 @@ class InspectTree {
   /// the scenario artifacts and the comparison caches have always been written
   /// in, and changing it under them would be changing files already on disk.
   ///
-  /// **Compact is the same tree written for a reader that pays per byte.** Two
+  /// Compact is the same tree written for a reader that pays per byte. Two
   /// substitutions, both undone by [fromJson] before anything downstream sees
   /// a node:
   ///

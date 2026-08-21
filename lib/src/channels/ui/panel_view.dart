@@ -1,7 +1,7 @@
 /// A whole [PanelDescriptor], rendered: a tab strip over one body per feed,
 /// one per state, and one for the controls.
 ///
-/// **A View, not a Screen.** It takes the descriptor, the events and the
+/// A View, not a Screen. It takes the descriptor, the events and the
 /// snapshots as plain data and hands every interaction back as a callback. It
 /// fetches nothing and holds no channel — which is what lets it be exercised
 /// against fixtures in a preview, with no app running, and what lets the same

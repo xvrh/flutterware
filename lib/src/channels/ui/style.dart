@@ -1,7 +1,7 @@
 /// The look of a rendered panel, in the published package, without the GUI's
 /// design tokens.
 ///
-/// **Why this exists rather than `FwTokens`** (owner, 2026-08-11: *"we don't
+/// Why this exists rather than `FwTokens` (owner, 2026-08-11: *"we don't
 /// move the token, that doesn't make sense — inline them so it looks mostly
 /// right on both sides"*). One renderer serves two hosts: the flutterware
 /// cockpit, which has `FwTokens`, and the in-app devbar overlay inside

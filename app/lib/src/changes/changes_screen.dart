@@ -40,8 +40,8 @@ const changesFileKey = Key('changes-file');
 
 /// Which of the index's tabs is showing.
 ///
-/// **The ranking's answer and the directory structure are two orderings of one
-/// set of files, and they do not fit in one column.** Putting the pinned files
+/// The ranking's answer and the directory structure are two orderings of one
+/// set of files, and they do not fit in one column. Putting the pinned files
 /// in a band above the tree was tried and used, and it lost on both counts: the
 /// alert competed with the tree for the top of a 320 px column, and it was
 /// still occupying that column on the branches where it had nothing to say.
@@ -58,23 +58,23 @@ enum IndexTab {
 
   /// What you have written about this delta, in the order you wrote it.
   ///
-  /// **A tab, not a third column.** The list of comments is navigation — every
+  /// A tab, not a third column. The list of comments is navigation — every
   /// row opens the line it is about — which is what this column already is, and
   /// a 1200 px window has no room for another one. The comments themselves are
   /// drawn in the diff, where the code is.
   review,
 }
 
-/// **`fw:///worktrees/<worktree>/changes`** — what this checkout has changed
+/// `fw:///worktrees/<worktree>/changes` — what this checkout has changed
 /// against its base branch, committed and uncommitted together.
 ///
 /// Deliberately not a plugin, and unlike the config screen not merely because
 /// of what it is *about*: it reads git rather than the project, so it renders
-/// for a worktree **nobody has opened**. A plugin needs a resolved config and a
+/// for a worktree that is **not open**. A plugin needs a resolved config and a
 /// session; the checkout you most want to look at is the one an agent has been
 /// working in while you were elsewhere.
 ///
-/// **Master and detail.** Left: every path in the delta, and nothing else.
+/// Master and detail. Left: every path in the delta, and nothing else.
 /// Right: the one file you picked. They used to be a single list of file rows
 /// that expanded to inject their own diff, which made the surface you navigate
 /// with and the surface you read the same one — every complaint about this
@@ -87,7 +87,7 @@ enum IndexTab {
 /// — three navigation surfaces for one list of files was two too many, and the
 /// Review tab is not one of them: it lists comments, not files.
 ///
-/// **A comment carries the code it is about**, quoted when you wrote it, so the
+/// A comment carries the code it is about, quoted when you wrote it, so the
 /// agent may keep editing while you type. See `review_comment.dart`.
 class ChangesScreen extends StatefulWidget {
   const ChangesScreen({
@@ -116,7 +116,7 @@ class ChangesScreen extends StatefulWidget {
 
   /// The file the address names, expanded and scrolled to on arrival.
   ///
-  /// **Segments after the plugin id belong to the panel**, which is the rule
+  /// Segments after the plugin id belong to the panel, which is the rule
   /// every other panel in the shell already follows. Here it means a file's
   /// diff has a name you can paste: `fw:///worktrees/<n>/changes/lib/a.dart`.
   final String? initialPath;
@@ -146,7 +146,7 @@ class ChangesScreen extends StatefulWidget {
 
   /// Whether this screen has to name itself.
   ///
-  /// **False when it is a tab.** `ComparisonTabs` draws a strip above all three
+  /// False when it is a tab. `ComparisonTabs` draws a strip above all three
   /// renderings of one delta, and only this one was also writing a page title
   /// and a branch line under it — so the files tab began with two lines of
   /// chrome the previews and scenarios tabs do not have, and the strip's
@@ -154,7 +154,7 @@ class ChangesScreen extends StatefulWidget {
   /// same delta, stated twice, in two different vocabularies.
   ///
   /// True when there is no strip, which is a real case rather than a fallback:
-  /// a checkout nobody has opened gets the file diff and no comparison, with no
+  /// an unopened checkout gets the file diff and no comparison, with no
   /// rail and no tabs around it, and then this line is the only thing on screen
   /// that says whose changes these are.
   final bool showTitle;
@@ -206,7 +206,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// What the open composer is about, or null when nothing is being written.
   ///
-  /// **One at a time.** Two half-written comments is two things to lose track
+  /// One at a time. Two half-written comments is two things to lose track
   /// of, and the second one is always opened by accident.
   ReviewAnchor? _composing;
 
@@ -216,7 +216,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// A note you deleted a moment ago, whose tombstone has **not been written**.
   ///
-  /// **The undo window is the delete.** The log is append-only and a tombstone
+  /// The undo window is the delete. The log is append-only and a tombstone
   /// cannot be unwritten, so an undo that re-added the comment would give it a
   /// new place at the end of the list — the third note becoming the sixth is
   /// not the note you took back. Holding the delete instead costs a few
@@ -262,7 +262,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// Whether the resolved notes are being shown as well.
   ///
-  /// **Off, and not remembered.** The list is what is still to do; a filter
+  /// Off, and not remembered. The list is what is still to do; a filter
   /// that persisted across launches would make a screen that opens on nine
   /// answered notes and two live ones, which is the pile the resolve was for.
   var _showResolved = false;
@@ -301,7 +301,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
   /// place while you were reading.
   IndexTab? _tab;
 
-  /// **Important when there is something in it, All otherwise.**
+  /// Important when there is something in it, All otherwise.
   ///
   /// The one thing a tab costs is that the alert is hidden half the time, so
   /// the half it is hidden in is the half where it is empty. On a branch where
@@ -427,7 +427,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// The tokens for the file the right pane is showing.
   ///
-  /// **Keyed by the file, not by the patch**, because the language is: a
+  /// Keyed by the file, not by the patch, because the language is: a
   /// `.dart` file and a `.yaml` file in one delta are two grammars, and a cache
   /// that outlived the selection would hand a hunk of one to the other. One
   /// file is open at a time, so one cache is the right number.
@@ -455,7 +455,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// Shows [path] in the right pane, from the top.
   ///
-  /// **The body scrolls back to the start.** Two files' diffs share a scroll
+  /// The body scrolls back to the start. Two files' diffs share a scroll
   /// offset only by accident, and arriving four hundred lines into a file you
   /// just picked is the sort of thing that reads as the app losing its place.
   void _show(String? path) {
@@ -467,7 +467,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// What the right pane is showing, and what it falls back to.
   ///
-  /// **Nothing is auto-selected.** The claim this screen makes is that it knows
+  /// Nothing is auto-selected. The claim this screen makes is that it knows
   /// what to look at first, so opening straight into the top-ranked file would
   /// be tempting — and wrong: the first thing you want is the *shape* of what
   /// an agent did, which is the index. Reading a file is the second question,
@@ -487,7 +487,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// The `+` in a diff line's margin.
   ///
-  /// **Shift extends the span rather than starting a new comment.** Two clicks
+  /// Shift extends the span rather than starting a new comment. Two clicks
   /// is the whole gesture for *this block*, and it is the gesture every diff
   /// viewer already teaches — a modifier that silently started over instead
   /// would lose whatever you had already typed.
@@ -543,7 +543,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// Writes the draft down, and closes the composer.
   ///
-  /// **The quote is read here, once.** This is the moment the comment stops
+  /// The quote is read here, once. This is the moment the comment stops
   /// depending on the checkout: from now on it carries its own evidence, and
   /// the agent can keep editing without any of this going wrong.
   void _submitComment(ChangeSet set) {
@@ -614,7 +614,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// The agent resolutions that were new when you arrived at the Review tab.
   ///
-  /// **Held here rather than read from the log**, because arriving is also what
+  /// Held here rather than read from the log, because arriving is also what
   /// marks them seen: a screen that read the log directly would clear the
   /// accent in the same frame that drew it, and the one thing this marker
   /// exists for is that you notice.
@@ -622,7 +622,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// Marked on arrival, once. See [ReviewController.markSeen].
   ///
-  /// **Re-reads first.** The watch on the log is what usually brings the
+  /// Re-reads first. The watch on the log is what usually brings the
   /// agent's answers in, and a watch can be refused — a platform without them,
   /// a home that will not take one. Arriving at the tab is the moment the
   /// answer matters, so it is the moment not to rely on that.
@@ -649,7 +649,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// Opens what a review row is about, and goes to it.
   ///
-  /// **Opening the file is not arriving at the note.** This selected the path
+  /// Opening the file is not arriving at the note. This selected the path
   /// and jumped the body to line one, which on a six-hundred-line diff leaves
   /// the note you clicked somewhere below the fold — and when the file was
   /// already open it did nothing at all, because [_show] returns early on the
@@ -687,12 +687,11 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// Takes the outstanding notes somewhere else.
   ///
-  /// **It changes nothing by itself.** Exporting is a read: the agent that
-  /// works in this checkout reads the log through its own surface and resolves
-  /// what it deals with, and a paste into some other window tells us nothing
-  /// about whether anybody acted on it. What the sheet offers afterwards is
-  /// *resolve these too*, for exactly the case where nobody is going to report
-  /// back — and it is offered, not assumed.
+  /// It changes nothing by itself. Exporting is a read: the agent that works in
+  /// this checkout reads the log through its own surface and resolves what it
+  /// deals with, and a paste into another window says nothing about whether it
+  /// was acted on. What the sheet offers afterwards is *resolve these too*, for
+  /// the case where no reply is coming back — and it is offered, not assumed.
   Future<void> _export(ChangeSet? set) async {
     var comments = _live;
     _commitPendingDelete();
@@ -933,9 +932,9 @@ class _Header extends StatelessWidget {
             if (it.baseSource == BaseSource.none) ...[
               const Gap(FwSpacing.md),
               _Note(
-                'No base branch: none of origin/HEAD, main or master resolved '
-                'here, so nothing is compared against a guess. Showing '
-                'uncommitted work only.',
+                'No base branch: none of origin/HEAD, main or master '
+                'resolved here, so there is nothing to compare against. '
+                'Showing uncommitted work only.',
               ),
             ],
             // Ranking by rules that have since been edited is worth one line.
@@ -959,7 +958,7 @@ class _Header extends StatelessWidget {
 
 /// Says whether the screen is still listening — three words, no timer.
 ///
-/// **Deliberately not an age that counts up.** "14s ago" needs a ticker
+/// Deliberately not an age that counts up. "14s ago" needs a ticker
 /// rebuilding the header every second for a number that means nothing on a
 /// screen which refreshes when the checkout moves and not otherwise: on a quiet
 /// worktree it would climb to "40m ago" and read as broken. What you actually
@@ -967,12 +966,12 @@ class _Header extends StatelessWidget {
 /// the exact clock time of the last read is in the tooltip for the one moment
 /// you want it.
 ///
-/// The failed case earns its own words. A watch can be refused — the checkout
+/// The failed case gets its own words. A watch can be refused — the checkout
 /// was deleted under us, or the system is out of watches — and *that* is the
 /// state where the screen quietly stops being true.
 ///
-/// **It says nothing about a read in progress**, which it tried to and should
-/// not: a probe is 60–195 ms, so the word would be a flicker nobody can read,
+/// It says nothing about a read in progress, which it tried to and should
+/// not: a probe is 60–195 ms, so the word would be an unreadable flicker,
 /// and on the one load slow enough to see — the first — the summary below is
 /// already saying `Reading…`. Two of that word in one header, six pixels apart,
 /// meaning different things.
@@ -1028,7 +1027,7 @@ class _Watching extends StatelessWidget {
 
 /// Re-read, as an icon the size of the line it sits on.
 ///
-/// **Not an `IconButton`.** Material's minimum tap target is 40 px tall, which
+/// Not an `IconButton`. Material's minimum tap target is 40 px tall, which
 /// is more than twice the 18 px of text beside it — under a tab strip it was
 /// the only thing setting the header's height, and the band was 65 px to hold
 /// one line. A pointer does not need a thumb's target.
@@ -1111,11 +1110,11 @@ class _Summary extends StatelessWidget {
 
 /// The **index**: filter, two tabs, and the paths.
 ///
-/// Navigation only. Nothing here is content, which is the whole point of the
+/// Navigation only. Nothing here is content, which is the reason for the
 /// split — the list stays where you left it while you read, and a live re-probe
 /// that adds a file changes this column without moving a line of what is open.
 ///
-/// **Two orderings, one column, so two tabs.** *All* is a directory tree, which
+/// Two orderings, one column, so two tabs. *All* is a directory tree, which
 /// is what navigation wants: structure, ordered by weight inside it, so an
 /// agent's heaviest module is the first thing under each folder. *Important* is
 /// the ranking's answer — flat, short, in rank order, nothing folded, because a
@@ -1444,7 +1443,7 @@ class _IndexPane extends StatelessWidget {
 
 /// The three tabs, with their counts.
 ///
-/// **The count is what pays for the tab.** A tab's cost is that half the time
+/// The count is what justifies the tab. A tab's cost is that half the time
 /// it is hiding what it holds; a number on the label means the Important tab
 /// still says *there are four files a rule pinned* without being opened, which
 /// is most of what the band it replaces was for.
@@ -1605,7 +1604,7 @@ class _Tab extends StatelessWidget {
 
 /// What the **Review** tab says before anything has been written.
 ///
-/// **It names the gesture**, because nothing else on the screen advertises it:
+/// It names the gesture, because nothing else on the screen advertises it:
 /// the `+` in the margin is drawn on hover, which is the right call for a list
 /// of three thousand rows and the wrong one for discovery.
 ///
@@ -1630,18 +1629,18 @@ class _NoComments extends StatelessWidget {
 
 /// The Review tab's foot.
 ///
-/// **Pinned below the list rather than at the end of it.** Twelve comments
+/// Pinned below the list rather than at the end of it. Twelve comments
 /// would put the action below the fold, which is the one place a primary action
 /// may not be.
 ///
-/// **Primary, not loud.** It was a solid full-bleed accent slab with the
+/// Primary, not loud. It was a solid full-bleed accent slab with the
 /// second action as a 10.5 px link under it — between them the heaviest and
 /// nearly the lightest thing on the screen, for two actions a note-taker
 /// alternates between. The house primary is [FwActionButton]'s: an accent
 /// border over [FwPalette.accentSoft], which is emphatic in a panel of greys
 /// without being the loudest object in the app.
 ///
-/// **It is Export, and it is no longer what the tab is for.** The gesture that
+/// It is Export, and it is no longer what the tab is for. The gesture that
 /// used to close a batch here has been replaced by an agent that reads the log
 /// itself and resolves what it deals with, so this button now serves the case
 /// where the reader is somewhere flutterware cannot reach.
@@ -1722,10 +1721,10 @@ class _ReviewFooter extends StatelessWidget {
 
 /// *Resolved (12)*, opening and closing the answered notes.
 ///
-/// **A row in the list, not a control in the chrome.** It sits where the
+/// A row in the list rather than a control in the chrome. It sits where the
 /// handed-off section used to start, which is where the eye already goes for
-/// *what is already dealt with* — and it costs nothing on the tab of somebody
-/// who has never resolved anything, because it is not drawn at all.
+/// *what is already dealt with* — and it costs nothing on a tab with nothing
+/// resolved, because it is not drawn at all.
 class _ResolvedToggle extends StatelessWidget {
   const _ResolvedToggle({
     required this.count,
@@ -1784,7 +1783,7 @@ class _Nothing extends StatelessWidget {
 /// What the **Important** tab says to a project that has never written an
 /// `attention:` rule.
 ///
-/// **There are no built-in ones**, so without this the tab is empty and the
+/// There are no built-in ones, so without this the tab is empty and the
 /// whole ranking reads as a feature that does not work. It is the empty state
 /// rather than a line above the list, which is where it used to sit: a note
 /// that a band could not fit is a full pane's worth of room here, and it can
@@ -2176,8 +2175,8 @@ class _FilePaneState extends State<_FilePane> {
       icon: Icons.difference_outlined,
       title: 'Pick a file',
       body:
-          'All is every path in this delta, as a tree. Important is what a '
-          'rule in tool/flutterware.dart pinned.',
+          'All shows every path in this delta, as a tree. Important shows '
+          'what a rule in tool/flutterware.dart pinned.',
     );
   }
 
@@ -2468,7 +2467,7 @@ class _FilePaneState extends State<_FilePane> {
 
   /// The rows themselves.
   ///
-  /// **One [SelectionArea] over the whole body.** Nothing in a diff was
+  /// One [SelectionArea] over the whole body. Nothing in a diff was
   /// selectable: the rows are `Text`, and the app has no selection region
   /// anywhere — so the one thing everybody does with a line of code, take it
   /// somewhere else, could not be done here at all. It wraps the list rather
@@ -2571,8 +2570,8 @@ class _FilePaneState extends State<_FilePane> {
 
   /// This file's rows, with what has been said about it woven in.
   ///
-  /// **A comment whose line could not be found is drawn at the top of the
-  /// file** rather than dropped. It happens when the agent rewrote the hunk out
+  /// A comment whose line could not be found is drawn at the top of the
+  /// file rather than dropped. It happens when the agent rewrote the hunk out
   /// from under it, which is exactly the moment the note matters — and it still
   /// carries the code it was written about, so it reads on its own.
   List<ChangeRow> _rowsFor(FileChange file) {
@@ -2620,9 +2619,9 @@ class _FilePaneState extends State<_FilePane> {
 
 /// What the right pane says when it has nothing to draw.
 ///
-/// The whole body of the screen, so it is the one empty state nobody can miss —
-/// and it was the one with no icon, left-aligned prose at two greys, resembling
-/// nothing else in the app.
+/// The whole body of the screen, so it is the most visible empty state there
+/// is — and it was the one with no icon, left-aligned prose at two greys,
+/// resembling nothing else in the app.
 class _Empty extends StatelessWidget {
   const _Empty({required this.title, required this.body, required this.icon});
 
@@ -2653,7 +2652,7 @@ class _FileHeader extends StatelessWidget {
   final FileChange file;
   final bool uncommitted;
 
-  /// **Not every note has a line.** *No test covers this* is about the file,
+  /// Not every note has a line. *No test covers this* is about the file,
   /// and a line-only tool forces it into a lie about line 1.
   final VoidCallback onComment;
 

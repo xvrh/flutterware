@@ -43,7 +43,7 @@ typedef DatabaseWatch = Stream<List<Map<String, Object?>>> Function(String sql);
 /// at logout, and replaced when the user switches environment. There is
 /// nothing to hand this constructor at the moment the devbar is built.
 ///
-/// **The adapter is the shape; the session is the data.** Close over the
+/// The adapter is the shape; the session is the data. Close over the
 /// lookup rather than over the database, and resolve it inside each function:
 ///
 /// ```dart
@@ -67,8 +67,8 @@ typedef DatabaseWatch = Stream<List<Map<String, Object?>>> Function(String sql);
 /// panel is described: an adapter that leaves [execute] null while logged out
 /// declares an app with no write door, permanently, and the same goes for
 /// [watch] and [updates]. Pass every function the app will ever offer, and let
-/// the ones with nothing to work on throw. And **[updates] is the one field
-/// that cannot be resolved late** — it is a stream, handed over once, not a
+/// the ones with nothing to work on throw. And [updates] is the one field that
+/// cannot be resolved late — it is a stream, handed over once, not a
 /// function called per query. Own a broadcast controller that outlives every
 /// session and forward the current database into it:
 ///
@@ -83,7 +83,7 @@ typedef DatabaseWatch = Stream<List<Map<String, Object?>>> Function(String sql);
 /// }
 /// ```
 ///
-/// **Why a panel that answers rather than one that disappears.** The other
+/// Why a panel that answers rather than one that disappears. The other
 /// shape — declaring the panel only while a session is open, which
 /// `AddDevbarPanel` and `DevbarPanels` make possible — leaves the absence
 /// unexplained. Ask for
@@ -116,13 +116,13 @@ class DatabaseAdapter {
   /// its SQL on every coalesced [updates] tick — correct, just wasteful.
   final DatabaseWatch? watch;
 
-  /// **Presence is the write opt-in.** No function, no `execute` action, on
+  /// Presence is the write opt-in. No function, no `execute` action, on
   /// any surface — an agent cannot even see it (§ Decision 3 of the design).
   final DatabaseQuery? execute;
 }
 
-/// What a database function throws when there is no database to reach —
-/// nobody is signed in, the session is closing, the environment is switching.
+/// What a database function throws when there is no database to reach — no one
+/// is signed in, the session is closing, the environment is switching.
 ///
 /// It exists for its [toString]. An error crossing the channel travels as its
 /// message and nothing else, and lands verbatim in the cockpit's error pane

@@ -55,8 +55,8 @@ class ComparisonWebViewer extends StatefulWidget {
 class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
   late final _store = HttpShotStore(widget.base);
 
-  /// Satisfies the tabs' contract; nothing on an exported page captures, so
-  /// nobody ever asks it whether the window is quiet.
+  /// Satisfies the tabs' contract; nothing on an exported page captures, so it
+  /// is never asked whether the window is quiet.
   final _settle = SettleRegistry();
 
   ComparisonIndex? _index;

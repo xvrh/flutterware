@@ -18,7 +18,7 @@ import 'window_capture.dart';
 /// The size, density and theme a capture is taken at, independent of the
 /// machine taking it.
 ///
-/// **Layout, not the window.** Resizing the real window would need a platform
+/// Layout, not the window. Resizing the real window would need a platform
 /// dependency and would still be bounded by the display — a 1600×1200 shot is
 /// impossible on a 13" laptop, and every screenshot would carry that laptop's
 /// scale factor. Forcing the *layout* size inside the capture boundary needs
@@ -186,7 +186,7 @@ class CaptureRequest {
 
   /// Why the window is not showing what was asked for, or null when it is.
   ///
-  /// **The failure this exists for is silent.** [ShellController.go] accepts an
+  /// The failure this exists for is silent. [ShellController.go] accepts an
   /// address whose plugin no worktree declares, writes it to the bar, and
   /// renders the home screen — deliberately, because a reloaded config may drop
   /// a plugin and a panel that cannot be built is worse than a fallback. For a
@@ -199,8 +199,8 @@ class CaptureRequest {
   /// `flutterware.previews`, which is exactly the mistake that produced this
   /// check.
   ///
-  /// **The segments are checked too, and skipping them let the worst version of
-  /// this through.** The plugin test only ever asked "is this the right panel",
+  /// The segments are checked too, and skipping them let the worst version of
+  /// this through. The plugin test only ever asked "is this the right panel",
   /// and a catalog panel that could not reach the entry it was asked for does
   /// not fail — it opens on another one and writes that back to the address.
   /// Measured: a capture of `demo/buttons.dart#buttons` came back reporting
@@ -222,8 +222,8 @@ class CaptureRequest {
   /// Fills in the worktree the shell already opened, when the address named a
   /// plugin without one.
   ///
-  /// **The plugin test is what makes this safe, and it was added because the
-  /// explorer broke it.** This used to fill in a worktree whenever the address
+  /// The plugin test is what makes this safe, and it was added because the
+  /// explorer broke it. This used to fill in a worktree whenever the address
   /// lacked one, on the reasoning that no parseable address could — the worktree
   /// slot being positional ahead of the plugin. `fw:///worktrees` is exactly
   /// that address: a complete, deliberately worktree-less place, and rewriting

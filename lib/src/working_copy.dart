@@ -32,7 +32,7 @@ File workingCopyStampFile(String root) => File(p.join(root, '.source_stamp'));
 /// The files the copy is made of: everything the walk finds except
 /// `pubspec.lock`.
 ///
-/// **A lock is a resolution, and a resolution is a fact about one SDK.**
+/// A lock is a resolution, and a resolution is a fact about one SDK.
 /// flutterware resolves its own workspace against the SDK it is developed on;
 /// the copy is resolved and built by whichever SDK the consumer's project
 /// names. Carrying the lock across that boundary hands them package versions
@@ -52,7 +52,7 @@ Iterable<File> packageFiles(String packageRoot) => listFilesInDirectory(
 /// Identifies everything the copy is built from, so one that is no longer
 /// current is noticed without being declared.
 ///
-/// **The SDK is an input, not a constant.** The tree is resolved by the Dart
+/// The SDK is an input, not a constant. The tree is resolved by the Dart
 /// running the launcher and built by the Flutter beside it, so the same sources
 /// under a different SDK are a different copy: the versions that satisfied the
 /// old one are not the versions the new one would pick, and the binaries are

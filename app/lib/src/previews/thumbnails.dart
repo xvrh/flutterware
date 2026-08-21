@@ -54,7 +54,7 @@ class ThumbnailFailed extends Thumbnail {
 
 /// One package's previews, photographed under `flutter_tester` and kept.
 ///
-/// **Why this lane and not the live guest.** There is one embedded engine and
+/// Why this lane and not the live guest. There is one embedded engine and
 /// one texture, so a guest asked for another entry shows it on the canvas —
 /// there is no arrangement where a popover holds one picture while the canvas
 /// holds another. A photograph has no such tie: it can be drawn anywhere, as
@@ -131,7 +131,8 @@ class PreviewThumbnails extends ChangeNotifier {
   bool get warm => _warm;
   var _warm = false;
 
-  /// What the store knows about [entry], or null if nobody has asked.
+  /// What the store knows about [entry], or null if it has not been asked
+  /// for.
   Thumbnail? of(CatalogEntry entry) {
     var found = _cache[entry.id];
     if (found == null) return null;
@@ -297,11 +298,10 @@ class PreviewThumbnails extends ChangeNotifier {
   /// All of them rather than the one that moved: the harness renders one
   /// compiled program, so a single edited file leaves every picture in
   /// question — a demo drawn by the helper that changed has no stamp of its
-  /// own that could ever say so. [keep] bounds this at two dozen stats on a
+  /// own that could ever record it. [keep] bounds this at two dozen stats on a
   /// pointer stopping, not a sweep of the catalog. A pending is left alone: it
-  /// has no picture to be stale, and dropping the row a render is on its way
-  /// to answering would leave the popover waiting on something nobody is doing
-  /// any more.
+  /// has no picture to be stale, and dropping the row a render is on its way to
+  /// answering would leave the popover waiting on abandoned work.
   void _dropMoved() {
     var moved = _cache.values.any(
       (found) =>

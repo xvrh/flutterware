@@ -29,7 +29,7 @@ const _methodNotFound = -32601;
 
 /// The app answered, and has mounted nothing.
 ///
-/// **Not "still starting up", which is what this used to guess.** The two
+/// Not "still starting up", which is what this used to guess. The two
 /// states are indistinguishable from here — a root element is absent during
 /// the first frames and absent forever after a `main` that threw — so the
 /// sentence says what is *known* and points at the one place that can tell
@@ -57,7 +57,7 @@ class AppNotStarted implements ProjectFault {
 
 /// Reads a running app through the framework's own inspector.
 ///
-/// **Nothing here needs code in the user's app.** `WidgetInspectorService` is
+/// Nothing here needs code in the user's app. `WidgetInspectorService` is
 /// registered by `package:flutter` in debug mode, so this works against any
 /// Flutter app the cockpit can reach a VM service for — including one that has
 /// never depended on flutterware. That is the reason the guest runtime came off
@@ -81,7 +81,7 @@ class RunInspector {
 
   /// One reading of the app: the tree, a picture, or both.
   ///
-  /// **Both come off one object group and one `getRootWidgetTree` call**, and
+  /// Both come off one object group and one `getRootWidgetTree` call, and
   /// that is the whole reason this exists rather than two methods a caller
   /// chains. The app is live: between two reads it animates, a timer fires,
   /// data arrives. Two calls produce a tree and a picture that *happen to
@@ -144,7 +144,7 @@ class RunInspector {
   /// `RenderParagraph`'s resolved span never leaves the app on any RPC. See
   /// `docs/superpowers/specs/2026-08-18-node-detail-enrichment.md` §5.
   ///
-  /// **It never throws, and the fallback is not a degraded mode.** An app with
+  /// It never throws, and the fallback is not a degraded mode. An app with
   /// no guest is the ordinary case here — this class exists to work against
   /// one that has never heard of flutterware — so every failure lands on
   /// [_readTree], which is what every run got before this existed. The cost of
@@ -189,7 +189,7 @@ class RunInspector {
   /// one call is the difference between the guest path costing more than the
   /// service path and costing about the same.
   ///
-  /// **`objectGroup`, not `groupName`.** The two spellings are not
+  /// `objectGroup`, not `groupName`. The two spellings are not
   /// interchangeable and the wrong one does not say so: this extension is
   /// registered through `_registerObjectGroupServiceExtension`, which reads
   /// `objectGroup` behind a null check, so `groupName` comes back as
@@ -239,7 +239,7 @@ class RunInspector {
 
   /// A PNG of the whole app, as it is on the screen right now.
   ///
-  /// **`ext.flutter.inspector.screenshot`, not `_flutter.screenshot`.** The
+  /// `ext.flutter.inspector.screenshot`, not `_flutter.screenshot`. The
   /// rasterizer screenshot fails under Impeller — measured on macOS and the iOS
   /// simulator alike, and `_flutter.screenshotSkp` says so in its error — which
   /// rules it out on every target, since macOS, iOS and Android are all
@@ -403,7 +403,7 @@ class RunInspector {
 
   /// The inspector's JSON as an [InspectNode].
   ///
-  /// **The field rules here must stay in step with `GuestInspector._convert`**
+  /// The field rules here must stay in step with `GuestInspector._convert`
   /// (`lib/src/inspect/guest_inspect.dart`), because an agent can be handed a
   /// tree from either and must not have to tell which. They are separate rather
   /// than shared because only one of them can answer the two questions that

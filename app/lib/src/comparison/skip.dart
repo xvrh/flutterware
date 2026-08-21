@@ -48,7 +48,7 @@ List<String> pixelInputsOf({
 
 /// What [pixelInputsOf] listed, hashed **once per checkout**.
 ///
-/// **A constant of the plan, exactly as the SDK key is.** The same lockfiles,
+/// A constant of the plan, exactly as the SDK key is. The same lockfiles,
 /// the same asset tree and the same `.arb` bundles decide every entry, so
 /// there is one answer per checkout and not one per entry.
 ///

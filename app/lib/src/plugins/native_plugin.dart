@@ -8,17 +8,17 @@ import 'plugin_host.dart';
 
 /// The GUI-side runtime of a native plugin — one instance per open worktree.
 ///
-/// **A panel over a [PluginCore], and nothing more.** The core holds the
+/// A panel over a [PluginCore], and nothing more. The core holds the
 /// behaviour: the report, the actions, what `reload` does. This class exists
 /// because `buildPanel` returns a `Widget` and a `Widget` cannot be linked into
 /// `fw`.
 ///
-/// **There is deliberately no `report` on this class.** Callers read
+/// There is deliberately no `report` on this class. Callers read
 /// `plugin.core.report`. Dart cannot seal a member, so the only way to stop a
 /// panel overriding the report — becoming a second, disagreeing answer to what
 /// the sidebar shows — is not to give it one to override.
 ///
-/// **A panel calls its core directly, and no panel invokes an action.**
+/// A panel calls its core directly, and no panel invokes an action.
 /// `Session.invoke` has two callers, `fw` and MCP; a dialog that configures a
 /// run, streams its output for tens of seconds and then offers to open the
 /// result is not a shape that method can express — `JobEvent` has no log or
@@ -71,7 +71,7 @@ abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier
 
   /// The panel mounted when this plugin is selected. Real Flutter, no limits.
   ///
-  /// **Takes no selection argument.** Where the panel is comes from the
+  /// Takes no selection argument. Where the panel is comes from the
   /// address, which it reads through `AddressScope` — installed by the shell
   /// directly above this widget, already past the worktree and the plugin id,
   /// so segment 0 is the plugin's own first segment.
@@ -151,7 +151,7 @@ abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier
 
 /// One command on a sidebar child's ⋮ menu.
 ///
-/// **Deliberately not a [PluginAction].** An action is behaviour every renderer
+/// Deliberately not a [PluginAction]. An action is behaviour every renderer
 /// can reach by name; these are the GUI's own affordances — a form to fill in
 /// first, a log to watch while it runs, somewhere to go when it finishes. None
 /// of that survives being described to `fw`.

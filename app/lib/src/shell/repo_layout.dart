@@ -12,7 +12,7 @@ const configFileName = 'tool/flutterware.dart';
 /// `.git`. Launching from `packages/admin/lib` therefore opens the one window
 /// for the whole repo.
 ///
-/// **The walk stops at the repository.** A `tool/flutterware.dart` in some
+/// The walk stops at the repository. A `tool/flutterware.dart` in some
 /// ancestor of the checkout belongs to a different project — a sibling app
 /// parked under a shared parent directory, someone's `~/tool/flutterware.dart`
 /// — and letting it win over the `.git` right here would open a project the

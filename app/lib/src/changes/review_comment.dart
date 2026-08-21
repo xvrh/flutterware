@@ -1,8 +1,8 @@
 /// A note left on this delta for the agent that produced it.
 ///
-/// **A comment is an observation, not a pointer.** It carries the code it was
-/// written about, quoted at the moment you wrote it, and the line numbers are a
-/// hint beside that quote rather than the thing being stored. That is the whole
+/// A comment is an observation rather than a pointer. It carries the code it
+/// was written about, quoted at the moment you wrote it, and the line numbers
+/// are a hint beside that quote rather than the thing being stored. That is the
 /// answer to *what happens when the agent keeps editing while I type*: nothing
 /// happens, because nothing here addresses a line that can move. The receiving
 /// agent relocates a three-line snippet better than any tracking we could write
@@ -33,7 +33,7 @@ enum ReviewSide {
 
 /// What a comment is about.
 ///
-/// **Three anchors, and no more.** A line-only tool forces *this whole file is
+/// Three anchors, and no more. A line-only tool forces *this whole file is
 /// untested* into a lie about line 1, and forces *three of these are the same
 /// problem* into a lie about a file. Each of the three is a thing people
 /// actually write, and each reads differently in the markdown.
@@ -158,12 +158,12 @@ enum ReviewActor {
       name == 'agent' ? ReviewActor.agent : ReviewActor.human;
 }
 
-/// A note is dealt with, and this is who says so.
+/// A note is dealt with, and this records who did it.
 ///
-/// **A message, not a status.** There is no `done` / `declined` / `wontfix`
-/// enum: the sentence carries the nuance, and a taxonomy is a field nobody
-/// fills in honestly. If a shape emerges from a year of real messages it can be
-/// added over the data instead of over a guess.
+/// A message rather than a status. There is no `done` / `declined` / `wontfix`
+/// enum: the sentence carries the nuance, where a taxonomy invites picking
+/// whichever label is closest. If a shape emerges from a year of real messages
+/// it can be added over the data instead of over a guess.
 class ReviewResolution {
   const ReviewResolution({required this.by, required this.at, this.message});
 
@@ -215,7 +215,7 @@ class ReviewComment {
 
   /// The code as it stood when you wrote the comment, without diff markers.
   ///
-  /// **Kept as it was, forever.** Re-reading it from the current patch would
+  /// Kept as it was, forever. Re-reading it from the current patch would
   /// turn a note about a line the agent has since deleted into a note about
   /// whatever now occupies that position, which is the one failure mode a
   /// review tool must not have.
@@ -231,7 +231,7 @@ class ReviewComment {
 
   /// Who dealt with this and what they said, or null while it is outstanding.
   ///
-  /// **Not written by the author of the comment**, and not part of what a
+  /// Not written by the author of the comment, and not part of what a
   /// comment is: it arrives as its own event, from either side, minutes or days
   /// later. It lives on the comment because every reader wants the two
   /// together.
@@ -290,7 +290,7 @@ String digestOfPatchSlice(List<int> bytes) => sha1.convert(bytes).toString();
 
 /// The notes, as markdown.
 ///
-/// **One format, every reader.** The clipboard, the file and the reply the
+/// One format, every reader. The clipboard, the file and the reply the
 /// agent's own tool hands back all render this — so there is one thing to keep
 /// readable, one to test, and no way for what you previewed to differ from what
 /// the agent got.
@@ -300,7 +300,7 @@ String digestOfPatchSlice(List<int> bytes) => sha1.convert(bytes).toString();
 ///
 /// A resolved note carries its resolution under the body: who dealt with it and
 /// what they said. In a list of unresolved notes there are none, and it costs
-/// nothing; in the filter-off view it is the whole point.
+/// nothing; in the filter-off view it is what you came to read.
 String reviewMarkdown(
   List<ReviewComment> comments, {
   required String worktree,
@@ -385,7 +385,7 @@ String _language(String? path) {
 
 /// One line of the append-only log, as it is written and read back.
 ///
-/// **Events rather than a snapshot.** The alternative — a JSON document holding
+/// Events rather than a snapshot. The alternative — a JSON document holding
 /// the current list — is what `worktrees.json` is, and it has a documented
 /// clobber history across Studio instances: two windows on one repository each
 /// write the whole file, and the last one wins. An appended line physically
@@ -470,9 +470,9 @@ final class CommentDeleted extends ReviewEvent {
   Map<String, Object?> toJson() => {'event': 'delete', 'id': id};
 }
 
-/// A note somebody dealt with.
+/// A note that has been dealt with.
 ///
-/// **Either side writes this**, which is the whole shape of the feature: you
+/// Either side writes this, which is the shape of the feature: you
 /// tick off what you no longer need, and the agent reports what it did. Which
 /// of the two it was is [ReviewResolution.by], and it is never inferred.
 final class CommentResolved extends ReviewEvent {
@@ -491,7 +491,7 @@ final class CommentResolved extends ReviewEvent {
 
 /// A resolution taken back.
 ///
-/// **Not symmetry for its own sake.** It is how you recover a note the agent
+/// Not symmetry for its own sake. It is how you recover a note the agent
 /// closed by disagreeing with it, and how an agent backs out of a resolution it
 /// wrote before its session was cut short. Without it the only repair for a
 /// wrong resolve is writing the note again, which loses the quote it was about.
@@ -505,7 +505,7 @@ final class CommentUnresolved extends ReviewEvent {
 
 /// You have looked at the Review tab, as of this moment.
 ///
-/// **A marker, not per-note acknowledgement.** What it protects against is an
+/// A marker, not per-note acknowledgement. What it protects against is an
 /// agent resolving a note by disagreeing with it and the note vanishing into a
 /// filter: a resolution the agent wrote after this marker is drawn whatever the
 /// filter says. Per-note acknowledgement would do the same job and cost a click
@@ -524,7 +524,7 @@ final class ReviewSeen extends ReviewEvent {
   };
 }
 
-/// **Read, never written.** The batch handoff was how the previous version
+/// Read, never written. The batch handoff was how the previous version
 /// closed notes, and a log that has been in use since then is full of these.
 ///
 /// Ignoring them would resurface every note ever handed off as outstanding —
@@ -546,7 +546,7 @@ final class BatchHandedOff extends ReviewEvent {
 /// What a log folds down to: every note that still exists, and when you last
 /// looked at them.
 ///
-/// **One list, not two.** Resolved and outstanding are a property of a note
+/// One list, not two. Resolved and outstanding are a property of a note
 /// rather than two places a note can be — which is what makes *show the
 /// resolved ones too* a filter instead of a second screen, and what makes
 /// taking a resolution back a possibility rather than a migration.

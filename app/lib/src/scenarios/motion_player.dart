@@ -163,7 +163,7 @@ int scenarioMotionBytes(ScenarioRunStep step) =>
 ///
 /// So the panel keeps its own MRU over whole transitions and hands the rest
 /// back. A budget in steps rather than in bytes would be the wrong shape: what
-/// gets played is a transition, and half of one is no use to anybody.
+/// gets played is a transition, and half of one is no use.
 ///
 /// Global, like the image cache it is managing, and for the same reason: the
 /// flow view, the step page and any future surface are all playing frames out

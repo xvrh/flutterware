@@ -106,7 +106,7 @@ String generatePreviewHarness(
 
 /// Writes the harness and its wrappers, and returns the harness's path.
 ///
-/// **Nothing whose content is already right is touched.** A rewritten file is a
+/// Nothing whose content is already right is touched. A rewritten file is a
 /// moved mtime, and a moved mtime is what `SourceInvalidator` reads as an edit —
 /// so a generator that rewrote unconditionally would make every sync recompile
 /// the whole catalog for nothing.

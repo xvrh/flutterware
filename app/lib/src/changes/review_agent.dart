@@ -1,6 +1,6 @@
 /// The review log, as `fw` and the MCP server see it.
 ///
-/// **The reason this file exists is a report.** A human left a note on a line
+/// The reason this file exists is a report. A human left a note on a line
 /// of a config file and asked whether the agent could read it. It could — by
 /// knowing from a commit message that notes live in an append-only JSONL log,
 /// guessing that *outside the repository* meant `~/.flutterware`, and searching
@@ -24,7 +24,7 @@ import 'review_store.dart';
 
 /// What a status reply says about a checkout's notes.
 ///
-/// **Always present, even at zero.** A count of nothing is what tells a reader
+/// Always present, even at zero. A count of nothing is what tells a reader
 /// that notes exist at all and where they would be — which is the half of the
 /// report that cost a day, and it costs three keys to answer forever.
 Map<String, Object?> reviewStatusJson(String worktreePath) {
@@ -73,7 +73,7 @@ Map<String, Object?> reviewListJson(
 
 /// Deals with one note, or says why it could not.
 ///
-/// **[ReviewActor.agent] is not a parameter.** This is the surface an agent
+/// [ReviewActor.agent] is not a parameter. This is the surface an agent
 /// calls, and letting a caller declare itself the human would make the one
 /// distinction the resolution carries — *who says this is dealt with* —
 /// something the log cannot be trusted about.

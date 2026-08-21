@@ -11,8 +11,8 @@ import 'loading_state.dart';
 /// The error arm of the load → empty/error triad, alongside [EmptyState] and
 /// [LoadingState].
 ///
-/// **It is [EmptyState] with different defaults, not a third layout.** That is
-/// deliberate. The component this replaced — `ErrorPanel` — was a fourth
+/// It is [EmptyState] with different defaults rather than a third layout, and
+/// that is deliberate. The component this replaced — `ErrorPanel` — was a fourth
 /// anatomy with raw `10.0`/`8.0` paddings, an uncoloured icon and text off
 /// `Theme.of` rather than the tokens, and it had exactly one call site after
 /// years in the tree. Panels did not adopt it because it did not look like the
@@ -24,7 +24,7 @@ import 'loading_state.dart';
 ///   "this did not work" without reading a word.
 /// - **The message is selectable.** An error message is a path, a command or a
 ///   stack trace, and the first thing anyone does with one is paste it into a
-///   terminal or a bug. An empty state's message is prose and nobody copies it.
+///   terminal or a bug. An empty state's message is prose and is not copied.
 ///
 /// Four panels had already worked this out and were writing
 /// `EmptyState(icon: Icons.error_outline, …)` by hand; this is that, named, and
@@ -41,8 +41,8 @@ class ErrorState extends StatelessWidget {
   });
 
   /// What failed, as a sentence — `Could not read the icons`. Not the
-  /// exception: that is [message]. A title built from an exception is a title
-  /// nobody can scan.
+  /// exception: that is [message]. A title built from an exception cannot be
+  /// scanned.
   final String title;
 
   /// What the failure said. Shown selectable, and safe to be long.

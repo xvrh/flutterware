@@ -1,6 +1,6 @@
 /// The screen's two lists, each flattened to one row per drawable line.
 ///
-/// **An index and a body, never one list doing both.** They used to be the
+/// An index and a body, never one list doing both. They used to be the
 /// same list: file rows that expanded to inject their own diff between
 /// themselves and the next file. That made the thing you navigate with and the
 /// thing you read the same surface, and every complaint about this screen came
@@ -86,7 +86,7 @@ final class FileNoticeRow extends ChangeRow {
 
 /// A comment, drawn in the body under the line it is about.
 ///
-/// **A row of its own, not a decoration on a diff line.** It wraps, so it is
+/// A row of its own, not a decoration on a diff line. It wraps, so it is
 /// the one variable-height thing in a list whose every other row is a fixed
 /// line of monospace — keeping it separate is what stops that variability
 /// leaking into the three thousand rows around it.
@@ -96,7 +96,7 @@ final class CommentRow extends ChangeRow {
   final ReviewComment comment;
 
   /// Whether the file has changed since this was written. The comment keeps its
-  /// quote either way; this only decides whether the row says so.
+  /// quote either way; this only decides whether the row flags it.
   final bool drifted;
 }
 
@@ -119,7 +119,7 @@ final class UntrackedRow extends ChangeRow {
 
 /// The **Important** tab: every file a rule pinned, flat and all of it open.
 ///
-/// **Two tabs, not a band above a tree.** The band was tried and rejected in
+/// Two tabs rather than a band above a tree. The band was tried and rejected in
 /// use: it made the top of the index a place where the ranking's answer and the
 /// directory structure argued for the same column, and it was still there
 /// taking space on the branches where it said nothing. A tab hides the alert
@@ -128,8 +128,8 @@ final class UntrackedRow extends ChangeRow {
 /// without being opened.
 ///
 /// No headings in here. The tab is the heading, and there is only one kind of
-/// row, which is the point: this is the short list, in rank order, and it never
-/// collapses anything.
+/// row: this is the short list, in rank order, and it never collapses
+/// anything.
 ///
 /// [visible] is null when nothing is filtering.
 List<ChangeRow> buildImportantRows(
@@ -171,7 +171,7 @@ List<ChangeRow> buildImportantRows(
 /// has walked, and folding that into a directory tree would claim a shape that
 /// was never read.
 ///
-/// **Pinned ones are listed here too.** All means all: a tab that quietly drops
+/// Pinned ones are listed here too. All means all: a tab that quietly drops
 /// the four files the other tab is about is a tab whose count disagrees with
 /// the header, which is the same bug the tree had when pins were held out of it.
 List<ChangeRow> buildUntrackedRows(
@@ -193,7 +193,7 @@ List<ChangeRow> buildUntrackedRows(
 
 /// The files the **tree** holds: every one of them.
 ///
-/// **Pinned files are in here too**, which they were not at first. Leaving them
+/// Pinned files are in here too, which they were not at first. Leaving them
 /// out to avoid "listing a file twice" made the tree an *incomplete map*: its
 /// directory counts came out one short for every pin, so the header said 53
 /// files over a tree that totalled 52, and browsing to `CLAUDE.md` could not
@@ -202,7 +202,7 @@ List<ChangeRow> buildUntrackedRows(
 /// The Important tab is a **view onto** this tree, not a removal from it — the
 /// way a problems panel lists files that are also in the file explorer. The
 /// tree marks a pinned file where it lives.
-/// **Every tier, in tier order** — `RankTier.values` rather than a list spelled
+/// Every tier, in tier order — `RankTier.values` rather than a list spelled
 /// out here, which is what it used to be when one of the three was held back.
 /// A hand-written enumeration is how a tier added later goes missing from the
 /// tree, and a tree that can lose a file is what this whole file argues against.
@@ -214,7 +214,7 @@ List<FileChange> treeFiles(ChangeSet set, {Set<String>? visible}) => [
 
 /// Where a row sits in the body: which hunk, and how far into it.
 ///
-/// **Not a line number.** A hunk's rows include both sides of the diff, so
+/// Not a line number. A hunk's rows include both sides of the diff, so
 /// *line 388* is one of two rows depending on which gutter you meant, and a
 /// removed line has no number in the other one at all. This is the coordinate
 /// the list is actually built on.
@@ -222,13 +222,13 @@ typedef RowSpot = ({int hunkStart, int index});
 
 /// The **body**: one file's diff, with whatever has been said about it.
 ///
-/// Every reason a body is withheld says so in place. A file that opens to
+/// Every reason a body is withheld is stated in place. A file that opens to
 /// nothing, with no explanation, reads as a bug in the viewer.
 ///
 /// [placed] and [composer] are keyed by [RowSpot] — see [spotOf], which is what
 /// turns a comment's line anchor back into one. A comment whose spot could not
 /// be found is simply not drawn here; it is still in the review list, with its
-/// quote, which is the whole reason the quote is stored.
+/// quote, which is why the quote is stored.
 ///
 /// [fileComments] draw above the first hunk, because that is what *about this
 /// file* means when the file has three hundred lines of diff under it.

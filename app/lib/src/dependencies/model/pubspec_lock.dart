@@ -5,7 +5,7 @@ import 'package:yaml/yaml.dart';
 /// `pubspec.lock`, read for what only it knows: the resolved version of each
 /// package and the `description:` block that says where the package came from.
 ///
-/// **The lock is not asked what is direct.** It carries a `dependency:` field —
+/// The lock is not asked what is direct. It carries a `dependency:` field —
 /// `direct main`, `direct dev`, `transitive` — and reading it is what made a
 /// workspace member report every one of 170 resolved packages as direct: in a
 /// workspace there is one lockfile for the whole resolution, so that field

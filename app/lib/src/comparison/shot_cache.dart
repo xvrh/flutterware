@@ -12,7 +12,7 @@ import 'closure.dart';
 /// because the key already says everything about a picture: five agents
 /// branched off one commit render its previews once between them.
 ///
-/// **The base checkout is a build fixture; this is what persists.** A
+/// The base checkout is a build fixture; this is what persists. A
 /// comparison materialises a base worktree, renders from it, and may throw the
 /// worktree away — the shots outlive it, and the next comparison against that
 /// commit renders nothing at all.
@@ -46,7 +46,7 @@ class ShotCache {
 
   /// Files [bytes] under [key].
   ///
-  /// **Written to a temporary name and renamed**, because a comparison can be
+  /// Written to a temporary name and renamed, because a comparison can be
   /// killed at any moment and a half-written picture under a content key is a
   /// lie that never expires: every later run would find the key present and
   /// serve the truncated file. Rename is atomic on every filesystem this runs

@@ -53,7 +53,7 @@ class ScenarioResults {
 
   /// Why there is nothing here, when there is nothing here.
   ///
-  /// **Recorded rather than only printed.** A harness that will not build
+  /// Recorded rather than only printed. A harness that will not build
   /// leaves the same empty list as a project with no scenarios at all, and a
   /// reader who cannot tell those apart will read a silent artifact as a clean
   /// one.
@@ -97,7 +97,7 @@ class ScenarioResults {
 
 /// Everything one comparison concluded, both halves, as one file.
 ///
-/// **One artifact, not two.** The GUI, an agent and a static page all read this
+/// One artifact, not two. The GUI, an agent and a static page all read this
 /// rather than each computing their own, and a reader asking "did this branch
 /// break anything" is asking about the branch — not about previews and then
 /// separately about scenarios. Which is also why the halves are named rather

@@ -20,19 +20,19 @@ const _frameGrace = Duration(seconds: 2);
 /// Waits until nothing in [registry] has been busy for [quiet], or [timeout]
 /// elapses.
 ///
-/// **A quiet period rather than a single idle reading.** The catalog goes
+/// A quiet period rather than a single idle reading. The catalog goes
 /// briefly idle between compiling an entry and reloading it into the guest, and
 /// a capture that fired in that gap would photograph the previous entry with
 /// every appearance of success. [quiet] has to outlast that hand-off; it does
 /// not have to outlast a human.
 ///
 /// Frames are pumped throughout, and that is not incidental: a settled tree
-/// still has to *paint* before `toImage` has anything to copy, and an app
-/// nobody is interacting with is not scheduling frames on its own. This is the
+/// still has to *paint* before `toImage` has anything to copy, and an idle app
+/// is not scheduling frames on its own. This is the
 /// half of settling that needs Flutter, which is why it is not on
 /// [SettleRegistry] itself — see the note there.
 ///
-/// **[timeout] is enforced against the clock, not against the frame loop.** It
+/// [timeout] is enforced against the clock, not against the frame loop. It
 /// used to be checked only between iterations, while each iteration ended in a
 /// bare `await endOfFrame` — which completes in a post-frame callback and
 /// therefore never completes at all when the platform stops delivering vsync.
@@ -40,8 +40,8 @@ const _frameGrace = Duration(seconds: 2);
 /// so a capture behind another window did not time out after three minutes: it
 /// waited for a frame that was never going to arrive, and `fw capture` waited
 /// on it, and the deadline this function takes could not be consulted because
-/// the `while` that consults it was never reached. A screenshot tool that hangs
-/// when nobody is looking at the screen is the one failure mode it cannot have.
+/// the `while` that consults it was never reached. A screenshot tool must not
+/// hang because its window is off screen.
 Future<SettleOutcome> waitForSettle(
   SettleRegistry registry, {
   Duration quiet = const Duration(milliseconds: 250),

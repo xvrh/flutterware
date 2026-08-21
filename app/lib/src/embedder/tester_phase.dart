@@ -32,15 +32,14 @@ enum TesterPhase {
 typedef TesterPhaseReading = ({TesterPhase phase, int? files});
 
 /// Reads one line of a [TesterHost]'s narration, or null for a line that means
-/// nothing to somebody watching it work.
+/// nothing to a reader watching it work.
 ///
 /// Unknown lines return null rather than a fallback, and that is the whole
 /// point: `[tester] flutterware previews harness ready — 133 entries, fonts:
 /// MaterialIcons` is a long, bracketed, lower-case line naming three things —
 /// a process, a count and a font list — that the person waiting did not ask
 /// about, and the line after it may be the app greeting its own console. A
-/// caption that changes to whatever the guest last printed is a caption
-/// nobody can read.
+/// caption that changes to whatever the guest last printed is unreadable.
 TesterPhaseReading? readTesterPhase(String line) {
   var text = line.replaceFirst(RegExp(r'^\[[^\]]*\]\s*'), '');
   if (RegExp(r'^reloading (\d+) edited').firstMatch(text) case var m?) {

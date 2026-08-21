@@ -10,8 +10,8 @@ import 'model/asset_scan.dart';
 /// The left half: every key in the bundle, filtered.
 ///
 /// A view — it takes the scan's data and hands back a selection. What it owns
-/// is the filter, which is nobody else's business: a search box is not state
-/// worth putting in an address, because it names no place.
+/// is the filter, which is local to it: a search box is not state worth putting
+/// in an address, because it names no place.
 class AssetListView extends StatefulWidget {
   const AssetListView({
     super.key,

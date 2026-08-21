@@ -29,7 +29,7 @@ class ShopStrings {
 
   /// Wraps every value on its way out of the catalog.
   ///
-  /// **The seam, and the only thing a project has to add.** Null in
+  /// The seam, and the only thing a project has to add. Null in
   /// production, so this costs nothing there. A scenario run sets it to
   /// `indexTranslations('shop')`, and from then on each key renders a distinct
   /// string object that the capture can name.
@@ -79,7 +79,7 @@ class ShopStrings {
   String get onItsWay => read('onItsWay');
   String get backToMenu => read('backToMenu');
 
-  /// **The string that goes through a placeholder, and still resolves.**
+  /// The string that goes through a placeholder, and still resolves.
   ///
   /// Substituting allocates a new object, so identity alone loses it here. The
   /// key is not gone though — this method knew it one line ago — so it is

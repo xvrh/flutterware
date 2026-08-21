@@ -387,9 +387,9 @@ class ScenarioTargetError implements Exception {
 ///
 /// Counted by a persistent frame callback registered **once per binding** —
 /// they cannot be unregistered, and the harness runs thousands of scenarios
-/// through one binding, so one is all there may ever be. What it buys: a step
-/// can tell how many frames happened outside the scenario's verbs, which is
-/// how a flow says it has a gap in it.
+/// through one binding, so one is all there may ever be. It lets a step tell
+/// how many frames happened outside the scenario's verbs, which is how a flow
+/// reports a gap in itself.
 ///
 /// It counts frames that were actually *drawn*: the test binding's `pump`
 /// skips the frame entirely when nothing is scheduled, so an idle pump is not
@@ -538,7 +538,7 @@ class ScenarioTester {
 
   /// The software keyboard, for a scenario that wants to say it explicitly.
   ///
-  /// **Nothing here is needed to get one.** A scenario that taps a text field
+  /// Nothing here is needed to get one. A scenario that taps a text field
   /// already renders with a keyboard over the bottom of the screen, because
   /// that is what a phone does and the framework says when. This is for the
   /// other cases: a layout you want to see under one with nothing focused, a
@@ -602,7 +602,7 @@ class ScenarioTester {
 
   /// The frame count when the last verb finished — the baseline stray frames
   /// are measured from. Set at construction, which is after the replay's
-  /// teardown pump, so tearing the tree down is never anybody's stray frame.
+  /// teardown pump, so tearing the tree down never counts as a stray frame.
   var _framesAtLastStep = _frames;
 
   /// Collects the frames of the transition being walked, when the run asked
@@ -651,8 +651,8 @@ class ScenarioTester {
   /// call, an asset the app has not read yet — needs a turn of the real event
   /// loop, and this is the turn. The catch is that no pump can run while it is
   /// open, so awaiting a future that was made *outside* it, and that only a
-  /// pump could complete, deadlocks the whole run silently. The watchdog says
-  /// so in seconds, and names the cache that is nearly always behind it.
+  /// pump could complete, deadlocks the whole run silently. The watchdog
+  /// reports that within seconds, and names the cache usually behind it.
   ///
   /// ```dart
   /// var bytes = await s.runAsync(() => report.generatePdf());
@@ -764,8 +764,9 @@ class ScenarioTester {
   /// — so the verb is safe inside a loop over pages of varying length, where
   /// which pages scroll depends on the device. Unlike the other verbs this
   /// one may start with a target that matches nothing — being off screen is
-  /// the whole point — so it says so itself when the scrolling never finds
-  /// it, and when nothing scrolls and the target is absent or off screen.
+  /// the reason to call it — so it reports the miss itself when the scrolling
+  /// never finds it, and when nothing scrolls and the target is absent or off
+  /// screen.
   Future<void> scrollTo(
     dynamic target, {
     dynamic within,
@@ -928,15 +929,15 @@ class ScenarioTester {
   ///     mimeType: 'application/pdf');
   /// ```
   ///
-  /// A flow whose whole point is the document it produces was otherwise a
-  /// scenario that stopped one step short: you could screenshot the button and
+  /// A flow that exists to produce a document was otherwise a scenario that
+  /// stopped one step short: you could screenshot the button and
   /// prove nothing about what it made. Deliberately one verb rather than one
   /// per format — the format is [mimeType]'s job, and a viewer shows what it
   /// can and offers the rest as a download.
   ///
   /// It renders nothing, so it costs no capture: there is no screen here to
-  /// photograph, which is the whole reason it is its own kind of step rather
-  /// than a file bolted onto somebody else's.
+  /// photograph, which is why it is its own kind of step rather than a file
+  /// attached to another one.
   Future<void> document(
     String name,
     List<int> bytes, {
@@ -1094,7 +1095,7 @@ class ScenarioTester {
   }
 
   /// One verb: act, wait per the policy, capture. The settle result rides the
-  /// step, so a screen that never stopped animating says so instead of
+  /// step, so a screen that never stopped animating is reported instead of
   /// throwing.
   Future<void> _step(
     Shot? shot,
@@ -1189,7 +1190,7 @@ class ScenarioTester {
   /// Splits nest. Under bare `flutter test` the replays run too, so CI
   /// asserts every path.
   ///
-  /// **What a replay does and does not reset.** The widget tree is torn down
+  /// What a replay does and does not reset. The widget tree is torn down
   /// and rebuilt from nothing, so each path starts from a fresh app. Anything
   /// *outside* the tree is not: a seeded repository, a registered singleton, a
   /// mock's recorded calls carry from one path into the next.
@@ -1267,8 +1268,7 @@ class ScenarioTester {
   static const _messages = TargetMessages(
     prefix: 's.',
     coveredEscapeHatch:
-        ' `s.tester` is the raw tester if hitting whatever is on top is the '
-        'point.',
+        ' Use `s.tester` if you meant to hit whatever is on top.',
     blankScreenHint:
         'Nothing has rendered — there is no text on screen at all, so this '
         'is not something `s.scrollTo` can reach. A scenario runs under fake '
@@ -1289,33 +1289,32 @@ class ScenarioTester {
     namedCovering: _keyboardOver,
   );
 
-  /// The refusal a target under the keyboard deserves, or null when the
-  /// keyboard is not what is over it.
+  /// The refusal for a target under the keyboard, or null when the keyboard is
+  /// not what is over it.
   ///
-  /// **A refusal is the feature here.** Without it the tap lands on the slab,
+  /// The refusal is deliberate. Without it the tap lands on the slab,
   /// which absorbs it, and the flow sails on: the verb reported success, the
   /// button was never pressed, and the failure surfaces three steps later as a
   /// screen that did not change. The generic covered sentence would be true —
   /// something absorbs the pointer — and would send the reader looking for an
   /// overlay that is not in their code.
   ///
-  /// **It does not offer `scrollTo`, and that was measured rather than
-  /// assumed.** `Scrollable.ensureVisible` stops the moment the target is
+  /// It does not offer `scrollTo`, and that was measured rather than
+  /// assumed. `Scrollable.ensureVisible` stops the moment the target is
   /// inside the *viewport*, and in the app this refusal actually fires on —
   /// one that does not resize — the viewport runs under the keyboard. So the
   /// scroll succeeds, the target is still covered, and the very next verb is
-  /// refused again. Which is faithful: a row parked at the bottom of a list
-  /// under a real keyboard is not reachable on a real phone either. The only
-  /// honest way past is to take the keyboard away.
+  /// refused again. That is faithful: a row parked at the bottom of a list
+  /// under a real keyboard is not reachable on a real phone either. The way
+  /// past is to dismiss the keyboard.
   String? _keyboardOver(Offset center, String verb, String described) {
     if (!_keyboard.up || center.dy < _keyboardTop) return null;
     return '$described is behind the software keyboard, which covers the '
-        'bottom ${_keyboard.height.round()} points of the screen — so '
-        '`s.$verb` at its centre lands on the keyboard, exactly as a finger '
-        'would. If the app is meant to reach this while somebody is typing, '
-        'that is a real layout problem: a `Scaffold` that resizes moves it out '
-        'of the way, and one that does not leaves it as unreachable on a phone '
-        'as it is here. To carry the flow on: `await s.keyboard.dismiss()`.';
+        'bottom ${_keyboard.height.round()} points of the screen, so '
+        '`s.$verb` at its centre lands on the keyboard instead. If the app is '
+        'meant to reach this while the keyboard is up, that is a layout '
+        'problem: a `Scaffold` that resizes moves it out of the way. To carry '
+        'the flow on: `await s.keyboard.dismiss()`.';
   }
 
   /// Where the keyboard's top edge is, in the logical pixels every box in a
@@ -1326,7 +1325,7 @@ class ScenarioTester {
     return height - _keyboard.height;
   }
 
-  /// Resolves a verb's target and insists it names exactly one widget the
+  /// Resolves a verb's target and checks it names exactly one widget the
   /// pointer can actually reach.
   ///
   /// The same checks the underlying `tap` fails on anyway — made legible, and
@@ -1356,9 +1355,9 @@ class ScenarioTester {
   /// Held for exactly one step, because a [screen] that follows without
   /// moving the screen adopts its name — and adoption has to land before
   /// anything is written, every artifact's file name being built from the
-  /// step's label. Handing over one step late is what buys that, and it is
-  /// the whole of the cost: a host drawing the flow live sees each step as
-  /// the next one is taken, and the last is flushed when the body ends.
+  /// step's label. Handing over one step late is what allows it, and that is
+  /// the only cost: a host drawing the flow live sees each step as the next
+  /// one is taken, and the last is flushed when the body ends.
   _PendingEmit? _pending;
 
   /// Frameless beats — [document]s and [notification]s — emitted since
@@ -1373,8 +1372,8 @@ class ScenarioTester {
   /// Whether the capture being taken is the frame [_pending] already took.
   ///
   /// The frame counter carries it, and exactly rather than approximately: the
-  /// binding draws no frame at all for a pump with nothing scheduled, so a
-  /// settled screen nobody has touched does not move it. Counted from the
+  /// binding draws no frame at all for a pump with nothing scheduled, so an
+  /// untouched settled screen does not move it. Counted from the
   /// pending *capture* rather than from the last step, because the two are not
   /// the same line — a `Shot.skip` verb between them draws its frames like any
   /// other, and they are frames this screen would otherwise adopt away.
@@ -1384,8 +1383,8 @@ class ScenarioTester {
   /// the verb before it left in flight, and an image arriving there is a
   /// different picture.
   ///
-  /// The rest is bookkeeping that keeps a real second picture, or somebody
-  /// else's step, from being swallowed by a name.
+  /// The rest is bookkeeping that keeps a real second picture, or an unrelated
+  /// step, from being swallowed by a name.
   bool _canAdopt({required bool settled}) {
     var pending = _pending;
     return pending != null &&
@@ -1584,9 +1583,9 @@ class ScenarioTester {
 
   /// The frame the scenario broke on.
   ///
-  /// Captured whatever the shot policy says — a failure is the one step nobody
-  /// asked for and everybody wants — and deliberately given no position key:
-  /// it belongs to this replay's dead end, never to a shared prefix a later
+  /// Captured whatever the shot policy says, since a failure is the step most
+  /// worth having a picture of, and deliberately given no position key: it
+  /// belongs to this replay's dead end, never to a shared prefix a later
   /// replay would recognise.
   Future<void> _captureFailure(
     Object error, {
@@ -1910,11 +1909,10 @@ class _PendingEmit {
 
 /// The software keyboard's own verbs — `s.keyboard`.
 ///
-/// **A scenario needs none of them for the ordinary case.** Tapping a field
-/// raises a keyboard already, because the framework says so and the driver
-/// listens; these are for saying something the flow does not: hold one up over
-/// a layout with nothing focused, swipe one away the way a user does, or take
-/// one picture without it.
+/// A scenario needs none of them for the ordinary case: tapping a field raises
+/// a keyboard already. These are for the cases a flow cannot express on its
+/// own — hold one up over a layout with nothing focused, swipe one away the way
+/// a user does, or take one picture without it.
 ///
 /// Each is a step like any other verb, so the flow shows the screen moving
 /// rather than a screen that changed between two shots for no visible reason.
@@ -1962,7 +1960,7 @@ class ScenarioKeyboardVerbs {
   /// The platform closing it without the app being touched — a swipe down on
   /// Android, the dismiss key on an iPad.
   ///
-  /// **Not the same as [hide]**, and the difference is the whole reason both
+  /// Not the same as [hide], and the difference is the whole reason both
   /// exist: this makes the app *let go*. The focused field is unfocused, so
   /// anything the app does on losing focus — validating, committing a draft,
   /// collapsing a suggestion list — actually happens. [hide] leaves the field

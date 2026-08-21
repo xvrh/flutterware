@@ -7,7 +7,7 @@
 /// cd app && fvm dart run tool/icon/generate.dart
 /// ```
 ///
-/// **Why this exists rather than `flutter_launcher_icons`.** That package
+/// Why this exists rather than `flutter_launcher_icons`. That package
 /// derives every size by downscaling one source image, and this mark does not
 /// survive it: below ~48px the word closes up into a smudge. So there are two
 /// drawings — [_master] for 64px and up, [_small] (heavier type, thinner

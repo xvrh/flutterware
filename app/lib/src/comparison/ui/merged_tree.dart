@@ -20,7 +20,7 @@ Key stepNodeKey(String id) => ValueKey('comparison.step.$id');
 
 /// One scenario's two runs as a single tree.
 ///
-/// **Merged, not side by side**, and that is the whole design of the scenario
+/// Merged, not side by side, and that is the whole design of the scenario
 /// half. Two flows drawn next to each other make a reader do the alignment —
 /// which is the expensive part, and the part the aligner has already done. One
 /// tree with a ring per node says *where* the runs diverged in the shape a
@@ -111,7 +111,7 @@ class _BranchCell extends _Cell {
 
 /// The flat item list, back into the tree it came from.
 ///
-/// **Read out of the ids rather than carried alongside them**: an item's id
+/// Read out of the ids rather than carried alongside them: an item's id
 /// *is* its path through the flow — `guest › small cup › Cart` — because that
 /// is what a report has to address it by anyway. One representation, so the
 /// tree and the artifact cannot disagree about where a step is.

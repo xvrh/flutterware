@@ -32,7 +32,7 @@ List<PaletteSection> groupHits(List<SearchHit> hits) {
 /// The ⌘K surface: a query field, fuzzy-matched results grouped by section with
 /// the matched characters lit, and full keyboard control.
 ///
-/// **A View.** It is handed [sections] and hands back a [SearchHit] — it does
+/// A View. It is handed [sections] and hands back a [SearchHit] — it does
 /// not know what a session is, never runs a search, and cannot open anything.
 /// What it does own is interaction: the text field, the selection, and the
 /// keys. Those are not business logic, and pushing them out would leave the

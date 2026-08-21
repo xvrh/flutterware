@@ -28,14 +28,14 @@ enum CatalogSessionPhase { starting, ready, error }
 /// returning to the tab you had open is the same courtesy as returning to the
 /// entry you had selected.
 ///
-/// **Deliberately not on the address**, unlike the node selection beside it.
+/// Deliberately not on the address, unlike the node selection beside it.
 /// `inspect.*` is dropped when the entry segment changes — it must be, since a
 /// node id names a position in one particular tree and would otherwise name
 /// some unrelated widget of the next demo with complete confidence. A tab
 /// dropped with it would flip back to Elements on every click through the entry
 /// list, which is exactly when you least want it to.
 ///
-/// **Controls is first and is the default.** It is the everyday loop — turn a
+/// Controls is first and is the default. It is the everyday loop — turn a
 /// knob, watch the demo — where the tree is what you go to when something is
 /// wrong. Opening straight onto a wall of widget rows reads as the panel having
 /// an opinion about what you came here to do.
@@ -95,7 +95,7 @@ class CatalogBrowsing extends ChangeNotifier {
 
   /// Opens [branchIds], for a selection that has arrived somewhere folded away.
   ///
-  /// **An action taken once, not a rule applied on every build.** The panel
+  /// An action taken once, not a rule applied on every build. The panel
   /// used to OR the path to the selected entry into "open" as it laid the rows
   /// out, which meant the folder holding your selection could not be closed at
   /// all: the click landed in [_closed], the row did not move, and the only
@@ -155,13 +155,13 @@ class CatalogBrowsing extends ChangeNotifier {
   /// contents rather than as a list you arrive already scrolling; under it,
   /// everything stays visible, which is what a handful of demos wants.
   ///
-  /// **Decided once, not re-applied.** After this, the fold is whatever the
+  /// Decided once, not re-applied. After this, the fold is whatever the
   /// person browsing made it, including all the way open. A branch that turns
   /// up later — a file written while the panel is open — is open in a folded
   /// tree, since the closed set names what existed when the decision was
   /// taken. Which is the right accident: the newest thing is the visible one.
   ///
-  /// **Deliberately without a notification.** The caller is the build that
+  /// Deliberately without a notification. The caller is the build that
   /// lays the rows out and reads [isOpen] a few lines further down, so the
   /// answer is already used by the frame that asked for it. Notifying from
   /// inside a build is a `markNeedsBuild` during build, and deferring the
@@ -326,7 +326,7 @@ class SwitchReport {
 /// Switching an entry is a hot reload, not a restart — the engine, the isolate
 /// and the compiler all stay warm.
 ///
-/// **Nothing here compiles in-process.** All building and compiling happens in
+/// Nothing here compiles in-process. All building and compiling happens in
 /// the daemon, a separate plain-Dart process; see [CompilerDaemonClient] for
 /// why that is not a style preference.
 class CatalogSession extends ChangeNotifier {
@@ -406,11 +406,11 @@ class CatalogSession extends ChangeNotifier {
   ///
   /// The core's answer rather than a second one, for the same reason [roots] is:
   /// the panel and `previews screenshot` have to open on the same picture, and a
-  /// default resolved twice is a default that eventually differs. It is the
-  /// whole point of the setting that they agree — a project says "we are a
-  /// phone" once and both surfaces stop rendering it as a small desktop.
+  /// default resolved twice is a default that eventually differs. The setting
+  /// exists so they agree — a project says "we are a phone" once and both
+  /// surfaces stop rendering it as a small desktop.
   ///
-  /// **The list rather than one device**, because a package is allowed to hold
+  /// The list rather than one device, because a package is allowed to hold
   /// more than one form factor and the answer is then a function of the entry
   /// rather than of the package. A session that had been handed a single device
   /// would have to ask the plugin again on every selection, which is the two
@@ -496,9 +496,9 @@ class CatalogSession extends ChangeNotifier {
   /// The axes the shell on screen declared, with what each is set to.
   ///
   /// The only place shells are known at all. Nothing discovers them: a shell is
-  /// whatever the entry's wrapper builds, and it says so by declaring its axes
-  /// while it builds — so the host learns which shell an entry uses from this
-  /// report and from nowhere else.
+  /// whatever the entry's wrapper builds, and it declares its axes while it
+  /// builds — so the host learns which shell an entry uses from this report and
+  /// from nowhere else.
   AxisReport axes = AxisReport.empty;
 
   /// The widget tree the guest last reported, whichever entry it was of.
@@ -534,7 +534,7 @@ class CatalogSession extends ChangeNotifier {
 
   /// What the entry on screen reported while building and painting.
   ///
-  /// **Read after every build regardless of which tab is open**, unlike the
+  /// Read after every build regardless of which tab is open, unlike the
   /// tree. A badge exists to tell you about something you did not ask about,
   /// and one that only appears once you open the tab it is on would be telling
   /// you what you had just gone and looked up. It is also a much smaller answer
@@ -552,7 +552,7 @@ class CatalogSession extends ChangeNotifier {
 
   /// Whether the panel is folded away.
   ///
-  /// **Closed to start with.** Most entries declare no knobs, so opening on
+  /// Closed to start with. Most entries declare no knobs, so opening on
   /// Controls spent 260px of every catalog on a sentence explaining what a knob
   /// is. What says there is something to open is the count on the tab, the way
   /// Problems already says it — see [InspectPanel].
@@ -566,12 +566,12 @@ class CatalogSession extends ChangeNotifier {
   /// Whether the tree is **on screen** — the Elements tab showing, and the
   /// panel not collapsed.
   ///
-  /// Deliberately narrower than "the panel is mounted". A tree nobody is
-  /// looking at is a round trip on every entry switch, paid by everyone who
-  /// never opens that tab; and since the panel now opens on Controls, tying it
-  /// to the mount would have meant every session reading trees for a pane
-  /// nobody had asked to see.
-  /// **Does not notify.** Nothing draws this flag, and the panel turns it off
+  /// Deliberately narrower than "the panel is mounted". An unwatched tree is a
+  /// round trip on every entry switch, paid even by sessions that never open
+  /// that tab; and since the panel now opens on Controls, tying it to the mount
+  /// would have meant every session reading trees for a pane that was never
+  /// opened.
+  /// Does not notify. Nothing draws this flag, and the panel turns it off
   /// from `dispose` — where notifying would rebuild listeners around a widget
   /// on its way out. Turning it on notifies soon enough, when the tree lands.
   bool get inspecting => _inspecting;
@@ -591,7 +591,7 @@ class CatalogSession extends ChangeNotifier {
   /// *guest's* semantics on and off. A live app builds no semantics until
   /// something holds a handle, and building it costs every frame — so the
   /// guest pays only between opening the tab and leaving it.
-  /// **Does not notify**, for the reason [inspecting] does not.
+  /// Does not notify, for the reason [inspecting] does not.
   bool get inspectingSemantics => _inspectingSemantics;
   var _inspectingSemantics = false;
   set inspectingSemantics(bool value) {
@@ -619,7 +619,7 @@ class CatalogSession extends ChangeNotifier {
 
   /// What the entry on screen has printed, oldest first.
   ///
-  /// **Its own notifier**, for the reason [watchedBox] is: a demo printing from
+  /// Its own notifier, for the reason [watchedBox] is: a demo printing from
   /// `build` prints on every frame, and rebuilding the entry list and the top
   /// bar to append a line would be absurd. Only the console listens.
   final guestLogs = ValueNotifier<List<InspectLogLine>>(const []);
@@ -720,7 +720,7 @@ class CatalogSession extends ChangeNotifier {
 
   /// Whether the panel is mounted at all — which is the watch's lifetime.
   ///
-  /// **Deliberately wider than [inspecting].** The watch costs the guest
+  /// Deliberately wider than [inspecting]. The watch costs the guest
   /// 0.3ms a frame on the largest tree in the repo, measured, and nothing at
   /// all on a frame that is not drawn; what is expensive is the *tree read* it
   /// can ask for, and that stays behind [inspecting]. Tying the watch to the
@@ -729,7 +729,7 @@ class CatalogSession extends ChangeNotifier {
   /// what makes a `Row` overflow or stop overflowing — with no way to know the
   /// preview had been resized at all.
   ///
-  /// **Does not notify**, for the reason [inspecting] does not: the panel
+  /// Does not notify, for the reason [inspecting] does not: the panel
   /// clears it from `dispose`.
   bool get panelOpen => _panelOpen;
   var _panelOpen = false;
@@ -747,7 +747,7 @@ class CatalogSession extends ChangeNotifier {
 
   /// The box the guest last reported for [watchedNode], live.
   ///
-  /// **A notifier of its own, not a field behind [notifyListeners].** This
+  /// A notifier of its own, not a field behind [notifyListeners]. This
   /// arrives sixty times a second on an animating demo, and rebuilding the
   /// whole catalog view at that rate — entry list, panel, tree and all — to
   /// move one rectangle would cost far more than the watch saves. Only the
@@ -760,8 +760,8 @@ class CatalogSession extends ChangeNotifier {
   /// rectangle — see the overlay's own note on why a *selection* deliberately
   /// draws nothing.
   ///
-  /// **Debounced, and this is the whole reason it is a setter rather than a
-  /// call.** Resolving an id costs the guest a full summary-tree walk — 8ms on
+  /// Debounced, and this is the whole reason it is a setter rather than a
+  /// call. Resolving an id costs the guest a full summary-tree walk — 8ms on
   /// the largest tree in the repo, measured — so sweeping the pointer down
   /// fifty rows would spend half a second of guest time resolving forty-nine
   /// nodes nobody stopped on. Highlighting stays instant regardless: it is
@@ -805,7 +805,7 @@ class CatalogSession extends ChangeNotifier {
   /// has not registered yet rather than calling it missing — so this can be
   /// mid-wait when the panel closes, and [_stopWatch]'s own `unwatch` has run
   /// and returned by the time the watch actually starts. A guest left watching
-  /// for nobody pays for it every frame.
+  /// with no reader pays for it every frame.
   void _armWatch(InspectClient inspect, String what) {
     _fireAndForget(
       inspect.watch(nodeId: _watchedNode).then((_) {
@@ -851,7 +851,7 @@ class CatalogSession extends ChangeNotifier {
 
   /// Catches up after something in the demo has scrolled.
   ///
-  /// **The staleness nothing else here could see.** A scroll changes no
+  /// The staleness nothing else here could see. A scroll changes no
   /// widget's type, no widget's depth and not the demo's box, so neither the
   /// structure tier nor the resize tier fires — and the tree went on reporting
   /// the rects from before it. That is invisible in the numbers and very
@@ -947,7 +947,7 @@ class CatalogSession extends ChangeNotifier {
   /// Tells the guest it is being rendered as [platform] — null for the panel's
   /// own rectangle, which renders as this machine.
   ///
-  /// **Deduped against the guest that was told, not only against the value.**
+  /// Deduped against the guest that was told, not only against the value.
   /// A fresh guest starts as itself and has to be told again even when nothing
   /// about the device moved — which is every restart, and would otherwise be a
   /// phone quietly rendering as a Mac for the rest of the session.
@@ -1006,9 +1006,9 @@ class CatalogSession extends ChangeNotifier {
   /// Closes the keyboard the way a platform does — what the dismiss key drawn
   /// over the band calls. The app is told, and lets go of the field itself.
   ///
-  /// Clears the forced-up mode with it, so the key that is drawn on a keyboard
-  /// somebody raised by hand actually takes it away rather than being undone
-  /// by the next push. The guest does the same on its own side; both, because
+  /// Clears the forced-up mode with it, so the key drawn on a manually raised
+  /// keyboard actually takes it away rather than being undone by the next
+  /// push. The guest does the same on its own side; both, because
   /// the mode lives here and the focus lives there.
   void dismissKeyboard() {
     var inspect = _inspect;
@@ -1036,11 +1036,11 @@ class CatalogSession extends ChangeNotifier {
   /// What the panel's refresh does, and what a reload does before it rebuilds.
   /// Nothing ever arrives to say a problem *stopped* — an overflow that a
   /// resize fixed goes on being reported, because the record is of what was
-  /// said rather than of what is true now — so forgetting has to be somebody's
-  /// decision, and it belongs to whoever asked for the rebuild.
+  /// said rather than of what is true now — so forgetting has to be a
+  /// deliberate act, and it belongs to whatever asked for the rebuild.
   ///
   /// The read that follows will usually come back empty and fill again on the
-  /// next poll, which is honest: the frame that would re-report has not been
+  /// next poll, which is accurate: the frame that would re-report has not been
   /// painted yet.
   Future<void> forgetErrors() async {
     var inspect = _inspect;
@@ -1196,7 +1196,7 @@ class CatalogSession extends ChangeNotifier {
   /// Calls a service extension on this session's guest, or null when there is
   /// no guest to call.
   ///
-  /// **The one door another plugin reaches this guest through.** The motion
+  /// The one door another plugin reaches this guest through. The motion
   /// plugin shares the catalog's compiler and guest and has its own panel, so
   /// it needs to drive `ext.flutterware.motion.*` against whatever is running
   /// here. Deliberately not an `InspectClient`: that one is *this* plugin's
@@ -1253,7 +1253,7 @@ class CatalogSession extends ChangeNotifier {
 
   /// How long the current [busyWith] has been running.
   ///
-  /// Only counts up on screen where a counter is the point — the cold-start
+  /// Only counts up on screen where a counter is useful — the cold-start
   /// screen, which is a spinner and nothing else.
   Duration get busyFor => _busySince.elapsed;
   final _busySince = Stopwatch();
@@ -1523,7 +1523,7 @@ class CatalogSession extends ChangeNotifier {
   /// Sends the entry's knobs what the address asks of them, and reads back
   /// what the demo made of it.
   ///
-  /// **Coalesced, not queued.** A slider writes a value per frame of a drag,
+  /// Coalesced, not queued. A slider writes a value per frame of a drag,
   /// and each push is a round trip that waits for the guest's frame. Sent
   /// concurrently they land out of order — a slider that jumps backwards under
   /// the pointer; sent one at a time in a queue, the drag finishes seconds
@@ -1640,7 +1640,7 @@ class CatalogSession extends ChangeNotifier {
   /// Rebuilds what is on screen from the files as they are now.
   ///
   /// Literally a switch to the entry already selected: the daemon sweeps for
-  /// edits on every request, so re-selecting is the whole of a reload — and
+  /// edits on every request, so re-selecting is all a reload is — and
   /// because the daemon retries a quarantined entry on request, this is also
   /// how a demo that stopped compiling is asked again.
   ///
@@ -1732,9 +1732,8 @@ class CatalogSession extends ChangeNotifier {
   ///
   /// - **Not the fast path.** A switch the guest makes by itself is one frame,
   ///   and a loader that appeared and left inside it would be a flash on every
-  ///   click. This is set at the moment the guest refuses, which is the moment
-  ///   we know we are on the slow path — no delay to tune, and nothing to
-  ///   flash.
+  ///   click. This is set at the moment the guest refuses, which is when the
+  ///   slow path is known — no delay to tune, and nothing to flash.
   /// - **Not an edit reload.** Saving a file reloads the entry already on
   ///   screen, and what is on screen is still the answer to what you asked
   ///   for. Only a switch away from what the guest holds obscures its own
@@ -1902,8 +1901,8 @@ class CatalogSession extends ChangeNotifier {
   }
 
   /// The daemon serves several clients, so the set of buildable entries can
-  /// move without this session having asked for anything — somebody edits a
-  /// demo and it breaks, or they fix it and it comes back.
+  /// move without this session having asked for anything — a demo is edited and
+  /// breaks, or is fixed and comes back.
   void _onCatalogChanged(CatalogChanged change) {
     entries = change.entries;
     quarantined = change.quarantined;
@@ -1966,7 +1965,7 @@ class CatalogSession extends ChangeNotifier {
     }
   }
 
-  /// Runs [work] with nobody waiting on it, and says so if it fails.
+  /// Runs [work] with nothing waiting on it, and reports a failure.
   ///
   /// The panel drives the guest from setters and timers — an address changing,
   /// a pointer coming to rest — where there is no caller left to hand a failure
@@ -1975,9 +1974,9 @@ class CatalogSession extends ChangeNotifier {
   /// writes rather than the tolerant reads (see [InspectClient.watch] for why
   /// they are required), throwing is something they genuinely do.
   ///
-  /// Reported rather than swallowed, which is the whole point of those calls
-  /// being strict: a watch that never started looks exactly like a demo that is
-  /// not moving, and this is the line that tells the two apart.
+  /// Reported rather than swallowed, which is why those calls are strict: a
+  /// watch that never started looks exactly like a demo that is not moving, and
+  /// this is the line that tells the two apart.
   void _fireAndForget(Future<void> work, String what) {
     unawaited(
       work.then<void>(

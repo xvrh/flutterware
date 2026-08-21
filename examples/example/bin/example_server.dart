@@ -194,7 +194,7 @@ Future<(Response, String?)> _captureResponseBody(Response response) async {
 
 /// What must not leave the process, dropped before reporting.
 ///
-/// **This list is a starting point and is wrong for your server.** The way to
+/// This list is a starting point and is wrong for your server. The way to
 /// get it right is not to lengthen it from memory but to grep your handlers
 /// for the headers they actually read: a project accepting `x-authorization`
 /// as a fallback for `authorization` is a line nobody outside it would guess,

@@ -29,13 +29,13 @@ String describeAge(Duration age) {
   return '${age.inDays}d ago';
 }
 
-/// The device list, as somebody last saw it.
+/// The device list, as it was last read.
 ///
 /// A cache with a timestamp rather than a value that expires. A `flutter
 /// daemon` takes seconds to start and there is no version of this tool where
-/// paying that on every `fw devices` is acceptable, so the honest shape is the
-/// one the architecture doc already settled for runs: **it gets old, it does
-/// not become wrong.** Every surface that renders this says how old it is, and
+/// paying that on every `fw devices` is acceptable, so this follows the shape
+/// the architecture doc already settled for runs: it gets old, it does not
+/// become wrong. Every surface that renders this says how old it is, and
 /// `--refresh` is what a caller reaches for when the age matters.
 class DeviceCache {
   const DeviceCache({required this.updatedAt, required this.devices});
@@ -149,7 +149,7 @@ class DeviceDaemon {
   /// Spawns a process, so it belongs behind an action or in live tracking —
   /// never in `report` or `computeAll`.
   ///
-  /// **Every caller must [release] eventually.** The child keeps the Dart VM
+  /// Every caller must [release] eventually. The child keeps the Dart VM
   /// alive, so a `fw devices --refresh` that forgets prints its answer and then
   /// hangs forever — which is exactly what the first run of this code did, for
   /// ten minutes, until the daemon was killed by hand. Leases rather than an
@@ -237,7 +237,7 @@ class DeviceDaemon {
 
   /// Boots [emulatorId] and waits for it to show up as a device.
   ///
-  /// **`emulator.launch` returns long before the emulator is usable.** It
+  /// `emulator.launch` returns long before the emulator is usable. It
   /// answers once the daemon has started the process; the device appears later,
   /// through `device.added`, and only then can anything be installed onto it.
   /// So this waits for the device rather than for the command, and reports the

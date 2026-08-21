@@ -7,14 +7,14 @@ import '../utils/run_git.dart' as git_process;
 /// Removing the checkout itself — the one step the shell owns rather than a
 /// plugin, and the one that always runs last.
 ///
-/// **`--force` is passed exactly when the user was told there was uncommitted
-/// work.** Git refuses to remove a worktree with modified or untracked files,
+/// `--force` is passed exactly when the user was told there was uncommitted
+/// work. Git refuses to remove a worktree with modified or untracked files,
 /// and the checklist has already shown that number and been told to go ahead;
 /// refusing again here would only send the user to a terminal to type the flag
 /// themselves, which is the friction that makes a cleanup tool go unused.
 ///
 /// The pairing matters more than either half. Force without the warning
-/// destroys work nobody was told about; the warning without force produces a
+/// destroys unannounced work; the warning without force produces a
 /// dialog that promises to delete files and then fails. Both come from
 /// [TeardownPlan.uncommittedFiles], so they cannot disagree.
 ///
@@ -50,7 +50,7 @@ class WorktreeRemover {
   /// `-d`, never `-D`: git refuses to delete a branch whose commits are not
   /// merged anywhere, and that refusal is the point. A branch is the last
   /// handle on work that is not on a remote, and "delete the branch too" is a
-  /// checkbox somebody ticks while thinking about the directory.
+  /// checkbox that gets ticked while thinking about the directory.
   Future<GitStepResult> deleteBranch({
     required String branch,
     required String repositoryRoot,

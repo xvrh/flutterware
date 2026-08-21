@@ -7,7 +7,7 @@ import 'theme.dart';
 /// The chrome's way of saying *N things here want a look* without spending a
 /// row on it — the explorer tab counts worktrees waiting on you, the device
 /// desk counts busy devices. Zero draws the bare icon: a badge that is always
-/// lit is a badge nobody reads, so the count only appears when it is news.
+/// lit gets ignored, so the count only appears when there is one.
 ///
 /// One widget because the pill's geometry is easy to drift — the explorer tab
 /// and the desk button hand-rolling their own corners is how two counts end up

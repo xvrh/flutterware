@@ -38,7 +38,7 @@ class DiffLine {
 /// The `@@` header is dropped: the list draws it as its own row, from the
 /// [HunkSpan] rather than from the text.
 ///
-/// **`\ No newline at end of file` is [DiffLineKind.meta]** — it belongs to the
+/// `\ No newline at end of file` is [DiffLineKind.meta] — it belongs to the
 /// line before it, consumes no line number, and would otherwise be drawn as a
 /// context line the file does not contain.
 List<DiffLine> parseHunkLines(String hunkText, HunkSpan hunk) {

@@ -8,7 +8,7 @@ import 'panels.dart';
 
 /// Serves [source] as a panel for as long as this widget is mounted.
 ///
-/// **The unit is the panel, not the plugin.** A devbar's plugins are declared
+/// The unit is the panel rather than the plugin. A devbar's plugins are declared
 /// once and live as long as it does, which is right for the things an app has
 /// all the time — its flags, its logs, its network. It is wrong for anything
 /// scoped to something the app opens and closes. A database opened at login
@@ -28,27 +28,27 @@ import 'panels.dart';
 /// mid-run reaches the cockpit's App tab, `fw` and MCP without any of them
 /// being told about sessions.
 ///
-/// **The same call, tied to a lifetime.** This is `DevbarPanels.add` with the
+/// The same call, tied to a lifetime. This is `DevbarPanels.add` with the
 /// removal wired to `dispose`, the way `AddDevbarButton` wraps
 /// `UiService.addButton`. Reach past it to `DevbarPanels` when the scope is a
 /// service rather than a subtree — a session opened at login has no subtree to
 /// hang from, and inventing one costs a remount.
 ///
-/// **[source] is not owned here.** [DevbarPanelSource] declares no `dispose`,
+/// [source] is not owned here. [DevbarPanelSource] declares no `dispose`,
 /// so this cannot be the thing that disposes one — build the source where its
 /// data lives (a `State`, a session object) and let it die with that. Building
 /// one inside `build` is the same mistake as building an `AnimationController`
 /// there, with the same symptom: a new instance every frame, and here that
 /// means the panel is torn down and re-declared every frame.
 ///
-/// **Consider not doing this at all.** A panel that comes and goes cannot
+/// Consider not doing this at all. A panel that comes and goes cannot
 /// explain its own absence: an agent asking for `db:main` is told *"this app
 /// declares no panel db:main"* whether the app has no database or the user
 /// simply is not signed in, and only one of those is worth acting on. A panel
 /// that is always there and answers *"no session is open"* keeps them apart —
-/// see `DatabaseUnavailable`, which is that answer for a database. Reach for
-/// this widget when the panel genuinely does not exist outside the scope,
-/// not merely when its data does not.
+/// see `DatabaseUnavailable`, which is that answer for a database. Use this
+/// widget when the panel genuinely does not exist outside the scope, not merely
+/// when its data does not.
 class AddDevbarPanel extends StatefulWidget {
   const AddDevbarPanel({super.key, required this.source, this.child});
 

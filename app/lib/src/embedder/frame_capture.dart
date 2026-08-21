@@ -22,8 +22,8 @@ import 'raw_frame.dart';
 ///
 /// Shared by the headless pipeline and by the GUI's live engine, because they
 /// are the same exchange over different sockets. The live one is the only way
-/// to photograph a demo *as somebody left it* — the dropdown they opened, the
-/// row they scrolled to — since no fresh guest performs their clicks.
+/// to photograph a demo *as it was left* — the dropdown that was opened, the
+/// row that was scrolled to — since no fresh guest repeats those clicks.
 class FrameCapture {
   FrameCapture({required this.send, required this.workDir});
 

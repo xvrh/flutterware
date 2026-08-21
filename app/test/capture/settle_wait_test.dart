@@ -12,7 +12,7 @@ class _Source implements SettleSource {
 
 /// The wait behind `fw capture` — which had no tests, and one way to hang.
 ///
-/// **Plain `test`, with real timers and a real clock, on purpose.** The loop
+/// Plain `test`, with real timers and a real clock, on purpose. The loop
 /// measures its deadline with a `Stopwatch`, so a `testWidgets` fake clock does
 /// not move it: `tester.pump(seconds: 30)` advances Flutter's notion of time
 /// and leaves this function believing no time has passed at all. Every duration

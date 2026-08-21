@@ -7,7 +7,7 @@ import 'shell.dart';
 
 /// The button that says what happened, in the four cases it has to survive.
 ///
-/// **These have to be pressed to be seen, and that is the point.** Every state
+/// These have to be pressed to be seen, and that is the point. Every state
 /// but idle is transient and timing-dependent, so none of them appears in a
 /// screenshot and none of them is reachable from a widget test without pumping
 /// specific durations. The one below labelled *instant* is the case the button

@@ -76,12 +76,12 @@ class SplashArtifact {
 
   /// The size this file occupies on screen, in logical pixels.
   ///
-  /// **Android only, and deliberately.** The rule is verified against the
+  /// Android only, and deliberately. The rule is verified against the
   /// generator: it writes each density at `source * pixelDensity ~/ 4`, and
   /// Android draws an `xxxhdpi` drawable at a quarter of its pixels. So every
-  /// density of one image should report the *same* dp — a mismatch is a
-  /// generated set somebody edited by hand. iOS and web get null rather than a
-  /// number nobody has checked.
+  /// density of one image should report the *same* dp — a mismatch means the
+  /// generated set was edited by hand. iOS and web get null rather than an
+  /// unchecked number.
   double? get logicalWidth {
     var scale = splashDensityScale(density);
     if (scale == null || pixelWidth == null) return null;
@@ -124,7 +124,7 @@ String? _bucket(String? density) {
 
 /// A PNG's dimensions, read from its header rather than by decoding it.
 ///
-/// **24 bytes off the front of the file**, because the alternative is reading
+/// 24 bytes off the front of the file, because the alternative is reading
 /// every generated PNG whole — an `xxxhdpi` splash is comfortably a megabyte,
 /// there are dozens of them, and this runs on the UI isolate every time the
 /// fingerprint moves. A valid PNG always puts IHDR first: 8-byte signature,

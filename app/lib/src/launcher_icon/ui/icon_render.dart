@@ -68,7 +68,7 @@ Path _adaptivePath(AdaptiveMask mask, Rect rect) => switch (mask) {
 /// You, so there is no correct answer to hard-code and no way to read the
 /// user's. What matters is the *relationship* — a flat fill on a flat ground —
 /// which is what makes a colourful monochrome layer come out as a blob. The
-/// captions say the colour is illustrative so nobody reads it as a promise.
+/// captions say the colour is illustrative, so it is not read as a promise.
 const themedIconForeground = Color(0xFFD3E3FD);
 const themedIconBackground = Color(0xFF0B57D0);
 
@@ -130,8 +130,8 @@ class IconRender extends StatelessWidget {
   /// The clip to apply, overriding the role's own.
   ///
   /// Exists so the detail view can draw the same file unmasked beside the
-  /// masked version. Seeing what a mask *removes* is the point; a masked icon
-  /// on its own just looks like an icon.
+  /// masked version. What matters is seeing what a mask *removes*; a masked
+  /// icon on its own just looks like an icon.
   final IconMask? mask;
 
   /// Which launcher shape to clip an adaptive icon to. Ignored elsewhere.
@@ -149,8 +149,8 @@ class IconRender extends StatelessWidget {
   ///
   /// The inspector reports facts about the file: transparency gets a
   /// checkerboard, and the region a mask removes gets dimmed out. Neither
-  /// belongs on a home screen, where the honest answer is what the launcher
-  /// actually shows — a checkerboard paints a light frame around every icon the
+  /// belongs on a home screen, which should show what the launcher actually
+  /// shows — a checkerboard paints a light frame around every icon the
   /// mask does not reach into, and a scrim over a dark icon on a dark wallpaper
   /// makes the whole thing unreadable. In situ the safe zone is an outline and
   /// nothing else.

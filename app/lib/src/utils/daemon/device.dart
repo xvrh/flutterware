@@ -147,12 +147,12 @@ enum MachineKind {
   /// A phone or tablet on the end of a cable or a wifi link.
   physical,
 
-  /// An emulator or a simulator: absent until somebody boots it, contended
-  /// once they have.
+  /// An emulator or a simulator: absent until booted, contended once it is.
   virtual,
 
   /// This machine, or a browser on it. Cannot be taken, and stopping the run
-  /// closes the window — so the honest words are about the run, not the slot.
+  /// closes the window — so the wording is about the run rather than the
+  /// slot.
   host,
 }
 

@@ -9,7 +9,7 @@ import 'app_theme.dart';
 /// The preview stage — the ground a guest sits on and the edge around it — in
 /// the states it takes, under the chrome it has to survive.
 ///
-/// **What this is for.** The thing being judged is whether two surfaces read as
+/// What this is for. The thing being judged is whether two surfaces read as
 /// two surfaces, which is a question about a few pixels of edge and a few
 /// percent of grey — and the running studio prices one look at a device pick, a
 /// compile and a squint at a corner. So the pane is faked: a top bar and an

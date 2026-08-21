@@ -258,7 +258,7 @@ class _Slot extends StatelessWidget {
   }
 }
 
-/// A stand-in for somebody else's app.
+/// A stand-in for a neighbouring app.
 ///
 /// Painted rather than bundled: an asset would be one more thing to ship and
 /// would date, and the only job here is to give the eye something to judge
@@ -754,6 +754,6 @@ double situAspectRatio(IconSurface surface) => switch (surface) {
 };
 
 /// Clamped so a caller cannot ask for a stage so small the neighbours stop
-/// being legible, which is the point of them.
+/// being legible, which is what they are there for.
 double situWidthFor(double available) =>
     math.max(260, math.min(available, 380));

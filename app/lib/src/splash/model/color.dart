@@ -15,7 +15,7 @@ library;
 /// … throw Exception('Invalid color value');
 /// ```
 ///
-/// **Exactly six hex digits, RGB, no alpha.** Eight digits do not mean ARGB
+/// Exactly six hex digits, RGB, no alpha. Eight digits do not mean ARGB
 /// here — they throw, and so returning null for them is the honest answer
 /// rather than a courtesy. Alpha is always opaque because a splash is drawn on
 /// nothing.

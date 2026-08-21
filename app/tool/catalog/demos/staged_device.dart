@@ -12,7 +12,7 @@ import 'app_theme.dart';
 /// The preview panel's own device capsule — picker, rotation, frame, keyboard
 /// — in every state it takes, all at once.
 ///
-/// **What this is for.** The control is four 24pt segments sharing one border,
+/// What this is for. The control is four 24pt segments sharing one border,
 /// and everything interesting about it is a pixel or a glyph: whether the
 /// border survives the corner, whether the two icons beside each other read as
 /// two different controls, what "dim" looks like next to "lit". None of that

@@ -21,7 +21,7 @@ import '../ui/error_state.dart';
 /// pulls the bytes off disk, and hands plain data to two views that know
 /// nothing about any of that.
 ///
-/// **Every piece of state that names something is in the address** — which
+/// Every piece of state that names something is in the address — which
 /// asset, which density, which frame, which backdrop. That is not tidiness: an
 /// address with its axes resolved is what a preview will be captured *by* once
 /// rendering moves into the guest, so a control whose value lives in a `State`

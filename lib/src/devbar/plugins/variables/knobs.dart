@@ -1,11 +1,11 @@
 /// The variables plugin, described as a panel: every devbar variable becomes a
 /// knob, and a feature flag is a variable.
 ///
-/// **The app owns the list** (owner, 2026-08-11: *"only devbar can report the
+/// The app owns the list (owner, 2026-08-11: *"only devbar can report the
 /// available flags"*). A flag does not exist until the widget declaring it
-/// builds, so what is reported here grows as somebody navigates — there is
-/// nothing static to promise, and promising one would mean a cockpit list that
-/// lies. What the host may do about that is [presetAction]: name a value for a
+/// builds, so what is reported here grows as the user navigates — there is
+/// nothing static to promise, and a static list would go out of date. What the
+/// host may do about that is [presetAction]: name a value for a
 /// flag that has not appeared yet, and have it apply the instant one does.
 library;
 

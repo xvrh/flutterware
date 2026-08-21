@@ -15,8 +15,8 @@ String? scenarioAsyncStall;
 ///
 /// Comfortably under the harness's own scenario deadline, so the diagnosis is
 /// already recorded by the time that fires — and comfortably over anything a
-/// real-async step legitimately does, since the whole point of a scenario is
-/// that it runs in fake time.
+/// real-async step legitimately does, since a scenario otherwise runs in fake
+/// time.
 var scenarioRunAsyncStallBudget = const Duration(seconds: 8);
 
 /// Depth rather than a flag: the harness watches every `runAsync` at the

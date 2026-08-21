@@ -8,8 +8,8 @@ import 'stock_icons.dart';
 /// Which package a repository would probably call its face, and which of its
 /// files to point at, before anyone has said.
 ///
-/// **This runs once, at `init`, and its answer is written into
-/// `tool/flutterware.dart` where it can be read and corrected.** That is the
+/// This runs once, at `init`, and its answer is written into
+/// `tool/flutterware.dart` where it can be read and corrected. That is the
 /// whole reason a guess is acceptable here: a monorepo genuinely has no obvious
 /// answer — one real repository holds a web app, an admin app, a macOS utility
 /// and two plugin examples — and which of them *is* the repository is a claim
@@ -17,18 +17,18 @@ import 'stock_icons.dart';
 /// starting point; the same guess made silently at every launch would be a rule
 /// nobody could see or change.
 ///
-/// **The signal is not "is this an app" but "how many platforms have an icon
-/// that is not the template's".** Platform count alone picks the wrong package:
+/// The signal is not "is this an app" but "how many platforms have an icon
+/// that is not the template's". Platform count alone picks the wrong package:
 /// in testing, a five-platform app whose iOS and Android icons were still stock
-/// beat a two-platform one that had really been dressed. Somebody who bothered
-/// to draw an icon for three platforms has told you which app they care about.
+/// beat a two-platform one that had really been dressed. Icons drawn for three
+/// platforms are a good indication of which app the project is about.
 ///
 /// Measured against three real repositories — a 19-package monorepo, a
 /// 9-package one and a single-package project — and correct on all three, in
 /// about a second. That is a demonstration of feasibility, not a validated
 /// weighting: they are also the repositories it was tuned on.
 ///
-/// **This is the one place [isStockIcon] is still asked**, and the stakes are
+/// This is the one place [isStockIcon] is still asked, and the stakes are
 /// what make that all right. Resolving the face by hash put the Flutter logo in
 /// a real app's Dock with nothing on screen to explain it; a hash that has gone
 /// stale *here* writes a line of Dart, under a comment that says it was guessed,

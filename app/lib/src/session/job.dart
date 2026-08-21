@@ -10,7 +10,7 @@ import 'package:flutterware/plugins.dart';
 /// want and no renderer should implement itself — an id to write down, a
 /// duration, the artifacts it produced, and a place for progress to arrive.
 ///
-/// **Nothing here crosses a process boundary yet.** The events are in-memory
+/// Nothing here crosses a process boundary yet. The events are in-memory
 /// and deliberately not serialisable: a wire format for them earns nothing
 /// until a job can run somewhere other than here, and guessing one now is the
 /// retrofit this architecture keeps avoiding.
@@ -45,7 +45,7 @@ class Job {
 
   /// Everything that has happened, and everything still to happen.
   ///
-  /// **Replays.** A broadcast controller drops events for subscribers that
+  /// Replays. A broadcast controller drops events for subscribers that
   /// arrive late, and here the caller cannot subscribe until [Job] is returned
   /// — which is already after the job started. So a subscriber gets what it
   /// missed before it gets what is next, and a subscriber that arrives after
@@ -70,7 +70,7 @@ class Job {
 
   /// Completes when the action has finished — successfully or not.
   ///
-  /// **Never completes with an error.** A failed run is a run: it has a
+  /// Never completes with an error. A failed run is a run: it has a
   /// duration, it belongs in the log, and every renderer has to report it
   /// rather than let it escape. `JobResult.error` carries the reason.
   Future<JobResult> get done => _done.future;
@@ -221,8 +221,8 @@ class JobResult {
 /// "you said purple" is half an error message.
 /// A failure that is a fact about the project, not a fault in flutterware.
 ///
-/// **The marker decides whether a stack is printed**, and that is the whole of
-/// what it is for. [FwCli] prints one for anything it does not recognise,
+/// The marker decides whether a stack is printed, and that is all it is for.
+/// [FwCli] prints one for anything it does not recognise,
 /// deliberately — a plugin bug has to be reportable from the surface that has
 /// a terminal. But a stack is also an accusation: it names files in this
 /// package, and a reader who gets one starts debugging this package.

@@ -21,18 +21,18 @@ class _Column {
 
 /// The whole list, as lines.
 ///
-/// **One line per worktree, unlike the GUI's two.** The row's second line is
+/// One line per worktree, unlike the GUI's two. The row's second line is
 /// evidence for its first; a terminal has no vertical pairing to make that
 /// legible, so what survives is the answer. Dropped: the agent's last prompt and
 /// the bucket split — texture, and neither decides anything.
 ///
-/// **A column every row leaves empty is not printed.** A repo with no agents, a
+/// A column every row leaves empty is not printed. A repo with no agents, a
 /// machine with no `gh`, and an agent format that stopped parsing all produce
 /// the same thing — a column of nothing — and the fix for all three is the same.
 /// It is also what keeps this readable before the agent and forge providers
 /// exist at all.
 ///
-/// **Widths come from the content.** A branch name is what you would copy out of
+/// Widths come from the content. A branch name is what you would copy out of
 /// this list and hand to `git`, so it is never truncated; sizing to the longest
 /// one is what keeps the columns lined up anyway.
 List<String> worktreeTable(
@@ -186,7 +186,7 @@ String ago(DateTime then, DateTime now) {
 /// The age [ago] would *print*, as a number — and the only thing the list may
 /// be ordered by.
 ///
-/// **Two rows showing the same age must never swap places.** Sorting by the raw
+/// Two rows showing the same age must never swap places. Sorting by the raw
 /// timestamp broke that: two agents working at once are both a few seconds old,
 /// both render `now`, and their millisecond order changes every time either one
 /// writes a line — so the list reshuffled every couple of seconds while saying

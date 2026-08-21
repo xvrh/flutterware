@@ -61,8 +61,8 @@ const _waitingTurn = Duration(milliseconds: 1);
 /// `ImageProvider` decoding off the fake clock and a `FutureBuilder` on a real
 /// future are the same shape.
 ///
-/// **Some of that work announces itself, and the announced half is not
-/// guesswork.** Two counters say a decode is in flight without anyone taking a
+/// Some of that work announces itself, and the announced half is not
+/// guesswork. Two counters say a decode is in flight without anyone taking a
 /// turn to find out: `ImageCache.pendingImageCount`, which every
 /// `ImageProvider` passes through — `Image.asset`, `Image.memory`,
 /// `Image.network`, an `AssetImage` — and [ScenarioAssetBundle.readsInFlight],
@@ -73,8 +73,8 @@ const _waitingTurn = Duration(milliseconds: 1);
 /// a slow one alike, and a 780×609 PNG does not need a bigger number than an
 /// 8×8 one — it needs the same condition, held for longer.
 ///
-/// **What is left over is guessed at, and a turn is the only detector there
-/// is.** A `FutureBuilder` on a real future announces nothing, so this takes a
+/// What is left over is guessed at, and a turn is the only detector there
+/// is. A `FutureBuilder` on a real future announces nothing, so this takes a
 /// turn of the real loop and reads what it did: a frame scheduled on a tree
 /// that was quiet before it can only have been scheduled by work that just
 /// landed. Then it draws that frame with the caller's own policy and looks
@@ -95,8 +95,8 @@ const _waitingTurn = Duration(milliseconds: 1);
 /// `Future.delayed` on the real clock — which no counter names and which
 /// `s.runAsync` is the verb for.
 ///
-/// **A tree that never stops asking for frames takes the same turns, spent
-/// flat.** The loop below reads "a frame was scheduled" as progress and hands
+/// A tree that never stops asking for frames takes the same turns, spent
+/// flat. The loop below reads "a frame was scheduled" as progress and hands
 /// the next link a full budget again — which is sound only while a quiet tree
 /// is the baseline. On a screen holding an indefinite animation a frame is
 /// always scheduled, whatever landed or did not, so that reading is worth
@@ -234,9 +234,9 @@ bool _announced(ScenarioAssetBundle? assets) =>
 ///
 /// Unconditional rather than only when something is pending, so what a body
 /// decodes it decodes itself. The cost is re-decoding an asset two entries
-/// share — invisible against the measurement above — and what it buys is the
-/// property the comparison rides on: a body's picture is a function of the
-/// body, not of what happened to run before it.
+/// share — invisible against the measurement above — and in return the
+/// comparison gets the property it relies on: a body's picture depends on the
+/// body, not on what happened to run before it.
 void resetAnnouncedWork() {
   var cache = PaintingBinding.instance.imageCache;
   cache.clear();

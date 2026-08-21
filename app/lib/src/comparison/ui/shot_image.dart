@@ -28,7 +28,7 @@ class ShotPair extends ChangeNotifier implements SettleSource {
 
   /// True once a load has finished, whatever it found.
   ///
-  /// **Distinct from having an image**, and the distinction is a message: a
+  /// Distinct from having an image, and the distinction is a message: a
   /// step that failed on both sides has no frames and never will, and a pane
   /// that said "Loading…" over it said so forever.
   var settled = false;

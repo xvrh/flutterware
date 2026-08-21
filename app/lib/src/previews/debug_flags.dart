@@ -58,9 +58,8 @@ const debugFlags = <DebugFlag>[
     extension: 'ext.flutter.debugPaint',
     kind: DebugFlagKind.boolean,
     description:
-        'Draw the layout guides — box edges, padding, alignment arrows. The '
-        'single most useful one for a screenshot of something that is the '
-        'wrong size.',
+        'Draw the layout guides — box edges, padding, alignment arrows. '
+        'Useful when something is coming out the wrong size.',
   ),
   DebugFlag(
     name: 'baselines',
@@ -120,7 +119,7 @@ const debugFlags = <DebugFlag>[
 
 /// Sets [values] on the guest, and leaves everything unnamed alone.
 ///
-/// **Not whole-state, unlike knobs and axes**, and the difference is not an
+/// Not whole-state, unlike knobs and axes, and the difference is not an
 /// inconsistency. A knob belongs to the entry and an axis to the shell, so
 /// "everything not named goes back to its default" is meaningful for both. A
 /// debug flag belongs to the *process*: the panel's own guest may have had
@@ -166,7 +165,7 @@ Future<void> applyDebugFlags(
 /// Stages the guest as [platform] — the device's *identity*, where the window
 /// metrics carry its geometry.
 ///
-/// **The framework's own switch, not one of ours.** `platformOverride` is
+/// The framework's own switch rather than one of ours. `platformOverride` is
 /// registered by every debug binding, it is what DevTools' platform selector
 /// drives, and its setter reassembles the application — so a `ThemeData` built
 /// at the top of a demo is rebuilt rather than left describing the machine the
@@ -180,8 +179,8 @@ Future<void> applyDebugFlags(
 ///
 /// Not [applyDebugFlags], though it is the same extension: that one is for a
 /// caller who *asked* for a flag by name and refuses anything the guest would
-/// not take, and neither half fits. Nobody asked for this — a device did — and
-/// the reset has no value to check against, because the guest answers with the
+/// not take, and neither half fits. This is not asked for by name — a device
+/// implies it — and the reset has no value to check against, because the guest answers with the
 /// platform it is really running on.
 Future<void> stageGuestPlatform(
   GuestVmService service,

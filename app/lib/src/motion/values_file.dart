@@ -106,9 +106,9 @@ class MotionPropertyValues {
 
   /// Whether an empty line sat above this entry.
   ///
-  /// Kept for the same reason as [comments], and it is not fussiness: a values
-  /// file with every blank line removed is one wall of numbers, and the first
-  /// rewrite would produce exactly that diff over a file nobody had edited.
+  /// Kept for the same reason as [comments]: a values file with every blank
+  /// line removed is one wall of numbers, and the first rewrite would produce
+  /// exactly that diff over an unedited file.
   final bool blankBefore;
 
   /// The comment lines immediately above this entry, verbatim.
@@ -143,7 +143,7 @@ class MotionTargetValues {
 
 /// A parsed `<screen>.motion.dart`, and the range of it the editor may replace.
 ///
-/// **The editor rewrites the `MotionValues(...)` expression and nothing else.**
+/// The editor rewrites the `MotionValues(...)` expression and nothing else.
 /// Imports, the doc comment above the const, anything else in the file — all
 /// outside [expressionStart]..[expressionEnd] and never touched. That is a
 /// stronger guarantee than "we own this file", and it costs one offset pair.
@@ -580,7 +580,7 @@ String? _stringOf(Expression expression) =>
 /// AST node — the analyzer hangs it off the following token, and only for
 /// documentation comments.
 ///
-/// **A blank line ends the run and is reported, not skipped.** A comment
+/// A blank line ends the run and is reported rather than skipped. A comment
 /// separated from an entry belongs to the gap rather than to the entry, and the
 /// gap itself is worth keeping: a values file with every blank line removed is
 /// one wall of numbers.

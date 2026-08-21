@@ -7,7 +7,7 @@ import 'package:logging/logging.dart';
 /// progress-spinner protocol, all of it built to carry the GUI's log lines back
 /// to the terminal that ran `dart run flutterware`.
 ///
-/// **None of it was reachable.** `RemoteLogServer.start` was never called, and
+/// None of it was reachable. `RemoteLogServer.start` was never called, and
 /// neither `REMOTE_LOGGER_URL` nor `FW_REMOTE_LOGGER_URL` was ever set, so the
 /// "no server reachable" fallback had quietly become the only implementation
 /// there is. `2026-07-28-cli-adoption-story.md` deleted the transport when the
@@ -29,7 +29,7 @@ abstract class LogClient {
   /// MCP speaks JSON-RPC on stdout, so a log line printed there is not a stray
   /// message a human can ignore; it is a malformed frame, and the client
   /// disconnects. Which sink a session logs to is therefore a property of the
-  /// surface, not a default any one of them gets to keep to itself.
+  /// surface rather than a per-session default.
   factory LogClient.writeTo(StringSink sink) => _LogClient(sink.writeln);
 
   void printLogRecord(LogRecord record);
@@ -40,7 +40,7 @@ class _LogClient implements LogClient {
 
   final void Function(String line) _write;
 
-  /// The level is named only when it is one somebody should act on. Tagging
+  /// The level is named only when it is one worth acting on. Tagging
   /// every line `[STATUS]` is how the old client made ordinary logs look like
   /// diagnostics.
   @override

@@ -2,7 +2,7 @@
 ///
 /// The annotation itself is **not here** — it is Flutter's, from
 /// `package:flutter/widget_previews.dart`, and a preview that wants nothing
-/// from this library does not import it. That is the point of the library
+/// from this library does not import it. That is why the library is kept
 /// being small: the dependency is incremental, paid when you want a shell or a
 /// knob rather than to declare a preview at all.
 ///

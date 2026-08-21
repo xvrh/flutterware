@@ -18,7 +18,7 @@ import 'shell.dart';
 /// rather than a path. That is the whole reason the views take data instead of
 /// reading files themselves.
 ///
-/// **One variant is missing and cannot be here: a font that renders.** A real
+/// One variant is missing and cannot be here: a font that renders. A real
 /// specimen needs real font bytes, and the app bundles none — so the font entry
 /// below exercises the *failure* path, and the working one is verified by
 /// running the app against `examples/example`, which ships two weights of
@@ -37,7 +37,7 @@ Widget assetInspectorDetail() => const _Detail();
 /// empty state that collapses or a key that overflows shows up here without
 /// anyone selecting a variant to find it.
 ///
-/// **Scrolls sideways**, because three fixed-width cases are wider than some of
+/// Scrolls sideways, because three fixed-width cases are wider than some of
 /// the windows this is rendered in. Each case keeps a realistic width instead of
 /// being squeezed — the list's own ellipsis behaviour is one of the things being
 /// looked at, and it is a function of that width, so flexing the cases to fit

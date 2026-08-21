@@ -21,7 +21,7 @@ class InspectSemantics {
   /// `InspectTree.entryId`: a tree naming another entry is a read from before
   /// the switch, not an empty one.
   ///
-  /// **Null until the guest has a tree to report.** Enabling semantics takes
+  /// Null until the guest has a tree to report. Enabling semantics takes
   /// a frame, so the extension withholds the entry id rather than settling a
   /// poll on "nothing yet" — an absence with a name would read as the answer.
   final String? entryId;

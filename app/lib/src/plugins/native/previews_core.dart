@@ -53,7 +53,7 @@ const uiCatalogPluginId = 'flutterware.previews';
 const webBuildActionId = 'build-web';
 
 /// A package's busy line while the tester host works, or null when the host
-/// has nothing left for anybody to wait on.
+/// has nothing left to wait on.
 ///
 /// The rail's register, not the log's: lower case and trailing, so it sits in
 /// the column beside `scanning…` and `rendering the catalog…` rather than
@@ -191,7 +191,7 @@ const _liveDoc =
 
 /// Previews' entries, per declared package — everything but the panel.
 ///
-/// Two tiers, and the split is the point. The **scan** parses a package's demos
+/// Two tiers, and the split matters. The **scan** parses a package's demos
 /// in ~38ms and touches no compiler, so `fw` and an agent read the entry list
 /// without building anything. **Screenshots** run the real pipeline headlessly
 /// — `HeadlessCatalog` needs no Flutter, which is what lets the button, `fw`
@@ -223,8 +223,8 @@ class PreviewsCore extends PluginCore {
 
   /// The tester the audit renders in, kept per package and kept **warm**.
   ///
-  /// That warmth is the whole point of holding it here rather than building one
-  /// per call: the first audit pays a compile and a tester launch, and every
+  /// That warmth is why it is held here rather than built once per call: the
+  /// first audit pays a compile and a tester launch, and every
   /// one after it pays an incremental compile of what was edited. Disposed with
   /// the plugin — see [dispose] — because a `flutter_tester` is a child process
   /// and nothing else reaps it.
@@ -293,9 +293,9 @@ class PreviewsCore extends PluginCore {
   /// annotation on something that cannot be an entry.
   ///
   /// Public for the panel's empty state, which is the one place these matter
-  /// most: with no entries to show, a diagnostic is the whole explanation of
-  /// why, and without it the screen says "you have written none" to somebody
-  /// who has.
+  /// most: with no entries to show, a diagnostic is the only explanation of
+  /// why, and without it the screen claims none were written when some
+  /// were.
   List<ScanDiagnostic> diagnosticsFor(String path) =>
       _scans[path]?.diagnostics ?? const [];
 
@@ -361,8 +361,8 @@ class PreviewsCore extends PluginCore {
     unawaited(_scan(path));
   }
 
-  /// Releases [path]. The scan stays — demand says what work is justified, not
-  /// what must be discarded.
+  /// Releases [path]. The scan stays — demand decides what work is justified,
+  /// not what has to be discarded.
   void untrack(String path) {}
 
   /// Scans every declared package and waits — what `fw` does for the duration
@@ -441,10 +441,10 @@ class PreviewsCore extends PluginCore {
     return root.isEmpty ? defaultAuthoringDirectory : root;
   }
 
-  /// What [path]'s previews are framed as when nobody names a device, or null
+  /// What [path]'s previews are framed as when no device is named, or null
   /// for the plain rectangle.
   ///
-  /// **One answer for every surface**, which is the whole of the fix: the panel
+  /// One answer for every surface, which is the fix: the panel
   /// canvas, `screenshot`, `inspect` and `compare` each took `device`
   /// separately, so a project that is all phones had to repeat itself into
   /// every call site and CI invocation — and the one that forgot rendered at
@@ -476,7 +476,7 @@ class PreviewsCore extends PluginCore {
   /// What [path] declares its subtrees are framed as, longest prefix last to
   /// matter and `canvasFor` deciding between them.
   ///
-  /// **`device:` is desugared here**, into the canvas with no prefix — so there
+  /// `device:` is desugared here, into the canvas with no prefix — so there
   /// is one mechanism underneath rather than a per-package default *and* a set
   /// of per-subtree ones with a precedence rule between them. A package that
   /// declares both gets the explicit whole-package canvas: it is the more
@@ -526,7 +526,7 @@ class PreviewsCore extends PluginCore {
 
   /// What the scan says about [path], before anything is compiled.
   ///
-  /// **The gate on the compile loop.** A package with no entries used to reach
+  /// The gate on the compile loop. A package with no entries used to reach
   /// the daemon anyway: it bound a socket, scanned the same directory in 1ms,
   /// refused, and exited before the client's first poll — which then ran to its
   /// 30-second deadline and reported that the daemon "never started listening".
@@ -1514,7 +1514,7 @@ class PreviewsCore extends PluginCore {
 
   /// Every entry, in scan order, with the address that identifies each one.
   ///
-  /// **Scans if nothing has.** A report may never start work; an action asked
+  /// Scans if nothing has. A report may never start work; an action asked
   /// for by name may, and here must — `fw` and MCP open a session per request
   /// and hold nothing between them, so a query that only read the cache would
   /// answer "no entries" every time.
@@ -1853,7 +1853,7 @@ class PreviewsCore extends PluginCore {
   /// daemon.
   ///
   /// One daemon at a time rather than all at once: each package's daemon may
-  /// have to build a host binary, and two cold builds racing helps nobody. A
+  /// have to build a host binary, and two cold builds racing helps neither. A
   /// package that cannot be checked reports why in its own row instead of
   /// sinking the others.
   Future<CatalogCheckResult> _check(Map<String, Object?> arguments) async {
@@ -2148,8 +2148,8 @@ class PreviewsCore extends PluginCore {
 
   /// One rendered build, and every projection of it that was asked for.
   ///
-  /// **This replaced `tree`, `find`, `at` and `errors`, and the argument was
-  /// never mainly about tidiness.** They had the same inputs, the same
+  /// This replaced `tree`, `find`, `at` and `errors`, and the argument was
+  /// never mainly about tidiness. They had the same inputs, the same
   /// precondition — the entry must be rendered first — and each paid a full
   /// compile, guest launch and render to answer one question about a frame the
   /// others also had to produce. Three questions was three renders. For an
@@ -2166,7 +2166,7 @@ class PreviewsCore extends PluginCore {
   /// every projection comes off it, and the assumption is gone rather than
   /// merely reliable.
   ///
-  /// **No flags is the "is it OK" answer** — render, report what the framework
+  /// No flags is the "is it OK" answer — render, report what the framework
   /// said, nothing else. Everything heavier is opt-in, which is what the token
   /// measurements in the prior design already concluded: summary always,
   /// details on request, `find` before `tree`.
@@ -2532,7 +2532,7 @@ class PreviewsCore extends PluginCore {
   /// this package; the published handle will not connect, in which case it is
   /// deleted on the way past; or the session is showing a different entry.
   ///
-  /// **It never switches the guest**, which is the whole safety property. This
+  /// It never switches the guest, which is the whole safety property. This
   /// reads what is on screen or it declines — it does not put something on
   /// screen. A person watching their own window sees nothing happen.
   ///
@@ -2907,7 +2907,7 @@ PluginCore uiCatalogCoreFactory(PluginHost host) => PreviewsCore(host);
 
 /// What one `inspect` call asked for, read and checked once.
 ///
-/// **Its own type because the handler had fifteen locals**, and a function that
+/// Its own type because the handler had fifteen locals, and a function that
 /// parses arguments, chooses a source and projects a result in one breath is a
 /// function nobody can review — which is how `--debug` came to be declared and
 /// passed nowhere.
@@ -3026,7 +3026,7 @@ class _InspectRequest {
   final bool picture;
 
   /// The screen — what is on it, what can be acted on, how it is laid out.
-  /// **On by default**, and the reason a no-flag `inspect` now says what
+  /// On by default, and the reason a no-flag `inspect` now says what
   /// rendered rather than only that something did.
   final bool screen;
 
@@ -3057,7 +3057,7 @@ class _InspectRequest {
   final Map<String, String> axes;
   final Map<String, String> debug;
 
-  /// Whether this call may read a window somebody has open — decided here so
+  /// Whether this call may read an already-open window — decided here so
   /// that the reasons sit beside the flags they are about.
   final bool mayAttach;
 }

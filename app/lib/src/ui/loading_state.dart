@@ -6,12 +6,12 @@ import 'design/design.dart';
 /// a muted spinner, a [title] and an optional [message]. The load arm of the
 /// load → empty/error triad, alongside [EmptyState].
 ///
-/// **It is deliberately the same anatomy as [EmptyState]** — same 32px slot,
+/// It is deliberately the same anatomy as [EmptyState] — same 32px slot,
 /// same gaps, same two lines of type — so a panel that loads and then finds
 /// nothing does not move its own words around as it settles. The two states are
 /// the same sentence in two tenses, and they should look it.
 ///
-/// The size is the point. A bare `CircularProgressIndicator` in a panel-sized
+/// The size matters. A bare `CircularProgressIndicator` in a panel-sized
 /// field renders as a small dot floating in white with nothing to say — which
 /// is what the previews panel showed for the several seconds it takes to build
 /// a guest and compile an entry. A spinner the size of an icon, with a line of
@@ -24,9 +24,9 @@ class LoadingState extends StatelessWidget {
     this.minHeight = 160,
   });
 
-  /// What is being waited for, in the panel's own words. The default is the
-  /// honest fallback, not the target — "Building the guest" beats "Loading…"
-  /// every time, because only one of them tells you whether to keep waiting.
+  /// What is being waited for, in the panel's own words. The default is a
+  /// fallback rather than the target — "Building the guest" beats "Loading…",
+  /// because only one of them tells you whether to keep waiting.
   final String title;
 
   /// A second line: why it takes as long as it does, or what happens next.

@@ -14,7 +14,7 @@ import 'facts.dart';
 
 /// One worktree in the explorer.
 ///
-/// **Two lines: line 1 is the answer, line 2 is the evidence.** Every line-2
+/// Two lines: line 1 is the answer, line 2 is the evidence. Every line-2
 /// item explains the line-1 item directly above it, which is the rule that keeps
 /// six cells in 52 pixels from reading as a wall.
 ///
@@ -59,7 +59,7 @@ class WorktreeRow extends StatefulWidget {
   /// The checkout's directory, for the detail. Null in a demo that has none.
   final String? path;
 
-  /// **Tapping the row expands it; it does not open the worktree.**
+  /// Tapping the row expands it; it does not open the worktree.
   ///
   /// Opening costs a config subprocess and a tab, and the whole premise of this
   /// screen is that you can decide *before* spending that. A row that opened on
@@ -80,7 +80,7 @@ class WorktreeRow extends StatefulWidget {
 
   /// Whether these columns are drawn at all.
   ///
-  /// **Decided across the list, not per row** — otherwise the cells stop lining
+  /// Decided across the list, not per row — otherwise the cells stop lining
   /// up, which is the one thing a table has to do. A column no row can fill is
   /// 150 pixels of dashes: it is what a repo with no agents looks like, what a
   /// machine with no `gh` looks like, and what an agent format that stopped
@@ -174,7 +174,7 @@ const _nameMinWidth = 220.0;
 
 /// Which optional columns fit, given how much room the row actually has.
 ///
-/// **The row has to survive a narrow window, and it did not.** The fixed
+/// The row has to survive a narrow window, and it did not. The fixed
 /// columns come to 758px before the name gets anything, so at an 800px window
 /// the name cell was squeezed to 42 — and a name cell that narrow cannot hold
 /// its own trailing marker. The label ellipsised to nothing, as it should, but
@@ -379,8 +379,8 @@ class _Lines extends StatelessWidget {
   final Widget? top;
   final Widget? bottom;
 
-  /// A stale value is shown, not hidden — dimmed, and never replaced by a
-  /// spinner. One "Refreshing…" in the header is the whole progress story.
+  /// A stale value is shown rather than hidden — dimmed, and never replaced by
+  /// a spinner. One "Refreshing…" in the header covers the progress.
   final bool dim;
 
   final bool padded;
@@ -440,8 +440,8 @@ class _Nothing extends StatelessWidget {
   }
 }
 
-/// A probe that broke. Never a red row — a probe failing is our problem, not
-/// the worktree's.
+/// A probe that broke. Never a red row — a failing probe is a flutterware
+/// problem rather than a worktree problem.
 class _Broken extends StatelessWidget {
   const _Broken(this.failure);
 
@@ -652,7 +652,8 @@ class _ChangesCell extends StatelessWidget {
 }
 
 /// Uncommitted work. A different question from branch size, so a different
-/// mark — this one is about what you would lose, not about what you changed.
+/// mark — this one is about what you would lose rather than what you
+/// changed.
 class _Dirty extends StatelessWidget {
   const _Dirty(this.count);
 
@@ -681,11 +682,11 @@ class _Dirty extends StatelessWidget {
 
 /// Proportion in the bar, meaning in the text beside it.
 ///
-/// **No hue.** A colour per directory is not comparable row to row without a
+/// No hue. A colour per directory is not comparable row to row without a
 /// hover, which makes it decoration; the luminance ramp already in the palette
 /// orders the buckets, and the two dominant names are spelled out next to it.
 ///
-/// **Shared scale.** Width tracks the branch's size relative to the busiest row
+/// Shared scale. Width tracks the branch's size relative to the busiest row
 /// on screen, which is the whole reason the bar exists — "that one is big, this
 /// one is a typo fix", read straight down the column. Square-rooted so a
 /// 2,000-line branch does not render every other row as a stub.
@@ -761,7 +762,7 @@ class _Fingerprint extends StatelessWidget {
 
 /// What this checkout's dev stack was last seen doing.
 ///
-/// **The answer to "which of my worktrees is holding the port block".** That is
+/// The answer to "which of my worktrees is holding the port block". That is
 /// the question the whole per-worktree port allocation exists to create, and
 /// until this column existed the only way to answer it was to open eight
 /// checkouts one at a time.
@@ -770,9 +771,9 @@ class _Fingerprint extends StatelessWidget {
 /// the state is the only thing that fits. The reasons, the services and the
 /// controls are two clicks away on the worktree's own screen.
 ///
-/// **Everything here is a cached reading** — see `providers/stack.dart`. So the
-/// age is not decoration: a stale cell means *nobody has looked recently*, not
-/// *this is what is true now*, and it dims to say so.
+/// Everything here is a cached reading — see `providers/stack.dart`. So the
+/// age is not decoration: a stale cell means *nothing has looked recently*
+/// rather than *this is what is true now*, and it dims to show that.
 class _StackCell extends StatelessWidget {
   const _StackCell({required this.fact, required this.now});
 
@@ -991,8 +992,8 @@ class _PrCell extends StatelessWidget {
 
 /// The relative time, and which clock it came from.
 ///
-/// The attribution is the point. "4m" that silently means a commit on one row
-/// and an agent message on the next is worse than no time at all.
+/// The attribution matters. "4m" that silently means a commit on one row and an
+/// agent message on the next is worse than no time at all.
 class _WhenCell extends StatelessWidget {
   const _WhenCell({required this.fact, required this.now});
 

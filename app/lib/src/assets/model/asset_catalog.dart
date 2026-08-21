@@ -11,7 +11,7 @@ import 'package:yaml/yaml.dart';
 /// an asset: **what will `Image.asset('…')` find at run time**, which is not the
 /// same question as what is on disk.
 ///
-/// **Two consumers, and that is the point.** `AssetBundleBuilder` turns this
+/// Two consumers, and that is the point. `AssetBundleBuilder` turns this
 /// into the manifests the embedder guest reads; the asset inspector turns it
 /// into what the panel, `fw` and MCP show. A second implementation would be a
 /// second set of answers to "does this key resolve", and the one the user reads
@@ -75,7 +75,7 @@ class AssetCatalog {
   /// Resolves the bundle for [rootPackageRoot] — its own assets, plus those of
   /// every package it actually depends on.
   ///
-  /// **Depends on, not "is in the package config".** A config resolves imports,
+  /// Depends on, not "is in the package config". A config resolves imports,
   /// and in a pub workspace it resolves them for every member at once, so
   /// walking it would put a sibling app's assets in this app's bundle. It would
   /// pull in dev-dependencies too. `flutter_tools` filters the same way and

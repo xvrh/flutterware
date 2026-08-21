@@ -1,7 +1,7 @@
 /// The transport-free half of the inspector: the ring, the channels, the
 /// command handlers, the detail store and the attach handshake.
 ///
-/// **No `dart:io`, and that is the point.** Everything an inspected process
+/// No `dart:io`, and that is the point. Everything an inspected process
 /// does for an attacher — keep the last N events per channel, replay them to
 /// whoever attaches, correlate, hold bodies aside until someone asks, run a
 /// command where the data is — is the same whether the peer arrived over a
@@ -48,8 +48,8 @@ abstract class InspectorPeer {
 
 /// [map], with anything `jsonEncode` would refuse replaced by its own text.
 ///
-/// **Reporting is not allowed to fail, and an unencodable value used to take
-/// the whole attachment down.** [InspectorCore.send] treats a throw as "this
+/// Reporting is not allowed to fail, and an unencodable value used to take
+/// the whole attachment down. [InspectorCore.send] treats a throw as "this
 /// peer is gone", which is right for a dead socket and wrong for a `DateTime`
 /// in a bound parameter: the encode threw on the way to a perfectly healthy
 /// peer and the peer was destroyed for it. Worse, the event stayed in the ring,
@@ -234,8 +234,8 @@ class InspectorCore {
   /// Forgets a channel's handlers — what a panel being torn down means.
   ///
   /// The ring is left alone: the events happened, and a history that vanished
-  /// because the thing reporting it unmounted would be a worse answer than one
-  /// nobody can query any more.
+  /// because the thing reporting it unmounted would be worse than one that is
+  /// merely no longer queryable.
   void unregisterHandlers(String channel) => _handlers.remove(channel);
 
   /// Dispatches one decoded frame from [peer]. Anything that is not a

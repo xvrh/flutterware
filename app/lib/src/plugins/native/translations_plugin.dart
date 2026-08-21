@@ -32,7 +32,7 @@ export 'translations_core.dart' show TranslationsCore, translationsPluginId;
 /// is a coverage number rather than a worklist. What survived is two filters
 /// over the same rows, which is why this panel has no tabs.
 ///
-/// **It is useful before anything has run.** The catalog files fill every
+/// It is useful before anything has run. The catalog files fill every
 /// column but the picture, so the first open shows the whole product's strings
 /// and which languages are behind — and the export becomes something you
 /// choose rather than a toll you pay before the tab does anything.
@@ -348,9 +348,9 @@ class _Strip extends StatelessWidget {
 ///
 /// Same anatomy as the scenario panel's Run button: the primary segment runs
 /// with whatever is ticked, the arrow holds the rare toggle. The label says
-/// which export a click buys — a primary that silently measures (or silently
-/// stops measuring) would make the button's cost and result both a surprise,
-/// and measuring is minutes where plain export is seconds.
+/// which export a click will run — a primary that silently measures (or
+/// silently stops measuring) would make both the cost and the result a
+/// surprise, and measuring takes minutes where plain export takes seconds.
 class _ExportSplitButton extends StatelessWidget {
   const _ExportSplitButton({
     required this.measure,
@@ -604,7 +604,7 @@ class _Filters extends StatelessWidget {
 
 /// The filter row's search box.
 ///
-/// **Every border state is cleared, not just `border`.** The app's theme sets
+/// Every border state is cleared, not just `border`. The app's theme sets
 /// `enabledBorder` and `focusedBorder` in its `inputDecorationTheme`, and those
 /// win over `border` — so a field asked politely for no border still drew one
 /// inside the box around it, and lit it blue on focus. Two borders, one of them
@@ -906,8 +906,8 @@ class _List extends StatelessWidget {
   final String directory;
   final String? selected;
 
-  /// **The picture column is what the export adds, so before one there is no
-  /// column.** Fourteen identical "no picture" boxes are a wall that says
+  /// The picture column is what the export adds, so before one there is no
+  /// column. Fourteen identical "no picture" boxes are a wall that says
   /// exactly what the banner above already said, and they push the words a
   /// person came to read off to the right.
   final bool exported;
@@ -1154,7 +1154,7 @@ class _Value extends StatelessWidget {
 /// The string where it actually rendered — the only thing on the row that
 /// shows a user's view of it.
 ///
-/// **A crop, and only here.** The export ships whole frames because that is
+/// A crop, and only here. The export ships whole frames because that is
 /// what a translation service takes; a row is 44 pixels tall and a whole phone
 /// in it is a smudge. Same rectangle, two renderings.
 class _InPlace extends StatelessWidget {

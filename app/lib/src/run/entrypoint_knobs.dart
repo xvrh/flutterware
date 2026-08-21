@@ -19,7 +19,7 @@ class EntrypointKnobs {
   });
 
   /// One per optional parameter, in signature order — which is the order the
-  /// form renders, and the order somebody chose when they wrote it.
+  /// form renders, and the order the signature was written in.
   final List<ParameterKnob> knobs;
 
   /// The entry point's own imports, as the generated wrapper must write them —
@@ -34,7 +34,7 @@ class EntrypointKnobs {
   /// sentence saying why — a verb phrase whose subject is the parameter, so a
   /// surface can put it after the name it is already showing.
   ///
-  /// **Keyed by name, because the name is what a surface has.** This was a list
+  /// Keyed by name, because the name is what a surface has. This was a list
   /// of prose that nothing read, so the accurate reason was computed and thrown
   /// away twice over: a control went missing with nothing to explain it, and a
   /// knob declared for one of these was reported as a parameter `main` does not
@@ -44,8 +44,8 @@ class EntrypointKnobs {
 
   /// Named parameters `main` declares `required`, which make it unlaunchable.
   ///
-  /// **Not knobs, and not skippable either.** A knob is optional by definition:
-  /// the wrapper writes the ones somebody set and leaves the rest to their
+  /// Not knobs, and not skippable either. A knob is optional by definition:
+  /// the wrapper writes the ones that were set and leaves the rest to their
   /// defaults, and a parameter with no default has none to leave it to. Nothing
   /// here can invent a value, so the launch is refused by name.
   ///
@@ -60,7 +60,7 @@ class EntrypointKnobs {
 /// Reads [entrypoint]'s `main` — names, types, defaults, and the imports a
 /// wrapper calling it will need.
 ///
-/// **Parsed, never resolved.** The same posture as the catalog scanner, and for
+/// Parsed, never resolved. The same posture as the catalog scanner, and for
 /// the measured reason: resolving one unit of a real project costs 17.3s
 /// against 478ms to parse the whole package (`CatalogScanner`), and 5.5s on an
 /// entry point that imports Flutter (`2026-08-12-run-knobs-design.md` § E4).

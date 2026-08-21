@@ -70,10 +70,10 @@ List<String> runCommand({
   ],
 ];
 
-/// Starts `flutter run --machine` as a process nobody is waiting on, and
-/// announces it in the run dir.
+/// Starts `flutter run --machine` as a detached process, and announces it in
+/// the run dir.
 ///
-/// **Detached, with its output going to a file.** Detached because the thing
+/// Detached, with its output going to a file. Detached because the thing
 /// that launched an app must not be the thing that keeps it alive: a `fw
 /// launch` returns, a GUI window closes, and the phone keeps running the app.
 /// To a file because the `--machine` stream carries the build progress and the
@@ -81,9 +81,9 @@ List<String> runCommand({
 /// scrolled past still has to be able to read them — which is also what makes
 /// the handle self-healing (see [refreshFromLog]).
 ///
-/// The child owns the port forward, so on hardware it is a process nobody
-/// waits on and everybody depends on. Its death is detected rather than
-/// prevented: see [RunProbe].
+/// The child owns the port forward, so on hardware nothing waits on it and
+/// everything depends on it. Its death is detected rather than prevented: see
+/// [RunProbe].
 Future<RunHandle> launchApp({
   required FlutterSdkPath sdk,
   required String runDir,
@@ -253,7 +253,7 @@ class LaunchLog {
 
   /// Every plain line since the last structured event, in order.
   ///
-  /// **A build failure's last line is its least useful one.** Measured, an iOS
+  /// A build failure's last line is its least useful one. Measured, an iOS
   /// signing failure ends `App failed to start` — and the reason, `No Account
   /// for Team "B7V224LKE4"`, is twenty lines above it, along with the four
   /// steps that fix it. [output] alone reported the summary and threw the cause
@@ -381,7 +381,7 @@ class LaunchLog {
   /// The trailing plain lines, minus the blank ones a terminal used for
   /// spacing, capped so a runaway build log cannot become the error message.
   ///
-  /// **The head, not the tail.** A tool states the fault first and summarises
+  /// The head, not the tail. A tool states the fault first and summarises
   /// last — `Failed to build iOS app`, then the Xcode error, then the steps,
   /// then `App failed to start`. Keeping the last N would throw away the cause
   /// and keep the summary, which is the exact bug this block exists to fix. The
@@ -411,7 +411,7 @@ class LaunchLog {
 
 /// A run that ended before it ever started, kept after its handle is gone.
 ///
-/// **The handle has to go and the reason has to stay.** A launcher that never
+/// The handle has to go and the reason has to stay. A launcher that never
 /// came up is not holding the device, so leaving its handle in the ledger would
 /// tell the next person a phone is busy running something that is not there —
 /// which is why both the sweeper and a failed `launch` delete it. But that
@@ -419,12 +419,13 @@ class LaunchLog {
 /// with nothing said. This is what stands in its place — a rail row in red, and
 /// a page with the launcher's own words on it.
 ///
-/// **A file beside the log, not memory.** It was memory first, and moving the
+/// A file beside the log rather than memory. It was memory first, and moving the
 /// run list into the rail proved that wrong within the hour: a launch that
 /// failed under `fw` was invisible to the GUI and to the next `fw`, so the list
 /// it had just been promoted into was the one place it could not appear. Every
 /// other fact about a run in this plugin is a file for exactly that reason —
-/// nobody coordinates, and the process that asks is rarely the one that knows.
+/// there is no coordinator, and the process that asks is rarely the one that
+/// knows.
 ///
 /// Named `<key>.failed`, which is the convention the daemon library already
 /// uses in this directory, so the run dir's sweeper ages one out with the log
@@ -499,9 +500,9 @@ class RunFailure {
     'at': at.toUtc().toIso8601String(),
   };
 
-  /// Writes `<key>.failed` beside the log. Best effort: a failure nobody can
-  /// record is still a failure, and throwing here would replace a legible
-  /// build error with a file-system one.
+  /// Writes `<key>.failed` beside the log. Best effort: an unrecorded failure
+  /// is still a failure, and throwing here would replace a legible build error
+  /// with a file-system one.
   void write(String runDir) {
     try {
       Directory(runDir).createSync(recursive: true);
@@ -513,7 +514,7 @@ class RunFailure {
     }
   }
 
-  /// Forgets it, for when somebody has read it.
+  /// Forgets it, once it has been read.
   static void forget(String runDir, String key) {
     try {
       File(p.join(runDir, '$key.failed')).deleteSync();
@@ -551,7 +552,7 @@ class RunFailure {
 
 /// The `*.failed` records in [runDir], newest first.
 ///
-/// **Reads files and nothing else**, so [PluginCore.computeAll] may call it.
+/// Reads files and nothing else, so [PluginCore.computeAll] may call it.
 /// Anything older than [maxAge] is skipped but *not* deleted: deleting is the
 /// run dir's sweeper's job, which already ages `<key>.failed` out on the same
 /// rule as the log it belongs to. A scan that quietly wrote would be a scan
@@ -654,7 +655,7 @@ Future<(RunHandle, LaunchLog)> awaitLaunch(
 
 /// Reads [handle]'s log once its launcher has stopped adding to it.
 ///
-/// **A launcher is not finished talking when it says it stopped.** `app.stop`
+/// A launcher is not finished talking when it says it stopped. `app.stop`
 /// arrives *before* the tool prints why — measured on an iOS signing failure,
 /// where everything that explains it comes after that event. Returning at the
 /// event caught the log mid-sentence, and worse, caught the launcher still

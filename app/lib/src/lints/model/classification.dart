@@ -11,7 +11,7 @@ enum LintBucket {
   /// Explicitly `false` (or severity `ignore`) somewhere, on nowhere.
   dismissed,
 
-  /// Mentioned only in a comment — someone looked, nobody committed.
+  /// Mentioned only in a comment — considered, never enabled.
   mentioned,
 
   /// In the SDK's rule set for this project, mentioned nowhere. The panel's

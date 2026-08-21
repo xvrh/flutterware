@@ -5,13 +5,13 @@
 /// this one is a number and a cross where everything interesting is a glyph or
 /// a pixel. `demos/zoom_control.dart` renders it in every state it takes.
 ///
-/// **Where it sits says what it is.** The bar's own rule is that the device
+/// Where it sits says what it is. The bar's own rule is that the device
 /// capsule and the axis strip say what the guest *is*, and everything right of
 /// the strip acts on the picture. Magnification acts on the picture — it
 /// changes nothing the demo can see, not its size, not its layout — so it
 /// belongs beside the capture button and not beside the phone.
 ///
-/// **A readout that is also the way out**, rather than a readout beside a
+/// A readout that is also the way out, rather than a readout beside a
 /// button: the number is the only thing worth showing at rest, and at rest it
 /// is dim and does nothing. There is no third state where you want to know the
 /// magnification but not be able to leave it.
@@ -25,11 +25,11 @@ import 'stage_zoom.dart';
 
 /// Frame-the-selection and the scale readout, sharing one border.
 ///
-/// **Nothing here is ever hidden**, which is the rule the device capsule
+/// Nothing here is ever hidden, which is the rule the device capsule
 /// already follows: a segment goes dim rather than absent, so magnifying does
 /// not reflow the bar under the pointer that was about to click something else.
 ///
-/// **Values and callbacks, not the session**, so it can be one: a control that
+/// Values and callbacks, not the session, so it can be one: a control that
 /// needed a `CatalogSession` would need a guest, a compiler and a daemon to
 /// render, which is the same as saying it could never be looked at except by
 /// reloading the whole studio and squinting at a corner of the bar. Two
@@ -47,7 +47,7 @@ class ZoomControl extends StatelessWidget {
 
   /// Whether the stage is life-size *and* centred.
   ///
-  /// **Not `scale == 1`**, which is what this asked before and is a way to be
+  /// Not `scale == 1`, which is what this asked before and is a way to be
   /// stuck: a stage can sit at life-size and translated, and a control that
   /// went dim there is a control that refuses to undo the only thing left to
   /// undo.
@@ -102,7 +102,7 @@ class ZoomControl extends StatelessWidget {
 
 /// The magnification as it is written on the bar.
 ///
-/// **Fewer digits as it grows**, because the digits stop meaning anything: at
+/// Fewer digits as it grows, because the digits stop meaning anything: at
 /// 1.4× a tenth is a visible difference and at 37× it is not, and a readout
 /// that keeps two decimals through a pinch is a column of noise flickering in
 /// the corner of the screen. The widths are stable enough not to shove the

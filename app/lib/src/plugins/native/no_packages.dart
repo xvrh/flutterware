@@ -4,7 +4,7 @@ import '../../ui/empty_state.dart';
 
 /// What a plugin panel shows when the project declares no packages for it.
 ///
-/// **Six panels say this, and said it six times.** Assets, Dependencies,
+/// Six panels say this, and said it six times. Assets, Dependencies,
 /// Launcher icon, Motion, Scenarios and Splash screen each carried their own
 /// copy of the same two sentences, and the copies had already begun to drift:
 /// four styled the text with `context.type.bodyMuted` and two with

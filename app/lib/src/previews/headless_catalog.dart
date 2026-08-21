@@ -101,10 +101,10 @@ class HeadlessCatalog {
 
   /// N frames of one entry's motion, as one contact sheet.
   ///
-  /// **One guest, N seeks.** Calling [capture] in a loop would compile, launch
-  /// and tear down a guest per frame, which is most of the cost and all of the
-  /// wall clock — the seek itself is a frame. This is the whole reason the
-  /// filmstrip is a method here rather than a loop in the caller.
+  /// One guest, N seeks. Calling [capture] in a loop would compile, launch and
+  /// tear down a guest per frame, which is most of the cost and all of the wall
+  /// clock — the seek itself is a frame. That is why the filmstrip is a method
+  /// here rather than a loop in the caller.
   Future<CatalogFilmstrip> filmstrip({
     required String entryId,
     required String output,
@@ -367,7 +367,7 @@ class HeadlessCatalog {
 /// What `--node` and `--annotate` mean against one tree: a rect to crop to, and
 /// the boxes to draw.
 ///
-/// **One implementation, because there were briefly two.** `observe` was written
+/// One implementation, because there were briefly two. `observe` was written
 /// with a copy of `capture`'s version — the same lookup, the same two error
 /// messages, byte for byte — which is precisely the drift that produced every
 /// other defect this file carries a note about: `settledAxes` beside
@@ -407,7 +407,7 @@ class _Framing {
   /// Matched by [InspectTree.matching], which is the same matcher `find` uses,
   /// so one grammar covers looking something up and cropping to it.
   ///
-  /// **Several matches are refused, never guessed.** A silently-picked first
+  /// Several matches are refused, never guessed. A silently-picked first
   /// match is a picture of the wrong widget that looks like a picture of the
   /// right one, and the refusal carries the ids so the next call is exact.
   static InspectLayout _cropTo(
@@ -465,10 +465,10 @@ class _Framing {
   final List<InspectNode> boxes;
 }
 
-/// One rendered build, and everything anybody asked about it.
+/// One rendered build, and everything the call asked about it.
 ///
 /// Nullable per section rather than empty-per-section, and the distinction is
-/// load-bearing: null means **nobody asked**, empty means *asked and there is
+/// load-bearing: null means *not asked for*, empty means *asked and there is
 /// nothing*. A demo that printed nothing and a demo whose logs were not
 /// requested are different answers, and a caller that could not tell them apart
 /// would read the second as the first.
@@ -576,8 +576,8 @@ class CatalogCheck {
 
 /// What a settle counts as quiet, across every entry one guest renders.
 ///
-/// **`pendingImageCount` is the whole cache's, and the guest outlives every
-/// entry rendered against it.** One demo asking for an image that never
+/// `pendingImageCount` is the whole cache's, and the guest outlives every
+/// entry rendered against it. One demo asking for an image that never
 /// resolves — a missing asset, a provider that neither completes nor errors —
 /// leaves the count above zero for the life of the process. A rule that waits
 /// for zero then waits the *full deadline on every entry after it*, including
@@ -593,7 +593,7 @@ class CatalogCheck {
 /// it drops back the moment a settle sees a clean cache, so a stuck completer
 /// that is later evicted does not leave it raised behind it.
 ///
-/// **Images only.** `transientCallbackCount` is tied to mounted tickers and an
+/// Images only. `transientCallbackCount` is tied to mounted tickers and an
 /// entry switch remounts, so it returns to zero on its own; giving an
 /// animation the same allowance would report a demo that genuinely never stops
 /// moving as a settled picture, which is the one thing the count is read for.
@@ -805,7 +805,7 @@ class _GuestSession {
 
   /// What [entryId] declares, once the guest has actually built it.
   ///
-  /// **Renders a frame first, and throws it away.** A knob is declared while
+  /// Renders a frame first, and throws it away. A knob is declared while
   /// the demo builds, and a headless host draws nothing until a frame is asked
   /// for — so without this the answer is always "no knobs". The panel never
   /// meets this because it drives frames continuously; measured here by
@@ -848,9 +848,9 @@ class _GuestSession {
 
   /// The node ids under a point of [tree].
   ///
-  /// Takes the tree rather than reading one, which is the whole point: an id
-  /// names a position in a particular tree, so a hit resolved against a second
-  /// reading answers about a tree the caller was never shown.
+  /// Takes the tree rather than reading one, deliberately: an id names a
+  /// position in a particular tree, so a hit resolved against a second reading
+  /// answers about a tree the caller was never shown.
   Future<List<String>> readHitTest(
     InspectTree tree,
     double x,
@@ -956,7 +956,7 @@ class _GuestSession {
 
   /// Sets the framework's debug switches, once the guest can hear them.
   ///
-  /// **Renders a frame first**, and it is not the usual reason. Knobs and the
+  /// Renders a frame first, and it is not the usual reason. Knobs and the
   /// tree need a frame because a demo declares them by building; these are
   /// registered by the binding whether anything builds or not — but the *VM
   /// service* learns about them asynchronously, and a call that lands between
@@ -1011,10 +1011,10 @@ class _GuestSession {
     );
   }
 
-  /// Draws one frame nobody looks at, so the demo has built.
+  /// Draws one throwaway frame, so the demo has built.
   ///
-  /// **Separated from the reads because there were seven of these per
-  /// observation.** Every `settled*` rendered its own, which was right when each
+  /// Separated from the reads because there were seven of these per
+  /// observation. Every `settled*` rendered its own, which was right when each
   /// was a standalone call and wrong the moment one call wanted five answers:
   /// `observe` drew a frame per projection, and `settledHitTest` drew *another*
   /// tree to resolve against — so the ids on an annotated screenshot matched the
@@ -1124,7 +1124,7 @@ class _GuestSession {
   /// what starts the loads on a fresh guest and paints whatever has been
   /// delivered since; see [GuestImages].
   ///
-  /// Zero **twice in a row**, because one asynchronous hop can separate a
+  /// Zero twice in a row, because one asynchronous hop can separate a
   /// build from the `Image` it creates — a `FutureBuilder` over
   /// `rootBundle.load` reads zero pending while its future is still in flight,
   /// and by the next frame the image it built is either delivered or counted.
@@ -1133,8 +1133,8 @@ class _GuestSession {
   /// slightly-early picture, the same trade [SettleRegistry] makes for busy
   /// plugins.
   ///
-  /// [GuestVmService.requireExtension] rather than the tolerant form, and the
-  /// distinction is this bug's whole history: the first capture of a fresh
+  /// [GuestVmService.requireExtension] rather than the tolerant form, which is
+  /// this bug's whole history: the first capture of a fresh
   /// guest lands before `main` has registered anything, and a call that treats
   /// "not registered yet" as "no answer needed" skips the wait on exactly the
   /// capture most likely to race the decode — intermittently, which is how the

@@ -186,7 +186,7 @@ class PubDevPackage {
 
 /// Fetches [PubDevPackage]s, with an on-disk cache.
 ///
-/// **Never throws for a network problem.** A detail page that failed to load
+/// Never throws for a network problem. A detail page that failed to load
 /// because pub.dev was unreachable would be worse than one missing its download
 /// count: everything else on it comes from disk and is still true. A failed
 /// fetch returns the cached copy if there is one, and null otherwise.

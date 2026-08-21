@@ -8,7 +8,7 @@ import 'package:flutterware/src/ui_catalog/keyboard.dart';
 
 /// The two signals and what is done with them.
 ///
-/// **The whole feasibility of the feature is the first group.** The framework
+/// The whole feasibility of the feature is the first group. The framework
 /// already computes when a phone would raise its keyboard and hands it to
 /// whatever [TextInputControl] is installed — so this asserts the traffic
 /// rather than a heuristic, and a Flutter upgrade that moved the rule would

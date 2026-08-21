@@ -10,11 +10,11 @@ import 'theme.dart';
 ///
 /// A click on the primary part runs [onPressed], the chevron opens a standard
 /// [Menu] of [entries] — the same rows as every other dropdown in the app. For
-/// the bar whose one frequent action deserves the room and whose variants do
-/// not: hot reload over hot restart, copy over save-as.
+/// the bar with one frequent action worth the room and variants that are not:
+/// hot reload over hot restart, copy over save-as.
 ///
 /// Two shapes: the default is a bordered capsule with a labelled primary, for
-/// a header where the action is the point of the row; [FwSplitButton.icon] is
+/// a header where the action is the subject of the row; [FwSplitButton.icon] is
 /// two bare icons, for a toolbar where the whole affordance is a glyph.
 ///
 /// A null [onPressed] disables the primary segment; the chevron follows the

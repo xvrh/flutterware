@@ -246,7 +246,7 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
 
   /// Keeps the list pane honest about a suite that changes under it.
   ///
-  /// **The scan is otherwise one-shot for the life of the worktree session.**
+  /// The scan is otherwise one-shot for the life of the worktree session.
   /// `track` returns early once a package has been scanned, and the only two
   /// things that ever replaced that scan were finishing a run and writing a
   /// file through the New dialog — so an agent adding twenty scenarios while
@@ -389,7 +389,7 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
 }
 
 /// Writes a scenario and goes straight to it — which runs it, since opening a
-/// scenario is the demand. The whole point of the button over the command the
+/// scenario is what runs one. That is what this offers over the command the
 /// help page names: you end up looking at the thing you just made.
 ///
 /// Top-level because three surfaces offer it — the list header, the empty list,
@@ -1001,7 +1001,7 @@ class _ScenarioRow extends StatelessWidget {
   }
 }
 
-/// One scenario's page. Opening it is the demand: a scenario nobody has run
+/// One scenario's page. Opening it runs it: a scenario that has not been run
 /// yet runs now, and the Run button reruns — against the sources on disk,
 /// since the warm runner refreshes first. The run draws as the flow; a step
 /// address pushes [ScenarioStepPage] over it.
@@ -1050,7 +1050,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   Timer? _ticker;
   bool get _waitIsWorthSaying => _runFor.elapsed >= _loaderAppearsAfter;
 
-  /// Longer than a warm run, shorter than a wait anybody would question. A
+  /// Longer than a warm run, shorter than a noticeable wait. A
   /// warm harness answers in a couple of hundred milliseconds, and the panel
   /// says nothing at all inside that.
   static const _loaderAppearsAfter = Duration(milliseconds: 250);
@@ -1120,7 +1120,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   }
 
   /// The step that was open when this one was, or null for an arrival from
-  /// the flow, a fresh run, or a link somebody sent.
+  /// the flow, a fresh run, or a shared link.
   int? _cameFrom;
 
   @override
@@ -1133,7 +1133,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   /// The device the canvas on screen was laid out for.
   String? _framedAt;
 
-  /// **Another device is another canvas.** A flow's cells are the device's own
+  /// Another device is another canvas. A flow's cells are the device's own
   /// size, so the same six steps are twice as wide on a tablet as on a phone —
   /// and a place panned to under one framing is, under the other, blank canvas
   /// with the flow drawn off behind it. Null is not a framing: a run reports no
@@ -1570,7 +1570,7 @@ class _AxesBar extends StatelessWidget {
 
   /// What the last run made of an unspecified device — the folder profile's
   /// first device, or the global default. Null before the first run, when the
-  /// honest answer is that the panel does not know yet.
+  /// panel does not know yet.
   final String? resolved;
 
   /// The locale tags the project's config declares — the whole language menu.
@@ -1819,7 +1819,7 @@ class _AccessibilityPanel extends StatelessWidget {
 }
 
 /// One axis as a compact dropdown trigger. Accent-tinted when set, so a page
-/// running under non-default axes says so at a glance.
+/// running under non-default axes is recognisable at a glance.
 class _AxisChip extends StatelessWidget {
   const _AxisChip({
     required this.label,

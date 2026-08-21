@@ -13,7 +13,7 @@ import 'authoring.dart';
 /// as rows. It used to be a single 40-line string squeezed into the 240px list
 /// pane, where the example wrapped mid-expression.
 ///
-/// **Reachable with scenarios present, not only without them.** Writing the
+/// Reachable with scenarios present, not only without them. Writing the
 /// second one is the same question as writing the first, and the empty state
 /// that used to be the only door closes exactly when the first file lands.
 class ScenarioHelpPage extends StatelessWidget {
@@ -126,7 +126,7 @@ class _Point extends StatelessWidget {
 ///
 /// Shared by the prose and the rows because the source strings are the same
 /// ones the terminal prints, backticks and all — this is what those backticks
-/// mean when somebody is looking at them instead of reading them.
+/// become when the text is rendered rather than printed.
 List<InlineSpan> inlineCodeSpans(BuildContext context, String text) => [
   for (var (index, run) in text.split('`').indexed)
     if (run.isNotEmpty)

@@ -9,7 +9,7 @@ import '../model/validation.dart';
 /// Shared because it was written twice — once under the matrix for the
 /// config-wide problems, once in the inspector for a cell's — and the two copies
 /// were identical down to the 5px the dot is nudged to sit on the first line of
-/// text. Two copies of a row agree until somebody changes one.
+/// text. Two copies of a row agree only until one of them is edited.
 class SplashProblemRow extends StatelessWidget {
   const SplashProblemRow(this.problem, {super.key});
 

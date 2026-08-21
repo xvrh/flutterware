@@ -7,7 +7,7 @@ import 'shell.dart';
 
 /// Every state the house tap target has, next to each other.
 ///
-/// **This one has to be driven by hand.** Hover, press and focus are exactly
+/// This one has to be driven by hand. Hover, press and focus are exactly
 /// the states that leave nothing behind for a screenshot to catch or a drive
 /// step to read — there is no hover verb in either harness — so the alternative
 /// to a page you move a pointer across is that nobody ever sees four of the

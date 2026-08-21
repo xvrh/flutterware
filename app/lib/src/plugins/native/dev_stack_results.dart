@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 
 /// Where a worktree's last stack reading is cached, under the run dir.
 ///
-/// **One formula, two readers.** The core writes this file after every probe;
+/// One formula, two readers. The core writes this file after every probe;
 /// the worktree explorer reads it for every checkout in the repository, and
 /// reads *only* this — a list of eight worktrees must not spawn eight
 /// subprocesses to fill a column. The two halves cannot be allowed to disagree
@@ -81,12 +81,12 @@ class StackService {
   }
 }
 
-/// One run of the probe — the whole of what this plugin knows.
+/// One run of the probe — everything this plugin knows.
 ///
-/// Carries [at] because a reading is **a fact that happened, and it gets old
-/// rather than becoming wrong**. That is the same rule `RunCore`'s device cache
-/// follows, and it is what lets a cold `fw status` and a freshly opened sidebar
-/// say something true without spawning anything.
+/// Carries [at] because a reading is a fact that happened: it gets old rather
+/// than becoming wrong. That is the same rule `RunCore`'s device cache follows,
+/// and it is what lets a cold `fw status` and a freshly opened sidebar say
+/// something true without spawning anything.
 class StackReading implements PluginResult {
   const StackReading({
     required this.state,
@@ -177,8 +177,8 @@ class DevStackRunResult implements PluginResult {
     this.reading,
   });
 
-  /// What was actually run, joined — so a caller that wants to do it themselves
-  /// next time can, which is the point of delegating rather than supervising.
+  /// What was actually run, joined — so a caller that wants to run it directly
+  /// next time can.
   final String command;
 
   /// Null when the command has not exited — see [timedOut]. Zero would be a
@@ -200,7 +200,7 @@ class DevStackRunResult implements PluginResult {
 
   /// The two streams apart, each trimmed to its own tail.
   ///
-  /// **Because almost nothing writing structured output has stderr to itself.**
+  /// Because almost nothing writing structured output has stderr to itself.
   /// `dart` announces `Running build hooks...` there, docker writes deprecation
   /// warnings, a wrapper's `set -x` writes every line it runs — so a renderer
   /// that wants to put that somewhere other than under the reader's eye needs

@@ -36,7 +36,7 @@ import 'step_status.dart';
 /// the tabs a snapshot can honestly serve. The back arrow returns to the
 /// flow; previous/next walk the run's graph without going back.
 ///
-/// **Elements** is the step's `.tree.json` — the capture's third leg, read at
+/// Elements is the step's `.tree.json` — the capture's third leg, read at
 /// last — in the catalog's own tree view: hover a row and the widget's box
 /// lights up on the screenshot, pick on the screenshot and the tree jumps to
 /// the node. **Texts** is the visible-text projection that used to be the
@@ -62,8 +62,8 @@ class ScenarioStepPage extends StatefulWidget {
   final void Function(ScenarioRunStep) onOpenStep;
 
   /// The index of the step the reader was on when they opened this one, or
-  /// null when they arrived from the flow, from a link somebody sent them, or
-  /// from a run that just finished.
+  /// null when they arrived from the flow, from a shared link, or from a run
+  /// that just finished.
   ///
   /// Told rather than inferred, because the two arrivals that have to be told
   /// apart are not both changes to *this* widget: walking off a document
@@ -213,8 +213,8 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   /// With [play] it starts at the first frame instead: the recording *is* the
   /// transition from the step just left, so a forward walk shows the app
   /// moving from one screen to the next, and pressing next along a flow plays
-  /// it the way it ran. It still ends on the screenshot, so a walk that
-  /// stopped is a page nobody can tell from the old one.
+  /// it the way it ran. It still ends on the screenshot, so a walk that stopped
+  /// leaves a page indistinguishable from the old one.
   void _loadMotion({bool play = false}) {
     _motionLoaded = true;
     _motionFrames = widget.step.frames;
@@ -359,7 +359,7 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   /// The step's shot as PNG bytes — the artifact as-is when the run captured
   /// PNG, encoded here when it captured raw pixels. Encoding on demand
   /// mirrors why raw exists at all: every capture pays a write, only the
-  /// rare one somebody exports pays an encode. Read through the artifacts
+  /// rare exported one pays an encode. Read through the artifacts
   /// scope like every other read on this page; a missing file is a null, the
   /// button's quiet refusal.
   Future<Uint8List?> _capturePng() async {
@@ -390,7 +390,7 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
 
   /// What the screen shows, and what may be drawn over it.
   ///
-  /// **One decision, not two.** The picture and the overlay have to agree
+  /// One decision, not two. The picture and the overlay have to agree
   /// about which *instant* they are of: an aim measured on the frame before a
   /// verb, drawn over a frame from the middle of the transition after it,
   /// boxes a widget that is not there — and so does a tree, which is why the
@@ -427,7 +427,7 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
 
   /// The frame the previewed verb was about to act on.
   ///
-  /// **The first frame of the step being previewed**, not this step's own
+  /// The first frame of the step being previewed, not this step's own
   /// still: the harness banks a frame before every verb acts, so frame zero of
   /// the transition *into* the next step is, by construction, the exact
   /// instant its aim was measured on. This step's still is the same pixels in

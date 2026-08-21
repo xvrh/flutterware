@@ -8,15 +8,15 @@ import 'target.dart';
 /// MotionExtent(art, child: const CoverArt())
 /// ```
 ///
-/// **It applies no values, changes no layout, and adds no layer.** It exists so
+/// It applies no values, changes no layout, and adds no layer. It exists so
 /// the editor can draw a ring around the thing a lane drives.
 ///
 /// It is needed because a target is not a widget. `art.width` goes on a
 /// `SizedBox`, `art.rotate` on a `Transform`, `art.elevation` inside a
 /// `BoxShadow` — three call sites, no element that *is* `art`, and nothing to
-/// infer from. Somebody has to point, and this is the smallest way to.
+/// infer from. Something has to point at it, and this is the smallest way.
 ///
-/// **Always optional.** Skip it and the lane simply has no ring; every other
+/// Always optional. Skip it and the lane simply has no ring; every other
 /// thing the panel does works the same either way.
 ///
 /// [MotionBox] registers on its own, so a target that already goes through one

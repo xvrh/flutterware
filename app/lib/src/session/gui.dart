@@ -396,7 +396,7 @@ class _Quit {
 /// startup it says which rendering backend it picked — every launch, identical,
 /// unactionable, and now the first thing a user reads under "ready".
 ///
-/// **Only `IMPORTANT`.** That is the engine's *informational* level despite the
+/// Only `IMPORTANT`. That is the engine's *informational* level despite the
 /// name; `ERROR` and `FATAL` use the same shape and are the reason this is a
 /// named predicate with one level in it rather than a prefix match. A filter
 /// that swallowed a real engine error would make the GUI undebuggable from the

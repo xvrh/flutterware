@@ -18,7 +18,7 @@ import '../utils/run_dir.dart';
 /// can call. The server plugin's `srv-*.json` handles work the same way, for
 /// the same reason.
 ///
-/// **Nothing in a handle is trusted to be current.** The file says what was
+/// Nothing in a handle is trusted to be current. The file says what was
 /// true when it was written; whether the app is still up is decided by
 /// connecting ([probe]), and whether the launcher is still up by looking for
 /// its process. That split is not pedantry — the launch spike found that they
@@ -119,7 +119,7 @@ class RunHandle {
 
   /// This run with some fields replaced.
   ///
-  /// **One copy, not one per caller.** There were three, written out field by
+  /// One copy, not one per caller. There were three, written out field by
   /// field, and a field added to only two of them was silently dropped by the
   /// third: `knobs` survived the launch, survived `publish`'s file, and
   /// vanished from the handle `publish` *returned* — so the first
@@ -321,7 +321,7 @@ String runHandleFileName({
 /// Shared so the two are recognisably one run in a directory listing, and so
 /// the sweeper's existing `*.log` rule ages the log out on its own.
 ///
-/// **[flavor] is part of the identity, not a decoration.** `dev` and `prod` of
+/// [flavor] is part of the identity, not a decoration. `dev` and `prod` of
 /// one entry point install as different bundle ids and sit on the phone
 /// together, so keying without it would give two live runs one handle and one
 /// log — the same collision that once had a relaunch publishing the previous

@@ -4,8 +4,7 @@
 /// Both directions in one file for the reason
 /// `ui_catalog_address.dart` gives: encode and decode that live apart drift,
 /// and the symptom is an app that navigates without throwing and shows the
-/// wrong thing. The round trip is the contract, and there is a test that says
-/// so.
+/// wrong thing. The round trip is the contract, and a test enforces it.
 ///
 /// ```
 /// <package>                        the dependency list

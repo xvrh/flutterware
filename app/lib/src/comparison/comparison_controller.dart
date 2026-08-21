@@ -85,7 +85,7 @@ class ComparisonHalf extends ChangeNotifier {
   /// True when [rows] came off disk rather than from a run this session.
   var restored = false;
 
-  /// True when the current rows are a run somebody stopped partway.
+  /// True when the current rows are a run that was stopped partway.
   var stopped = false;
 
   /// What the run concluded, once it has.
@@ -197,8 +197,8 @@ class ComparisonHalf extends ChangeNotifier {
 
 /// Everything a comparison needs from the world, as one seam.
 ///
-/// **A seam rather than a session, for the reason the runners already have
-/// one**: none of the sequencing here — when the base is prepared, what a tab
+/// A seam rather than a session, for the reason the runners already have
+/// one: none of the sequencing here — when the base is prepared, what a tab
 /// says before it is, what happens when a half refuses — needs a compiler, a
 /// guest or a git worktree to be wrong. A fake environment makes the whole
 /// controller testable in milliseconds.
@@ -260,7 +260,7 @@ abstract interface class ComparisonEnvironment {
   });
 }
 
-/// Owns one worktree's comparison. **Nothing runs on its own**: building the
+/// Owns one worktree's comparison. Nothing runs on its own: building the
 /// controller restores what the last run concluded, and everything past that —
 /// the base checkout included — waits for [compare].
 ///
@@ -269,8 +269,8 @@ abstract interface class ComparisonEnvironment {
 /// estimate that made the price visible before the click; the estimate was
 /// built, measured at four minutes on a real catalog, and removed — leaving a
 /// panel that started git checkouts, `pub get` and compilers as a side effect
-/// of a tab getting focus, with a one-line spinner for company. The honest
-/// contract is the opposite one: the tab always *shows* for free (the last
+/// of a tab getting focus, with a one-line spinner for company. The contract
+/// is now the opposite one: the tab always *shows* for free (the last
 /// run, kept on disk), and the machinery starts only when the button that
 /// names it is pressed.
 class ComparisonController extends ChangeNotifier {
@@ -362,7 +362,7 @@ class ComparisonController extends ChangeNotifier {
 
   /// Runs [kind], from the start, whatever it concluded before.
   ///
-  /// **The one way anything runs.** A press while the half is busy joins the
+  /// The one way anything runs. A press while the half is busy joins the
   /// run in flight rather than restarting it; a press on a finished, restored
   /// or refused half runs it again — the button is also the refresh and the
   /// retry.
@@ -495,7 +495,7 @@ class ComparisonController extends ChangeNotifier {
 
   /// The readable part of an error, without the stack of nested prefixes.
   ///
-  /// **Not always one line.** A daemon failure ends its first line with a colon
+  /// Not always one line. A daemon failure ends its first line with a colon
   /// and puts what actually went wrong on the next, so a strict first-line rule
   /// renders a sentence that stops mid-thought — which reads as a truncation
   /// bug rather than as the reason it is.

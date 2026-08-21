@@ -7,7 +7,7 @@ import 'package:flutterware_app/src/changes/ranking.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
-/// **What survives a re-index** — and after the split, the answer is *the thing
+/// What survives a re-index — and after the split, the answer is *the thing
 /// you are reading*, by construction.
 ///
 /// The old screen needed a scroll anchor for this: index and content were one

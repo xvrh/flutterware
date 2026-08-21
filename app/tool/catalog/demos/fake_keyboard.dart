@@ -8,7 +8,7 @@ import 'app_theme.dart';
 /// The fake keyboard's artwork — both platforms, both themes, at the heights
 /// they are actually drawn at.
 ///
-/// **What this is for.** The slab is a `CustomPainter` with no widgets in it,
+/// What this is for. The slab is a `CustomPainter` with no widgets in it,
 /// so nothing about it can be asserted except by looking: whether the rows
 /// read as rows, whether the modifier keys are distinguishable from the
 /// letters, whether a 219-point landscape keyboard is still legible as one at

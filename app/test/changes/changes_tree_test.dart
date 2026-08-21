@@ -9,7 +9,7 @@ import 'package:flutterware_app/src/changes/ranking.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
-/// **Structure, which the ranked list could not carry.** A flat column of
+/// Structure, which the ranked list could not carry. A flat column of
 /// fifty-three basenames answers "what should I look at" and says nothing about
 /// the shape of the branch. The tree was dropped in the master/detail rewrite
 /// and put back the same day.

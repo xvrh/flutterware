@@ -17,8 +17,8 @@ import 'semantics_capture.dart';
 
 /// Reads the live widget tree out of a running guest.
 ///
-/// **The structure and the source locations come from the framework's own
-/// inspector, and everything else is ours.** That split is forced rather than
+/// The structure and the source locations come from the framework's own
+/// inspector, and everything else is ours. That split is forced rather than
 /// chosen: `--track-widget-creation` stores a widget's location behind
 /// `_HasCreationLocation`, a private interface in `package:flutter`, and Dart
 /// mangles private names per library — so no code here can read it, by
@@ -102,7 +102,7 @@ class GuestInspector {
     return filter == null ? tree : tree.filtered(filter);
   }
 
-  /// The handle that keeps semantics on while somebody is looking.
+  /// The handle that keeps semantics on while a panel is watching.
   ///
   /// A live app has semantics **off** — unlike `testWidgets`, which holds a
   /// handle by default — and building the tree costs every frame, so it runs
@@ -443,7 +443,7 @@ class GuestInspector {
   /// Whether [render] is actually shown, judged over the render chain up to
   /// (and excluding) [upTo] — the nearest converted ancestor's render object.
   ///
-  /// **The oracle is `visitChildrenForSemantics`.** The summary tree keeps the
+  /// The oracle is `visitChildrenForSemantics`. The summary tree keeps the
   /// user's widgets and drops the framework's, and the framework's is where
   /// all the hiding happens — `_RenderTheater` skipping the routes a pushed
   /// screen covers, `RenderOffstage`, `RenderIndexedStack` showing one child
@@ -519,7 +519,7 @@ class GuestInspector {
   /// nothing is a line of source that could go, and a design system wants to
   /// know which of its overrides are those.
   ///
-  /// **Read without registering a dependency.**
+  /// Read without registering a dependency.
   /// [BuildContext.getInheritedWidgetOfExactType] is documented O(1) and,
   /// unlike `dependOnInheritedWidgetOfExactType`, leaves no trace: an
   /// inspector that dirtied the elements it looked at would change the app it
@@ -601,7 +601,7 @@ class GuestInspector {
   /// Which translation keys this node's glyphs came from, and how many of its
   /// spans came from no catalog at all.
   ///
-  /// **Per span, not per `Text`.** A first version read `Text.data` and
+  /// Per span, not per `Text`. A first version read `Text.data` and
   /// flattened a `Text.rich` with `toPlainText()`, which destroyed exactly the
   /// case worth resolving — a sentence assembled from a translated fragment and
   /// a name. The paragraph's own span tree keeps the pieces apart, and `Text`
@@ -764,7 +764,7 @@ class GuestInspector {
   /// it costs.
   ///
   /// A screen has far fewer styles than texts. Measured on a thirty-card list:
-  /// **112 paragraphs and three distinct resolved styles**, two distinct
+  /// 112 paragraphs and three distinct resolved styles, two distinct
   /// ambient ones. `debugFillProperties` and a `toDescription` per field is
   /// the expensive half and it was being paid per *text*. Keyed on the style
   /// itself, so two equal styles built in different places still share an
@@ -825,15 +825,15 @@ class GuestInspector {
   /// first — in both, the widget being asked about is a couple of render
   /// objects above the glyphs.
   ///
-  /// **It follows only-children, and a depth bound was tried first and was
-  /// wrong in both directions.** Render depth is not widget depth: two render
+  /// It follows only-children, and a depth bound was tried first and was
+  /// wrong in both directions. Render depth is not widget depth: two render
   /// levels can span fifteen widgets, so "two levels down" let a `Scaffold`
   /// adopt the style of a `Text` two `Column`s inside it, while an `Icon` —
   /// three render objects, all of them plumbing — still came back empty. Both
   /// were caught by `test/inspect/guest_properties_test.dart` rather than
   /// reasoned about, and both cases are pinned there.
   ///
-  /// A chain of only-children is the honest version of what the bound was
+  /// A chain of only-children is a more accurate version of what the bound was
   /// reaching for, and it is the noise filter's rule seen from another angle:
   /// a render object with one child is not deciding anything about it, so a
   /// paragraph at the end of such a chain *is* what this node draws. The
@@ -879,9 +879,9 @@ class GuestInspector {
 
 /// The semantics node [render] contributes to, or null.
 ///
-/// **Up the render tree, never by comparing rectangles.** A widget with no
-/// semantics of its own is inside somebody's, so the walk climbs until it finds
-/// one — which is exact, and cheap because the render object is already in
+/// Up the render tree, never by comparing rectangles. A widget with no
+/// semantics of its own sits inside another's, so the walk climbs until it
+/// finds one — exact, and cheap because the render object is already in
 /// hand. The rectangle alternative was tried and is wrong in both directions:
 /// a `Checkbox`'s node is smaller than the `CheckboxListTile` that owns it and
 /// a `Tab`'s is 9.5× larger than the `Tab` widget, so a containment test
@@ -924,7 +924,7 @@ SemanticsNode? _semanticsOf(RenderObject? render) {
 /// measured, `find "Filter"` matches nothing on a screen with a "Filter paths"
 /// field on it — but the `EditableText` inside does publish it. One node in
 /// the subtree is that widget describing itself through a child. Two or more
-/// is a container, and the roll-up is the honest answer there.
+/// is a container, and the roll-up is the right answer there.
 ///
 /// Bounded on both counts, because this runs per node of every read: it stops
 /// at the second node it finds and six render objects down.

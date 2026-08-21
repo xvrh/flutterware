@@ -11,7 +11,7 @@
 /// re-invented, so an agent that has learned one flutterware surface has
 /// learned this one.
 ///
-/// **No Flutter in here.** The renderers live next door in
+/// No Flutter in here. The renderers live next door in
 /// `package:flutterware/channels_ui.dart`, because everything that only wants
 /// to *talk* to a panel is not a Flutter program: `fw` and the MCP server are
 /// pure Dart entry points, and a library that pulled `material.dart` in behind

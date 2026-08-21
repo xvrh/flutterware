@@ -1,6 +1,6 @@
 /// A ring around the target a lane drives, drawn over the guest.
 ///
-/// **Painted into a surface that is the guest's logical size**, which costs
+/// Painted into a surface that is the guest's logical size, which costs
 /// nothing to arrange here: the panel is the thing that calls `engine.resize`,
 /// so the `Texture`'s box and the guest's coordinate space are the same
 /// rectangle and the rect arrives ready to use. It is the same contract the

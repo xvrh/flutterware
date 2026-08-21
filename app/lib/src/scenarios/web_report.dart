@@ -31,8 +31,8 @@ class ScenarioWebReport {
   /// What the page calls itself — the project, normally.
   final String title;
 
-  /// When the scenarios were run. A page is a photograph, and a photograph
-  /// with no date on it is one nobody can tell is stale.
+  /// When the scenarios were run. A page is a snapshot, and an undated snapshot
+  /// cannot be told from a current one.
   final DateTime generated;
 
   final ScenarioRunResult run;

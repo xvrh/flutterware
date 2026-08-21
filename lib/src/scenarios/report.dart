@@ -7,7 +7,7 @@
 /// into these same classes. A shape with fewer careers than that was the old
 /// state of affairs: three hand-kept copies that could drift one field apart.
 ///
-/// **This is published API.** A field renamed here breaks somebody's script,
+/// This is published API. A field renamed here breaks somebody's script,
 /// which is why [scenarioRunReportVersion] exists and why [ScenarioRunResult.fromJson]
 /// refuses a major it does not know rather than handing back a half-decoded
 /// object. Added fields do not bump the version — an older reader ignoring a
@@ -191,7 +191,7 @@ class ScenarioRunPackage {
   /// The whole run, on disk, in this same shape — every step of every
   /// scenario, whatever this copy carries.
   ///
-  /// **Because the whole thing does not fit in an answer.** A full suite across
+  /// Because the whole thing does not fit in an answer. A full suite across
   /// a 2×2 matrix is 160 steps and 60k tokens of paths, past anything a client
   /// hands a model, and most of it is about scenarios that passed. So the
   /// answer summarises and the file keeps everything: one read when a reader
@@ -336,7 +336,7 @@ class ScenarioRunOutcome {
   /// Every key each catalog was asked for on the way through this scenario,
   /// and what it answered: `catalog -> key -> value`.
   ///
-  /// **Per scenario, and that is load-bearing.** A scenario runs under one
+  /// Per scenario, and that is load-bearing. A scenario runs under one
   /// assignment, so this belongs to one locale — which is what lets the
   /// falling-back report compare a rendered string against the file that was
   /// supposed to supply it. Carried across a whole run it would hold whichever
@@ -677,7 +677,7 @@ class ScenarioRunStep {
   /// without opening [events]. `POST /login → 401` is the part an agent
   /// reasons about; the payloads are what it fetches when it cares.
   ///
-  /// **The cap says when it bit**, as a final `… N more` entry rather than by
+  /// The cap says when it bit, as a final `… N more` entry rather than by
   /// going quiet, because twelve of forty handed back silently read as an app
   /// that did twelve things. `scenarios read events: true` is where the rest
   /// live, filtered by `channel` or by `errors`.
@@ -796,7 +796,7 @@ class ScenarioRunStep {
   /// How tall the software keyboard was when this frame was taken, in logical
   /// pixels, or null when it was down — which is nearly every step.
   ///
-  /// **A note about the screen rather than a node in it.** A real phone's
+  /// A note about the screen rather than a node in it. A real phone's
   /// keyboard is not in the app's widget tree either, and putting one in would
   /// mean a keyboard in every `find.text`, every semantics audit and every
   /// transcript. The only reason to record it at all is that a reader looking
@@ -1114,9 +1114,9 @@ List<T> _listOf<T>(Object? value, T Function(Map<String, Object?>) decode) => [
 
 /// Two runs of the same suite, compared by what their steps captured.
 ///
-/// **A suite can be entirely green while a third of its screenshots move every
-/// pass.** Nothing else in a run report says so: every scenario passes, every
-/// assertion holds, and the pictures underneath are different pictures. On a
+/// A suite can be entirely green while a third of its screenshots move every
+/// pass, and nothing else in a run report shows it: every scenario passes,
+/// every assertion holds, and the pictures underneath differ. On a
 /// real 125-scenario suite the causes were a fixture chosen by hashing a
 /// freshly-minted id, generated ids drawn on screen as text, and two
 /// production writes reaching for `DateTime.now()` instead of the injectable
@@ -1134,11 +1134,11 @@ List<T> _listOf<T>(Object? value, T Function(Map<String, Object?>) decode) => [
 /// none anywhere, which answers here as two runs with nothing to compare
 /// rather than as a suite that moved entirely.
 ///
-/// **Only scenarios both runs contain are looked at.** One of them may have
-/// been a selective run — one file, one name, one tag — and a scenario the
-/// other never executed is not a scenario that moved. A scenario genuinely
-/// added or deleted between the two is a change to the suite, which the suite
-/// already knows about; what this function is for is the change nobody made.
+/// Only scenarios both runs contain are looked at. One of them may have been a
+/// selective run — one file, one name, one tag — and a scenario the other never
+/// executed is not a scenario that moved. A scenario genuinely added or deleted
+/// between the two is a change to the suite, which the suite already knows
+/// about; this function is for unintended change.
 ScenarioRunDrift compareScenarioRuns(
   ScenarioRunResult before,
   ScenarioRunResult after,

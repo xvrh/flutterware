@@ -49,7 +49,7 @@ const launchFallbackBannerKey = Key('launch-fallback-banner');
 const configButtonKey = Key('config-button');
 
 /// Everything in the band that has to clear the traffic lights. Keyed so a test
-/// can measure where it starts, which is the whole of that arrangement.
+/// can measure where it starts.
 const bandContentKey = Key('shell.band-content');
 
 /// The box the macOS traffic lights occupy, **in real window pixels**; band
@@ -91,7 +91,7 @@ bool _gutterInFlow(ShellController shell) =>
 /// The smallest window this layout lays out for: the pane's floor, plus the
 /// rail the user has asked to see.
 ///
-/// **A sum, not a constant.** The pane is what has a minimum — the dependencies
+/// A sum, not a constant. The pane is what has a minimum — the dependencies
 /// table is the thing that stops fitting — and the rail is chrome that happens
 /// to sit next to it. Charging for a rail either way is what made ⌘B stop
 /// short: it gave the panel 232px of room and then went on scaling the window
@@ -469,12 +469,12 @@ class _RailToggle extends StatelessWidget {
 
 /// The selected worktree's config failure, until a load succeeds.
 ///
-/// **Not dismissible.** It is a fact about a file on disk, so hiding it would
+/// Not dismissible. It is a fact about a file on disk, so hiding it would
 /// hide a real problem — and unlike before, there is no other symptom to notice:
 /// the plugins built from the last config that loaded are all still running
 /// behind it.
 ///
-/// **The shell is not where you started it.**
+/// The shell is not where you started it.
 ///
 /// Shown on the checkout that was opened in place of a launch directory no
 /// worktree contains, and only on that one — switching tabs is a deliberate act
@@ -589,7 +589,7 @@ class _ConfigErrorBanner extends StatelessWidget {
 
 /// What the last config load did, for a few seconds after it did it.
 ///
-/// **The `unchanged` case is the reason this exists.** A reload that matched and
+/// The `unchanged` case is the reason this exists. A reload that matched and
 /// a reload that never happened are the same absence of feedback, and that
 /// ambiguity is what makes reloading feel unreliable — so a load always says
 /// something, even when the answer is "nothing moved". The duration rides along
@@ -611,7 +611,7 @@ class _ConfigLoadLineState extends State<_ConfigLoadLine> {
 
   /// What is on screen, and what has already been said.
   ///
-  /// **Two fields for what looks like one thing.** [_showing] goes back to null
+  /// Two fields for what looks like one thing. [_showing] goes back to null
   /// when the line fades, so deciding what to show from it meant every later
   /// notification — a plugin changing state, a dependency finishing a load, any
   /// save at all — found a `lastLoad` still recorded and nothing on screen, and
@@ -677,7 +677,7 @@ class _ConfigLoadLineState extends State<_ConfigLoadLine> {
 
 /// Opens `fw:///worktrees/<worktree>/config`.
 ///
-/// **This used to reload on click**, which put the action in the chrome and its
+/// This used to reload on click, which put the action in the chrome and its
 /// result nowhere: a reload that rebuilt one plugin, or refused because a plugin
 /// was busy, had no place to say so. Now the button is navigation and the Reload
 /// button lives on the screen, next to the log of what previous reloads did.
@@ -698,7 +698,7 @@ class _ConfigButton extends StatelessWidget {
     return Tooltip(
       message: failing
           ? 'This worktree’s config did not load'
-          : 'Config — what tool/flutterware.dart resolved to',
+          : 'Config resolved from tool/flutterware.dart',
       child: IconButton(
         key: configButtonKey,
         onPressed: worktree == null ? null : shell.selectConfig,
@@ -829,8 +829,8 @@ const explorerTabKey = ValueKey('tab:explorer');
 
 /// The explorer, as a tab that is always open and cannot be closed.
 ///
-/// **A tab rather than a button in the right-hand cluster, and the badge is
-/// why.** The explorer's job is ambient — *N worktrees will not progress until
+/// A tab rather than a button in the right-hand cluster, and the badge is
+/// why. The explorer's job is ambient — *N worktrees will not progress until
 /// you do something* — and that number wants a permanent pixel. A pinned tab
 /// carries it natively; a meta-cluster icon carries it badly and a menu item
 /// cannot carry it at all.
@@ -840,7 +840,7 @@ const explorerTabKey = ValueKey('tab:explorer');
 /// a pinned tab means in a browser. No close button follows from that rather
 /// than needing an excuse.
 ///
-/// **Not a house.** `Icons.home_outlined` is the sidebar's "Overview" row —
+/// Not a house. `Icons.home_outlined` is the sidebar's "Overview" row —
 /// *this worktree's* home — and one glyph meaning two different scopes in one
 /// window is worse than an unfamiliar glyph meaning one.
 class _ExplorerTab extends StatelessWidget {
@@ -863,7 +863,7 @@ class _ExplorerTab extends StatelessWidget {
 
     return Tooltip(
       message: needsYou == 0
-          ? 'Worktrees — every checkout of this repo'
+          ? 'Every checkout of this repo'
           : '$needsYou worktree${needsYou == 1 ? '' : 's'} waiting on you',
       child: Tappable(
         onTap: shell.selectExplorer,
@@ -898,7 +898,7 @@ Key worktreeTabKey(Worktree worktree) => ValueKey('tab:${worktree.path}');
 
 /// The open project's own launcher icon, in the window chrome.
 ///
-/// **Once per window, not once per tab.** Tabs are worktrees and a window holds
+/// Once per window rather than once per tab. Tabs are worktrees and a window holds
 /// one repository's worktrees, so a chip on every tab would repeat the same
 /// picture down the band. Here it says what this *window* is, which is the
 /// question several identical windows raise.
@@ -906,8 +906,8 @@ Key worktreeTabKey(Worktree worktree) => ValueKey('tab:${worktree.path}');
 /// Nothing when the project declares no identity — see [resolveProjectFace]. An
 /// absent chip is the shell as it was, which is the right amount of noise for a
 /// project that has not said anything. A project that *did* say something and
-/// got the path wrong is a different case, and says so on the worktree instead
-/// of going quiet here.
+/// got the path wrong is a different case, and is reported on the worktree
+/// instead of going quiet here.
 class _ProjectFaceChip extends StatelessWidget {
   const _ProjectFaceChip(this.shell);
 
@@ -1762,7 +1762,7 @@ String? _changesFilePath(ShellController shell) {
 
 /// Mounts the explorer, and refreshes it on the way in.
 ///
-/// **Becoming visible is one of the three refresh triggers**, and this is where
+/// Becoming visible is one of the three refresh triggers, and this is where
 /// it lives — a screen appearing is the only moment that knows it happened.
 /// Not a timer: with the branch diffs cached by their commits, arriving costs
 /// the per-worktree `git status` and nothing else.

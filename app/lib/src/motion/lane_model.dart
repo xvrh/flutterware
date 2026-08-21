@@ -7,7 +7,7 @@
 /// by name and show four of its fields, nor a selection that has to outlive the
 /// poll that replaces the object it points at.
 ///
-/// **Nothing here decides anything.** The states are the runtime's, parroted;
+/// Nothing here decides anything. The states are the runtime's, parroted;
 /// the only computed values are the ones a lane cannot draw without —
 /// a target's aggregate span, and which offers are still addable.
 library;

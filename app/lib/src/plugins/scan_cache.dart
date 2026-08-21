@@ -82,7 +82,7 @@ class ScanCache<K, T> {
   Set<K> get settledKeys => {..._values.keys, ..._failures.keys};
 
   /// Scans [key], unless it already has been. Idempotent — what a panel calls
-  /// on mount, where nobody is waiting.
+  /// on mount, where nothing is waiting on the result.
   void track(K key) => unawaited(load(key));
 
   /// [track], for a caller that waits — `computeAll`, and everything reaching

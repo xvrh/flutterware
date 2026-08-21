@@ -146,8 +146,8 @@ class _DeskButtonState extends State<DeskButton> {
       menuChildren: [_menu(context)],
       builder: (context, controller, child) => Tooltip(
         message: _busy == 0
-            ? 'Devices — what is on this machine, and who has it'
-            : '$_busy device${_busy == 1 ? '' : 's'} busy — who has what',
+            ? 'Devices on this machine, and who is using them'
+            : '$_busy device${_busy == 1 ? '' : 's'} in use',
         child: IconButton(
           onPressed: () => controller.isOpen ? controller.close() : _open(),
           icon: BadgedIcon(

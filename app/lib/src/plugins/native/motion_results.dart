@@ -39,10 +39,10 @@ class MotionListPackage {
 
   final List<MotionListMotion> motions;
 
-  /// What the scan noticed and could not act on. **Read these before trusting
-  /// the list**: a target named by an expression rather than a literal is
-  /// invisible here and perfectly real at run time, and that turned out to be
-  /// the second demo anybody wrote.
+  /// What the scan noticed and could not act on. Read these before trusting the
+  /// list: a target named by an expression rather than a literal is invisible
+  /// here and perfectly real at run time, which the second demo written already
+  /// hit.
   final List<String> diagnostics;
 
   /// Set when the package could not be scanned, in which case [motions] means

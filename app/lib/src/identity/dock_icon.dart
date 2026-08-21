@@ -14,7 +14,7 @@ import 'tile_composer.dart';
 /// three identical windows. The tile is, and so is ⌘-Tab, which follows the
 /// same image.
 ///
-/// **Set, never unset.** macOS has no "put my bundle icon back": once
+/// Set, never unset. macOS has no "put my bundle icon back": once
 /// `applicationIconImage` is assigned it holds until the process exits. So a
 /// worktree with no face leaves whatever is already there rather than trying to
 /// restore a default that cannot be restored — which also means the first

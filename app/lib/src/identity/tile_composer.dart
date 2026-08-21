@@ -7,7 +7,7 @@ import 'tile_slot.dart';
 /// Draws the app's tile with a project's icon in the chip slot, and returns it
 /// as PNG bytes for whatever wants to be that picture.
 ///
-/// **One image, not a set**, and that is a measured constraint rather than a
+/// One image, not a set, and that is a measured constraint rather than a
 /// simplification. `applicationIconImage` ignores per-size representations: an
 /// `NSImage` carrying 16/32/128/512 art renders the *largest* downsampled in
 /// both the Dock and the ⌘-Tab switcher, even though `bestRepresentation`

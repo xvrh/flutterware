@@ -370,7 +370,7 @@ const fwExitCodes = {
 
 /// Which flutterware is answering, and where its code is.
 ///
-/// **One number, because there is one.** The package the project resolved is
+/// One number, because there is one. The package the project resolved is
 /// the only flutterware in play: it is reached through `dart run flutterware`,
 /// so nothing sits in front of it that could carry a version of its own. This
 /// used to report two — a globally installed `fw` was installed once and never
@@ -754,7 +754,7 @@ class FwCli {
   /// Brings the project up to whatever `init` writes, before every command
   /// rather than once, so no command has to begin by refusing.
   ///
-  /// **It used to skip everything when `.flutterware/sdk` existed**, which made
+  /// It used to skip everything when `.flutterware/sdk` existed, which made
   /// one artifact stand for all of them: anything `init` learned to write later
   /// never reached a project that had run it once already, and each addition
   /// arrived needing a migration. Every step of [ProjectInit.run] is its own
@@ -848,7 +848,7 @@ class FwCli {
 
   /// Opens the GUI, photographs it and lets it exit.
   ///
-  /// **Always the built binary, never `flutter run`.** On a path dependency
+  /// Always the built binary, never `flutter run`. On a path dependency
   /// `fw app` hands the terminal to `flutter run` so `r` works, and that is
   /// exactly wrong here: this needs the *app's* exit code, and there is no
   /// human to press anything. `release: true` and `interactive: false` are the
@@ -1081,7 +1081,7 @@ class FwCli {
 
   /// Every checkout of the repository, and what is going on in each.
   ///
-  /// **Opens no session, and deliberately.** A session is per worktree and
+  /// Opens no session, and deliberately. A session is per worktree and
   /// costs running that worktree's config; this command is about all of them,
   /// most of which are not open. The facts layer exists precisely so that a
   /// checkout nobody has opened still reports — see the explorer design, §1.
@@ -1219,7 +1219,7 @@ class FwCli {
 
   /// The notes left on a checkout, and answering them.
   ///
-  /// **Opens no session**, for the same reason `changes` does not: the log is
+  /// Opens no session, for the same reason `changes` does not: the log is
   /// keyed by the worktree path and nothing in it needs the project's config
   /// run. A checkout whose plugins will not load still reports its notes, which
   /// matters — a note about a broken config is exactly the note you would leave.
@@ -1519,7 +1519,7 @@ class FwCli {
   /// declared `ActionParameterKind` — a shell has no types to pass, so this is
   /// where the CLI stops and the plugin's own contract starts.
   ///
-  /// **The separated form is the one everyone types**, and it used to be
+  /// The separated form is the one everyone types, and it used to be
   /// dropped: `--entry demo/buttons.dart#buttons` set `entry` to `true` and
   /// left the value to be counted as a positional, which came back as
   /// `required (entry): true` — or, where the action cast it, as a type error

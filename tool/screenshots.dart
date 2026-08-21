@@ -12,7 +12,7 @@
 /// an unchanged screenshot is an unchanged file. Measured: two runs with the
 /// compiler daemon killed in between hash the same.
 ///
-/// **Run it from the branch the images will be committed on.** The window
+/// Run it from the branch the images will be committed on. The window
 /// shows the worktree's branch in its tab and address bar, so a shot taken on
 /// a feature branch says so, in the README, forever.
 ///

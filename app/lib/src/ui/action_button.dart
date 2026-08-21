@@ -7,7 +7,7 @@ import 'theme.dart';
 
 /// A bordered button that runs something async and says what happened.
 ///
-/// **The problem it solves is that fast work is invisible.** The splash panel's
+/// The problem it solves is that fast work is invisible. The splash panel's
 /// Reload re-reads the config in about 40ms. Pressing it did exactly what it
 /// promised and looked like it had done nothing at all — no press state that
 /// outlasted the pointer, no result, no error if the read threw. The instinct is
@@ -22,12 +22,12 @@ import 'theme.dart';
 ///   sooner. Below about a quarter second a state change reads as a flicker.
 /// - **done** — a tick for [_settle], then back to idle.
 /// - **failed** — the error's own message, held until the next press. A failure
-///   that timed out would be a failure nobody read.
+///   that timed out would go unread.
 ///
 /// Re-entrant presses are dropped while running, so a double click cannot start
 /// two of anything.
 ///
-/// [onPressed] returning a `Future` is the whole contract: this catches what it
+/// [onPressed] returning a `Future` is the entire contract: this catches what it
 /// throws and shows it. A caller that swallows its own errors and hands back a
 /// completed future gets a green tick for a failure, which is worse than the
 /// button this replaces.
@@ -46,8 +46,7 @@ class FwActionButton extends StatefulWidget {
   /// themselves.
   final String? tooltip;
 
-  /// Tinted with the accent. For the one button on a bar that is the point of
-  /// it.
+  /// Tinted with the accent. For the primary action on a bar.
   final bool primary;
 
   /// Awaited, and its error caught and shown. Null disables the button.

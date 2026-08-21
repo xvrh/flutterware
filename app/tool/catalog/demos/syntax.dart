@@ -7,8 +7,8 @@ import 'app_theme.dart';
 
 /// Syntax highlighting, across the languages the app actually renders.
 ///
-/// **The colours are theme-dependent, and nothing had looked at them in the
-/// dark build.** `spansFor` resolves each token class against the palette, and
+/// The colours are theme-dependent, and nothing had looked at them in the
+/// dark build. `spansFor` resolves each token class against the palette, and
 /// a class that resolved to near-black would be invisible on a dark ground with
 /// no test anywhere that would notice.
 ///
@@ -74,7 +74,7 @@ const _json = r'''
 @Preview(name: 'Dart', group: 'Syntax', wrapper: wrapInAppTheme)
 Widget syntaxDart() => const _Code(_dart, language: 'dart');
 
-/// **The reason this file exists.** Every token class on a dark ground, where a
+/// The reason this file exists. Every token class on a dark ground, where a
 /// colour that was only ever checked against white shows up as unreadable.
 @Preview(name: 'Dart · dark', group: 'Syntax', wrapper: wrapInDarkTheme)
 Widget syntaxDartDark() => const _Code(_dart, language: 'dart');

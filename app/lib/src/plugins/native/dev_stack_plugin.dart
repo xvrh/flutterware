@@ -27,7 +27,7 @@ class DevStackPlugin extends NativePlugin<DevStackCore> {
 
 /// Answer, then evidence, then controls, then output — the Run cockpit's shape.
 ///
-/// **The page used to open with a copy of the thing that links to it.** The
+/// The page used to open with a copy of the thing that links to it. The
 /// worktree overview's card was mounted verbatim at the top, 720px wide inside a
 /// panel twice that, above two mismatched command controls and three hundred
 /// pixels of empty state, while facts the core already held — per-service state,
@@ -56,12 +56,11 @@ class _DevStackPanel extends StatelessWidget {
             Expanded(
               child: services.isEmpty && core.commands.isEmpty
                   ? const EmptyState(
-                      title: 'This stack is watched, not driven.',
+                      title: 'Nothing to run here',
                       message:
-                          'The project declared a probe and nothing else — no '
+                          'This project declares a probe and nothing else — no '
                           'services to break down, and no commands to run from '
-                          'here. The state above is the whole of what there is '
-                          'to say.',
+                          'here. The state above is all there is to show.',
                     )
                   // The console takes whatever the sections leave rather than
                   // being pinned under a gap they were too short to fill: a
@@ -245,7 +244,7 @@ class _ServiceDot extends StatelessWidget {
 
 /// Everything the stack's CLI can be asked to do, in one group and one shape.
 ///
-/// **A command looks like a command whether or not it needs a value.** The
+/// A command looks like a command whether or not it needs a value. The
 /// argument-less ones used to be a `Wrap` of bare buttons whose labels were the
 /// only thing said about them — the project's `description` reached the tooltip
 /// and nowhere else, which is how `Logs` became a button nobody could identify
@@ -385,7 +384,7 @@ class _CommandsState extends State<_Commands> {
 /// Not a log viewer, and deliberately not one: the stack's own `logs` command is
 /// declared right beside this and streams the real thing in a terminal that can
 /// scroll, search and stay open. This is the tail of the command *this panel*
-/// just ran, which is the output nobody else has — echoed under its own
+/// just ran, which is output no other surface has — echoed under its own
 /// invocation, the way a terminal would, so there is never a question of which
 /// command the text belongs to.
 ///
@@ -509,7 +508,7 @@ class _Console extends StatelessWidget {
   /// A config runs its scripts under the SDK the project is pinned to, so the
   /// first token is an absolute path ending in `bin/dart` — 70 characters of
   /// provenance in front of the two words that say what ran. The footer below
-  /// still carries the whole of it.
+  /// still carries all of it.
   static String shorten(String command) {
     var space = command.indexOf(' ');
     if (space <= 0) return command;

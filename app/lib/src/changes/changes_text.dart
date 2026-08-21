@@ -12,7 +12,7 @@ import 'ranking.dart';
 
 /// The whole report, as lines.
 ///
-/// **Widths come from the content**, like the worktree table: a path is what you
+/// Widths come from the content, like the worktree table: a path is what you
 /// would copy out of this and hand to `git`, so it is never truncated, and
 /// sizing to the longest one is what keeps the columns lined up anyway.
 List<String> changesReport(ChangeSet set) {

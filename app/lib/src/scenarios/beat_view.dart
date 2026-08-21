@@ -295,9 +295,9 @@ class NotificationBanner extends StatelessWidget {
 /// format renders — text and images do, everything else shows what it is and
 /// leaves opening to the desktop.
 ///
-/// The anatomy is a paper sheet's, not a panel card's: a soft shadow lifting
-/// it off the canvas and a folded corner — the cue that says "document" at
-/// the strip's half-scale, where the words are too small to.
+/// The anatomy is a paper sheet's rather than a panel card's: a soft shadow
+/// lifting it off the canvas and a folded corner — the cue that reads as
+/// "document" at the strip's half-scale, where the words are too small.
 class _DocumentSheet extends StatelessWidget {
   const _DocumentSheet({
     required this.step,

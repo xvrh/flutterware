@@ -9,7 +9,7 @@ import 'value_stream.dart';
 
 /// Hot reload and hot restart of the flutterware GUI itself, from inside it.
 ///
-/// **Neither is a VM capability.** The VM can swap sources, but producing the
+/// Neither is a VM capability. The VM can swap sources, but producing the
 /// new kernel is `flutter_tools`' job, so `flutter run` *registers* the two
 /// operations as VM-service methods and any client may call them
 /// (`packages/flutter_tools/lib/src/vmservice.dart` — `kReloadSourcesServiceName`,

@@ -8,7 +8,7 @@ import 'package:flutterware/src/scenarios/run_listener.dart';
 /// The scenario keyboard: up when the app asks, down when the view lets go,
 /// and over whatever it is over.
 ///
-/// **What this is really asserting.** Not that a widget draws — that a flow
+/// What this is really asserting. Not that a widget draws — that a flow
 /// which fills a form is a flow a phone could have performed. So every group
 /// here checks a *consequence*: the layout meets the smaller screen, a button
 /// under the band is refused rather than silently missed, the step says how

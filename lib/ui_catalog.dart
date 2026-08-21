@@ -1,13 +1,13 @@
 /// The catalog page: a browsable index of your previews.
 ///
-/// **What this is for, stated plainly, because it changed.** `UICatalog` is
+/// What this is for, stated plainly, because it changed. `UICatalog` is
 /// what `fw run previews build-web` mounts — it is the page's shell, and that
 /// is the supported way to reach it. Mounting it yourself still works and is
 /// still tested, but nothing is designed around it any more: the generated
 /// page is discovered from `@Preview` annotations, where the widget takes a
 /// hand-written map, and the map is the older half of the same tool.
 ///
-/// **Not the Previews tool.** That is `previews.dart` and the `Previews` plugin
+/// Not the Previews tool. That is `previews.dart` and the `Previews` plugin
 /// — a panel, a CLI and an MCP surface driving a guest engine. Previews is
 /// where you work; this is what you publish for people who are not going to
 /// run the tool.

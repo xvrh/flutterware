@@ -8,7 +8,7 @@ import 'dart:io';
 /// pub had already resolved, and in a workspace it saw every member's packages
 /// as one undifferentiated pile.
 ///
-/// **This object is workspace-wide, and deliberately so.** Run from anywhere
+/// This object is workspace-wide, and deliberately so. Run from anywhere
 /// inside a workspace, pub reports the whole resolution — 174 packages and
 /// three `kind: root` entries for this repo — and [root] names the *workspace
 /// root package*, not the directory you ran in. Scoping to one member is
@@ -123,7 +123,7 @@ class PubDepsFailure implements Exception {
 
 /// How a package entered the resolution.
 ///
-/// **Workspace-wide, and therefore not what to show a user.** Every member's
+/// Workspace-wide, and therefore not what to show a user. Every member's
 /// classification is folded into one value, so a package that is direct for
 /// `app` reads as `direct` even while you are looking at `examples/example`,
 /// which does not depend on it at all. Per-member direct/dev/transitive is

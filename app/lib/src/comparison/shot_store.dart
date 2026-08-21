@@ -35,7 +35,7 @@ abstract interface class ShotStore {
 
 /// rgba8888 rows into a texture.
 ///
-/// **Raw straight to a texture, never through a PNG.** Frames are stored
+/// Raw straight to a texture, never through a PNG. Frames are stored
 /// unencoded precisely because encoding is most of what a capture costs;
 /// re-encoding to hand `Image.memory` something it recognises would pay that
 /// price back, per frame, on every click in a list.

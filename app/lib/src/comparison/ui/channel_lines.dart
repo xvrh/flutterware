@@ -6,7 +6,7 @@ import '../tree_diff.dart';
 
 /// The tree, the texts and the events, as prose.
 ///
-/// **What the percentage cannot say.** A pixel fraction tells you something
+/// What the percentage cannot say. A pixel fraction tells you something
 /// moved and roughly how much of the screen; it never tells you that a padding
 /// went from 12 to 20, and that line is usually the whole finding.
 class ChannelLines extends StatelessWidget {

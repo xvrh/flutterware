@@ -11,7 +11,7 @@ import 'app_theme.dart';
 
 /// What a scenario's next link promises, drawn over the frame it acts on.
 ///
-/// **What this is for.** The mark appears on hover, and a hover is the one
+/// What this is for. The mark appears on hover, and a hover is the one
 /// thing the drive loop cannot produce — the same reason `run_screen_picture`
 /// exists — so in the running studio there is no way to *look* at this without
 /// a hand on the mouse.

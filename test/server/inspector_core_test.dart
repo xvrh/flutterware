@@ -8,7 +8,7 @@ import 'package:test/test.dart';
 
 /// A peer that keeps what it was sent, and can be told to start failing.
 ///
-/// **It encodes, because the real ones do.** `_SocketPeer.send` is
+/// It encodes, because the real ones do. `_SocketPeer.send` is
 /// `socket.write(encodeFrame(frame))`, so a frame the encoder refuses throws
 /// out of `send` — which the core reads as a dead peer. A fake that merely
 /// stored the map could not fail that way, and that is why an unencodable

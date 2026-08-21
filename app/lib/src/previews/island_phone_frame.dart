@@ -165,7 +165,7 @@ const _band = 4.0;
 const _buttonDepth = 3.0;
 
 /// The corner radius this generation's display is drawn with. Close rather than
-/// exact — nobody here measured a phone — and it matters more than a
+/// exact — no physical phone was measured — and it matters more than a
 /// decoration: the screen path is what clips the preview, so a layout running
 /// to its own corners is cut on this curve.
 const _screenRadius = 55.0;

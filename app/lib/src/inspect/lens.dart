@@ -6,7 +6,7 @@ import '../run/handle.dart';
 
 /// How much of an observation to hand back, as one word.
 ///
-/// **Four presets rather than six booleans**, because the booleans are the
+/// Four presets rather than six booleans, because the booleans are the
 /// thing a caller will not read: `screen`, `screenshot`, `styles`, `tree`,
 /// `find`, `at` is six decisions per call, and measuring the real combinations
 /// turned up about four. A lens is the answer to "I am doing this kind of
@@ -17,7 +17,7 @@ import '../run/handle.dart';
 /// words, the same contents, one place to change them. Only `run` reads it
 /// today; that is adoption pending, not a different design.
 ///
-/// **Explicit flags always win.** `{lens: 'look', screenshot: false}` returns
+/// Explicit flags always win. `{lens: 'look', screenshot: false}` returns
 /// no picture. A preset is a default, and a default that overrode what the
 /// caller actually said would be a trap.
 enum ObserveLens {
@@ -81,7 +81,7 @@ String? lensPathFor(RunHandle handle) {
   return '${p.withoutExtension(handlePath)}.lens';
 }
 
-/// The lens pinned for this run, or null when nobody pinned one.
+/// The lens pinned for this run, or null when none is pinned.
 ObserveLens? pinnedLens(RunHandle handle) {
   var path = lensPathFor(handle);
   if (path == null) return null;

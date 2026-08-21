@@ -19,7 +19,7 @@ import 'shell.dart';
 /// filter, the card's shadow arrives after the card, and the total lands after
 /// the card it sits in.
 ///
-/// **Mixed on purpose.** `motion_player.dart` reads every property at its call
+/// Mixed on purpose. `motion_player.dart` reads every property at its call
 /// site and wears no `MotionBox`; this one does both, because that is what real
 /// code looks like — a box where an element just moves, a read where the value
 /// is structural (`card.borderRadius` on a `BoxDecoration`, `ring.progress` on
@@ -31,7 +31,7 @@ import 'shell.dart';
 /// syntactic scan, so the panel can show you the lanes before anything has been
 /// compiled.
 ///
-/// **Drag `t` to scrub, tap to replay.**
+/// Drag `t` to scrub, tap to replay.
 @Preview(name: 'Order confirmed', group: 'Motion', wrapper: wrapInApp)
 Widget motionReceipt() => const _Receipt();
 

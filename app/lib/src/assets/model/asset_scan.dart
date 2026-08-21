@@ -71,7 +71,7 @@ class AssetScan {
   List<AssetProblem> get problems => catalog.problems;
 
   /// How many of the package's own assets are of each kind, most first.
-  /// Dependency assets are left out: they are somebody else's shape.
+  /// Dependency assets are left out: they describe another package.
   ///
   /// Ties break on [AssetKind]'s own order rather than on whichever key was
   /// inserted first, because this is projected into text that `fw` prints and a

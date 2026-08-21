@@ -3,7 +3,7 @@
 /// Pure Dart, like the rest of the facts layer: `fw worktrees` links this and
 /// must not drag in Flutter.
 ///
-/// **Batched where git allows it.** One `for-each-ref` reports every branch's
+/// Batched where git allows it. One `for-each-ref` reports every branch's
 /// tip, so fourteen worktrees cost one process rather than fourteen. What
 /// cannot be batched is the working tree — each checkout has its own — so dirty
 /// state is the one per-worktree call.
@@ -129,7 +129,7 @@ StatusFacts parseStatusV2(String output) {
 /// `<behind>\t<ahead>` — commits the base has and the head does not, then the
 /// reverse.
 ///
-/// **This, and not `%(upstream:track)`, is where ahead/behind comes from.** A
+/// This, and not `%(upstream:track)`, is where ahead/behind comes from. A
 /// stack of local feature branches has no upstream at all, so the tracking
 /// field is empty and `# branch.ab` is absent — measured on a real repo of
 /// fourteen worktrees, where none of them had one. Against the base branch the
@@ -220,7 +220,7 @@ class GitProbe {
   })
   _run;
 
-  /// **`--no-optional-locks` on everything that could write.**
+  /// `--no-optional-locks` on everything that could write.
   ///
   /// It exists for tools that poll. Without it a background refresh rewrites
   /// each worktree's index, which means flutterware fights the user's own git

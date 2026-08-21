@@ -108,7 +108,7 @@ void main() {
       );
     });
 
-    /// **The assertion that makes the whole lazy-slice architecture safe.**
+    /// The assertion that makes the whole lazy-slice architecture safe.
     /// If a byte offset is wrong, the screen renders one file's code under
     /// another file's name, and nothing else in the suite would notice.
     test("every file's slice is that file's patch", () async {
@@ -152,7 +152,7 @@ void main() {
   });
 
   group('the branch-switch trap', () {
-    /// **The regression that matters most**, because it is invisible on every
+    /// The regression that matters most, because it is invisible on every
     /// developer's machine until it isn't: `.gitignore` is versioned. Build a
     /// package on one branch, switch to a branch without it, and the ignore
     /// rule leaves with the branch — the build output is now untracked *and*

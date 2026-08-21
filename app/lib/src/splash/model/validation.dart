@@ -24,7 +24,7 @@
 /// [SplashProblem.blocksGeneration] marks the rules that stop `create` dead, so
 /// a reader can tell "this will not build" from "this will look wrong".
 ///
-/// **Every rule here names the edit; none of them makes it.** A problem is a
+/// Every rule here names the edit; none of them makes it. A problem is a
 /// sentence with the key in it — "Set `branding_bottom_padding_ios` to at
 /// least 34" — and the reader goes to the file. The buttons that used to write
 /// those keys are gone with the rest of the editor: they were computed from a

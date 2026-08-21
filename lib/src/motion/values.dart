@@ -28,7 +28,7 @@ class Seg<T> {
 ///
 /// Structure — which targets exist, which properties they have — comes from the
 /// code that reads them. This carries only the numbers, which is why it can be
-/// a whole-file rewrite by a tool without ever touching what somebody wrote.
+/// a whole-file rewrite by a tool without ever touching hand-written code.
 ///
 /// Keyed target → property → segments. A list per property because several
 /// spans of one property *is* the keyframe case.

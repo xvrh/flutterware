@@ -52,7 +52,7 @@ class EmbeddedEngine extends ChangeNotifier {
 
   /// Every engine currently backing a texture, by the id the host gave it.
   ///
-  /// **Static, and worth defending.** A window capture finds its guests by
+  /// Static, and worth defending. A window capture finds its guests by
   /// walking the render tree for `TextureBox`, which yields texture ids and
   /// nothing else — the widget that built one is long out of reach by then.
   /// Something has to turn an id back into the engine that owns it, and a

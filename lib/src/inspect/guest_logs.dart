@@ -6,7 +6,7 @@ import 'log.dart';
 
 /// Keeps what the preview printed, where it can be asked for.
 ///
-/// **The gap this closes.** The guest's `print` reached the *host's* console and
+/// The gap this closes. The guest's `print` reached the *host's* console and
 /// nowhere else — the GUI could not show it, `fw` could not return it, and an
 /// agent driving a demo could not read the one thing a developer reaches for
 /// first. The host does hold the guest's stdout, but only because the host
@@ -14,7 +14,7 @@ import 'log.dart';
 /// service URI and nothing more. So the buffer has to be in the guest, exactly
 /// as [GuestErrors]' is, and for the same reason.
 ///
-/// **Both pulled and pushed.** The buffer answers "what has been printed"; the
+/// Both pulled and pushed. The buffer answers "what has been printed"; the
 /// events say "and here is another one" without waiting for a poll. A console
 /// that lagged three seconds behind the demo would be a console nobody trusts,
 /// and the measurement behind `GuestWatch` already established that the event
@@ -29,10 +29,10 @@ class GuestLogs {
   /// Bounded, because a demo printing from `build` prints on every frame and an
   /// unbounded buffer in a live app is a leak.
   ///
-  /// Far larger than [GuestErrors]' fifty, and the difference is the point:
-  /// errors are *distinct* failures with repeats counted, so fifty is a great
-  /// many. Log lines are occurrences, and a demo that prints one line per frame
-  /// fills five hundred in eight seconds. This is a scrollback, not a summary.
+  /// Far larger than [GuestErrors]' fifty, because the two hold different
+  /// things: errors are *distinct* failures with repeats counted, so fifty is a
+  /// great many. Log lines are occurrences, and a demo that prints one line per
+  /// frame fills five hundred in eight seconds. This has to hold a scrollback.
   static const _limit = 500;
 
   final _lines = <InspectLogLine>[];
@@ -52,11 +52,11 @@ class GuestLogs {
 
   /// Runs [body] in a zone whose `print` is recorded as well as printed.
   ///
-  /// **A zone rather than a `debugPrint` override**, because `debugPrint` is
+  /// A zone rather than a `debugPrint` override, because `debugPrint` is
   /// only what the framework uses; a demo calls `print`, and so does anything it
   /// depends on. `debugPrint` ends in `print` too, so one seam catches both.
   ///
-  /// **And it forwards, always.** Swallowing the line to collect it would trade
+  /// And it forwards, always. Swallowing the line to collect it would trade
   /// a thing you can see for a thing you can query — and worse, the host reads
   /// the VM service URI and the `FW-PROBE:` lines off this very stream, so a
   /// zone that kept them would stop the session starting at all.
@@ -105,7 +105,7 @@ class GuestLogs {
   /// did not would be the one place showing another demo's words under this
   /// demo's name.
   ///
-  /// **Only on a change of entry**, because this runs from `didUpdateWidget`
+  /// Only on a change of entry, because this runs from `didUpdateWidget`
   /// and therefore on every rebuild — turning a knob would otherwise wipe what
   /// the previous knob printed, which is the one thing you turned it to see.
   void resetFor(String entryId) {

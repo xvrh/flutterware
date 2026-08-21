@@ -42,8 +42,8 @@ class HumanAction {
 class HumanActions {
   HumanActions({this.cap = 100});
 
-  /// Buffered actions past this are counted, not kept — the take reports how
-  /// many were dropped rather than silently forgetting them.
+  /// Buffered actions past this are counted but not kept — the take reports
+  /// how many were dropped rather than discarding them silently.
   final int cap;
 
   final _records = <HumanAction>[];

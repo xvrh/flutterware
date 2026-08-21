@@ -44,8 +44,8 @@ const _maxInlineTitles = 12;
 
 /// How wide one inline title may be.
 ///
-/// **Two caps, because a summary is bounded by rows times width and this is
-/// the half that was open.** A stored title is capped at 300 characters and
+/// Two caps, because a summary is bounded by rows times width and this is
+/// the half that was open. A stored title is capped at 300 characters and
 /// that is right for the artifact; twelve of those inline is 3,600 characters
 /// on one step, and a step is not the unit anyone budgets in. A db event's
 /// title is a whole SQL statement now, so the case is ordinary rather than
@@ -65,7 +65,7 @@ const _maxInlineTitleChars = 120;
 /// volume: measured on the example suite, 183 of 189 events and 98% of the
 /// bytes.
 ///
-/// **Both caps say when they bit.** Handing back twelve of forty with nothing
+/// Both caps say when they bit. Handing back twelve of forty with nothing
 /// saying so reads as "the app did twelve things", and the arithmetic that
 /// would disprove it — `eventCount` minus the `system` count — needs the
 /// exclusion rule above to be known first. A title cut short ends in `…` for

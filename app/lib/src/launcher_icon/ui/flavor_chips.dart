@@ -2,9 +2,9 @@
 ///
 /// Its own file because a chip stopped being a label. A flavor now arrives with
 /// the evidence for it, and the row's job is to say which ones you can go and
-/// read — a chip for a flavor nobody has generated has to be visibly different
-/// from one for a flavor that is there, or the row invites a click into an
-/// empty panel and calls it a bug.
+/// read — a chip for an ungenerated flavor has to be visibly different from one
+/// for a flavor that is there, or the row invites a click into an empty
+/// panel.
 library;
 
 import 'package:flutter/material.dart';

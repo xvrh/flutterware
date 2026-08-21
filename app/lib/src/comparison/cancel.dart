@@ -1,4 +1,4 @@
-/// A comparison stopped because somebody asked it to.
+/// A comparison stopped on request.
 ///
 /// Its own type rather than a generic exception so every layer between the
 /// Stop button and a render loop can tell "the user is done" from "something

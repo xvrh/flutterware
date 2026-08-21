@@ -52,7 +52,7 @@ Future<Uint8List> _shot(WidgetTester tester, Widget child) async {
 }
 
 void main() {
-  /// **E2, the gate on the whole devbar split.**
+  /// E2, the gate on the whole devbar split.
   ///
   /// The cockpit photographs the app's tree: every `flutterware_act` reply,
   /// every scenario shot, every screenshot in the Screen tab. If mounting a
@@ -74,7 +74,7 @@ void main() {
     expect(wrapped, bare);
   });
 
-  /// **What `overlayVisible: false` does not buy, measured.**
+  /// What `overlayVisible: false` does not buy, measured.
   ///
   /// The pixels *do* match with the panel shut and no plugin adding a button —
   /// which was not what this design assumed, and is recorded here so nobody
@@ -168,8 +168,8 @@ void main() {
     expect(find.byType(FittedBox), findsNothing);
   });
 
-  /// **The ambient defaults are not chrome, and this is what it cost to learn
-  /// that.** Reported by a consumer wiring Run into a real app: the visible
+  /// The ambient defaults are not chrome, and this is what it cost to learn
+  /// that. Reported by a consumer wiring Run into a real app: the visible
   /// branch supplied a `Directionality` for the overlay's own `Stack` and the
   /// headless branch did not, so an app with a widget above its `MaterialApp`
   /// that needed one rendered *nothing* and logged `No Directionality widget

@@ -9,13 +9,13 @@ import 'watch.dart';
 
 /// Tells the host when what it is looking at has moved, without being asked.
 ///
-/// **The problem this exists for.** A tree is of one build. Entry switch,
+/// The problem this exists for. A tree is of one build. Entry switch,
 /// reload, knob and axis change all notify; nothing notifies when the *demo's
 /// own* state moves. That was invisible while a stale tree only showed slightly
 /// wrong numbers — but once hovering a row draws a rectangle on screen, a stale
 /// tree visibly lies: you hover `Padding` and a box appears over nothing.
 ///
-/// **Why not push the tree every frame.** An animation almost never changes
+/// Why not push the tree every frame. An animation almost never changes
 /// tree structure. It changes geometry. Re-sending fifty identical nodes with
 /// different rects sixty times a second, to move one rectangle, spends the most
 /// in exactly the case the feature was turned on for. So two things are watched
@@ -33,7 +33,7 @@ import 'watch.dart';
 /// the tree inside the event would put the expensive walk on the frame that
 /// detected the change, which is the frame that can least afford it.
 ///
-/// Off unless somebody is looking: a guest nobody is inspecting pays nothing,
+/// Off unless something is watching, so an uninspected guest costs nothing —
 /// which is why this is a switch and not an install.
 class GuestWatch {
   GuestWatch({

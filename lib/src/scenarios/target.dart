@@ -95,7 +95,7 @@ sealed class Target {
   /// The widget at a point, in the coordinates every box in an observation is
   /// reported in.
   ///
-  /// **What to reach for when a control has no words.** Six or seven of the
+  /// What to reach for when a control has no words. Six or seven of the
   /// forty-odd things on a real screen carry no label, no text and no tooltip
   /// — icon buttons, mostly — and until this there was no way to name one at
   /// all. It is also how a screen item is acted on: the host turns

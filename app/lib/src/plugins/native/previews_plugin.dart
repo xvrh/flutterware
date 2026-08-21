@@ -51,7 +51,7 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   /// [CatalogSession.connectToDaemon], which already exists for the same
   /// reason and is simply threaded through here.
   ///
-  /// Nothing in production passes it. What it buys is a test that can mount
+  /// Nothing in production passes it. It exists so a test can mount
   /// this panel: the real connect compiles a snapshot and spawns a process, so
   /// without a seam the only way to exercise the panel's own wiring is not to
   /// exercise it.
@@ -61,7 +61,7 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
 
   /// Each package's photographed previews, for the list's hover popover.
   ///
-  /// **Here rather than on the core**, which is pure Dart because `fw` and the
+  /// Here rather than on the core, which is pure Dart because `fw` and the
   /// MCP server link it — a cache of `dart:ui` images is exactly what the
   /// purity guardrail exists to keep out. Here rather than on the *session*
   /// too: a session is built fresh every time the panel is mounted, and a
@@ -165,10 +165,10 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   /// what lets you look elsewhere and notice when it lands. No elapsed count —
   /// a figure ticking in the corner of the eye is movement, not information.
   ///
-  /// [CatalogSession.visiblyBusyWith] rather than `busyWith`, and that is the
-  /// whole difference between a rail that reports and a rail that flickers: a
-  /// switch the guest makes by itself is 64ms, and this row is not worth
-  /// 64ms of anybody's attention. The unfloored [busyWith] is still what
+  /// [CatalogSession.visiblyBusyWith] rather than `busyWith`, which is the
+  /// difference between a rail that reports and a rail that flickers: a switch
+  /// the guest makes by itself is 64ms, and a 64ms row is not worth reading.
+  /// The unfloored [busyWith] is still what
   /// [PreviewsPlugin.busyWith] above answers with, because a capture must know
   /// the instant the session starts working, not a quarter-second later.
   Status? _busyStatusFor(String path) {
@@ -209,7 +209,7 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   ];
 
   /// Closing the worktree is what ends the compile loops and the servers —
-  /// nothing shorter does, which is the whole point of the plugin owning them.
+  /// nothing shorter does, which is why the plugin owns them.
   @override
   void dispose() {
     for (var session in _sessions.values) {
@@ -348,7 +348,7 @@ class _CatalogPanelState extends State<_CatalogPanel> {
   /// Starts the compile loop for [package], but only once the scan says there
   /// is something to compile.
   ///
-  /// **This is the thirty seconds.** A package with no entries used to get a
+  /// This is the thirty seconds. A package with no entries used to get a
   /// session like any other: the daemon bound its socket, scanned the same
   /// directory this one did, refused in about a millisecond, and exited before
   /// the client's first 25ms poll had connected — so the `DaemonFailed` it sent

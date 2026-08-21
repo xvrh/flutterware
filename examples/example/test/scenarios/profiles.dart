@@ -5,7 +5,7 @@
 /// them: a profile that lives in another file works exactly as well as one
 /// written in place.
 ///
-/// **The list is the offered set, and its head is the default.** The GUI shows
+/// The list is the offered set, and its head is the default. The GUI shows
 /// all of it and CI brings its own list, so "show every phone in the picker,
 /// run two on CI" is not a contradiction.
 library;

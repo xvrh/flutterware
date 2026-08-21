@@ -13,7 +13,7 @@
 ///   posts one payload-free [channelNudgeKind] event meaning "there is
 ///   something to pull".
 ///
-/// **The nudge is coalesced, and that is the whole trick.** At most one is
+/// The nudge is coalesced, and that is the whole trick. At most one is
 /// outstanding per peer between drains, so the nudge rate is bounded by how
 /// often the host pulls, never by how fast events arrive. A bulk sync writing
 /// five thousand rows produces one nudge, not five thousand — which is what
@@ -111,7 +111,7 @@ class VmServiceTransport {
   /// produces are answered rather than nudged about. Without this every attach
   /// would post a nudge for the replay it is already returning.
   ///
-  /// **Per peer, not a bool** — found by the database panel, 2026-08-12. An
+  /// Per peer, not a bool — found by the database panel, 2026-08-12. An
   /// event broadcast while *another* peer's exchange was in flight (a panel
   /// action invoked over MCP, say) queued on this peer but was never nudged
   /// about, because the global flag said "a call will answer it" when that
@@ -140,7 +140,7 @@ class VmServiceTransport {
   /// the app some other way (an embedder, a test) drives this directly instead
   /// of going through the service extension.
   ///
-  /// **The pause before draining is not a hedge, it is the common case.**
+  /// The pause before draining is not a hedge, it is the common case.
   /// `InspectorCore` answers a request from an `async` method, so even a
   /// handler that returns a value immediately enqueues its response one
   /// microtask after `handleFrame` returns. Draining synchronously would send

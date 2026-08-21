@@ -13,7 +13,7 @@ import 'app_theme.dart';
 /// The comparison stage over a staged pair of frames: a button that moved
 /// 12px down and changed shade, and a badge that appeared.
 ///
-/// **What this is for.** The stage only ever appears after a comparison run,
+/// What this is for. The stage only ever appears after a comparison run,
 /// which prices a look at it in minutes; here the two frames are drawn on a
 /// canvas and the diff is written by hand to match, so every mode — the boxes
 /// on the head half, the slider's boundary, the pills' hover — is one preview

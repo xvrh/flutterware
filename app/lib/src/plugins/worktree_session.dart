@@ -13,7 +13,7 @@ import 'registry.dart';
 /// One *open* worktree in the GUI: a [Session], and a panel for each of its
 /// plugins.
 ///
-/// **It wraps a session rather than being one.** The two used to be parallel
+/// It wraps a session rather than being one. The two used to be parallel
 /// implementations — same plugin list in the same order, same `reports`, same
 /// lookup, one over panels and one over cores — and parallel implementations
 /// of the same thing are how a GUI ends up able to do something no other

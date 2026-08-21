@@ -4,7 +4,7 @@ import 'guest.dart';
 
 /// Driving a motion from a test.
 ///
-/// **In-process, not over the VM service.** A scenario runs the widget tree in
+/// In-process, not over the VM service. A scenario runs the widget tree in
 /// the test isolate, so there is nothing to connect to and nothing to wait a
 /// frame for — this writes the playhead and pumps. `ext.flutterware.motion.*`
 /// exists for a *host* looking at a guest in another process; here the registry

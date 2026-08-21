@@ -23,7 +23,7 @@ import 'session.dart';
 /// same [PluginCore]s the GUI sidebar and `fw` read, which is what makes
 /// "no renderer is privileged" true rather than aspirational.
 ///
-/// **A small fixed tool set, not one tool per action.** The obvious mapping —
+/// A small fixed tool set, not one tool per action. The obvious mapping —
 /// a tool per plugin action — puts every action of every plugin into an
 /// agent's context on every request, and 8 plugins with 6 actions each is 50
 /// tools to describe before answering a question about one. So discovery is a
@@ -86,7 +86,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
 
   /// [registerTool], with the tool's own schema enforced on the way in.
   ///
-  /// **Because one level in already refuses, and the level above it did not.**
+  /// Because one level in already refuses, and the level above it did not.
   /// `Session` rejects an argument naming a parameter an action does not have,
   /// for the reason written at `_undeclared`: a dropped argument comes back as
   /// a well-formed answer to a question nobody asked, and nothing downstream
@@ -305,7 +305,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
 
   /// The one tool here that is not about a plugin.
   ///
-  /// **A tool, because there is nowhere else to put it.** Everything else on
+  /// A tool, because there is nowhere else to put it. Everything else on
   /// this server reaches a plugin core, and cores are resolved from the
   /// worktree's declared manifest — so a feature of the shell, available to
   /// every project whether or not it declares anything, has no action to be.
@@ -415,7 +415,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
 
   /// The index, or one plugin in full.
   ///
-  /// **Because the full answer does not fit.** Every parameter of every action
+  /// Because the full answer does not fit. Every parameter of every action
   /// documented is 34k tokens on flutterware's own repo — past the 25k a client
   /// hands a model, so the reply an agent got was a note saying it had been
   /// written to a file. The one documented way to learn an action id could not
@@ -483,7 +483,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
 
   /// One plugin's actions, with everything they share said once.
   ///
-  /// **The repetition was the size.** Measured on `run` 2026-08-13: 93KB, of
+  /// The repetition was the size. Measured on `run` 2026-08-13: 93KB, of
   /// which `act`, `observe` and `navigate` were 45KB between them — three
   /// actions that take the same twenty-odd parameters and hand back the same
   /// `RunActResult`, spelled out three times. `RunControlResult` appeared four
@@ -666,18 +666,18 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
   /// Forwards what the plugin is saying about itself while the job runs, and
   /// returns the way to stop.
   ///
-  /// **The line the panel is showing, and nothing invented.** A core moves its
+  /// The line the panel is showing, and nothing invented. A core moves its
   /// report's status as it works — `building`, `2 of 40 · 3 broken`, `Syncing
   /// files to device macOS` — because that is what the sidebar renders, and
   /// [PluginCore.changes] is the same bump every renderer already subscribes
   /// to. So an agent watching a three-minute action reads what a human beside
-  /// it would read, out of one source. A plugin that says nothing while it
-  /// works sends nothing: silence is honest, and a heartbeat that only means
+  /// it would read, out of one source. A plugin that reports nothing while it
+  /// works sends nothing: silence is accurate, and a heartbeat that only means
   /// "still alive" is what a timeout is for.
   ///
   /// Only when the client asked. The token is the opt-in the protocol defines
   /// — no token, no traffic — and the notifications never extend a client's
-  /// timeout, so this buys visibility rather than patience.
+  /// timeout, so this adds visibility rather than patience.
   void Function() _followProgress(PluginCore core, ProgressToken? token) {
     if (token == null) return () {};
     var sent = 0;

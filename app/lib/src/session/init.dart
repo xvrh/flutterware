@@ -17,8 +17,8 @@ const mcpConfigFileName = '.mcp.json';
 /// Writes the two files a project needs to be usable by a human and an agent:
 /// its config, and its MCP registration.
 ///
-/// **It records nothing about this machine, and that is the change from what it
-/// used to be.** It wrote `.flutterware/sdk`, a link naming whichever SDK ran
+/// It records nothing about this machine, and that is the change from what it
+/// used to be. It wrote `.flutterware/sdk`, a link naming whichever SDK ran
 /// it, so that a globally installed `fw` could find a project and the SDK to
 /// run it with. There is no such binary now — flutterware is reached through
 /// `dart run flutterware`, so the SDK is whatever the caller's own `dart` is,
@@ -102,8 +102,8 @@ class ProjectInit {
   /// you can see and `fw` is a command you can type, but an MCP server nobody
   /// has configured is indistinguishable from one that does not exist.
   ///
-  /// **The entry is the command a user would type, and it names no version
-  /// manager.** `dart run flutterware mcp` resolves through whatever `dart` the
+  /// The entry is the command a user would type, and it names no version
+  /// manager. `dart run flutterware mcp` resolves through whatever `dart` the
   /// client's environment provides, at spawn time — so upgrading an SDK keeps
   /// it correct, and flutterware never has to know whether this project is
   /// managed by fvm, mise, asdf or nothing at all. Guessing that from a
@@ -116,7 +116,7 @@ class ProjectInit {
   /// version manager which auto-installs an SDK may narrate that onto stdout,
   /// which is where the protocol lives.
   ///
-  /// **Merges; never rewrites.** This is the one file `init` touches that
+  /// Merges; never rewrites. This is the one file `init` touches that
   /// flutterware does not own — other servers live in it, it is normally
   /// committed, and an entry someone has edited is an entry they meant. So a
   /// `flutterware` key that is already there is left exactly as it is, and a
@@ -408,15 +408,15 @@ Map<String, String> _memberConsts(List<String> members) {
 
 /// The `fw.identity(...)` the scaffold writes, with a guess already filled in.
 ///
-/// **The guess belongs here and nowhere else.** Which package represents a
+/// The guess belongs here and nowhere else. Which package represents a
 /// repository is a claim only its author can make — a monorepo holds several
-/// real apps and no obvious answer — so inferring it at every launch would be a
-/// rule nobody could see. Written into the config once, it is a starting point
-/// somebody reads and corrects.
+/// real apps and no obvious answer — so inferring it at every launch would be
+/// an invisible rule. Written into the config once, it is a starting point to
+/// read and correct.
 ///
 /// A repository where nothing has a real icon yet gets the line commented out:
-/// there is nothing true to put in it, and an empty default teaches nobody that
-/// the setting exists.
+/// there is nothing true to put in it, and an empty default would not even
+/// show that the setting exists.
 String _identityLine(String root) {
   const preamble =
       '  // Which package stands for this repository, and the picture that\n'

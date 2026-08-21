@@ -66,7 +66,7 @@ class TargetMessages {
   /// The nothing-matched refusal.
   ///
   /// [hint] is what the resolver worked out about *this* miss — a rendered
-  /// string that differs from the wanted one by a character nobody can see, or
+  /// string that differs from the wanted one by an invisible character, or
   /// a semantics label carrying the words. It replaces the guess rather than
   /// joining it: told the exact string is on screen, a reader does not also
   /// need to be told to scroll. [prelude] goes in front of either, for the
@@ -144,7 +144,7 @@ class TargetMessages {
 
   /// A miss on rendered text that another property would have hit.
   ///
-  /// **`screen` is the thing you read to decide what to act on**, and its `w`
+  /// `screen` is the thing you read to decide what to act on, and its `w`
   /// is whatever carries the control's words: the semantics label first — a
   /// `Slider.label`, an icon button's `Semantics` — and the tooltip when
   /// nothing else does. A bare target is rendered text only, so a reader
@@ -174,7 +174,7 @@ class TargetMessages {
 
   /// The refusal that has to be usable in one step.
   ///
-  /// **It names the matches.** A caller told only that two things matched has
+  /// It names the matches. A caller told only that two things matched has
   /// to go and look before it can choose, and the look is another round trip
   /// against a screen that may have moved. [where] is one line per match, in
   /// the order `nth` indexes them, so the number in front of a box is the
@@ -205,8 +205,8 @@ class TargetMessages {
   /// The covered refusal for the one covering that is not a mistake: a text
   /// field's own decoration.
   ///
-  /// **A field's `labelText` is a visible string, so a bare target matches
-  /// it** — and matches the label `Text`, the one widget in that field nobody
+  /// A field's `labelText` is a visible string, so a bare target matches
+  /// it — and matches the label `Text`, the one widget in that field nobody
   /// can act on: the decoration sits under an `IgnorePointer`, so the pointer
   /// at the label's centre goes to the field. The generic covered sentence is
   /// true and useless there, because the thing "covering" the label is the
@@ -342,7 +342,7 @@ class TargetResolver {
     }
   }
 
-  /// The refusal an out-of-range index deserves, with the count in it.
+  /// The refusal for an out-of-range index, with the count in it.
   ///
   /// Targets compose, so `nth(nth(…))` runs out at whichever level ran out
   /// first and the sentence has to be about *that* one; the walk descends to
@@ -409,7 +409,7 @@ class TargetResolver {
   ///
   /// Tooltip before semantics because it is the cheaper question and, on a
   /// live app, the likelier one: a tooltip is always there to be asked about,
-  /// where the semantics tree is off until somebody holds a handle.
+  /// where the semantics tree is off until something holds a handle.
   String? _propertyMiss(String wanted) {
     var tooltips = find.byTooltip(wanted).evaluate().length;
     if (tooltips > 0) {
@@ -473,7 +473,7 @@ class TargetResolver {
 
   /// Matches the semantics tree does have, when it is already on.
   ///
-  /// **Never turns semantics on to answer.** It is not free, it changes what
+  /// Never turns semantics on to answer. It is not free, it changes what
   /// the app builds, and an error path is the last place to do that quietly —
   /// and it would buy nothing: a label that never reached a `screen` reply is
   /// not the label anybody copied.
@@ -511,9 +511,8 @@ class TargetResolver {
 
   /// How many matches a refusal lists before it stops.
   ///
-  /// A target matching thirty things is a question about the target rather
-  /// than about the thirty, and the count in front of the list already says
-  /// so.
+  /// A target matching thirty things is a problem with the target rather than
+  /// with the thirty, and the count in front of the list already reports it.
   static const listedMatches = 10;
 
   /// Where each match is, numbered as `nth` indexes them.
@@ -610,10 +609,10 @@ class TargetResolver {
   /// [TargetMessages.decorationLabel].
   ///
   /// The walk stops at whichever of `EditableText` and `InputDecorator` it
-  /// meets first, and that order is the whole test: the field's *value* is
-  /// drawn inside the editable, everything the decoration draws around it —
-  /// label, hint, helper, prefix — is not. Reaching the editable first means
-  /// the covering is an ordinary one and deserves the ordinary sentence.
+  /// meets first, and that order is the test: the field's *value* is drawn
+  /// inside the editable, everything the decoration draws around it — label,
+  /// hint, helper, prefix — is not. Reaching the editable first means the
+  /// covering is an ordinary one and gets the ordinary sentence.
   String? _decorationRefusal(Finder finder, String described, String verb) {
     var elements = finder.evaluate().toList();
     if (elements.length != 1) return null;
@@ -639,8 +638,8 @@ class TargetResolver {
   /// The `{"label": …}` that reaches the field [decorator] decorates, or null
   /// when this cannot say that it does.
   ///
-  /// **Deduced from the decoration, then resolved — never deduced and
-  /// offered.** The first version of this message read `labelText ?? hintText`
+  /// Deduced from the decoration, then resolved — never deduced and
+  /// offered. The first version of this message read `labelText ?? hintText`
   /// off the decoration and handed it over, which a widget test agreed with
   /// and the live GUI did not: on the studio's own filter field the offered
   /// label found nothing, because a word had just been typed into it and a
@@ -676,7 +675,7 @@ class TargetResolver {
 
   /// The view [render] paints into, walked up the render tree.
   ///
-  /// **Not `binding.renderViews.single`**, which is a `Bad state: Too many
+  /// Not `binding.renderViews.single`, which is a `Bad state: Too many
   /// elements` waiting for the first app that opens a second window — and
   /// `.first` in its place would be a guess that silently hit-tests one view
   /// against another's coordinates. The target itself knows which view it is
@@ -810,14 +809,13 @@ class _IncludingScrolledAway extends Finder {
 /// The `EditableText` a text-entering verb means, given the [finder] its
 /// target resolved to.
 ///
-/// **A point inside a field resolves *below* the editable, not above it.**
+/// A point inside a field resolves *below* the editable, not above it.
 /// `Target.at` — which is what `item:` becomes — takes the innermost render
 /// object the hit test reached, and inside a `TextField` that is the
 /// `RenderEditable` itself. The descendant search alone then comes back
 /// empty, because `EditableText` is an *ancestor* of what the point resolved
 /// to, and the verb refuses a field the caller can see with "contains 0 text
-/// fields" — the one refusal in this tool that tells a reader the thing in
-/// front of them is not there.
+/// fields", which contradicts what is on their screen.
 ///
 /// So the search runs both ways: down first, which is what a target naming
 /// the `TextField`, its key or its semantics label needs, then up to the

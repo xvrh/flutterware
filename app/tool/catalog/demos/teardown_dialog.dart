@@ -14,8 +14,8 @@ import 'shell.dart';
 
 /// The checklist assembled when a worktree is removed.
 ///
-/// **A dialog is opened by a click, so it has no address and `fw capture`
-/// cannot reach it.** These are how it gets looked at: each button below builds
+/// A dialog is opened by a click, so it has no address and `fw capture`
+/// cannot reach it. These are how it gets looked at: each button below builds
 /// a [TeardownPlan] by hand and shows the real dialog over a fake `git`, so
 /// every state — blocked, warned, closed, and a run that fails halfway — can be
 /// seen without a checkout to destroy.

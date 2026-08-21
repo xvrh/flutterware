@@ -8,7 +8,7 @@ import 'package:flutterware_app/src/changes/ranking.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
-/// **Selection is the whole interaction.** One file is showing, the address
+/// Selection is the whole interaction. One file is showing, the address
 /// says which, and the index says the same. Everything the old screen got wrong
 /// here — a click that scrolled instead of opening, a file that could only be
 /// reached by scrolling past another one's diff — was a consequence of not

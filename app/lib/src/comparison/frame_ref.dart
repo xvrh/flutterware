@@ -1,6 +1,6 @@
 /// Where a frame is, and how to read it.
 ///
-/// **Raw pixels carry no header**, so a path on its own is not enough to draw:
+/// Raw pixels carry no header, so a path on its own is not enough to draw:
 /// the width and height have to travel with it. A preview's frame is filed in
 /// the `ShotCache`, which keeps a record beside every entry; a scenario's is
 /// written by the replay, which records the dimensions in the step rather than

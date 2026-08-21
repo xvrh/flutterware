@@ -37,7 +37,7 @@ class GuestTextInput with TextInputControl {
 
   /// Whether the platform would be showing a keyboard right now.
   ///
-  /// **The two signals, and the whole of the state machine they drive.** The
+  /// The two signals, and the whole state machine they drive. The
   /// framework computes this and hands it to whatever control is installed, so
   /// nothing downstream needs a heuristic for when a phone would raise its
   /// keyboard: it is up between a [show] and the [hide] after it.
@@ -92,7 +92,7 @@ class GuestTextInput with TextInputControl {
   /// so the field lets go and the keyboard comes down because the view
   /// dismissed it, which is the rule the whole feature is built on.
   ///
-  /// **The trap it exists to avoid.** On this path `TextInput._clearClient()`
+  /// The trap it exists to avoid. On this path `TextInput._clearClient()`
   /// never runs, so no [detach] ever arrives: a control that waited for one
   /// would keep its key handler installed and its client believed-focused, and
   /// the next keystroke would go to a field that has already let go. So the
@@ -153,7 +153,7 @@ class GuestTextInput with TextInputControl {
   /// The `NSStandardKeyBindingResponding` selector [key] means on macOS, or
   /// null when the key is not an editing command.
   ///
-  /// **This is the half of an IME that is easy to miss.** On Apple platforms
+  /// This is the half of an IME that is easy to miss. On Apple platforms
   /// the framework deliberately refuses to act on the editing keys while a
   /// field is focused — `DefaultTextEditingShortcuts` maps backspace, delete,
   /// every arrow, home, end, page and escape to

@@ -94,9 +94,9 @@ class FwTypography {
   ///
   /// A token because it was six copies: seven files each spelled out the same
   /// family, the same three fallbacks and the same tabular figures, and they
-  /// had already drifted on size. Tabular figures are the point of it — a
-  /// column of durations that shifts as the digits change is a column nobody
-  /// can compare down.
+  /// had already drifted on size. Tabular figures are the reason it exists — a
+  /// column of durations that shifts as the digits change cannot be compared
+  /// down.
   ///
   /// Deliberately not routed through [FwTypeSpec.applyFont]: a theme picks the
   /// face for prose, and prose is exactly what this is not.

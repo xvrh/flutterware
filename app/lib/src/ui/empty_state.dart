@@ -20,7 +20,7 @@ class EmptyState extends StatelessWidget {
   final Color? iconColor;
 
   /// Makes [message] selectable. Off by default, because an empty state's
-  /// message is a sentence somebody wrote and nobody needs to copy. [ErrorState]
+  /// message is prose rather than something to copy. [ErrorState]
   /// turns it on: an error message is a path, a command or a stack, and the
   /// first thing anyone does with one is paste it somewhere.
   final bool selectableMessage;

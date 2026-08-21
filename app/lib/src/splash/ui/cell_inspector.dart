@@ -15,7 +15,7 @@ import 'variant_tile.dart';
 
 /// One cell, said in full, beside the matrix rather than instead of it.
 ///
-/// **This replaces a drill-in page and its back link.** Selecting a tile used
+/// This replaces a drill-in page and its back link. Selecting a tile used
 /// to swap the whole panel for a single cell, which meant the comparison — the
 /// only reason to draw eight of anything — disappeared at the moment you got
 /// interested in one of them, and left a text link called "← All eight" as the
@@ -250,11 +250,11 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// Where the picture came from, at the size the question deserves.
+/// Where the picture came from, at the size this view can afford.
 ///
 /// On a tile this is one micro line, because eight of them have to stay out of
 /// the way. Here it is the first thing under the picture and it carries the
-/// full sentence, because this is where somebody has come to ask.
+/// full sentence, because this is the view opened to ask that question.
 class _Origin extends StatelessWidget {
   const _Origin(this.picture);
 

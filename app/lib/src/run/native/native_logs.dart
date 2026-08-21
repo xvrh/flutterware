@@ -8,8 +8,8 @@ import '../logs.dart';
 
 /// The platform's own log for one run — the half `flutter run` never shows.
 ///
-/// **This exists because forwarding more of the launcher's output could not
-/// fix it.** `flutter run` reads the device log itself and hands on a filtered
+/// This exists because forwarding more of the launcher's output could not
+/// fix it. `flutter run` reads the device log itself and hands on a filtered
 /// stream, and the filter is not about volume — it is structural. On an iOS
 /// simulator the predicate it builds admits a line only if the sender is the
 /// engine, `libswiftCore`, or the process's *own main executable*
@@ -30,14 +30,14 @@ import '../logs.dart';
 /// purchases, deep links, maps, camera, Bluetooth, biometrics — are exactly
 /// the features whose only instrument was unreadable from here.
 ///
-/// **Scoped to the process is necessary and not sufficient.** The same window
+/// Scoped to the process is necessary and not sufficient. The same window
 /// unscoped is 385,000 events, and scoped to the app's process alone it is
 /// still 1889 — `Network`, `UIKitCore`, `libxpc`, `CFNetwork` and the rest of
 /// the OS talking on the app's behalf. One more clause, that the *sender* not
 /// be an OS image, takes it to 141: the plugin frameworks, the engine, and the
 /// app. That is the read this offers.
 ///
-/// **A question asked afterwards, not a stream.** Like [readRunLog], and for
+/// A question asked afterwards, not a stream. Like [readRunLog], and for
 /// the same reason: the interesting lines are emitted in the first two seconds
 /// of a launch, before any client could have attached. Both Apple platforms
 /// answer from the log store with `log show --start`, so a run's whole life is
@@ -52,7 +52,7 @@ abstract class NativeLogSource {
   ///
   /// [since] bounds the window — the run's start, normally, which is the only
   /// bound that means anything: a device log is machine-wide and permanent,
-  /// and "this run" is the only slice of it anybody asked about.
+  /// and "this run" is the only slice of it worth reading.
   Future<NativeLogRead> read({DateTime? since, int? tail});
 }
 
@@ -156,7 +156,7 @@ class AppleLogSource implements NativeLogSource {
 
   /// The app bundle of whatever ran a Flutter engine in this window.
   ///
-  /// **Asked of the log rather than of the build directory**, which is the
+  /// Asked of the log rather than of the build directory, which is the
   /// difference between a fact and a guess. A product name has to be dug out
   /// of an Xcode configuration whose directory depends on the flavor, and the
   /// answer would still be a name rather than the container the simulator
@@ -220,8 +220,8 @@ class AppleLogSource implements NativeLogSource {
   /// a Swift crash reports itself from there, and `flutter run` admits it for
   /// the same reason.
   ///
-  /// **The sender is excluded by what it is not, and that is not a style
-  /// choice.** Asking instead that the sender live under [bundle] — the
+  /// The sender is excluded by what it is not, and that is not a style
+  /// choice. Asking instead that the sender live under [bundle] — the
   /// obvious spelling, and the first one here — matched nothing at all, on a
   /// simulator where the process clause was matching 1889 lines. The log store
   /// resolves an image path by its Mach-O UUID and reports whichever path it
@@ -355,7 +355,7 @@ class AndroidLogSource implements NativeLogSource {
 
   /// The app's pid, from the engine's own logcat lines.
   ///
-  /// **Not from the applicationId**, which is the obvious route and the wrong
+  /// Not from the applicationId, which is the obvious route and the wrong
   /// one: Gradle can rewrite it per flavor and per build type, which is why
   /// `flutter_tools` runs `aapt` over the built APK rather than reading the
   /// manifest. Bootstrapping from the log needs no build tools and no build

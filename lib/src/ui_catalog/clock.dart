@@ -7,7 +7,7 @@ import 'package:clock/clock.dart';
 /// the other side of a branch, in a comparison against the base — and a screen
 /// showing today's date differs every one of those times for a reason that has
 /// nothing to do with the code. Pinning it is what makes "these two pictures
-/// differ" mean "somebody changed something".
+/// differ" mean "the code changed".
 ///
 /// Constructed **local**, so every machine renders the same wall clock —
 /// 9:41 on the first of the month, the hour a screenshot has been taken at
@@ -24,7 +24,7 @@ final previewClockOrigin = DateTime(2026, 1, 1, 9, 41);
 
 /// Runs [body] with the preview clock pinned.
 ///
-/// **Must wrap the whole of the guest's `main`, binding included.**
+/// Must wrap the whole of the guest's `main`, binding included.
 /// `PlatformDispatcher.onBeginFrame` captures `Zone.current` when it is *set*,
 /// and the binding sets it in `initInstances` — so a zone entered after
 /// `ensureInitialized` would leave every build, layout and paint callback

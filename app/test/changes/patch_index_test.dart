@@ -4,8 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/changes/patch_index.dart';
 
-/// **This is the file where a wrong byte offset silently renders the wrong
-/// code**, which is the worst failure the changes screen can have. So the cases
+/// This is the file where a wrong byte offset silently renders the wrong
+/// code, which is the worst failure the changes screen can have. So the cases
 /// here are the ones a happy-path patch never produces, written out explicitly
 /// rather than recorded, because each one is a specific claim about the format.
 ///

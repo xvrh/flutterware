@@ -8,7 +8,7 @@
 /// [[my_app, http, async], [my_app, shelf, async]]
 /// ```
 ///
-/// **Breadth-first and capped.** This used to enumerate every path depth-first
+/// Breadth-first and capped. This used to enumerate every path depth-first
 /// and without a bound, which is exponential in a dense graph and was being
 /// called from inside a `Tooltip`'s build. Breadth-first means the [limit]
 /// chains kept are the shortest ones, which are also the ones worth reading:

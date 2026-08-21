@@ -63,7 +63,7 @@ Widget jsonPayload() => _Frame(
   },
 );
 
-/// **Deep enough to run out of horizontal room.** Indentation is per level, so
+/// Deep enough to run out of horizontal room. Indentation is per level, so
 /// past a certain depth a tree either scrolls sideways or squeezes its values
 /// into nothing — this is the entry that says which.
 @Preview(name: 'Deeply nested', group: 'JSON view', wrapper: wrapInAppTheme)

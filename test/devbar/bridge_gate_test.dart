@@ -17,7 +17,7 @@ class _FlagsPlugin implements DevbarPlugin, DevbarPanelSource {
   void dispose() {}
 }
 
-/// **The gate, in its own file because it needs an app nobody is watching.**
+/// The gate, in its own file because it needs an app nobody is watching.
 ///
 /// `GuestChannels.install()` is process-wide and cannot be undone, so this has
 /// to run in an isolate where it has not happened — which is what a separate

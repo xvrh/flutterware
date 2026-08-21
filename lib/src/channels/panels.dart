@@ -1,7 +1,7 @@
 /// Serving a [PanelDescriptor]: the app-side half that turns a declaration
 /// into channels, handlers and events on an [InspectorCore].
 ///
-/// **A panel is built, not implemented.** There is no interface with four
+/// A panel is built, not implemented. There is no interface with four
 /// methods to override and no way to declare a knob whose value nobody can
 /// read: every `feed`/`state`/`knob`/`action` call takes the declaration and
 /// the code that serves it together, and the descriptor is derived from what
@@ -123,8 +123,8 @@ class Panel {
   /// been called about.
   ///
   /// Refuses an undeclared feed rather than dropping the event on a channel
-  /// nothing renders — a feed nobody declared is a typo, and a silent one
-  /// costs an afternoon.
+  /// nothing renders — an undeclared feed is a typo, and a silent one costs an
+  /// afternoon.
   int emit(
     String feedId,
     Map<String, Object?> payload, {

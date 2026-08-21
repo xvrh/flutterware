@@ -6,7 +6,7 @@ import '../launcher_icon/model/role.dart';
 
 /// Whether a launcher icon is still the one `flutter create` wrote.
 ///
-/// **Read by the `init` guess and by nothing else.** It used to decide the face
+/// Read by the `init` guess and by nothing else. It used to decide the face
 /// itself, and that was a mistake with a cost: the list below is byte-exact
 /// against template files somebody else maintains, it had been taken from one
 /// vintage of them, and a real mobile app whose generator writes iOS and

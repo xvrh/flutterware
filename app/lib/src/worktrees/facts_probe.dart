@@ -49,8 +49,8 @@ class WorktreeFactsProbe {
   final GitProbe git;
 
   /// Nice to have, never required. Everything it reports is optional, and a
-  /// probe that finds nothing is indistinguishable from a repo with no agents —
-  /// which is the point.
+  /// probe that finds nothing is indistinguishable from a repo with no agents,
+  /// which is the intended behaviour.
   final AgentProbe agent;
 
   /// Also nice to have: a machine with no `gh` is a repo with no PR column.
@@ -63,7 +63,7 @@ class WorktreeFactsProbe {
 
   /// How long a pull request answer is believed.
   ///
-  /// **The only fact here with a TTL**, because it is the only one whose truth
+  /// The only fact here with a TTL, because it is the only one whose truth
   /// lives on someone else's computer. Everything git says is either instant to
   /// recompute or keyed by a sha that cannot change; a check that turns red does
   /// so without anything local moving, so this one is a clock.
@@ -125,7 +125,7 @@ class WorktreeFactsProbe {
   /// What a `~/.claude/projects` event costs: a `stat` and a 64 KB tail read per
   /// worktree, and not one subprocess. An agent mid-answer writes to its session
   /// file continuously, so this path is taken every couple of seconds for as
-  /// long as anybody is working — which is affordable exactly because it runs no
+  /// long as work is going on — which is affordable exactly because it runs no
   /// git.
   ///
   /// Activity is folded rather than recomputed: no git event fired, so the
@@ -241,9 +241,9 @@ class WorktreeFactsProbe {
   /// will report, since most projects declare no stack at all.
   ///
   /// Past [stackFreshFor] the reading is [FactState.stale] rather than dropped.
-  /// It is still the last thing anybody saw, and a stack that was up an hour
-  /// ago is very probably still up — the row dims it and prints its age instead
-  /// of pretending to certainty or pretending to ignorance.
+  /// It is still the last reading taken, and a stack that was up an hour ago is
+  /// very probably still up — the row dims it and prints its age rather than
+  /// claiming either certainty or ignorance.
   Fact<StackReading> _stackFact(StackReading? reading) {
     if (reading?.at == null) return const Fact.unavailable('no stack');
     var age = _now().difference(reading!.at!);

@@ -1,6 +1,6 @@
 /// How a devbar plugin says it can be rendered from outside the app.
 ///
-/// **Implementing this is what puts a plugin in descriptor mode** — there is no
+/// Implementing this is what puts a plugin in descriptor mode — there is no
 /// enum and no flag. A plugin that implements it is mirrored to the cockpit,
 /// `fw` and MCP, and (later) drawn in the overlay from the same declaration. A
 /// plugin that does not implement it is widget mode: it draws its own tab with

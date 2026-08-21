@@ -23,7 +23,7 @@ class GuestVmService {
     unawaited(service.onDone.then((_) => _gone = true));
   }
 
-  /// A client over a [service] somebody else connected, for a test.
+  /// A client over a [service] the caller connected, for a test.
   ///
   /// [connect] is the way in for everything real: it is what knows a guest
   /// prints an `http://` URI and that the isolate to talk to is the first one.
@@ -43,10 +43,9 @@ class GuestVmService {
   /// The underlying client, for calls this wrapper does not name.
   final VmService service;
 
-  /// Whether the connection has finished — the guest exited, or somebody
-  /// closed it.
+  /// Whether the connection has finished — the guest exited, or it was closed.
   ///
-  /// **Checked before calling, not only caught after.** A call made after the
+  /// Checked before calling rather than only caught after. A call made after the
   /// client was disposed does not fail cleanly: `VmService` errors the
   /// completers it is *holding* and then clears them, so a later one registers
   /// a completer nothing will ever complete and writes to a closed sink. The
@@ -122,7 +121,7 @@ class GuestVmService {
   /// an answer, not a failure: a panel asking what knobs a demo has, of a demo
   /// that has not built, should show nothing rather than an error.
   ///
-  /// **Null covers a guest that is gone, too**, for the same reason and one
+  /// Null covers a guest that is gone, too, for the same reason and one
   /// more. The same reason: a question put to a guest that no longer exists has
   /// nothing to answer with, and every caller of this form already handles
   /// nothing. The one more: the calls that meet a dead connection are mostly
@@ -159,8 +158,8 @@ class GuestVmService {
   /// A guest too old to have the extension is a real case, which is why the
   /// tolerant form stays. It is just not the right form for a write.
   ///
-  /// **Gives the guest [registrationWindow] to register before it believes
-  /// the answer.** "Not registered" and "not registered *yet*" arrive as the
+  /// Gives the guest [registrationWindow] to register before it believes the
+  /// answer. "Not registered" and "not registered *yet*" arrive as the
   /// same JSON-RPC 32601, and nothing but time tells them apart: the VM service
   /// is listening — and its URI printed, and this client connected — well
   /// before the guest's `main` has run, so a host that asks the moment it
@@ -170,7 +169,7 @@ class GuestVmService {
   ///
   /// The strictness is unchanged, only postponed. A renamed extension still
   /// throws, and still lists what the guest does register — it just pays the
-  /// wait first, which nobody but a developer with a typo ever pays.
+  /// wait first, which is only ever paid by a typo.
   Future<Map<String, dynamic>?> requireExtension(
     String method, {
     Map<String, String>? args,

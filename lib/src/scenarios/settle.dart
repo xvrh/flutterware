@@ -23,7 +23,7 @@ const _frameInterval = Duration(milliseconds: 100);
 /// the step. Use [Settle.full] where a screen that never settles should be an
 /// error.
 ///
-/// **Frames are all a policy can follow, and a scenario needs one more thing.**
+/// Frames are all a policy can follow, and a scenario needs one more thing.
 /// Work that resolves on the *real* event loop — an asset read from the engine,
 /// and the `vector_graphics`, Lottie or `ImageProvider` decode on the other end
 /// of it — schedules no frame while it is in flight, so no policy here can wait
@@ -52,7 +52,7 @@ sealed class Settle {
   /// it does not — or when [budget] of the fake clock is spent, whichever
   /// comes first. Running out is not a failure — it is recorded on the step.
   ///
-  /// **The budget is a ceiling, not a wait.** Frames are the only thing this
+  /// The budget is a ceiling, not a wait. Frames are the only thing this
   /// loop follows, and work waiting on a timer schedules none: a screen whose
   /// `Future.delayed(Duration(seconds: 1))` has not completed looks exactly
   /// like a screen that is finished, so the loop returns at the first quiet
@@ -62,7 +62,7 @@ sealed class Settle {
   /// [Settle.frames] count that covers it.
   const factory Settle.upTo(Duration budget) = _Budgeted;
 
-  /// Spend the whole of [budget] on the fake clock, whatever the frame loop is
+  /// Spend all of [budget] on the fake clock, whatever the frame loop is
   /// doing — the policy for work that waits on a timer rather than on frames.
   ///
   /// Where [Settle.upTo] asks the app whether to keep going, this one does not
@@ -74,7 +74,7 @@ sealed class Settle {
   /// The cost is that the clock really does move. A snackbar that
   /// auto-dismisses at four seconds is gone by the end of a five-second
   /// budget, and a screen captured after this policy is the screen as it stands
-  /// at `budget`, not as it stood when it stopped changing. Which is why it is
+  /// at `budget`, not as it stood when it stopped changing. That is why it is
   /// not the default: reach for it where the question is *does this work at
   /// all* rather than *what does it look like now*.
   const factory Settle.elapse(Duration budget) = _Elapsed;

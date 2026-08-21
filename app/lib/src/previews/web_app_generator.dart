@@ -15,7 +15,7 @@ import 'catalog_wrapper.dart';
 /// one at a time into a guest engine, so there is no such app any more — this
 /// writes one.
 ///
-/// **It hosts the old [UICatalog] widget**, and that is not a stopgap. The
+/// It hosts the old [UICatalog] widget, and that is not a stopgap. The
 /// tree, the search, the device frames and the parameters panel all already
 /// work against the model the new demos produce: a demo declares its knobs by
 /// calling `context.knobs.*`, which is the same API the old

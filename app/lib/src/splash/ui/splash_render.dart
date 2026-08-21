@@ -10,7 +10,7 @@ import '../model/surface.dart';
 
 /// A [SplashComposition], drawn.
 ///
-/// **Deliberately thin, and it must stay that way.** Every decision about where
+/// Deliberately thin, and it must stay that way. Every decision about where
 /// something goes — which key won the cascade, what `android_gravity` means,
 /// how big the Android 12 mask is — has already been made by the time a
 /// composition exists. This widget maps [SplashFit] onto `BoxFit` and
@@ -73,7 +73,7 @@ class SplashRender extends StatelessWidget {
 /// Where the parts of the screen the OS keeps begin — the notch band and the
 /// home indicator.
 ///
-/// **A rule at the boundary, not a band over the content.** The first version
+/// A rule at the boundary, not a band over the content. The first version
 /// filled both insets with a translucent grey, and on an iPhone that is a 59dp
 /// slab across the top of an 852dp screen: it reads as part of the splash, which
 /// is the one thing a preview must never make you believe. A hairline says the
@@ -207,9 +207,9 @@ class _MissingLayer extends StatelessWidget {
 /// The Android 12 icon: a fixed slot, a circular mask, and an optional circle
 /// behind it.
 ///
-/// The whole point of this surface is that the icon is **not** screen-sized
-/// however large the source is, and that a third of it is cut away. Drawing it
-/// any other way would hide the two things people get wrong.
+/// This surface exists to show that the icon is **not** screen-sized however
+/// large the source is, and that a third of it is cut away. Drawing it any
+/// other way would hide the two things people get wrong.
 class _Android12Icon extends StatelessWidget {
   const _Android12Icon(this.composition);
 

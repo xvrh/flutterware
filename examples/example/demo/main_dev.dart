@@ -6,7 +6,7 @@ import 'src/seed.dart';
 /// A dev-only entry point that lives outside `lib/`, which is the whole point
 /// of it.
 ///
-/// **It exists to hold the run guest to a non-`package:` entry point.** The
+/// It exists to hold the run guest to a non-`package:` entry point. The
 /// wrapper the launch generates has to name three things three different ways:
 /// this file by path, [Seed] beside it by path, and `MyHomePage` by the
 /// `package:` URI it does have. Wrapping used to be refused here outright — no

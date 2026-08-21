@@ -6,7 +6,7 @@
 /// the scenario: a plain `testWidgets` that walks a catalog and pumps every
 /// entry needs the same fact, and has nowhere to get it from.
 ///
-/// **Why a project needs this at all.** A catalog holding two form factors has
+/// Why a project needs this at all. A catalog holding two form factors has
 /// to pump a desktop entry on a desktop-sized surface or it reports overflows
 /// that are not real — the same fact `PreviewCanvas` carries for the tool. The
 /// canvas list is pure Dart and lives in the project's own package, so the
@@ -45,7 +45,7 @@ import 'run_args.dart';
 extension DeviceStaging on WidgetTester {
   /// Renders as [device] until the returned callback is run.
   ///
-  /// **Run the reset inside the test body — a `tearDown` is too late.** The
+  /// Run the reset inside the test body — a `tearDown` is too late. The
   /// binding verifies its foundation debug variables at the end of the body,
   /// `debugDefaultTargetPlatformOverride` among them, and tearDowns run after
   /// that. So a reset filed as a tearDown fails the test it was meant to clean
@@ -74,9 +74,9 @@ extension DeviceStaging on WidgetTester {
   /// else, so a test written against it agrees with the panel and with
   /// `previews screenshot` by construction rather than by care.
   ///
-  /// **No canvas and a canvas that stages nothing are different answers.** No
-  /// canvas leaves the surface exactly as the test had it, which is the whole
-  /// of the old behaviour and stays the rule. A canvas that resolves to no
+  /// No canvas and a canvas that stages nothing are different answers. No
+  /// canvas leaves the surface exactly as the test had it, which is the old
+  /// behaviour and stays the rule. A canvas that resolves to no
   /// device has *said something* — it is a subtree of windows, and a declared
   /// window is offered rather than staged (see [PreviewCanvas.defaultDevice]) —
   /// so it gets the same rectangle the panel opens it on rather than
@@ -158,7 +158,7 @@ VoidCallback applyScenarioRunArgs(WidgetTester tester, ScenarioRunArgs args) {
 
 /// Puts [height] logical pixels of software keyboard on the view.
 ///
-/// **The three numbers a real embedder writes**, and all three of them: the
+/// The three numbers a real embedder writes, and all three of them: the
 /// insets rise, the bottom safe area is eaten — measured as 0 on every device
 /// in the table with a keyboard up — and `viewPadding` is left alone, because
 /// it is what still remembers the device underneath and the one number

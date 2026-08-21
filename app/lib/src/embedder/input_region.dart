@@ -12,7 +12,7 @@ import 'protocol.dart';
 /// the guest divides by its own ratio, so a wheel tick scrolls the same logical
 /// distance whether the guest fills the panel or is staged as a phone.
 ///
-/// **The ratio is read from the engine at event time, not passed in at build.**
+/// The ratio is read from the engine at event time, not passed in at build.
 /// It is the engine that was told what to render at, so it is the only value
 /// that cannot disagree with what the guest is actually doing — and it moves
 /// without this widget rebuilding, because magnifying the stage changes the
@@ -36,7 +36,7 @@ class EmbedderInputRegion extends StatelessWidget {
   /// Whether the guest is being touched rather than clicked — a phone or a
   /// tablet, where the mouse driving it is standing in for a finger.
   ///
-  /// **The mouse then stops existing**, which is the point rather than a side
+  /// The mouse then stops existing, deliberately rather than as a side
   /// effect: no add, no hover, no exit, so a demo staged as a phone shows no
   /// hover states, because a phone has none. What survives is the wheel, sent
   /// as it always was — a phone has no wheel, but the human driving one has no

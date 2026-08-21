@@ -10,7 +10,7 @@ import 'app_theme.dart';
 /// The split button and the hover card — two controls whose interesting states
 /// only exist while a pointer is somewhere.
 ///
-/// **This is the case previews are actually best at.** Neither of these can be
+/// This is the case previews are actually best at. Neither of these can be
 /// screenshotted in a useful state from a running app without holding a cursor
 /// still at the right pixel, and neither is reachable from a widget test
 /// without pumping specific durations. Here the menu is one click away and the

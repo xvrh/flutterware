@@ -10,7 +10,7 @@ import 'knob.dart';
 /// The app-wide switches a project's shell offers — a theme, a locale, a
 /// flavour — drawn in the catalog's top bar.
 ///
-/// **Axes, not knobs, and the word is the one the rest of the tool uses**:
+/// Axes, not knobs, and the word is the one the rest of the tool uses:
 /// `--axes=theme=dark`, `describe --axes=true`, `axes:` on an artifact's
 /// address. This was called `TopBarState`, which named where the control is
 /// drawn rather than what it is, leaving nothing in the API to connect it to
@@ -79,8 +79,8 @@ class CatalogAxes implements PreviewAxes {
   /// Called from the guest when the entry changes, so that an entry whose
   /// wrapper is *not* a shell reports having no axes immediately, rather than
   /// leaving the last shell's on the bar until something replaces them.
-  /// Selections are untouched — they belong to the shell, which is the whole
-  /// point of them.
+  /// Selections are untouched — they belong to the shell, which is what makes
+  /// them survive an entry change.
   void resetFor(String entryId) {
     if (_entryId == entryId) return;
     _entryId = entryId;
@@ -149,8 +149,8 @@ class CatalogAxes implements PreviewAxes {
 
   /// Records selections and asks for a rebuild. Returns whether anything moved.
   ///
-  /// **A shell's map is replaced, not merged.** What arrives is the whole truth
-  /// for that shell: the host holds selections in the address, and an axis on
+  /// A shell's map is replaced rather than merged. What arrives is the full
+  /// state for that shell: the host holds selections in the address, and an axis on
   /// its default is written there as *nothing at all*, so an absent name is an
   /// instruction to forget rather than an absence of instruction. A null value
   /// says the same thing explicitly, and both put an axis back to the default
@@ -235,9 +235,9 @@ class CatalogAxes implements PreviewAxes {
 /// it unchanged and [PreviewAxes] answers them with the defaults.
 ///
 /// [id] is what the host files selections under, so leaving a shell and coming
-/// back finds the flavour you had chosen. Write it once and leave it alone —
-/// it is a name, not a path, so moving or renaming the file does not lose what
-/// was set.
+/// back finds the flavour you had chosen. Write it once and leave it alone: it
+/// is a name rather than a path, so moving or renaming the file does not lose
+/// what was set.
 class PreviewShell extends StatelessWidget {
   const PreviewShell(this.id, {super.key, required this.builder});
 

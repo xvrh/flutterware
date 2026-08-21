@@ -5,14 +5,14 @@ import 'package:flutter/widgets.dart';
 /// The narrowest pane the shell lays out for, and the floor every window
 /// minimum is built up from.
 ///
-/// **Derived, not chosen.** The densest thing in the app is the dependencies
+/// Derived, not chosen. The densest thing in the app is the dependencies
 /// table, whose seven columns declare 800px of minimum width between them
 /// (160 + 110 + 120 + 120 + 110 + 90 + 90). Add the panel's own gutter either
 /// side of it — 24 + 800 + 24 — and 848 is the width at which the widest panel
 /// still fits without scrolling inside itself. The height is what leaves the
 /// plugin rail room for its entries and their sub-entries without scrolling.
 ///
-/// **A window minimum is this plus whatever chrome the user keeps beside it** —
+/// A window minimum is this plus whatever chrome the user keeps beside it —
 /// the rail's 232 while the sidebar preference is on, nothing once ⌘B turns it
 /// off. Only the shell knows which, so the sum is made there: `shellMinimumSize`
 /// in `shell_view.dart`. Counting the rail while it is hidden is what used to
@@ -28,7 +28,7 @@ const shellPaneMinimumSize = Size(848, 700);
 /// window is smaller, so a shrunken window keeps working rather than
 /// overflowing.
 ///
-/// **This is the whole responsive policy.** At or above [minimumSize] the app is
+/// This is the whole responsive policy. At or above [minimumSize] the app is
 /// ordinary flex; below it everything scales uniformly. There is no third
 /// regime — no breakpoints, no columns that disappear, no panes that become
 /// drawers — which is what makes "does this panel work?" a question with one

@@ -7,7 +7,7 @@ import 'app_theme.dart';
 
 /// The preview panel's own magnification capsule, in every state it takes.
 ///
-/// **What this is for.** The control is a number and a cross in a 24pt capsule,
+/// What this is for. The control is a number and a cross in a 24pt capsule,
 /// and everything worth deciding about it is a glyph or a pixel: whether the
 /// dim state reads as *at rest* rather than as broken, whether the cross reads
 /// as a way out at 11pt, whether the readout stops shoving the capsule about as

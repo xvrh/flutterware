@@ -1,12 +1,12 @@
 /// The directory tree of a change set.
 ///
-/// **Structure, which a ranked list cannot carry.** A flat list of fifty-three
+/// Structure, which a ranked list cannot carry. A flat list of fifty-three
 /// filenames answers "what should I look at" and says nothing at all about the
 /// shape of the branch — that 27 of them are under `app/lib`, that `docs` was
 /// touched once. It was dropped in the master/detail rewrite and put back the
 /// same day, because that was the wrong thing to have taken away.
 ///
-/// **Ordered by weight, not by name.** This is the one change from the version
+/// Ordered by weight, not by name. This is the one change from the version
 /// that was deleted, and it is what lets the tree carry the ranking instead of
 /// fighting it: the directory an agent hammered sorts to the top, and inside it
 /// so does the file. Alphabetical is the right default for a file explorer,
@@ -73,10 +73,10 @@ class TreeNode {
 
 /// Folds [files] into a directory tree.
 ///
-/// **Single-child directories are collapsed into their parent** — `app/lib/src`
-/// is one row, not three. A repo whose every path starts with the same four
-/// segments would otherwise spend the whole rail on prefixes nobody is choosing
-/// between.
+/// Single-child directories are collapsed into their parent — `app/lib/src` is
+/// one row, not three. A repo whose every path starts with the same four
+/// segments would otherwise spend the whole rail on prefixes that offer no
+/// choice.
 TreeNode buildTree(List<FileChange> files) {
   var root = TreeNode('·', '');
 

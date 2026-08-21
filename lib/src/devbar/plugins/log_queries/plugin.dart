@@ -7,7 +7,7 @@ import 'ui.dart';
 /// A plugin for the Devbar which adds a tab listing the statements the app
 /// itself issued.
 ///
-/// **The other half of `DatabasePlugin`.** That one is a *browser*: it runs
+/// The other half of `DatabasePlugin`. That one is a *browser*: it runs
 /// the SQL you type and watches the tables you name, through the four
 /// functions of a `DatabaseAdapter`. It never sees a statement the app ran on
 /// its own. This one is the log, and it is fed the same way every other

@@ -53,9 +53,9 @@ class InspectPatience {
 
   /// Ask once and take the answer.
   ///
-  /// For reading a guest **nobody asked to change** — the attach path, where
-  /// the question is "is this session already showing the entry I want" and a
-  /// no is an answer. Retrying there would be waiting for a person to click.
+  /// For reading a guest nothing asked to change — the attach path, where the
+  /// question is "is this session already showing the entry I want" and a no is
+  /// an answer. Retrying there would mean waiting for a click.
   static const glance = InspectPatience(attempts: 1, delay: Duration.zero);
 
   final int attempts;
@@ -64,7 +64,7 @@ class InspectPatience {
 
 /// Reads a guest's `ext.flutterware.*` inspection extensions.
 ///
-/// **One reader, two mounts.** [HeadlessCatalog] brings up its own guest to
+/// One reader, two mounts. [HeadlessCatalog] brings up its own guest to
 /// answer a `fw` or MCP call; [CatalogSession] holds a live one behind the
 /// panel. Both ask the same guest the same questions, and before this existed
 /// they asked it in two files — `settledAxes` beside `_readAxes`,
@@ -213,7 +213,7 @@ class InspectClient {
   /// is what says "leave this at its default". Both callers build it with
   /// `paramPayloadFor`.
   ///
-  /// **A write, so it uses [GuestVmService.requireExtension]**, and routing both
+  /// A write, so it uses [GuestVmService.requireExtension], and routing both
   /// callers through here is most of why this class earns its keep. The tolerant
   /// form swallows JSON-RPC 32601, which is right for "does this old guest have
   /// the extension" and wrong for "call the extension I know exists" — and that
@@ -242,7 +242,7 @@ class InspectClient {
   /// Stages the guest as [platform] — null for a preview that is no device at
   /// all, which renders as the machine the studio is running on.
   ///
-  /// **The identity of the device, where the resize carries its geometry.**
+  /// The identity of the device, where the resize carries its geometry.
   /// The two travel apart because they have to: the window metrics reach the
   /// guest through the embedder's own event, which has fields for a size, a
   /// ratio and four insets and nothing else. Everything beyond geometry — the
@@ -255,7 +255,7 @@ class InspectClient {
 
   /// Tells the guest how tall its keyboard is and whether to raise it.
   ///
-  /// **Two halves of one fact, and neither is a keyboard on its own.** The
+  /// Two halves of one fact, and neither is a keyboard on its own. The
   /// height is a measurement the host holds — it comes off the device table
   /// and the guest has no way to know it — and the mode is what the person
   /// looking at the picture asked for. What the app *wants* stays entirely on
@@ -266,7 +266,7 @@ class InspectClient {
   /// and `Fit`, which is not a device and has nothing measured to draw. A
   /// forced-up keyboard there raises nothing rather than inventing a number.
   ///
-  /// **Required rather than tolerant**, like the other writes: a keyboard that
+  /// Required rather than tolerant, like the other writes: a keyboard that
   /// silently failed to arrive looks exactly like a layout that survived it.
   Future<KeyboardState?> setKeyboard({
     required KeyboardMode mode,
@@ -341,7 +341,7 @@ class InspectClient {
   /// is driving an overlay that has to track an animation or a tree view that
   /// is happy a second late.
   ///
-  /// **Required rather than tolerant**, like the other writes: a watch that
+  /// Required rather than tolerant, like the other writes: a watch that
   /// silently failed to start looks exactly like a demo that is not moving.
   Future<WatchStats?> watch({
     String? nodeId,
@@ -360,7 +360,7 @@ class InspectClient {
     return json == null ? null : WatchStats.fromJson(json);
   }
 
-  /// Stops the watch, so a guest nobody is inspecting pays nothing.
+  /// Stops the watch, so an uninspected guest costs nothing.
   ///
   /// Tolerant, unlike [watch], and for the reason [clearErrors] is: this runs
   /// from a dispose, where the guest may already be going away and there is
@@ -378,14 +378,14 @@ class InspectClient {
   ///
   /// Not filtered by entry here. A push naming another entry is the *evidence*
   /// that a switch has happened and this reader is behind, so dropping it
-  /// silently would throw away the one signal that says so.
+  /// silently would throw away the only signal for it.
   Stream<WatchPush> get watches =>
       vmService.extensionEvents('flutterware.watch').map(WatchPush.fromJson);
 
   /// Polls [method] until what it decodes names [entryId].
   ///
-  /// **Null covers both "the guest does not register this" and "it never named
-  /// the entry".** They are one outcome at every call site — the headless side
+  /// Null covers both "the guest does not register this" and "it never named
+  /// the entry". They are one outcome at every call site — the headless side
   /// answers empty for both, the panel leaves what it is holding alone for both
   /// — so collapsing them keeps that decision visible where it is made rather
   /// than baked in here.

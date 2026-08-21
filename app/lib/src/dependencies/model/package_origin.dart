@@ -105,7 +105,7 @@ class GitOrigin extends PackageOrigin {
   /// case pub tracked the default branch.
   final String? ref;
 
-  /// The commit actually resolved. The honest answer to "which code is this",
+  /// The commit actually resolved. The exact answer to "which code is this",
   /// since [ref] can move under you.
   final String? resolvedRef;
 

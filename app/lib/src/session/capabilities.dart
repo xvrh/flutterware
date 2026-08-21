@@ -21,7 +21,7 @@ import 'session.dart';
 /// consequence of the code rather than a description of it that someone has to
 /// remember to update.
 ///
-/// **Schema, not data.** It resolves the cores against a synthetic one-package
+/// Schema, not data. It resolves the cores against a synthetic one-package
 /// project, so what comes out is the shape every project gets — the actions and
 /// their parameters — and not this repo's entry ids or dependency names. Those
 /// belong to `fw run … entries` and `fw run … list`, which is rather the point:

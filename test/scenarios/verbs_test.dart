@@ -235,7 +235,7 @@ void main() {
     expect(find.text('bought second'), findsOneWidget);
   });
 
-  /// **Reported by a consumer driving a form.** A point is the target for a
+  /// Reported by a consumer driving a form. A point is the target for a
   /// control with no words, a field labelled from its decoration is one, and
   /// `enterText` at a point resolves *below* the editable — so the search the
   /// verb makes downwards found nothing to type into.

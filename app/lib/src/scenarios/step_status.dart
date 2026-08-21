@@ -35,9 +35,9 @@ Color scenarioStepTone(BuildContext context, ScenarioRunStep step) {
   return colors.mut;
 }
 
-/// What a step says about itself above its picture — the error it broke on, or
-/// the note that the app was still animating when the shutter fell. Nothing at
-/// all in the healthy case, which is almost every step.
+/// What a step reports above its picture — the error it broke on, or the note
+/// that the app was still animating when the capture was taken. Nothing at all
+/// in the healthy case, which is almost every step.
 class ScenarioStepNotice extends StatelessWidget {
   const ScenarioStepNotice(this.step, {super.key});
 
@@ -63,18 +63,17 @@ class ScenarioStepNotice extends StatelessWidget {
         colors.amber,
         Icons.image_not_supported_outlined,
         'Still loading when this was captured — an image decode or an asset '
-            'read had not finished after a second of real time. Whatever this '
-            'picture is missing turns up on the next step; the app is the one '
-            'taking its time, not the shutter.',
+            'read had not finished after a second of real time. Whatever is '
+            'missing from this picture turns up on the next step.',
       ),
       ScenarioRunStep(unchanged: true) => (
         colors.amber,
         Icons.copy_all_outlined,
         'Identical to the step before it — the verb ran and nothing on '
-            'screen changed. In a walking scenario that is usually a stalled '
-            'flow: a tap that landed on a control that ignored it, repeated '
-            "until the loop's bound. A capture deliberately parked "
-            'mid-flight is the innocent case.',
+            'screen changed. In a walking scenario that usually means a '
+            'stalled flow: a tap that landed on a control that ignored it, '
+            "repeated until the loop's bound. It is harmless if you parked "
+            'the capture mid-flight on purpose.',
       ),
       ScenarioRunStep(:var strayFrames) when strayFrames > 0 => (
         colors.mut2,

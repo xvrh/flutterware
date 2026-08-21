@@ -25,7 +25,7 @@ enum DevStackForm {
 
 /// The stack's state, as one widget with two forms.
 ///
-/// **One widget, two homes.** The worktree home mounts the [DevStackForm.strip]
+/// One widget, two homes. The worktree home mounts the [DevStackForm.strip]
 /// so "is my stack up" costs no navigation, and the panel mounts the
 /// [DevStackForm.band] above its services, commands and console. Sharing the
 /// widget is what stops the two from disagreeing — a second rendering of a state
@@ -86,7 +86,7 @@ const _maxWidth = 720.0;
 
 /// The panel's content column, shared by every band of it.
 ///
-/// **One right edge for the whole page.** The header's controls, a service's
+/// One right edge for the whole page. The header's controls, a service's
 /// state, a command's `Run` and the console's `Copy` are all trailing content,
 /// and they were landing on three different edges because the sections capped
 /// their width and the full-bleed bands did not. Whichever number is right, it
@@ -162,8 +162,8 @@ class _DevStackBlockState extends State<DevStackBlock> {
 
   /// Asks first, and only for a stop the project marked as destructive.
   ///
-  /// The dialog says what is lost rather than "are you sure": nobody has ever
-  /// answered "are you sure" with new information.
+  /// The dialog says what is lost rather than "are you sure", which adds
+  /// nothing the reader did not already know.
   Future<void> _stop() async {
     if (!_core.stopIsDestructive) {
       await _core.stop();

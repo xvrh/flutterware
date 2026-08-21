@@ -14,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// settings in `ScenariosCore.panelMotionInterval` all come from here, and a
 /// later change to either should be able to re-run them.
 ///
-/// **Not part of the suite** — it takes half a minute and asserts almost
+/// Not part of the suite — it takes half a minute and asserts almost
 /// nothing. Hence the name: no `_test` suffix, so no glob picks it up. Run it
 /// on purpose:
 ///

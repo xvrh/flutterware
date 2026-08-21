@@ -13,7 +13,7 @@
 ///     …/flutterware.run/<key>/screen     the same, said out loud
 ///     …/flutterware.run/<key>/logs       its output
 ///
-/// **`<key>` is [runHandleKey] — `app-` and twelve hex characters.** It hashes
+/// `<key>` is [runHandleKey] — `app-` and twelve hex characters. It hashes
 /// the worktree, the device and the entry point, which means it is *stable
 /// across relaunch*: stop Staging on the iPhone, start it again, and the same
 /// address still names it. That is the whole reason a run gets an address at
@@ -27,7 +27,7 @@
 /// answers with no app cooperation, and that reach beat the plugin route
 /// (`2026-08-12-http-profile-spike-findings.md`).
 ///
-/// **There is no `tree` tab**, and there was one for a day. The design's Screen
+/// There is no `tree` tab, and there was one for a day. The design's Screen
 /// tab is a split — the picture on the left, the widget tree filling the rest —
 /// and pulling the tree out into a third tab separated the two things you look
 /// at together. An address written against that build reads back as the screen,

@@ -5,7 +5,7 @@ import 'package:flutterware_app/src/ui/theme.dart';
 
 import 'app_theme.dart';
 
-/// **The design system, on one screen.**
+/// The design system, on one screen.
 ///
 /// Every token the app has, rendered beside its own name. This is the page that
 /// makes drift reviewable instead of a matter of taste: the finding that started

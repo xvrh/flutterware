@@ -5,7 +5,7 @@ import 'knob.dart';
 
 /// The shell's axes, as controls, in the catalog's own toolbar.
 ///
-/// **The page and the demo are one isolate here, so there is no wire.**
+/// The page and the demo are one isolate here, so there is no wire.
 /// [CatalogAxes] already holds everything both halves need — `describe()` says
 /// what the shell declared and what each is set to, `apply` records a selection
 /// and bumps `revision`, and [PreviewShell] rebuilds on that notifier by
@@ -67,7 +67,7 @@ class _AxesControlsState extends State<AxesControls> {
     return true;
   }
 
-  /// **The whole map for the shell, not the one that moved.** `apply` replaces
+  /// The whole map for the shell, not the one that moved. `apply` replaces
   /// rather than merges — an absent name means "put it back to the default" —
   /// so sending one axis would reset every other one on the bar.
   void _select(String name, Object? value) {

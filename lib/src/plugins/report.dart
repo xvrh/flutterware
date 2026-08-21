@@ -44,12 +44,12 @@ class PluginReport {
   /// [includeActions] is off for a renderer whose caller has another way to
   /// read the declarations, and for whom carrying them is not free.
   ///
-  /// **Measured, not tidied.** An action declaration is static — the same bytes
+  /// Measured, not tidied. An action declaration is static — the same bytes
   /// every time — and it dominates a report: on flutterware's own repo the
   /// Previews report is 39k characters of JSON, 38k of it declarations. A
   /// terminal pays nothing for that, so `fw status --json` keeps them. An agent
   /// pays for every one of them in every reply, and already has a tool that
-  /// serves them once.
+  /// serves them on request.
   ///
   /// [viewRows] caps every list and table in the projection, counting the rest
   /// — see [PluginView.capped]. Null keeps the projection whole, which is what

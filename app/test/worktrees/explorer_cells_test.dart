@@ -4,8 +4,8 @@ import 'package:flutterware_app/src/ui/theme.dart';
 import 'package:flutterware_app/src/worktrees/explorer_row.dart';
 import 'package:flutterware_app/src/worktrees/facts.dart';
 
-/// **Every cell must survive every state, including the ones a happy path never
-/// produces.**
+/// Every cell must survive every state, including the ones a happy path never
+/// produces.
 ///
 /// Written after finding that the changes cell enumerated `failed` and
 /// `unknown` and then asserted the value was there — so a git fact that ever

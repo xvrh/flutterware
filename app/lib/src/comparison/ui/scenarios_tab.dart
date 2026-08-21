@@ -27,12 +27,12 @@ const stepBackKey = Key('comparison.step-back');
 /// The scenario half: every flow on the left, the picked flow's merged tree
 /// beside it, and a picked *step* pushed over both.
 ///
-/// **A tree where the previews half has a list**, because a preview is one
+/// A tree where the previews half has a list, because a preview is one
 /// picture and a scenario is a tree of them: without it, picking a step means
 /// reading a list of paths with `›` in them, which is the shape the tree exists
 /// to replace.
 ///
-/// **And a pushed page where the previews half has a detail pane.** A step's
+/// And a pushed page where the previews half has a detail pane. A step's
 /// two frames are portrait; a band under the tree is landscape and short, so
 /// two of them side by side came out postage-stamp sized in the one place the
 /// pictures are the point. The scenarios panel already pushes a step as a full
@@ -147,7 +147,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
     unawaited(_shots.loadFrames(base: frames?.base, head: frames?.head));
   }
 
-  /// **Another flow starts at the origin.** The canvas is unconstrained and
+  /// Another flow starts at the origin. The canvas is unconstrained and
   /// pans two thousand pixels past its own edges, so a place scrolled to in a
   /// long flow is, in the next one, blank canvas — the tree is drawn, off
   /// somewhere behind you.
@@ -464,7 +464,7 @@ class _Header extends StatelessWidget {
 
 /// Why a scenario has no tree: it was never replayed, and the reason differs.
 ///
-/// **The word in the chip, expanded.** `skipped` beside an empty pane is a
+/// The word in the chip, expanded. `skipped` beside an empty pane is a
 /// verdict a reader has to already know how to trust — the thing worth saying
 /// is *what was compared to reach it*, which is the closure hash, and that it
 /// answers "no reason to run", not "could not run".

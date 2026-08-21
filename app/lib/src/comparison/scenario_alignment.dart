@@ -115,7 +115,7 @@ class ScenarioAlignment {
 
   /// Aligns two step lists.
   ///
-  /// **A scenario is a tree, so this is a tree alignment.** `split` replays the
+  /// A scenario is a tree, so this is a tree alignment. `split` replays the
   /// body per branch and the shared prefix is captured once, so what lands on
   /// disk is a trunk that forks. Two flows laid side by side and zipped stop
   /// being readable at the first inserted step and stop being *correct* at the
@@ -210,8 +210,8 @@ class ScenarioAlignment {
   /// The straight run starting at [first]: every step until one forks or the
   /// scenario ends.
   ///
-  /// **A linear scenario is a chain of single-child nodes, not a list of
-  /// siblings.** Aligning sibling lists compares one step against one step at
+  /// A linear scenario is a chain of single-child nodes, not a list of
+  /// siblings. Aligning sibling lists compares one step against one step at
   /// each level, which recognises no insertion at all — the LCS has to see the
   /// whole run at once, so the run has to be flattened first.
   static List<AlignableStep> _chainFrom(
@@ -302,8 +302,8 @@ class ScenarioAlignment {
 
   /// Splits hanging off a step that exists on one side only.
   ///
-  /// **A branch reported as both added and removed is a branch that never
-  /// moved.** Rename the step above a `split` and the LCS drops its pair, so
+  /// A branch reported as both added and removed is a branch that never
+  /// moved. Rename the step above a `split` and the LCS drops its pair, so
   /// every branch under it is orphaned on *both* sides — reported once as gone
   /// and once as new, over a flow whose shape did not change at all. Matching
   /// the leftovers by label puts the two halves back together and aligns their
@@ -405,9 +405,9 @@ class ScenarioAlignment {
 
   /// Longest common subsequence over signatures.
   ///
-  /// Not a zip, and that is the whole point: insert one step at position three
-  /// and a zip reports every step after it as changed, which is the report
-  /// nobody can read. Duplicate signatures — `tap "Next"` three times — need
+  /// Not a zip, deliberately: insert one step at position three and a zip
+  /// reports every step after it as changed, which is unreadable. Duplicate
+  /// signatures — `tap "Next"` three times — need
   /// no special handling here, because an LCS pairs them in order.
   static List<(AlignableStep?, AlignableStep?)> _lcs(
     List<AlignableStep> base,

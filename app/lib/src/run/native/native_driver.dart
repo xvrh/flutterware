@@ -15,7 +15,7 @@ import 'dart:convert';
 /// needs no guest, works on apps flutterware did not launch, and keeps working
 /// when the Dart VM is not being scheduled at all.
 ///
-/// **This layer is never taken silently.** It is slower and blunter than the
+/// This layer is never taken silently. It is slower and blunter than the
 /// drive layer — a native observe is seconds where a Flutter observe is
 /// milliseconds, and it addresses what the platform chose to publish rather
 /// than what the app's code says. The caller asks for it by name (`layer:
@@ -36,8 +36,8 @@ abstract class NativeDriver {
   ///
   /// Coordinates are the one part of this layer an agent can get silently
   /// wrong: a screenshot is retina-scaled and a tap is not, and the two spaces
-  /// differ by a factor nobody sees until a tap lands in the wrong place. So
-  /// the space is stated rather than implied — `px` on Android, where the dump
+  /// differ by a factor that is invisible until a tap lands in the wrong place.
+  /// So the space is stated rather than implied — `px` on Android, where the dump
   /// and `input tap` already agree, and window points on macOS and the
   /// simulator, where the screenshot is twice that.
   String get coordinateSpace;
@@ -414,9 +414,8 @@ class NativeTarget {
       );
     }
     throw NativeRefusal(
-      'the native layer sees ${matches.length} things matching $description, '
-      'and acting on a guess is the one thing this never does. Pick one with '
-      '{"nth": {"target": …, "index": …}} — they are, in order: '
+      'the native layer sees ${matches.length} things matching $description. '
+      'Pick one with {"nth": {"target": …, "index": …}} — they are, in order: '
       '${matches.map((node) => node.describe()).join(', ')}.',
       failure: 'multiple',
     );

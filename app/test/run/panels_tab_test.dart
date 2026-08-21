@@ -153,7 +153,7 @@ void main() {
     expect(find.byType(Switch), findsOneWidget);
   });
 
-  /// **A panel is not only declared at startup.** `AddDevbarPanel` serves one
+  /// A panel is not only declared at startup. `AddDevbarPanel` serves one
   /// for as long as a subtree is mounted, so an app signing in halfway through
   /// a run grows a panel while the cockpit is looking at it. Nothing pushes
   /// the panel itself: the app announces that its list moved and the tab

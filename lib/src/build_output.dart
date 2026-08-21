@@ -164,7 +164,7 @@ class Step {
 /// pipe and stops colouring and animating its output, so teeing would show a
 /// degraded copy of the very thing being asked for. Handing the terminal over
 /// gives it back exactly as the tool meant it, at the cost of the log — which
-/// is the affordance for the case where nobody was watching anyway.
+/// is a fair trade when someone is at the terminal watching.
 Future<ProcessLog> runLogged(
   String executable,
   List<String> arguments, {

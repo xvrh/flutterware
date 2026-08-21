@@ -99,7 +99,7 @@ void main() {
     expect(caused.single['query'], 'select 1');
   });
 
-  /// **The filters are what makes the details affordable.** A server up for an
+  /// The filters are what makes the details affordable. A server up for an
   /// hour holds far more than any one question wants, and before this the only
   /// narrowing was a count — so "the 5xx on /api/cases" was a client-side scan
   /// over everything the ring held.
@@ -372,8 +372,8 @@ void main() {
     );
   });
 
-  /// **A parameterized statement is the case explain exists for, and the text
-  /// alone does not run it.** The query is reported as the driver received it
+  /// A parameterized statement is the case explain exists for, and the text
+  /// alone does not run it. The query is reported as the driver received it
   /// so `normalizeSql` can group occurrences by shape; that leaves `@since` in
   /// the text, and postgres has no parameter `@since` outside a prepared
   /// statement. So the occurrence's own params have to reach the handler.

@@ -36,7 +36,7 @@ abstract class MotionSurface {
 
 /// The door a motion is driven through from outside it.
 ///
-/// **Two doors, one object.** A *host* in another process drives the service
+/// Two doors, one object. A *host* in another process drives the service
 /// extensions below; a *test* in the same isolate holds the registry directly
 /// and writes the playhead with no RPC and no frame to wait for. The extensions
 /// exist because of the process boundary, not because of the driving.

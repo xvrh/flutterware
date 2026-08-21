@@ -19,14 +19,14 @@ import 'catalog_session.dart';
 /// What the guest is staged as, as one control: the device, which way up it is,
 /// and whether it is drawn inside a body.
 ///
-/// **One capsule, because it is one subject.** These were three controls with
+/// One capsule, because it is one subject. These were three controls with
 /// the axis strip between them — picker and rotation at the left, the frame
 /// toggle at the far right past the capture button — and the last one read as a
 /// property of the panel rather than of the phone. Everything here writes
 /// staging or the address; everything to the right of the strip acts on the
 /// picture instead.
 ///
-/// **Nothing here is ever hidden.** Every segment goes dim rather than absent,
+/// Nothing here is ever hidden. Every segment goes dim rather than absent,
 /// so moving between a phone and a window does not reflow the bar under the
 /// pointer — which is the rule the rotation already followed and the frame
 /// toggle did not, appearing and disappearing on the far end as the pick
@@ -184,7 +184,7 @@ class _SegmentFace extends StatelessWidget {
 
 /// Turns the picked device on its side.
 ///
-/// **Beside the picker, not inside it.** Orientation is a state of the device
+/// Beside the picker, not inside it. Orientation is a state of the device
 /// you already chose, so "iPad" and "iPad (landscape)" as two rows would make
 /// the list say they are different devices — which is the modelling this
 /// deliberately does not use, and the list would grow by one row per rotatable
@@ -238,7 +238,7 @@ class _RotateSegment extends StatelessWidget {
 
 /// Draws the device's body around the preview, or takes it away.
 ///
-/// **Off for anything with no silhouette**, which is the panel and every window
+/// Off for anything with no silhouette, which is the panel and every window
 /// size: [canBeFramed] is the same question the canvas asks before it reaches
 /// for a body, so the switch cannot claim a picture it would not change. It was
 /// live for a window before, and pressing it did nothing at all.
@@ -272,14 +272,14 @@ class _FrameSegment extends StatelessWidget {
 
 /// Raises the software keyboard, or lets the demo decide.
 ///
-/// **A menu rather than a toggle, because it has three states and they have
-/// names.** The other two segments are switches — the device is framed or it
+/// A menu rather than a toggle, because it has three states and they have
+/// names. The other two segments are switches — the device is framed or it
 /// is not — and this one is not: *automatic* is a third thing, and it is the
 /// default. A cycling icon would have made the two forced states and the
 /// default indistinguishable until you had clicked twice to find out.
 ///
 /// The fill still says one thing and says it the way its neighbours do:
-/// **lit when a keyboard is actually up**. In [KeyboardMode.auto] that is the
+/// lit when a keyboard is actually up. In [KeyboardMode.auto] that is the
 /// app's answer rather than the address's — a form with a field focused lights
 /// this without anybody having chosen anything, which is exactly the fact
 /// worth putting on the bar.

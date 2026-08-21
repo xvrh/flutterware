@@ -40,7 +40,7 @@ const _projectedProblems = 10;
 /// only thing here that decides what resolves.
 ///
 /// Holds to the two rules every core holds to: the constructor allocates
-/// nothing, and [report] only formats what somebody already caused to load.
+/// nothing, and [report] only formats what a previous call caused to load.
 /// Loading is a scan, which is parsing and `stat`ing and nothing more.
 class AssetsCore extends PluginCore {
   AssetsCore(super.host);
@@ -431,7 +431,7 @@ class AssetsCore extends PluginCore {
 
   /// The packages an action was asked about, scanned and ready.
   ///
-  /// **Loads what it needs.** A report may never start work; an action asked
+  /// Loads what it needs. A report may never start work; an action asked
   /// for by name may, and must — in `fw` and MCP the process was born for this
   /// request and holds nothing, so a query that only read the cache would
   /// answer "nothing" every time.
@@ -590,9 +590,9 @@ class AssetsCore extends PluginCore {
 
   /// Everything wrong with a bundle that can be found without running the app.
   ///
-  /// **Scoped to each package's own assets.** A dependency's density ladder is
+  /// Scoped to each package's own assets. A dependency's density ladder is
   /// not the reader's to fix, and hashing a few thousand files they cannot
-  /// change is a slow way to produce a list nobody acts on. Weight is the
+  /// change is a slow way to produce an unactionable list. Weight is the
   /// exception: what a dependency contributes is exactly the thing worth
   /// knowing, so the byte total counts everything.
   ///

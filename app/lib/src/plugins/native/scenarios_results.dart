@@ -132,8 +132,7 @@ class ScenarioWebExportResult implements PluginResult, ReportsFailure {
 
   final int durationMs;
 
-  /// Scenarios that came back red. Their flows are on the page, which is the
-  /// point.
+  /// Scenarios that came back red. Their flows are on the page.
   final int failed;
 
   /// How to look at it. A page nobody can open is a directory, and the one
@@ -273,7 +272,7 @@ class ScenarioShotSet {
 
   /// Scenarios that failed while producing this set. Their shots up to the
   /// failure are still here; a store run that silently shipped a half suite
-  /// would be worse than one that says so.
+  /// would be worse than one that reports the gap.
   final int failed;
 
   Map<String, Object?> toJson() => _$ScenarioShotSetToJson(this);

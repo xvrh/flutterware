@@ -31,7 +31,7 @@ class PixelDiff {
   final int changedPixels;
 
   /// How many pixels were in the compared region. The denominator, kept
-  /// because [fraction] hides it and a reader deserves both.
+  /// because [fraction] hides it and both are worth having.
   final int comparedPixels;
 
   /// Where the changes are, as rects, largest first. Rects whose boxes
@@ -40,7 +40,7 @@ class PixelDiff {
 
   /// Whether the two frames were different sizes.
   ///
-  /// **Reported rather than folded into the percentage.** A card that grew
+  /// Reported rather than folded into the percentage. A card that grew
   /// 24px taller shifts every pixel below it; a diff that answers "97%
   /// changed" is arithmetically right and useless. The size delta is the
   /// finding, and the percentage below it describes only the region the two

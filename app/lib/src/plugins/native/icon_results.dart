@@ -36,7 +36,7 @@ class IconInventoryResult implements PluginResult {
   /// Which flavor this reports on, or null for the default.
   final String? flavor;
 
-  /// Every flavor the package has, and what says so.
+  /// Every flavor the package has, and what declares it.
   final List<IconFlavorEntry> flavors;
 
   /// `none`, `appIconSet`, `iconComposer` or `both`. Three-valued because a

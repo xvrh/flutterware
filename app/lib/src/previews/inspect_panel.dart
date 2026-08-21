@@ -248,7 +248,7 @@ class _InspectPanelState extends State<InspectPanel> {
 
 /// What the entry on screen reported while building and painting.
 ///
-/// **Not what it failed to compile.** That is a different question with a
+/// Not what it failed to compile. That is a different question with a
 /// different answer already on screen — the compiler's own words, where the
 /// widget would have been — and it is answered before a frame is ever drawn.
 /// This is the half that a green compile says nothing about: a demo that throws
@@ -370,7 +370,7 @@ class _Problem extends StatelessWidget {
 
 /// What the demo printed, newest at the bottom.
 ///
-/// **The output existed and reached nowhere anybody could see it.** The guest's
+/// The output existed and reached nowhere anybody could see it. The guest's
 /// `print` went to the *host's* console — the terminal running the GUI — so the
 /// panel could not show it, `fw` could not return it, and an agent driving a
 /// demo could not read the first thing a developer reaches for when something

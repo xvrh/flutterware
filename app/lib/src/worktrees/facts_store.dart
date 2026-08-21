@@ -1,6 +1,6 @@
 /// What the explorer remembers between launches.
 ///
-/// **Deliberately not "every fact".** Only two things are worth persisting: an
+/// Deliberately not "every fact". Only two things are worth persisting: an
 /// answer that can never change, and an answer that cost a network round trip.
 /// Everything else is cheaper to recompute than to invalidate correctly — dirty
 /// state is ~25 ms per worktree and an agent probe is a `stat` — and a cache
@@ -15,14 +15,14 @@
 ///   glance.
 /// - **Changes configs** are keyed by the mtime and size of the worktree's
 ///   `tool/flutterware.dart`. Running that file is what "opening a worktree"
-///   costs, and the changes screen has to rank a worktree **nobody has
-///   opened** — so the executed value is remembered rather than approximated.
+///   costs, and the changes screen has to rank a worktree that is **not
+///   open** — so the executed value is remembered rather than approximated.
 ///   See the design doc's §5.
 ///
 /// Lives outside the repository: this is machine state, and a cache written
 /// into the checkout would turn up in the dirty count it is there to report.
 ///
-/// **The file is shared by every process on this repository** — the file is
+/// The file is shared by every process on this repository — it is
 /// keyed by the repo root on purpose, and a Studio in one worktree plus a `fw`
 /// in another are both writers. So a save is not "write my snapshot": it is
 /// re-read, fold in what the others wrote since [open], overlay only what this
@@ -74,7 +74,7 @@ class CachedDiff {
 /// The key is [CachedChangesConfig.validityKey] — the config file's mtime and
 /// size. A key that still matches means this **is** the executed value, not an
 /// approximation of one; a key that has moved means the file was edited since,
-/// and the screen says so rather than ranking silently by yesterday's rules.
+/// and the screen flags it rather than ranking silently by yesterday's rules.
 class CachedChangesConfig {
   const CachedChangesConfig({required this.config, required this.validityKey});
 
@@ -116,8 +116,8 @@ class WorktreeFactsStore {
 
   /// Opens the store for the repository rooted at [repoRoot].
   ///
-  /// **Never throws.** A corrupt or unreadable cache is an empty cache: the
-  /// whole point of this file is to save time, and a startup that fails because
+  /// Never throws. A corrupt or unreadable cache is an empty cache: this file
+  /// exists to save time, and a startup that fails because
   /// its optional cache did not parse would be a strictly worse program than one
   /// with no cache at all.
   ///
@@ -260,9 +260,10 @@ class WorktreeFactsStore {
   /// Per section, the merge that matches its semantics:
   /// - **Diffs** are never wrong, so the disk's map is taken whole and only
   ///   this process's own writes are laid over it. A non-dirty entry the disk
-  ///   no longer has was evicted by somebody, and re-adding it would undo
-  ///   their eviction.
-  /// - **Opened** takes the later timestamp per worktree, whoever wrote it —
+  ///   no longer has was evicted by another process, and re-adding it would
+  ///   undo that eviction.
+  /// - **Opened** takes the later timestamp per worktree, whichever process
+  ///   wrote it —
   ///   "when was this last opened" has exactly one right answer.
   /// - **Changes configs** overlay dirty keys only, like diffs; the validity
   ///   key makes a stale survivor self-correcting at read time.
@@ -300,7 +301,7 @@ class WorktreeFactsStore {
     }
   }
 
-  /// **Never throws**, for the same reason [open] does not: failing to write an
+  /// Never throws, for the same reason [open] does not: failing to write an
   /// optional cache must not fail the command that produced it.
   ///
   /// Read-merge-write under an exclusive lock, then rename into place: the

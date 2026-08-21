@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-/// Spawning git without inheriting somebody else's repository.
+/// Spawning git without inheriting an unrelated repository.
 ///
 /// A git hook exports `GIT_DIR` to everything it runs, and `GIT_DIR` **beats
 /// every other way of saying which repository** — the working directory, and

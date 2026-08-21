@@ -123,7 +123,7 @@ void main() {
     expect(hovered, isTrue);
   });
 
-  /// **The reason the hold exists, with the clock advanced by hand.**
+  /// The reason the hold exists, with the clock advanced by hand.
   ///
   /// A tooltip's `waitDuration` is a `Timer`: it schedules no frame, no ticker
   /// and no image decode until it fires, so every probe a settle has reads

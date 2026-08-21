@@ -8,7 +8,7 @@ const asideGutterWidth = 28.0;
 /// Whether the panel's own navigation column is showing, and whether the panel
 /// has one at all.
 ///
-/// **A preference about the window, like the rail's**, and held the same way:
+/// A preference about the window, like the rail's, and held the same way:
 /// not per plugin, not per worktree, not written to disk. Two panels that both
 /// have a list read the same answer, so folding one and stepping to the other
 /// does not hand you straight back the thing you just folded away. It used to
@@ -29,7 +29,7 @@ class AsideVisibility extends ChangeNotifier {
   final ValueGetter<bool> railVisible;
   final ValueSetter<bool> setRailVisible;
 
-  /// Whether the aside is drawn. True until somebody folds it.
+  /// Whether the aside is drawn. True until it is folded.
   bool get visible => _visible;
   var _visible = true;
   set visible(bool value) {
@@ -46,9 +46,9 @@ class AsideVisibility extends ChangeNotifier {
   bool get expanded => !_visible && !railVisible();
 
   /// Folds both panes and remembers which of them was showing, so [restore]
-  /// gives back what was there rather than a rail somebody had already hidden.
+  /// gives back what was there rather than a rail that was already hidden.
   ///
-  /// **A macro over the two toggles, not a third state.** There is nothing to
+  /// A macro over the two toggles rather than a third state. There is nothing to
   /// be stuck in and nothing to diverge: ⌘B still works on the rail alone, the
   /// gutter still works on the aside alone, and whichever of the two you use
   /// leaves the other exactly where it was.
@@ -177,7 +177,7 @@ class _AsidePaneState extends State<AsidePane> {
 
 /// The one control that folds both panes, for an aside's own header.
 ///
-/// **On the thing it acts on, never in the window chrome.** The rail's toggle
+/// On the thing it acts on, never in the window chrome. The rail's toggle
 /// made that trip once already and came back — a control up in the band that
 /// acts on the pane below it reads as chrome and gets scanned past.
 class AsideExpandButton extends StatelessWidget {
@@ -197,14 +197,14 @@ class AsideExpandButton extends StatelessWidget {
 
 /// All that is left of the two panes once they are folded: the way back.
 ///
-/// **In the flow and always drawn**, unlike the rail's own peek strip, which
+/// In the flow and always drawn, unlike the rail's own peek strip, which
 /// appears on hover and is invisible at rest. The strip stands down while this
 /// is up — see `_gutterInFlow` — so the two never stack, and that read is the
 /// one thing about a folded aside the shell is allowed to learn a frame late,
-/// because a control that is invisible at rest can afford it. That is the right resting state
-/// for a rail somebody folded on purpose and can bring back with a shortcut
-/// they know; it is the wrong one for a window that has just given up both of
-/// its navigation columns, where the whole question is how to get out. 28px of
+/// because a control that is invisible at rest can afford it. That is the right
+/// resting state for a rail folded on purpose and brought back with a known
+/// shortcut; it is the wrong one for a window that has just given up both of
+/// its navigation columns, where the question is how to get back. 28px of
 /// 1198 is 2%, against the 39% the fold just handed back.
 ///
 /// One button for both directions, and it reads its own label: with the rail
@@ -251,7 +251,7 @@ class AsideGutter extends StatelessWidget {
 
 /// The one icon button both halves of the fold wear.
 ///
-/// **Muted at rest**, which is the whole of what this exists for. These sit in
+/// Muted at rest, which is what this exists for. These sit in
 /// a list header among controls that act on the suite — rescan, help, new — and
 /// every one of those is drawn muted until the pointer is on it. An icon button
 /// left to the theme takes full ink, so the one control in the row that acts on

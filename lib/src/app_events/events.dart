@@ -73,7 +73,7 @@ class AppEvent {
 
   /// A database statement, with the SQL as the body so it can be read whole.
   ///
-  /// **Report the app's own statements, not the schema's.** Opening a database
+  /// Report the app's own statements, not the schema's. Opening a database
   /// costs a dozen before the app has done anything — `BEGIN IMMEDIATE`, the
   /// migration bookkeeping, the `create table`s, `COMMIT` — and measured on a
   /// real suite that was 1680 of 1874 events, 89% of the channel, drowning the
@@ -167,7 +167,7 @@ class AppEvent {
 
 /// A SQL statement on one line — what a title is made of.
 ///
-/// **Folded rather than cut at the first newline**, which is what this used to
+/// Folded rather than cut at the first newline, which is what this used to
 /// do. A generator emits one line, so its statement titled whole; a person
 /// formats theirs across several with the keyword alone on the first, so it
 /// titled `select …`. Measured on a real suite, 110 of 194 db events were

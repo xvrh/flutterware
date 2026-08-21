@@ -11,7 +11,7 @@ import 'package:test/test.dart';
 /// learns something. That is worth a test rather than a reading.
 void main() {
   group('app.debugPort', () {
-    /// **The web payload, verbatim from a Chrome launch.** The daemon builds
+    /// The web payload, verbatim from a Chrome launch. The daemon builds
     /// `baseUri` with a null-aware map entry, so a runner that leaves it unset
     /// omits the key — and the web runner is one, where the mobile and desktop
     /// path sets it.

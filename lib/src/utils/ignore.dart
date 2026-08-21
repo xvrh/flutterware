@@ -7,7 +7,7 @@
 /// An [Ignore] instance holds a set of [`.gitignore` rules][1], and allows
 /// testing if a given path is ignored.
 ///
-/// **Example**:
+/// Example:
 /// ```dart
 /// import 'package:ignore/ignore.dart';
 ///
@@ -33,7 +33,7 @@ import 'package:meta/meta.dart';
 ///
 /// An [Ignore] instance holds [`.gitignore` rules][1] relative to a given path.
 ///
-/// **Example**:
+/// Example:
 /// ```dart
 /// import 'package:ignore/ignore.dart';
 ///
@@ -71,7 +71,7 @@ class Ignore {
   /// [FormatException] describing the problem. The exception will have [source]
   /// as source.
   ///
-  /// **Example**:
+  /// Example:
   /// ```dart
   /// import 'package:ignore/ignore.dart';
   /// void main() {
@@ -110,7 +110,7 @@ class Ignore {
   /// The [path] must be a relative path, not starting with `./`, `../`, and
   /// must end in slash (`/`) if it is directory.
   ///
-  /// **Example**:
+  /// Example:
   /// ```dart
   /// import 'package:ignore/ignore.dart';
   ///

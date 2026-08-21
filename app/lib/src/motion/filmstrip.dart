@@ -13,7 +13,7 @@ class FilmstripFrame {
 
 /// Lays [frames] out as a single contact sheet and writes it to [output].
 ///
-/// **One image of N moments, rather than N images.** This is what makes an
+/// One image of N moments, rather than N images. This is what makes an
 /// animation affordable for an agent to look at: the alternative is N separate
 /// artifacts, each of which costs a tool call to fetch and a good deal of
 /// context to hold, for a comparison that is only meaningful when they are side
@@ -94,7 +94,7 @@ String _shortT(double t) =>
 
 /// The playhead positions [count] frames should be taken at.
 ///
-/// **Both ends included.** A filmstrip whose first frame is not `t = 0` cannot
+/// Both ends included. A filmstrip whose first frame is not `t = 0` cannot
 /// show what a motion starts from, and one whose last is not `t = 1` cannot
 /// show where it lands — which are the two frames anybody looks at first.
 List<double> filmstripStops(int count) {

@@ -22,14 +22,14 @@ const splashPluginId = 'flutterware.splash';
 /// What each declared package's `flutter_native_splash` config will actually
 /// produce, per surface and per theme.
 ///
-/// The subject is deliberately **the resolved surface, not the config file**.
-/// What you wrote and what Android 12 shows are several cascade steps apart,
-/// and the gap between them is the whole reason this exists — so the unit of
+/// The subject is deliberately the resolved surface rather than the config
+/// file. What you wrote and what Android 12 shows are several cascade steps
+/// apart, and that gap is why this exists — so the unit of
 /// everything here is a cell of the matrix, addressable as
 /// `?surface=android12&theme=dark`.
 ///
 /// Holds to the two rules every core holds to: the constructor allocates
-/// nothing, and [report] only formats what somebody already caused to load.
+/// nothing, and [report] only formats what a previous call caused to load.
 /// Loading is parsing YAML and reading a dozen image headers.
 class SplashCore extends PluginCore {
   SplashCore(
@@ -375,14 +375,14 @@ class SplashCore extends PluginCore {
 
   /// One cell of `fw status`'s table.
   ///
-  /// **Reads the generated files where they exist, exactly as `describe` and the
-  /// panel do.** This row used to be built from `compositionFor` — the config
+  /// Reads the generated files where they exist, exactly as `describe` and the
+  /// panel do. This row used to be built from `compositionFor` — the config
   /// prediction — while `describe` had already moved to [SplashConfigScan
   /// .pictureFor]. The table therefore printed `assets/logo.png` and the
   /// config's placement while `describe`, over the same scan, printed what the
-  /// drawables actually say. Three surfaces over one core is the point of this
-  /// arrangement; two of them answering differently is the failure it exists to
-  /// prevent. The `From` column carries which one it was, because a picture and
+  /// drawables actually say. Three surfaces over one core is the reason for
+  /// this arrangement; two of them answering differently is the failure it
+  /// exists to prevent. The `From` column carries which one it was, because a picture and
   /// its provenance are one fact.
   List<String> _matrixRow(
     SplashConfigScan scan,

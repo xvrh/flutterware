@@ -30,7 +30,7 @@ enum TapFeedback {
 /// their own borders and fills for selected state, so Material's ink would only
 /// muddy them.
 ///
-/// **It paints its own hover and press state.** That is the difference between
+/// It paints its own hover and press state. That is the difference between
 /// this and a bare [GestureDetector], and it is the whole reason to reach for
 /// it: every tap target in the app answers the pointer, without each caller
 /// re-deriving the same wash from the same two tokens. [feedback] picks which
@@ -45,7 +45,7 @@ enum TapFeedback {
 /// would rather hand the job over passes `feedback: TapFeedback.overlay` and
 /// drops its own ternary, which also buys it the press state for free.
 ///
-/// **A label inside a [SelectionArea] is not selectable.** Flutter's [Text]
+/// A label inside a [SelectionArea] is not selectable. Flutter's [Text]
 /// wraps itself in a text-cursor [MouseRegion] whenever a selection registrar
 /// is in scope, and that region sits *below* this one — so the click cursor
 /// lost to the button's own label, and dragging across a row of buttons put
@@ -54,7 +54,7 @@ enum TapFeedback {
 /// answers both. [selectableChild] is the way out for a target whose text is
 /// the point.
 ///
-/// **Focus is keyboard-only.** A tap deliberately does not take focus, so the
+/// Focus is keyboard-only. A tap deliberately does not take focus, so the
 /// [FwPalette.focusRing] only ever appears for somebody travelling by keyboard,
 /// and Enter or Space there does what a tap does. [focusable] takes a target
 /// out of the traversal order — for the ones there are hundreds of, like a

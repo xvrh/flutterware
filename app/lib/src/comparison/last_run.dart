@@ -6,7 +6,7 @@ import 'scenario_comparison.dart';
 
 /// One half's finished run, as the panel restores it on the next visit.
 ///
-/// **The idle state is never blank** — that is the whole reason this exists.
+/// The idle state is never blank — that is the whole reason this exists.
 /// A comparison used to evaporate with the panel: every visit started from
 /// zero, so opening the tab meant either running the machinery again or
 /// looking at nothing. Persisting the last answer makes glancing free, and

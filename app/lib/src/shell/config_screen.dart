@@ -10,7 +10,7 @@ import 'worktree.dart';
 /// The config screen's root, so a test can scope to it.
 const configScreenKey = Key('config-screen');
 
-/// **`fw:///worktrees/<worktree>/config`** — the shell's own screen for
+/// `fw:///worktrees/<worktree>/config` — the shell's own screen for
 /// `tool/flutterware.dart`.
 ///
 /// Deliberately not a plugin. Which plugins exist is this file's decision, so a
@@ -104,14 +104,14 @@ class _ReloadAction extends StatelessWidget {
 
 /// What is actually being watched.
 ///
-/// **Naming the directory is the point**, not decoration. "It did not notice my
+/// Naming the directory is functional rather than decorative. "It did not notice my
 /// edit" is the standard complaint about file watching, and the standard cause is
 /// that the thing you edited was not in the watched set. Saying which directory
 /// is watched turns that from a mystery into a fact — and today the answer is
 /// only the config's own directory, so an edit to a file it imports really does
 /// need the button until the import closure arrives with the resident compiler.
 ///
-/// **There is no off switch.** There was one, on the theory that a watcher which
+/// There is no off switch. There was one, on the theory that a watcher which
 /// looks armed and is not should be turnable off to say so — but this line
 /// already says what is armed, and the switch brought its own failure mode: a
 /// fresh watcher takes the current file as its baseline, so every edit made

@@ -91,7 +91,7 @@ void main() {
     expect(find.byKey(mergedTreeKey), findsOneWidget);
   });
 
-  /// **Pan is per flow.** The canvas is unconstrained, so a place scrolled to
+  /// Pan is per flow. The canvas is unconstrained, so a place scrolled to
   /// in a long flow is blank canvas in a short one — the tree drawn off behind
   /// you, which reads as a flow that failed to draw.
   testWidgets('another flow gets the canvas back at the origin', (

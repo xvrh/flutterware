@@ -19,8 +19,8 @@ const dependenciesPluginId = 'flutterware.dependencies';
 /// the widgets.
 ///
 /// Shows the shape every plugin core follows, including the rule that matters
-/// most: **nothing here starts work.** The constructor allocates nothing and
-/// [report] only reads what somebody already caused to load. Loading begins in
+/// most: nothing here starts work. The constructor allocates nothing and
+/// [report] only reads what a previous call caused to load. Loading begins in
 /// [track], which the panel calls on mount and `fw` calls for the duration of
 /// a request.
 class DependenciesCore extends PluginCore {
@@ -56,8 +56,8 @@ class DependenciesCore extends PluginCore {
     notifyChanged();
   }
 
-  /// Releases [path]. The data stays cached — demand says what work is
-  /// justified, not what must be discarded.
+  /// Releases [path]. The data stays cached — demand decides what work is
+  /// justified, not what has to be discarded.
   void untrack(String path) {
     var subscription = _tracked.remove(path);
     if (subscription == null) return;
@@ -75,7 +75,7 @@ class DependenciesCore extends PluginCore {
 
   /// Whether anything being watched is still resolving.
   ///
-  /// **Tracked, not declared.** [track] is what the panel calls on mount, so
+  /// Tracked, not declared. [track] is what the panel calls on mount, so
   /// this answers about what someone is actually looking at rather than about
   /// every package in the workspace — and asking about an untracked package
   /// would build its service, which is the whole thing [_cached] avoids.
@@ -259,7 +259,7 @@ class DependenciesCore extends PluginCore {
 
   /// The dependencies of one package, or of every declared package.
   ///
-  /// **Loads what it needs.** A report may never start work; an action asked
+  /// Loads what it needs. A report may never start work; an action asked
   /// for by name may, and must — in `fw` and MCP the process was born for this
   /// request and holds nothing, so a query that only read the cache would
   /// answer "nothing" every time. That is what the plugin's two dead

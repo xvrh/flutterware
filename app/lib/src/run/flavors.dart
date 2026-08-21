@@ -39,7 +39,7 @@ String? defaultFlavorOf(String packageRoot) {
 ///
 /// Carried rather than reduced to a string because the New run page shows the
 /// flavor as a line of text instead of a field to fill, and a value with no
-/// provenance is one nobody can tell from a guess.
+/// provenance is indistinguishable from a guess.
 enum FlavorSource {
   /// `Entrypoint(flavor: 'dev')` — the pairing that motivated the field.
   entrypoint,
