@@ -351,8 +351,8 @@ class FakeKeyboardPainter extends CustomPainter {
   /// differ only in how wide the middle key is, which nobody reads as a
   /// keyboard type. With the two characters on them it needs no explaining.
   List<(double, bool, String?)> get _bottomRow => switch (variant) {
-    KeyboardVariant.email => const [
-      (1.4, true, '123'),
+    KeyboardVariant.email => [
+      (1.4, true, _numbers),
       (1.0, false, '@'),
       (1.0, false, '.'),
       (3.4, false, null),
@@ -363,8 +363,8 @@ class FakeKeyboardPainter extends CustomPainter {
     // it, so the platform spends the space bar's width on the one string every
     // address ends with. Drawn as a narrower key with a blank one beside it,
     // that blank read as a key nobody could name.
-    KeyboardVariant.url => const [
-      (1.4, true, '123'),
+    KeyboardVariant.url => [
+      (1.4, true, _numbers),
       (1.0, false, '.'),
       (1.0, false, '/'),
       (3.4, false, '.com'),
@@ -374,20 +374,28 @@ class FakeKeyboardPainter extends CustomPainter {
     // enter; iOS gives the return key a fifth of the row.
     _ =>
       _android
-          ? const [
-              (1.4, true, '?123'),
+          ? [
+              (1.4, true, _numbers),
               (1, true, ','),
               (5, false, null),
               (1, true, '.'),
               (1.4, true, null),
             ]
-          : const [
-              (1.4, true, '123'),
+          : [
+              (1.4, true, _numbers),
               (1.1, true, null),
               (4.6, false, null),
               (1.9, true, null),
             ],
   };
+
+  /// What the key that switches to digits is called — `?123` on Android and
+  /// `123` on iOS.
+  ///
+  /// Platform-aware on every row it appears on, which it was not: the letters
+  /// row spelled it the platform's way and the email and URL rows spelled it
+  /// iOS's, so an Android email keyboard carried a key Gboard does not have.
+  String get _numbers => _android ? '?123' : '123';
 
   /// A digit pad: three columns, four rows, and nothing that looks like a
   /// letter.
@@ -543,12 +551,23 @@ class FakeKeyboardPainter extends CustomPainter {
   /// Laid out unconstrained first and then re-laid at a scaled size, because
   /// `maxWidth` on a `TextPainter` wraps rather than shrinks — a `.com` on a
   /// narrow key would come out as two lines rather than as smaller text.
+  ///
+  /// **Every painter made here is disposed here**, including the one that
+  /// turned out too wide and was never drawn. A `TextPainter` owns a
+  /// `ui.Paragraph`, which is engine memory a Dart garbage collection has to
+  /// come round to; a keypad is ten of them, the slide repaints on every frame
+  /// it moves, and a suite raises a keyboard on most of its steps. The
+  /// paragraph is safe to release the moment it has been recorded — the
+  /// display list keeps its own reference to what it drew, which is why
+  /// `RenderParagraph` may dispose a painter it has painted a hundred times.
   void _paintLabel(Canvas canvas, Rect key, String label) {
     var size = key.height * 0.34;
     var painter = _layOut(label, size);
     var room = key.width * 0.78;
-    if (painter.width > room) {
-      painter = _layOut(label, size * room / painter.width);
+    if (painter.width > room && painter.width > 0) {
+      var wanted = size * room / painter.width;
+      painter.dispose();
+      painter = _layOut(label, wanted);
     }
     painter.paint(
       canvas,
@@ -557,6 +576,7 @@ class FakeKeyboardPainter extends CustomPainter {
         key.center.dy - painter.height / 2,
       ),
     );
+    painter.dispose();
   }
 
   TextPainter _layOut(String label, double fontSize) => TextPainter(
@@ -564,7 +584,9 @@ class FakeKeyboardPainter extends CustomPainter {
       text: label,
       style: TextStyle(
         color: _ink,
-        fontSize: fontSize,
+        // Never zero or below: a key laid out to nothing would otherwise ask
+        // the engine for a font size it refuses.
+        fontSize: math.max(1, fontSize),
         // Whatever the rendering lane's default face is. Naming a family here
         // would be naming one that only one of the two lanes has.
         fontWeight: FontWeight.w400,
@@ -572,7 +594,6 @@ class FakeKeyboardPainter extends CustomPainter {
       ),
     ),
     textDirection: TextDirection.ltr,
-    textAlign: TextAlign.center,
   )..layout();
 
   @override

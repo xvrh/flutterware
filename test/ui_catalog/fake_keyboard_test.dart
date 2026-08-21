@@ -90,6 +90,21 @@ void main() {
       ]);
     });
 
+    test('and Android spells the digits key its own way, on every row', () {
+      FakeKeyboardPainter android(KeyboardVariant variant) =>
+          FakeKeyboardPainter(
+            platform: DevicePlatform.android,
+            dark: false,
+            variant: variant,
+          );
+      // It was platform-aware on the letters row and hard-coded to iOS's `123`
+      // on the other two, so an Android email keyboard carried a key Gboard
+      // does not have.
+      expect(android(KeyboardVariant.letters).labels.first, '?123');
+      expect(android(KeyboardVariant.email).labels.first, '?123');
+      expect(android(KeyboardVariant.url).labels.first, '?123');
+    });
+
     test('and letters claim no language at all', () {
       // `123` is the only mark on it, and it is a mark every locale's keyboard
       // carries. Nothing here spells a letter, because a letter would need a

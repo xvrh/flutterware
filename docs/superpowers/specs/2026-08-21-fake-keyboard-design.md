@@ -179,8 +179,18 @@ headless captures await the push before capturing.
 ## The artwork: a schematic slab (owner, 2026-08-21)
 
 Rows of rounded rectangles at the right height, tinted per platform, light and
-dark. No glyphs: they would need a font that differs between the harness and a
-bare `flutter test`, and a per-locale layout to not be a lie.
+dark. **No letters** — they would need a font that differs between the harness
+and a bare `flutter test`, and a per-locale layout to not be a lie.
+
+**Glyphs on the keys that identify the keyboard, and no others** (owner,
+2026-08-21). `@`, `.`, `/`, `.com` and the digits stand in the same place on an
+AZERTY, a Cyrillic and a QWERTY keyboard, so neither objection above reaches
+them — and they are exactly what tells one variant from another. Drawn bare, an
+email row and a text row differed only in how wide the middle key was, which
+nobody reads as a keyboard type. ASCII only: a glyph the rendering font lacks
+is a tofu box, which on an otherwise blank key reads as a bug, so the keypad's
+backspace is a drawn shape rather than `⌫`. `FakeKeyboardPainter.labels` is the
+seam a test asserts on, because a painted label is invisible to every finder.
 
 **Painted, never built.** A keyboard composed of widgets would put key caps in
 front of `find.text`, a hundred nodes into the semantics and transcript

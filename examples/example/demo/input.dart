@@ -83,10 +83,16 @@ class _KeyboardsState extends State<_Keyboards> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Keyboards')),
-    // Scrollable, because on a small phone in landscape five fields and a
-    // keyboard do not fit — which is what a real form does there, and beats an
-    // overflow stripe across the entry that exists to be looked at.
-    body: SingleChildScrollView(
+    // **Not a `SingleChildScrollView`, which is what a real form would use.**
+    // In the previews guest the entry builds once as this machine and again as
+    // the staged device, and `MaterialScrollBehavior` wraps a viewport in a
+    // `Scrollbar` on macOS and not on iOS — so the platform switch reparents
+    // everything under a `Scrollable`, disposing these fields and closing the
+    // input connection the autofocus had just opened. The keyboard then
+    // correctly follows the app back down, and the entry photographs with no
+    // keyboard on it at all. Unscrolled until the guest builds staged from the
+    // first build rather than the first frame.
+    body: Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         spacing: 16,
