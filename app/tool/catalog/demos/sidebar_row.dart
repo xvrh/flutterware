@@ -113,6 +113,31 @@ Widget sidebarRowStates() => const _Rail(
       ),
     ),
     _Labelled(
+      'what a tester host says while it works',
+      Column(
+        children: [
+          SidebarChildRow(
+            label: 'app',
+            status: Status.info('compiling the catalog…'),
+            selected: false,
+            onTap: _noop,
+          ),
+          SidebarChildRow(
+            label: 'app',
+            status: Status.info('restarting the harness…'),
+            selected: false,
+            onTap: _noop,
+          ),
+          SidebarChildRow(
+            label: 'examples/example',
+            status: Status.info('reloading 3 files…'),
+            selected: false,
+            onTap: _noop,
+          ),
+        ],
+      ),
+    ),
+    _Labelled(
       'a name too long for the rail keeps the status',
       _WithCommands(
         label: 'packages/design_system_foundations',

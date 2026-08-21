@@ -11,6 +11,7 @@ import 'package:flutterware/src/inspect/node.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../../embedder/tester_phase.dart';
 import '../../inspect/lens.dart';
 import '../../inspect/screen_read.dart';
 import '../../previews/devices.dart' show orientationParameterDoc;
@@ -83,35 +84,28 @@ class ScenarioPanelRun {
 /// The panel's word for what a runner log line means, or null for a line that
 /// means nothing to somebody watching a spinner.
 ///
-/// The runner narrates itself for a log file, and a log file's voice is the
-/// wrong one here: `[tester] flutterware scenarios harness ready — fonts:
-/// Roboto, MaterialIcons` is a long, bracketed, lower-case line that wraps
-/// across a panel and names two things — a process and a font list — that the
-/// person waiting did not ask about. Every wait a cold start has is one of a
-/// handful of phases, so the caption says the phase and the log keeps the
-/// line.
-///
-/// Unknown lines return null rather than a fallback: the guest's stdout is
-/// also the app's own `print`, and a caption that changes to whatever the app
-/// last printed is a caption nobody can read.
+/// A thin dressing over [readTesterPhase], which is where the reading — and
+/// the rule that keeps the guest's own console out of a caption — lives. What
+/// is added here is the one phase the shared reader has no word for: the
+/// scenario itself, running.
 @visibleForTesting
 String? scenarioRunnerPhase(String line) {
-  var text = line.replaceFirst(RegExp(r'^\[[^\]]*\]\s*'), '');
-  if (RegExp(r'^reloading (\d+) edited').firstMatch(text) case var m?) {
-    var count = int.parse(m.group(1)!);
-    return 'Reloading $count edited file${count == 1 ? '' : 's'}';
+  if (readTesterPhase(line) case var reading?) {
+    return switch (reading.phase) {
+      TesterPhase.compiling => 'Compiling the harness',
+      // The harness answering is still the start of the run from here: the
+      // caption moves on when the first step lands, not when the guest is up.
+      TesterPhase.starting || TesterPhase.ready => 'Starting the harness',
+      TesterPhase.bundling => 'Rebuilding the asset bundle',
+      TesterPhase.restarting => 'Restarting the harness',
+      TesterPhase.reloading =>
+        'Reloading ${reading.files} edited file'
+            '${reading.files == 1 ? '' : 's'}',
+    };
   }
-  if (text.startsWith('compiling the harness')) return 'Compiling the harness';
-  if (text.startsWith('the asset bundle changed')) {
-    return 'Rebuilding the asset bundle';
+  if (line.replaceFirst(RegExp(r'^\[[^\]]*\]\s*'), '').startsWith('running')) {
+    return 'Running the scenario';
   }
-  if (text.contains('restarting the harness')) return 'Restarting the harness';
-  if (text.startsWith('the harness exited')) return 'Restarting the harness';
-  if (text.startsWith('The Dart VM service is listening')) {
-    return 'Starting the harness';
-  }
-  if (text.contains('harness ready')) return 'Starting the harness';
-  if (text.startsWith('running')) return 'Running the scenario';
   return null;
 }
 
