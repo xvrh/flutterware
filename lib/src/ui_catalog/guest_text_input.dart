@@ -52,10 +52,23 @@ class GuestTextInput with TextInputControl {
   final showing = ValueNotifier<bool>(false);
 
   @override
-  void show() => showing.value = true;
+  void show() => showing.value = _wantsSystemKeyboard;
 
   @override
   void hide() => showing.value = false;
+
+  /// Whether the field that asked would get a keyboard **on a real device**.
+  ///
+  /// `TextInputType.none` is a field that opens a connection and wants no
+  /// system keyboard: a custom pad, a date picker sheet, a calculator's own
+  /// keys. The platform shows nothing for it — and `show()` is still called,
+  /// so a control that took the call at face value would raise 336 points of
+  /// keyboard over a screen that has none on the phone it is imitating.
+  ///
+  /// Read at [show] rather than at [attach] because a field may change its
+  /// mind — see [updateConfig].
+  bool get _wantsSystemKeyboard =>
+      _configuration != null && _configuration!.inputType != TextInputType.none;
 
   /// Replaces the platform control. Call once, before `runApp`.
   void install() {
@@ -118,6 +131,11 @@ class GuestTextInput with TextInputControl {
   @override
   void updateConfig(TextInputConfiguration configuration) {
     _configuration = configuration;
+    // A field that swaps its keyboard type while focused — a "use a custom
+    // pad" toggle — has to move the keyboard with it, in both directions.
+    if (showing.value != _wantsSystemKeyboard && _client != null) {
+      showing.value = _wantsSystemKeyboard;
+    }
   }
 
   @override

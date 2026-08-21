@@ -119,6 +119,60 @@ void main() {
       expect(input.showing.value, isFalse);
     });
 
+    testWidgets('a field that wants no system keyboard asks for none', (
+      tester,
+    ) async {
+      keyboard.apply(deviceHeight: 336);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: TextField(
+              focusNode: first,
+              autofocus: true,
+              keyboardType: TextInputType.none,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      // `show()` is called all the same — the platform is the one that decides
+      // to draw nothing, because the app brought its own pad. Taking the call
+      // at face value put a keyboard over a screen that has none.
+      expect(first.hasFocus, isTrue);
+      expect(input.showing.value, isFalse);
+      expect(keyboard.height, 0);
+    });
+
+    testWidgets('and changing its mind while focused moves the keyboard', (
+      tester,
+    ) async {
+      keyboard.apply(deviceHeight: 336);
+      var custom = ValueNotifier(true);
+      addTearDown(custom.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: custom,
+              builder: (context, on, _) => TextField(
+                focusNode: first,
+                autofocus: true,
+                keyboardType: on ? TextInputType.none : TextInputType.text,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(keyboard.height, 0);
+      // The "use the normal keyboard" toggle a custom pad usually sits beside.
+      // It arrives as `updateConfig` rather than a fresh attach, so a control
+      // that only read the type at `attach` would never notice.
+      custom.value = false;
+      await tester.pump();
+      expect(keyboard.height, 336);
+    });
+
     testWidgets('and it can be pressed with nothing focused', (tester) async {
       await pumpFields(tester);
       input.dismiss();

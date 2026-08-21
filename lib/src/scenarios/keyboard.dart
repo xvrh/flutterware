@@ -63,7 +63,20 @@ class ScenarioKeyboard {
   /// per test and reading it before that asserts.
   bool get requested {
     var input = tester.binding.testTextInput;
-    return input.isRegistered && input.isVisible;
+    if (!input.isRegistered || !input.isVisible) return false;
+    // **A field can ask for no keyboard at all.** `TextInputType.none` is a
+    // custom pad, a date picker sheet, a calculator's own keys: the field
+    // opens a connection and the platform shows nothing. `TextInput.show` is
+    // still sent, so reading it alone raises 336 points of keyboard over a
+    // screen that has none on the phone this is imitating.
+    //
+    // The configuration arrives on `setClient`, which is the *first* message
+    // of the five that precede the show — so by the time there is anything to
+    // decide, this is already known.
+    return switch (input.setClientArgs?['inputType']) {
+      Map type => type['name'] != 'TextInputType.none',
+      _ => true,
+    };
   }
 
   /// What the height should be, as a fraction of [deviceHeight].

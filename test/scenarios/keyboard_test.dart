@@ -257,6 +257,30 @@ void main() {
     });
   });
 
+  group('a field that wants no keyboard gets none', () {
+    setUp(stageAPhone);
+
+    scenario('TextInputType.none is a custom pad, not a keyboard', (s) async {
+      await s.pumpWidget(const _Form(custom: true));
+      await s.tap(const Key('name'));
+      // The field takes focus and `TextInput.show` is still sent — the
+      // platform simply shows nothing for it, because the app has its own
+      // input surface. Reading the show alone put 336 points of keyboard over
+      // a screen that has none on the phone.
+      expect(s.keyboard.isRequested, isFalse);
+      expect(s.keyboard.isUp, isFalse);
+      expect(s.tester.getSize(find.byKey(const Key('body'))).height, 852);
+    });
+
+    scenario('and holding one up is still the human asking', (s) async {
+      // The forced modes are about the layout, not about the app: they ignore
+      // focus already, so they ignore this too.
+      await s.pumpWidget(const _Form(custom: true));
+      await s.keyboard.show();
+      expect(s.keyboard.isUp, isTrue);
+    });
+  });
+
   group('a stage with no keyboard', () {
     scenario('raises nothing rather than inventing a height', (s) async {
       // No device: the plain surface, which is what a desktop run and a `fit`
@@ -310,9 +334,13 @@ final _name = FocusNode();
 /// keyboard, which is the case the refusal exists for and a real layout bug
 /// nothing else in this tool can see.
 class _Form extends StatefulWidget {
-  const _Form({this.resizes = true});
+  const _Form({this.resizes = true, this.custom = false});
 
   final bool resizes;
+
+  /// Whether the first field brings its own input surface — the shape a date
+  /// picker, a PIN pad or a calculator has.
+  final bool custom;
 
   @override
   State<_Form> createState() => _FormState();
@@ -328,7 +356,11 @@ class _FormState extends State<_Form> {
       body: Column(
         key: const Key('body'),
         children: [
-          TextField(key: const Key('name'), focusNode: _name),
+          TextField(
+            key: const Key('name'),
+            focusNode: _name,
+            keyboardType: widget.custom ? TextInputType.none : null,
+          ),
           const TextField(key: Key('email')),
           const Spacer(),
           if (_submitted) const Text('submitted'),

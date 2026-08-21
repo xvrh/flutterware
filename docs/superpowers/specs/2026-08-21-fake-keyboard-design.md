@@ -445,11 +445,42 @@ measured. The sides come back at exactly the declared 59 on an iPhone 16.
   device while the keyboard was up, on both platforms — which is the arithmetic
   in § The arithmetic, confirmed rather than assumed.
 
-`attach` carries the `TextInputConfiguration` — the live probe read
-`TextInputType.multiline` and `TextInputType.text` off it — so per-input-type
-heights are available whenever they are wanted. They are not wanted in v1:
-each one is another measured number per device, and a numeric pad that is
-wrong by 40 points is worse than a text keyboard that is right.
+### The intent is on the wire, and one case is not optional
+
+`attach` carries the `TextInputConfiguration` and the test lane's
+`setClientArgs` carries the same thing as a map — measured, a phone field
+reports `{name: TextInputType.phone}` and a number field reports
+`{name: TextInputType.number, signed: false, decimal: false}`. It arrives on
+`setClient`, the **first** of the five messages that precede the `show`, so by
+the time there is anything to decide the type is already known. Both lanes
+have it; neither had been reading it.
+
+**`TextInputType.none` is the case that is a bug rather than a refinement.** It
+is a field that opens a connection and wants no system keyboard at all — a
+custom pad, a date picker sheet, a calculator's own keys — and the platform
+draws nothing for it. `TextInput.show` is still sent, so a control that took
+the call at face value put 336 points of keyboard over a screen that has none
+on the phone it is imitating. Both lanes read the type now, in `show` rather
+than in `attach`, because a field beside a *use the normal keyboard* toggle
+changes its mind through `updateConfig` and never re-attaches. The forced modes
+still ignore it: they ignore focus already, and they are the human asking about
+the layout rather than the app asking for a keyboard.
+
+**Per-input-type heights are still not in v1**, and the reason is no longer
+that we cannot tell — it is that each one is another measured number per
+device, and the honest version is more than a number. A shorter height drawn
+with ten-key rows is a lying picture, so the pass owes a keypad layout to the
+painter as well. What it would buy is real: our one height is the text
+keyboard's, which is the **tallest**, so a numeric form is judged against a
+keyboard taller than the device would raise — and a keyboard that is too tall
+is a false-failure generator in both directions at once, overflowing layouts
+that fit and covering buttons that a finger would reach.
+
+The first thing that pass should establish is how many *classes* there are
+rather than how many types: an iOS number, phone and decimal pad are a keypad
+and are visibly shorter than the QWERTY, while email, URL and name are the
+same QWERTY with a different bottom row. If that is two classes it is one more
+run of the same probe with a second field in it.
 
 ## What PR 3 did differently
 
