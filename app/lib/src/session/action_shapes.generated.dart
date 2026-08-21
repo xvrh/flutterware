@@ -4957,6 +4957,13 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
             },
             <String, Object?>{
+              'name': 'aim',
+              'type': 'Map<String, Object?>',
+              'optional': true,
+              'doc':
+                  'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
+            },
+            <String, Object?>{
               'name': 'events',
               'type': 'String',
               'optional': true,
@@ -5322,6 +5329,13 @@ final resultShapes = <String, ResultShape>{
                     'name': 'target',
                     'type': 'String',
                     'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'aim',
+                    'type': 'Map<String, Object?>',
+                    'optional': true,
+                    'doc':
+                        'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
                   },
                   <String, Object?>{
                     'name': 'events',
@@ -5739,6 +5753,13 @@ final resultShapes = <String, ResultShape>{
                           'optional': true,
                         },
                         <String, Object?>{
+                          'name': 'aim',
+                          'type': 'Map<String, Object?>',
+                          'optional': true,
+                          'doc':
+                              'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
+                        },
+                        <String, Object?>{
                           'name': 'events',
                           'type': 'String',
                           'optional': true,
@@ -6072,6 +6093,13 @@ final resultShapes = <String, ResultShape>{
             'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
       },
       <String, Object?>{'name': 'target', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'aim',
+        'type': 'Map<String, Object?>',
+        'optional': true,
+        'doc':
+            'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
+      },
       <String, Object?>{
         'name': 'events',
         'type': 'String',

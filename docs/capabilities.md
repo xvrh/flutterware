@@ -1358,6 +1358,7 @@ packages: List<ScenarioRunPackage>
       navBrightness: String?
       verb: String?   # The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.
       target: String?
+      aim: Map<String, Object?>?   # Where the verb's finger went — the box it resolved, in the view's own logical pixels, measured on the frame it was about to act on.
       events: String?   # What the app did on the way here — logs, prints, platform channel messages, and whatever the project's fakes reported through `recordScenarioEvent`.
       eventCount: int?   # How many, and on which channels — `{platform: 3, print: 1}`.
       eventChannels: Map<String, int>?

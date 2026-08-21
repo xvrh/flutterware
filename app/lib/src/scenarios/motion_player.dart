@@ -188,6 +188,11 @@ class ScenarioMotionResidency {
   /// source is a different cache key, and evicting it would free nothing.
   final _sources = <String, ScenarioArtifacts>{};
 
+  /// The recordings that made it all the way through a precache — a subset of
+  /// the resident ones, since warming is a loop that eviction or a reader
+  /// moving on can cut short.
+  final _warm = <String>{};
+
   /// What the recordings currently hold, in decoded bytes.
   int get residentBytes =>
       _steps.values.fold(0, (sum, step) => sum + scenarioMotionBytes(step));
@@ -197,6 +202,14 @@ class ScenarioMotionResidency {
   /// Whether [step]'s frames are still ones the panel wants decoded.
   bool isResident(ScenarioRunStep step) =>
       step.frames != null && _steps.containsKey(step.frames);
+
+  /// Whether every frame of [step] is decoded and in the image cache.
+  ///
+  /// The difference between a transition that plays and one that draws blanks
+  /// while it decodes — which is what anything that starts playback *for* the
+  /// reader, rather than because they pressed play, has to ask first.
+  bool isWarm(ScenarioRunStep step) =>
+      step.frames != null && _warm.contains(step.frames);
 
   /// Marks [step]'s frames as the ones in use, and evicts whatever that pushes
   /// over the budget. The step just touched is never the one evicted, however
@@ -222,6 +235,7 @@ class ScenarioMotionResidency {
 
   void _release(String key) {
     _order.remove(key);
+    _warm.remove(key);
     var step = _steps.remove(key);
     var artifacts = _sources.remove(key);
     if (step == null || artifacts == null) return;
@@ -262,4 +276,8 @@ Future<void> precacheScenarioMotion(
     if (!scenarioMotionResidency.isResident(step)) return;
     await precacheImage(scenarioFrameImage(artifacts, step, frame), context);
   }
+  // Only here, where every frame got through: a recording warmed halfway is
+  // one that would still flicker, and saying otherwise is worse than saying
+  // nothing.
+  if (step.frames case var key?) scenarioMotionResidency._warm.add(key);
 }

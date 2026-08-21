@@ -11,6 +11,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../drive/resolve.dart';
+import 'aim.dart';
 import 'asset_bundle.dart';
 import 'async_watchdog.dart';
 import 'events.dart';
@@ -602,7 +603,11 @@ class ScenarioTester {
     // `warnIfMissed: false` on the underlying verbs because `_resolve` has
     // already decided reachability — and loudly, where the SDK's warning is a
     // console line the flow sails past.
-    () async => tester.tap(await _resolve(target, 'tap'), warnIfMissed: false),
+    () async {
+      var finder = await _resolve(target, 'tap');
+      _aimAt(finder);
+      await tester.tap(finder, warnIfMissed: false);
+    },
     verb: 'tap',
     target: describeTarget(target),
   );
@@ -610,10 +615,11 @@ class ScenarioTester {
   Future<void> longPress(dynamic target, {Shot? shot, Settle? settle}) => _step(
     shot,
     settle,
-    () async => tester.longPress(
-      await _resolve(target, 'longPress'),
-      warnIfMissed: false,
-    ),
+    () async {
+      var finder = await _resolve(target, 'longPress');
+      _aimAt(finder);
+      await tester.longPress(finder, warnIfMissed: false);
+    },
     verb: 'longPress',
     target: describeTarget(target),
   );
@@ -645,11 +651,11 @@ class ScenarioTester {
       _step(
         shot,
         settle,
-        () async => tester.drag(
-          await _resolve(target, 'drag'),
-          by,
-          warnIfMissed: false,
-        ),
+        () async {
+          var finder = await _resolve(target, 'drag');
+          _aimAt(finder, by: by);
+          await tester.drag(finder, by, warnIfMissed: false);
+        },
         verb: 'drag',
         target: describeTarget(target),
       );
@@ -961,6 +967,42 @@ class ScenarioTester {
   /// prefix, which leaves something older held.
   var _lastCaptureFresh = false;
 
+  /// What the verb now running aimed at, measured by [_aimAt] the moment
+  /// after its target resolved and before it acted. Cleared per step, so a
+  /// verb that aims at nothing never inherits the last one's box.
+  ScenarioAim? _aim;
+
+  /// Records the box [finder] resolved to, in the same space every other rect
+  /// in a report is in.
+  ///
+  /// Measured before the verb acts, because after it the widget may be gone —
+  /// and read off the render object the actionability ladder just proved is
+  /// there, so it costs a transform and no searching.
+  ///
+  /// Never throws. A picture of where the finger went is a nicety; a scenario
+  /// that failed because it could not measure the thing it just tapped would
+  /// be a bad trade.
+  void _aimAt(Finder finder, {Offset? by}) {
+    var render = finder.evaluate().firstOrNull?.renderObject;
+    if (render is! RenderBox || !render.hasSize || !render.attached) return;
+    // The whole rect through the transform, for the reason `_layoutOf` gives
+    // at length: an origin from `localToGlobal` beside a raw `render.size` are
+    // in different spaces the moment any ancestor scales, and a box drawn from
+    // the two of them disagrees with the picture it is drawn on.
+    var bounds = MatrixUtils.transformRect(
+      render.getTransformTo(null),
+      Offset.zero & render.size,
+    );
+    _aim = ScenarioAim(
+      x: bounds.left,
+      y: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+      dx: by?.dx,
+      dy: by?.dy,
+    );
+  }
+
   /// One verb: act, wait per the policy, capture. The settle result rides the
   /// step, so a screen that never stopped animating says so instead of
   /// throwing.
@@ -976,6 +1018,7 @@ class ScenarioTester {
     // drew, so they came from `s.tester` — and whatever they showed is not in
     // the flow. Read before the action, reported on the step it precedes.
     var stray = _frames - _framesAtLastStep;
+    _aim = null;
     bool settled;
     bool landed;
     try {
@@ -1020,6 +1063,7 @@ class ScenarioTester {
       stray: stray,
       verb: verb,
       target: target,
+      aim: _aim,
       adopt: adopt,
     );
   }
@@ -1093,6 +1137,7 @@ class ScenarioTester {
     required int stray,
     String? verb,
     String? target,
+    ScenarioAim? aim,
     bool adopt = false,
   }) async {
     // Nothing captures, so nothing drains: what the app did during this verb
@@ -1107,6 +1152,7 @@ class ScenarioTester {
       stray: stray,
       verb: verb,
       target: target,
+      aim: aim,
       adopt: adopt,
     );
   }
@@ -1339,6 +1385,7 @@ class ScenarioTester {
     int stray = 0,
     String? verb,
     String? target,
+    ScenarioAim? aim,
     bool adopt = false,
   }) async {
     // Where this capture sits in the scenario's shape: the split choices
@@ -1393,6 +1440,7 @@ class ScenarioTester {
       stray: stray,
       verb: verb,
       target: target,
+      aim: aim,
       position: position,
     );
     _lastCaptureFresh = true;
@@ -1430,6 +1478,7 @@ class ScenarioTester {
       // trying to do.
       verb: verb,
       target: target,
+      aim: _aim,
       failure: '${_inContext(error)}',
     );
     // Handed over at once rather than held: a failure's picture is nobody's
@@ -1450,6 +1499,7 @@ class ScenarioTester {
     int stray = 0,
     String? verb,
     String? target,
+    ScenarioAim? aim,
     required String position,
     String? failure,
   }) async {
@@ -1527,6 +1577,7 @@ class ScenarioTester {
         navBrightness: style?.systemNavigationBarIconBrightness?.name,
         verb: verb,
         target: target,
+        aim: aim,
         position: position,
         events: List.of(events),
         eventsDropped: dropped,
@@ -1587,6 +1638,7 @@ class _PendingEmit {
     required this.strayFrames,
     required this.failure,
     required this.frames,
+    this.aim,
     this.kind = ScenarioCaptureKind.screen,
     this.bytes,
     this.format,
@@ -1638,6 +1690,10 @@ class _PendingEmit {
   final String? navBrightness;
   final String? verb;
   final String? target;
+
+  /// Where the verb's finger went — see [ScenarioAim].
+  final ScenarioAim? aim;
+
   final String position;
   final List<ScenarioEvent> events;
   int eventsDropped;
@@ -1669,6 +1725,7 @@ class _PendingEmit {
     navBrightness: navBrightness,
     verb: verb,
     target: target,
+    aim: aim,
     position: position,
     events: events,
     eventsDropped: eventsDropped,

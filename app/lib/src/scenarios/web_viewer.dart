@@ -78,6 +78,15 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
   /// The step pushed over the flow, by its index within the scenario.
   int? _step;
 
+  /// The step that was open before it — what tells a walk from a jump, and so
+  /// whether the step landed on plays the transition into it.
+  int? _cameFrom;
+
+  void _openStep(ScenarioRunStep step) => setState(() {
+    _cameFrom = _step;
+    _step = step.index;
+  });
+
   @override
   void initState() {
     super.initState();
@@ -199,12 +208,14 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
         // the banner over the screen it landed on.
         if (step.kind != ScenarioStepKind.screen) {
           return ScenarioBeatPage(
+            steps: outcome.steps,
             step: step,
             background: scenarioFrameFor(outcome.steps, step),
             device: device,
             onBack: () => setState(() {
               _step = null;
             }),
+            onOpenStep: _openStep,
             statusFallback: statusFallback,
             appLabel: p.basename(package.path),
           );
@@ -212,11 +223,10 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
         return ScenarioStepPage(
           steps: outcome.steps,
           step: step,
+          from: _cameFrom,
           device: device,
           onBack: () => setState(() => _step = null),
-          onOpenStep: (step) => setState(() {
-            _step = step.index;
-          }),
+          onOpenStep: _openStep,
           statusFallback: statusFallback,
           // Nothing to shorten against: the page has no checkout behind it, so
           // a node's source path is shown as the run recorded it.
@@ -243,7 +253,10 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
               steps: outcome.steps,
               device: device,
               transform: _transform,
-              onOpenStep: (step) => setState(() => _step = step.index),
+              onOpenStep: (step) => setState(() {
+                _cameFrom = null;
+                _step = step.index;
+              }),
               appLabel: p.basename(package.path),
               statusFallback: statusFallback,
             ),

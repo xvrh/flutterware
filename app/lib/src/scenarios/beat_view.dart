@@ -13,6 +13,7 @@ import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import 'artifacts.dart';
 import 'framed_shot.dart';
+import 'step_links.dart';
 
 /// A beat that is not a screen, drawn: what the flow canvas puts between two
 /// screens, and what the detail page blows up.
@@ -489,14 +490,19 @@ String scenarioBeatSize(int bytes) => bytes < 1024
 class ScenarioBeatPage extends StatelessWidget {
   const ScenarioBeatPage({
     super.key,
+    required this.steps,
     required this.step,
     required this.background,
     required this.device,
     required this.onBack,
+    required this.onOpenStep,
     required this.statusFallback,
     this.appLabel,
     this.appIcon,
   });
+
+  /// The run this beat is one of, so the page can offer the steps around it.
+  final List<ScenarioRunStep> steps;
 
   /// The beat — a document or a notification.
   final ScenarioRunStep step;
@@ -506,6 +512,11 @@ class ScenarioBeatPage extends StatelessWidget {
 
   final Device? device;
   final VoidCallback onBack;
+
+  /// Walking on from here. A receipt in the middle of a flow is a step like
+  /// any other, and a walk that had to go back to the canvas to get past it
+  /// would not be a walk.
+  final void Function(ScenarioRunStep) onOpenStep;
   final Brightness statusFallback;
   final String? appLabel;
   final ImageProvider? appIcon;
@@ -579,20 +590,33 @@ class ScenarioBeatPage extends StatelessWidget {
         ),
         const Divider(height: 1),
         Expanded(
-          child: Container(
-            color: colors.panel2,
-            padding: const EdgeInsets.all(FwSpacing.xl),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: ScenarioBeatShot(
-                step: step,
-                background: background,
-                device: device,
-                statusFallback: statusFallback,
-                appLabel: appLabel,
-                appIcon: appIcon,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Container(
+                  color: colors.panel2,
+                  padding: const EdgeInsets.all(FwSpacing.xl),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: ScenarioBeatShot(
+                      step: step,
+                      background: background,
+                      device: device,
+                      statusFallback: statusFallback,
+                      appLabel: appLabel,
+                      appIcon: appIcon,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              Positioned.fill(
+                child: ScenarioStepLinks(
+                  steps: steps,
+                  step: step,
+                  onOpenStep: onOpenStep,
+                ),
+              ),
+            ],
           ),
         ),
       ],
