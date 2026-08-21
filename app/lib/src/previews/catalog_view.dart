@@ -10,6 +10,7 @@ import '../address/address_scope.dart';
 import '../capture/capture_mode.dart';
 import '../embedder/embedded_engine.dart';
 import '../embedder/input_region.dart';
+import '../embedder/protocol.dart';
 import '../inspect/node_highlight.dart';
 import '../inspect/pick_region.dart';
 import '../inspect/semantics_node.dart';
@@ -24,6 +25,8 @@ import 'catalog_entry.dart';
 import 'catalog_session.dart';
 import 'preview_popover.dart';
 import 'staged_device.dart';
+import 'stage_zoom.dart';
+import 'zoom_control.dart';
 import 'thumbnails.dart';
 import 'catalog_tree.dart';
 import 'inspect_panel.dart';
@@ -47,9 +50,24 @@ const _inspectNamespace = 'inspect';
 /// the widget, which is what lets a cold compile keep running — and keep
 /// reporting into the sidebar — while you are looking at another plugin.
 class CatalogView extends StatefulWidget {
-  const CatalogView({super.key, required this.session, this.thumbnails});
+  const CatalogView({
+    super.key,
+    required this.session,
+    this.thumbnails,
+    this.zoom,
+  });
 
   final CatalogSession session;
+
+  /// The stage's pan and zoom, when something above wants it to outlive this
+  /// widget.
+  ///
+  /// **Because the panel is keyed on the session and a package is a session.**
+  /// Moving between two packages remounts everything here, and a magnification
+  /// that evaporated on the way would be a zoom you cannot use while comparing
+  /// the same control in two places. Null means nobody cares — the standalone
+  /// catalog entry point — and one is made and disposed here.
+  final TransformationController? zoom;
 
   /// This package's photographed previews, for the popover the list shows on
   /// hover. Null where nothing is keeping them — the standalone catalog entry
@@ -115,6 +133,7 @@ class _CatalogViewState extends State<CatalogView> {
   @override
   void initState() {
     super.initState();
+    _zoom.addListener(_followZoom);
     // Coming back to the window after editing elsewhere. `onResume` is
     // documented as "a view in the application gains input focus", which on
     // desktop is exactly the alt-tab back from the editor.
@@ -154,6 +173,10 @@ class _CatalogViewState extends State<CatalogView> {
       ..dispose();
     _semanticsHighlight.dispose();
     _picking.dispose();
+    _resizeSettle?.cancel();
+    _zoom.removeListener(_followZoom);
+    _ownedZoom?.dispose();
+    _panning.dispose();
     super.dispose();
   }
 
@@ -207,6 +230,37 @@ class _CatalogViewState extends State<CatalogView> {
     _session.knobSelections = AddressScope.params(context, namespace: 'knob');
   }
 
+  /// The stage's pan and zoom — see [ZoomableStage].
+  ///
+  /// Held above the stage so it survives what the stage does not: a compile
+  /// error replaces the canvas outright, and a magnified preview that reset
+  /// itself every time you broke the build would be a zoom you could not work
+  /// with. Handed in from higher still when it has to outlive this widget too.
+  late final _zoom = widget.zoom ?? (_ownedZoom = TransformationController());
+  TransformationController? _ownedZoom;
+
+  /// Whether a pan is currently moving the stage — see [_demoInput].
+  final _panning = ValueNotifier(false);
+
+  /// Back to life-size, and back to the middle.
+  void _resetZoom() => _zoom.value = Matrix4.identity();
+
+  /// The stage has taken the drag, or given it back.
+  ///
+  /// **The cancel is the point.** The demo was told about a finger going down
+  /// and is holding whatever that pressed; simply withholding the rest of the
+  /// gesture leaves it pressed for ever — a button lit, an ink ripple that
+  /// never settles, a `Draggable` stuck to nothing. Cancel is what a framework
+  /// sends when a recognizer loses an arena, and losing an arena is exactly
+  /// what has happened here.
+  void _setPanning(EmbeddedEngine engine, bool panning) {
+    if (panning == _panning.value) return;
+    _panning.value = panning;
+    if (panning) {
+      engine.sendPointer(phaseKind: PointerPhase.cancel, x: 0, y: 0);
+    }
+  }
+
   /// Cheap by construction: the daemon answers `unchanged` when nothing on disk
   /// moved, so this fires as often as it likes without touching the guest.
   void _reloadIfChanged() {
@@ -227,11 +281,48 @@ class _CatalogViewState extends State<CatalogView> {
     // comparing only the size would leave the guest rendering as the old one.
     var next = (width, height, dpr, safeAreas);
     if (next == _lastReported) return;
+    // **A resize is a new surface, and a new surface mid-gesture is a jolt.**
+    // The logical size moves when a device is picked or the panel is dragged —
+    // rare, and wanted at once. The ratio moves continuously through a pinch,
+    // and reallocating the guest sixty times a second is what a smooth gesture
+    // was being spent on. So a ratio-only change waits for the fingers to
+    // stop, including the first one: a leading-edge resize is still a jolt,
+    // and it lands at the moment the gesture is least ready for it.
+    //
+    // What that costs in between is a texture briefly sampled — soft while
+    // moving, exact once still, which is what every viewer does and what the
+    // eye is expecting anyway.
+    var sized =
+        _lastReported == null ||
+        width != _lastReported!.$1 ||
+        height != _lastReported!.$2 ||
+        safeAreas != _lastReported!.$4;
+    _resizeSettle?.cancel();
+    _resizeSettle = null;
+    if (!sized) {
+      _resizeSettle = Timer(
+        const Duration(milliseconds: 150),
+        () => _applyResize(engine, next),
+      );
+      return;
+    }
+    _applyResize(engine, next);
+  }
+
+  void _applyResize(
+    EmbeddedEngine engine,
+    (int, int, double, EdgeInsets) next,
+  ) {
+    _resizeSettle = null;
     _lastReported = next;
+    var (width, height, dpr, safeAreas) = next;
     // Physical pixels, like the size — the guest turns them back into logical
     // padding on the other side.
     engine.resize(width, height, dpr, insets: safeAreas * dpr);
   }
+
+  /// The trailing edge waiting to resize the guest — see [_maybeResize].
+  Timer? _resizeSettle;
 
   bool _isAppChord(KeyEvent event) =>
       isReservedAppChord(event, HardwareKeyboard.instance);
@@ -304,6 +395,8 @@ class _CatalogViewState extends State<CatalogView> {
                       session: _session,
                       captureButton: _captureButton,
                       highlight: _highlight,
+                      zoom: _zoom,
+                      onResetZoom: _resetZoom,
                     ),
                     const Divider(height: 1),
                     // Wrapped so the panel can be told how much room there is,
@@ -452,12 +545,17 @@ class _CatalogViewState extends State<CatalogView> {
     ScreenOrientation? orientation,
   ) {
     if (device == null) {
-      var dpr = MediaQuery.of(context).devicePixelRatio;
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          _resizeAfterFrame(engine, constraints.biggest, dpr);
-          return _guestInput(engine, dpr, const SizedBox.expand());
-        },
+      var hostRatio = MediaQuery.of(context).devicePixelRatio;
+      return ZoomableStage(
+        controller: _zoom,
+        onInteracting: (panning) => _setPanning(engine, panning),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            _stage = (engine, constraints.biggest, hostRatio, EdgeInsets.zero);
+            _resizeAfterFrame();
+            return _guestInput(engine, const SizedBox.expand());
+          },
+        ),
       );
     }
 
@@ -467,63 +565,84 @@ class _CatalogViewState extends State<CatalogView> {
     // one device, read sideways, and not a second entry in the table.
     var effective = device.oriented(orientation);
     var screen = Size(effective.width, effective.height);
-    _resizeAfterFrame(
+    _stage = (
       engine,
       screen,
       effective.pixelRatio,
       // What the frame draws around the screen, told to the thing rendering
       // inside it — otherwise the notch is decoration and an AppBar sits under
       // it.
-      safeAreas: EdgeInsets.fromLTRB(
+      EdgeInsets.fromLTRB(
         effective.insetLeft,
         effective.insetTop,
         effective.insetRight,
         effective.insetBottom,
       ),
     );
+    _resizeAfterFrame();
     // The one thing `device_frame` is here for, and the only place it is
     // touched: the silhouette. Everything above came from our own measurements.
     // Null for a desktop size, which gets none.
     var chrome = deviceFrameFor(device);
-    var guest = _guestInput(
-      engine,
-      effective.pixelRatio,
-      SizedBox.fromSize(size: screen),
-    );
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(FwSpacing.xl),
-        // scaleDown, never up: a texture rendered at the device's resolution
-        // and then enlarged is just a blurrier phone.
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: chrome == null || !_session.staging.frameVisible
-              ? SizedBox.fromSize(size: screen, child: guest)
-              // Told which way up, because the body it is holding is not: a
-              // hand-drawn phone is drawn portrait and turned here, and the
-              // screen box handed to it has already traded its width for its
-              // height.
-              : DeviceFrame(
-                  device: chrome,
-                  screen: guest,
-                  orientation: orientation == ScreenOrientation.landscape
-                      ? Orientation.landscape
-                      : Orientation.portrait,
-                ),
+    var guest = _guestInput(engine, SizedBox.fromSize(size: screen));
+    // **The body is inside the zoom, not around it.** Zooming a framed preview
+    // ought to look like leaning towards the phone; a stage that magnified the
+    // screen while the body stayed put would look like neither. So the
+    // transform goes above both, and the artwork re-rasterizes through it for
+    // the same reason the guest's own picture does.
+    return ZoomableStage(
+      controller: _zoom,
+      onInteracting: (panning) => _setPanning(engine, panning),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(FwSpacing.xl),
+          // scaleDown, never up: at rest the texture is the device's own
+          // resolution, and enlarging that is just a blurrier phone. Past rest
+          // it is the transform above that enlarges, with the pixels behind it
+          // to make that honest.
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: chrome == null || !_session.staging.frameVisible
+                ? SizedBox.fromSize(size: screen, child: guest)
+                // Told which way up, because the body it is holding is not: a
+                // hand-drawn phone is drawn portrait and turned here, and the
+                // screen box handed to it has already traded its width for its
+                // height.
+                : DeviceFrame(
+                    device: chrome,
+                    screen: guest,
+                    orientation: orientation == ScreenOrientation.landscape
+                        ? Orientation.landscape
+                        : Orientation.portrait,
+                  ),
+          ),
         ),
       ),
     );
   }
 
-  void _resizeAfterFrame(
-    EmbeddedEngine engine,
-    Size logical,
-    double dpr, {
-    EdgeInsets safeAreas = EdgeInsets.zero,
-  }) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _maybeResize(engine, logical, dpr, safeAreas: safeAreas);
-    });
+  /// What the stage last laid out, so the zoom listener can work out what to
+  /// render at without a rebuild.
+  (EmbeddedEngine, Size, double, EdgeInsets)? _stage;
+
+  /// The guest's ratio follows the magnification — see [guestRatioFor].
+  ///
+  /// A listener rather than a rebuild: what magnifying changes is one number on
+  /// a wire, and rebuilding the body and the texture to deliver it is what made
+  /// a pinch stutter. Nothing under [ZoomableStage] is built again by a zoom.
+  void _followZoom() => _resizeAfterFrame();
+
+  void _resizeAfterFrame() {
+    if (_stage case (var engine, var logical, var deviceRatio, var insets)) {
+      var ratio = guestRatioFor(
+        logical,
+        deviceRatio,
+        _zoom.value.getMaxScaleOnAxis(),
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maybeResize(engine, logical, ratio, safeAreas: insets);
+      });
+    }
   }
 
   /// Picks the widget under a point instead of letting the demo have the click.
@@ -552,7 +671,7 @@ class _CatalogViewState extends State<CatalogView> {
   /// would tap the button you were trying to inspect, and not the hover, which
   /// would light the demo's own hover states underneath the thing you are
   /// trying to see.
-  Widget _guestInput(EmbeddedEngine engine, double dpr, Widget sizedBox) {
+  Widget _guestInput(EmbeddedEngine engine, Widget sizedBox) {
     // The guest's picture, built once and handed to whichever mode is on. Built
     // per-mode it is easy to pass the placeholder to one of them, which is what
     // happened: arming the picker replaced the demo with an empty box, so the
@@ -564,7 +683,7 @@ class _CatalogViewState extends State<CatalogView> {
       valueListenable: _picking,
       builder: (context, picking, _) => picking
           ? _pickerInput(context, picture)
-          : _demoInput(engine, dpr, picture),
+          : _demoInput(engine, picture),
     );
   }
 
@@ -583,14 +702,25 @@ class _CatalogViewState extends State<CatalogView> {
     );
   }
 
-  Widget _demoInput(EmbeddedEngine engine, double dpr, Widget picture) {
-    return EmbedderInputRegion(
-      engine: engine,
-      dpr: dpr,
-      focusNode: _focusNode,
-      // Ignored, not handled: an app chord carries on up to whichever
-      // `CallbackShortcuts` claims it — this panel's, or the shell's.
-      shouldIgnoreKey: _isAppChord,
+  Widget _demoInput(EmbeddedEngine engine, Widget picture) {
+    return ValueListenableBuilder(
+      valueListenable: _panning,
+      builder: (context, panning, child) => EmbedderInputRegion(
+        engine: engine,
+        focusNode: _focusNode,
+        // Ignored, not handled: an app chord carries on up to whichever
+        // `CallbackShortcuts` claims it — this panel's, or the shell's.
+        shouldIgnoreKey: _isAppChord,
+        // Two things are the stage's and nothing else is. A ⌘-scroll and a pinch
+        // magnify, so the demo must not also scroll under them; and a drag that
+        // is moving the stage must not also drag in the demo, which it otherwise
+        // would — a `Listener` is not a gesture recognizer and never loses an
+        // arena, so without this every pan scrolls whatever list it passes over.
+        // Everything else still arrives, including the click: a tap moves the
+        // stage nowhere, so it never reaches [_PanFlag] at all.
+        shouldIgnorePointer: (event) => panning || stageOwnsPointer(event),
+        child: child!,
+      ),
       child: _withOverlay(picture),
     );
   }
@@ -1126,6 +1256,8 @@ class _TopBar extends StatelessWidget {
     required this.session,
     required this.captureButton,
     required this.highlight,
+    required this.zoom,
+    required this.onResetZoom,
   });
 
   final CatalogSession session;
@@ -1136,6 +1268,12 @@ class _TopBar extends StatelessWidget {
   /// The overlay's hover notifier — the capture menu lights the node its
   /// cropped entries would photograph.
   final ValueNotifier<String?> highlight;
+
+  /// The stage's transform, read for its scale — owned by the page, because it
+  /// has to outlive a compile error replacing the canvas under it.
+  final TransformationController zoom;
+
+  final VoidCallback onResetZoom;
 
   @override
   Widget build(BuildContext context) {
@@ -1203,6 +1341,14 @@ class _TopBar extends StatelessWidget {
                   );
                 },
               ),
+            ),
+          ),
+          ValueListenableBuilder(
+            valueListenable: zoom,
+            builder: (context, matrix, _) => ZoomControl(
+              scale: matrix.getMaxScaleOnAxis(),
+              atRest: isAtRest(matrix),
+              onReset: onResetZoom,
             ),
           ),
           _CaptureButtons(

@@ -248,6 +248,10 @@ class _CatalogPanel extends StatefulWidget {
 }
 
 class _CatalogPanelState extends State<_CatalogPanel> {
+  /// The preview stage's pan and zoom, kept across package switches — see
+  /// [CatalogView.zoom].
+  final _zoom = TransformationController();
+
   /// The plugin the binding below belongs to — **not** always the one
   /// [widget] holds.
   ///
@@ -466,6 +470,7 @@ class _CatalogPanelState extends State<_CatalogPanel> {
 
   @override
   void dispose() {
+    _zoom.dispose();
     _release();
     super.dispose();
   }
@@ -546,6 +551,11 @@ class _CatalogPanelState extends State<_CatalogPanel> {
                 key: ObjectKey(session),
                 session: session,
                 thumbnails: widget.plugin.thumbnailsFor(path),
+                // Outlives the key above, and that is the whole reason it is
+                // here: a package switch is a session switch, so everything
+                // below remounts, and a magnification held down there would go
+                // with it.
+                zoom: _zoom,
               ),
             ),
           ],
