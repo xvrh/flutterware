@@ -115,6 +115,17 @@ class PreviewThumbnails extends ChangeNotifier {
   var _rendering = false;
   var _disposed = false;
 
+  /// Whether the disk is known to have moved since the harness was last
+  /// brought up to date.
+  ///
+  /// The harness renders what it compiled, never what is on disk, so a
+  /// re-render on its own photographs the same stale code again — and then
+  /// stores it under the *new* stamp, which is how a picture stops being
+  /// merely old and becomes permanently wrong. Only a `sync` pushes the edits
+  /// in, and it costs ~1.5s, so this is what makes one happen once per edit
+  /// rather than once per hover or, as it did, never.
+  var _moved = false;
+
   /// Whether the harness has been brought up. The first render pays a compile
   /// of the whole catalog; everything after it is a message and a frame.
   bool get warm => _warm;
@@ -125,8 +136,9 @@ class PreviewThumbnails extends ChangeNotifier {
     var found = _cache[entry.id];
     if (found == null) return null;
     // Stale by its own file: the cheapest honest test there is. It does not
-    // catch an edit to something the entry *imports*, which is the known hole
-    // — the sync below is what closes it, and it only runs when this fires.
+    // catch an edit to something the entry *imports* — that is what [_moved]
+    // and the sync it buys are for, since a sync moves the harness past every
+    // picture at once.
     if (found.stamp != _stampOf(entry)) return null;
     return found.thumbnail;
   }
@@ -136,6 +148,7 @@ class PreviewThumbnails extends ChangeNotifier {
   /// Idempotent and cheap to call on every hover.
   void want(CatalogEntry entry) {
     if (_disposed) return;
+    _dropMoved();
     if (of(entry) case ThumbnailReady() || ThumbnailFailed()) return;
     _wanted = entry.id;
     if (_cache[entry.id]?.thumbnail is! ThumbnailPending) {
@@ -157,6 +170,10 @@ class PreviewThumbnails extends ChangeNotifier {
 
   /// Everything is stale — the catalog moved under us.
   void invalidate() {
+    // Recorded whether or not there is a picture to throw away. An empty cache
+    // over a warm harness is exactly the state where the next render would
+    // otherwise photograph the code the harness compiled before the rescan.
+    _moved = true;
     if (_cache.isEmpty) return;
     for (var entry in _cache.values) {
       entry.dispose();
@@ -171,22 +188,31 @@ class PreviewThumbnails extends ChangeNotifier {
     _rendering = true;
     try {
       while (!_disposed) {
-        // **Sync on the way up, never after.** A sync is a sweep of every
-        // source and the asset bundle, 1.5s or so whether or not anything
-        // moved, and a pointer cannot pay that per row. The cold bring-up is
-        // already paying for a compile, so it is free there.
-        var cold = !_warm;
+        // **Sync on the way up, and whenever the disk has moved since.** A
+        // sync is a sweep of every source and the asset bundle, 1.5s or so
+        // whether or not anything moved, and a pointer cannot pay that per
+        // row — the cold bring-up is already paying for a compile, so it is
+        // free there. But skipping it *always* was the picture that could
+        // never come back: a stale stamp re-renders, the harness answers out
+        // of the code it compiled, and the same old frame is stored under the
+        // new stamp. Once per edit is the bargain that works.
+        var syncing = !_warm || _moved;
+        _moved = false;
+        // Read before the render rather than after. An edit that lands while
+        // this one is running has to leave the picture stale, and a stamp
+        // taken on the way out would record that edit as already photographed.
+        var stamp = _stampOf(entry);
         var out = p.join(_scratch.path, entry.id.hashCode.toString());
         PreviewCaptureRow? row;
         try {
-          row = await render(entry.id, out, sync: cold);
+          row = await render(entry.id, out, sync: syncing);
           _warm = true;
         } catch (e) {
-          _store(entry, ThumbnailFailed('$e'));
+          _store(entry, ThumbnailFailed('$e'), stamp: stamp);
           return;
         }
         if (_disposed) return;
-        if (keepPicture) await _land(entry, row);
+        if (keepPicture) await _land(entry, row, stamp);
         // Whatever the pointer landed on while that ran, which may be nothing.
         var next = _wanted;
         if (next == null || next == entry.id) return;
@@ -201,21 +227,29 @@ class PreviewThumbnails extends ChangeNotifier {
     }
   }
 
-  Future<void> _land(CatalogEntry entry, PreviewCaptureRow? row) async {
+  Future<void> _land(
+    CatalogEntry entry,
+    PreviewCaptureRow? row,
+    int stamp,
+  ) async {
     if (row == null) {
-      _store(entry, const ThumbnailFailed('the harness said nothing'));
+      _store(
+        entry,
+        const ThumbnailFailed('the harness said nothing'),
+        stamp: stamp,
+      );
       return;
     }
     if (row.compileError ?? row.failure case var problem?) {
       // A picture was still taken for a failure — an ErrorWidget is what is
       // there — but the words are the answer and the red box is not worth
       // 700 pixels of popover.
-      _store(entry, ThumbnailFailed(problem));
+      _store(entry, ThumbnailFailed(problem), stamp: stamp);
       return;
     }
     var path = row.image;
     if (path == null || row.width == 0) {
-      _store(entry, const ThumbnailFailed('nothing rendered'));
+      _store(entry, const ThumbnailFailed('nothing rendered'), stamp: stamp);
       return;
     }
     try {
@@ -229,9 +263,9 @@ class PreviewThumbnails extends ChangeNotifier {
         image.dispose();
         return;
       }
-      _store(entry, ThumbnailReady(image));
+      _store(entry, ThumbnailReady(image), stamp: stamp);
     } catch (e) {
-      _store(entry, ThumbnailFailed('$e'));
+      _store(entry, ThumbnailFailed('$e'), stamp: stamp);
     }
   }
 
@@ -257,9 +291,35 @@ class PreviewThumbnails extends ChangeNotifier {
     return done.future;
   }
 
-  void _store(CatalogEntry entry, Thumbnail thumbnail) {
+  /// Drops every picture if any entry's own file has moved since its picture
+  /// was taken, and records that the harness is behind the disk.
+  ///
+  /// All of them rather than the one that moved: the harness renders one
+  /// compiled program, so a single edited file leaves every picture in
+  /// question — a demo drawn by the helper that changed has no stamp of its
+  /// own that could ever say so. [keep] bounds this at two dozen stats on a
+  /// pointer stopping, not a sweep of the catalog. A pending is left alone: it
+  /// has no picture to be stale, and dropping the row a render is on its way
+  /// to answering would leave the popover waiting on something nobody is doing
+  /// any more.
+  void _dropMoved() {
+    var moved = _cache.values.any(
+      (found) =>
+          found.thumbnail is! ThumbnailPending &&
+          found.stamp != _stampOf(found.entry),
+    );
+    if (!moved) return;
+    _moved = true;
+    for (var id in [..._order]) {
+      if (_cache[id]?.thumbnail is ThumbnailPending) continue;
+      _cache.remove(id)?.dispose();
+      _order.remove(id);
+    }
+  }
+
+  void _store(CatalogEntry entry, Thumbnail thumbnail, {int? stamp}) {
     _cache[entry.id]?.dispose();
-    _cache[entry.id] = _Entry(entry, _stampOf(entry), thumbnail);
+    _cache[entry.id] = _Entry(entry, stamp ?? _stampOf(entry), thumbnail);
     _order
       ..remove(entry.id)
       ..add(entry.id);
