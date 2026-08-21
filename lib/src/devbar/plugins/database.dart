@@ -10,6 +10,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
+import '../../app_events/events.dart' show foldSql;
 import '../../channels/descriptor.dart';
 import '../../channels/panels.dart';
 import '../../plugins/action.dart';
@@ -384,7 +385,7 @@ class DatabasePanelSource implements DevbarPanelSource {
       onError: (Object error) {
         _panel?.emit('watch', {
           'watch': id,
-          'sql': _firstLine(sql),
+          'sql': foldSql(sql),
           'error': '$error',
         });
         unawaited(_watches.remove(id)?.cancel());
@@ -422,7 +423,7 @@ class DatabasePanelSource implements DevbarPanelSource {
     if (panel == null) return;
     var eventId = panel.emit('watch', {
       'watch': id,
-      'sql': _firstLine(sql),
+      'sql': foldSql(sql),
       'rows': rows.length,
     }, details: _rowsReply(rows, databaseWatchDetailRows));
     _sqlByEvent[eventId] = sql;
@@ -522,12 +523,6 @@ class DatabasePanelSource implements DevbarPanelSource {
       throw ArgumentError('`limit` must be a positive integer, got: $raw');
     }
     return limit;
-  }
-
-  static String _firstLine(String sql) {
-    var trimmed = sql.trim();
-    var end = trimmed.indexOf('\n');
-    return end < 0 ? trimmed : '${trimmed.substring(0, end)} …';
   }
 
   void dispose() {

@@ -50,6 +50,31 @@ void main() {
         normalizeSql('select * from t where id = 9'),
       );
     });
+
+    test('sqlite numbered placeholders do not become `??`', () {
+      // `?1` is what `sqlite3`/`sqlite_async` emit. It fell past the explicit
+      // `$1` rule into the bare-number one, which ate the digit and left a
+      // second `?` behind — stable enough to group by, and reading as a typo
+      // wherever the result is shown.
+      expect(
+        normalizeSql('UPDATE "task" SET "state" = (?1), "version" = (?2)'),
+        'UPDATE "task" SET "state" = (?), "version" = (?)',
+      );
+    });
+
+    test('a numbered placeholder groups with its inlined twin', () {
+      expect(
+        normalizeSql('select * from t where id = ?1'),
+        normalizeSql('select * from t where id = 9'),
+      );
+    });
+
+    test('a bare `?` is still itself', () {
+      expect(
+        normalizeSql('select * from t where id = ?'),
+        'select * from t where id = ?',
+      );
+    });
   });
 
   group('IN lists', () {
