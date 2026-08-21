@@ -111,6 +111,22 @@ Set<String> allBranches(List<CatalogNode> nodes) => {
     ],
 };
 
+/// How many rows [nodes] lays out with everything open.
+///
+/// Folders and groups count: a branch is a row like any other, and what the
+/// count is compared against is the height of the pane. See
+/// `foldsOnArrival`.
+int catalogTreeRows(List<CatalogNode> nodes) {
+  var rows = 0;
+  for (var node in nodes) {
+    rows++;
+    if (node case CatalogBranch(:var children)) {
+      rows += catalogTreeRows(children);
+    }
+  }
+  return rows;
+}
+
 /// Keeps what matches [query], and the folders leading to it.
 ///
 /// A branch whose own label matches keeps its whole subtree — typing a folder

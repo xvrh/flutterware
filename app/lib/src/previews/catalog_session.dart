@@ -8,6 +8,7 @@ import 'package:flutterware/previews_guest.dart';
 import 'package:path/path.dart' as p;
 
 import '../embedder/embedded_engine.dart';
+import '../ui/tree_collapse.dart';
 import '../embedder/guest_vm_service.dart';
 import 'authoring.dart';
 import 'catalog_params.dart';
@@ -141,6 +142,42 @@ class CatalogBrowsing extends ChangeNotifier {
     _closed.clear();
     notifyListeners();
   }
+
+  /// Whether [foldIfCrowded] has anything left to decide — the cheap guard
+  /// for a caller that would otherwise walk its whole tree twice on every
+  /// build to ask a question already answered.
+  bool get needsFoldDecision => !_decidedFold;
+
+  /// Folds a catalog that would not fit, once, the first time one is laid out.
+  ///
+  /// [rowCount] is what the tree would lay out open and [branchIds] is every
+  /// branch in it. Over [treeRowBudget] rows, a catalog opens as a table of
+  /// contents rather than as a list you arrive already scrolling; under it,
+  /// everything stays visible, which is what a handful of demos wants.
+  ///
+  /// **Decided once, not re-applied.** After this, the fold is whatever the
+  /// person browsing made it, including all the way open. A branch that turns
+  /// up later — a file written while the panel is open — is open in a folded
+  /// tree, since the closed set names what existed when the decision was
+  /// taken. Which is the right accident: the newest thing is the visible one.
+  ///
+  /// **Deliberately without a notification.** The caller is the build that
+  /// lays the rows out and reads [isOpen] a few lines further down, so the
+  /// answer is already used by the frame that asked for it. Notifying from
+  /// inside a build is a `markNeedsBuild` during build, and deferring the
+  /// decision to a post-frame callback instead would paint the crowded tree
+  /// open for one frame before folding it.
+  void foldIfCrowded(int rowCount, Iterable<String> branchIds) {
+    // An empty tree is not a decision: entries arrive from the daemon after
+    // the panel mounts, and deciding on the tree that has none yet would mean
+    // never deciding at all.
+    if (rowCount == 0 || _decidedFold) return;
+    _decidedFold = true;
+    if (!foldsOnArrival(rowCount)) return;
+    _closed.addAll(branchIds);
+  }
+
+  var _decidedFold = false;
 
   /// What was typed in the filter box. Empty shows everything.
   String get filter => _filter;
