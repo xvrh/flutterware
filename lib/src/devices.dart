@@ -77,6 +77,8 @@ class Device {
     this.insetBottom = 0,
     this.insetLeft = 0,
     this.landscape,
+    this.keyboard = 0,
+    this.landscapeKeyboard,
   });
 
   /// What goes in an address — `?device=iphone-16`.
@@ -127,6 +129,27 @@ class Device {
   /// `safeAreas` is the same conclusion reached from the hardware.
   final DeviceInsets? landscape;
 
+  /// How tall the software keyboard is on this device, in logical pixels — 0
+  /// for a device that has none, which is every desktop size.
+  ///
+  /// **Measured, not computed**, like [landscape] and for the same reason:
+  /// there is no formula. A 375-wide phone with a home button gets 260 and a
+  /// 375-wide phone with a notch gets a different number entirely, because the
+  /// number includes whatever the platform puts under the keys.
+  ///
+  /// The height *with* the predictive bar, which is what a phone shows out of
+  /// the box. See `docs/superpowers/specs/2026-08-21-fake-keyboard-design.md`
+  /// for how each of these was taken, and on what.
+  final double keyboard;
+
+  /// The keyboard's height with the device on its side, or null when it has no
+  /// keyboard at all.
+  ///
+  /// Declared rather than scaled, exactly like [landscape]: a landscape
+  /// keyboard is not a portrait keyboard in a wider box — it is shorter, by a
+  /// different amount on every device.
+  final double? landscapeKeyboard;
+
   /// Whether orientation is a question this device answers. Desktops are
   /// windows: there is no other way up.
   ///
@@ -165,6 +188,8 @@ class Device {
     insetBottom: landscape?.bottom ?? insetBottom,
     insetLeft: landscape?.left ?? insetLeft,
     landscape: landscape,
+    keyboard: landscapeKeyboard ?? keyboard,
+    landscapeKeyboard: landscapeKeyboard,
   );
 
   @override
@@ -208,6 +233,8 @@ abstract final class Devices {
     height: 667,
     pixelRatio: 2,
     insetTop: 20,
+    keyboard: 260,
+    landscapeKeyboard: 200,
   );
 
   static const iphone13Mini = Device(
@@ -220,7 +247,9 @@ abstract final class Devices {
     height: 812,
     // 2, not 3, because `device_frame`'s own body says 2 and the frame test
     // pins them together. The mini renders at 3× and downsamples on the real
-    // device; correcting both at once is for the measurement pass.
+    // device. The 2026-08-21 measurement pass could not settle it either: no
+    // simulator will render this app at a mini's geometry at all — see the
+    // keyboard note below.
     pixelRatio: 2,
     insetTop: 47,
     insetBottom: 34,
@@ -228,6 +257,14 @@ abstract final class Devices {
     // far side only its rounded corner. `device_frame`'s own body for this
     // model, which is where these four numbers come from.
     landscape: DeviceInsets(left: 47, right: 44, bottom: 21),
+    // **Not measured, and the only entry that is not.** Both mini device types
+    // render this app at 320×568 under iOS 26.2 — the iPhone-SE-1
+    // compatibility geometry — so no simulator here can be asked what a mini's
+    // keyboard is. These are [iphone13]'s, the nearest measured device of the
+    // same class: a notched phone whose keyboard sits above a home indicator,
+    // where [iphoneSe] at the same width has neither and gives 75 less.
+    keyboard: 335,
+    landscapeKeyboard: 248,
   );
 
   static const iphone13 = Device(
@@ -242,6 +279,8 @@ abstract final class Devices {
     insetTop: 47,
     insetBottom: 34,
     landscape: DeviceInsets(left: 47, right: 47, bottom: 21),
+    keyboard: 335,
+    landscapeKeyboard: 248,
   );
 
   static const iphone12ProMax = Device(
@@ -256,6 +295,8 @@ abstract final class Devices {
     insetTop: 44,
     insetBottom: 34,
     landscape: DeviceInsets(left: 44, right: 44, bottom: 21),
+    keyboard: 345,
+    landscapeKeyboard: 248,
   );
 
   /// The Dynamic Island generation — the same screen as an iPhone 15, and the
@@ -277,6 +318,10 @@ abstract final class Devices {
     // portrait top was, and the home indicator settles at 21. Said out loud
     // because the rest of this table only claims numbers somebody measured.
     landscape: DeviceInsets(left: 59, right: 59, bottom: 21),
+    keyboard: 336,
+    // 219, where the same generation's predecessors give 248: the landscape
+    // keyboard changed with the 16 family, and both 16s agree on it.
+    landscapeKeyboard: 219,
   );
 
   /// The largest iPhone screen there is — what a layout overflows on last and
@@ -294,6 +339,8 @@ abstract final class Devices {
     insetBottom: 34,
     // Derived the same way as [iphone16], and carrying the same caveat.
     landscape: DeviceInsets(left: 59, right: 59, bottom: 21),
+    keyboard: 346,
+    landscapeKeyboard: 219,
   );
 
   static const iPad = Device(
@@ -306,6 +353,8 @@ abstract final class Devices {
     height: 1080,
     pixelRatio: 2,
     insetTop: 20,
+    keyboard: 320,
+    landscapeKeyboard: 408,
   );
 
   static const iPadPro13 = Device(
@@ -319,6 +368,11 @@ abstract final class Devices {
     pixelRatio: 2,
     insetTop: 24,
     insetBottom: 20,
+    // Measured on the 13-inch iPad Pro (M4), whose screen is 1032×1376 — this
+    // entry is the 12.9-inch generation it replaced, and eight points of width
+    // do not move a keyboard.
+    keyboard: 405.5,
+    landscapeKeyboard: 501,
   );
 
   // ------------------------------------------------------------ Android
@@ -337,6 +391,8 @@ abstract final class Devices {
     height: 640,
     pixelRatio: 2,
     insetTop: 24,
+    keyboard: 299,
+    landscapeKeyboard: 239,
   );
 
   static const androidMedium = Device(
@@ -349,6 +405,8 @@ abstract final class Devices {
     height: 732,
     pixelRatio: 2,
     insetTop: 24,
+    keyboard: 332,
+    landscapeKeyboard: 261,
   );
 
   /// The shape almost every current Android phone is: tall, with a gesture bar
@@ -364,6 +422,10 @@ abstract final class Devices {
     pixelRatio: 2.625,
     insetTop: 24,
     insetBottom: 24,
+    // The emulator's own geometry, so this pair is the one Android number
+    // measured on a screen rather than on a resized one.
+    keyboard: 336.4,
+    landscapeKeyboard: 261.3,
   );
 
   static const androidBig = Device(
@@ -376,6 +438,11 @@ abstract final class Devices {
     height: 853,
     pixelRatio: 2,
     insetTop: 24,
+    // The same pair as [androidMedium], measured separately: Gboard settles on
+    // one height per density and only a screen too short to afford it — see
+    // [androidSmall] — gets less.
+    keyboard: 332,
+    landscapeKeyboard: 261,
   );
 
   static const androidSmallTablet = Device(
@@ -387,6 +454,11 @@ abstract final class Devices {
     width: 800,
     height: 1280,
     pixelRatio: 2,
+    // The same in both orientations, unlike an iPad's, which grows when it
+    // turns. Measured twice, at two densities, in case it was a rounding
+    // artefact; it is not.
+    keyboard: 320,
+    landscapeKeyboard: 320,
     insetTop: 24,
   );
 
@@ -399,6 +471,8 @@ abstract final class Devices {
     width: 1024,
     height: 1350,
     pixelRatio: 2,
+    keyboard: 320,
+    landscapeKeyboard: 320,
     insetTop: 24,
   );
 

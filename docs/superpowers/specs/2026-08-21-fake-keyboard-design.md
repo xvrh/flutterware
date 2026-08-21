@@ -275,6 +275,106 @@ device per orientation. **Devices we cannot boot inherit the nearest measured
 device of the same platform and size class, and say so in the doc comment**
 rather than being quietly interpolated.
 
+### Measured, 2026-08-21
+
+A probe app autofocuses a field and waits for the insets to read the same twice
+— the raise animates, and the first frame after it starts is not the height it
+lands on — then asks for the other orientation and does it again. Logical
+pixels, iOS 26.2 simulators and one Android 15 emulator, predictive bar on,
+**hardware keyboard disconnected** (`ConnectHardwareKeyboard`, or the software
+keyboard never appears and every reading is a confident zero).
+
+| Device | Screen | Portrait | Landscape |
+| --- | --- | --- | --- |
+| `iphone-se` | 375×667 | 260 | 200 |
+| `iphone-13-mini` | 375×812 | *335* | *248* |
+| `iphone-13` | 390×844 | 335 | 248 |
+| `iphone-12-pro-max` | 428×926 | 345 | 248 |
+| `iphone-16` | 393×852 | 336 | 219 |
+| `iphone-16-pro-max` | 440×956 | 346 | 219 |
+| `ipad` | 810×1080 | 320 | 408 |
+| `ipad-pro-13` | 1024×1366 | 405.5 | 501 |
+
+| `android-small` | 360×640 | 299 | 239 |
+| `android-medium` | 412×732 | 332 | 261 |
+| `android-tall` | 412×915 | 336.4 | 261.3 |
+| `android-big` | 480×853 | 332 | 261 |
+| `android-small-tablet` | 800×1280 | 320 | 320 |
+| `android-medium-tablet` | 1024×1350 | 320 | 320 |
+
+Italics are the one entry that is not a measurement.
+
+**One emulator wears every Android geometry**, through `wm size` and `wm
+density` at the ratio each entry declares — there is one AVD, and it is a
+Pixel-shaped 412×915 at 420dpi, which is `android-tall` exactly. Its IME is
+Gboard rather than the AOSP keyboard, which is what a phone actually has. What
+that shows: Gboard settles on **one height per density** — 332/261 on every
+phone big enough for it — and only a screen too short to afford that gets less
+(`android-small` at 299/239). Density moves it by about four points, not by a
+factor, so the dp numbers are stable across the phones in this table.
+
+Three things the pass had to work around, each worth knowing before repeating
+it:
+
+- **No simulator will render an app at a mini's geometry.** Both the iPhone 13
+  mini and the iPhone 12 mini device types run this app at 320×568 — the
+  iPhone-SE-1 compatibility screen — under iOS 26.2, freshly created and after
+  an erase. So `iphone-13-mini` inherits `iphone-13`, the nearest measured
+  device of its class: a notched phone whose keyboard sits above a home
+  indicator. `iphone-se` is the same width and 75 points shorter, because it
+  has neither.
+- **iPads ignore `setPreferredOrientations`.** A multitasking-capable iPad
+  honours only the *app's* declared orientations, so the landscape numbers were
+  taken by editing `UISupportedInterfaceOrientations~ipad` in a copy of the
+  built bundle — and editing it **before** `simctl install`, because iOS reads
+  the plist at install time and an edit to the installed container does
+  nothing at all.
+- **The landscape keyboard changed with the iPhone 16 family**: 219, where the
+  13 and the 12 Pro Max both give 248. Two devices of each generation agree,
+  which is why it is in the table rather than treated as a bad reading.
+- **Android's first focus after a cold start raises nothing.** The request
+  lands before the window has focus and the IME never appears — a reading of
+  zero that looks exactly like a device with no keyboard, which is why the
+  probe says `NO-KEYBOARD` rather than reporting a number, and why it asks
+  again every two seconds until something comes up.
+
+### Safe areas the pass found wrong, and did not touch
+
+The probe reports the view's padding beside the keyboard, so the pass also
+measured what the table claims about safe areas. Four entries disagree with
+iOS 26.2:
+
+| Entry | Table | Measured |
+| --- | --- | --- |
+| `iphone-12-pro-max` | `insetTop: 44` | 47 |
+| `iphone-16-pro-max` | `insetTop: 59`, landscape sides 59 | 62 |
+| `ipad` | `insetTop: 20` | 32 |
+| `ipad-pro-13` | screen 1024×1366 | 1032×1376 (the M4) |
+
+**Left alone on purpose.** `app/test/previews/frames_test.dart` pins these
+numbers to `device_frame`'s own artwork for the five hand-drawn bodies, so
+correcting the table means correcting a drawing — a different piece of work,
+with its own screenshot churn, and not one to smuggle into a keyboard change.
+The `iphone-13-mini` pixel ratio (2, where the hardware is 3) is the same
+story, and its doc comment already said the measurement pass would settle it:
+the pass could not, because no simulator renders a mini at a mini's size.
+
+One thing the pass *confirmed*: the iPhone 16 family's landscape insets, which
+the table admits were derived from the rule the older phones follow rather than
+measured. The sides come back at exactly the declared 59 on an iPhone 16.
+
+### Two rules that turned out not to be one rule
+
+- **A phone's keyboard shrinks when it turns and a tablet's does not.** Every
+  phone measured loses height in landscape — 336 → 219 on an iPhone 16, 299 →
+  239 on a small Android. An iPad *grows* (320 → 408, 405.5 → 501: a wider
+  screen buys bigger keys) and Gboard on a tablet stays exactly where it was.
+  `test/devices_test.dart` pins both halves, having first been written with one
+  rule for both and failed on the tablets.
+- **The keyboard eats the home indicator.** `padding.bottom` read 0 on every
+  device while the keyboard was up, on both platforms — which is the arithmetic
+  in § The arithmetic, confirmed rather than assumed.
+
 `attach` carries the `TextInputConfiguration` — the live probe read
 `TextInputType.multiline` and `TextInputType.text` off it — so per-input-type
 heights are available whenever they are wanted. They are not wanted in v1:

@@ -28,6 +28,50 @@ void main() {
     expect(landscape.insetBottom, 21);
   });
 
+  test('turning a device turns its keyboard too', () {
+    // The one number downstream reads is `keyboard`, so `rotated()` has to put
+    // the landscape one there — the same trick the landscape insets play.
+    expect(Devices.iphone13.keyboard, 335);
+    expect(
+      Devices.iphone13.oriented(ScreenOrientation.landscape).keyboard,
+      248,
+    );
+    // And the declaration survives the turn, or turning twice would lose it.
+    expect(
+      Devices.iphone13.oriented(ScreenOrientation.landscape).landscapeKeyboard,
+      248,
+    );
+  });
+
+  test(
+    'every screen a finger touches declares a keyboard, and no window does',
+    () {
+      for (var device in Devices.all) {
+        var reason = device.id;
+        if (device.kind == DeviceKind.desktop) {
+          expect(device.keyboard, 0, reason: reason);
+          expect(device.landscapeKeyboard, isNull, reason: reason);
+        } else {
+          expect(device.keyboard, greaterThan(0), reason: reason);
+          expect(device.landscapeKeyboard, isNotNull, reason: reason);
+          // **A phone's keyboard shrinks when it turns; a tablet's does not.**
+          // Measured, and it caught the version of this test that assumed one
+          // rule for both: a phone in landscape has almost no height to spare
+          // and the rows are squashed, where a tablet has room either way — an
+          // iPad's landscape keyboard is *taller* (bigger keys across a wider
+          // screen) and Gboard's is the same 320 in both.
+          expect(
+            device.landscapeKeyboard,
+            device.kind == DeviceKind.phone
+                ? lessThan(device.keyboard)
+                : greaterThanOrEqualTo(device.keyboard),
+            reason: reason,
+          );
+        }
+      }
+    },
+  );
+
   test('turning keeps the identity: a rotated iPad is still `ipad`', () {
     var landscape = Devices.iPad.oriented(ScreenOrientation.landscape);
 
