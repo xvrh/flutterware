@@ -13,9 +13,18 @@ class LoadedCatalog {
     required this.name,
     required this.template,
     required this.byLocale,
+    this.filesMatched = 0,
   });
 
   final String name;
+
+  /// How many files the glob found, whatever they turned out to hold.
+  ///
+  /// Kept beside [keys] so an empty catalog can say *which* mistake it is: a
+  /// glob that matched nothing, or files that were found and read as the wrong
+  /// kind of catalog, yielding no key. The two are one sentence apart and send
+  /// a reader to opposite ends of the declaration.
+  final int filesMatched;
 
   /// The locale the source text is written in.
   final String template;
