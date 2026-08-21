@@ -3,7 +3,8 @@
 **Date:** 2026-08-21
 **Status:** Designed. Three measurements were taken *before* the design, and
 two of them changed it (§ What was measured). The owner decided four things on
-2026-08-21, marked **owner** where they land. Not built.
+2026-08-21, marked **owner** where they land. **PR 1 — staging the platform —
+is built**; the keyboard itself is not.
 
 **Lineage:** `2026-07-30-scenarios-design.md` (the substrate every scenario
 verb runs on), `2026-08-15-previews-audit-on-flutter-tester.md` (the second
@@ -135,10 +136,20 @@ crossed over the same devices, rendering different apps.
 Staging means two things:
 
 1. **`debugDefaultTargetPlatformOverride`** from the staged device, pushed by
-   the host. Debug-only, which every lane here is (the guest is JIT with a VM
-   service; flutter_tester is debug). It moves page transitions, scrollbars,
-   selection handles, `.adaptive` widgets and the tap-outside rule — every
-   preview screenshot moves once, and moves *towards* the truth.
+   the host through the framework's own `ext.flutter.platformOverride` — the
+   switch DevTools' platform selector drives, registered by every debug
+   binding, and already spelled in this repo as the `platform` debug flag. Its
+   setter reassembles the application, so a `ThemeData` built at the top of a
+   demo is rebuilt rather than left describing the machine the studio runs on.
+   Debug-only, which every lane here is (the guest is JIT with a VM service;
+   flutter_tester is debug). It moves page transitions, scrollbars, selection
+   handles, `.adaptive` widgets and the tap-outside rule — every preview
+   screenshot moves once, and moves *towards* the truth.
+
+   **A guest-side extension of our own was built first and deleted.** It
+   worked, in a widget test and in a live guest, and it was still the wrong
+   answer: it did the same thing less completely, and only we would have known
+   it existed. Look for the framework's switch before writing one.
 2. **Touch pointers** when the staged device is a phone or tablet — the tap
    outside rule needs the kind as well as the platform. One field appended to
    `PointerEventMessage` and one line in `input.c`, following the length-guard
@@ -157,14 +168,12 @@ Three consequences to build for, not around:
   `catalog_view.dart` already arbitrate this; touch staging is what makes the
   arbitration visible, so it gets a test rather than a hope.
 
-**The ordering trap.** Staging travels over the VM service, like axes and
-knobs, because the C host has no channel for arbitrary data — that is why
-`CatalogAxes` is pushed rather than passed. So the first frame of a fresh
-session can render as macOS before the push lands. Headless captures await the
-push before capturing and are never affected; the live panel may flash one
-frame at session start. Accepted. A staging change remounts the entry (the
-entrypoint already keys the subtree per entry), because widgets that read the
-platform in `initState` will not recompute otherwise.
+**Ordering.** Staging travels over the VM service, like axes and knobs,
+because the C host has no channel for arbitrary data — that is why
+`CatalogAxes` is pushed rather than passed. The reassemble is what makes that
+safe: a push that lands after the guest has already built rebuilds it, so the
+first frame of a fresh session is the only one that can be a frame early, and
+headless captures await the push before capturing.
 
 ## The artwork: a schematic slab (owner, 2026-08-21)
 

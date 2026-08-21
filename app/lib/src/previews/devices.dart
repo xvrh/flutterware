@@ -10,6 +10,19 @@ import 'package:flutterware/devices.dart';
 
 export 'package:flutterware/devices.dart';
 
+/// Whether a finger, rather than a mouse, is what touches this device.
+///
+/// The other half of staging a device — see [CaptureViewport.platform]. The
+/// framework asks *both* questions before it decides what tapping outside a
+/// text field means: on a mobile platform a **touch** leaves the keyboard up
+/// and a mouse click dismisses it, which is why a phone driven by mouse events
+/// behaved like a desktop no matter what platform it claimed to be.
+///
+/// A desktop size is a window and keeps the mouse, which is also what keeps
+/// hover working where hover is real.
+bool deviceIsTouched(Device? device) =>
+    device != null && device.kind != DeviceKind.desktop;
+
 /// How a device reads in the bar: its screen in logical pixels, which is the
 /// number a layout is written against.
 String describeDevice(Device device) =>
@@ -85,6 +98,7 @@ class CaptureViewport {
     this.insetRight = 0,
     this.insetBottom = 0,
     this.insetLeft = 0,
+    this.platform,
   });
 
   /// The device's screen, at its own ratio, with its safe areas — the same
@@ -98,6 +112,7 @@ class CaptureViewport {
     insetRight: device.insetRight,
     insetBottom: device.insetBottom,
     insetLeft: device.insetLeft,
+    platform: device.platform,
   );
 
   /// What a capture that names no device gets.
@@ -116,6 +131,15 @@ class CaptureViewport {
   final double insetBottom;
   final double insetLeft;
 
+  /// What the guest is staged *as*, or null for the panel's own rectangle.
+  ///
+  /// Not a number like the rest, and here anyway: it is the other half of what
+  /// makes a capture the picture you were looking at. A window shaped like a
+  /// phone running as a Mac renders desktop transitions, desktop scrollbars
+  /// and the desktop rule for tapping outside a field — see
+  /// `stageGuestPlatform`.
+  final DevicePlatform? platform;
+
   /// The same viewport at a different size, for a caller that asked for one
   /// explicitly. The ratio and the insets stay: asking for a taller iPhone is
   /// asking for a taller iPhone, not for a slab of glass with no notch.
@@ -127,10 +151,11 @@ class CaptureViewport {
     insetRight: insetRight,
     insetBottom: insetBottom,
     insetLeft: insetLeft,
+    platform: platform,
   );
 
-  /// By value, because "is this the same screen" is a question about the seven
-  /// numbers and never about which object holds them. An audit walking a
+  /// By value, because "is this the same screen" is a question about the
+  /// numbers and the identity, never about which object holds them. An audit walking a
   /// catalog of mixed form factors asks it once per entry, to resize the warm
   /// guest only where the canvas actually changed.
   @override
@@ -142,7 +167,8 @@ class CaptureViewport {
       other.insetTop == insetTop &&
       other.insetRight == insetRight &&
       other.insetBottom == insetBottom &&
-      other.insetLeft == insetLeft;
+      other.insetLeft == insetLeft &&
+      other.platform == platform;
 
   @override
   int get hashCode => Object.hash(
@@ -153,6 +179,7 @@ class CaptureViewport {
     insetRight,
     insetBottom,
     insetLeft,
+    platform,
   );
 
   @override

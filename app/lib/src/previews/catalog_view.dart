@@ -563,7 +563,10 @@ class _CatalogViewState extends State<CatalogView> {
                   EdgeInsets.zero,
                 );
                 _resizeAfterFrame();
-                return _staged(_guestInput(engine, const SizedBox.expand()));
+                _stageAfterFrame(null);
+                return _staged(
+                  _guestInput(engine, const SizedBox.expand(), touch: false),
+                );
               },
             ),
           ),
@@ -592,11 +595,18 @@ class _CatalogViewState extends State<CatalogView> {
       ),
     );
     _resizeAfterFrame();
+    // The identity, where everything above was the geometry — the guest renders
+    // as this platform, not as the machine the studio is running on.
+    _stageAfterFrame(effective.platform);
     // The one thing `device_frame` is here for, and the only place it is
     // touched: the silhouette. Everything above came from our own measurements.
     // Null for a desktop size, which gets none.
     var chrome = deviceFrameFor(device);
-    var guest = _guestInput(engine, SizedBox.fromSize(size: screen));
+    var guest = _guestInput(
+      engine,
+      SizedBox.fromSize(size: screen),
+      touch: deviceIsTouched(effective),
+    );
     // **The body is inside the zoom, not around it.** Zooming a framed preview
     // ought to look like leaning towards the phone; a stage that magnified the
     // screen while the body stayed put would look like neither. So the
@@ -652,6 +662,19 @@ class _CatalogViewState extends State<CatalogView> {
   /// a pinch stutter. Nothing under [ZoomableStage] is built again by a zoom.
   void _followZoom() => _resizeAfterFrame();
 
+  /// Tells the guest what it is being rendered *as*, after the frame that
+  /// worked it out.
+  ///
+  /// Post-frame like [_resizeAfterFrame] and for the same reason: this is a
+  /// call out of a build, and the build is what knows the device. The session
+  /// swallows the repeats — every rebuild computes the same platform, and only
+  /// a change or a fresh guest is worth a round trip.
+  void _stageAfterFrame(DevicePlatform? platform) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _session.stageAs(platform);
+    });
+  }
+
   void _resizeAfterFrame() {
     if (_stage case (var engine, var logical, var deviceRatio, var insets)) {
       var ratio = guestRatioFor(
@@ -691,7 +714,11 @@ class _CatalogViewState extends State<CatalogView> {
   /// would tap the button you were trying to inspect, and not the hover, which
   /// would light the demo's own hover states underneath the thing you are
   /// trying to see.
-  Widget _guestInput(EmbeddedEngine engine, Widget sizedBox) {
+  Widget _guestInput(
+    EmbeddedEngine engine,
+    Widget sizedBox, {
+    required bool touch,
+  }) {
     // The guest's picture, built once and handed to whichever mode is on. Built
     // per-mode it is easy to pass the placeholder to one of them, which is what
     // happened: arming the picker replaced the demo with an empty box, so the
@@ -703,7 +730,7 @@ class _CatalogViewState extends State<CatalogView> {
       valueListenable: _picking,
       builder: (context, picking, _) => picking
           ? _pickerInput(context, picture)
-          : _demoInput(engine, picture),
+          : _demoInput(engine, picture, touch: touch),
     );
   }
 
@@ -722,12 +749,17 @@ class _CatalogViewState extends State<CatalogView> {
     );
   }
 
-  Widget _demoInput(EmbeddedEngine engine, Widget picture) {
+  Widget _demoInput(
+    EmbeddedEngine engine,
+    Widget picture, {
+    required bool touch,
+  }) {
     return ValueListenableBuilder(
       valueListenable: _panning,
       builder: (context, panning, child) => EmbedderInputRegion(
         engine: engine,
         focusNode: _focusNode,
+        touch: touch,
         // Ignored, not handled: an app chord carries on up to whichever
         // `CallbackShortcuts` claims it — this panel's, or the shell's.
         shouldIgnoreKey: _isAppChord,

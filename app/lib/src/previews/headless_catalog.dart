@@ -752,6 +752,12 @@ class _GuestSession {
       // ratio and the safe areas have no other way in, and without them a phone
       // capture is a correctly-sized picture of the wrong layout.
       session._resize(viewport);
+      // And what the buffer is a picture *of*. Awaited, unlike the resize:
+      // this one is a round trip over the VM service, and a capture that
+      // started before it landed would photograph the demo rendering as this
+      // machine. The first frame has not been asked for yet, so nothing is
+      // remounted by it — the guest simply builds staged.
+      await session._inspect.setStaging(viewport.platform);
       return session;
     } catch (_) {
       // Whatever failed above, nothing owns the guest yet.

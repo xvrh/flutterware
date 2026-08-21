@@ -110,6 +110,40 @@ void main() {
     expect(msg.rotation, 0.5);
   });
 
+  test('a pointer says whether it is a finger', () {
+    // The default is the mouse this wire only ever carried, so a host that
+    // never mentions touch keeps behaving exactly as it did.
+    expect(
+      roundTrip(
+        const PointerEventMessage(
+          phase: PointerPhase.down,
+          x: 1,
+          y: 2,
+          buttons: 1,
+          scrollDeltaX: 0,
+          scrollDeltaY: 0,
+          timestampMicros: 1,
+        ),
+      ).touch,
+      isFalse,
+    );
+    expect(
+      roundTrip(
+        const PointerEventMessage(
+          phase: PointerPhase.down,
+          x: 1,
+          y: 2,
+          buttons: 1,
+          scrollDeltaX: 0,
+          scrollDeltaY: 0,
+          timestampMicros: 1,
+          touch: true,
+        ),
+      ).touch,
+      isTrue,
+    );
+  });
+
   test('round-trips KeyEvent', () {
     var msg = roundTrip(
       const KeyEventMessage(

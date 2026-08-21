@@ -46,8 +46,18 @@ void input_handle_pointer(FlutterEngine engine, const uint8_t* p, size_t len) {
   // The framework only routes the panZoom phases to scrollables when they come
   // from a trackpad; a mouse is not a device that pans.
   bool pan_zoom = ev.phase >= kPanZoomStart;
-  ev.device_kind =
-      pan_zoom ? kFlutterPointerDeviceKindTrackpad : kFlutterPointerDeviceKindMouse;
+  // Whether the GUI is standing in for a finger — it says so because it is the
+  // one that picked the device. Appended after the pan/zoom block, so a frame
+  // that stops short of it is a host that predates staging and means a mouse.
+  //
+  // A separate device id, not only a separate kind: the engine keeps one state
+  // per device, and a device that changed kind mid-stream would be a mouse and
+  // a finger wearing the same name. The wheel still arrives as the mouse.
+  bool touch = !pan_zoom && len >= 81 && p[80] != 0;
+  ev.device = touch ? 1 : 0;
+  ev.device_kind = pan_zoom  ? kFlutterPointerDeviceKindTrackpad
+                   : touch   ? kFlutterPointerDeviceKindTouch
+                             : kFlutterPointerDeviceKindMouse;
   if (!pan_zoom && (scroll_dx != 0.0 || scroll_dy != 0.0)) {
     ev.signal_kind = kFlutterPointerSignalKindScroll;
     ev.scroll_delta_x = scroll_dx;

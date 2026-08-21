@@ -944,6 +944,29 @@ class CatalogSession extends ChangeNotifier {
     return ids.isEmpty ? null : ids.last;
   }
 
+  /// Tells the guest it is being rendered as [platform] — null for the panel's
+  /// own rectangle, which renders as this machine.
+  ///
+  /// **Deduped against the guest that was told, not only against the value.**
+  /// A fresh guest starts as itself and has to be told again even when nothing
+  /// about the device moved — which is every restart, and would otherwise be a
+  /// phone quietly rendering as a Mac for the rest of the session.
+  void stageAs(DevicePlatform? platform) {
+    var inspect = _inspect;
+    if (inspect == null) return;
+    if (_staged case (
+      var told,
+      var was,
+    ) when identical(told, inspect) && was == platform) {
+      return;
+    }
+    _staged = (inspect, platform);
+    _fireAndForget(inspect.setStaging(platform), 'staging the guest');
+  }
+
+  /// Which guest was told what — see [stageAs].
+  (InspectClient, DevicePlatform?)? _staged;
+
   /// Forgets what the entry has reported, then reads it back.
   ///
   /// What the panel's refresh does, and what a reload does before it rebuilds.

@@ -1,5 +1,9 @@
 import 'dart:async';
 
+// The device vocabulary, which is pure Dart and public — so this stays
+// linkable from `fw`, like everything else this file imports.
+import 'package:flutterware/devices.dart';
+
 // The plain-Dart halves rather than the umbrella `ui_catalog.dart`, for the
 // reason `headless_catalog.dart` gives at its own imports: this file is reached
 // from `fw`, and the umbrella exports the demo annotations, which reach
@@ -20,6 +24,7 @@ import 'package:flutterware/src/ui_catalog/axis.dart';
 import 'package:flutterware/src/ui_catalog/knob.dart';
 
 import '../embedder/guest_vm_service.dart';
+import 'debug_flags.dart';
 
 /// How patiently a read waits for the guest to be describing the entry it was
 /// asked about.
@@ -231,6 +236,20 @@ class InspectClient {
     );
     return json == null ? null : AxisReport.fromJson(json);
   }
+
+  /// Stages the guest as [platform] — null for a preview that is no device at
+  /// all, which renders as the machine the studio is running on.
+  ///
+  /// **The identity of the device, where the resize carries its geometry.**
+  /// The two travel apart because they have to: the window metrics reach the
+  /// guest through the embedder's own event, which has fields for a size, a
+  /// ratio and four insets and nothing else. Everything beyond geometry — the
+  /// axes, the knobs, this — goes over the VM service.
+  ///
+  /// Through the framework's own `platformOverride` — see [stageGuestPlatform]
+  /// for why that one rather than an extension of ours.
+  Future<void> setStaging(DevicePlatform? platform) =>
+      stageGuestPlatform(vmService, platform);
 
   /// Puts [entryId] on screen without recompiling or reloading anything.
   ///
