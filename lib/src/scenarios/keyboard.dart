@@ -86,6 +86,18 @@ class ScenarioKeyboard {
   /// holding one up over a layout with nothing focused.
   KeyboardVariant get variant => asked ?? KeyboardVariant.letters;
 
+  /// [variant], as something the slab can rebuild on.
+  ///
+  /// **The picture needs its own signal, because the height is not one.** The
+  /// slab sits *above* the app, so an app-internal frame never rebuilds it; the
+  /// only thing that does is the view's insets changing, which is the height.
+  /// And email, url and letters are all the same height on every device
+  /// measured — so tapping from a text field to an email field moves nothing
+  /// the slab is watching, and it goes on drawing the keyboard the previous
+  /// field asked for. Measured: `keyboard.variant` reported `email` beside a
+  /// slab still painting letters.
+  final drawn = ValueNotifier<KeyboardVariant>(KeyboardVariant.letters);
+
   /// How tall the keyboard the app is asking for would be.
   double get targetHeight => enabled ? (device?.keyboardFor(variant) ?? 0) : 0;
 
@@ -151,6 +163,10 @@ class ScenarioKeyboard {
   /// else.
   void step() {
     _run?.call(_want, animate: true);
+    // Edge-triggered by the notifier, so a sample that changes nothing costs
+    // nothing. It is *this* that repaints the slab when two variants share a
+    // height.
+    drawn.value = variant;
     // **A variant can change without the fraction moving.** Tapping from a
     // text field to a number field on a phone morphs one keyboard into a
     // shorter one: the keyboard never goes down, so the ticker has nowhere to
@@ -201,6 +217,7 @@ class ScenarioKeyboard {
   void reset() {
     mode = KeyboardMode.auto;
     _fraction = 0;
+    drawn.value = KeyboardVariant.letters;
     write(0);
   }
 
@@ -303,6 +320,10 @@ class _ScenarioKeyboardSlabState extends State<ScenarioKeyboardSlab>
   // it first. Shared with the previews harness, which stages a keyboard from a
   // canvas and needs the same picture.
   @override
-  Widget build(BuildContext context) =>
-      ViewKeyboardSlab(variant: widget.driver.variant, child: widget.child);
+  Widget build(BuildContext context) => ValueListenableBuilder<KeyboardVariant>(
+    valueListenable: widget.driver.drawn,
+    child: widget.child,
+    builder: (context, variant, child) =>
+        ViewKeyboardSlab(variant: variant, child: child!),
+  );
 }

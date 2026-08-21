@@ -4,6 +4,7 @@ import 'package:flutterware/src/scenarios/keyboard.dart';
 import 'package:flutterware/src/scenarios/profile.dart';
 import 'package:flutterware/src/scenarios/run_args.dart';
 import 'package:flutterware/src/scenarios/run_listener.dart';
+import 'package:flutterware/src/ui_catalog/fake_keyboard.dart';
 
 /// The scenario keyboard: up when the app asks, down when the view lets go,
 /// and over whatever it is over.
@@ -284,6 +285,23 @@ void main() {
       expect(s.keyboard.variant, KeyboardVariant.keypad);
       expect(s.keyboard.height, 291);
     });
+
+    scenario('and the picture follows even when the height does not', (
+      s,
+    ) async {
+      // **The gap a state check cannot see.** The slab sits above the app, so
+      // no frame the app draws rebuilds it — the only thing that does is the
+      // view's insets moving, which is the height. Letters and email are the
+      // same height on every device measured, so this pair once reported
+      // `email` from the driver beside a slab still painting letters.
+      await s.pumpWidget(const _Form());
+      await s.tap(const Key('email'));
+      expect(_drawnVariant(s), KeyboardVariant.letters);
+      await s.tap(const Key('mail'));
+      expect(s.keyboard.variant, KeyboardVariant.email);
+      expect(s.keyboard.height, 336, reason: 'the same height, on purpose');
+      expect(_drawnVariant(s), KeyboardVariant.email);
+    });
   });
 
   group('a field that wants no keyboard gets none', () {
@@ -362,6 +380,15 @@ final _name = FocusNode();
 /// bar, `resizeToAvoidBottomInset: false` — leaves its button *under* the
 /// keyboard, which is the case the refusal exists for and a real layout bug
 /// nothing else in this tool can see.
+/// Which keyboard the slab is actually painting — the picture, rather than
+/// what the driver says about it.
+KeyboardVariant _drawnVariant(ScenarioTester s) {
+  var paint = s.tester
+      .widgetList<CustomPaint>(find.byType(CustomPaint))
+      .firstWhere((p) => p.painter is FakeKeyboardPainter);
+  return (paint.painter! as FakeKeyboardPainter).variant;
+}
+
 class _Form extends StatefulWidget {
   const _Form({this.resizes = true, this.custom = false, this.number = false});
 
@@ -399,6 +426,13 @@ class _FormState extends State<_Form> {
                 : null,
           ),
           const TextField(key: Key('email')),
+          // A field whose keyboard is the *same height* as the plain one and a
+          // different picture — which is the only pair that can catch a slab
+          // repainting on the height alone.
+          const TextField(
+            key: Key('mail'),
+            keyboardType: TextInputType.emailAddress,
+          ),
           const Spacer(),
           if (_submitted) const Text('submitted'),
           TextButton(
