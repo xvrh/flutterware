@@ -266,15 +266,29 @@ class InspectClient {
   /// and `Fit`, which is not a device and has nothing measured to draw. A
   /// forced-up keyboard there raises nothing rather than inventing a number.
   ///
+  /// [keypadHeight] is the shorter keyboard a `phone` or `number` field gets,
+  /// and null means this device does not shrink for one. *Which* keyboard is
+  /// asked for stays entirely on the guest's side: it is on the text input
+  /// channel, and the host has no business guessing at it.
+  ///
   /// Required rather than tolerant, like the other writes: a keyboard that
   /// silently failed to arrive looks exactly like a layout that survived it.
   Future<KeyboardState?> setKeyboard({
     required KeyboardMode mode,
     required double height,
+    double? keypadHeight,
   }) async {
     var json = await vmService.requireExtension(
       'ext.flutterware.keyboard',
-      args: {'mode': mode.name, 'height': '$height'},
+      args: {
+        'mode': mode.name,
+        'height': '$height',
+        // **The empty string is a value here, not an omission.** It says *this
+        // device does not shrink for a digit pad*, which every iPad and every
+        // Android geometry means and which is a different fact from a host
+        // that has nothing to say.
+        'keypadHeight': keypadHeight == null ? '' : '$keypadHeight',
+      },
     );
     return json == null ? null : KeyboardState.fromJson(json);
   }

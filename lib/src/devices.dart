@@ -69,6 +69,59 @@ enum KeyboardMode {
   down,
 }
 
+/// Which keyboard a field asked for — what a platform draws, not only how
+/// tall it is.
+///
+/// Two facts wear one name here, and they are genuinely separate. The
+/// *height* differs by platform: an iPhone gives a keypad 27–45 fewer points
+/// than a QWERTY, an iPad gives every type the same keyboard, and Gboard swaps
+/// the layout without moving the height at all. The *picture* differs
+/// everywhere — a number pad looks nothing like a letter keyboard on any
+/// device. So a variant always changes what is drawn, and changes the height
+/// only where the device has a measurement saying it should.
+///
+/// Here rather than beside the guest that reads it, for the reason
+/// [KeyboardMode] and [ScreenOrientation] are: this is a fact about the
+/// device, and the code that maps a `TextInputType` onto it must not have to
+/// import Flutter.
+enum KeyboardVariant {
+  /// The full letter keyboard, and what most fields get.
+  letters,
+
+  /// Letters with an `@` and a dot on the bottom row.
+  email,
+
+  /// Letters with a slash and a `.com`.
+  url,
+
+  /// A digit pad — a grid of numbers rather than rows of letters.
+  keypad,
+}
+
+/// The variant a field asking for [name] gets.
+///
+/// [name] and [signed] are the text input channel's own spelling — the
+/// `{name, signed, decimal}` map that rides `TextInput.setClient`, which both
+/// the previews guest and the scenario binding receive verbatim. Taking the
+/// pair rather than a `TextInputType` is what lets one function serve both
+/// without either lane translating first.
+///
+/// `signed` is the discriminator nobody expects. A plain number field and
+/// a decimal one get iOS's keypad; the moment a minus sign is allowed the
+/// platform gives the full punctuation keyboard at full height instead.
+/// Measured on two phones, both agreeing.
+///
+/// Anything unrecognised is [KeyboardVariant.letters], which is the shape most
+/// types have and the safe answer for a type this build has not heard of.
+KeyboardVariant keyboardVariantForName(String name, {bool signed = false}) =>
+    switch (name) {
+      'TextInputType.phone' => KeyboardVariant.keypad,
+      'TextInputType.number' when !signed => KeyboardVariant.keypad,
+      'TextInputType.emailAddress' => KeyboardVariant.email,
+      'TextInputType.url' => KeyboardVariant.url,
+      _ => KeyboardVariant.letters,
+    };
+
 /// A device's safe areas, as one value.
 ///
 /// Ours rather than `EdgeInsets` because this file is pure Dart by design: a
@@ -107,6 +160,8 @@ class Device {
     this.landscape,
     this.keyboard = 0,
     this.landscapeKeyboard,
+    this.keypadKeyboard,
+    this.landscapeKeypadKeyboard,
   });
 
   /// What goes in an address — `?device=iphone-16`.
@@ -178,6 +233,42 @@ class Device {
   /// different amount on every device.
   final double? landscapeKeyboard;
 
+  /// How tall the **digit pad** is — what a `phone` or `number` field gets —
+  /// or null where this device does not shrink for one.
+  ///
+  /// Null is the conservative answer and it means *no shrink*: the letters
+  /// height stands. It covers three different situations on purpose, because
+  /// they all want the same behaviour — a device that genuinely does not
+  /// shrink (every iPad, and Gboard, which swaps the layout without moving the
+  /// height), a device with no keyboard at all, and a cell nobody has measured
+  /// yet. A keyboard that is too *tall* is the failure this whole distinction
+  /// exists to remove, so an unmeasured cell must never guess downwards.
+  final double? keypadKeyboard;
+
+  /// The digit pad with the device on its side, and null with the same meaning
+  /// as [keypadKeyboard] — no shrink, use the landscape letters height.
+  ///
+  /// Two of the table's phones have this unset because their reading failed
+  /// its control; see the design's *the keypad column, as far as it is
+  /// verified*.
+  final double? landscapeKeypadKeyboard;
+
+  /// How tall this device's keyboard is when a field asks for [variant].
+  ///
+  /// The one place a variant becomes a number, so nothing downstream has
+  /// to know which variants differ on which platform — an iPad answers the
+  /// same height for all four, and that is a property of the iPad rather than
+  /// something a caller should special-case.
+  ///
+  /// Already turned: call it on the device [oriented] gave you.
+  double keyboardFor(KeyboardVariant variant) => switch (variant) {
+    KeyboardVariant.keypad => keypadKeyboard ?? keyboard,
+    // Email and URL are the *same* keyboard with two keys swapped in the
+    // bottom row, on every device measured. They differ in the picture and
+    // not in the height.
+    _ => keyboard,
+  };
+
   /// Whether orientation is a question this device answers. Desktops are
   /// windows: there is no other way up.
   ///
@@ -218,6 +309,12 @@ class Device {
     landscape: landscape,
     keyboard: landscapeKeyboard ?? keyboard,
     landscapeKeyboard: landscapeKeyboard,
+    // **Not `?? keypadKeyboard`.** A portrait keypad is *taller* than a
+    // landscape letters keyboard on every phone in the table, so falling back
+    // to it would turn on a shrink that grows the keyboard. Null here is the
+    // conservative answer the field documents: no shrink, letters height.
+    keypadKeyboard: landscapeKeypadKeyboard,
+    landscapeKeypadKeyboard: landscapeKeypadKeyboard,
   );
 
   @override
@@ -263,6 +360,8 @@ abstract final class Devices {
     insetTop: 20,
     keyboard: 260,
     landscapeKeyboard: 200,
+    keypadKeyboard: 216,
+    landscapeKeypadKeyboard: 162,
   );
 
   static const iphone13Mini = Device(
@@ -293,6 +392,9 @@ abstract final class Devices {
     // where [iphoneSe] at the same width has neither and gives 75 less.
     keyboard: 335,
     landscapeKeyboard: 248,
+    // Inherited with the rest of this entry's keyboard numbers, and unset in
+    // landscape for the reason [iphone13] is.
+    keypadKeyboard: 308,
   );
 
   static const iphone13 = Device(
@@ -309,6 +411,11 @@ abstract final class Devices {
     landscape: DeviceInsets(left: 47, right: 47, bottom: 21),
     keyboard: 335,
     landscapeKeyboard: 248,
+    // No `landscapeKeypadKeyboard`: the reading for it failed its control —
+    // see the design's *the keypad column, as far as it is verified* — so this
+    // phone keeps its letters height for a keypad on its side rather than
+    // shrinking by a number nobody has stood behind.
+    keypadKeyboard: 308,
   );
 
   static const iphone12ProMax = Device(
@@ -325,6 +432,11 @@ abstract final class Devices {
     landscape: DeviceInsets(left: 44, right: 44, bottom: 21),
     keyboard: 345,
     landscapeKeyboard: 248,
+    // No `landscapeKeypadKeyboard`: the reading for it failed its control —
+    // see the design's *the keypad column, as far as it is verified* — so this
+    // phone keeps its letters height for a keypad on its side rather than
+    // shrinking by a number nobody has stood behind.
+    keypadKeyboard: 318,
   );
 
   /// The Dynamic Island generation — the same screen as an iPhone 15, and the
@@ -350,6 +462,8 @@ abstract final class Devices {
     // 219, where the same generation's predecessors give 248: the landscape
     // keyboard changed with the 16 family, and both 16s agree on it.
     landscapeKeyboard: 219,
+    keypadKeyboard: 291,
+    landscapeKeypadKeyboard: 181,
   );
 
   /// The largest iPhone screen there is — what a layout overflows on last and
@@ -369,6 +483,8 @@ abstract final class Devices {
     landscape: DeviceInsets(left: 59, right: 59, bottom: 21),
     keyboard: 346,
     landscapeKeyboard: 219,
+    keypadKeyboard: 301,
+    landscapeKeypadKeyboard: 181,
   );
 
   static const iPad = Device(

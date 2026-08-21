@@ -1,11 +1,116 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
+import 'package:flutterware/previews.dart';
 
 import 'shell.dart';
 
 /// Exercises what the preview forwards into the guest: typing needs the
 /// guest's own text input (there is no platform IME on the other side), and
 /// scrolling needs wheel and trackpad events on the wire.
+
+/// A field per keyboard the platform can be asked for, and a knob for which
+/// one is focused — so the fake keyboard can be photographed as each of them
+/// rather than only as whichever field happened to autofocus.
+///
+/// **The entry to open when the fake keyboard changes.** Live, tapping between
+/// the fields morphs one keyboard into another without it ever going down; from
+/// a screenshot, `--knobs=focus=Email` is the same walk one frame at a time.
+/// The digit pad is the one to look hardest at: on a phone it is a different
+/// picture *and* a measurably shorter one, so the form above it moves.
+@Preview(name: 'Keyboards', group: 'Input', wrapper: wrapInApp)
+Widget keyboards() => Builder(
+  builder: (context) => _Keyboards(
+    focused: context.knobs.picker('focus', {
+      for (var field in _KeyboardField.values) field.label: field,
+    }, _KeyboardField.phone),
+  ),
+);
+
+enum _KeyboardField {
+  phone('Phone', 'a digit pad', TextInputType.phone),
+  email('Email', 'an @ and a dot', TextInputType.emailAddress),
+  url('URL', 'a slash and a .com', TextInputType.url),
+  text('Text', 'the letters', null),
+  none('None', 'brings its own pad', TextInputType.none);
+
+  const _KeyboardField(this.label, this.gets, this.type);
+
+  final String label;
+  final String gets;
+  final TextInputType? type;
+}
+
+class _Keyboards extends StatefulWidget {
+  const _Keyboards({required this.focused});
+
+  final _KeyboardField focused;
+
+  @override
+  State<_Keyboards> createState() => _KeyboardsState();
+}
+
+class _KeyboardsState extends State<_Keyboards> {
+  final _nodes = {
+    for (var field in _KeyboardField.values)
+      field: FocusNode(debugLabel: field.label),
+  };
+
+  @override
+  void didUpdateWidget(_Keyboards old) {
+    super.didUpdateWidget(old);
+    // Turning the knob moves the focus, which is what moves the keyboard — the
+    // same path a tap takes, so a screenshot per option is a screenshot of the
+    // thing the app really does rather than of a keyboard somebody forced up.
+    //
+    // The *first* focus is `autofocus:` below rather than a `requestFocus` from
+    // here or from `initState`. Measured: asking a node that is not in the
+    // focus tree yet colours the field's label as focused and opens no text
+    // input connection at all — a screenshot with no caret and no keyboard,
+    // which reads exactly like a keyboard that failed to arrive.
+    if (widget.focused != old.focused) {
+      _nodes[widget.focused]!.requestFocus();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (var node in _nodes.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Keyboards')),
+    // **Not a `SingleChildScrollView`, which is what a real form would use.**
+    // In the previews guest the entry builds once as this machine and again as
+    // the staged device, and `MaterialScrollBehavior` wraps a viewport in a
+    // `Scrollbar` on macOS and not on iOS — so the platform switch reparents
+    // everything under a `Scrollable`, disposing these fields and closing the
+    // input connection the autofocus had just opened. The keyboard then
+    // correctly follows the app back down, and the entry photographs with no
+    // keyboard on it at all. Unscrolled until the guest builds staged from the
+    // first build rather than the first frame.
+    body: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        spacing: 16,
+        children: [
+          for (var field in _KeyboardField.values)
+            TextField(
+              autofocus: field == widget.focused,
+              focusNode: _nodes[field],
+              keyboardType: field.type,
+              decoration: InputDecoration(
+                labelText: '${field.label} — ${field.gets}',
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
 
 @Preview(name: 'Text fields', group: 'Input', wrapper: wrapInApp)
 Widget textFields() => Scaffold(

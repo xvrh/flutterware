@@ -29,7 +29,7 @@ import 'staging.dart';
 /// tell the difference. The slab is a widget, because a picture has to be
 /// somewhere.
 class ScenarioKeyboard {
-  ScenarioKeyboard(this.tester, {required this.deviceHeight});
+  ScenarioKeyboard(this.tester, {this.device, this.enabled = true});
 
   /// How long the raise takes, in **fake** time.
   ///
@@ -42,10 +42,64 @@ class ScenarioKeyboard {
 
   final WidgetTester tester;
 
-  /// The device's measured keyboard, already turned the way the device is.
-  /// Zero for a run staged on nothing, or on a desktop size — where a forced
-  /// keyboard raises nothing rather than inventing a height.
-  final double deviceHeight;
+  /// The device the run is staged as, **already turned**, or null for a run
+  /// staged on nothing. It is the device rather than a number because how tall
+  /// a keyboard is depends on which one the field asked for — see
+  /// `Device.keyboardFor`.
+  final Device? device;
+
+  /// Whether the folder wants a keyboard at all.
+  final bool enabled;
+
+  /// The letters height, which is what "does this stage have a keyboard"
+  /// means: zero for a desktop size, for a run staged on nothing, and for a
+  /// folder that turned the feature off.
+  double get deviceHeight => enabled ? (device?.keyboard ?? 0) : 0;
+
+  /// What the app is asking for, or null when it is asking for nothing at all.
+  ///
+  /// A field can ask for no keyboard. `TextInputType.none` is a custom
+  /// pad, a date picker sheet, a calculator's own keys: the field opens a
+  /// connection and the platform shows nothing. `TextInput.show` is still
+  /// sent, so reading the show alone raises a keyboard over a screen that has
+  /// none on the phone this is imitating.
+  ///
+  /// The configuration arrives on `setClient`, the **first** of the five
+  /// messages that precede the show — so by the time there is anything to
+  /// decide, this is already known.
+  KeyboardVariant? get asked {
+    var input = tester.binding.testTextInput;
+    if (!input.isRegistered || !input.isVisible) return null;
+    return switch (input.setClientArgs?['inputType']) {
+      Map type when type['name'] == 'TextInputType.none' => null,
+      // The channel's own `{name, signed, decimal}`, handed to the same
+      // pure-Dart discriminator the previews guest uses on the same map.
+      Map type => keyboardVariantForName(
+        '${type['name']}',
+        signed: type['signed'] == true,
+      ),
+      _ => KeyboardVariant.letters,
+    };
+  }
+
+  /// Which keyboard is drawn — the app's, or letters where the human is
+  /// holding one up over a layout with nothing focused.
+  KeyboardVariant get variant => asked ?? KeyboardVariant.letters;
+
+  /// [variant], as something the slab can rebuild on.
+  ///
+  /// The picture needs its own signal, because the height is not one. The
+  /// slab sits *above* the app, so an app-internal frame never rebuilds it; the
+  /// only thing that does is the view's insets changing, which is the height.
+  /// And email, url and letters are all the same height on every device
+  /// measured — so tapping from a text field to an email field moves nothing
+  /// the slab is watching, and it goes on drawing the keyboard the previous
+  /// field asked for. Measured: `keyboard.variant` reported `email` beside a
+  /// slab still painting letters.
+  final drawn = ValueNotifier<KeyboardVariant>(KeyboardVariant.letters);
+
+  /// How tall the keyboard the app is asking for would be.
+  double get targetHeight => enabled ? (device?.keyboardFor(variant) ?? 0) : 0;
 
   /// What the run asked for, over the top of what the app asks for.
   KeyboardMode mode = KeyboardMode.auto;
@@ -56,17 +110,11 @@ class ScenarioKeyboard {
 
   bool get up => _height > 0;
 
-  /// Whether the app has a field focused — what the framework told the
-  /// platform, not something inferred from the tree.
-  ///
-  /// Guarded on `isRegistered`, because the stub is registered by the binding
-  /// per test and reading it before that asserts.
-  bool get requested {
-    var input = tester.binding.testTextInput;
-    return input.isRegistered && input.isVisible;
-  }
+  /// Whether the app has a field focused that wants a keyboard — what the
+  /// framework told the platform, not something inferred from the tree.
+  bool get requested => asked != null;
 
-  /// What the height should be, as a fraction of [deviceHeight].
+  /// What the height should be, as a fraction of [targetHeight].
   double get _want => switch (mode) {
     KeyboardMode.up => 1,
     KeyboardMode.down => 0,
@@ -110,9 +158,32 @@ class ScenarioKeyboard {
   /// Samples the app — called between the frames of whatever [Settle] policy
   /// is running.
   ///
-  /// Cheap and idempotent: it reads one bool and, when that bool disagrees
-  /// with where the slide is heading, points the ticker somewhere else.
-  void step() => _run?.call(_want, animate: true);
+  /// Cheap and idempotent: it reads one field's configuration and, where that
+  /// disagrees with where the slide is heading, points the ticker somewhere
+  /// else.
+  void step() {
+    _run?.call(_want, animate: true);
+    // Edge-triggered by the notifier, so a sample that changes nothing costs
+    // nothing. It is *this* that repaints the slab when two variants share a
+    // height.
+    drawn.value = variant;
+    // **A variant can change without the fraction moving.** Tapping from a
+    // text field to a number field on a phone morphs one keyboard into a
+    // shorter one: the keyboard never goes down, so the ticker has nowhere to
+    // go and would never fire. Recomputing here is what lets the morph land.
+    var wanted = _fraction * targetHeight;
+    if (_height != wanted) write(wanted);
+  }
+
+  /// Where the slide has got to, 0 to 1. Held here rather than only on the
+  /// host so that a variant change can be re-applied at the same fraction.
+  double _fraction = 0;
+
+  /// Called by the host on every tick of the slide.
+  void onFraction(double fraction) {
+    _fraction = fraction;
+    write(fraction * targetHeight);
+  }
 
   /// Puts it where the mode says at once, with no slide — what a scenario's
   /// own `show`/`hide` verb does, since an author asking for it explicitly is
@@ -145,6 +216,8 @@ class ScenarioKeyboard {
   /// form.
   void reset() {
     mode = KeyboardMode.auto;
+    _fraction = 0;
+    drawn.value = KeyboardVariant.letters;
     write(0);
   }
 
@@ -239,7 +312,7 @@ class _ScenarioKeyboardSlabState extends State<ScenarioKeyboardSlab>
   void _onTick() {
     // The clock the animation runs on is fake, so this whole slide costs a
     // handful of pumps and no wall time at all.
-    widget.driver.write(_slide.value * widget.driver.deviceHeight);
+    widget.driver.onFraction(_slide.value);
   }
 
   // Off the view's own insets rather than off the controller, so the picture
@@ -247,5 +320,10 @@ class _ScenarioKeyboardSlabState extends State<ScenarioKeyboardSlab>
   // it first. Shared with the previews harness, which stages a keyboard from a
   // canvas and needs the same picture.
   @override
-  Widget build(BuildContext context) => ViewKeyboardSlab(child: widget.child);
+  Widget build(BuildContext context) => ValueListenableBuilder<KeyboardVariant>(
+    valueListenable: widget.driver.drawn,
+    child: widget.child,
+    builder: (context, variant, child) =>
+        ViewKeyboardSlab(variant: variant, child: child!),
+  );
 }

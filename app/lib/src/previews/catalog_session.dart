@@ -987,18 +987,22 @@ class CatalogSession extends ChangeNotifier {
   /// the same reason: a restart starts from the guest's own defaults, so a
   /// dedupe on the value alone would leave a fresh guest with no measurement
   /// and a mode nobody chose.
-  void keyboardAs(KeyboardMode mode, double height) {
+  void keyboardAs(KeyboardMode mode, double height, double? keypadHeight) {
     var inspect = _inspect;
     if (inspect == null) return;
     if (_keyboarded case (
       var told,
       var was,
-    ) when identical(told, inspect) && was == (mode, height)) {
+    ) when identical(told, inspect) && was == (mode, height, keypadHeight)) {
       return;
     }
-    _keyboarded = (inspect, (mode, height));
+    _keyboarded = (inspect, (mode, height, keypadHeight));
     _fireAndForget(
-      inspect.setKeyboard(mode: mode, height: height),
+      inspect.setKeyboard(
+        mode: mode,
+        height: height,
+        keypadHeight: keypadHeight,
+      ),
       'raising the keyboard',
     );
   }
@@ -1015,15 +1019,15 @@ class CatalogSession extends ChangeNotifier {
     if (inspect == null) return;
     if (_keyboarded case (
       var told,
-      (KeyboardMode.up, var height),
+      (KeyboardMode.up, var height, var keypad),
     ) when identical(told, inspect)) {
-      _keyboarded = (inspect, (KeyboardMode.auto, height));
+      _keyboarded = (inspect, (KeyboardMode.auto, height, keypad));
     }
     _fireAndForget(inspect.dismissKeyboard(), 'dismissing the keyboard');
   }
 
   /// Which guest was told what — see [keyboardAs].
-  (InspectClient, (KeyboardMode, double))? _keyboarded;
+  (InspectClient, (KeyboardMode, double, double?))? _keyboarded;
 
   void _onKeyboard(KeyboardState state) {
     if (_disposed || state == _keyboard) return;

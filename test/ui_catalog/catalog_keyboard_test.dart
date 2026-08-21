@@ -66,17 +66,17 @@ void main() {
   group('the app asks', () {
     testWidgets('a field taking focus raises it', (tester) async {
       await pumpFields(tester);
-      expect(input.showing.value, isFalse);
+      expect(input.asking.value, isNull);
       await tester.tap(find.byKey(const Key('a')));
       await tester.pump();
-      expect(input.showing.value, isTrue);
+      expect(input.asking.value, isNotNull);
     });
 
     testWidgets('autofocus raises it before anything is touched', (
       tester,
     ) async {
       await pumpFields(tester, autofocus: true);
-      expect(input.showing.value, isTrue);
+      expect(input.asking.value, isNotNull);
     });
 
     testWidgets('field to field does not flicker', (tester) async {
@@ -85,18 +85,18 @@ void main() {
       await tester.pump();
       var flickers = 0;
       void count() {
-        if (!input.showing.value) flickers++;
+        if (input.asking.value == null) flickers++;
       }
 
-      input.showing.addListener(count);
-      addTearDown(() => input.showing.removeListener(count));
+      input.asking.addListener(count);
+      addTearDown(() => input.asking.removeListener(count));
       await tester.tap(find.byKey(const Key('b')));
       await tester.pump();
       // `TextInput` defers the hide to a microtask that cancels itself when
       // something re-attaches, so moving between fields produces no hide at
       // all — which is why nothing here needs a debounce of its own.
       expect(flickers, 0);
-      expect(input.showing.value, isTrue);
+      expect(input.asking.value, isNotNull);
     });
 
     testWidgets('letting go of the field lowers it', (tester) async {
@@ -105,7 +105,7 @@ void main() {
       await tester.pump();
       primaryFocus?.unfocus();
       await tester.pump();
-      expect(input.showing.value, isFalse);
+      expect(input.asking.value, isNull);
     });
 
     testWidgets('the dismiss key makes the app let go', (tester) async {
@@ -116,7 +116,61 @@ void main() {
       // Not artwork disappearing: the field itself unfocused, because that is
       // what `connectionClosed` means and what a real platform sends.
       expect(first.hasFocus, isFalse);
-      expect(input.showing.value, isFalse);
+      expect(input.asking.value, isNull);
+    });
+
+    testWidgets('a field that wants no system keyboard asks for none', (
+      tester,
+    ) async {
+      keyboard.apply(deviceHeight: 336);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: TextField(
+              focusNode: first,
+              autofocus: true,
+              keyboardType: TextInputType.none,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      // `show()` is called all the same — the platform is the one that decides
+      // to draw nothing, because the app brought its own pad. Taking the call
+      // at face value put a keyboard over a screen that has none.
+      expect(first.hasFocus, isTrue);
+      expect(input.asking.value, isNull);
+      expect(keyboard.height, 0);
+    });
+
+    testWidgets('and changing its mind while focused moves the keyboard', (
+      tester,
+    ) async {
+      keyboard.apply(deviceHeight: 336);
+      var custom = ValueNotifier(true);
+      addTearDown(custom.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: custom,
+              builder: (context, on, _) => TextField(
+                focusNode: first,
+                autofocus: true,
+                keyboardType: on ? TextInputType.none : TextInputType.text,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(keyboard.height, 0);
+      // The "use the normal keyboard" toggle a custom pad usually sits beside.
+      // It arrives as `updateConfig` rather than a fresh attach, so a control
+      // that only read the type at `attach` would never notice.
+      custom.value = false;
+      await tester.pump();
+      expect(keyboard.height, 336);
     });
 
     testWidgets('and it can be pressed with nothing focused', (tester) async {
@@ -124,6 +178,124 @@ void main() {
       input.dismiss();
       await tester.pump();
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('which keyboard the field asked for', () {
+    Future<KeyboardVariant?> ask(
+      WidgetTester tester,
+      TextInputType type,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: TextField(
+              focusNode: first,
+              autofocus: true,
+              keyboardType: type,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      return keyboard.asked;
+    }
+
+    testWidgets('a phone or a plain number is a keypad', (tester) async {
+      expect(await ask(tester, TextInputType.phone), KeyboardVariant.keypad);
+    });
+
+    testWidgets('and so is a decimal one', (tester) async {
+      expect(
+        await ask(tester, const TextInputType.numberWithOptions(decimal: true)),
+        KeyboardVariant.keypad,
+      );
+    });
+
+    testWidgets('but a **signed** number is letters', (tester) async {
+      // The discriminator nobody expects, and the reason the mapping takes
+      // `signed` rather than the type name alone: allowing a minus sign gets
+      // iOS's full punctuation keyboard at full height. Measured on two
+      // phones, both agreeing.
+      expect(
+        await ask(tester, const TextInputType.numberWithOptions(signed: true)),
+        KeyboardVariant.letters,
+      );
+    });
+
+    testWidgets('email and url get their own keys', (tester) async {
+      expect(
+        await ask(tester, TextInputType.emailAddress),
+        KeyboardVariant.email,
+      );
+      expect(await ask(tester, TextInputType.url), KeyboardVariant.url);
+    });
+
+    testWidgets('and a type this build never heard of is letters', (
+      tester,
+    ) async {
+      // Forwards-compatible for the reason a canvas drops an unknown device:
+      // the guest is compiled against the *project's* flutterware, which can
+      // run behind the SDK that names the type.
+      expect(
+        keyboardVariantForName('TextInputType.holographic'),
+        KeyboardVariant.letters,
+      );
+    });
+  });
+
+  group('the height follows the keys', () {
+    testWidgets('a keypad is the shorter measurement', (tester) async {
+      keyboard.apply(deviceHeight: 336, deviceKeypadHeight: 291);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: TextField(
+              focusNode: first,
+              autofocus: true,
+              keyboardType: TextInputType.phone,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(keyboard.variant, KeyboardVariant.keypad);
+      expect(keyboard.height, 291);
+    });
+
+    testWidgets('and a device that does not shrink keeps its letters height', (
+      tester,
+    ) async {
+      // Every iPad, and every Android geometry: Gboard swaps the keys without
+      // moving the height. Null is also what an unmeasured cell carries, and
+      // it has to mean the same thing — no shrink — because a keyboard that
+      // is too tall is the failure this distinction exists to remove.
+      keyboard.apply(deviceHeight: 405.5, clearKeypad: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: TextField(
+              focusNode: first,
+              autofocus: true,
+              keyboardType: TextInputType.phone,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(keyboard.variant, KeyboardVariant.keypad);
+      expect(keyboard.height, 405.5);
+    });
+
+    testWidgets('a field held up by hand draws letters', (tester) async {
+      keyboard.apply(
+        mode: KeyboardMode.up,
+        deviceHeight: 336,
+        deviceKeypadHeight: 291,
+      );
+      await pumpFields(tester);
+      expect(keyboard.variant, KeyboardVariant.letters);
+      expect(keyboard.height, 336);
     });
   });
 

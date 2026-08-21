@@ -384,8 +384,15 @@ void _declare(
             // answer and what resets the axes, errors and logs per entry.
             // And the keyboard, if the canvas staged one — as tall as the
             // view says, so the picture and the layout are the same number.
-            // Nothing focuses in a cold render, so this lane has no driver:
-            // the canvas is the only thing that can ask.
+            //
+            // **Always the letters one, and that is a limit of this lane.**
+            // The canvas stages its keyboard *before* the pump, so there is
+            // nothing focused yet to read a variant off; an entry that
+            // autofocuses a `phone` field is drawn here with the keyboard the
+            // canvas asked for rather than the one the field did. Following
+            // it would need a driver sampling between frames, which is the
+            // scenario lane's `ScenarioKeyboard` — and this lane renders one
+            // cold frame.
             child: ViewKeyboardSlab(
               child: CatalogGuest(entryId: entry.id, child: entry.build()),
             ),

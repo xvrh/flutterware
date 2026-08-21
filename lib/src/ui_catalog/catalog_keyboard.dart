@@ -14,7 +14,7 @@ import 'keyboard.dart';
 ///
 /// Two facts arriving from opposite directions, which is the shape of the
 /// whole feature. The app's opinion comes up from the framework — a field took
-/// focus, so [GuestTextInput.showing] flipped — and it knows nothing about
+/// focus, so [GuestTextInput.asking] moved — and it knows nothing about
 /// which phone it is on. The measurement comes down from the host, which knows
 /// the device and cannot know when a field is focused. Neither half is a
 /// keyboard on its own.
@@ -39,30 +39,52 @@ class CatalogKeyboard {
 
   KeyboardMode _mode = KeyboardMode.auto;
   double _deviceHeight = 0;
+  double? _deviceKeypadHeight;
   var _installed = false;
 
-  /// The device's measured keyboard, in logical pixels, already turned the way
-  /// the device is. Zero for a stage with no keyboard at all — a desktop
-  /// window, and `Fit`, which is not a device and has no measurement to draw.
+  /// The device's measured letters keyboard, in logical pixels, already turned
+  /// the way the device is. Zero for a stage with no keyboard at all — a
+  /// desktop window, and `Fit`, which is not a device and has no measurement
+  /// to draw.
   double get deviceHeight => _deviceHeight;
 
   KeyboardMode get mode => _mode;
 
+  /// What the app is asking for, or null when it is asking for nothing.
+  KeyboardVariant? get asked => GuestTextInput.instance.asking.value;
+
   /// Whether the app has asked for a keyboard, whatever [mode] then does with
   /// it.
-  bool get requested => GuestTextInput.instance.showing.value;
+  bool get requested => asked != null;
+
+  /// Which keyboard is drawn.
+  ///
+  /// The app's where it has one, and letters otherwise — which covers a
+  /// keyboard the *human* is holding up over a layout with nothing focused,
+  /// and is the shape most fields would have asked for anyway.
+  KeyboardVariant get variant => asked ?? KeyboardVariant.letters;
 
   /// What the screen actually loses. Zero on a stage with no measurement, so a
   /// forced-up keyboard on `Fit` raises nothing rather than inventing a height.
   double get height => switch (_mode) {
-    KeyboardMode.up => _deviceHeight,
     KeyboardMode.down => 0,
-    KeyboardMode.auto => requested ? _deviceHeight : 0,
+    KeyboardMode.up => _heightFor(variant),
+    KeyboardMode.auto => requested ? _heightFor(variant) : 0,
   };
+
+  /// Null keypad means no shrink, exactly as `Device.keypadKeyboard`
+  /// documents: an iPad gives every field the same keyboard, Gboard swaps the
+  /// keys without moving the height, and a cell nobody has measured must never
+  /// guess downwards.
+  double _heightFor(KeyboardVariant variant) =>
+      variant == KeyboardVariant.keypad
+      ? (_deviceKeypadHeight ?? _deviceHeight)
+      : _deviceHeight;
 
   KeyboardState get state => KeyboardState(
     mode: _mode,
     requested: requested,
+    variant: variant,
     height: height,
     deviceHeight: _deviceHeight,
   );
@@ -72,14 +94,15 @@ class CatalogKeyboard {
   void install() {
     if (_installed) return;
     _installed = true;
-    GuestTextInput.instance.showing.addListener(_onRequestChanged);
+    GuestTextInput.instance.asking.addListener(_onRequestChanged);
   }
 
   void _onRequestChanged() {
-    // Only when it changes the picture: in a forced mode the app's opinion
-    // moves nothing, and rebuilding the whole demo to record an opinion
-    // nobody acts on is a frame spent on nothing.
-    if (_mode == KeyboardMode.auto && _deviceHeight > 0) _bump();
+    // Only when it changes the picture. Held *down*, the app's opinion moves
+    // nothing at all; held *up*, it still chooses which keys are drawn and how
+    // tall they are, so a forced keyboard follows a field from text to digits
+    // the way the phone would.
+    if (_mode != KeyboardMode.down && _deviceHeight > 0) _bump();
     // Pushed either way, because the *host* cares about the opinion even where
     // the screen does not move — a forced-down keyboard over a focused field
     // is exactly the state a control should be able to say out loud.
@@ -87,10 +110,20 @@ class CatalogKeyboard {
   }
 
   /// Applies what the host asked for. Returns whether anything moved.
-  bool apply({KeyboardMode? mode, double? deviceHeight}) {
+  bool apply({
+    KeyboardMode? mode,
+    double? deviceHeight,
+    double? deviceKeypadHeight,
+    bool clearKeypad = false,
+  }) {
     var before = state;
     _mode = mode ?? _mode;
     _deviceHeight = deviceHeight ?? _deviceHeight;
+    if (clearKeypad) {
+      _deviceKeypadHeight = null;
+    } else if (deviceKeypadHeight != null) {
+      _deviceKeypadHeight = deviceKeypadHeight;
+    }
     var moved = state != before;
     if (moved) {
       _bump();
@@ -142,6 +175,13 @@ class CatalogKeyboard {
           String height => double.tryParse(height),
           _ => null,
         },
+        deviceKeypadHeight: switch (args['keypadHeight']) {
+          String height => double.tryParse(height),
+          _ => null,
+        },
+        // The empty string is how a host says *this device does not shrink*,
+        // which is a different fact from saying nothing at all.
+        clearKeypad: args['keypadHeight'] == '',
       );
       // Answered only once the frame it caused has been painted, so a host
       // that captures straight afterwards photographs the screen it asked for
@@ -184,6 +224,7 @@ class CatalogKeyboardScope extends StatelessWidget {
       child: child,
       builder: (context, _, child) => FakeKeyboard(
         height: keyboard.height,
+        variant: keyboard.variant,
         // Read rather than pushed. The host already stages the platform
         // through the framework's own `ext.flutter.platformOverride`, so
         // `defaultTargetPlatform` is the *same* fact the demo's own

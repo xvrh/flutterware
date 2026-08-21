@@ -17,6 +17,7 @@ void main() {
   Future<MediaQueryData> pump(
     WidgetTester tester, {
     required double keyboard,
+    KeyboardVariant variant = KeyboardVariant.letters,
     Widget child = const SizedBox.expand(),
   }) async {
     // The surface itself, not only what `MediaQuery` claims: a `Scaffold`
@@ -39,6 +40,7 @@ void main() {
           child: FakeKeyboard(
             height: keyboard,
             platform: DevicePlatform.ios,
+            variant: variant,
             child: Builder(
               builder: (context) {
                 seen = MediaQuery.of(context);
@@ -51,6 +53,71 @@ void main() {
     );
     return seen;
   }
+
+  group('the keys that say which keyboard it is carry their characters', () {
+    // **The one thing a finder cannot check.** Every label here is painted, so
+    // it is invisible to `find.text`, to `screen()` and to the transcript
+    // audits — which is exactly the property that keeps a keyboard out of the
+    // app's own text projection, and exactly the property that let a variant
+    // reach the painter and change nothing anybody could assert on.
+    FakeKeyboardPainter painterFor(KeyboardVariant variant) =>
+        FakeKeyboardPainter(
+          platform: DevicePlatform.ios,
+          dark: false,
+          variant: variant,
+        );
+
+    test('an email keyboard draws an @ and a dot', () {
+      expect(painterFor(KeyboardVariant.email).labels, ['123', '@', '.']);
+    });
+
+    test('a url keyboard draws a slash and a .com, and no space bar', () {
+      expect(painterFor(KeyboardVariant.url).labels, ['123', '.', '/', '.com']);
+    });
+
+    test('a keypad draws the ten digits', () {
+      expect(painterFor(KeyboardVariant.keypad).labels, [
+        '1',
+        '2',
+        '3',
+        '4',
+        '5',
+        '6',
+        '7',
+        '8',
+        '9',
+        '0',
+      ]);
+    });
+
+    test('and Android spells the digits key its own way, on every row', () {
+      FakeKeyboardPainter android(KeyboardVariant variant) =>
+          FakeKeyboardPainter(
+            platform: DevicePlatform.android,
+            dark: false,
+            variant: variant,
+          );
+      // It was platform-aware on the letters row and hard-coded to iOS's `123`
+      // on the other two, so an Android email keyboard carried a key Gboard
+      // does not have.
+      expect(android(KeyboardVariant.letters).labels.first, '?123');
+      expect(android(KeyboardVariant.email).labels.first, '?123');
+      expect(android(KeyboardVariant.url).labels.first, '?123');
+    });
+
+    test('and letters claim no language at all', () {
+      // `123` is the only mark on it, and it is a mark every locale's keyboard
+      // carries. Nothing here spells a letter, because a letter would need a
+      // layout that is a lie on an AZERTY.
+      expect(painterFor(KeyboardVariant.letters).labels, ['123']);
+    });
+
+    test('a repaint follows the labels, not only the height', () {
+      var email = painterFor(KeyboardVariant.email);
+      expect(email.shouldRepaint(painterFor(KeyboardVariant.url)), isTrue);
+      expect(email.shouldRepaint(painterFor(KeyboardVariant.email)), isFalse);
+    });
+  });
 
   group('the arithmetic', () {
     testWidgets('the insets rise by exactly the keyboard', (tester) async {
@@ -174,6 +241,26 @@ void main() {
   });
 
   group('the artwork', () {
+    testWidgets('the variant reaches the brush', (tester) async {
+      // **Pinned because it silently did not.** `FakeKeyboard` takes the
+      // variant, hands the height and the platform to the slab, and once
+      // forgot to hand over the third — so the guest knew perfectly well a
+      // phone field was focused, reported `variant: keypad` over the wire, and
+      // drew ten rows of letters anyway. Nothing about that is visible from
+      // either end on its own.
+      await pump(tester, keyboard: 291, variant: KeyboardVariant.keypad);
+      var paint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(AbsorbPointer),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      expect(
+        (paint.painter! as FakeKeyboardPainter).variant,
+        KeyboardVariant.keypad,
+      );
+    });
+
     testWidgets('repaints only when the keyboard it draws changes', (
       tester,
     ) async {

@@ -99,6 +99,7 @@ class CaptureViewport {
     this.insetLeft = 0,
     this.platform,
     this.keyboard = 0,
+    this.keypadKeyboard,
     this.keyboardMode = KeyboardMode.auto,
   });
 
@@ -117,6 +118,7 @@ class CaptureViewport {
     // Already turned: [Device.rotated] swaps in `landscapeKeyboard`, because a
     // phone's landscape keyboard is not its portrait one in a wider box.
     keyboard: device.keyboard,
+    keypadKeyboard: device.keypadKeyboard,
   );
 
   /// What a capture that names no device gets.
@@ -153,6 +155,16 @@ class CaptureViewport {
   /// `docs/superpowers/specs/2026-08-21-fake-keyboard-design.md`.
   final double keyboard;
 
+  /// The digit pad's height — what a `phone` or `number` field gets — or null
+  /// where this device does not shrink for one.
+  ///
+  /// Null carries the same conservative meaning `Device.keypadKeyboard` gives
+  /// it: **no shrink**. It covers a device that genuinely does not have a
+  /// shorter keypad, one with no keyboard at all, and a cell nobody has
+  /// measured — all of which want the letters height rather than a guess
+  /// downwards.
+  final double? keypadKeyboard;
+
   /// Whether that keyboard follows the entry or the caller.
   ///
   /// On the viewport for the reason [platform] is: it changes the picture,
@@ -171,6 +183,7 @@ class CaptureViewport {
     insetLeft: insetLeft,
     platform: platform,
     keyboard: keyboard,
+    keypadKeyboard: keypadKeyboard,
     keyboardMode: mode,
   );
 
@@ -187,6 +200,7 @@ class CaptureViewport {
     insetLeft: insetLeft,
     platform: platform,
     keyboard: keyboard,
+    keypadKeyboard: keypadKeyboard,
     keyboardMode: keyboardMode,
   );
 
@@ -206,6 +220,7 @@ class CaptureViewport {
       other.insetLeft == insetLeft &&
       other.platform == platform &&
       other.keyboard == keyboard &&
+      other.keypadKeyboard == keypadKeyboard &&
       other.keyboardMode == keyboardMode;
 
   @override
@@ -219,6 +234,7 @@ class CaptureViewport {
     insetLeft,
     platform,
     keyboard,
+    keypadKeyboard,
     keyboardMode,
   );
 

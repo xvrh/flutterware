@@ -20,6 +20,7 @@ class KeyboardState {
   const KeyboardState({
     this.mode = KeyboardMode.auto,
     this.requested = false,
+    this.variant = KeyboardVariant.letters,
     this.height = 0,
     this.deviceHeight = 0,
   });
@@ -30,6 +31,13 @@ class KeyboardState {
       _ => KeyboardMode.auto,
     },
     requested: json['requested'] == true,
+    variant:
+        switch (json['variant']) {
+          String name =>
+            KeyboardVariant.values.where((v) => v.name == name).firstOrNull,
+          _ => null,
+        } ??
+        KeyboardVariant.letters,
     height: (json['height'] as num? ?? 0).toDouble(),
     deviceHeight: (json['deviceHeight'] as num? ?? 0).toDouble(),
   );
@@ -40,6 +48,10 @@ class KeyboardState {
   /// it. True regardless of [mode], because it is what the app said rather
   /// than what was done with it.
   final bool requested;
+
+  /// Which keyboard is on screen — what the focused field asked for, and
+  /// letters where nothing did.
+  final KeyboardVariant variant;
 
   /// What the screen actually lost, in logical pixels. Zero when the keyboard
   /// is down.
@@ -55,6 +67,7 @@ class KeyboardState {
   Map<String, Object?> toJson() => {
     'mode': mode.name,
     'requested': requested,
+    'variant': variant.name,
     'height': height,
     'deviceHeight': deviceHeight,
   };
@@ -64,11 +77,13 @@ class KeyboardState {
       other is KeyboardState &&
       other.mode == mode &&
       other.requested == requested &&
+      other.variant == variant &&
       other.height == height &&
       other.deviceHeight == deviceHeight;
 
   @override
-  int get hashCode => Object.hash(mode, requested, height, deviceHeight);
+  int get hashCode =>
+      Object.hash(mode, requested, variant, height, deviceHeight);
 
   @override
   String toString() =>

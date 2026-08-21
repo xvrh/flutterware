@@ -7,9 +7,18 @@
 /// [ExcludeSemantics] is one leaf, one paint call, and invisible to every
 /// finder.
 ///
-/// No glyphs. Letters would need a font that differs between the previews
-/// harness and a bare `flutter test`, and a per-locale layout to not be a lie.
-/// Rows of rounded rectangles say *keyboard* without claiming a language.
+/// Glyphs only where they are the same in every language. No letter is ever
+/// drawn: a letter would need a per-locale layout to not be a lie, and rows of
+/// rounded rectangles say *keyboard* without claiming a language. But `@`, `.`,
+/// `/`, `.com` and the digits sit in the same place on an AZERTY, a Cyrillic
+/// and a QWERTY keyboard — and they are precisely the keys that say *which*
+/// keyboard it is. Leaving those blank is what made an email keyboard and a
+/// text one tell apart only by the width of a space bar.
+///
+/// Every label is ASCII, deliberately: a glyph the rendering font does not
+/// carry comes out as a tofu box, which is worse than the blank key it
+/// replaced. That is why the backspace on the keypad is drawn as a shape
+/// rather than as `⌫`.
 ///
 /// Shared by both lanes on purpose — the guest drives it from a
 /// [TextInputControl], a scenario drives it from the test binding, and the
@@ -36,6 +45,7 @@ class FakeKeyboard extends StatelessWidget {
     super.key,
     required this.height,
     this.platform,
+    this.variant = KeyboardVariant.letters,
     required this.child,
   });
 
@@ -45,6 +55,9 @@ class FakeKeyboard extends StatelessWidget {
   /// Which keyboard to draw. Null takes the iOS tint, which is also what a
   /// device with no platform of its own would be shown on.
   final DevicePlatform? platform;
+
+  /// Which keys to draw — see [FakeKeyboardPainter.variant].
+  final KeyboardVariant variant;
 
   final Widget child;
 
@@ -79,7 +92,12 @@ class FakeKeyboard extends StatelessWidget {
               ),
               viewInsets: media.viewInsets.copyWith(bottom: height),
             ),
-      child: FakeKeyboardSlab(height: height, platform: platform, child: child),
+      child: FakeKeyboardSlab(
+        height: height,
+        platform: platform,
+        variant: variant,
+        child: child,
+      ),
     );
   }
 }
@@ -98,11 +116,13 @@ class FakeKeyboardSlab extends StatelessWidget {
     super.key,
     required this.height,
     this.platform,
+    this.variant = KeyboardVariant.letters,
     required this.child,
   });
 
   final double height;
   final DevicePlatform? platform;
+  final KeyboardVariant variant;
   final Widget child;
 
   @override
@@ -136,6 +156,7 @@ class FakeKeyboardSlab extends StatelessWidget {
                 size: Size.infinite,
                 painter: FakeKeyboardPainter(
                   platform: platform,
+                  variant: variant,
                   dark:
                       MediaQuery.platformBrightnessOf(context) ==
                       Brightness.dark,
@@ -156,12 +177,50 @@ class FakeKeyboardSlab extends StatelessWidget {
 /// box is a measurement — an iPhone SE's 260 points and an iPad Pro's 501 hold
 /// the same rows at different sizes, which is what real keyboards do.
 class FakeKeyboardPainter extends CustomPainter {
-  FakeKeyboardPainter({required this.platform, required this.dark});
+  FakeKeyboardPainter({
+    required this.platform,
+    required this.dark,
+    this.variant = KeyboardVariant.letters,
+  });
 
   final DevicePlatform? platform;
   final bool dark;
 
+  /// Which keyboard to draw. **The picture changes on every device**, even
+  /// where the height does not: an iPad gives a number field the same 405.5
+  /// points as a text field and a completely different set of keys, and a
+  /// screenshot that showed letters there would be describing a field the app
+  /// never asked for.
+  final KeyboardVariant variant;
+
   bool get _android => platform == DevicePlatform.android;
+
+  /// The ten characters on every locale's number pad, in the order the grid
+  /// draws them — `1`–`9` across three rows, then `0` beside the backspace.
+  static const _keypadDigits = [
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    '0',
+  ];
+
+  /// Every label this keyboard draws, in drawing order.
+  ///
+  /// Exists so a test can hold the picture to account. A label here is
+  /// painted, not built, so no finder can see it and no `screen()` reports it —
+  /// which is the property that keeps a keyboard out of the app's text
+  /// projection, and also the property that let a variant go missing while
+  /// every assertion still passed. This is the seam that closes it: the email
+  /// keyboard draws an `@`, and a test can say so.
+  List<String> get labels => variant == KeyboardVariant.keypad
+      ? _keypadDigits
+      : [for (var (_, _, label) in _bottomRow) ?label];
 
   /// The slab itself.
   Color get _ground => switch ((_android, dark)) {
@@ -190,6 +249,9 @@ class FakeKeyboardPainter extends CustomPainter {
   /// The suggestion pills, which are text on a real keyboard and shapes here.
   Color get _hint => _modifier.withValues(alpha: dark ? 0.9 : 0.75);
 
+  /// What a key's label is drawn in.
+  Color get _ink => dark ? const Color(0xFFF2F2F7) : const Color(0xFF1C1C1E);
+
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(Offset.zero & size, Paint()..color = _ground);
@@ -204,13 +266,18 @@ class FakeKeyboardPainter extends CustomPainter {
     // The bands, top to bottom. The suggestion strip is inside the measured
     // number rather than beside it — see the design's *Not in v1* — and so is
     // the home indicator, which is why the rows stop short of the bottom.
-    var strip = size.height * 0.14;
+    //
+    // **A keypad has no strip**, and that is not a drawing decision: a digit
+    // pad predicts nothing, which is most of why it is the shorter keyboard
+    // in the first place.
+    var strip = variant == KeyboardVariant.keypad ? 0.0 : size.height * 0.14;
     var foot = size.height * (_android ? 0.05 : 0.10);
-    var rowsTop = strip;
     var rowsHeight = size.height - strip - foot;
     if (rowsHeight <= 0) return;
 
-    _paintStrip(canvas, Rect.fromLTWH(0, 0, size.width, strip));
+    if (strip > 0) {
+      _paintStrip(canvas, Rect.fromLTWH(0, 0, size.width, strip));
+    }
 
     var gap = math.max(1.0, rowsHeight * 0.055);
     var rowHeight = (rowsHeight - gap * 4) / 4;
@@ -218,7 +285,12 @@ class FakeKeyboardPainter extends CustomPainter {
     var margin = size.width * 0.012;
     var radius = Radius.circular(_android ? rowHeight * 0.16 : rowHeight * 0.2);
 
-    double rowTop(int index) => rowsTop + gap * (index + 1) + rowHeight * index;
+    double rowTop(int index) => strip + gap * (index + 1) + rowHeight * index;
+
+    if (variant == KeyboardVariant.keypad) {
+      _paintKeypad(canvas, size, rowTop, rowHeight, margin, radius, gap);
+      return;
+    }
 
     // 10, 9 inset by half a key, then shift + 7 + backspace. The alphabet
     // every Latin layout is some permutation of.
@@ -242,20 +314,22 @@ class FakeKeyboardPainter extends CustomPainter {
       radius,
       gap,
       const [
-        (1.5, true),
-        (1, false),
-        (1, false),
-        (1, false),
-        (1, false),
-        (1, false),
-        (1, false),
-        (1, false),
-        (1.5, true),
+        (1.5, true, null),
+        (1, false, null),
+        (1, false, null),
+        (1, false, null),
+        (1, false, null),
+        (1, false, null),
+        (1, false, null),
+        (1, false, null),
+        (1.5, true, null),
       ],
     );
-    // The bottom row is where the two platforms visibly differ: iOS gives the
-    // return key a fifth of the row, Android splits the same width between a
-    // comma, a full stop and a smaller enter.
+    // The bottom row is the whole of what a reader can see the *type* in. A
+    // real email keyboard grows an `@` and a dot here, a URL keyboard a slash
+    // and a `.com`, and both take the width out of the space bar — which is
+    // exactly what makes them recognisable at a glance without a single glyph
+    // being drawn.
     _paintWeighted(
       canvas,
       size,
@@ -264,9 +338,137 @@ class FakeKeyboardPainter extends CustomPainter {
       margin,
       radius,
       gap,
+      _bottomRow,
+    );
+  }
+
+  /// `(weight, isModifier, label)` per key, for the row that says which
+  /// keyboard this is.
+  ///
+  /// The labels are the whole point of this row. A real email keyboard
+  /// grows an `@` and a dot here and a URL one a slash and a `.com`, both at
+  /// the space bar's expense — and drawn as bare rectangles the two rows
+  /// differ only in how wide the middle key is, which nobody reads as a
+  /// keyboard type. With the two characters on them it needs no explaining.
+  List<(double, bool, String?)> get _bottomRow => switch (variant) {
+    KeyboardVariant.email => [
+      (1.4, true, _numbers),
+      (1.0, false, '@'),
+      (1.0, false, '.'),
+      (3.4, false, null),
+      (1.9, true, null),
+    ],
+    // **`.com` stands exactly where the space bar does**, and that is the
+    // whole of the difference from the row above it: a URL has no spaces in
+    // it, so the platform spends the space bar's width on the one string every
+    // address ends with. Drawn as a narrower key with a blank one beside it,
+    // that blank read as a key nobody could name.
+    KeyboardVariant.url => [
+      (1.4, true, _numbers),
+      (1.0, false, '.'),
+      (1.0, false, '/'),
+      (3.4, false, '.com'),
+      (1.9, true, null),
+    ],
+    // Android splits the same width between a comma, a full stop and a smaller
+    // enter; iOS gives the return key a fifth of the row.
+    _ =>
       _android
-          ? const [(1.4, true), (1, true), (5, false), (1, true), (1.4, true)]
-          : const [(1.4, true), (1.1, true), (4.6, false), (1.9, true)],
+          ? [
+              (1.4, true, _numbers),
+              (1, true, ','),
+              (5, false, null),
+              (1, true, '.'),
+              (1.4, true, null),
+            ]
+          : [
+              (1.4, true, _numbers),
+              (1.1, true, null),
+              (4.6, false, null),
+              (1.9, true, null),
+            ],
+  };
+
+  /// What the key that switches to digits is called — `?123` on Android and
+  /// `123` on iOS.
+  ///
+  /// Platform-aware on every row it appears on, which it was not: the letters
+  /// row spelled it the platform's way and the email and URL rows spelled it
+  /// iOS's, so an Android email keyboard carried a key Gboard does not have.
+  String get _numbers => _android ? '?123' : '123';
+
+  /// A digit pad: three columns, four rows, and nothing that looks like a
+  /// letter.
+  ///
+  /// Unmistakable is the whole job. A shorter band drawn with ten-key rows
+  /// would be a picture of a keyboard the app did not ask for, and the reader
+  /// would have no way to tell the form wanted digits.
+  void _paintKeypad(
+    Canvas canvas,
+    Size size,
+    double Function(int) rowTop,
+    double rowHeight,
+    double margin,
+    Radius radius,
+    double gap,
+  ) {
+    var available = size.width - margin * 2;
+    var keyGap = gap * 0.6;
+    var width = (available - keyGap * 2) / 3;
+    for (var row = 0; row < 4; row++) {
+      for (var column = 0; column < 3; column++) {
+        // 1–9, then the last row: nothing, 0, backspace. The empty corner is
+        // as much a part of a number pad's silhouette as the digits are.
+        var lastRow = row == 3;
+        if (lastRow && column == 0) continue;
+        var backspace = lastRow && column == 2;
+        var rect = Rect.fromLTWH(
+          margin + column * (width + keyGap),
+          rowTop(row),
+          width,
+          rowHeight,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect, radius),
+          Paint()..color = backspace ? _modifier : _key,
+        );
+        if (backspace) {
+          _paintBackspace(canvas, rect);
+        } else {
+          // The digits, which are the same ten characters on every locale's
+          // number pad — so drawing them claims nothing a blank key does not
+          // already claim, and says the one thing it cannot.
+          _paintLabel(
+            canvas,
+            rect,
+            _keypadDigits[lastRow ? 9 : row * 3 + column],
+          );
+        }
+      }
+    }
+  }
+
+  /// The backspace arrow, as a shape.
+  ///
+  /// Drawn rather than written because `⌫` is the one mark this keyboard wants
+  /// that a rendering font may not carry, and a missing glyph is a tofu box —
+  /// which on a key that is otherwise blank reads as a bug rather than as a
+  /// character.
+  void _paintBackspace(Canvas canvas, Rect key) {
+    var height = key.height * 0.26;
+    var width = height * 1.5;
+    var centre = key.center;
+    var tip = centre.dx - width / 2;
+    var right = centre.dx + width / 2;
+    canvas.drawPath(
+      Path()
+        ..moveTo(tip, centre.dy)
+        ..lineTo(tip + height / 2, centre.dy - height / 2)
+        ..lineTo(right, centre.dy - height / 2)
+        ..lineTo(right, centre.dy + height / 2)
+        ..lineTo(tip + height / 2, centre.dy + height / 2)
+        ..close(),
+      Paint()..color = _ink.withValues(alpha: 0.65),
     );
   }
 
@@ -316,7 +518,7 @@ class FakeKeyboardPainter extends CustomPainter {
     }
   }
 
-  /// A row of keys of unequal width — `(weight, isModifier)` each.
+  /// A row of keys of unequal width — `(weight, isModifier, label)` each.
   void _paintWeighted(
     Canvas canvas,
     Size size,
@@ -325,26 +527,78 @@ class FakeKeyboardPainter extends CustomPainter {
     double margin,
     Radius radius,
     double gap,
-    List<(double, bool)> keys,
+    List<(double, bool, String?)> keys,
   ) {
     var available = size.width - margin * 2;
     var keyGap = gap * 0.6;
     var total = keys.fold<double>(0, (sum, key) => sum + key.$1);
     var unit = (available - keyGap * (keys.length - 1)) / total;
     var x = margin;
-    for (var (weight, modifier) in keys) {
+    for (var (weight, modifier, label) in keys) {
       var width = unit * weight;
+      var rect = Rect.fromLTWH(x, top, width, height);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(x, top, width, height), radius),
+        RRect.fromRectAndRadius(rect, radius),
         Paint()..color = modifier ? _modifier : _key,
       );
+      if (label != null) _paintLabel(canvas, rect, label);
       x += width + keyGap;
     }
   }
 
+  /// One key's label, centred, shrunk to fit rather than allowed to spill.
+  ///
+  /// Laid out unconstrained first and then re-laid at a scaled size, because
+  /// `maxWidth` on a `TextPainter` wraps rather than shrinks — a `.com` on a
+  /// narrow key would come out as two lines rather than as smaller text.
+  ///
+  /// Every painter made here is disposed here, including the one that
+  /// turned out too wide and was never drawn. A `TextPainter` owns a
+  /// `ui.Paragraph`, which is engine memory a Dart garbage collection has to
+  /// come round to; a keypad is ten of them, the slide repaints on every frame
+  /// it moves, and a suite raises a keyboard on most of its steps. The
+  /// paragraph is safe to release the moment it has been recorded — the
+  /// display list keeps its own reference to what it drew, which is why
+  /// `RenderParagraph` may dispose a painter it has painted a hundred times.
+  void _paintLabel(Canvas canvas, Rect key, String label) {
+    var size = key.height * 0.34;
+    var painter = _layOut(label, size);
+    var room = key.width * 0.78;
+    if (painter.width > room && painter.width > 0) {
+      var wanted = size * room / painter.width;
+      painter.dispose();
+      painter = _layOut(label, wanted);
+    }
+    painter.paint(
+      canvas,
+      Offset(
+        key.center.dx - painter.width / 2,
+        key.center.dy - painter.height / 2,
+      ),
+    );
+    painter.dispose();
+  }
+
+  TextPainter _layOut(String label, double fontSize) => TextPainter(
+    text: TextSpan(
+      text: label,
+      style: TextStyle(
+        color: _ink,
+        // Never zero or below: a key laid out to nothing would otherwise ask
+        // the engine for a font size it refuses.
+        fontSize: math.max(1, fontSize),
+        // Whatever the rendering lane's default face is. Naming a family here
+        // would be naming one that only one of the two lanes has.
+        fontWeight: FontWeight.w400,
+        height: 1,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+
   @override
   bool shouldRepaint(FakeKeyboardPainter old) =>
-      old.platform != platform || old.dark != dark;
+      old.platform != platform || old.dark != dark || old.variant != variant;
 }
 
 /// [FakeKeyboardSlab] as tall as the **view** says the keyboard is.
@@ -355,13 +609,23 @@ class FakeKeyboardPainter extends CustomPainter {
 /// what stops the picture and the layout from being two facts: they are one,
 /// and the app met it first.
 class ViewKeyboardSlab extends StatelessWidget {
-  const ViewKeyboardSlab({super.key, required this.child});
+  const ViewKeyboardSlab({
+    super.key,
+    this.variant = KeyboardVariant.letters,
+    required this.child,
+  });
+
+  /// Which keys. Defaults to letters, which is what a lane with no field
+  /// focused has to assume — a preview harness stages a keyboard from a canvas
+  /// and nothing in a cold render ever asks for one.
+  final KeyboardVariant variant;
 
   final Widget child;
 
   @override
   Widget build(BuildContext context) => FakeKeyboardSlab(
     height: MediaQuery.viewInsetsOf(context).bottom,
+    variant: variant,
     // The staged platform, which the run has already set from the device —
     // the same fact the app's own `.adaptive` widgets read.
     platform: defaultTargetPlatform == TargetPlatform.android

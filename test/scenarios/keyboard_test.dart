@@ -4,6 +4,7 @@ import 'package:flutterware/src/scenarios/keyboard.dart';
 import 'package:flutterware/src/scenarios/profile.dart';
 import 'package:flutterware/src/scenarios/run_args.dart';
 import 'package:flutterware/src/scenarios/run_listener.dart';
+import 'package:flutterware/src/ui_catalog/fake_keyboard.dart';
 
 /// The scenario keyboard: up when the app asks, down when the view lets go,
 /// and over whatever it is over.
@@ -257,6 +258,76 @@ void main() {
     });
   });
 
+  group('which keyboard, and how tall', () {
+    setUp(stageAPhone);
+
+    scenario('a number field gets the shorter one', (s) async {
+      await s.pumpWidget(const _Form(number: true));
+      await s.tap(const Key('name'));
+      expect(s.keyboard.variant, KeyboardVariant.keypad);
+      // The iPhone 16's measured keypad, 45 points under its letters
+      // keyboard — so the layout meets the screen a phone would give it and
+      // not one 45 points smaller.
+      expect(s.keyboard.height, 291);
+      expect(s.tester.getSize(find.byKey(const Key('body'))).height, 852 - 291);
+    });
+
+    scenario('and the morph between them needs no going down', (s) async {
+      // Tapping from a text field to a number field on a phone turns one
+      // keyboard into a shorter one — it never leaves the screen. The slide
+      // has nowhere to travel, so the driver has to notice the *variant*
+      // moved rather than waiting for a fraction that never changes.
+      await s.pumpWidget(const _Form(number: true));
+      await s.tap(const Key('email'));
+      expect(s.keyboard.variant, KeyboardVariant.letters);
+      expect(s.keyboard.height, 336);
+      await s.tap(const Key('name'));
+      expect(s.keyboard.variant, KeyboardVariant.keypad);
+      expect(s.keyboard.height, 291);
+    });
+
+    scenario('and the picture follows even when the height does not', (
+      s,
+    ) async {
+      // **The gap a state check cannot see.** The slab sits above the app, so
+      // no frame the app draws rebuilds it — the only thing that does is the
+      // view's insets moving, which is the height. Letters and email are the
+      // same height on every device measured, so this pair once reported
+      // `email` from the driver beside a slab still painting letters.
+      await s.pumpWidget(const _Form());
+      await s.tap(const Key('email'));
+      expect(_drawnVariant(s), KeyboardVariant.letters);
+      await s.tap(const Key('mail'));
+      expect(s.keyboard.variant, KeyboardVariant.email);
+      expect(s.keyboard.height, 336, reason: 'the same height, on purpose');
+      expect(_drawnVariant(s), KeyboardVariant.email);
+    });
+  });
+
+  group('a field that wants no keyboard gets none', () {
+    setUp(stageAPhone);
+
+    scenario('TextInputType.none is a custom pad, not a keyboard', (s) async {
+      await s.pumpWidget(const _Form(custom: true));
+      await s.tap(const Key('name'));
+      // The field takes focus and `TextInput.show` is still sent — the
+      // platform simply shows nothing for it, because the app has its own
+      // input surface. Reading the show alone put 336 points of keyboard over
+      // a screen that has none on the phone.
+      expect(s.keyboard.isRequested, isFalse);
+      expect(s.keyboard.isUp, isFalse);
+      expect(s.tester.getSize(find.byKey(const Key('body'))).height, 852);
+    });
+
+    scenario('and holding one up is still the human asking', (s) async {
+      // The forced modes are about the layout, not about the app: they ignore
+      // focus already, so they ignore this too.
+      await s.pumpWidget(const _Form(custom: true));
+      await s.keyboard.show();
+      expect(s.keyboard.isUp, isTrue);
+    });
+  });
+
   group('a stage with no keyboard', () {
     scenario('raises nothing rather than inventing a height', (s) async {
       // No device: the plain surface, which is what a desktop run and a `fit`
@@ -309,10 +380,27 @@ final _name = FocusNode();
 /// bar, `resizeToAvoidBottomInset: false` — leaves its button *under* the
 /// keyboard, which is the case the refusal exists for and a real layout bug
 /// nothing else in this tool can see.
+/// Which keyboard the slab is actually painting — the picture, rather than
+/// what the driver says about it.
+KeyboardVariant _drawnVariant(ScenarioTester s) {
+  var paint = s.tester
+      .widgetList<CustomPaint>(find.byType(CustomPaint))
+      .firstWhere((p) => p.painter is FakeKeyboardPainter);
+  return (paint.painter! as FakeKeyboardPainter).variant;
+}
+
 class _Form extends StatefulWidget {
-  const _Form({this.resizes = true});
+  const _Form({this.resizes = true, this.custom = false, this.number = false});
 
   final bool resizes;
+
+  /// Whether the first field wants digits — the shorter keyboard on a phone,
+  /// and a different set of keys everywhere.
+  final bool number;
+
+  /// Whether the first field brings its own input surface — the shape a date
+  /// picker, a PIN pad or a calculator has.
+  final bool custom;
 
   @override
   State<_Form> createState() => _FormState();
@@ -328,8 +416,23 @@ class _FormState extends State<_Form> {
       body: Column(
         key: const Key('body'),
         children: [
-          TextField(key: const Key('name'), focusNode: _name),
+          TextField(
+            key: const Key('name'),
+            focusNode: _name,
+            keyboardType: widget.custom
+                ? TextInputType.none
+                : widget.number
+                ? TextInputType.phone
+                : null,
+          ),
           const TextField(key: Key('email')),
+          // A field whose keyboard is the *same height* as the plain one and a
+          // different picture — which is the only pair that can catch a slab
+          // repainting on the height alone.
+          const TextField(
+            key: Key('mail'),
+            keyboardType: TextInputType.emailAddress,
+          ),
           const Spacer(),
           if (_submitted) const Text('submitted'),
           TextButton(

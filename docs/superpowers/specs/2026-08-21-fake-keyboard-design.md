@@ -179,8 +179,18 @@ headless captures await the push before capturing.
 ## The artwork: a schematic slab (owner, 2026-08-21)
 
 Rows of rounded rectangles at the right height, tinted per platform, light and
-dark. No glyphs: they would need a font that differs between the harness and a
-bare `flutter test`, and a per-locale layout to not be a lie.
+dark. **No letters** — they would need a font that differs between the harness
+and a bare `flutter test`, and a per-locale layout to not be a lie.
+
+**Glyphs on the keys that identify the keyboard, and no others** (owner,
+2026-08-21). `@`, `.`, `/`, `.com` and the digits stand in the same place on an
+AZERTY, a Cyrillic and a QWERTY keyboard, so neither objection above reaches
+them — and they are exactly what tells one variant from another. Drawn bare, an
+email row and a text row differed only in how wide the middle key was, which
+nobody reads as a keyboard type. ASCII only: a glyph the rendering font lacks
+is a tofu box, which on an otherwise blank key reads as a bug, so the keypad's
+backspace is a drawn shape rather than `⌫`. `FakeKeyboardPainter.labels` is the
+seam a test asserts on, because a painted label is invisible to every finder.
 
 **Painted, never built.** A keyboard composed of widgets would put key caps in
 front of `find.text`, a hundred nodes into the semantics and transcript
@@ -445,11 +455,119 @@ measured. The sides come back at exactly the declared 59 on an iPhone 16.
   device while the keyboard was up, on both platforms — which is the arithmetic
   in § The arithmetic, confirmed rather than assumed.
 
-`attach` carries the `TextInputConfiguration` — the live probe read
-`TextInputType.multiline` and `TextInputType.text` off it — so per-input-type
-heights are available whenever they are wanted. They are not wanted in v1:
-each one is another measured number per device, and a numeric pad that is
-wrong by 40 points is worse than a text keyboard that is right.
+### The intent is on the wire, and one case is not optional
+
+`attach` carries the `TextInputConfiguration` and the test lane's
+`setClientArgs` carries the same thing as a map — measured, a phone field
+reports `{name: TextInputType.phone}` and a number field reports
+`{name: TextInputType.number, signed: false, decimal: false}`. It arrives on
+`setClient`, the **first** of the five messages that precede the `show`, so by
+the time there is anything to decide the type is already known. Both lanes
+have it; neither had been reading it.
+
+**`TextInputType.none` is the case that is a bug rather than a refinement.** It
+is a field that opens a connection and wants no system keyboard at all — a
+custom pad, a date picker sheet, a calculator's own keys — and the platform
+draws nothing for it. `TextInput.show` is still sent, so a control that took
+the call at face value put 336 points of keyboard over a screen that has none
+on the phone it is imitating. Both lanes read the type now, in `show` rather
+than in `attach`, because a field beside a *use the normal keyboard* toggle
+changes its mind through `updateConfig` and never re-attaches. The forced modes
+still ignore it: they ignore focus already, and they are the human asking about
+the layout rather than the app asking for a keyboard.
+
+**Per-input-type heights and per-input-type artwork are built.** What made it
+possible was already on the wire and simply not being read: `attach` carries
+the `TextInputConfiguration` and the test binding carries the same
+`{name, signed, decimal}` map, so one pure-Dart discriminator —
+`keyboardVariantForName` — serves both lanes off the identical payload.
+
+**Height and picture are separate consequences of one fact**, and keeping them
+separate is what makes the model fit all three platforms. A `KeyboardVariant`
+always changes what is drawn; it changes the height only where the device has a
+measurement saying it should. An iPad draws a digit pad and stays 405.5 tall;
+Gboard draws a digit pad and stays 336.4; an iPhone draws one and loses 27–45
+points. `Device.keypadKeyboard` is null wherever there is no shrink, and null
+covers three situations that all want the same answer — a device that genuinely
+does not shrink, a device with no keyboard, and a cell nobody has measured.
+
+### How many classes there are, measured 2026-08-21
+
+`tool/keyboard_type_probe.dart` — the sibling of the orientation probe, cycling
+fifteen input types in portrait. Three simulators and the Gboard emulator.
+**There is no single answer: the platforms do not even agree on the shape of
+the question.**
+
+| | Classes | The split |
+| --- | --- | --- |
+| iPhone 16 | **2** | 336 QWERTY · **291** keypad |
+| iPhone SE | **2** | 260 QWERTY · **216** keypad |
+| iPad Pro 13 | **1** | 405.5, every type |
+| Android · Gboard | **2** | 336.4 everything · **370.3** `visiblePassword` |
+
+The keypad class on iPhone is exactly three types — `phone`, `number` and
+`number.decimal` — and its membership is identical on both phones.
+
+Four things worth having measured rather than reasoned:
+
+- **The delta is tens of points, not the ~120 this section previously
+  guessed** — and it moves with the phone's *generation*, not its size. 44 on
+  an iPhone SE and 45 on both 16s; **27** on an iPhone 13 and a 12 Pro Max.
+  An earlier draft of this line said "constant across two phones of very
+  different sizes", which generalised from two samples that happened to be the
+  same generation. Two more devices disproved it.
+- **`number.signed` is a QWERTY, not a keypad.** Allowing a minus sign gets the
+  full `numbersAndPunctuation` keyboard at full height, on both phones. A table
+  derived by reasoning would have put it with the other numbers.
+- **An iPad has no split at all.** It shows a full keyboard with a number row
+  for everything, so per-type heights buy *nothing* on a tablet — four of the
+  fourteen touch entries in the table.
+- **Android inverts the premise.** Gboard does not shrink for a keypad; it
+  swaps the layout and keeps the height. The one type that differs is
+  `visiblePassword`, and it is **taller** — so the single number we carry is
+  right for thirteen of fifteen types, and the one case it is wrong about
+  under-reports by 34 points. Under-reporting produces a false *pass*, which
+  is the harmless direction.
+
+### The keypad column, as far as it is verified
+
+A second pass, one reading per class per orientation. **The letters column is
+the control**: where it reproduces the number already in the table, the keypad
+reading beside it was taken under the same conditions and is trusted; where it
+does not, neither is.
+
+| Device | letters ⟂ | **keypad ⟂** | letters ↔ | **keypad ↔** |
+| --- | --- | --- | --- | --- |
+| `iphone-se` | 260 ✓ | **216** | 200 ✓ | **162** |
+| `iphone-13` | 335 ✓ | **308** | 248 ✗ | *165, unverified* |
+| `iphone-12-pro-max` | 345 ✓ | **318** | 248 ✗ | *165, unverified* |
+| `iphone-16` | 336 ✓ | **291** | 219 ✓ | **181** |
+| `iphone-16-pro-max` | 346 ✓ | **301** | 219 ✓ | **181** |
+
+**What the control caught.** On two freshly created simulators the landscape
+letters height came back as 209 against the table's 248. The same simulator
+under the *orientation* probe reads 248, so the device was not the variable —
+the reading was. Raised from nothing, an iOS keyboard arrives and grows its
+predictive bar a beat later, and a settle rule that stopped at the first
+plateau caught it before the bar. The orientation probe never sees this
+because it morphs a keyboard that is already open.
+
+Without that column there would now be two wrong numbers in the table and
+nothing to say so. It is the reason a measurement pass should always re-measure
+something it already knows.
+
+The two unverified cells stay **unset** rather than guessed, and unset means
+*no shrink*: those devices keep their letters height for a keypad until
+somebody measures them. A keyboard that is too tall is the failure mode this
+whole section is about, so leaving two cells conservative is a smaller lie
+than filling them from a round whose control failed.
+
+So the pass that was described as "another measured number per device" is
+smaller than that: **one extra number per iOS phone**, reaching three input
+types, and nothing for tablets or for Android except one taller password
+keyboard. Two of the six are already measured above. It still owes the painter
+a keypad layout, because a 291-point band drawn with ten-key rows is a lying
+picture — and now only on iOS phones, for three types.
 
 ## What PR 3 did differently
 
