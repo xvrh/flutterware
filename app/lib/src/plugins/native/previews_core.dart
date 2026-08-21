@@ -21,6 +21,7 @@ import 'package:flutterware/src/ui_catalog/axis.dart';
 import 'package:flutterware/src/ui_catalog/knob.dart';
 import 'package:path/path.dart' as p;
 
+import '../../embedder/tester_phase.dart';
 import '../../previews/authoring.dart';
 import '../../previews/catalog_entry.dart';
 import '../../previews/catalog_tree.dart';
@@ -50,6 +51,31 @@ const uiCatalogPluginId = 'flutterware.previews';
 /// terminal. A rename that reached only one of them would put a command that
 /// fails in front of a user.
 const webBuildActionId = 'build-web';
+
+/// A package's busy line while the tester host works, or null when the host
+/// has nothing left for anybody to wait on.
+///
+/// The rail's register, not the log's: lower case and trailing, so it sits in
+/// the column beside `scanning…` and `rendering the catalog…` rather than
+/// arriving as a sentence from somewhere else.
+///
+/// [TesterPhase.ready] is the one that returns null, and it is the reason this
+/// exists at all: the warm tester is started for *thumbnails* as often as for
+/// an audit, and only the audit clears the line afterwards. A row that said
+/// "starting the harness" on the way up kept saying it for the rest of the
+/// session.
+@visibleForTesting
+Status? previewsRunnerStatus(TesterPhaseReading reading) =>
+    switch (reading.phase) {
+      TesterPhase.compiling => const Status.info('compiling the catalog…'),
+      TesterPhase.bundling => const Status.info('rebuilding the assets…'),
+      TesterPhase.starting => const Status.info('starting the harness…'),
+      TesterPhase.restarting => const Status.info('restarting the harness…'),
+      TesterPhase.reloading => Status.info(
+        'reloading ${reading.files} file${reading.files == 1 ? '' : 's'}…',
+      ),
+      TesterPhase.ready => null,
+    };
 
 /// What a package is scanned for when it does not say otherwise: all of it.
 const _defaultRoot = defaultCatalogRoot;
@@ -246,6 +272,20 @@ class PreviewsCore extends PluginCore {
     notifyChanged();
   }
 
+  /// Moves [path]'s busy line for a host line that means something, and leaves
+  /// it exactly where it is for one that does not.
+  ///
+  /// The distinction is the whole of it: `onLog` carries the guest's console
+  /// too, so a preview that prints while it builds would otherwise become the
+  /// status. An unrecognised line is not "nothing is happening" either — it
+  /// arrives *during* the compile it says nothing about — so it clears
+  /// nothing.
+  void _noteRunnerLine(String path, String line) {
+    if (readTesterPhase(line) case var reading?) {
+      _setBusy(path, previewsRunnerStatus(reading));
+    }
+  }
+
   /// The scan failure for [path], for a panel that wants to show it directly.
   String? failureFor(String path) => _failures[path];
 
@@ -298,10 +338,11 @@ class PreviewsCore extends PluginCore {
             entries: _scans[packagePath]?.entries ?? const [],
             canvases: canvasesFor(packagePath),
           ),
-          // Straight onto the panel's busy line. The cold compile is the long
-          // pole and the only thing worth reading during one, and the audit
-          // clears the line when it finishes either way.
-          onLog: (line) => _setBusy(packagePath, Status.info(line)),
+          // The cold compile is the long pole and the only thing worth
+          // reading during one — but a *log line* is not what a row can say,
+          // so the host's narration is read back as a phase and everything
+          // else is dropped. See [previewsRunnerStatus].
+          onLog: (line) => _noteRunnerLine(packagePath, line),
         ),
       );
 
@@ -1326,7 +1367,12 @@ class PreviewsCore extends PluginCore {
   }
 
   Status _packageStatus(String path) {
-    if (_failures[path] case var failure?) return Status.error(failure);
+    // The fact, not the exception: `_failures` holds a whole `'$e'`, which on
+    // a scan is a multi-line analyzer message. The text is in the panel's own
+    // projection, where there is room to read it.
+    if (_failures.containsKey(path)) {
+      return const Status.error('failed to scan');
+    }
     if (_busy[path] case var busy?) return busy;
     if (busyStatusFor?.call(path) case var busy?) return busy;
     if (_scanning.contains(path)) return const Status.info('scanning…');

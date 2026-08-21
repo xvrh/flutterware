@@ -4,6 +4,13 @@ import 'tone.dart';
 ///
 /// This is what the sidebar row, the worktree switcher, `fw status` and an
 /// agent all read. It is deliberately tiny: a tone and a short human message.
+///
+/// **A phrase, never a log line.** Every renderer gives this one line and a
+/// hundred-odd pixels, so past that it ellipsises and the rest is only a
+/// hover away. A plugin that forwarded a runner's console here — the whole
+/// `[tester] flutterware previews harness ready — 133 entries, fonts: …` —
+/// got a row saying `[tester] flutterw…`, which is neither the status nor
+/// news. Say the phase, and leave the line in the log.
 class Status {
   const Status(this.tone, this.message);
 

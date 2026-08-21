@@ -1265,8 +1265,19 @@ class _MenuHeading extends StatelessWidget {
   );
 }
 
+/// The key a switcher row carries, so a test can point at the row rather than
+/// at a name the tab band also shows.
+Key switcherRowKey(Worktree worktree) => ValueKey('switcher:${worktree.path}');
+
+/// How much of a switcher row the status may claim. The menu is 360 wide and
+/// a worktree's name is the longest thing in it, so this is the smaller half
+/// of what is left: enough for the statuses plugins actually write, and a
+/// hard stop for the ones they should not.
+const _switcherStatusWidth = 120.0;
+
 class _SwitcherRow extends StatelessWidget {
-  const _SwitcherRow(this.shell, this.worktree, this.menu, {this.match});
+  _SwitcherRow(this.shell, this.worktree, this.menu, {this.match})
+    : super(key: switcherRowKey(worktree));
 
   final ShellController shell;
   final Worktree worktree;
@@ -1324,14 +1335,23 @@ class _SwitcherRow extends StatelessWidget {
                 ],
               ),
             ),
+            const Gap(FwSpacing.sm),
             // Worktrees that are not open hold no session, so there is nothing
             // to report about them yet — see open question 4.
-            Text(
-              isOpen ? status.message : 'Open',
-              style: context.type.micro.copyWith(
-                color: isOpen ? toneColor(colors, status.tone) : colors.accent,
+            //
+            // The rail's [StatusText], for the rail's reason: a status is
+            // written by a plugin and a row is not the place to find out how
+            // long one got. Taking its natural width, a plugin that put a log
+            // line here squeezed the name column to nothing and set the
+            // worktree's name one letter per line. The name is what this row
+            // is *for*.
+            if (isOpen)
+              StatusText(status, maxWidth: _switcherStatusWidth)
+            else
+              Text(
+                'Open',
+                style: context.type.micro.copyWith(color: colors.accent),
               ),
-            ),
           ],
         ),
       ),

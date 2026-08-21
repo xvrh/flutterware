@@ -358,6 +358,52 @@ void main() {
     expect(find.text('Open'), findsOneWidget);
   });
 
+  testWidgets('a long status yields to the worktree name in the switcher', (
+    tester,
+  ) async {
+    // What a plugin forwarding a log line did to this row: the status took
+    // its natural width, the name column collapsed to a few pixels, and
+    // `main` came down the menu one letter per line.
+    var shell = ShellController(
+      appContext: AppContext(logger: LogClient.print()),
+      flutterSdk: FlutterSdkPath('/tmp/flutter'),
+      registry: _panels(const ['a.deps', 'a.tests']),
+      coreRegistry: PluginCoreRegistry({
+        'a.deps': (h) => _FakeCore(
+          h,
+          status: const Status.info(
+            '[tester] flutterware previews harness ready — 133 entries, '
+            'fonts: MaterialIcons',
+          ),
+        ),
+        'a.tests': _FakeCore.new,
+      }),
+      manifestLoader: _StubLoader(),
+      discovery: WorktreeDiscovery(
+        runProcess: (_, _, {workingDirectory}) async =>
+            ProcessResult(0, 0, _listing, ''),
+      ),
+    );
+    await shell.start('/repo');
+    await tester.pumpWidget(ShellApp(shell));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Switch worktree'));
+    await tester.pumpAndSettle();
+
+    var row = find.byKey(switcherRowKey(shell.worktrees.first));
+    var name = find.descendant(of: row, matching: find.text('main'));
+    expect(name, findsOneWidget);
+    // Laid out on one line — the letter-per-line column was four of them.
+    expect(tester.getSize(name).height, lessThan(24));
+    // And the status took a slice of the row rather than the row.
+    var said = find.descendant(
+      of: row,
+      matching: find.textContaining('[tester]'),
+    );
+    expect(tester.getSize(said).width, lessThanOrEqualTo(120));
+  });
+
   testWidgets('opening from the switcher adds a tab', (tester) async {
     var shell = await _pumpShell(tester);
 
