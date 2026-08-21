@@ -267,6 +267,68 @@ skipped otherwise.
   from the step's label. And an adopted `screen`'s events move onto the step it
   names rather than rolling forward to a later one.
 
+- **Adoption's second chance is the bytes, and a no-op `scrollTo` skips its
+  shot** (2026-08-21, both reported by a consumer suite migrating from
+  dev_studio). The frame counter above is a *prediction* that the pixels did
+  not move, and two ordinary patterns defeat it while the pixels end up
+  provably identical: extra settling between a verb and its name — the
+  migrated idiom is `tap → pumpAndSettle → screen` — and a periodic timer
+  repainting an identical screen around the capture, or leaving it
+  `settled: false`. Measured on a 125-scenario suite: 50 named `screen`s
+  still emitted as duplicates, 35 of them sitting directly on an anonymous
+  verb capture with an equal digest.
+
+  So where the frame count says no and the pending capture is still
+  anonymous, fresh and captured in this branch segment, the render the step
+  was about to pay anyway is compared against the held one — dimensions,
+  overlay style, the visible words, the shutter's tree-and-semantics read,
+  and the bytes, each there because the ones before it cannot vouch for it
+  (raw bytes carry no dimensions, a box-glyph test font rasters two
+  different strings identically, a semantics-only change touches no pixel).
+  Equal means adopt: the name lands on the pending step, nothing new is
+  written, and the stretch's *facts* merge onto it — settled/landed combine
+  as ANDs, strays and swallowed overflows stay counted, and the recording is
+  sifted against the frame it ended on so a flash that came and went on
+  provably identical end pixels keeps its movie while a quiet interval's
+  identical stills stay out. "The pre-fork refusal" is enforced by stamping
+  each capture with its branch segment rather than by the branch *label*,
+  which a branch-opening `document`/`notification` beat consumes while the
+  pre-fork capture is still the one pending — the label proxy let a
+  branch-local name land on the shared step. A pixel-less probe pass never
+  byte-adopts — every probe capture holds the same empty bytes, which prove
+  nothing — so a `format=none` run emits steps a pixel run merges: step
+  *indices* diverge between such passes by design, and anything joining
+  passes must key on `position` (the max-length survey's sighting cells and
+  screen-break dedup do, since this change; `compareScenarioRuns` always
+  has).
+
+  The same suite's other half: 67 of its 135 `unchanged` steps were
+  `scrollTo` on a target already on screen — the verb's own documented
+  advice, called defensively before taps, becoming a warned byte-identical
+  duplicate on every page that happens not to scroll on this device. A
+  `scrollTo` that drew nothing now skips its automatic capture — but
+  **consumes its position**, mapping it to the chain's head exactly as an
+  adoption does. That is the load-bearing half: the decision is exactly what
+  varies — with the device, with expanded text making a page scroll, with a
+  frame a real-async decode lands on one pass and not another — and a skip
+  that consumed no position turned every flip into a misalignment of
+  everything after it (drift reporting a segment tail as changed, split
+  replays mis-recognising their own steps). Consumed, a flip costs one
+  step's presence and nothing else. The skip also discards the recorder's
+  banked stills — provably identical, and otherwise padding the next step's
+  movie and its frame cap — while events keep riding as a skipped shot's
+  always have. An explicit shot still captures, and a call that moved pixels
+  — the trailing alignment nudging even a visible target to the viewport's
+  edge — captures as ever. Deliberately `scrollTo` only: an unchanged `tap`
+  is the stall diagnostic — seven identical captures passing as seven pages
+  — and skipping it would hide the very thing the flag exists to expose.
+
+  One more hardening from the same review: the render runs inside
+  `tester.runAsync`, which swallows a thrown capture (reported, run
+  continues) — the emit now burns a step index on that path, so the consumed
+  position can never alias a live step and a later replay cannot mis-recognise
+  it.
+
 - **Not every beat is a screen** (2026-08-20). `s.attach` is replaced by
   `await s.document(name, bytes, …)` and `await s.notification(body, …)`, and
   both are **steps** — positioned, parented, carrying the events that led to

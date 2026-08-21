@@ -44,6 +44,7 @@ class KeySighting {
     required this.scenario,
     required this.step,
     required this.stepIndex,
+    required this.position,
     required this.image,
     this.locale,
     this.device,
@@ -65,6 +66,12 @@ class KeySighting {
   final String scenario;
   final String step;
   final int stepIndex;
+
+  /// The step's shape-stable position (`ScenarioRunStep.position`) — what
+  /// pairs a cell across passes. Never the index: steps merge under adoption
+  /// and a no-op scroll takes none in a pixel pass, so indices shift between
+  /// the passes a probe compares, while a position is consumed either way.
+  final String position;
 
   /// The captured frame this was seen on — what a translator is shown.
   final String image;
@@ -162,6 +169,7 @@ typedef ScreenOverflow = ({
   String scenario,
   String step,
   int stepIndex,
+  String position,
   String? locale,
   int count,
 });

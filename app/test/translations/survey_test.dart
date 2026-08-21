@@ -24,6 +24,7 @@ KeySighting sighting({
   scenario: scenario,
   step: step,
   stepIndex: stepIndex,
+  position: '#$stepIndex',
   image: '$step.png',
   locale: locale,
   offstage: offstage,

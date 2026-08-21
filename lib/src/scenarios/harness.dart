@@ -1147,10 +1147,13 @@ Future<Map<String, Object?>> _runOne(
     //
     // `screen` used to be excluded here, on the grounds that it was "a
     // deliberate second picture of the same frame". It is not one any more:
-    // where nothing moved, the name lands on the capture that took the frame
-    // and no second step exists. What still reaches this line is a `screen`
-    // that declined to adopt — a second name on one frame, a branch's first
-    // capture, `force: true` — and for those the flag says something true.
+    // where the screen did not move — nothing drawn since the capture, or
+    // frames drawn and the render proven identical on dimensions, style,
+    // words, tree read and bytes — the name lands on the capture that took
+    // the frame and no second step exists. What still reaches this line is
+    // a `screen` that declined to adopt — a second name on one frame, a
+    // branch's first capture, `force: true` — and for those the flag says
+    // something true.
     // Never on a pixel-less capture: every probe step digests the same empty
     // bytes, and "unchanged" would be a statement about pixels nobody took.
     var unchanged =

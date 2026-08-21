@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
 import 'package:flutterware/src/scenarios/motion.dart';
@@ -176,8 +178,8 @@ void main() {
       // already follows, for the same reason.
       //
       // And that capture is a real one rather than a name on `pumpWidget`'s:
-      // the fade drew 21 frames since it, which is exactly what stops a
-      // `screen` from adopting a frame that has moved on.
+      // the fade left the screen visibly different, which is exactly what
+      // stops a `screen` from adopting a frame that has moved on.
       tearDown(() {
         expect(captures, hasLength(2));
         expect(captures[1].name, 'Faded');
@@ -221,6 +223,40 @@ void main() {
       // The failed step is the one step nobody asked for and everybody wants,
       // and how the app got to it is part of the evidence.
       expect(captures.last.failure, isNotNull);
+    });
+
+    group('a skipped no-op scrollTo', () {
+      scenario('leaves no stills in the next step’s movie', (s) async {
+        await s.pumpWidget(const _App());
+        await s.scrollTo('Fade in');
+        await s.screen('Same', force: true);
+      });
+      // The skip discards its banked stills — provably identical to the
+      // picture already in the flow — so the forced screen after it is
+      // still a hard cut: its own before-frame and the frame it found, not
+      // those plus the skip's.
+      tearDown(() {
+        expect(captures, hasLength(2));
+        expect(captures[1].motion.bytes, hasLength(2));
+      });
+    });
+
+    group('a byte-proven adoption', () {
+      scenario('keeps the frames that moved on the way to the name', (s) async {
+        await s.pumpWidget(const _TimedFlash());
+        // The wait fires the flash; its settle plays it out, ending on the
+        // pixels the step started with — the shape a byte adoption absorbs.
+        await s.wait(const Duration(milliseconds: 1200), shot: Shot.skip);
+        await s.screen('Quiet again');
+      });
+      // One step, and its movie holds the flash: the identical stills around
+      // it are not a transition and stay out, the frames that moved are the
+      // flow's only record and stay in.
+      tearDown(() {
+        expect(captures, hasLength(1));
+        expect(captures.single.name, 'Quiet again');
+        expect(captures.single.motion.bytes.length, greaterThan(2));
+      });
     });
   });
 
@@ -290,6 +326,60 @@ class _FadeOnTapState extends State<_FadeOnTap> {
         ),
       ),
     ],
+  );
+}
+
+/// Quiet at first; a timer flashes an overlay in and straight back out, so
+/// the screen moves and lands exactly where it started.
+class _TimedFlash extends StatefulWidget {
+  const _TimedFlash();
+
+  @override
+  State<_TimedFlash> createState() => _TimedFlashState();
+}
+
+class _TimedFlashState extends State<_TimedFlash>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _flash;
+  Timer? _later;
+
+  @override
+  void initState() {
+    super.initState();
+    _flash =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 150),
+          )
+          ..addStatusListener((status) {
+            if (status == AnimationStatus.completed) _flash.reverse();
+          })
+          ..addListener(() => setState(() {}));
+    _later = Timer(const Duration(seconds: 1), _flash.forward);
+  }
+
+  @override
+  void dispose() {
+    _later?.cancel();
+    _flash.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: Scaffold(
+      body: Stack(
+        children: [
+          const Text('quiet'),
+          IgnorePointer(
+            child: Opacity(
+              opacity: _flash.value,
+              child: Container(color: const Color(0xFF2196F3)),
+            ),
+          ),
+        ],
+      ),
+    ),
   );
 }
 

@@ -4,7 +4,10 @@
 /// Pure Dart — `fw` links this.
 library;
 
-import 'dart:typed_data';
+// The byte comparison the scenario captures also use — one implementation,
+// shared through the package the app already builds on.
+// ignore: implementation_imports
+import 'package:flutterware/src/bytes.dart';
 
 import 'changes_config_cache.dart';
 import 'patch_index.dart';
@@ -221,7 +224,7 @@ class ChangeSet {
         return false;
       }
     }
-    if (!_sameBytes(patch.bytes, other.patch.bytes)) return false;
+    if (!sameBytes(patch.bytes, other.patch.bytes)) return false;
     // Only reachable when [files] was injected; otherwise this is the same
     // list read twice.
     if (files != null || other.files != null) {
@@ -247,15 +250,6 @@ class ChangeSet {
           mine[i].reason != theirs[i].reason) {
         return false;
       }
-    }
-    return true;
-  }
-
-  static bool _sameBytes(Uint8List a, Uint8List b) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
     }
     return true;
   }

@@ -109,9 +109,14 @@ class TranslationMaxLengths {
 /// The probe baseline's cells, indexed once — what the ladder's flip checks
 /// and the final join both read.
 ///
-/// The pairing unit is a **sighting cell** — (scenario, step index, key) —
-/// which FakeAsync determinism makes sound: two runs of one suite capture the
-/// same steps. A sighting clipped at the probe baseline is excluded (it
+/// The pairing unit is a **sighting cell** — (scenario, step *position*,
+/// key). Position rather than index, deliberately: the passes this joins
+/// differ in expansion and in whether they capture pixels, and both of those
+/// move step *indices* — a pixel pass merges a named screen a probe pass
+/// emits, and a defensive scroll takes a step only where the expanded text
+/// makes the page scroll. A position is consumed either way, so cells stay
+/// paired; the one flipped step exists in one pass only and honestly pairs
+/// with nothing. A sighting clipped at the probe baseline is excluded (it
 /// ellipsizes today by someone's choice, and the findings audit already
 /// established no signal can litigate that choice); a cell a pass never
 /// reached — a diverged scenario — pairs with nothing and attributes nothing.
@@ -212,7 +217,7 @@ TranslationMaxLengths computeMaxLengths({
         var cell = constraining[id];
         if (cell != null &&
             sighting.scenario == cell.scenario &&
-            sighting.stepIndex == cell.stepIndex) {
+            sighting.position == cell.position) {
           return sighting;
         }
       }
@@ -268,7 +273,10 @@ TranslationMaxLengths computeMaxLengths({
   for (var pass in sorted) {
     for (var overflow in pass.survey.screenOverflows) {
       overflowBreaks.putIfAbsent(
-        '${overflow.scenario} ${overflow.stepIndex}',
+        // By position, not index: the same screen sits at different indices
+        // on different rungs (see [ProbeBaseline]), and one break must not
+        // count once per rung.
+        '${overflow.scenario} ${overflow.position}',
         () => MaxLengthBreak(
           scenario: overflow.scenario,
           level: pass.level,
@@ -326,4 +334,4 @@ int _order(KeySighting a, KeySighting b) {
 }
 
 String _cell(KeySighting sighting) =>
-    '${sighting.scenario} ${sighting.stepIndex} ${sighting.id}';
+    '${sighting.scenario} ${sighting.position} ${sighting.id}';
