@@ -373,6 +373,7 @@ class ScenariosCore extends PluginCore {
       String file,
       String scenario,
     )) {
+      _countScenario(package, '$file/$scenario');
       var key = (package, file, scenario);
       var state = _panelRuns[key];
       if (state == null || !state.running) return;
@@ -1471,24 +1472,94 @@ class ScenariosCore extends PluginCore {
   void _setBusy(String path, Status? status) {
     if (status == null) {
       _busy.remove(path);
+      _ran.remove(path);
+      _narrow.remove(path);
     } else {
       _busy[path] = status;
     }
     notifyChanged();
   }
 
+  /// How far the point being run has got: scenarios that have announced a
+  /// step, out of what the scan found.
+  ///
+  /// A point takes as long as the suite does — minutes on a real one — and
+  /// "running" for that long is indistinguishable from a hang. The count is of
+  /// scenarios rather than steps because a scenario is the unit a person
+  /// wrote, and because the denominator for steps is not knowable until they
+  /// have all run.
+  ///
+  /// [total] is the syntactic scan's count, so it is null until that lands and
+  /// it counts a scenario that then skips itself. A run that ends a scenario
+  /// short of the total has skipped the difference, which is worth seeing.
+  ({int done, int? total})? runProgressFor(String path) {
+    var ran = _ran[path];
+    if (ran == null) return null;
+    var narrow = _narrow[path];
+    return (
+      done: ran.length,
+      total: _scenarioCount(
+        path,
+        file: narrow?.file,
+        scenario: narrow?.scenario,
+      ),
+    );
+  }
+
+  /// Scenarios that have announced a step during the point being run, so a
+  /// second step from the same one does not count twice. Null for a package
+  /// with no point running — a panel run of one scenario counts nothing.
+  final _ran = <String, Set<String>>{};
+
+  /// What the running point was narrowed to, so the denominator is narrowed
+  /// the same way. Read on every look rather than fixed at the start, because
+  /// the scan it counts may land after the point starts.
+  final _narrow = <String, ({String? file, String? scenario})>{};
+
+  void _countScenario(String path, String id) {
+    if (!(_ran[path]?.add(id) ?? false)) return;
+    notifyChanged();
+  }
+
+  /// Starts counting [path]'s next point from zero.
+  void _startCounting(String path, {String? file, String? scenario}) {
+    _ran[path] = <String>{};
+    _narrow[path] = (file: file, scenario: scenario);
+  }
+
+  /// The busy line with the count appended, which is the whole of the news
+  /// while a point runs.
+  Status? _busyStatus(String path) {
+    var busy = _busy[path];
+    if (busy == null) return null;
+    var progress = runProgressFor(path);
+    if (progress?.total == null) {
+      // Nothing to count yet, so the bare word gets its ellipsis back.
+      return busy.message == _running ? const Status.info('running…') : busy;
+    }
+    var count = '${progress!.done} of ${progress.total} scenarios';
+    return Status.info(
+      busy.message == _running ? 'running $count' : '${busy.message} · $count',
+    );
+  }
+
+  /// A single point's phrase, kept wordless so the count completes it —
+  /// `running 12 of 46 scenarios`, rather than an ellipsis trailing into a
+  /// number.
+  static const _running = 'running';
+
   Status _status() {
     if (packages.isEmpty) return Status.none;
     if (_errors.isNotEmpty) return const Status.error('scan failed');
     for (var path in packages) {
-      if (_busy[path] case var busy?) return busy;
+      if (_busyStatus(path) case var busy?) return busy;
     }
     var scanning = _scans.keys.where((p) => !_results.containsKey(p)).length;
     return scanning == 0 ? Status.none : const Status.info('scanning…');
   }
 
   Status _packageStatus(String path) {
-    if (_busy[path] case var busy?) return busy;
+    if (_busyStatus(path) case var busy?) return busy;
     if (_errors.containsKey(path)) return const Status.error('scan failed');
     if (!_scans.containsKey(path)) return Status.none;
     if (!_results.containsKey(path)) return const Status.info('scanning…');
@@ -2407,6 +2478,20 @@ class ScenariosCore extends PluginCore {
     );
   }
 
+  /// What the progress line counts against: the scan's scenarios, narrowed
+  /// the way the run is.
+  ///
+  /// Null while the scan is still parsing — the count appears a beat after the
+  /// run starts rather than the run waiting for it, because compiling the
+  /// harness takes far longer than parsing the directory does.
+  int? _scenarioCount(String path, {String? file, String? scenario}) {
+    var scenarios = _results[path]?.scenarios;
+    if (scenarios == null) return null;
+    if (scenario != null) return 1;
+    if (file == null) return scenarios.length;
+    return scenarios.where((ref) => ref.file == file).length;
+  }
+
   /// Runs scenarios in the runner's `flutter_tester`.
   ///
   /// The runner per package is created on first use and **kept warm** — in
@@ -2415,6 +2500,13 @@ class ScenariosCore extends PluginCore {
   /// session.
   Future<ScenarioRunResult> _run(Map<String, Object?> arguments) async {
     var paths = _requested(arguments);
+    // Not awaited: it is what the progress count is against, and a run that
+    // waited on it would pay for the parse before compiling anything. A core
+    // the panel has mounted has scanned already; one synthesized for an export
+    // has not.
+    for (var path in paths) {
+      track(path);
+    }
     var file = arguments['file'] as String?;
     var scenario = arguments['scenario'] as String?;
     if (scenario != null && file == null) {
@@ -2633,6 +2725,10 @@ class ScenariosCore extends PluginCore {
         // assignment overwrites the first — same file, same scenario, same
         // step names — and only the last language survives on disk.
         var outDir = fannedOut ? p.join(base, axisSlug(assignment)) : base;
+        // From zero for this point: the count is how far *this* pass has
+        // got, and one that carried the previous point's over would start the
+        // second language at 46 of 46.
+        _startCounting(path, file: file, scenario: scenario);
         // One process per point, seconds each — so which point is running is
         // the news a sidebar shows and MCP forwards. The matrix count only
         // when there is a matrix: "1 of 1" is noise.
@@ -2641,7 +2737,7 @@ class ScenariosCore extends PluginCore {
           Status.info(
             points > 1
                 ? 'running ${++point} of $points · ${axisSlug(assignment)}'
-                : 'running…',
+                : _running,
           ),
         );
         // Before the run, not after: a caller that named a fixed `output` is

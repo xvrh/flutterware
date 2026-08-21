@@ -52,6 +52,7 @@ class TranslationsCore extends PluginCore {
   late final _cache = ScanCache<String, Map<String, LoadedCatalog>>(
     scan: _scan,
     onChanged: notifyChanged,
+    onSettled: _forget,
     retryAfterFailure: true,
   );
 
@@ -70,6 +71,10 @@ class TranslationsCore extends PluginCore {
 
   /// What `export` says while it is running.
   final _busy = <String, String>{};
+
+  /// How far the pass named by [busyFor] has got, mirrored off the scenarios
+  /// core that is running it.
+  final _progress = <String, ({int done, int? total})>{};
 
   /// The catalogs declared for [path], as `tool/flutterware.dart` wrote
   /// them.
@@ -143,7 +148,10 @@ class TranslationsCore extends PluginCore {
 
   /// Drops the cached catalogs so the next read re-parses. What the panel
   /// calls when a translation file changes underneath it.
-  void invalidate(String path) => _cache.invalidate(path);
+  void invalidate(String path) {
+    _cache.invalidate(path);
+    _forget(path);
+  }
 
   @override
   Future<void> computeAll() async {
@@ -169,18 +177,26 @@ class TranslationsCore extends PluginCore {
   Future<void> _loadExport(String path) async {
     var directory = exportDirectoryFor(path);
     var file = File(p.join(directory, translationExportFile));
-    if (!file.existsSync()) {
-      _exports.remove(path);
-      return;
+    ({TranslationExport export, DateTime at})? read;
+    if (file.existsSync()) {
+      try {
+        read = (
+          export: await TranslationExport.read(directory),
+          at: file.statSync().modified,
+        );
+      } catch (_) {
+        read = null;
+      }
     }
-    try {
-      _exports[path] = (
-        export: await TranslationExport.read(directory),
-        at: file.statSync().modified,
-      );
-    } catch (_) {
+    if (read == null) {
       _exports.remove(path);
+    } else {
+      _exports[path] = read;
     }
+    // Half the join moved, so the rows built from it are gone. This is the
+    // half that moves outside a scan — the export written by the action above
+    // is re-read here, with the panel already mounted over the old one.
+    _forget(path);
   }
 
   /// Every key the catalogs define, with what each locale says and the shot
@@ -190,7 +206,27 @@ class TranslationsCore extends PluginCore {
   /// are what was just edited and the export is from whenever it last ran. A
   /// row whose text disagrees with its picture is a stale export, shown as
   /// one.
-  List<TranslationRow> rowsFor(String path) {
+  ///
+  /// **Held, not rebuilt.** One sidebar frame asks for this eight times — the
+  /// badge, the child row and four readings in the view, then the panel and
+  /// its strip — and every plugin's notification is a sidebar frame. Built
+  /// each time it cost 324ms a frame on a 2000-key project once an export
+  /// existed, which is a studio that does not scroll. Dropped by
+  /// [_forget] wherever the two halves it joins can move.
+  List<TranslationRow> rowsFor(String path) => _rows[path] ??= _buildRows(path);
+
+  final _rows = <String, List<TranslationRow>>{};
+
+  /// Drops what [path]'s catalogs and export were joined into. Called from
+  /// both halves — a re-scan and a re-read of the export — because a row is
+  /// only as fresh as the staler of the two.
+  void _forget(String path) {
+    _rows.remove(path);
+    _missing.remove(path);
+    _withoutPicture.remove(path);
+  }
+
+  List<TranslationRow> _buildRows(String path) {
     var catalogs = _cache[path];
     if (catalogs == null) return const [];
     var export = _exports[path]?.export;
@@ -248,10 +284,34 @@ class TranslationsCore extends PluginCore {
   final _measureOnExport = <String, bool>{};
 
   /// What a running export is doing right now — "measuring max lengths —
-  /// +40%…" — for the strip that replaced its button with a spinner. A
+  /// +40%" — for the strip that replaced its button with a spinner. A
   /// measuring export takes minutes rather than seconds, and a silent spinner
   /// that long reads as a hang.
   String? busyFor(String path) => _busy[path];
+
+  /// Scenarios done out of scenarios to run, for the pass [busyFor] names.
+  ///
+  /// The pass, not the export: an export is a run per locale, and — when it
+  /// measures — a baseline, up to ten padded passes and a photograph of each
+  /// level that clipped. How many of those there will be is not knowable
+  /// before they run, because the ladder stops as soon as every measurable key
+  /// has clipped. So the bar fills once per pass and the phrase beside it says
+  /// which pass, which is the pair that never lies.
+  ({int done, int? total})? progressFor(String path) => _progress[path];
+
+  /// Whether the last export traced nothing at all.
+  ///
+  /// Not "photographed nothing": no key was so much as *read*, which is what
+  /// an unwired seam looks like from here — the export ran the suite, wrote
+  /// its frames, and had nothing to attach them to. The panel says so, because
+  /// the alternative is a table of "No picture" that a person reads as a
+  /// coverage problem and goes looking for missing scenarios.
+  bool untracedFor(String path) {
+    var export = _exports[path]?.export;
+    if (export == null || export.keys.isEmpty) return false;
+    return export.seen.isEmpty &&
+        export.findings.notReached.length == export.keys.length;
+  }
 
   @override
   PluginReport get report => PluginReport(
@@ -275,24 +335,27 @@ class TranslationsCore extends PluginCore {
     view: _view,
   );
 
+  /// **Only what stops the plugin from working.** A catalog that will not
+  /// read is the rail's business; how many keys are still untranslated is
+  /// not. That count is a fact about the product, it is true for months at a
+  /// time, and a permanent amber dot beside a working plugin is how a rail
+  /// teaches people to stop reading it. It is on the panel, where someone
+  /// went to look.
   StatusBadge get _badge {
     for (var path in packages) {
       if (_cache.failureFor(path) != null) {
         return const StatusBadge.dot(Tone.error);
       }
     }
-    // The one thing worth a mark on the rail. Not a count of everything the
-    // export noticed — a suite that has not run says nothing, and a key with
-    // no picture is a gap in coverage rather than a defect. A language with
-    // nothing to say is a defect, and it reads with no export at all.
-    for (var path in packages) {
-      if (missingFor(path) > 0) return const StatusBadge.dot(Tone.warn);
-    }
     return StatusBadge.none;
   }
 
   /// Keys some target locale has no text for.
-  int missingFor(String path) {
+  int missingFor(String path) => _missing[path] ??= _countMissing(path);
+
+  final _missing = <String, int>{};
+
+  int _countMissing(String path) {
     var locales = localesFor(path);
     var count = 0;
     for (var row in rowsFor(path)) {
@@ -303,7 +366,12 @@ class TranslationsCore extends PluginCore {
 
   /// Keys the last export has no shot for — including all of them when there
   /// is no export.
-  int withoutPictureFor(String path) {
+  int withoutPictureFor(String path) =>
+      _withoutPicture[path] ??= _countWithoutPicture(path);
+
+  final _withoutPicture = <String, int>{};
+
+  int _countWithoutPicture(String path) {
     var count = 0;
     for (var row in rowsFor(path)) {
       if (!row.hasPicture) count++;
@@ -331,10 +399,6 @@ class TranslationsCore extends PluginCore {
             ? 'Catalog "${empty.single}" matched no files'
             : '${empty.length} catalogs matched no files',
       );
-    }
-    var missing = missingFor(path);
-    if (missing > 0) {
-      return Status.warn('$missing keys untranslated somewhere');
     }
     var rows = rowsFor(path);
     return Status.good('${rows.length} keys · ${localesFor(path).join(', ')}');
@@ -593,12 +657,32 @@ class TranslationsCore extends PluginCore {
       return file.existsSync() ? file.readAsString() : null;
     }
 
-    _setBusy(path, 'running ${languages.length} locales…');
+    // Named, not counted: "1 locales" was the old spelling of one, and the
+    // scenario count runs beside this phrase now.
+    _setBusy(
+      path,
+      languages.length == 1
+          ? 'running ${languages.single}'
+          : 'running ${languages.length} locales',
+    );
     ScenarioRunResult run;
     ProbeBaseline? probeBaseline;
     var probePasses = <ProbePass>[];
     var evidencePasses = <({int level, TranslationSurvey survey})>[];
     var scenarios = _scenariosFor(path);
+    // The count the bar draws. Mirrored rather than reinvented: the scenarios
+    // core is the one running the suite, and it already counts the scenarios
+    // that have announced a step against the ones its scan found.
+    var watching = scenarios.changes.stream.listen((_) {
+      var progress = scenarios.runProgressFor(path);
+      if (progress == _progress[path]) return;
+      if (progress == null) {
+        _progress.remove(path);
+      } else {
+        _progress[path] = progress;
+      }
+      notifyChanged();
+    });
     try {
       // `!`: the `??= 2` above settled it, but a closure capture defeats
       // the promotion.
@@ -646,7 +730,7 @@ class TranslationsCore extends PluginCore {
         // against the wrong baseline would misread that pre-existing clip as
         // a flip at the first rung. Captured, because it also supplies the
         // `screen` evidence shots.
-        _setBusy(path, 'measuring max lengths — baseline…');
+        _setBusy(path, 'measuring max lengths — baseline');
         probeBaseline = ProbeBaseline(await surveyOf(await invoke(probeArgs)));
 
         var remaining = probeBaseline.measurableIds;
@@ -655,7 +739,7 @@ class TranslationsCore extends PluginCore {
           // Every measurable key has clipped: the rest of the ladder can
           // only re-prove it.
           if (remaining.isEmpty) break;
-          _setBusy(path, 'measuring max lengths — +$level%…');
+          _setBusy(path, 'measuring max lengths — +$level%');
           var result = await invoke({
             ...probeArgs,
             'format': 'none',
@@ -689,7 +773,7 @@ class TranslationsCore extends PluginCore {
         // first clipped, so every real limit gets a picture of the padded
         // string actually ellipsizing in place.
         for (var level in firstClipLevels.toList()..sort()) {
-          _setBusy(path, 'measuring max lengths — photographing +$level%…');
+          _setBusy(path, 'measuring max lengths — photographing +$level%');
           evidencePasses.add((
             level: level,
             survey: await surveyOf(
@@ -699,6 +783,8 @@ class TranslationsCore extends PluginCore {
         }
       }
     } finally {
+      unawaited(watching.cancel());
+      _progress.remove(path);
       _setBusy(path, 'building the export…');
       scenarios.dispose();
     }
@@ -834,6 +920,7 @@ class TranslationsCore extends PluginCore {
   void _setBusy(String path, String? message) {
     if (message == null) {
       _busy.remove(path);
+      _progress.remove(path);
     } else {
       _busy[path] = message;
     }

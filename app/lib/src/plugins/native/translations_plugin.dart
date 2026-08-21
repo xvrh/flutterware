@@ -202,7 +202,12 @@ class _TranslationsPanelState extends State<_TranslationsPanel> {
         ),
         if (_error case var error?) _ErrorBar(error),
         if (_core.exportFor(place.package) == null && !_exporting)
-          _NoExportYet(onExport: () => _export(place.package)),
+          _NoExportYet(onExport: () => _export(place.package))
+        else if (_core.untracedFor(place.package))
+          _NothingTraced(
+            catalog:
+                _core.catalogsFor(place.package)?.keys.firstOrNull ?? 'app',
+          ),
         _Filters(
           search: _search,
           locales: locales,
@@ -312,22 +317,9 @@ class _Strip extends StatelessWidget {
             ),
           ),
           if (exporting)
-            Row(
-              spacing: FwSpacing.md,
-              children: [
-                SizedBox(
-                  width: FwIconSize.xs,
-                  height: FwIconSize.xs,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: colors.accent,
-                  ),
-                ),
-                Text(
-                  core.busyFor(place.package) ?? 'Running the scenarios…',
-                  style: context.type.bodyMuted,
-                ),
-              ],
+            _Running(
+              phrase: core.busyFor(place.package) ?? 'running the scenarios',
+              progress: core.progressFor(place.package),
             )
           else
             _ExportSplitButton(
@@ -340,6 +332,62 @@ class _Strip extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// What the Export button turns into while it runs.
+///
+/// A bar, because an export is minutes rather than seconds: the suite runs
+/// once per locale, and measuring max lengths runs it again per rung of the
+/// ladder. A spinner held that long says only that the app has not crashed.
+///
+/// The bar fills once per **pass** and the phrase says which pass — there is
+/// no honest denominator for the whole export, because the ladder stops as
+/// soon as every measurable key has clipped and nobody knows when that is
+/// until it happens. Indeterminate until the scan that supplies the
+/// denominator lands, which is a beat after the first pass starts.
+class _Running extends StatelessWidget {
+  const _Running({required this.phrase, required this.progress});
+
+  final String phrase;
+  final ({int done, int? total})? progress;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var total = progress?.total;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: FwSpacing.md,
+      children: [
+        SizedBox(
+          width: 96,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: total == null || total == 0
+                  ? null
+                  : (progress!.done / total).clamp(0.0, 1.0),
+              minHeight: 4,
+              backgroundColor: colors.line,
+              color: colors.accent,
+            ),
+          ),
+        ),
+        // Flexible, because a measuring pass says the longest of these —
+        // "measuring max lengths — photographing +40% · 12 of 46 scenarios" —
+        // and the strip is as wide as the window is.
+        Flexible(
+          child: Text(
+            total == null
+                ? phrase
+                : '$phrase · ${progress!.done} of $total scenarios',
+            style: context.type.bodyMuted,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -485,6 +533,69 @@ class _NoExportYet extends StatelessWidget {
           TextButton(
             onPressed: onExport,
             child: const Text('Export screenshots'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// An export that ran and traced nothing.
+///
+/// The state that costs the most time to diagnose without help: the run
+/// succeeded, the frames are on disk, and every row says "No picture" — which
+/// reads as a coverage problem, so the next hour goes on scenarios that were
+/// never the problem. The seam is what is missing, and it is one line.
+class _NothingTraced extends StatelessWidget {
+  const _NothingTraced({required this.catalog});
+
+  /// A declared catalog's name, so the snippet is this project's rather than
+  /// the documentation's.
+  final String catalog;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.xl,
+        vertical: FwSpacing.lg,
+      ),
+      decoration: BoxDecoration(
+        color: colors.amber.withValues(alpha: .10),
+        border: Border(bottom: BorderSide(color: colors.line)),
+      ),
+      child: Row(
+        spacing: FwSpacing.lg,
+        children: [
+          Icon(
+            Icons.link_off_outlined,
+            size: FwIconSize.sm,
+            color: colors.amber,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: FwSpacing.xs,
+              children: [
+                Text(
+                  'The export ran, but nothing asked a catalog for a string — '
+                  'so no picture could be attached to a key. The seam is not '
+                  'wired.',
+                  style: context.type.bodySmall,
+                ),
+                SelectableText(
+                  "indexTranslations('$catalog')(key, value)",
+                  style: context.type.mono.copyWith(color: colors.mut),
+                ),
+                Text(
+                  'Hand that to whatever your app already funnels its '
+                  "translation reads through, in the scenarios' test setup, "
+                  'and the next export fills the column in.',
+                  style: context.type.bodySmall.copyWith(color: colors.mut),
+                ),
+              ],
+            ),
           ),
         ],
       ),
