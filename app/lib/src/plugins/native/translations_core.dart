@@ -78,19 +78,26 @@ class TranslationsCore extends PluginCore {
 
   /// The catalogs declared for [path], as `tool/flutterware.dart` wrote
   /// them.
-  List<({String name, String files, String template})> declaredFor(
-    String path,
-  ) {
+  /// The catalogs declared for [path], dropping any whose layout this build
+  /// cannot read — see [TranslationCatalog.fromJson]. [declaredCountFor] is
+  /// what the config actually held, so the difference can be reported rather
+  /// than read as "none declared".
+  List<TranslationCatalog> declaredFor(String path) {
+    return [
+      for (var entry in _rawCatalogsFor(path))
+        ?TranslationCatalog.fromJson(entry),
+    ];
+  }
+
+  /// How many catalogs the config declared, readable or not.
+  int declaredCountFor(String path) => _rawCatalogsFor(path).length;
+
+  List<Map<String, Object?>> _rawCatalogsFor(String path) {
     for (var config in host.packageConfigs) {
       if (config['path'] != path) continue;
       return [
         for (var entry in config['catalogs'] as List? ?? const [])
-          if (entry is Map)
-            (
-              name: entry['name'] as String? ?? '',
-              files: entry['files'] as String? ?? '',
-              template: entry['template'] as String? ?? 'en',
-            ),
+          if (entry is Map) entry.cast<String, Object?>(),
       ];
     }
     return const [];
@@ -383,20 +390,46 @@ class TranslationsCore extends PluginCore {
     if (_busy[path] case var message?) return Status.info(message);
     if (_cache.failureFor(path) case var failure?) return Status.error(failure);
     var declared = declaredFor(path);
+    // Dropped rather than guessed at, so the count is the only thing that can
+    // tell "declared nothing" from "declared something this build is too old
+    // to read". Silently, the second reads as the first.
+    var unreadable = declaredCountFor(path) - declared.length;
+    if (unreadable > 0) {
+      return Status.error(
+        unreadable == 1
+            ? 'A catalog uses a layout this flutterware cannot read'
+            : '$unreadable catalogs use a layout this flutterware cannot read',
+      );
+    }
     if (declared.isEmpty) return const Status.warn('No catalogs declared');
     var loaded = _cache[path];
     if (loaded == null) return Status.none;
-    // A catalog whose glob matched nothing is the mistake worth shouting
-    // about: everything downstream still works, and quietly attributes
-    // nothing.
+    // A catalog that defines no key is the mistake worth shouting about:
+    // everything downstream still works, and quietly attributes nothing. Which
+    // mistake it is decides where to look, so the two are named apart — a glob
+    // that found nothing is a path, and files that yielded nothing is almost
+    // always the layout they were read under.
     var empty = [
       for (var catalog in loaded.values)
-        if (catalog.keys.isEmpty) catalog.name,
+        if (catalog.keys.isEmpty) catalog,
     ];
     if (empty.isNotEmpty) {
+      var unread = [
+        for (var catalog in empty)
+          if (catalog.filesMatched > 0) catalog.name,
+      ];
+      if (unread.isNotEmpty) {
+        return Status.error(
+          unread.length == 1
+              ? 'Catalog "${unread.single}" read no keys from its files — '
+                    'check its layout'
+              : '${unread.length} catalogs read no keys from their files — '
+                    'check their layout',
+        );
+      }
       return Status.error(
         empty.length == 1
-            ? 'Catalog "${empty.single}" matched no files'
+            ? 'Catalog "${empty.single.name}" matched no files'
             : '${empty.length} catalogs matched no files',
       );
     }

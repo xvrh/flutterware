@@ -10,6 +10,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutterware/plugins.dart';
 import 'package:glob/glob.dart';
 import 'package:path/path.dart' as p;
 
@@ -163,28 +164,51 @@ Future<TranslationSurvey> buildSurvey({
 /// catalog with no keys and every read absent from it, which names the
 /// problem, instead of vanishing and taking its keys' attribution with it.
 Future<Map<String, LoadedCatalog>> loadCatalogs(
-  List<({String name, String files, String template})> catalogs, {
+  List<TranslationCatalog> catalogs, {
   required CatalogReader read,
 }) async {
   var loaded = <String, LoadedCatalog>{};
   for (var catalog in catalogs) {
-    var files = await read(catalog.files);
+    // Exhaustive over the variants, which is the point of the type: a format
+    // added to the declaration cannot be forgotten here.
+    var files = await switch (catalog) {
+      FilePerLocaleCatalog(:var files) => read(files),
+      LocalesPerKeyCatalog(:var file) => read(file),
+    };
     var byLocale = <String, Map<String, String>>{};
-    for (var file in files.entries) {
-      var locale = _localeFromFileName(file.key);
-      if (locale == null) continue;
-      byLocale[locale] = switch (jsonDecode(file.value)) {
-        Map json => {
-          for (var entry in json.entries)
-            if (entry.value is String) '${entry.key}': entry.value as String,
-        },
-        _ => <String, String>{},
+    for (var entry in files.entries) {
+      var json = switch (jsonDecode(entry.value)) {
+        Map json => json,
+        _ => const {},
       };
+      switch (catalog) {
+        case FilePerLocaleCatalog():
+          var locale = _localeFromFileName(entry.key);
+          if (locale == null) continue;
+          byLocale[locale] = {
+            for (var value in json.entries)
+              if (value.value is String) '${value.key}': value.value as String,
+          };
+        case LocalesPerKeyCatalog():
+          for (var row in json.entries) {
+            if (row.value is! Map) continue;
+            var key = '${row.key}';
+            for (var perLocale in (row.value as Map).entries) {
+              if (perLocale.value is! String) continue;
+              // Accumulated rather than assigned: a locale is spread across
+              // every row here, where the other layout hands one whole locale
+              // per file.
+              (byLocale['${perLocale.key}'] ??= {})[key] =
+                  perLocale.value as String;
+            }
+          }
+      }
     }
     loaded[catalog.name] = LoadedCatalog(
       name: catalog.name,
       template: catalog.template,
       byLocale: byLocale,
+      filesMatched: files.length,
     );
   }
   return loaded;
@@ -229,6 +253,14 @@ CatalogReader catalogFilesUnder(String root) => (filesGlob) async {
   // Matched against paths relative to the project, always: a declared glob is
   // written by somebody looking at their own repository, and an absolute one
   // would only resolve on the machine it was written on.
+  // **A path with no wildcard in it is a file, and naming one is ordinary** —
+  // a whole catalog can be a single file. Left to the walk below it would be
+  // opened as a directory, not exist, and read as nothing at all: an empty
+  // catalog where the declaration was right.
+  var literal = File(p.join(root, _literalPrefix(filesGlob)));
+  if (literal.existsSync()) {
+    return {p.relative(literal.path, from: root): literal.readAsStringSync()};
+  }
   var glob = Glob(filesGlob);
   // **Start at the glob's own literal prefix.** `assets/i18n/*.json` is a walk
   // of one directory, and walking the package to find it is what made the

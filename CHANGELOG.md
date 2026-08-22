@@ -1,5 +1,47 @@
 ## Unreleased
 
+- **A catalog can keep every locale on the key's own row.**
+  `TranslationCatalog` read one shape: a file per locale, named for it, holding
+  key to string. A project whose translations are filled in a key at a time — a
+  row per key with the languages side by side, which is what a human or a
+  translation service edits — had no way to say so, and the only way through
+  was to generate the other shape beside it and keep the two in step. Two
+  checked-in copies of one truth, and a CI gate to stop them drifting.
+
+  ```dart
+  TranslationCatalog.localesPerKey(name: 'server', file: 'tool/strings.json')
+  ```
+
+  **`TranslationCatalog` is sealed now**, the way `StackRun` is and for the
+  same reason: the variants do not carry the same thing. One file per locale is
+  found with a glob because there is one for each; every locale under a key is
+  a single `file`, and `files` naming it would be a plural that is never
+  plural. The gap widens with the next format rather than closing — an ARB
+  carries its locale inside the file and hides metadata under `@` keys, a CSV
+  needs a delimiter and a key column — and a class per format is where those
+  answers go. The unnamed constructor is unchanged, so existing declarations go
+  on compiling.
+
+  **Declared rather than sniffed**, because the two JSON shapes are only almost
+  distinguishable: a per-locale file is allowed to carry an object beside its
+  strings, and there is a test pinning that it is skipped rather than read.
+  Sniffed, that file would silently become a catalog of strange locales. A test
+  now reads one file both ways and expects both answers.
+
+  A layout a build does not know reads as **null** rather than as the shape it
+  does know — guessing would read one format as another and report an empty
+  catalog against a declaration that is right. The panel says the build is too
+  old instead.
+
+  Two things an empty catalog can now say apart: a glob that matched no files,
+  and files that were read and yielded no key. They send a reader to opposite
+  ends of the declaration.
+
+  Also: **a path naming one file reads that file.** The walk starts at a glob's
+  literal prefix, which for a wildcard-free path is the file itself — opened as
+  a directory it does not exist, and a single-file catalog read as empty with
+  nothing wrong with it.
+
 - **A step's inline event titles are bounded in width as well as in count.**
   `eventTitles` kept twelve summaries per step and each could run to the
   stored title's 300 characters — 3,600 on one step, which is not a number
