@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +17,7 @@ import 'package:test_api/src/backend/suite.dart';
 import 'package:test_api/src/backend/suite_platform.dart';
 import 'package:test_api/src/backend/test.dart';
 
+import '../bytes.dart';
 import '../devices.dart';
 import '../inspect/guest_inspect.dart';
 import 'async_watchdog.dart';
@@ -582,7 +582,11 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
     captureScale: number('captureScale'),
     captureRaw: args['captureRaw'] == 'true',
     captureNative: args['captureNative'] == 'true',
-    capturePixels: args['capturePixels'] != 'false',
+    pixels: switch (args['pixels']) {
+      'keyed' => ScenarioPixels.keyed,
+      'none' => ScenarioPixels.none,
+      _ => ScenarioPixels.all,
+    },
     expandTranslations: switch (args['expand']) {
       null => null,
       var raw => int.parse(raw),
@@ -613,7 +617,7 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       runArgs.captureScale == null &&
       !runArgs.captureRaw &&
       !runArgs.captureNative &&
-      runArgs.capturePixels &&
+      runArgs.pixels == ScenarioPixels.all &&
       runArgs.record == null &&
       runArgs.clockOrigin == null &&
       runArgs.assignment == null &&
@@ -1259,7 +1263,14 @@ Future<Map<String, Object?>> _runOne(
           : null,
       settled: capture.settled,
       landed: capture.landed,
-      digest: digest,
+      // Absent on a pixel-less capture, for the reason `unchanged` is false
+      // there: every such step digests the same empty bytes, so a *reported*
+      // digest would be a claim about pixels nobody took. `compareScenarioRuns`
+      // skips a step with no digest, and would otherwise count these as
+      // compared-and-identical — a `pixels: keyed` run is mostly ordinary
+      // steps with a few pictureless ones among them, and drift would quietly
+      // vouch for the screens it never looked at.
+      digest: imagePath.isEmpty ? null : digest,
       strayFrames: capture.strayFrames,
       unchanged: unchanged,
       failure: capture.failure,
@@ -1458,4 +1469,4 @@ String scenarioFileSafe(String name, {int max = scenarioNameMax}) {
 /// different pictures collide about as often as never. Sixteen hex characters
 /// is 64 bits against a suite of a few thousand steps.
 String _digest(List<int> bytes) =>
-    sha1.convert(bytes).toString().substring(0, 16);
+    digestBytes(bytes is Uint8List ? bytes : Uint8List.fromList(bytes));

@@ -1,12 +1,18 @@
 import 'dart:async';
 import 'dart:io';
 
+// ignore: implementation_imports
+import 'package:flutterware/src/scenarios/pixels.dart';
 import 'package:meta/meta.dart';
 
 import '../embedder/tester_host.dart';
 import 'axes.dart';
 import 'discovery.dart';
 import 'harness_entrypoint.dart';
+
+/// Which steps a run photographs, as callers of [ScenarioRunner.run] name it.
+// ignore: implementation_imports
+export 'package:flutterware/src/scenarios/pixels.dart';
 
 /// One scenario listed by the live harness — ground truth, where the scan is
 /// provisional.
@@ -221,8 +227,9 @@ class ScenarioRunner {
     int recordMaxFrames = 90,
     DateTime? clock,
 
-    /// Skip pixels entirely — a probe pass reads the walk, not the frames.
-    bool capturePixels = true,
+    /// Which steps are worth a picture. A probe pass reads the walk and not
+    /// the frames; a translation pass wants only the screens showing a key.
+    ScenarioPixels pixels = ScenarioPixels.all,
 
     /// Pad every translation read by this percentage: the max-length probe.
     int? expandTranslations,
@@ -249,7 +256,7 @@ class ScenarioRunner {
         if (captureScale != null) 'captureScale': '$captureScale',
         if (captureRaw) 'captureRaw': 'true',
         if (captureNative) 'captureNative': 'true',
-        if (!capturePixels) 'capturePixels': 'false',
+        if (pixels != ScenarioPixels.all) 'pixels': pixels.name,
         if (expandTranslations != null) 'expand': '$expandTranslations',
         if (narrowestDevice) 'deviceChoice': 'narrowest',
         // Present only when recording: the interval is what turns motion

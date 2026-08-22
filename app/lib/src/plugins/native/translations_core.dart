@@ -507,9 +507,11 @@ class TranslationsCore extends PluginCore {
           kind: ActionParameterKind.string,
           required: false,
           description:
-              'Screenshot pixels per logical pixel, up to 4. Defaults to 2 — '
-              'these are read on a retina screen and zoomed into, which is '
-              'the one place the bytes are worth it.',
+              'Screenshot pixels per logical pixel, up to 4. Defaults to 1 — '
+              'a phone screenshot at 1x is already 390 by 844 and the page '
+              'draws the box over it, so the second pixel is only worth '
+              'having where a translator zooms into small type. Pass `2` for '
+              'that; measured on the example suite it costs 28% of the run.',
         ),
         const ActionParameter(
           'max-lengths',
@@ -617,7 +619,13 @@ class TranslationsCore extends PluginCore {
         'a number in (0, 4]',
       );
     }
-    captureScale ??= 2;
+    // 1x, not the device's own ratio and not the 2 this used to take: the
+    // capture is the one part of a scenario run that scales with the square
+    // of this number — measured on the example suite, going from 1 to 2 took
+    // the run from 3.4s to 4.8s, all of it in `toByteData`. What it buys is
+    // legible small type under a zoom, which is a real want but not the
+    // default one.
+    captureScale ??= 1;
 
     var measureMaxLengths = switch (arguments['max-lengths']) {
       null || false || 'false' => false,
@@ -705,6 +713,13 @@ class TranslationsCore extends PluginCore {
         // The whole point: every step, so every screen a key was seen on is
         // in the result rather than only the failures.
         'steps': 'all',
+        // But not every step's *picture*. An export files a shot against a
+        // string id, so a screen showing no key can contribute none — and on
+        // the example suite that was 23 of 62 steps rasterized, encoded and
+        // written for a file nothing would link to. Text belonging to no
+        // catalog does not count: the `unkeyed` finding carries the words and
+        // the step, never a picture.
+        'pixels': 'keyed',
       });
 
       if (measureMaxLengths) {
@@ -719,6 +734,7 @@ class TranslationsCore extends PluginCore {
           'file': ?arguments['file'],
           'capture-scale': captureScale,
           'steps': 'all',
+          'pixels': 'keyed',
           if (maxLengthDevice != null)
             'device': maxLengthDevice
           else

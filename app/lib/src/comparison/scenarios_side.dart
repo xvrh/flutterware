@@ -89,9 +89,13 @@ class ScenariosSide {
 
   /// Runs [id] and reads back every step it captured.
   ///
-  /// Raw captures, never PNG: the comparison reads pixels, and encoding is
-  /// ~80% of what a capture costs. The clock is pinned so two runs a day apart
-  /// produce the same pictures.
+  /// Raw captures, never PNG, and not for the 31% it happens to be worth
+  /// here: the diff reads every pixel, and `fw compare` is a CLI command, so
+  /// the decode PNG would force has no engine codec to do it with. It would
+  /// fall to `package:image` in pure Dart, on every frame of both sides, to
+  /// undo an encode this had just paid for. See `ScenarioRunArgs.captureRaw`.
+  ///
+  /// The clock is pinned so two runs a day apart produce the same pictures.
   Future<List<ScenarioStepShot>> run(
     ScenarioRunner runner,
     String id, {

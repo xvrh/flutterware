@@ -1928,6 +1928,20 @@ class ScenarioTester {
   bool get _capturing =>
       scenarioRunListener != null || _screenshotsDestination != null;
 
+  /// Whether this step's frame is worth rasterizing — see [ScenarioPixels].
+  ///
+  /// A failure always is, whatever the mode: a red step's picture is the first
+  /// thing anybody opens, and a pass that photographed every screen except the
+  /// one that broke would be the wrong economy by a wide margin.
+  bool _wantsPixels(ScenarioScreenRead? screen, {String? failure}) =>
+      switch (scenarioRunArgs?.pixels ?? ScenarioPixels.all) {
+        ScenarioPixels.all => true,
+        ScenarioPixels.none => false,
+        ScenarioPixels.keyed =>
+          failure != null ||
+              (screen?.tree.translationKeys().isNotEmpty ?? false),
+      };
+
   /// Renders the frame and holds it as the next [_pending] — or, when
   /// [adoptByPixels] is set and the render matches the held capture, puts
   /// [shot]'s name on that capture instead and discards the fresh picture.
@@ -1988,20 +2002,31 @@ class ScenarioTester {
       // fidelity is worth the wait.
       var dpr = view.flutterView.devicePixelRatio;
       var scale = scenarioCaptureScale(scenarioRunArgs, dpr);
-      // Raw when the host asked for it: PNG *encoding* is ~80% of a 1×
-      // capture's cost (56ms/step vs 11.5ms raw) and ~96% at 3× — the
-      // rasterization itself is nearly free. Standalone runs always get PNG,
-      // which everything can open.
+      // Raw when the host asked for it — see `ScenarioRunArgs.captureRaw` for
+      // what that trade actually is, which is not what it says on the tin.
+      // Standalone runs always get PNG, which everything can open.
       var raw = listener != null && (scenarioRunArgs?.captureRaw ?? false);
+      // Read before the picture rather than after it, and once, for the
+      // adoption gate and the step alike: this capture waits a step before it
+      // is handed over, and by then the app has moved on. Nothing pumps
+      // between here and the rasterization below, so the read and the picture
+      // are still the same frame — and [ScenarioPixels.keyed] needs the read
+      // to decide whether there is a picture worth taking at all.
+      // Visible-for-testing is exactly what the style read is: scenario code
+      // only ever runs under the test binding.
+      var texts = visibleTexts();
+      var screen = scenarioScreenReader?.call();
+      // ignore: invalid_use_of_visible_for_testing_member
+      var style = SystemChrome.latestStyle;
       Uint8List bytes;
       String format;
       int width;
       int height;
-      if (listener != null && !(scenarioRunArgs?.capturePixels ?? true)) {
-        // A budget probe reads the walk, not the pixels — skipping the
-        // rasterization and the encode is what makes a probe pass cheaper
-        // than the capture pass it rides beside. The dimensions are still
-        // reported, because the survey computes screen share from them.
+      if (listener != null && !_wantsPixels(screen, failure: failure)) {
+        // Skipping the rasterization and the encode is what makes a probe
+        // pass cheaper than the capture pass it rides beside. The dimensions
+        // are still reported, because the survey computes screen share from
+        // them.
         bytes = Uint8List(0);
         format = 'none';
         width = (view.size.width * scale).round();
@@ -2019,14 +2044,6 @@ class ScenarioTester {
         bytes = data.buffer.asUint8List();
         format = raw ? 'raw' : 'png';
       }
-      // Read at the shutter, once, for the adoption gate and the step alike:
-      // this capture waits a step before it is handed over, and by then the
-      // app has moved on. Visible-for-testing is exactly what the style read
-      // is: scenario code only ever runs under the test binding.
-      var texts = visibleTexts();
-      var screen = scenarioScreenReader?.call();
-      // ignore: invalid_use_of_visible_for_testing_member
-      var style = SystemChrome.latestStyle;
       // The held capture and this render are the same screen — dimensions,
       // overlay style, words, tree read, and bytes — so the name belongs on
       // the held one, and the fresh picture is discarded unwritten: cheaper,

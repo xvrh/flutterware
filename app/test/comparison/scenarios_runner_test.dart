@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -151,6 +152,30 @@ void main() {
       ]);
     });
 
+    // Two harnesses on two checkouts, a build directory each, sharing nothing
+    // but the machine — so there is nothing to serialize them for, and a
+    // replay is where a comparison spends its time.
+    test('the two sides of one scenario replay together', () async {
+      source.declared = ['test/a.dart#A'];
+      var bothIn = Completer<void>();
+      // Neither side may answer until both have been asked. A sequential
+      // replay never gets here: the second call is not made until the first
+      // has returned, so this hangs rather than fails — which is why the
+      // whole run is given a deadline.
+      source.gate = (_) async {
+        source.waiting++;
+        if (source.waiting == 2) bothIn.complete();
+        await bothIn.future;
+      };
+
+      await runnerFor(
+        base: checkout('base', {'test/a.dart': '1'}),
+        head: checkout('head', {'test/a.dart': '2'}),
+      ).run(outDir: root.path).timeout(const Duration(seconds: 5));
+
+      expect(source.waiting, 2);
+    });
+
     test('rows arrive as they are decided, not all at the end', () async {
       source.declared = ['test/a.dart#A'];
       source.onHead = ['test/a.dart#A', 'test/new.dart#Fresh'];
@@ -196,6 +221,11 @@ class _FakeSource implements ScenarioSource {
   final replayed = <String>[];
   var listed = 0;
 
+  /// Held open in the middle of a replay, so a test can prove two sides are
+  /// in flight at once rather than infer it from an order.
+  Future<void> Function(bool base)? gate;
+  var waiting = 0;
+
   @override
   Future<List<String>> list({required bool base}) async {
     listed++;
@@ -212,6 +242,7 @@ class _FakeSource implements ScenarioSource {
     required String outDir,
   }) async {
     replayed.add('$id:${base ? 'base' : 'head'}');
+    await gate?.call(base);
     return [
       ScenarioStepShot(
         step: const AlignableStep(index: 1, position: '#1', name: 'Open'),

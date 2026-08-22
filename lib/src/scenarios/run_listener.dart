@@ -83,8 +83,9 @@ class ScenarioStepCapture {
   final ScenarioCaptureKind kind;
 
   /// The image, in [format]: `png`, or `raw` — bare rgba8888 rows,
-  /// [width]×[height]×4 bytes. Raw exists because PNG *encoding* is ~80% of
-  /// a capture's cost; a host that can display raw pixels asks for them.
+  /// [width]×[height]×4 bytes. Raw exists to skip the encoder, which costs
+  /// ~7.5ms a picture; what that is worth against ~80× the bytes is measured
+  /// on `ScenarioRunArgs.captureRaw`.
   ///
   /// Null on a step that is not a screen.
   final Uint8List? bytes;

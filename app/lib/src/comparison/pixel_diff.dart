@@ -3,9 +3,16 @@ import 'dart:typed_data';
 
 /// Two frames compared as pixels.
 ///
-/// Raw rgba8888 in, never PNG: encoding is ~80% of a capture's cost at 1×, the
-/// comparison reads pixels rather than files, and only the handful of pictures
-/// that reach a screen are ever encoded.
+/// Raw rgba8888 in, never PNG: the comparison reads pixels rather than files,
+/// so a PNG here would be encoded on the way out and decoded straight back in.
+/// Only the handful of pictures that reach a screen are ever encoded.
+///
+/// Measured, the encode is ~7.5ms a picture out and the decode ~0.75ms back,
+/// against bytes that cost about nothing to write (489MB at ~70ms, page
+/// cache). And `fw compare` is a CLI command, so the decode would have no
+/// engine codec to use: it would fall to `package:image`, in pure Dart, on
+/// every frame of both sides. This used to say encoding was "~80% of a
+/// capture's cost", which was never measured and is not true.
 ///
 /// The output is three things at once, computed in one pass, because they are
 /// three readings of the same fact: a **percentage** for the row, **clusters**

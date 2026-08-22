@@ -508,6 +508,23 @@ void main() {
     expect(result.axes!.containsKey('invert-colors'), isFalse);
   });
 
+  // The recording is the whole case for raw: it turns 31 pictures into 371 and
+  // PNG charges ~7.5ms of encoder for each. Recording, raw measured 4.3×;
+  // without one it is 31% for 160× the bytes, which is not worth it.
+  test('raw follows the recorder', () async {
+    var recording = _FakeRunner();
+    var withMotion = core(runner: recording);
+    start(withMotion);
+    await settled(withMotion);
+    expect(recording.seenRaw, [true]);
+
+    var quiet = _FakeRunner();
+    var withoutMotion = core(runner: quiet)..setRecordMotion(false);
+    start(withoutMotion);
+    await settled(withoutMotion);
+    expect(quiet.seenRaw, [false]);
+  });
+
   test("the configured captureScale is every run's default; an explicit "
       'capture-scale still wins', () async {
     var runner = _FakeRunner();
@@ -604,6 +621,8 @@ class _FakeRunner extends ScenarioRunner {
   /// narrowed to one — what the progress count is counting.
   List<String>? stepScenarios;
 
+  final seenRaw = <bool>[];
+
   /// Merged into the emitted step — what the harness writes only when the news
   /// is bad: `settled: false`, `failure: …`.
   var extraStepFields = const <String, Object?>{};
@@ -618,7 +637,7 @@ class _FakeRunner extends ScenarioRunner {
     String? unspecifiedDevice,
     double? captureScale,
     bool captureRaw = false,
-    bool capturePixels = true,
+    ScenarioPixels pixels = ScenarioPixels.all,
     int? expandTranslations,
     bool narrowestDevice = false,
     bool captureNative = false,
@@ -631,6 +650,7 @@ class _FakeRunner extends ScenarioRunner {
     seenAxes.add(axes);
     seenUnspecified.add(unspecifiedDevice);
     seenCaptureScales.add(captureScale);
+    seenRaw.add(captureRaw);
     seenOutDirs.add(outDir);
     seenTags.add(tag);
     seenNative.add(captureNative);
