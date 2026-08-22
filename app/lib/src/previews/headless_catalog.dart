@@ -1077,7 +1077,8 @@ class _GuestSession {
   /// The guest's next frame, decoded and not written anywhere.
   ///
   /// What [capture] does minus the PNG: a batch comparing pixels never wants
-  /// the file, and encoding is ~80% of what a 1× capture costs.
+  /// the file, and the encoder it skips costs ~7.5ms a picture — measured on
+  /// `ScenarioRunArgs.captureRaw`, along with what it costs in bytes.
   /// The frame, and what the guest could say about it having stopped moving.
   Future<(img.Image, ({bool settled, bool seesAnimations}))> captureImage({
     double pixelRatio = 1,

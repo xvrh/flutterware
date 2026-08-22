@@ -2,6 +2,10 @@ import 'package:flutter/widgets.dart';
 
 import '../devices.dart';
 import 'motion.dart';
+import 'pixels.dart';
+
+/// The type of [ScenarioRunArgs.pixels], which callers naming the field need.
+export 'pixels.dart';
 import 'profile.dart';
 
 /// One run's axis assignment — device geometry, locale, text scale,
@@ -22,7 +26,7 @@ class ScenarioRunArgs {
     this.captureScale,
     this.captureRaw = false,
     this.captureNative = false,
-    this.capturePixels = true,
+    this.pixels = ScenarioPixels.all,
     this.record,
     this.clockOrigin,
     this.assignment,
@@ -82,7 +86,7 @@ class ScenarioRunArgs {
       captureScale: captureScale,
       captureRaw: captureRaw,
       captureNative: captureNative,
-      capturePixels: capturePixels,
+      pixels: pixels,
       record: record,
       clockOrigin: clockOrigin,
       // The scenario reads its axes off the assignment, so the device the
@@ -161,9 +165,28 @@ class ScenarioRunArgs {
   /// rendering at. Wins over [captureScale] when both are set.
   final bool captureNative;
 
-  /// Capture raw rgba8888 instead of PNG. PNG *encoding* is ~80% of a 1×
-  /// capture's cost (and ~96% at 3×); a host that can display raw pixels —
-  /// the GUI can — skips it entirely. Recorded motion follows this too.
+  /// Capture raw rgba8888 instead of PNG. **Recorded motion follows this
+  /// too**, and that is usually what decides it.
+  ///
+  /// PNG charges ~7.5ms of encoder per picture, and **a recording is what
+  /// decides whether that matters**: frames at 33ms arrive in hundreds where
+  /// shots arrive in dozens. Measured on the example suite, three repeats,
+  /// arms alternated in one warm process:
+  ///
+  /// | | raw | PNG |
+  /// |---|---|---|
+  /// | shots only (31 pictures) | 404ms / 48MB | 587ms / 0.3MB |
+  /// | recording (31 shots + 340 frames) | **721ms** / 489MB | 3080ms / 6MB |
+  ///
+  /// So raw is 4.3× with a recording and 31% without — and 31% does not buy
+  /// 160× the bytes. Ask for it where a recording is running, or where the
+  /// reader must have rgba and has nothing to decode a PNG with.
+  ///
+  /// Writing the bytes is *not* what raw costs: 489MB measured at ~70ms,
+  /// which the page cache absorbs. It looked like a wash for a long time for
+  /// a different reason — every raw frame was hashed with `sha1` to make its
+  /// drift digest, at 6.19ms against a PNG's 0.03, which is almost exactly
+  /// the encoder raw had just skipped. See [digestBytes].
   final bool captureRaw;
 
   /// Record every transition's frames, or null to capture only the frame each
@@ -182,12 +205,8 @@ class ScenarioRunArgs {
   /// silently passing in English.
   final ScenarioAssignment? assignment;
 
-  /// Capture pixels at all. False for a probe pass — a translation budget run
-  /// reads its answers off the walk (`didExceedMaxLines`, the keys artifact)
-  /// and rasterizing frames nobody looks at is most of a capture's cost. The
-  /// step still emits: tree, keys and texts are written as ever, only the
-  /// image is skipped.
-  final bool capturePixels;
+  /// Which steps get a picture — see [ScenarioPixels].
+  final ScenarioPixels pixels;
 
   /// Pad every translation read — the max-length probe. The number is a rung
   /// in `[1, 100]`: `percent` of each value's own ceiling, which is larger

@@ -452,8 +452,11 @@ void _declare(
 /// Photographs the settled screen into [output] and reads the tree it drew,
 /// answering with the paths and the picture's dimensions.
 ///
-/// Raw rgba, never PNG — the comparison reads pixels and encoding is ~80% of
-/// what a capture costs, the same measurement the scenario capture cites. The
+/// Raw rgba, never PNG — the comparison reads pixels, and encoding them here
+/// only to decode them again costs ~7.5ms a picture out and ~0.75ms back;
+/// `fw compare` is a CLI command, so the decode would have no engine codec
+/// and would fall to `package:image`. Same reasoning as the scenario
+/// capture's, and the numbers are on `ScenarioRunArgs.captureRaw`. The
 /// rect is physical and the output logical, which is also the scenario rule:
 /// the root layer's coordinates have the device-pixel-ratio transform inside
 /// them, so a 3× canvas captured at face value saves its top-left ninth.

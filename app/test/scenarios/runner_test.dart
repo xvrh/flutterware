@@ -396,8 +396,8 @@ void main() {
         );
         expect(_pngSize(_lastPng(native)), (393 * 3, 852 * 3));
 
-        // Raw skips PNG encoding — ~80% of a capture's cost — and writes
-        // bare rgba8888, width×height×4, exactly as the step reports.
+        // Raw skips PNG encoding — ~7.5ms a picture — and writes bare
+        // rgba8888, width×height×4, exactly as the step reports.
         var raw = await runner.run(
           outDir: outDir,
           file: 'test/scenarios/axes_probe_test.dart',
@@ -412,6 +412,28 @@ void main() {
         expect(rawStep['image'] as String, endsWith('.raw'));
         expect((rawStep['width'], rawStep['height']), (375, 667));
         expect(File(rawStep['image']! as String).lengthSync(), 375 * 667 * 4);
+
+        // A step with no picture reports no digest. It has to: every one of
+        // them would digest the same empty bytes, and `compareScenarioRuns`
+        // counts a step it can read a digest off as compared — so drift would
+        // vouch for screens nobody photographed. The tree still rides along,
+        // which is the whole point of a pixel-less pass.
+        var blind = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/axes_probe_test.dart',
+          scenario: 'Probe',
+          axes: const ScenarioAxes(device: 'iphone-se'),
+          pixels: ScenarioPixels.none,
+        );
+        var blindStep =
+            (((blind['scenarios']! as List).single as Map)['steps']! as List)
+                    .last
+                as Map;
+        expect(blindStep['format'], 'none');
+        expect(blindStep['image'], isNull);
+        expect(blindStep['digest'], isNull);
+        expect(blindStep['tree'], isNotNull);
+        expect((blindStep['width'], blindStep['height']), (375, 667));
       } finally {
         probe.deleteSync();
       }

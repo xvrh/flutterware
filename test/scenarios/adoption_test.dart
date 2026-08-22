@@ -293,7 +293,10 @@ void main() {
   });
 
   group('a probe pass captures no pixels', () {
-    setUp(() => scenarioRunArgs = const ScenarioRunArgs(capturePixels: false));
+    setUp(
+      () =>
+          scenarioRunArgs = const ScenarioRunArgs(pixels: ScenarioPixels.none),
+    );
     tearDown(() => scenarioRunArgs = null);
     scenario('so there are no bytes to prove an adoption on', (s) async {
       await s.pumpWidget(const _App());

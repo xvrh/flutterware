@@ -28,9 +28,25 @@ class ShotCache {
   bool has(String key) => File(_pathFor(key)).existsSync();
 
   /// The picture filed under [key], or null when nothing is.
+  ///
+  /// Touches the file on the way past, which is what makes [sweep]'s eviction
+  /// a real LRU rather than a first-in-first-out. Without it the entries that
+  /// survive would be the most recently *written* ones — and this cache's
+  /// whole point is the opposite: a base commit's shots are written once and
+  /// then hit by every comparison against it for weeks, so they are exactly
+  /// what a write-ordered sweep would throw away first. One `utimes` against a
+  /// multi-megabyte read is not a cost worth measuring.
   Uint8List? read(String key) {
     var file = File(_pathFor(key));
-    return file.existsSync() ? file.readAsBytesSync() : null;
+    if (!file.existsSync()) return null;
+    var bytes = file.readAsBytesSync();
+    try {
+      file.setLastModifiedSync(DateTime.now());
+    } on FileSystemException {
+      // A read-only store, or a file another process just swept. The bytes are
+      // in hand either way, and refreshing an age is not worth an exception.
+    }
+    return bytes;
   }
 
   ShotRecord? meta(String key) {
@@ -88,6 +104,112 @@ class ShotCache {
   /// wants to do.
   String _pathFor(String key) =>
       p.join(root, key.substring(0, 2), key.substring(2, 4), key);
+
+  /// Drops what nobody has read in [keepFor], then whatever is still over
+  /// [maxBytes], oldest first. Answers how many entries it removed.
+  ///
+  /// Nothing evicted this store, ever — no sweep, no cap, no age. It is shared
+  /// by every worktree on the machine and it holds **raw** rgba, which is the
+  /// right format for a diff that reads every pixel and the wrong one to keep
+  /// forever: a frame is one to three megabytes, and one measured machine had
+  /// reached 340MB of them.
+  ///
+  /// **Age first, size second, and both are needed.** Age is what actually
+  /// accumulates here: a commit gets compared for a week and then nobody ever
+  /// asks about it again, and no size cap large enough to be useful will ever
+  /// notice. The cap is the backstop for the other shape — one enormous
+  /// catalog compared repeatedly inside the window — and it is deliberately
+  /// generous, because evicting an entry that is about to be asked for costs a
+  /// whole render pass where keeping it costs a megabyte.
+  ///
+  /// **An entry is its group.** The bytes, the `.json` beside them and the
+  /// `.tree.json` beside that are one render and are dropped together;
+  /// [has] answers off the bytes, so a half-swept entry would be re-rendered
+  /// with its stale record still on disk. A `.part` left by a killed write is
+  /// litter and goes on age alone.
+  ///
+  /// Every failure is swallowed per entry, as housekeeping should be.
+  int sweep({
+    Duration keepFor = const Duration(days: 14),
+    int maxBytes = 2 * 1024 * 1024 * 1024,
+  }) {
+    var groups = <String, _Entry>{};
+    var cutoff = DateTime.now().subtract(keepFor);
+    List<FileSystemEntity> found;
+    try {
+      found = Directory(root).listSync(recursive: true);
+    } on FileSystemException {
+      return 0;
+    }
+
+    for (var entity in found) {
+      if (entity is! File) continue;
+      FileStat stat;
+      try {
+        stat = entity.statSync();
+      } on FileSystemException {
+        continue;
+      }
+      var group = groups.putIfAbsent(_groupOf(entity.path), _Entry.new);
+      group.files.add(entity);
+      group.bytes += stat.size;
+      if (stat.modified.isAfter(group.touched)) group.touched = stat.modified;
+    }
+
+    var total = 0;
+    var live = <_Entry>[];
+    var deleted = 0;
+    for (var group in groups.values) {
+      if (group.touched.isBefore(cutoff)) {
+        if (group.delete()) deleted++;
+        continue;
+      }
+      total += group.bytes;
+      live.add(group);
+    }
+
+    if (total <= maxBytes) return deleted;
+    live.sort((a, b) => a.touched.compareTo(b.touched));
+    for (var group in live) {
+      if (total <= maxBytes) break;
+      if (group.delete()) {
+        total -= group.bytes;
+        deleted++;
+      }
+    }
+    return deleted;
+  }
+
+  /// The path an entry's files share: the bytes' own path, which its two
+  /// sidecars extend.
+  static String _groupOf(String path) {
+    for (var suffix in const ['.tree.json', '.json', '.part']) {
+      if (path.endsWith(suffix)) {
+        return path.substring(0, path.length - suffix.length);
+      }
+    }
+    return path;
+  }
+}
+
+/// One render's files, as [ShotCache.sweep] accounts for them.
+class _Entry {
+  final files = <File>[];
+  var bytes = 0;
+  var touched = DateTime.fromMillisecondsSinceEpoch(0);
+
+  bool delete() {
+    var any = false;
+    for (var file in files) {
+      try {
+        file.deleteSync();
+        any = true;
+      } on FileSystemException {
+        // Swept by another comparison already, which is the expected race.
+      }
+    }
+    return any;
+  }
 }
 
 /// What a cached picture is, beyond its bytes.
@@ -110,9 +232,10 @@ class ShotRecord {
 
   /// `raw` — rgba8888 rows, [width]×[height]×4 — or `png`.
   ///
-  /// Raw is what a comparison stores: PNG *encoding* is ~80% of a capture's
-  /// cost at 1×, the diff reads pixels rather than files, and only the handful
-  /// of pictures that end up on screen are ever encoded.
+  /// Raw is what a comparison stores: the diff reads pixels rather than files,
+  /// so a PNG would be encoded on the way in and decoded straight back out,
+  /// and only the handful of pictures that end up on screen are ever encoded.
+  /// What that costs is the disk, which is [ShotCache.sweep]'s problem.
   final String format;
 
   final int width;

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 
 import 'artifact.dart';
@@ -477,6 +480,29 @@ class ComparisonController extends ChangeNotifier {
     } on Object catch (error) {
       if (_disposed) return;
       half.refuse(_firstLine(error));
+    } finally {
+      unawaited(_sweepShots());
+    }
+  }
+
+  /// Trims the shared shot cache, off this isolate, and says nothing about it.
+  ///
+  /// At the end of a run rather than the start of one: this is where the cache
+  /// just grew, and a sweep that ran first would be deciding what to keep
+  /// without knowing what the run was about to ask for. A cancelled or refused
+  /// run gets it too — it rendered and cached whatever it reached before it
+  /// stopped.
+  ///
+  /// On its own isolate because the walk is `statSync` per file and this one
+  /// is drawing the rows. Nothing waits for the answer and nothing reports it:
+  /// the entries it drops are ones no comparison has read in a fortnight, and
+  /// a failure to drop them is not news.
+  Future<void> _sweepShots() async {
+    var root = environment.shots.root;
+    try {
+      await Isolate.run(() => ShotCache(root).sweep());
+    } on Object {
+      // Housekeeping.
     }
   }
 

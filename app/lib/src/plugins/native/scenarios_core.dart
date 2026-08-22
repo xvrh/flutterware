@@ -18,6 +18,7 @@ import '../../previews/devices.dart' show orientationParameterDoc;
 import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
+import '../../scenarios/run_dirs.dart';
 import '../../scenarios/runner.dart';
 import '../../scenarios/web_export.dart';
 import '../../scenarios/web_report.dart';
@@ -413,8 +414,19 @@ class ScenariosCore extends PluginCore {
       'panel-${DateTime.now().millisecondsSinceEpoch}',
     );
     try {
-      // Raw pixels for the panel: it displays them natively, and skipping
-      // PNG encoding is what makes a 50-step run feel instantaneous.
+      // Raw exactly when the recording pays for it, which is the line the
+      // measurement drew. A recording turns 31 pictures into 371, and PNG
+      // charges ~7.5ms of encoder for every one:
+      //
+      // |            | raw | PNG |
+      // |------------|-----|-----|
+      // | shots only | 404ms / 48MB | 587ms / 0.3MB |
+      // | recording  | **721ms** / 489MB | 3080ms / 6MB |
+      //
+      // Recording, raw is 4.3× and there is nothing to discuss. Without one it
+      // is 31% for 160× the bytes, which is not a trade worth making: the
+      // canvas decodes a PNG thumbnail in 0.75ms and "copy as PNG" stops being
+      // a `package:image` re-encode. So the flag follows the recorder.
       var report = await _runnerFor(package).run(
         outDir: outDir,
         file: file,
@@ -422,7 +434,7 @@ class ScenariosCore extends PluginCore {
         axes: axes,
         unspecifiedDevice: defaultScenarioDeviceId,
         captureScale: captureScaleFor(package),
-        captureRaw: true,
+        captureRaw: recordMotion,
         recordInterval: recordMotion ? panelMotionInterval : null,
         recordMaxFrames: panelMotionMaxFrames,
       );
@@ -453,6 +465,15 @@ class ScenariosCore extends PluginCore {
         steps: outcome.steps,
         outcome: outcome,
         output: outDir,
+      );
+      // Only once the page is pointed at this run — and every *other* live
+      // panel run is named too. A session runs one scenario after another and
+      // each keeps its own directory in `_panelRuns`, so "the newest few" is
+      // the wrong rule on its own: the fifth scenario you ran would sweep away
+      // the steps the first one is still showing.
+      _sweepRuns(
+        package,
+        protect: {outDir, for (var run in _panelRuns.values) ?run.output},
       );
     } catch (error) {
       // The steps captured before the failure stay: the last one is the
@@ -838,9 +859,12 @@ class ScenariosCore extends PluginCore {
               description:
                   '`png` (the default) is what everything opens. `raw` — '
                   'bare rgba8888 rows, width×height×4 bytes as the result '
-                  'reports them — skips PNG encoding, which is ~80% of a '
-                  "capture's cost; for pipelines that consume pixels "
-                  'directly. `none` skips pixels entirely — trees, keys and '
+                  'reports them — skips the encoder, which costs ~7.5ms a '
+                  'picture, and hands a pipeline pixels with nothing to '
+                  'decode. Worth it where the pictures are many or the '
+                  'reader has no codec: measured, 4.3× on a run recording '
+                  'motion and 31% on one that is not, for 80× to 160× the '
+                  'bytes. `none` skips pixels entirely — trees, keys and '
                   'texts are still written; for probe passes that read the '
                   'walk rather than the frames.',
               options: [
@@ -848,6 +872,22 @@ class ScenariosCore extends PluginCore {
                 ActionOption('raw'),
                 ActionOption('none'),
               ],
+            ),
+            const ActionParameter(
+              'pixels',
+              'Which steps get a picture',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  '`all` (the default) photographs every step. `keyed` '
+                  'photographs only the steps whose read found a translation '
+                  'key, plus any step that failed — what a translation export '
+                  'wants, since it files a shot against a string id and a '
+                  'screen showing no key can contribute none. Measured on the '
+                  'example suite, 23 of 62 steps showed no key. Orthogonal to '
+                  '`format`, which says how the pixels are encoded; '
+                  '`format: none` still means no pixels at all.',
+              options: [ActionOption('all'), ActionOption('keyed')],
             ),
             const ActionParameter(
               'expand',
@@ -2619,6 +2659,10 @@ class ScenariosCore extends PluginCore {
         format != 'none') {
       throw ArgumentError.value(format, 'format', 'accepted: png, raw, none');
     }
+    var pixels = arguments['pixels'];
+    if (pixels != null && pixels != 'all' && pixels != 'keyed') {
+      throw ArgumentError.value(pixels, 'pixels', 'accepted: all, keyed');
+    }
     var expand = switch (arguments['expand']) {
       null => null,
       num value => value.toInt(),
@@ -2753,7 +2797,13 @@ class ScenariosCore extends PluginCore {
             unspecifiedDevice: defaultScenarioDeviceId,
             captureScale: captureScale ?? captureScaleFor(path),
             captureRaw: format == 'raw',
-            capturePixels: format != 'none',
+            // `format: none` wins: it says there are no pixels, and `keyed`
+            // only ever narrows which steps have them.
+            pixels: format == 'none'
+                ? ScenarioPixels.none
+                : pixels == 'keyed'
+                ? ScenarioPixels.keyed
+                : ScenarioPixels.all,
             expandTranslations: expand,
             narrowestDevice: deviceChoice == 'narrowest',
             clock: clock,
@@ -2823,7 +2873,32 @@ class ScenariosCore extends PluginCore {
       ],
       axes: anyFannedOut || axes.isEmpty ? null : axes.toParams(),
     );
+    // After the reports are on disk, so a sweep can never race the thing it is
+    // meant to keep. The directories this request wrote are named explicitly
+    // rather than trusted to sort newest — `--output` may point anywhere,
+    // including at a name that looks stamped.
+    for (var path in paths) {
+      _sweepRuns(path, protect: {for (var run in results) run.output});
+    }
     return _carrying(whole, steps);
+  }
+
+  /// Trims this package's old run directories, and says nothing about it.
+  ///
+  /// A run writes a directory per invocation and a recorded panel session
+  /// writes a large one; nothing ever removed them, and a single worktree here
+  /// had reached 848MB. Called where a run *finishes* rather than once per
+  /// process, because that is where the litter is made.
+  void _sweepRuns(String path, {Set<String> protect = const {}}) {
+    try {
+      sweepScenarioRuns(
+        host.workspace.packageFor(path).directory.path,
+        protect: protect,
+      );
+    } on Object {
+      // Housekeeping. A package that cannot be resolved, or a directory
+      // somebody else is holding, is not worth failing a finished run over.
+    }
   }
 
   /// Writes the package's own run beside its artifacts and names the file.

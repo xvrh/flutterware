@@ -160,10 +160,18 @@ class ScenariosRunner {
   Future<ScenariosPlan> plan({ImportGraph? graph}) async {
     // The listing is the expensive-looking part of a scenario plan: each side
     // answers from a live harness, so the first ask builds and boots one.
+    //
+    // Both at once, because they are two harnesses: a separate checkout, a
+    // separate build directory and a separate `flutter_tester` each, sharing
+    // nothing but the machine. Asking one and then the other spent the base
+    // side's build waiting on this side's.
     onProgress?.call('listing the scenarios on both sides');
-    var headIds = await source.list(base: false);
-    cancel?.check();
-    var baseIds = await source.list(base: true);
+    var listed = await Future.wait([
+      source.list(base: false),
+      source.list(base: true),
+    ]);
+    var headIds = listed[0];
+    var baseIds = listed[1];
     cancel?.check();
     if (only case var only?) {
       headIds = [
@@ -228,6 +236,13 @@ class ScenariosRunner {
   /// replaying the whole head side and then the whole base side would double
   /// the time before the first row could be answered, and the first row is what
   /// a reader is waiting for.
+  ///
+  /// The two sides of one scenario run **together**. They are two harnesses on
+  /// two checkouts with a build directory each, so there is nothing to
+  /// serialize them for — and a replay is where a comparison spends its time.
+  /// `Future.wait` rather than a record's `.wait`: a side that fails is
+  /// usually a compile error, and the message a reader needs is that error
+  /// itself rather than a `ParallelWaitError` wrapping it.
   Future<ScenarioResults> run({
     required String outDir,
     ScenariosPlan? from,
@@ -253,12 +268,18 @@ class ScenariosRunner {
       done++;
       var name = id.contains('#') ? id.substring(id.indexOf('#') + 1) : id;
       var count = '$done of ${plan.toRun.length}';
-      onProgress?.call('replaying "$name" on the base side · $count');
-      var base = await source.shots(id, base: true, outDir: outDir);
-      cancel?.check();
-      onProgress?.call('replaying "$name" on this side · $count');
-      var head = await source.shots(id, base: false, outDir: outDir);
-      report(ScenarioComparison.of(scenario: id, base: base, head: head));
+      onProgress?.call('replaying "$name" on both sides · $count');
+      var replayed = await Future.wait([
+        source.shots(id, base: true, outDir: outDir),
+        source.shots(id, base: false, outDir: outDir),
+      ]);
+      report(
+        ScenarioComparison.of(
+          scenario: id,
+          base: replayed[0],
+          head: replayed[1],
+        ),
+      );
     }
 
     return ScenarioResults.of(

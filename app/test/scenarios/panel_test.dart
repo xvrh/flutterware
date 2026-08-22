@@ -1414,7 +1414,7 @@ class _FakeRunner extends ScenarioRunner {
     String? unspecifiedDevice,
     double? captureScale,
     bool captureRaw = false,
-    bool capturePixels = true,
+    ScenarioPixels pixels = ScenarioPixels.all,
     int? expandTranslations,
     bool narrowestDevice = false,
     bool captureNative = false,
