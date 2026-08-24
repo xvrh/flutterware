@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/src/inspect/node.dart';
 
 import '../inspect/node_highlight.dart';
+import '../ui/age.dart';
 import '../ui/design/design.dart';
 import '../ui/theme.dart';
 
@@ -32,6 +34,8 @@ class RunScreenPicture extends StatelessWidget {
     required this.highlight,
     required this.tree,
     required this.canvas,
+    this.readAt,
+    this.movedSince = false,
   });
 
   final ui.Image? picture;
@@ -55,6 +59,22 @@ class RunScreenPicture extends StatelessWidget {
   /// What the picture frames, in the app's logical pixels — see
   /// [canvasOf].
   final InspectLayout? canvas;
+
+  /// When the picture was taken. Null before the first reading lands.
+  ///
+  /// Said out loud because this pane is a photograph of a live app and looks
+  /// exactly like a mirror of one. Everything else about the design — the
+  /// button, the exact boxes over the picture — depends on the reader knowing
+  /// which of the two they are looking at, and a picture cannot say so.
+  final DateTime? readAt;
+
+  /// The cockpit has since been told the app moved and has not re-read.
+  ///
+  /// Only ever true of a change somebody *told* the cockpit about — see
+  /// `RunCore.screenClockOf`. False is "nothing has reported a change", never
+  /// "the screen is up to date", which is why it softens the caption rather
+  /// than replacing it.
+  final bool movedSince;
 
   /// The box the picture frames, in the app's own logical pixels — the
   /// [canvas] every rect is scaled against.
@@ -115,6 +135,7 @@ class RunScreenPicture extends StatelessWidget {
               ),
             ),
             const Gap(FwSpacing.sm),
+            _Freshness(readAt: readAt, movedSince: movedSince),
             Text(
               'rendered by the app — platform views will not appear',
               textAlign: TextAlign.center,
@@ -136,6 +157,64 @@ class RunScreenPicture extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// How old the picture is, and whether anything has reported a change since.
+///
+/// It keeps its own clock, and that is the point of it being a widget at all:
+/// an age drawn once is wrong a second later, and rebuilding the pane around
+/// it would re-lay-out a decoded image and a widget tree to move one word.
+/// Nothing above this line rebuilds.
+class _Freshness extends StatefulWidget {
+  const _Freshness({required this.readAt, required this.movedSince});
+
+  final DateTime? readAt;
+  final bool movedSince;
+
+  @override
+  State<_Freshness> createState() => _FreshnessState();
+}
+
+class _FreshnessState extends State<_Freshness> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // A second, because the first ten of them are the ones a reader is
+    // actually judging — after that the wording changes by the minute and an
+    // extra rebuild costs a `Text`.
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var age = ageOf(widget.readAt);
+    if (age == null) return const SizedBox.shrink();
+    var colors = context.colors;
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: 'read $age'),
+          if (widget.movedSince)
+            TextSpan(
+              text: ' · the app has moved since',
+              style: TextStyle(color: colors.warningText),
+            ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+      style: context.type.micro.copyWith(color: colors.mut2),
     );
   }
 }

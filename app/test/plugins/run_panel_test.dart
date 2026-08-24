@@ -56,7 +56,10 @@ void main() {
   });
 
   /// Mounts the panel on the Screen tab against one fake reading.
-  Future<void> pumpScreenTab(
+  ///
+  /// Answers with the core and the handle, so a test can go on doing things
+  /// to the run the pane is watching.
+  Future<(RunCore, RunHandle)> pumpScreenTab(
     WidgetTester tester,
     Uint8List? image, {
     InspectTree? tree,
@@ -139,7 +142,79 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await tester.pump();
+    return (core, handle);
   }
+
+  group('freshness', () {
+    testWidgets('the reading says how old it is', (tester) async {
+      await pumpScreenTab(tester, Uint8List.fromList(_onePixelPng));
+
+      // A photograph of a live app looks exactly like a mirror of one, and
+      // only the caption separates them.
+      expect(find.text('read just now'), findsOneWidget);
+    });
+
+    testWidgets('what the cockpit did to the app, the pane re-reads', (
+      tester,
+    ) async {
+      var (core, handle) = await pumpScreenTab(
+        tester,
+        Uint8List.fromList(_onePixelPng),
+      );
+
+      var reads = 0;
+      var first = core.debugRead!;
+      core.debugRead = (h) {
+        reads++;
+        return first(h);
+      };
+
+      // Stands in for the VM service round trip. A reload that returned is a
+      // reload that happened.
+      core.debugControl = (_, _) async {};
+      await core.control('reload', handle);
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+
+      expect(reads, 1, reason: 'the reload re-read the app');
+      expect(find.text('read just now'), findsOneWidget);
+      // Nothing to warn about: the picture is of the app as it now is.
+      expect(find.textContaining('has moved since'), findsNothing);
+    });
+
+    testWidgets("the human's own taps are reported, not chased", (
+      tester,
+    ) async {
+      var (core, handle) = await pumpScreenTab(
+        tester,
+        Uint8List.fromList(_onePixelPng),
+      );
+
+      var reads = 0;
+      var first = core.debugRead!;
+      core.debugRead = (h) {
+        reads++;
+        return first(h);
+      };
+
+      // What the beat poller collects, up to once a second. Re-reading on
+      // each would be a render and a full tree walk per tap.
+      core.debugCollectBeats(handle, [
+        {
+          'verb': 'tap',
+          'target': '"Pay"',
+          'at': DateTime.now().toIso8601String(),
+        },
+      ]);
+      await tester.pump();
+
+      expect(reads, 0, reason: 'a human tap does not spend a reading');
+      expect(find.textContaining('the app has moved since'), findsOneWidget);
+    });
+  });
 
   testWidgets('the screen pane finishes its read and draws both halves', (
     tester,

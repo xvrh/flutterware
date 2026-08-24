@@ -329,6 +329,7 @@ class _RunViewState extends State<_RunView> {
               key: _screen,
               core: core,
               handle: handle,
+              clock: core.screenClockOf(handle),
               onReadingChanged: () {
                 setState(() {});
                 widget.onReading(_screen.currentState?.isReading ?? false);
@@ -721,6 +722,14 @@ class _NotYet extends StatelessWidget {
   );
 }
 
+/// PROTOTYPE SWITCH — flip and hot reload to compare the layouts.
+///
+/// 0: the shipped three columns — picture, tree, detail.
+/// 1: the picture as a full-width canvas with an [InspectDock] under it,
+///    which is what previews and the scenarios step page draw.
+/// 2: the columns kept, with the dock's tab strip over the right-hand pane.
+const _layout = 0;
+
 /// The picture and the widget tree, side by side — the design's Screen tab.
 ///
 /// One reading rather than two. Both come off a single `getRootWidgetTree` in
@@ -737,11 +746,18 @@ class _ScreenTab extends StatefulWidget {
     super.key,
     required this.core,
     required this.handle,
+    required this.clock,
     required this.onReadingChanged,
   });
 
   final RunCore core;
   final RunHandle handle;
+
+  /// What the cockpit knows about the app moving — see
+  /// [RunCore.screenClockOf]. Read here rather than in the pane so that a
+  /// rebuild is the only wire: the page already rebuilds on every core
+  /// notification, and `didUpdateWidget` is where a pane is told what changed.
+  final (int moved, int byCockpit) clock;
 
   /// So the strip above can swap its refresh button for a spinner. The pane
   /// owns the reading; the page only needs to know one is happening.
@@ -768,10 +784,24 @@ class _ScreenTabState extends State<_ScreenTab> {
   String? _error;
   var _loading = false;
 
+  /// When the reading on screen was taken, and what the cockpit's `moved`
+  /// count stood at then. Together they are the caption: how old the picture
+  /// is, and whether anything has reported a change it does not show.
+  DateTime? _readAt;
+  var _readAtMoved = 0;
+
   /// How much of the pane the picture takes. Wider than the first build's
   /// fixed 240: a phone screenshot at that width is a thumbnail, and the tree
   /// beside it never needed the rest.
   double _split = 0.34;
+
+  /// Prototype only — the dock's open tab and whether it is folded away.
+  var _tab = 'elements';
+  var _collapsed = false;
+
+  /// Whether the human has moved the grip. Until they do, the split is
+  /// chosen from the shape of the app — see [_fitSplit].
+  var _splitIsMine = false;
 
   bool get isReading => _loading;
 
@@ -808,8 +838,21 @@ class _ScreenTabState extends State<_ScreenTab> {
       _tree = null;
       _fromGuest = false;
       _error = null;
+      _readAt = null;
+      _readAtMoved = 0;
       _read();
+      return;
     }
+    // **What the cockpit did, the cockpit shows.** A hot reload, a restart or
+    // a drive step is the user asking for the app to be different; leaving a
+    // picture of the old one up is the pane disagreeing with the button that
+    // was just pressed.
+    //
+    // A human's own taps deliberately do *not* land here. They arrive through
+    // the beat poller at up to one batch a second, and re-reading on each
+    // would be a render and a full tree walk per tap — polling, wearing a
+    // finger. Those move `moved` alone, and the caption says so.
+    if (widget.clock.$2 != old.clock.$2 && !_loading) _read();
   }
 
   @override
@@ -847,6 +890,12 @@ class _ScreenTabState extends State<_ScreenTab> {
         _tree = read.tree;
         _fromGuest = read.fromGuest;
         _error = null;
+        _readAt = DateTime.now();
+        if (!_splitIsMine) _split = _fitSplit(read.tree) ?? _split;
+        // The count as it stands *now*, not as it stood when the read was
+        // asked for: a tap that arrived while the picture was being taken is
+        // a tap the picture may well show.
+        _readAtMoved = widget.clock.$1;
       });
     } on Object catch (e) {
       if (!mounted) return;
@@ -890,6 +939,7 @@ class _ScreenTabState extends State<_ScreenTab> {
         message: 'Its widget tree, and a picture of what it is showing.',
       );
     }
+    if (_layout == 1) return _docked(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         var width = (constraints.maxWidth * _split)
@@ -907,11 +957,14 @@ class _ScreenTabState extends State<_ScreenTab> {
                 highlight: _highlight,
                 tree: _tree,
                 canvas: RunScreenPicture.canvasOf(_tree),
+                readAt: _readAt,
+                movedSince: widget.clock.$1 != _readAtMoved,
               ),
             ),
             InspectSplitGrip(
               axis: Axis.vertical,
               onDrag: (delta) => setState(() {
+                _splitIsMine = true;
                 _split = ((width + delta) / constraints.maxWidth).clamp(
                   0.15,
                   0.7,
@@ -919,30 +972,132 @@ class _ScreenTabState extends State<_ScreenTab> {
               }),
             ),
             Expanded(
-              child: ElementsView(
-                root: _tree?.root,
-                placeholder: _loading
-                    ? 'Reading the app…'
-                    : 'The app has not built a frame yet.',
-                highlight: _highlight,
-                // Paths are shortened against the worktree, and live in the
-                // detail pane rather than on every row — which is what the
-                // shared view does and what the run panel's own tree did not.
-                displayRoot: widget.core.host.worktree.path,
-                // Per read, because this pane has two sources. The VM
-                // service hands out structure and creation locations and
-                // nothing else; the guest walks the app's own elements, so on
-                // a run launched through flutterware a node with no box
-                // really has none. Said here rather than inferred from empty
-                // fields.
-                readsWidgets: _fromGuest,
-              ),
+              child: _layout == 2
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        InspectTabStrip(
+                          tabs: const [
+                            InspectDockTab(
+                              id: 'elements',
+                              label: 'Elements',
+                              body: _nothing,
+                            ),
+                            InspectDockTab(
+                              id: 'semantics',
+                              label: 'Semantics',
+                              body: _nothing,
+                            ),
+                          ],
+                          current: _tab,
+                          onSelect: (id) => setState(() => _tab = id),
+                        ),
+                        Expanded(
+                          child: _tab == 'elements'
+                              ? _elements()
+                              : const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(FwSpacing.xl),
+                                    child: Text(
+                                      'PROTOTYPE — the guest already answers '
+                                      '`ext.flutterware.semantics`; the run '
+                                      'inspector does not ask it yet.',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ],
+                    )
+                  : _elements(),
             ),
           ],
         );
       },
     );
   }
+
+  /// PROTOTYPE — the share of the width that fits the app's own shape.
+  ///
+  /// A fixed default cannot be right for both: dividing the pane *vertically*
+  /// gives the picture the full height and a slice of the width, which suits a
+  /// phone and starves a desktop window. Measured on this pane at 872×737 with
+  /// the shipped 0.34: a macOS app drew at 280×227 where a phone would draw at
+  /// 280×607 — the same slice, two and a half times the picture.
+  ///
+  /// So the slice follows the shape. Capped at 0.55 rather than solved
+  /// exactly, because a landscape app solves to more than the whole pane and
+  /// the tree beside it still has to be usable.
+  double? _fitSplit(InspectTree? tree) {
+    var canvas = RunScreenPicture.canvasOf(tree);
+    if (canvas == null || canvas.width <= 0 || canvas.height <= 0) return null;
+    var box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || box.size.width <= 0) return null;
+    var wanted = box.size.height * (canvas.width / canvas.height);
+    // The inspector's own floor, in pixels rather than as a fraction: what
+    // the tree needs to show a name *and* a size is about 330, and it takes
+    // 0.62 of this column, so the column needs about 530. A fraction would
+    // promise that on a wide window and break it on a narrow one.
+    var ceiling = math.max(180.0, box.size.width - 530);
+    return (math.min(wanted, ceiling) / box.size.width).clamp(0.15, 0.7);
+  }
+
+  /// The tree and its detail pane, whichever layout is holding them.
+  Widget _elements() => ElementsView(
+    root: _tree?.root,
+    placeholder: _loading
+        ? 'Reading the app…'
+        : 'The app has not built a frame yet.',
+    highlight: _highlight,
+    // Paths are shortened against the worktree, and live in the detail pane
+    // rather than on every row — which is what the shared view does and what
+    // the run panel's own tree did not.
+    displayRoot: widget.core.host.worktree.path,
+    // Per read, because this pane has two sources. The VM service hands out
+    // structure and creation locations and nothing else; the guest walks the
+    // app's own elements, so on a run launched through flutterware a node with
+    // no box really has none. Said here rather than inferred from empty fields.
+    readsWidgets: _fromGuest,
+  );
+
+  static Widget _nothing(BuildContext context) => const SizedBox.shrink();
+
+  /// PROTOTYPE — the picture as the canvas, the tree in a dock under it.
+  Widget _docked(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: RunScreenPicture(
+            picture: _picture,
+            undecodable: _undecodable,
+            loading: _loading,
+            highlight: _highlight,
+            tree: _tree,
+            canvas: RunScreenPicture.canvasOf(_tree),
+            readAt: _readAt,
+            movedSince: widget.clock.$1 != _readAtMoved,
+          ),
+        ),
+        InspectDock(
+          available: constraints.maxHeight,
+          current: _tab,
+          collapsed: _collapsed,
+          onChanged: (current, collapsed) => setState(() {
+            _tab = current;
+            _collapsed = collapsed;
+          }),
+          tabs: [
+            InspectDockTab(
+              id: 'elements',
+              label: 'Elements',
+              body: (context) => _elements(),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 }
 
 /// Bytes to a frame, or null.

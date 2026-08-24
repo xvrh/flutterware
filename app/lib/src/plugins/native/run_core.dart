@@ -3060,6 +3060,19 @@ class RunCore extends PluginCore {
 
   /// Does one thing to one running app. The panel's entry point as well.
   Future<void> control(String action, RunHandle handle) async {
+    await _control(action, handle);
+    // A reload or a restart that *returned* is the cockpit changing the app's
+    // screen, and the Screen pane re-reads on it. Out here rather than beside
+    // the two RPCs so that the stub path counts as well — a test standing in
+    // for the VM service is standing in for a reload that worked — and so
+    // that a throw skips it, which a `finally` would not.
+    if (action == 'reload' || action == 'restart') {
+      _screenMovedBy(handle: handle, cockpit: true);
+      notifyChanged();
+    }
+  }
+
+  Future<void> _control(String action, RunHandle handle) async {
     if (debugControl case var stub?) return stub(action, handle);
     var uri = handle.vmService;
     if (uri == null && action != 'stop') {
@@ -3093,6 +3106,8 @@ class RunCore extends PluginCore {
           // which is the worst of both.
           _stopWatchingBeats(handle);
           _humanSinceStep.remove(_driveKey(handle));
+          _screenMoved.remove(_driveKey(handle));
+          _screenMovedByCockpit.remove(_driveKey(handle));
           unawaited(_driveSessions.remove(_driveKey(handle))?.close());
           unawaited(_nativeSessions.remove(_driveKey(handle))?.close());
           _nativeEchoes.remove(_driveKey(handle));
@@ -3901,6 +3916,38 @@ class RunCore extends PluginCore {
   /// that never arrives.
   static const _humanSinceStepCap = 100;
 
+  /// How many times this run's screen is known to have changed, and how many
+  /// of those the cockpit itself caused.
+  ///
+  /// **Known**, never guessed. An app animates and takes in data with nobody
+  /// touching it, and nothing here pretends to see that — what these count is
+  /// the three moments the cockpit is *told* about: a reload or restart it
+  /// asked for, a drive step it took, and a tap the beat poller collected.
+  /// Anything else moves the app without moving these, which is why the pane
+  /// they feed keeps its button.
+  ///
+  /// Two numbers rather than one because the pane does two different things
+  /// with them. What the cockpit caused it re-reads, because the read is a
+  /// consequence of something the user just asked for. What the *human* did
+  /// it merely reports as stale — re-reading there would be a full render and
+  /// a tree walk per tap, which is polling wearing a finger.
+  final _screenMoved = <String, int>{};
+  final _screenMovedByCockpit = <String, int>{};
+
+  /// See [_screenMoved]. Safe on a handle nothing has moved yet: zero.
+  (int moved, int byCockpit) screenClockOf(RunHandle handle) {
+    var key = _driveKey(handle);
+    return (_screenMoved[key] ?? 0, _screenMovedByCockpit[key] ?? 0);
+  }
+
+  void _screenMovedBy({required RunHandle handle, required bool cockpit}) {
+    var key = _driveKey(handle);
+    _screenMoved[key] = (_screenMoved[key] ?? 0) + 1;
+    if (cockpit) {
+      _screenMovedByCockpit[key] = (_screenMovedByCockpit[key] ?? 0) + 1;
+    }
+  }
+
   /// Collects the human's own steps from [handle] until it stops.
   ///
   /// Idempotent, and it shares the drive session's socket rather than opening
@@ -3940,6 +3987,7 @@ class RunCore extends PluginCore {
     if (pending.length > _humanSinceStepCap) {
       pending.removeRange(0, pending.length - _humanSinceStepCap);
     }
+    if (human.isNotEmpty) _screenMovedBy(handle: handle, cockpit: false);
     notifyChanged();
   }
 
@@ -4236,6 +4284,13 @@ class RunCore extends PluginCore {
         reconciled: reconciled == 0 ? null : reconciled,
       ),
     );
+
+    // `observe` is the one verb that changes nothing, so it is the one verb
+    // that does not make the Screen pane's reading stale.
+    if (((step?['verb'] as String?) ?? verb) != 'observe') {
+      _screenMovedBy(handle: handle, cockpit: true);
+      notifyChanged();
+    }
 
     return RunActResult(
       device: handle.device,
@@ -4879,6 +4934,8 @@ class RunCore extends PluginCore {
     }
     _beatTrackers.clear();
     _humanSinceStep.clear();
+    _screenMoved.clear();
+    _screenMovedByCockpit.clear();
     for (var session in _driveSessions.values) {
       unawaited(session.close());
     }
