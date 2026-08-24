@@ -1686,9 +1686,16 @@ enum _LogBand {
 /// a `SEVERE` and an `INFO` came out the same grey. The level was in the
 /// payload the whole time.
 class _LogRow extends StatelessWidget {
-  const _LogRow(this.event);
+  const _LogRow(this.event, {this.showLogger = true});
 
   final ServerEvent event;
+
+  /// False when every line in the list came from the same logger.
+  ///
+  /// A column that says `example_server` on all eleven rows is 85px of the
+  /// message's width spent saying nothing — and in a request's own Logs tab,
+  /// beside a detail, that is a third of what the message had.
+  final bool showLogger;
 
   @override
   Widget build(BuildContext context) {
@@ -1737,13 +1744,14 @@ class _LogRow extends StatelessWidget {
               ],
             ),
           ),
-          if (p['logger'] case var logger? when '$logger'.isNotEmpty) ...[
-            const Gap(FwSpacing.md),
-            Text(
-              '$logger',
-              style: context.type.micro.copyWith(color: colors.mut3),
-            ),
-          ],
+          if (showLogger)
+            if (p['logger'] case var logger? when '$logger'.isNotEmpty) ...[
+              const Gap(FwSpacing.md),
+              Text(
+                '$logger',
+                style: context.type.micro.copyWith(color: colors.mut3),
+              ),
+            ],
         ],
       ),
     );
@@ -1779,6 +1787,8 @@ class _RequestLogsTabState extends State<_RequestLogsTab> {
             (needle.isEmpty || _summary(log).toLowerCase().contains(needle)))
           log,
     ];
+    var manyLoggers =
+        {for (var log in widget.logs) '${log.payload['logger']}'}.length > 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1803,7 +1813,9 @@ class _RequestLogsTabState extends State<_RequestLogsTab> {
                 horizontal: FwSpacing.xl,
                 vertical: FwSpacing.sm,
               ),
-              children: [for (var log in shown) _LogRow(log)],
+              children: [
+                for (var log in shown) _LogRow(log, showLogger: manyLoggers),
+              ],
             ),
           ),
         ),

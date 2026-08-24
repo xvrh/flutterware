@@ -82,15 +82,19 @@ class FwCodeBlock extends StatelessWidget {
         borderRadius: BorderRadius.circular(context.radii.radiusSmall),
         border: Border.all(color: colors.line),
       ),
-      // The button floats over the text rather than taking a row of its own:
-      // a block of two lines should not be a block of three.
-      child: Stack(
+      // The button gets a gutter rather than floating over the text. Floated,
+      // it sat on top of the last word of every line long enough to need
+      // scrolling — which is every line anybody reaches for the button on.
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          body,
+          Expanded(child: body),
           if (copy)
-            Positioned(
-              top: FwSpacing.xs,
-              right: FwSpacing.xs,
+            Padding(
+              padding: const EdgeInsets.only(
+                top: FwSpacing.xs,
+                right: FwSpacing.xs,
+              ),
               child: CopyIconButton(source),
             ),
         ],

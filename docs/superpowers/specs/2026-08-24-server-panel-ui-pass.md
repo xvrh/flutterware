@@ -269,7 +269,45 @@ in the popover, keeping the `/info` address but off the tab strip.
 to overflow the card in practice. The `_NoInfoHint` teaching snippet is short
 enough to live in the card unchanged.
 
-## 5. What is deliberately not in this pass
+## 5. Filling the panel
+
+Working on this panel means needing one of everything it draws, and curling by
+hand gets you a list of eleven `GET /health`s. `examples/example/bin/example_server.dart`
+drives itself now:
+
+```sh
+cd examples/example && fvm dart run bin/example_server.dart --seed
+```
+
+`GET /demo/seed` fires the same run again, and it is published as a
+`ServerLink` — so it is one click from the panel's own Details popover.
+
+What `_seed` covers, and why each one is there:
+
+| aspect | what produces it |
+|---|---|
+| every method colour | GET / HEAD / POST / PUT / PATCH / DELETE on `/users` |
+| every status band | `/bad-request` 400 … `/maintenance` 503, `/moved` 302, 201, 204 |
+| the N+1 badge and warning | `/users`, four times |
+| a slow request | `/slow`, 300ms |
+| every log level, coloured | FINEST…SHOUT in one burst, before the request noise |
+| a log carrying an exception | `/error`, and `_audit.severe` with a `FileSystemException` |
+| more than one logger | `example_server`, `.audit`, `.cache` |
+| a redacted header | the seeder sends `authorization` |
+| a request body that folds | `POST /users`, with an explicit `contentLength` — without it the client chunks, shelf reports no length, and the capture cut declines |
+| a response body that folds | `/report`, five keys deep |
+| a captured non-JSON body | `/report.xml` |
+| "not captured", both reasons | `/avatar.png` (binary), `/huge` (over the 32k cap) |
+| nine query shapes | select / insert / update / delete / a grouped aggregate |
+| a query with params | `/slow` and the aggregate |
+| an unknown channel | `/cache` emits on `cache`, which the GUI has a fallback for and nothing was reaching |
+| structured config | `Limits`, which the Details popover folds into a `JsonView` |
+| two connection kinds | `toy` (masked) and `redis` (nothing to mask) |
+
+`--seed` is opt-in: this file is also the copy-paste adapter demo, and a demo
+that fires forty requests at itself on boot buries the one you sent by hand.
+
+## 6. What is deliberately not in this pass
 
 - The SQL tab still has no badge. It costs a normalisation pass over every event
   to compute, which l. 335 declines to pay per frame, and that reasoning still
