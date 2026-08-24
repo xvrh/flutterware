@@ -70,11 +70,21 @@ var _currentListing = _listing;
 /// change what the config prints between loads.
 late _StubLoader _loader;
 
+/// A facts controller a test can move by hand, without a probe and without
+/// touching the filesystem.
+class _BumpableFacts extends WorktreeFactsController {
+  _BumpableFacts({required super.repoRoot, required super.probe});
+
+  /// Stands in for a probe landing — which is all the shell ever sees of one.
+  void bump() => notifyListeners();
+}
+
 ShellController _controller({
   String manifest = _manifestJson,
   int manifestExit = 0,
   Map<String, PluginCoreFactory>? cores,
   WorktreeFactsStore? factsStore,
+  WorktreeFactsController Function(String repoRoot)? facts,
 }) {
   cores ??= {'a.one': _FakeCore.new, 'a.two': _FakeCore.new};
   _loader = _StubLoader(manifest, manifestExit);
@@ -86,12 +96,14 @@ ShellController _controller({
     manifestLoader: _loader,
     // The shell writes the changes config through the explorer's store, so a
     // test that wants to read it back injects the controller that holds one.
-    worktreeFacts: factsStore == null
-        ? null
-        : (root) => WorktreeFactsController(
-            repoRoot: root,
-            probe: WorktreeFactsProbe(repoRoot: root, store: factsStore),
-          ),
+    worktreeFacts:
+        facts ??
+        (factsStore == null
+            ? null
+            : (root) => WorktreeFactsController(
+                repoRoot: root,
+                probe: WorktreeFactsProbe(repoRoot: root, store: factsStore),
+              )),
     discovery: WorktreeDiscovery(
       runProcess: (_, _, {workingDirectory}) async =>
           ProcessResult(0, 0, _currentListing, ''),
@@ -610,6 +622,99 @@ void main() {
     expect(shell.openWorktrees.map((w) => w.branch), ['main']);
     // Its plugins were disposed, not merely hidden.
     expect(_disposedIds, ['/repo-explorer:a.one', '/repo-explorer:a.two']);
+  });
+
+  /// Why the shell is quiet when nothing on it moved.
+  ///
+  /// Every one of these used to notify. The shell is one notifier under one
+  /// `AnimatedBuilder`, so each of them was the whole window — band, rail and
+  /// panel — rebuilt for something a corner of one screen draws. Measured on
+  /// this app with the window idle and untouched: a 15–40 ms build about twice
+  /// a second, indefinitely.
+  group('an idle shell stays still', () {
+    test('a rescan that finds the same worktrees notifies nobody', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      var notifications = 0;
+      shell.addListener(() => notifications++);
+
+      // What the git watch does all day. It fires for any write under `.git` —
+      // a commit, an index refresh, another window running `git status` — and
+      // the list it re-derives is almost always the list it already had.
+      await shell.rescanWorktrees();
+      expect(notifications, 0);
+    });
+
+    test('a rescan that finds a moved branch does notify', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      var notifications = 0;
+      shell.addListener(() => notifications++);
+
+      // The tab is named after the branch, so this is on screen.
+      _currentListing =
+          'worktree /repo\nbranch refs/heads/main\n\n'
+          'worktree /repo-explorer\nbranch refs/heads/feature/renamed\n\n'
+          'worktree /repo-pty\nbranch refs/heads/fix/pty\n';
+      addTearDown(() => _currentListing = _listing);
+      await shell.rescanWorktrees();
+
+      expect(notifications, 1);
+      expect(shell.worktrees[1].branch, 'feature/renamed');
+    });
+
+    test('a plugin changing does not reach the shell', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      await shell.open(shell.closedWorktrees.first);
+
+      var notifications = 0;
+      shell.addListener(() => notifications++);
+
+      // A health probe, a compile step, a log line. The rail subscribes to the
+      // plugin per row and a panel subscribes to its own; neither needs the
+      // window marked dirty.
+      var session = shell.selectedSession!;
+      var pluginNotifications = 0;
+      session.plugins.first.addListener(() => pluginNotifications++);
+      session.plugins.first.core.notifyChanged();
+      await pumpEventQueue();
+
+      expect(pluginNotifications, 1);
+      expect(notifications, 0);
+    });
+
+    test('the worktree facts changing does not reach the shell', () async {
+      var shell = _controller(
+        facts: (root) => _BumpableFacts(
+          repoRoot: root,
+          probe: WorktreeFactsProbe(
+            repoRoot: root,
+            store: WorktreeFactsStore.open(
+              root,
+              at: File(p.join(Directory.systemTemp.path, 'no-such-cache.json')),
+            ),
+          ),
+        ),
+      );
+      await shell.start('/repo');
+
+      var notifications = 0;
+      shell.addListener(() => notifications++);
+
+      var facts = shell.worktreeFacts! as _BumpableFacts;
+      var factsNotifications = 0;
+      facts.addListener(() => factsNotifications++);
+      // What an agent appending to its session file produces, floored at one
+      // signal every two seconds for as long as anybody anywhere is working.
+      // Three screens draw these; none of them is the window.
+      facts.bump();
+
+      expect(factsNotifications, 1);
+      expect(notifications, 0);
+    });
   });
 
   test('disposing the controller releases every open worktree', () async {

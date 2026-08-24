@@ -849,7 +849,16 @@ class _ExplorerTab extends StatelessWidget {
   final ShellController shell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => _RebuildsWhen(
+    // The badge is the one thing up here that moves on its own, so it is the
+    // one thing that subscribes to the facts — and it is a count, so it
+    // redraws when the count moves rather than when a probe lands.
+    listenable: Listenable.merge([shell.worktreeFacts]),
+    select: () => shell.worktreeFacts?.needsYou ?? 0,
+    builder: (context, _) => _build(context),
+  );
+
+  Widget _build(BuildContext context) {
     var colors = context.colors;
     // **Lit for the whole space, not only the list.** A changes screen for a
     // checkout nobody has opened is a page *in* the worktrees space — it has no
@@ -1451,23 +1460,7 @@ class _Sidebar extends StatelessWidget {
                     ),
                   )
                 else
-                  for (var plugin in session.plugins) ...[
-                    _PluginRow(shell, plugin),
-                    // Expanded only for the selected plugin: a sidebar showing
-                    // every package of every plugin at once is a wall, not a
-                    // summary.
-                    if (shell.selectedPluginId == plugin.id)
-                      for (var child in plugin.core.report.children)
-                        SidebarChildRow(
-                          label: child.label,
-                          status: child.status,
-                          selected:
-                              shell.selectedPluginId == plugin.id &&
-                              shell.selectedChildId == child.id,
-                          commands: plugin.childCommands(context, child.id),
-                          onTap: () => shell.selectChild(plugin.id, child.id),
-                        ),
-                  ],
+                  for (var plugin in session.plugins) _PluginRow(shell, plugin),
               ],
             ),
     );
@@ -1615,6 +1608,14 @@ class _SidebarSkeleton extends StatelessWidget {
   }
 }
 
+/// One plugin's row, and its packages when it is the selected one.
+///
+/// **The rail's unit of subscription.** Both halves read this plugin's report
+/// and nothing else's, so listening here is what keeps a plugin's tick off
+/// every other plugin — the shell no longer forwards a session's changes, and
+/// a health probe reporting the same thing it reported a second ago costs one
+/// row rather than the window. The two rows are one widget for that reason: a
+/// child row is as much this report as the parent row is.
 class _PluginRow extends StatelessWidget {
   const _PluginRow(this.shell, this.plugin);
 
@@ -1622,7 +1623,12 @@ class _PluginRow extends StatelessWidget {
   final NativePlugin plugin;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: plugin,
+    builder: (context, _) => _build(context),
+  );
+
+  Widget _build(BuildContext context) {
     var report = plugin.core.report;
     // **A row does not repeat a word the row underneath it is already saying.**
     // The rail expands the selected plugin's packages, and several plugin
@@ -1638,20 +1644,37 @@ class _PluginRow extends StatelessWidget {
     var echoed =
         expanded &&
         report.children.any((child) => child.status == report.status);
-    return SidebarRow(
-      label: report.label,
-      selected: expanded,
-      onTap: () => shell.selectPlugin(plugin.id),
-      status: echoed ? Status.none : report.status,
-      actions: [
-        for (var command in plugin.rowCommands())
-          (
-            label: command.label,
-            icon: command.icon,
-            // The shell does the navigating, which is the point: a plugin
-            // names a place and never reaches into the rail.
-            onTap: () => shell.selectChild(plugin.id, command.opens),
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SidebarRow(
+          label: report.label,
+          selected: expanded,
+          onTap: () => shell.selectPlugin(plugin.id),
+          status: echoed ? Status.none : report.status,
+          actions: [
+            for (var command in plugin.rowCommands())
+              (
+                label: command.label,
+                icon: command.icon,
+                // The shell does the navigating, which is the point: a plugin
+                // names a place and never reaches into the rail.
+                onTap: () => shell.selectChild(plugin.id, command.opens),
+              ),
+          ],
+        ),
+        // Expanded only for the selected plugin: a sidebar showing every
+        // package of every plugin at once is a wall, not a summary.
+        if (expanded)
+          for (var child in report.children)
+            SidebarChildRow(
+              label: child.label,
+              status: child.status,
+              selected: shell.selectedChildId == child.id,
+              commands: plugin.childCommands(context, child.id),
+              onTap: () => shell.selectChild(plugin.id, child.id),
+            ),
       ],
     );
   }
@@ -1711,19 +1734,31 @@ class _Panel extends StatelessWidget {
           ? null
           : session.pluginById(shell.selectedPluginId!);
       body = plugin == null
-          ? WorktreeHome(
-              worktree,
-              // Keyed by checkout so switching worktrees resets the run watch
-              // rather than leaving one screen's timer reading another's
-              // ledger.
-              key: ValueKey('home::${worktree.path}'),
-              session: session,
-              onOpenPlugin: shell.selectPlugin,
-              facts:
-                  shell.worktreeFacts?.factsFor(worktree) ??
-                  const WorktreeFacts(),
-              onRefreshFacts: () => unawaited(shell.refreshWorktreeFacts()),
-              onOpenChanges: () => shell.selectChanges(worktree),
+          ? _RebuildsWhen(
+              listenable: Listenable.merge([shell.worktreeFacts]),
+              // The two facts this screen draws, of the one checkout it is
+              // about. Not the agent, which it deliberately does not carry —
+              // and the agent is the fact that moves every couple of seconds.
+              select: () {
+                var facts =
+                    shell.worktreeFacts?.factsFor(worktree) ??
+                    const WorktreeFacts();
+                return (facts.git, facts.forge);
+              },
+              builder: (context, _) => WorktreeHome(
+                worktree,
+                // Keyed by checkout so switching worktrees resets the run watch
+                // rather than leaving one screen's timer reading another's
+                // ledger.
+                key: ValueKey('home::${worktree.path}'),
+                session: session,
+                onOpenPlugin: shell.selectPlugin,
+                facts:
+                    shell.worktreeFacts?.factsFor(worktree) ??
+                    const WorktreeFacts(),
+                onRefreshFacts: () => unawaited(shell.refreshWorktreeFacts()),
+                onOpenChanges: () => shell.selectChanges(worktree),
+              ),
             )
           : KeyedSubtree(
               // Rebuild the panel from scratch when the worktree or the plugin
@@ -1766,6 +1801,79 @@ String? _changesFilePath(ShellController shell) {
 /// it lives — a screen appearing is the only moment that knows it happened.
 /// Not a timer: with the branch diffs cached by their commits, arriving costs
 /// the per-worktree `git status` and nothing else.
+/// Subscribes to [listenable] and rebuilds only when [select] answers
+/// differently.
+///
+/// For the two places that listen to the worktree facts and draw a slice of
+/// them. The facts are live by design — an agent appending to its session file
+/// moves one checkout's activity every couple of seconds, and the watchers
+/// floor that at one refresh every two seconds — so every listener heard about
+/// it at 2 Hz for as long as anybody anywhere was working. The explorer wants
+/// exactly that. The pinned tab's badge is a count, and the home screen
+/// deliberately carries no agent facts at all; for those two the notification
+/// is noise.
+///
+/// [select] is compared with `==`. The facts model has no value equality — a
+/// `Fact` carries the moment it was computed, which moves on every probe — so
+/// the selectors here return the `Fact` objects themselves and lean on the
+/// partial probes building with `copyWith`: a sweep that only re-read the
+/// agents hands back the very same `git` and `forge` instances. Answering
+/// "changed" when nothing did costs one rebuild; nothing here can answer
+/// "same" about something that moved.
+class _RebuildsWhen<T> extends StatefulWidget {
+  const _RebuildsWhen({
+    required this.listenable,
+    required this.select,
+    required this.builder,
+  });
+
+  final Listenable listenable;
+  final T Function() select;
+  final Widget Function(BuildContext context, T value) builder;
+
+  @override
+  State<_RebuildsWhen<T>> createState() => _RebuildsWhenState<T>();
+}
+
+class _RebuildsWhenState<T> extends State<_RebuildsWhen<T>> {
+  late T _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = widget.select();
+    widget.listenable.addListener(_check);
+  }
+
+  @override
+  void didUpdateWidget(_RebuildsWhen<T> old) {
+    super.didUpdateWidget(old);
+    if (old.listenable != widget.listenable) {
+      old.listenable.removeListener(_check);
+      widget.listenable.addListener(_check);
+    }
+    // Whatever moved above this widget may have changed what [select] closes
+    // over — a different checkout, a replaced controller. Read it again so the
+    // next notification is compared against what is actually on screen.
+    _value = widget.select();
+  }
+
+  @override
+  void dispose() {
+    widget.listenable.removeListener(_check);
+    super.dispose();
+  }
+
+  void _check() {
+    var next = widget.select();
+    if (next == _value) return;
+    setState(() => _value = next);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _value);
+}
+
 class _Explorer extends StatefulWidget {
   const _Explorer(this.shell);
 
@@ -1786,7 +1894,14 @@ class _ExplorerState extends State<_Explorer> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    // The screen the facts are *for*. It redraws when a probe lands and
+    // nothing else in the window does.
+    listenable: Listenable.merge([widget.shell.worktreeFacts]),
+    builder: (context, _) => _build(context),
+  );
+
+  Widget _build(BuildContext context) {
     var shell = widget.shell;
     var facts = shell.worktreeFacts;
     return WorktreeExplorerView(
