@@ -187,12 +187,18 @@ class SkipDecision {
   ///
   /// It arrives already hashed because it is the same answer for every entry —
   /// see [PixelInputs].
+  ///
+  /// [digests] is the pass's [DigestCache]. Every entry in a catalog is
+  /// decided against the same two checkouts and their closures overlap almost
+  /// entirely, so passing one across the loop is the difference between
+  /// reading a file once and reading it once per entry.
   static SkipDecision of({
     required String entryId,
     required ClosureMemo memo,
     required String baseRoot,
     required String headRoot,
     PixelInputs? pixels,
+    DigestCache? digests,
   }) {
     var remembered = memo.recall(entryId);
     if (remembered == null) {
@@ -210,10 +216,12 @@ class SkipDecision {
     var base = SourceClosure.of(
       remembered,
       root: baseRoot,
+      digests: digests,
     ).merge(pixels?.inRoot(baseRoot));
     var head = SourceClosure.of(
       remembered,
       root: headRoot,
+      digests: digests,
     ).merge(pixels?.inRoot(headRoot));
     if (base.fingerprint == head.fingerprint) {
       return const SkipDecision(skip: true, changed: [], reason: null);

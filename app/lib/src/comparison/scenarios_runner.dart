@@ -5,6 +5,7 @@ import 'artifact.dart';
 import 'build_directory.dart';
 import 'cancel.dart';
 import 'channels.dart';
+import 'closure.dart';
 import 'import_graph.dart';
 import 'scenario_comparison.dart';
 import 'scenarios_side.dart';
@@ -193,6 +194,10 @@ class ScenariosRunner {
 
     var settled = <ScenarioComparison>[];
     var toRun = <String>[];
+    // One pass's digests, so the library every scenario imports is hashed
+    // once rather than once per scenario. Scoped to this plan and no longer:
+    // see [DigestCache].
+    var digests = DigestCache();
     for (var id in headIds) {
       if (!baseIds.contains(id)) {
         settled.add(
@@ -207,6 +212,7 @@ class ScenariosRunner {
         baseRoot: baseRoot,
         headRoot: headRoot,
         pixels: pixels,
+        digests: digests,
       ).skip) {
         settled.add(
           ScenarioComparison.notRun(scenario: id, state: ComparedState.skipped),
