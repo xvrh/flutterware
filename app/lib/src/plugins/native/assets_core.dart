@@ -20,6 +20,13 @@ import 'assets_results.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const assetsPluginId = 'flutterware.assets';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    "What each declared package's asset bundle actually resolves to at run "
+    'time — including what its dependencies contribute, and excluding the file '
+    'sitting on disk that nothing declared.';
+
 /// Own assets the projection lists before it starts counting. A projection is
 /// read, not scrolled.
 const _projectedAssets = 15;
@@ -132,6 +139,7 @@ class AssetsCore extends PluginCore {
   PluginReport get report => PluginReport(
     id: host.id,
     label: host.label,
+    description: _pluginDescription,
     status: _status,
     badge: _badge,
     children: [

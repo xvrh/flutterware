@@ -21,6 +21,12 @@ import 'translations_results.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const translationsPluginId = 'flutterware.translations';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    'Which translation key is on which screen, which locales are still missing '
+    'one, and a picture of each string in the place it appeared.';
+
 /// Which translation key is on which screen, and a picture of it.
 ///
 /// Two halves that only answer together. A run knows **where a key appeared**,
@@ -322,6 +328,7 @@ class TranslationsCore extends PluginCore {
   PluginReport get report => PluginReport(
     id: host.id,
     label: host.label,
+    description: _pluginDescription,
     // Quiet when unconfigured. A project with no catalogs is not in trouble,
     // it just does not use the feature — the panel is where the setup
     // instructions live, and a permanent warning in the rail taught people to

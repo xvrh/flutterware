@@ -17,6 +17,7 @@ class PluginReport {
   const PluginReport({
     required this.id,
     required this.label,
+    this.description,
     this.status = Status.none,
     this.badge = StatusBadge.none,
     this.actions = const [],
@@ -28,6 +29,26 @@ class PluginReport {
 
   final String id;
   final String label;
+
+  /// One sentence saying what this *kind* of plugin is for, or null.
+  ///
+  /// The subject is the core rather than the project: "which lint rules this
+  /// repo evaluated, and which it never did" is true of every project that
+  /// declares the plugin, which is why nothing here comes from
+  /// `PluginDeclaration`. What *this* project declared is [label] and the
+  /// config behind it.
+  ///
+  /// It exists because a reader with only the id has to infer the subject
+  /// from the action names, and `flutterware.dev_stack` does not survive that
+  /// inference. `docs/capabilities.md` is the reader it was written for — the
+  /// document an agent reads *instead of* calling, where until now a plugin
+  /// section was a heading and a list of verbs.
+  ///
+  /// Optional, and null-tolerant everywhere it is read: this type is
+  /// published, so a report built against a version of it that predates the
+  /// field is still a report.
+  final String? description;
+
   final Status status;
   final StatusBadge badge;
   final List<PluginAction> actions;
@@ -42,7 +63,9 @@ class PluginReport {
   final PluginView view;
 
   /// [includeActions] is off for a renderer whose caller has another way to
-  /// read the declarations, and for whom carrying them is not free.
+  /// read the declarations, and for whom carrying them is not free. It covers
+  /// [description] too, which is a declaration in the same sense — one static
+  /// sentence, the same on every project and in every reply.
   ///
   /// Measured, not tidied. An action declaration is static — the same bytes
   /// every time — and it dominates a report: on flutterware's own repo the
@@ -68,6 +91,7 @@ class PluginReport {
   }) => {
     'id': id,
     'label': label,
+    if (includeActions && description != null) 'description': description,
     'status': status.toJson(),
     if (!badge.isEmpty) 'badge': badge.toJson(),
     if (includeActions && actions.isNotEmpty)
