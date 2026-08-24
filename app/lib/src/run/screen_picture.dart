@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 
+import '../inspect/focus_order.dart';
 import '../inspect/node_highlight.dart';
+import '../inspect/semantics_node.dart';
 import '../ui/age.dart';
 import '../ui/stage.dart';
 import '../ui/design/design.dart';
@@ -35,6 +37,9 @@ class RunScreenPicture extends StatelessWidget {
     required this.highlight,
     required this.tree,
     required this.canvas,
+    this.semanticsHighlight,
+    this.focusOrder,
+    this.focusNodes,
     this.readAt,
     this.movedSince = false,
   });
@@ -60,6 +65,17 @@ class RunScreenPicture extends StatelessWidget {
   /// What the picture frames, in the app's logical pixels — see
   /// [canvasOf].
   final InspectLayout? canvas;
+
+  /// The hovered semantics node, from the other tab. Its rect is already in
+  /// the app's own logical pixels — the same space [InspectLayout] reports —
+  /// so it scales onto the picture exactly as a widget's box does.
+  final ValueNotifier<SemanticsSnapshotNode?>? semanticsHighlight;
+
+  /// The Semantics tab's reading-order switch, and what to number while it is
+  /// on. [focusNodes] is null unless that tab is the one showing, which is
+  /// what stops the discs outliving the toggle that controls them.
+  final ValueNotifier<bool>? focusOrder;
+  final List<SemanticsSnapshotNode>? focusNodes;
 
   /// When the picture was taken. Null before the first reading lands.
   ///
@@ -137,8 +153,11 @@ class RunScreenPicture extends StatelessWidget {
                     ),
                     Positioned.fill(
                       child: IgnorePointer(
-                        child: _Highlight(
+                        child: _Overlay(
                           highlight: highlight,
+                          semanticsHighlight: semanticsHighlight,
+                          focusOrder: focusOrder,
+                          focusNodes: focusNodes,
                           tree: tree,
                           canvas: canvas,
                         ),
@@ -233,55 +252,129 @@ class _FreshnessState extends State<_Freshness> {
   }
 }
 
-/// The hovered node's box, over the picture.
+/// What the inspector draws on the picture: the hovered node's box, from
+/// whichever tab is hovering, and the reading order when that is asked for.
 ///
-/// The rect is scaled here rather than under a `FittedBox`. The catalog
-/// paints into a surface that *is* the guest's logical size, so its painter
-/// needs no transform — but this picture is the app shrunk into a third of a
-/// pane, and scaling the painter would take the label down with it to three
-/// points. So the host does what the painter's contract says the host does:
-/// decides which rect, in the coordinates the painter draws in.
+/// The rect is scaled here rather than under a `FittedBox`. The catalog paints
+/// into a surface that *is* the guest's logical size, so its painter needs no
+/// transform — but this picture is the app shrunk into part of a pane, and
+/// scaling the painter would take the label down with it to three points. So
+/// the host does what the painter's contract says the host does: decides which
+/// rect, in the coordinates the painter draws in.
 ///
-/// Width and height scale independently. They are the same number whenever
-/// the picture frames the canvas, which is the case this is built for; if
-/// something ever letterboxes the render, a box covering the same *fraction*
-/// of the picture is a better wrong answer than one that has slid off it.
-class _Highlight extends StatelessWidget {
-  const _Highlight({
+/// Width and height scale independently. They are the same number whenever the
+/// picture frames the canvas, which is the case this is built for; if something
+/// ever letterboxes the render, a box covering the same *fraction* of the
+/// picture is a better wrong answer than one that has slid off it.
+class _Overlay extends StatelessWidget {
+  const _Overlay({
     required this.highlight,
+    required this.semanticsHighlight,
+    required this.focusOrder,
+    required this.focusNodes,
     required this.tree,
     required this.canvas,
   });
 
   final ValueNotifier<String?> highlight;
+  final ValueNotifier<SemanticsSnapshotNode?>? semanticsHighlight;
+  final ValueNotifier<bool>? focusOrder;
+  final List<SemanticsSnapshotNode>? focusNodes;
   final InspectTree? tree;
   final InspectLayout? canvas;
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder(
-    valueListenable: highlight,
-    builder: (context, hovered, _) {
-      // **Hover only, never the selection** — the rule the catalog's overlay
-      // arrived at and for its reason: a box that stays after you choose
-      // something is a box you then need a way to dismiss. What a selection
-      // leaves behind is the detail pane, not a rectangle.
-      var node = hovered == null ? null : tree?.nodeAt(hovered);
-      // An offstage node wears the rect it had the last time it was on a
-      // screen. Hovering its row lights the row and leaves the picture alone.
-      if (node?.offstage ?? false) node = null;
-      var layout = node?.layout;
-      if (layout == null || canvas == null) return const SizedBox.shrink();
-      return LayoutBuilder(
-        builder: (context, constraints) => CustomPaint(
-          painter: NodeHighlightPainter(
-            rect: scale(layout, canvas!, constraints.biggest),
-            label: node?.type,
-            color: context.colors.accent,
-          ),
-        ),
-      );
-    },
-  );
+  Widget build(BuildContext context) {
+    if (canvas == null) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var size = constraints.biggest;
+        Widget paint(
+          BuildContext context,
+          String? lit,
+          SemanticsSnapshotNode? sem,
+        ) {
+          // **Hover only, never the selection** — the rule the catalog's
+          // overlay arrived at and for its reason: a box that stays after you
+          // choose something is a box you then need a way to dismiss. What a
+          // selection leaves behind is the detail pane, not a rectangle.
+          var node = lit == null ? null : tree?.nodeAt(lit);
+          // An offstage node wears the rect it had the last time it was on a
+          // screen. Hovering its row lights the row and leaves the picture
+          // alone.
+          if (node?.offstage ?? false) node = null;
+          // The elements highlight wins when both are set. The two tabs cannot
+          // be hovered at once, so this only decides which stale one to drop.
+          var (rect, label) = switch ((node?.layout, sem)) {
+            (var layout?, _) => (scale(layout, canvas!, size), node!.type),
+            (_, var hovered?) => (
+              scaleRect(hovered.rect, canvas!, size),
+              hovered.headline,
+            ),
+            _ => (null, null),
+          };
+          // Nothing rather than a painter with no rect in it: a hover that
+          // found no box should leave the picture exactly as it was, and a
+          // `CustomPaint` that paints nothing is still a thing on the screen
+          // for anything reading this widget's output.
+          if (rect == null) return const SizedBox.shrink();
+          return CustomPaint(
+            painter: NodeHighlightPainter(
+              rect: rect,
+              label: label,
+              color: context.colors.accent,
+            ),
+          );
+        }
+
+        var box = ValueListenableBuilder(
+          valueListenable: highlight,
+          // Nested only where there is a second thing to listen to. A
+          // placeholder notifier built here would be a new object every build,
+          // subscribed to and dropped once a frame.
+          builder: (context, lit, _) => switch (semanticsHighlight) {
+            var semantic? => ValueListenableBuilder(
+              valueListenable: semantic,
+              builder: (context, sem, _) => paint(context, lit, sem),
+            ),
+            _ => paint(context, lit, null),
+          },
+        );
+
+        if (focusOrder case var numbering?) {
+          // Under the highlight rectangle, so hovering a row still points at
+          // one box while the whole order is numbered.
+          return ValueListenableBuilder(
+            valueListenable: numbering,
+            builder: (context, numbered, child) {
+              var nodes = focusNodes;
+              if (!numbered || nodes == null || nodes.isEmpty) return child!;
+              var colors = context.colors;
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  CustomPaint(
+                    painter: FocusOrderPainter(
+                      rects: [
+                        for (var node in nodes)
+                          scaleRect(node.rect, canvas!, size),
+                      ],
+                      color: colors.accent,
+                      onColor: colors.onPrimary,
+                      haloColor: colors.bg,
+                    ),
+                  ),
+                  child!,
+                ],
+              );
+            },
+            child: box,
+          );
+        }
+        return box;
+      },
+    );
+  }
 
   /// [box] in the app's logical pixels, as a rect in a picture of [canvas]
   /// drawn at [size].
@@ -292,6 +385,21 @@ class _Highlight extends StatelessWidget {
     return Rect.fromLTWH(
       (box.x - canvas.x) * x,
       (box.y - canvas.y) * y,
+      box.width * x,
+      box.height * y,
+    );
+  }
+
+  /// The same, for a rect that already is one — a semantics node's box, which
+  /// arrives in the screen's logical coordinates rather than as an
+  /// [InspectLayout].
+  static Rect scaleRect(Rect box, InspectLayout canvas, Size size) {
+    if (canvas.width <= 0 || canvas.height <= 0) return Rect.zero;
+    var x = size.width / canvas.width;
+    var y = size.height / canvas.height;
+    return Rect.fromLTWH(
+      (box.left - canvas.x) * x,
+      (box.top - canvas.y) * y,
       box.width * x,
       box.height * y,
     );

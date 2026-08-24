@@ -26,6 +26,9 @@ import '../../run/logs.dart';
 import '../../run/native/native_logs.dart';
 import '../../inspect/elements_view.dart';
 import '../../inspect/inspect_dock.dart';
+import '../../inspect/semantics_node.dart';
+import '../../inspect/semantics_view.dart';
+import '../../inspect/transcript.dart';
 
 import '../../ui/capture_button.dart';
 import '../../ui/design/design.dart';
@@ -805,6 +808,18 @@ class _ScreenTabState extends State<_ScreenTab> {
   /// arrived at without a second flag to keep in step.
   final _highlight = ValueNotifier<String?>(null);
 
+  /// The Semantics tab's own hover, and its reading-order switch.
+  ///
+  /// Separate from [_highlight] because they are hovers of different trees:
+  /// a widget's box comes off [InspectLayout], an utterance's off the
+  /// semantics node's own rect, and one notifier holding either would have to
+  /// say which every time it was read.
+  final _semanticsHighlight = ValueNotifier<SemanticsSnapshotNode?>(null);
+  final _focusOrder = ValueNotifier<bool>(false);
+
+  SemanticsSnapshotNode? _semantics;
+  SemanticsTranscript? _transcript;
+
   @override
   void initState() {
     super.initState();
@@ -823,6 +838,9 @@ class _ScreenTabState extends State<_ScreenTab> {
       _undecodable = false;
       _tree = null;
       _fromGuest = false;
+      _semantics = null;
+      _transcript = null;
+      _semanticsHighlight.value = null;
       _error = null;
       _readAt = null;
       _readAtMoved = 0;
@@ -845,6 +863,8 @@ class _ScreenTabState extends State<_ScreenTab> {
   void dispose() {
     _picture?.dispose();
     _highlight.dispose();
+    _semanticsHighlight.dispose();
+    _focusOrder.dispose();
     super.dispose();
   }
 
@@ -858,7 +878,12 @@ class _ScreenTabState extends State<_ScreenTab> {
     _loading = true;
     _tellThePage();
     try {
-      var read = await widget.core.inspectRead(widget.handle);
+      // **Semantics in the same reading, not when the tab opens.** One read
+      // is what makes the boxes over the picture exact — a semantics tree
+      // fetched later would describe a frame the picture is not of — and it
+      // is what makes switching tabs free rather than a second round trip
+      // through the app.
+      var read = await widget.core.inspectRead(widget.handle, semantics: true);
       // Decoded here rather than in the pane, so that the frame and the caption
       // describing it land in the same build. The picture already on screen is
       // held until this one is ready — a re-read should not blank the pane it
@@ -875,6 +900,19 @@ class _ScreenTabState extends State<_ScreenTab> {
         _undecodable = read.image != null && picture == null;
         _tree = read.tree;
         _fromGuest = read.fromGuest;
+        // Typed here rather than in the reading, because the reading is
+        // linked by `fw` and the MCP server and a `Rect` is `dart:ui`.
+        _semantics = switch (read.semantics?.root) {
+          var root? => SemanticsSnapshotNode.fromJson(root),
+          _ => null,
+        };
+        // Derived once per reading rather than per build: the tab badge wants
+        // the finding count whether or not the tab is open, and the view would
+        // otherwise walk the tree again to get it.
+        _transcript = _semantics == null
+            ? null
+            : SemanticsTranscript.of(_semantics!);
+        _semanticsHighlight.value = null;
         _error = null;
         _readAt = DateTime.now();
         // The count as it stands *now*, not as it stood when the read was
@@ -944,6 +982,14 @@ class _ScreenTabState extends State<_ScreenTab> {
               highlight: _highlight,
               tree: _tree,
               canvas: RunScreenPicture.canvasOf(_tree),
+              semanticsHighlight: _semanticsHighlight,
+              focusOrder: _focusOrder,
+              // Only while the Semantics tab is the one showing — its toggle
+              // is the only way to turn the numbers off, so they must not
+              // outlive it.
+              focusNodes: _tab == 'semantics'
+                  ? _transcript?.utterances.map((u) => u.node).toList()
+                  : null,
               readAt: _readAt,
               movedSince: widget.clock.$1 != _readAtMoved,
             ),
@@ -964,6 +1010,28 @@ class _ScreenTabState extends State<_ScreenTab> {
                 id: 'elements',
                 label: 'Elements',
                 body: (context) => _elements(),
+              ),
+              InspectDockTab(
+                id: 'semantics',
+                label: 'Semantics',
+                badge: _transcript?.findingCount ?? 0,
+                body: (context) => SemanticsView(
+                  root: _semantics,
+                  transcript: _transcript,
+                  highlight: _semanticsHighlight,
+                  focusOrder: _focusOrder,
+                  // Three absences, and they are not the same news. A run the
+                  // cockpit merely attached to has no guest to ask; a run that
+                  // has one is holding a `SemanticsHandle` for its whole life,
+                  // so an empty tree there is the app's own answer.
+                  placeholder: _loading
+                      ? 'Reading the app…'
+                      : !_fromGuest
+                      ? 'This run has no flutterware guest in it, and the '
+                            'service extension has no semantics to give. '
+                            'Launch it through flutterware to read them.'
+                      : 'The app has published no semantics tree.',
+                ),
               ),
             ],
           ),

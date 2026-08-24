@@ -9,6 +9,8 @@ import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 // ignore: implementation_imports
+import 'package:flutterware/src/inspect/semantics.dart';
+// ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/context.dart';
@@ -63,6 +65,8 @@ void main() {
     WidgetTester tester,
     Uint8List? image, {
     InspectTree? tree,
+    Map<String, Object?>? semantics,
+    bool guest = false,
   }) async {
     var core = RunCore(
       PluginHost(
@@ -110,8 +114,11 @@ void main() {
               createdByLocalProject: true,
             ),
           ),
-      fromGuest: tree != null,
+      fromGuest: tree != null || guest,
       image: image,
+      semantics: semantics == null
+          ? null
+          : InspectSemantics(entryId: null, root: semantics),
     );
 
     var address = ValueNotifier(
@@ -144,6 +151,58 @@ void main() {
     await tester.pump();
     return (core, handle);
   }
+
+  group('the Semantics tab', () {
+    /// One button with nothing to say, which is a finding — so the badge, the
+    /// script and the audit are all exercised by the smallest tree there is.
+    ///
+    /// In the guest's own wire shape rather than as a `SemanticsSnapshotNode`,
+    /// because that is what the reading carries: the decode into typed nodes
+    /// is the pane's job and belongs under test with it.
+    Map<String, Object?> aButton() => {
+      'rect': {'x': 0, 'y': 0, 'width': 100, 'height': 40},
+      'flags': ['isButton'],
+      'actions': ['tap'],
+      'children': <Object?>[],
+    };
+
+    testWidgets('reads with the picture, and is one tab away', (tester) async {
+      await pumpScreenTab(
+        tester,
+        Uint8List.fromList(_onePixelPng),
+        guest: true,
+        semantics: aButton(),
+      );
+
+      // The tab is there before it is opened, and its badge is the audit's
+      // count — which is what says the tab is worth opening at all.
+      expect(find.text('Semantics'), findsOneWidget);
+      expect(find.text('1'), findsWidgets);
+
+      await tester.tap(find.text('Semantics'));
+      await tester.pumpAndSettle();
+
+      // The screen reader's script, from the reading the picture came from.
+      expect(find.textContaining('nothing to read'), findsWidgets);
+    });
+
+    testWidgets('a run with no guest is told from an app with no tree', (
+      tester,
+    ) async {
+      // No guest at all: the service extension has no semantics to give, so
+      // this is news about the *run*, not about the app's accessibility.
+      await pumpScreenTab(tester, Uint8List.fromList(_onePixelPng));
+
+      await tester.tap(find.text('Semantics'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('no flutterware guest'),
+        findsOneWidget,
+        reason: 'the pane says which absence this is',
+      );
+    });
+  });
 
   group('freshness', () {
     testWidgets('the reading says how old it is', (tester) async {

@@ -10,6 +10,8 @@ import 'package:vm_service/vm_service.dart';
 // headless guest are the same shape to whatever consumes them.
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/semantics.dart';
 
 import '../session/job.dart';
 import 'connection.dart';
@@ -22,6 +24,10 @@ final _logger = Logger('run_inspect');
 /// the string is the host's: this file talks to whichever flutterware built
 /// the app, which need not be this one.
 const guestTreeExtension = 'ext.flutterware.tree';
+
+/// The guest's semantics read. Same extension the previews panel asks over its
+/// embedder wire, asked here over the VM service.
+const guestSemanticsExtension = 'ext.flutterware.semantics';
 
 /// JSON-RPC's "Method not found" — what the VM answers for an extension the
 /// isolate in the request does not have.
@@ -99,6 +105,7 @@ class RunInspector {
   Future<InspectRead> read({
     bool tree = false,
     bool screenshot = false,
+    bool semantics = false,
     bool summary = true,
     bool preferGuest = false,
     double maxPixelRatio = 2,
@@ -121,6 +128,12 @@ class RunInspector {
     return InspectRead(
       tree: tree ? guest ?? read : null,
       fromGuest: guest != null,
+      // **After the tree, and only when the tree came from the guest.** Two
+      // reasons, both load-bearing. The service extension has no semantics to
+      // give, so a run with no guest in it has no question to ask — and
+      // [_guestTree] is what repairs a connection pointing at the wrong
+      // isolate, so asking second is asking the isolate that just answered.
+      semantics: semantics && guest != null ? await _guestSemantics() : null,
       image: screenshot
           ? await _screenshot(
               group,
@@ -131,6 +144,34 @@ class RunInspector {
           : null,
     );
   });
+
+  /// The semantics tree as the app publishes it, or null.
+  ///
+  /// **No `on` argument, and that is not an omission.** The catalog turns
+  /// semantics on and off around its tab, because there it is a tab nobody may
+  /// have opened and the tree costs a frame to build. A run launched through
+  /// flutterware holds a `SemanticsHandle` for its whole life already — see
+  /// `run_guest.dart`, where it is load-bearing for the drive layer and
+  /// measured free (431ms against 434ms over 24 timed taps). So this reads
+  /// what is already there and changes nothing about the app.
+  ///
+  /// Null on every failure, like [_guestTree]: an app that will not answer has
+  /// no semantics as far as the pane is concerned, and the pane says so in
+  /// words rather than throwing a reading away that has a picture in it.
+  Future<InspectSemantics?> _guestSemantics() async {
+    try {
+      var response = await _service.callServiceExtension(
+        guestSemanticsExtension,
+        isolateId: connection.isolateId,
+      );
+      var json = response.json;
+      if (json == null) return null;
+      return InspectSemantics.fromJson(json);
+    } on Object catch (e) {
+      _logger.fine('Could not read a guest semantics tree: $e');
+      return null;
+    }
+  }
 
   /// The tree as the **app itself** walks it, or null when this run has no
   /// guest in it.
@@ -465,7 +506,12 @@ class RunInspector {
 /// returns, and the caller that wanted only liveness got it from the
 /// connection succeeding.
 class InspectRead {
-  const InspectRead({this.tree, this.image, this.fromGuest = false});
+  const InspectRead({
+    this.tree,
+    this.image,
+    this.semantics,
+    this.fromGuest = false,
+  });
 
   /// Null when the tree was not asked for. `InspectTree.empty` — non-null with
   /// a null root — when it was and the app has not built a frame yet. The
@@ -475,6 +521,19 @@ class InspectRead {
 
   /// A PNG, when one was asked for.
   final Uint8List? image;
+
+  /// The semantics tree, when one was asked for and the app had one.
+  ///
+  /// **Raw, on purpose.** `fw` and the MCP server link this class and neither
+  /// can reach `dart:ui`, so the typed `SemanticsSnapshotNode` — whose every
+  /// box is a `Rect` — cannot be named here. The GUI decodes it where `Rect`
+  /// exists; `entry_point_purity_test` is what says so out loud.
+  ///
+  /// Three things are one null, and [fromGuest] tells them apart for the
+  /// reader: not asked, asked of an app with no guest to ask, and asked of a
+  /// guest that has not published a semantics tree. Only the last is worth a
+  /// sentence about the app rather than about the reading.
+  final InspectSemantics? semantics;
 
   /// [tree] came from the app's own walk rather than from the service
   /// extension.

@@ -3261,6 +3261,7 @@ class RunCore extends PluginCore {
     RunHandle handle, {
     bool tree = true,
     bool screenshot = true,
+    bool semantics = false,
     bool summary = true,
   }) =>
       debugRead?.call(handle) ??
@@ -3269,6 +3270,7 @@ class RunCore extends PluginCore {
         (i) => i.read(
           tree: tree,
           screenshot: screenshot,
+          semantics: semantics,
           summary: summary,
           preferGuest: true,
         ),
