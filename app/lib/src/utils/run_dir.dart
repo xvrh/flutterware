@@ -355,9 +355,8 @@ Duration? processElapsed(int pid) {
 /// `ps` elapsed format: `[[dd-]hh:]mm:ss`.
 @visibleForTesting
 Duration? parseElapsed(String text) {
-  var match = RegExp(
-    r'^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)$',
-  ).firstMatch(text.trim());
+  var match = RegExp(r'^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)$')
+      .firstMatch(text.trim());
   if (match == null) return null;
   int part(int group) => int.parse(match[group] ?? '0');
   return Duration(

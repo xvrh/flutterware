@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/app_events.dart';
@@ -12,6 +13,7 @@ import 'package:flutterware/devbar_plugins/variables.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+
 import 'src/devbar/info_panel.dart';
 import 'src/devbar/storage_panel.dart';
 

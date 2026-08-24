@@ -280,9 +280,8 @@ class _BuilderVisitor extends RecursiveAstVisitor<void> {
   String? _targetNameOf(Expression? expression) {
     if (expression is! MethodInvocation) return null;
     if (expression.methodName.name != 'target') return null;
-    if (expression.target case SimpleIdentifier(
-      name: var on,
-    ) when on == receiver) {
+    if (expression.target case SimpleIdentifier(name: var on)
+        when on == receiver) {
       // A positional argument *is* an `Expression`; `Argument` is sealed over
       // that and `NamedArgument`.
       var first = expression.argumentList.arguments.firstOrNull;

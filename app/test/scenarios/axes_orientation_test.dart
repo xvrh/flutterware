@@ -21,20 +21,16 @@ void main() {
     expect(args['device'], 'ipad');
   });
 
-  test(
-    'and as an axis in its own right, for the device nobody has picked yet',
-    () {
-      var args = const ScenarioAxes(
-        orientation: 'landscape',
-      ).harnessArgs(unspecifiedDevice: 'iphone-13');
+  test('and as an axis in its own right, for the device nobody has picked yet', () {
+    var args = const ScenarioAxes(orientation: 'landscape')
+        .harnessArgs(unspecifiedDevice: 'iphone-13');
 
-      // The geometry is only the host's fallback — a scenario folder's profile
-      // may name something else, and the harness is the one that asks it. So the
-      // word travels too, or a folder-chosen device would never turn.
-      expect(args['deviceUnspecified'], 'true');
-      expect(args['orientation'], 'landscape');
-    },
-  );
+    // The geometry is only the host's fallback — a scenario folder's profile
+    // may name something else, and the harness is the one that asks it. So the
+    // word travels too, or a folder-chosen device would never turn.
+    expect(args['deviceUnspecified'], 'true');
+    expect(args['orientation'], 'landscape');
+  });
 
   test('a notched phone sends its declared landscape insets', () {
     var args = const ScenarioAxes(

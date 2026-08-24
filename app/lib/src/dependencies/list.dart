@@ -1,9 +1,12 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../address/address_scope.dart';
 import '../plugins/native/dependencies_address.dart';
+
 import 'package:pub_scores/pub_scores.dart';
+
 import '../ui/action_button.dart';
 import '../ui/column_layout.dart';
 import '../ui/empty_state.dart';

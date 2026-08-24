@@ -193,11 +193,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(enabled, isTrue, reason: 'the app holds it');
-    expect(
-      memory.wishes(FlagMemory.keyFor(handle)),
-      {'newCheckout': true},
-      reason: 'and the host remembers it for the next run',
-    );
+    expect(memory.wishes(FlagMemory.keyFor(handle)), {
+      'newCheckout': true,
+    }, reason: 'and the host remembers it for the next run');
   });
 
   /// The other half of Decision 4: what the host remembered is pushed before

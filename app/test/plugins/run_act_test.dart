@@ -195,9 +195,9 @@ void main() {
       expect(File('$stem$leg').existsSync(), isTrue, reason: leg);
     }
 
-    var manifest =
-        jsonDecode(File('$stem.capture.json').readAsStringSync())
-            as Map<String, Object?>;
+    var manifest = jsonDecode(
+      File('$stem.capture.json').readAsStringSync(),
+    ) as Map<String, Object?>;
     expect(manifest['capture'], result.capture);
     expect(manifest['verb'], 'observe');
     expect(
@@ -205,11 +205,9 @@ void main() {
       2,
       reason: 'the archived tree is the whole one, not the filtered one',
     );
-    expect(
-      manifest['reported'],
-      ['screen'],
-      reason: 'the testimony says what came back, which was not the picture',
-    );
+    expect(manifest['reported'], [
+      'screen',
+    ], reason: 'the testimony says what came back, which was not the picture');
 
     // The journal points at the same moment, and says the same thing.
     var entry = readJournal(handle).single;
@@ -568,39 +566,36 @@ void main() {
     expect(readJournal(handle).single.failure, 'notFound');
   });
 
-  test(
-    'a refusal teaches the native layer, but only where there is one',
-    () async {
-      core.debugAct = (handle, args) async => {
-        'error': 'nothing matches "Allow"',
-        'failure': 'notFound',
-        'texts': <String>['Pay'],
-      };
+  test('a refusal teaches the native layer, but only where there is one', () async {
+    core.debugAct = (handle, args) async => {
+      'error': 'nothing matches "Allow"',
+      'failure': 'notFound',
+      'texts': <String>['Pay'],
+    };
 
-      // How an agent finds this layer at all: not from documentation it read
-      // once, but at the moment it is looking for something the widget tree does
-      // not have.
-      core.debugNativeAvailable = true;
-      var taught =
-          (await core.invoke(
-                'act',
-                arguments: {'verb': 'tap', 'target': 'Allow'},
-              ))!
-              as RunActResult;
-      expect(taught.error, contains('layer: native'));
+    // How an agent finds this layer at all: not from documentation it read
+    // once, but at the moment it is looking for something the widget tree does
+    // not have.
+    core.debugNativeAvailable = true;
+    var taught =
+        (await core.invoke(
+              'act',
+              arguments: {'verb': 'tap', 'target': 'Allow'},
+            ))!
+            as RunActResult;
+    expect(taught.error, contains('layer: native'));
 
-      // And silence where the advice would fail: a device with no native driver
-      // must not be told to try one.
-      core.debugNativeAvailable = false;
-      var quiet =
-          (await core.invoke(
-                'act',
-                arguments: {'verb': 'tap', 'target': 'Allow'},
-              ))!
-              as RunActResult;
-      expect(quiet.error, isNot(contains('layer: native')));
-    },
-  );
+    // And silence where the advice would fail: a device with no native driver
+    // must not be told to try one.
+    core.debugNativeAvailable = false;
+    var quiet =
+        (await core.invoke(
+              'act',
+              arguments: {'verb': 'tap', 'target': 'Allow'},
+            ))!
+            as RunActResult;
+    expect(quiet.error, isNot(contains('layer: native')));
+  });
 
   test('a native step journals as its own layer', () async {
     // The native path refuses without a device, which is the point: the

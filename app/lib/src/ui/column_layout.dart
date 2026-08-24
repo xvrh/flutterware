@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+
 import 'table.dart';
 
 const _eq = DeepCollectionEquality();

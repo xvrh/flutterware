@@ -33,9 +33,8 @@ void removeLegacyEngineDir(String appPackageRoot) {
   var legacy = Directory(p.join(appPackageRoot, '.engine'));
   if (!legacy.existsSync()) return;
   if (!File(p.join(legacy.path, 'engine.revision')).existsSync()) return;
-  if (!Directory(
-    p.join(legacy.path, 'FlutterEmbedder.framework'),
-  ).existsSync()) {
+  if (!Directory(p.join(legacy.path, 'FlutterEmbedder.framework'))
+      .existsSync()) {
     return;
   }
   try {

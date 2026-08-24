@@ -210,38 +210,42 @@ void main() {
       expect(controller.value, Matrix4.identity());
     });
 
-    testWidgets('zooming back out returns the stage to rest, translation and all', (
-      tester,
-    ) async {
-      // The bug this pins: zoom in, pan, zoom out. The scale clamps at 1, every
-      // further notch is then a no-op, and the translation it was left with can
-      // never be undone — panning is off at life-size, so nothing else could
-      // undo it either. The stage was simply stuck off to one side.
-      await pump(tester);
-      var pointer = TestPointer(1, PointerDeviceKind.trackpad);
-      var centre = tester.getCenter(find.byType(ZoomableStage));
-      await tester.sendEventToBinding(pointer.panZoomStart(centre));
-      await tester.sendEventToBinding(pointer.panZoomUpdate(centre, scale: 4));
-      await tester.sendEventToBinding(pointer.panZoomEnd());
-      await tester.pump();
-
-      await tester.drag(find.byType(ZoomableStage), const Offset(90, 60));
-      await tester.pumpAndSettle();
-      expect(
-        controller.value.getTranslation().x,
-        isNot(0),
-        reason: 'the pan has to actually move something for this to prove much',
-      );
-
-      await hold(tester, LogicalKeyboardKey.meta);
-      var wheel = TestPointer(2, PointerDeviceKind.mouse);
-      wheel.hover(centre);
-      for (var i = 0; i < 40; i++) {
-        await tester.sendEventToBinding(wheel.scroll(const Offset(0, 200)));
+    testWidgets(
+      'zooming back out returns the stage to rest, translation and all',
+      (tester) async {
+        // The bug this pins: zoom in, pan, zoom out. The scale clamps at 1, every
+        // further notch is then a no-op, and the translation it was left with can
+        // never be undone — panning is off at life-size, so nothing else could
+        // undo it either. The stage was simply stuck off to one side.
+        await pump(tester);
+        var pointer = TestPointer(1, PointerDeviceKind.trackpad);
+        var centre = tester.getCenter(find.byType(ZoomableStage));
+        await tester.sendEventToBinding(pointer.panZoomStart(centre));
+        await tester.sendEventToBinding(
+          pointer.panZoomUpdate(centre, scale: 4),
+        );
+        await tester.sendEventToBinding(pointer.panZoomEnd());
         await tester.pump();
-      }
-      expect(controller.value, Matrix4.identity());
-    });
+
+        await tester.drag(find.byType(ZoomableStage), const Offset(90, 60));
+        await tester.pumpAndSettle();
+        expect(
+          controller.value.getTranslation().x,
+          isNot(0),
+          reason:
+              'the pan has to actually move something for this to prove much',
+        );
+
+        await hold(tester, LogicalKeyboardKey.meta);
+        var wheel = TestPointer(2, PointerDeviceKind.mouse);
+        wheel.hover(centre);
+        for (var i = 0; i < 40; i++) {
+          await tester.sendEventToBinding(wheel.scroll(const Offset(0, 200)));
+          await tester.pump();
+        }
+        expect(controller.value, Matrix4.identity());
+      },
+    );
 
     testWidgets('panning is off at life-size and on once magnified', (
       tester,

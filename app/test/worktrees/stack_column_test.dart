@@ -44,9 +44,9 @@ void main() {
     }
   });
 
-  void writeCache(StackReading reading) => File(
-    stackCachePath(runDir.path, project.path),
-  ).writeAsStringSync(jsonEncode(reading.toJson()));
+  void writeCache(StackReading reading) =>
+      File(stackCachePath(runDir.path, project.path))
+          .writeAsStringSync(jsonEncode(reading.toJson()));
 
   group('the probe', () {
     test('reads back what a session left behind', () async {
@@ -60,9 +60,8 @@ void main() {
           ],
         ),
       );
-      var reading = await RunDirStackProbe(
-        runDir: () => runDir.path,
-      ).probe(project.path);
+      var reading = await RunDirStackProbe(runDir: () => runDir.path)
+          .probe(project.path);
       expect(reading!.state, StackState.up);
       expect(reading.services.single.port, 8080);
     });
@@ -80,9 +79,8 @@ void main() {
     test('a reading with no clock is no reading', () async {
       // It could never be aged, and an un-ageable reading is worse than none:
       // it would sit in the column looking current forever.
-      File(
-        stackCachePath(runDir.path, project.path),
-      ).writeAsStringSync('{"state":"up"}');
+      File(stackCachePath(runDir.path, project.path))
+          .writeAsStringSync('{"state":"up"}');
       expect(
         await RunDirStackProbe(runDir: () => runDir.path).probe(project.path),
         isNull,
@@ -90,9 +88,8 @@ void main() {
     });
 
     test('a half-written cache is no cache', () async {
-      File(
-        stackCachePath(runDir.path, project.path),
-      ).writeAsStringSync('{"state":"u');
+      File(stackCachePath(runDir.path, project.path))
+          .writeAsStringSync('{"state":"u');
       expect(
         await RunDirStackProbe(runDir: () => runDir.path).probe(project.path),
         isNull,

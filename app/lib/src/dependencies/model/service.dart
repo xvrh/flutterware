@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+
 import 'package:package_config/package_config.dart';
 import 'package:pubspec_parse/pubspec_parse.dart' show Pubspec;
 import 'package:path/path.dart' as p;
 import 'package:pub_scores/pub_scores.dart';
+
 import '../../package_ref.dart';
 import '../../utils/async_value.dart';
 import '../../utils/cloc/cloc.dart';

@@ -100,9 +100,10 @@ String scenarioAuthoringHint(String directory) {
   );
   return [
     _wrap(scenarioAuthoringIntro(directory)),
-    scenarioAuthoringExample(
-      directory,
-    ).split('\n').map((line) => line.isEmpty ? '' : '  $line').join('\n'),
+    scenarioAuthoringExample(directory)
+        .split('\n')
+        .map((line) => line.isEmpty ? '' : '  $line')
+        .join('\n'),
     _wrap(scenarioAuthoringImportNote),
     [
       for (var (term, what) in scenarioAuthoringPoints)

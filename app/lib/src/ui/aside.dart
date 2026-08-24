@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+
 import 'design/design.dart';
 
 /// How wide the strip that offers a folded aside back is.

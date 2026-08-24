@@ -239,9 +239,10 @@ class NativeSession {
     try {
       var result = await Process.run('ps', ['-Ao', 'comm=']);
       if (result.exitCode != 0) return const [];
-      return LineSplitter.split(
-        '${result.stdout}',
-      ).map((line) => line.trim()).where((line) => line.isNotEmpty).toList();
+      return LineSplitter.split('${result.stdout}')
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty)
+          .toList();
     } on Object {
       return const [];
     }

@@ -278,9 +278,8 @@ void main() {
     tearDown(() => directory.deleteSync(recursive: true));
 
     test('finds the index and resolves a shot against it', () async {
-      File(
-        '${directory.path}${Platform.pathSeparator}$translationExportFile',
-      ).writeAsStringSync(jsonEncode(export().toJson()));
+      File('${directory.path}${Platform.pathSeparator}$translationExportFile')
+          .writeAsStringSync(jsonEncode(export().toJson()));
 
       var read = await TranslationExport.read(directory.path);
 

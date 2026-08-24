@@ -261,9 +261,8 @@ Future<int> _hit(String path) async {
 Future<({int? status, String? body, Object? error})> _get(String path) async {
   var client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
   try {
-    var response = await (await client.getUrl(
-      Uri.parse('$_base$path'),
-    )).close();
+    var response = await (await client.getUrl(Uri.parse('$_base$path')))
+        .close();
     return (
       status: response.statusCode,
       body: await response.transform(utf8.decoder).join(),

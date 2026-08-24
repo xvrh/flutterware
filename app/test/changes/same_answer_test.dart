@@ -106,9 +106,8 @@ void main() {
         Ranking([RankedFile(file: file('lib/a.dart'), tier: tier)]);
 
     expect(
-      setOf(
-        ranking: ranking(RankTier.ordinary),
-      ).sameAnswerAs(setOf(ranking: ranking(RankTier.attention))),
+      setOf(ranking: ranking(RankTier.ordinary))
+          .sameAnswerAs(setOf(ranking: ranking(RankTier.attention))),
       isFalse,
     );
   });

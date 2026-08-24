@@ -89,9 +89,8 @@ class BaseCheckout {
       // would both acquire it — so the in-process queue above serializes
       // those, and the file lock serializes everybody else.
       await gate;
-      var lock = File(
-        p.join(cacheRoot, '$sha.lock'),
-      ).openSync(mode: FileMode.write);
+      var lock = File(p.join(cacheRoot, '$sha.lock'))
+          .openSync(mode: FileMode.write);
       try {
         await lock.lock(FileLock.blockingExclusive);
         return await _ensureLocked(

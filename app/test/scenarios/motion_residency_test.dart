@@ -41,9 +41,8 @@ void main() {
     // `framePaths` to name them.
     var count = megabytes;
     for (var frame = 0; frame < count; frame++) {
-      File(
-        p.join(directory.path, '${frame.toString().padLeft(4, '0')}.raw'),
-      ).writeAsBytesSync(const []);
+      File(p.join(directory.path, '${frame.toString().padLeft(4, '0')}.raw'))
+          .writeAsBytesSync(const []);
     }
     return ScenarioRunStep(
       index: index,

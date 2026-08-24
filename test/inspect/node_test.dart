@@ -150,16 +150,15 @@ void main() {
     test('and comes back unbounded rather than zero', () {
       var round = InspectConstraints.fromJson(
         jsonDecode(
-              jsonEncode(
-                const InspectConstraints(
-                  minWidth: 0,
-                  maxWidth: double.infinity,
-                  minHeight: 8,
-                  maxHeight: double.infinity,
-                ).toJson(),
-              ),
-            )
-            as Map<String, Object?>,
+          jsonEncode(
+            const InspectConstraints(
+              minWidth: 0,
+              maxWidth: double.infinity,
+              minHeight: 8,
+              maxHeight: double.infinity,
+            ).toJson(),
+          ),
+        ) as Map<String, Object?>,
       );
       expect(round.maxWidth, double.infinity);
       expect(round.maxHeight, double.infinity);
@@ -208,22 +207,21 @@ void main() {
     test('carries flex both ways round', () {
       var round = InspectLayout.fromJson(
         jsonDecode(
-              jsonEncode(
-                const InspectLayout(
-                  x: 1,
-                  y: 2,
-                  width: 3,
-                  height: 4,
-                  flex: InspectFlex(
-                    direction: 'horizontal',
-                    mainAxisAlignment: 'start',
-                  ),
-                  flexFactor: 2,
-                  flexFit: 'tight',
-                ).toJson(),
+          jsonEncode(
+            const InspectLayout(
+              x: 1,
+              y: 2,
+              width: 3,
+              height: 4,
+              flex: InspectFlex(
+                direction: 'horizontal',
+                mainAxisAlignment: 'start',
               ),
-            )
-            as Map<String, Object?>,
+              flexFactor: 2,
+              flexFit: 'tight',
+            ).toJson(),
+          ),
+        ) as Map<String, Object?>,
       );
       expect(round.flex?.direction, 'horizontal');
       expect(round.flexFactor, 2);

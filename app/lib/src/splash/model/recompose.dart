@@ -528,9 +528,8 @@ Map<String, String> _cssBodyRule(String css) {
 /// generator wrote no dark block at all — which is itself the answer, and the
 /// same fact `-night` folders carry on Android.
 String? _cssDarkBlock(String css) {
-  var match = RegExp(
-    r'@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)\s*\{',
-  ).firstMatch(css);
+  var match = RegExp(r'@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)\s*\{')
+      .firstMatch(css);
   if (match == null) return null;
 
   var depth = 0;

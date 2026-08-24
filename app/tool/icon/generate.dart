@@ -137,9 +137,9 @@ String _artFor(int size) => size <= _smallArtCutoff ? _small : _master;
 /// regex rather than an SVG engine: nothing here has to unwind a transform.
 Future<void> _writeSlot(String sourceDir, String appRoot) async {
   var svg = await File(p.join(sourceDir, _tileBase)).readAsString();
-  var rect = RegExp(
-    r'<rect[^>]*id="chip-slot"[^>]*>',
-  ).firstMatch(svg)?.group(0);
+  var rect = RegExp(r'<rect[^>]*id="chip-slot"[^>]*>')
+      .firstMatch(svg)
+      ?.group(0);
   if (rect == null) {
     throw StateError('$_tileBase has no rect with id="chip-slot".');
   }

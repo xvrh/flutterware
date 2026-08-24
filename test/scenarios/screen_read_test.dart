@@ -28,9 +28,10 @@ void main() {
 
   /// What the tree says the counter reads, out of the descriptions the walk
   /// mints for `Text` — the same words [ScenarioStepCapture.texts] reports.
-  String? counterIn(ScenarioStepCapture capture) => RegExp(
-    r'Count: \d',
-  ).firstMatch('${capture.screen!.tree.toJson()}')?.group(0);
+  String? counterIn(ScenarioStepCapture capture) =>
+      RegExp(r'Count: \d')
+          .firstMatch('${capture.screen!.tree.toJson()}')
+          ?.group(0);
 
   scenario('every step’s tree is the tree of its own frame', (s) async {
     await s.pumpWidget(const _CounterApp());

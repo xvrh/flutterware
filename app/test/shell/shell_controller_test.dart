@@ -456,11 +456,10 @@ void main() {
     gate.complete();
     await Future.wait([first, second]);
 
-    expect(
-      shell.sessionFor(main)!.plugins.map((pl) => pl.id),
-      ['a.one', 'a.two'],
-      reason: 'the later load wins, whichever finishes first',
-    );
+    expect(shell.sessionFor(main)!.plugins.map((pl) => pl.id), [
+      'a.one',
+      'a.two',
+    ], reason: 'the later load wins, whichever finishes first');
     expect(
       reported,
       hasLength(1),

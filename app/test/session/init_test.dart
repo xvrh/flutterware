@@ -61,9 +61,8 @@ workspace:
 ''');
     await initWith().run();
 
-    var config = File(
-      p.join(root.path, 'tool', 'flutterware.dart'),
-    ).readAsStringSync();
+    var config = File(p.join(root.path, 'tool', 'flutterware.dart'))
+        .readAsStringSync();
     expect(config, contains("const app = Pkg('packages/app');"));
     expect(
       config,
@@ -91,9 +90,8 @@ workspace:
 ''');
     await initWith().run();
 
-    var config = File(
-      p.join(root.path, 'tool', 'flutterware.dart'),
-    ).readAsStringSync();
+    var config = File(p.join(root.path, 'tool', 'flutterware.dart'))
+        .readAsStringSync();
     expect(config, contains("Pkg('apps/mobile/app')"));
     expect(config, contains("Pkg('apps/desktop/app')"));
     expect(config, contains('const appsDesktopApp ='));

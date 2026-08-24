@@ -41,13 +41,9 @@ void main() {
         state: state,
       );
 
-  Map<String, Object?> read(ComparisonArtifact artifact) =>
-      jsonDecode(
-            artifact
-                .writeTo(p.join(root.path, 'out', 'index.json'))
-                .readAsStringSync(),
-          )
-          as Map<String, Object?>;
+  Map<String, Object?> read(ComparisonArtifact artifact) => jsonDecode(
+    artifact.writeTo(p.join(root.path, 'out', 'index.json')).readAsStringSync(),
+  ) as Map<String, Object?>;
 
   test("the base and the head are the comparison's, not a half's", () {
     var json = read(

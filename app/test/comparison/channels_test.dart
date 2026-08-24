@@ -169,8 +169,7 @@ void main() {
     /// Two different statements, both formatted the way a person formats
     /// them: the keyword alone on the first line.
     AppEvent tasks() => AppEvent.query(
-      sql:
-          'select\n  t.*,\n  count(te.id)\nfrom task as t\nwhere t.done is null',
+      sql: 'select\n  t.*,\n  count(te.id)\nfrom task as t\nwhere t.done is null',
     );
     AppEvent users() =>
         AppEvent.query(sql: 'select\n  u.id,\n  u.email\nfrom users as u');

@@ -205,9 +205,8 @@ void main() {
     );
 
     test('reports the iOS catalog kind', () async {
-      Directory(
-        p.join(root.path, 'ios', 'Runner', 'AppIcon.icon'),
-      ).createSync(recursive: true);
+      Directory(p.join(root.path, 'ios', 'Runner', 'AppIcon.icon'))
+          .createSync(recursive: true);
 
       var result = (await core().invoke('inventory'))! as IconInventoryResult;
       expect(result.iosCatalog, 'iconComposer');

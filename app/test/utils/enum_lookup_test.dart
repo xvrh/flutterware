@@ -212,9 +212,9 @@ enum Backend { local }
     write('main.dart', "import 'package:app/models.dart';");
 
     expect(
-      EnumLookup(
-        packageConfig: configFor('pkg'),
-      ).lookup(file: at('main.dart'), name: 'Backend').values,
+      EnumLookup(packageConfig: configFor('pkg'))
+          .lookup(file: at('main.dart'), name: 'Backend')
+          .values,
       ['dev'],
     );
   });

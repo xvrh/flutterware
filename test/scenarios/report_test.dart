@@ -208,20 +208,15 @@ void main() {
     test('counts its own steps on the harness record', () {
       var wire =
           (jsonDecode(
-                    jsonEncode(
-                      ScenarioRunOutcome(
-                        file: 'f',
-                        name: 's',
-                        ok: true,
-                        steps: [
-                          step(index: 1),
-                          step(index: 2, unchanged: true),
-                        ],
-                      ),
-                    ),
-                  )
-                  as Map)
-              .cast<String, Object?>()
+              jsonEncode(
+                ScenarioRunOutcome(
+                  file: 'f',
+                  name: 's',
+                  ok: true,
+                  steps: [step(index: 1), step(index: 2, unchanged: true)],
+                ),
+              ),
+            ) as Map).cast<String, Object?>()
             ..remove('stepCount')
             ..remove('unchangedCount');
       var back = ScenarioRunOutcome.fromJson(wire);
@@ -252,22 +247,18 @@ void main() {
     test('carries its errors and translations', () {
       var back = ScenarioRunOutcome.fromJson(
         (jsonDecode(
-                  jsonEncode(
-                    ScenarioRunOutcome(
-                      file: 'f',
-                      name: 's',
-                      ok: false,
-                      errors: [
-                        ScenarioRunError(error: 'boom', stack: 'at main'),
-                      ],
-                      translations: const {
-                        'app': {'cart.title': 'Panier'},
-                      },
-                    ),
-                  ),
-                )
-                as Map)
-            .cast<String, Object?>(),
+          jsonEncode(
+            ScenarioRunOutcome(
+              file: 'f',
+              name: 's',
+              ok: false,
+              errors: [ScenarioRunError(error: 'boom', stack: 'at main')],
+              translations: const {
+                'app': {'cart.title': 'Panier'},
+              },
+            ),
+          ),
+        ) as Map).cast<String, Object?>(),
       );
 
       expect(back.errors.single.error, 'boom');
@@ -398,9 +389,8 @@ void main() {
           ),
         ],
       );
-      File(
-        '${out.path}/$scenarioRunReportFile',
-      ).writeAsStringSync(jsonEncode(run));
+      File('${out.path}/$scenarioRunReportFile')
+          .writeAsStringSync(jsonEncode(run));
 
       var report = await ScenarioRunReport.read(out.path, root: temp.path);
 
@@ -443,9 +433,8 @@ void main() {
           ),
         ],
       );
-      File(
-        '${temp.path}/$scenarioRunIndexFile',
-      ).writeAsStringSync(jsonEncode(index));
+      File('${temp.path}/$scenarioRunIndexFile')
+          .writeAsStringSync(jsonEncode(index));
 
       var back = await readScenarioRunIndex(temp.path);
 
@@ -470,12 +459,8 @@ void main() {
   test('an event round-trips through its file spelling', () {
     var back = AppEvent.fromJson(
       (jsonDecode(
-                jsonEncode(
-                  AppEvent.query(sql: 'SELECT 1\nFROM t', args: [1], rows: 3),
-                ),
-              )
-              as Map)
-          .cast<String, Object?>(),
+        jsonEncode(AppEvent.query(sql: 'SELECT 1\nFROM t', args: [1], rows: 3)),
+      ) as Map).cast<String, Object?>(),
     );
 
     expect(back.channel, AppChannel.db);

@@ -232,12 +232,10 @@ ${transformers.entries.map((e) => '  ${e.key}:\n    path: ../${e.value}').join('
     var file = assetFile('assets/logo.svg');
     const chain = [AssetTransformer(package: 'upcase')];
 
-    var before = await (await resolve({
-      'upcase': 'upcase',
-    })).pathFor(file, chain);
-    var after = await (await resolve({
-      'upcase': 'upcase_next',
-    })).pathFor(file, chain);
+    var before = await (await resolve({'upcase': 'upcase'}))
+        .pathFor(file, chain);
+    var after = await (await resolve({'upcase': 'upcase_next'}))
+        .pathFor(file, chain);
 
     expect(after, isNot(before));
     expect(File(before).readAsStringSync(), 'HI');

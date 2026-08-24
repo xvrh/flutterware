@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:logging/logging.dart';
 import 'package:pool/pool.dart';
+
 import 'value_stream.dart';
 
 final _logger = Logger('data_loader');

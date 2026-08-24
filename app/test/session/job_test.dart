@@ -116,9 +116,9 @@ void main() {
   });
 
   test('a throwing action completes rather than escaping', () async {
-    var result = await _one(
-      throws: StateError('boom'),
-    ).invoke('one', 'go').done;
+    var result = await _one(throws: StateError('boom'))
+        .invoke('one', 'go')
+        .done;
     expect(result.ok, isFalse);
     expect(result.error, isA<StateError>());
     expect(result.stackTrace, isNotNull);
@@ -157,9 +157,9 @@ void main() {
       path: 'build/shot.png',
       address: Address(worktree: 'wt', plugin: 'a.one', segments: const ['x']),
     );
-    var result = await _one(
-      result: _DataCarryingArtifact(artifact),
-    ).invoke('one', 'go').done;
+    var result = await _one(result: _DataCarryingArtifact(artifact))
+        .invoke('one', 'go')
+        .done;
 
     expect(result.artifacts, [artifact]);
     expect(

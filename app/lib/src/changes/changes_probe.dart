@@ -41,8 +41,10 @@ class GitOutput {
 }
 
 /// Runs `git <arguments>` in `<directory>`.
-typedef GitRunner =
-    Future<GitOutput> Function(String directory, List<String> arguments);
+typedef GitRunner = Future<GitOutput> Function(
+  String directory,
+  List<String> arguments,
+);
 
 /// Reads one worktree's delta.
 class ChangesProbe {
@@ -359,9 +361,12 @@ class ChangesProbe {
 }
 
 /// Splits NUL-terminated output into its records, dropping the empty tail.
-List<String> _splitNul(Uint8List bytes) => const Utf8Decoder(
-  allowMalformed: true,
-).convert(bytes).split('\u0000').where((s) => s.isNotEmpty).toList();
+List<String> _splitNul(Uint8List bytes) =>
+    const Utf8Decoder(allowMalformed: true)
+        .convert(bytes)
+        .split('\u0000')
+        .where((s) => s.isNotEmpty)
+        .toList();
 
 /// Where [path] was renamed from, per `git diff --name-status -M -z`.
 ///

@@ -265,9 +265,9 @@ class _ServerBar extends StatelessWidget {
       children: [
         for (var server in servers)
           Tappable(
-            onTap: () => AddressScope.write(
-              context,
-            ).setSegments(serverSegments(server.handle.name)),
+            onTap: () =>
+                AddressScope.write(context)
+                    .setSegments(serverSegments(server.handle.name)),
             borderRadius: BorderRadius.circular(context.radii.pill),
             child: Container(
               padding: const EdgeInsets.symmetric(
@@ -627,9 +627,9 @@ class _QueryDetailState extends State<_QueryDetail> {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var stats = sqlStats(
-      widget.server.events,
-    ).where((s) => s.key == widget.queryKey).firstOrNull;
+    var stats = sqlStats(widget.server.events)
+        .where((s) => s.key == widget.queryKey)
+        .firstOrNull;
     if (stats == null) {
       return const EmptyState(
         icon: Icons.history_toggle_off,
@@ -652,9 +652,9 @@ class _QueryDetailState extends State<_QueryDetail> {
             IconButton(
               icon: const Icon(Icons.close, size: FwIconSize.lg),
               tooltip: 'Back to all queries',
-              onPressed: () => AddressScope.write(
-                context,
-              ).setSegments(sqlSegments(widget.server.handle.name)),
+              onPressed: () =>
+                  AddressScope.write(context)
+                      .setSegments(sqlSegments(widget.server.handle.name)),
             ),
           ],
         ),
@@ -994,9 +994,9 @@ class _RequestDetail extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.close, size: FwIconSize.lg),
                 tooltip: 'Back to the request list',
-                onPressed: () => AddressScope.write(
-                  context,
-                ).setSegments(serverSegments(server.handle.name)),
+                onPressed: () =>
+                    AddressScope.write(context)
+                        .setSegments(serverSegments(server.handle.name)),
               ),
             ],
           ),
@@ -1276,8 +1276,8 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
                       ),
                       const Gap(FwSpacing.md),
                       TextButton(
-                        onPressed: () =>
-                            AddressScope.write(context).setSegments(
+                        onPressed: () => AddressScope.write(context)
+                            .setSegments(
                               sqlSegments(
                                 widget.server.handle.name,
                                 queryKey: queryShapeKey(

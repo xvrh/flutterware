@@ -47,9 +47,8 @@ void main() {
   setUp(() {
     root = Directory.systemTemp.createTempSync('fw_web_app_test');
     Directory(p.join(root.path, 'demo', 'team')).createSync(recursive: true);
-    File(
-      p.join(root.path, 'demo', 'team', 'avatar_tile.dart'),
-    ).writeAsStringSync('''
+    File(p.join(root.path, 'demo', 'team', 'avatar_tile.dart'))
+        .writeAsStringSync('''
 import 'package:flutter/material.dart';
 
 import '../shell.dart';
@@ -86,9 +85,8 @@ Widget settingsWide() => const Placeholder();
 
     for (var i = 0; i < 3; i++) {
       expect(
-        File(
-          p.join(root.path, 'build', 'web_src', 'entry_$i.dart'),
-        ).existsSync(),
+        File(p.join(root.path, 'build', 'web_src', 'entry_$i.dart'))
+            .existsSync(),
         isTrue,
         reason: 'entry_$i.dart should have been written',
       );
@@ -173,9 +171,8 @@ Widget settingsWide() => const Placeholder();
 
   test('an entry with no wrapper still reaches its builder', () {
     generator.generate([settings]);
-    var wrapper = File(
-      p.join(root.path, 'build', 'web_src', 'entry_0.dart'),
-    ).readAsStringSync();
+    var wrapper = File(p.join(root.path, 'build', 'web_src', 'entry_0.dart'))
+        .readAsStringSync();
 
     expect(wrapper, contains('Preview get fwPreview => Demo();'));
     expect(

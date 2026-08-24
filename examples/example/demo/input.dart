@@ -128,9 +128,9 @@ Widget textFields() => Scaffold(
         Builder(
           builder: (context) => TextField(
             decoration: const InputDecoration(labelText: 'Submit me'),
-            onSubmitted: (value) => ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('Submitted: $value'))),
+            onSubmitted: (value) =>
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text('Submitted: $value'))),
           ),
         ),
       ],

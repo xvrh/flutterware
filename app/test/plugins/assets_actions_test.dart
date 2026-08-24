@@ -353,9 +353,8 @@ flutter:
         reason: '64px is nothing at the default limit.',
       );
 
-      var finding = (await audit({
-        'maxEdge': 32,
-      })).findings.singleWhere((f) => f.kind == 'oversized');
+      var finding = (await audit({'maxEdge': 32})).findings
+          .singleWhere((f) => f.kind == 'oversized');
       expect(finding.detail, contains('64 × 64'));
     });
 
@@ -399,9 +398,8 @@ flutter:
     test(
       'a package it could not scan is reported, not counted clean',
       () async {
-        File(
-          p.join(root.path, '.dart_tool', 'package_config.json'),
-        ).deleteSync();
+        File(p.join(root.path, '.dart_tool', 'package_config.json'))
+            .deleteSync();
         writeText('pubspec.yaml', 'name: app\n');
 
         var result = await audit();

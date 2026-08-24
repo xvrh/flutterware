@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutterware/server.dart';
 import 'package:flutterware/src/server/protocol.dart';
 import 'package:path/path.dart' as p;
@@ -65,9 +66,8 @@ void main() {
         pid: 1,
         startedAt: DateTime.now(),
       );
-      File(
-        p.join(dir.path, 'srv-00000000-api-1.json'),
-      ).writeAsStringSync(jsonEncode(handle.toJson()));
+      File(p.join(dir.path, 'srv-00000000-api-1.json'))
+          .writeAsStringSync(jsonEncode(handle.toJson()));
 
       expect(scanServerHandles(dir.path, underRoot: '/repo'), hasLength(1));
       expect(

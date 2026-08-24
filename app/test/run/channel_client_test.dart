@@ -225,24 +225,21 @@ void main() {
     );
   });
 
-  test(
-    'a synchronous handler answers in the same call, with no nudge',
-    () async {
-      app.core.registerHandler(
-        'sql',
-        'explain',
-        (params) => {'plan': params['q']},
-      );
-      var client = await attach();
-      addTearDown(client.close);
-      app.nudges.clear();
+  test('a synchronous handler answers in the same call, with no nudge', () async {
+    app.core.registerHandler(
+      'sql',
+      'explain',
+      (params) => {'plan': params['q']},
+    );
+    var client = await attach();
+    addTearDown(client.close);
+    app.nudges.clear();
 
-      expect(await client.request('sql', 'explain', {'q': 'x'}), {'plan': 'x'});
-      // The answer rode the reply to the call that carried the question. A nudge
-      // here would mean a whole extra round trip per command.
-      expect(app.nudges, isEmpty);
-    },
-  );
+    expect(await client.request('sql', 'explain', {'q': 'x'}), {'plan': 'x'});
+    // The answer rode the reply to the call that carried the question. A nudge
+    // here would mean a whole extra round trip per command.
+    expect(app.nudges, isEmpty);
+  });
 
   test('an async handler answers on a later pull', () async {
     var gate = Completer<void>();

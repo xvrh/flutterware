@@ -94,9 +94,10 @@ Future<void> main(List<String> args) async {
       var after = await guest.tree();
 
       int? topRow(String tree) {
-        var rows = RegExp(
-          r'Row (\d+)',
-        ).allMatches(tree).map((m) => int.parse(m.group(1)!)).toList();
+        var rows = RegExp(r'Row (\d+)')
+            .allMatches(tree)
+            .map((m) => int.parse(m.group(1)!))
+            .toList();
         return rows.isEmpty ? null : rows.reduce((a, b) => a < b ? a : b);
       }
 

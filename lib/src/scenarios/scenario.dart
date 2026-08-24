@@ -1760,9 +1760,8 @@ class ScenarioTester {
         // Three strings and no picture. Written anyway rather than skipped: a
         // destination directory that silently omits a beat reads as a flow
         // that never had one.
-        File(
-          '$base.notification.json',
-        ).writeAsBytesSync(pending.notification!.encode());
+        File('$base.notification.json')
+            .writeAsBytesSync(pending.notification!.encode());
     }
   }
 

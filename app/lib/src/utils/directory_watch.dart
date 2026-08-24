@@ -23,8 +23,10 @@ import 'dart:io';
 /// rather than `FileSystemEvent` for two reasons: it is all any of this uses
 /// (any event means "look again"), and dart:io's event classes have private
 /// constructors, so a test could not have made one.
-typedef WatchDirectory =
-    Stream<String> Function(String path, {required bool recursive});
+typedef WatchDirectory = Stream<String> Function(
+  String path, {
+  required bool recursive,
+});
 
 /// Whether a changed path is worth waking anything for.
 typedef WatchFilter = bool Function(String path);

@@ -607,35 +607,32 @@ flutter_native_splash:
       );
     });
 
-    test(
-      'does not mistake stock Flutter launch images for generated output',
-      () async {
-        // Every Flutter project ships LaunchImage.imageset from `flutter create`.
-        // Counting it reported three generated files — and then a drift warning —
-        // for a project that had never run the generator once.
-        write('flutter_native_splash.yaml', '''
+    test('does not mistake stock Flutter launch images for generated output', () async {
+      // Every Flutter project ships LaunchImage.imageset from `flutter create`.
+      // Counting it reported three generated files — and then a drift warning —
+      // for a project that had never run the generator once.
+      write('flutter_native_splash.yaml', '''
 flutter_native_splash:
   color: "FFFFFF"
 ''');
-        for (var name in [
-          'LaunchImage.png',
-          'LaunchImage@2x.png',
-          'LaunchImage@3x.png',
-        ]) {
-          writePng(
-            'ios/Runner/Assets.xcassets/LaunchImage.imageset/$name',
-            10,
-            10,
-          );
-        }
+      for (var name in [
+        'LaunchImage.png',
+        'LaunchImage@2x.png',
+        'LaunchImage@3x.png',
+      ]) {
+        writePng(
+          'ios/Runner/Assets.xcassets/LaunchImage.imageset/$name',
+          10,
+          10,
+        );
+      }
 
-        var c = core();
-        await c.computeAll();
-        var result = (await c.invoke('artifacts'))! as SplashArtifactsResult;
-        expect(result.generated, isFalse);
-        expect(result.stale, isFalse);
-      },
-    );
+      var c = core();
+      await c.computeAll();
+      var result = (await c.invoke('artifacts'))! as SplashArtifactsResult;
+      expect(result.generated, isFalse);
+      expect(result.stale, isFalse);
+    });
 
     test(
       'counts iOS output once the generator has left its own marker',
@@ -814,9 +811,8 @@ flutter_native_splash:
       var c = core();
       await c.computeAll();
 
-      var clipped = (await problems(
-        c,
-      )).singleWhere((p) => p.message.contains('cut off'));
+      var clipped = (await problems(c))
+          .singleWhere((p) => p.message.contains('cut off'));
       expect(clipped.tone, 'warn');
       // The device is what makes it actionable — and navigable.
       expect(clipped.device, 'android-small');

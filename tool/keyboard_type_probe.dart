@@ -81,9 +81,8 @@ class _ProbeState extends State<_Probe> {
       lines.add(await _once(entry.key, entry.value));
       if (mounted) setState(() => _report = lines.join('\n'));
     }
-    await File(
-      '${Directory.systemTemp.path}/kbtypes.txt',
-    ).writeAsString('${lines.join('\n')}\n');
+    await File('${Directory.systemTemp.path}/kbtypes.txt')
+        .writeAsString('${lines.join('\n')}\n');
   }
 
   /// Takes the keyboard fully down, swaps the field for one asking [type], and

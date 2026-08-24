@@ -23,9 +23,8 @@ import 'package:http/testing.dart';
 /// from the fixture, and the load is driven **before** `pumpWidget` so no future
 /// is started under fake time and then awaited from real time.
 void main() {
-  var fixture = File(
-    'test/dependencies/fixtures/pub_deps.json',
-  ).readAsStringSync();
+  var fixture = File('test/dependencies/fixtures/pub_deps.json')
+      .readAsStringSync();
 
   late Directory cache;
 

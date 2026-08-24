@@ -211,9 +211,9 @@ void main() {
       );
       late Uint8List bytes;
       await tester.runAsync(() async {
-        bytes = (await image.toByteData(
-          format: ui.ImageByteFormat.rawRgba,
-        ))!.buffer.asUint8List();
+        bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!
+            .buffer
+            .asUint8List();
       });
       image.dispose();
       return bytes;
@@ -394,9 +394,8 @@ class _Recorder {
       var raws = <Uint8List>[];
       for (var frame in frames) {
         raws.add(
-          (await frame.toByteData(
-            format: ui.ImageByteFormat.rawRgba,
-          ))!.buffer.asUint8List(),
+          (await frame.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer
+              .asUint8List(),
         );
       }
       sw.stop();
@@ -411,22 +410,20 @@ class _Recorder {
       sw = Stopwatch()..start();
       var total = 0;
       for (var (i, frame) in frames.indexed) {
-        var png = (await frame.toByteData(
-          format: ui.ImageByteFormat.png,
-        ))!.buffer.asUint8List();
+        var png = (await frame.toByteData(format: ui.ImageByteFormat.png))!
+            .buffer
+            .asUint8List();
         total += png.length;
-        File(
-          '${dir.path}/${i.toString().padLeft(4, '0')}.png',
-        ).writeAsBytesSync(png);
+        File('${dir.path}/${i.toString().padLeft(4, '0')}.png')
+            .writeAsBytesSync(png);
       }
       sw.stop();
       pngMs = sw.elapsedMicroseconds / 1000;
       pngBytes = total;
 
       // Raw, concatenated — what a host that can blit pixels would take.
-      File(
-        '${dir.path}/frames.raw',
-      ).writeAsBytesSync(Uint8List.fromList([for (var raw in raws) ...raw]));
+      File('${dir.path}/frames.raw')
+          .writeAsBytesSync(Uint8List.fromList([for (var raw in raws) ...raw]));
     });
 
     var size = '${frames.first.width}×${frames.first.height}';

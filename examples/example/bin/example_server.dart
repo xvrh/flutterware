@@ -12,6 +12,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutterware/server.dart';
 import 'package:logging/logging.dart';
 import 'package:shelf/shelf.dart';
@@ -36,9 +37,8 @@ Future<void> main() async {
       // Written through rather than buffered: `tool/stack.dart logs` reads this
       // file from another process, and a line still sitting in an IOSink is a
       // line that log command cannot see.
-      File(
-        logFile,
-      ).writeAsStringSync('$record\n', mode: FileMode.append, flush: true);
+      File(logFile)
+          .writeAsStringSync('$record\n', mode: FileMode.append, flush: true);
     }
     (record.zone ?? Zone.current).run(() {
       FlutterwareServer.event('log', {

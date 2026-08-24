@@ -365,9 +365,8 @@ void main() {
     for (var folder in ['mobile', 'desktop']) {
       var directory = Directory(p.join(root.path, 'test', 'scenarios', folder))
         ..createSync(recursive: true);
-      File(
-        p.join(directory.path, 'flutter_test_config.dart'),
-      ).writeAsStringSync('// this folder is a pool');
+      File(p.join(directory.path, 'flutter_test_config.dart'))
+          .writeAsStringSync('// this folder is a pool');
     }
 
     var core = ScenariosCore(
@@ -671,9 +670,8 @@ void main() {
     await tester.pump();
 
     expect(
-      File(
-        '${root.path}/test/scenarios/around_the_shop_test.dart',
-      ).readAsStringSync(),
+      File('${root.path}/test/scenarios/around_the_shop_test.dart')
+          .readAsStringSync(),
       contains("scenario('Around the shop'"),
     );
     // And the panel went to it, which is what runs it.
@@ -1476,9 +1474,8 @@ class _FakeRunner extends ScenarioRunner {
         var directory = Directory('$outDir/$index-$name.frames')
           ..createSync(recursive: true);
         for (var frame = 0; frame < 4; frame++) {
-          File(
-            '${directory.path}/${frame.toString().padLeft(4, '0')}.png',
-          ).writeAsBytesSync(_transparentPng);
+          File('${directory.path}/${frame.toString().padLeft(4, '0')}.png')
+              .writeAsBytesSync(_transparentPng);
         }
         frames = directory.path;
       }

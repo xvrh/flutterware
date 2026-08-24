@@ -68,14 +68,14 @@ void main() {
         expect(png.existsSync(), isTrue);
         expect(png.lengthSync(), greaterThan(1000));
         expect(step['format'], 'png');
-        var tree =
-            jsonDecode(File(step['tree']! as String).readAsStringSync())
-                as Map<String, dynamic>;
+        var tree = jsonDecode(
+          File(step['tree']! as String).readAsStringSync(),
+        ) as Map<String, dynamic>;
         expect(tree['root'], isNotNull);
         // The fourth leg: what a screen reader gets, beside the widget tree.
-        var semantics =
-            jsonDecode(File(step['semantics']! as String).readAsStringSync())
-                as Map<String, dynamic>;
+        var semantics = jsonDecode(
+          File(step['semantics']! as String).readAsStringSync(),
+        ) as Map<String, dynamic>;
         expect(semantics['rect'], isNotNull);
         expect(semantics['children'], isNotEmpty);
       }
@@ -291,9 +291,9 @@ void main() {
         (tapped['eventTitles']! as List).cast<String>(),
         containsAll(<String>['POST /sessions → 200', 'sign_in']),
       );
-      var events =
-          jsonDecode(File(tapped['events']! as String).readAsStringSync())
-              as List;
+      var events = jsonDecode(
+        File(tapped['events']! as String).readAsStringSync(),
+      ) as List;
       expect(
         [
           for (var event in events.cast<Map>())
@@ -708,12 +708,10 @@ void main() {
       var folder = Directory(
         p.join(packageRoot, 'test', 'scenarios', 'profiled'),
       )..createSync(recursive: true);
-      File(
-        p.join(folder.path, 'flutter_test_config.dart'),
-      ).writeAsStringSync(_folderConfigSource);
-      File(
-        p.join(folder.path, 'profiled_test.dart'),
-      ).writeAsStringSync(_profiledSource);
+      File(p.join(folder.path, 'flutter_test_config.dart'))
+          .writeAsStringSync(_folderConfigSource);
+      File(p.join(folder.path, 'profiled_test.dart'))
+          .writeAsStringSync(_profiledSource);
       // The same scenario outside the folder, to prove the framing is worked
       // out per file rather than per request.
       var unprofiled = File(
@@ -927,41 +925,36 @@ void main() {
     }
   });
 
-  test(
-    'a failed cold start is forgotten, not memoized',
-    () async {
-      var flutterRoot = Platform.environment['FLUTTER_ROOT']!;
-      var repoRoot = Directory.current.parent.path;
-      var packageRoot = p.join(repoRoot, 'examples', 'example');
-      var outDir = Directory.systemTemp.createTempSync('scenario_cold').path;
+  test('a failed cold start is forgotten, not memoized', () async {
+    var flutterRoot = Platform.environment['FLUTTER_ROOT']!;
+    var repoRoot = Directory.current.parent.path;
+    var packageRoot = p.join(repoRoot, 'examples', 'example');
+    var outDir = Directory.systemTemp.createTempSync('scenario_cold').path;
 
-      // An empty directory is the cheapest cold-start failure there is — no
-      // compile, same lane.
-      var empty = Directory(p.join(packageRoot, 'test', 'scenarios_cold'))
-        ..createSync(recursive: true);
-      var runner = ScenarioRunner(
-        packageRoot: packageRoot,
-        directory: 'test/scenarios_cold',
-        flutterSdkRoot: flutterRoot,
-      );
-      try {
-        await expectLater(runner.list(), throwsA(isA<StateError>()));
+    // An empty directory is the cheapest cold-start failure there is — no
+    // compile, same lane.
+    var empty = Directory(p.join(packageRoot, 'test', 'scenarios_cold'))
+      ..createSync(recursive: true);
+    var runner = ScenarioRunner(
+      packageRoot: packageRoot,
+      directory: 'test/scenarios_cold',
+      flutterSdkRoot: flutterRoot,
+    );
+    try {
+      await expectLater(runner.list(), throwsA(isA<StateError>()));
 
-        // The fix: writing the scenario the runner complained about and asking
-        // again starts it, rather than replaying the old complaint forever.
-        File(
-          p.join(empty.path, 'cold_test.dart'),
-        ).writeAsStringSync(_scratchSource('cold'));
-        var listed = await runner.list();
-        expect([for (var s in listed) s.name], contains('Scratch'));
-      } finally {
-        await runner.dispose();
-        empty.deleteSync(recursive: true);
-        Directory(outDir).deleteSync(recursive: true);
-      }
-    },
-    timeout: const Timeout(Duration(minutes: 4)),
-  );
+      // The fix: writing the scenario the runner complained about and asking
+      // again starts it, rather than replaying the old complaint forever.
+      File(p.join(empty.path, 'cold_test.dart'))
+          .writeAsStringSync(_scratchSource('cold'));
+      var listed = await runner.list();
+      expect([for (var s in listed) s.name], contains('Scratch'));
+    } finally {
+      await runner.dispose();
+      empty.deleteSync(recursive: true);
+      Directory(outDir).deleteSync(recursive: true);
+    }
+  }, timeout: const Timeout(Duration(minutes: 4)));
 
   test(
     'a package with no lib/main.dart runs, and taps a Material button',
@@ -976,9 +969,8 @@ void main() {
       var outDir = Directory.systemTemp.createTempSync('scenario_no_main').path;
       var dir = Directory(p.join(repoRoot, 'test', 'scenarios_no_main'))
         ..createSync(recursive: true);
-      File(
-        p.join(dir.path, 'ripple_test.dart'),
-      ).writeAsStringSync(_rippleSource);
+      File(p.join(dir.path, 'ripple_test.dart'))
+          .writeAsStringSync(_rippleSource);
 
       var runner = ScenarioRunner(
         packageRoot: repoRoot,
@@ -1009,9 +1001,8 @@ void main() {
       var outDir = Directory.systemTemp.createTempSync('scenario_hang').path;
       var dir = Directory(p.join(repoRoot, 'test', 'scenarios_hang'))
         ..createSync(recursive: true);
-      File(
-        p.join(dir.path, 'hanging_test.dart'),
-      ).writeAsStringSync(_hangingSource);
+      File(p.join(dir.path, 'hanging_test.dart'))
+          .writeAsStringSync(_hangingSource);
 
       var runner = ScenarioRunner(
         packageRoot: repoRoot,

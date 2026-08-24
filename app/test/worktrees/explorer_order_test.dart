@@ -51,11 +51,11 @@ void main() {
       // An hour old, and the only row whose position says anything.
       'gamma',
     ]);
-    expect(
-      await order(tester, entries(flipped: true)),
-      ['alpha', 'beta', 'gamma'],
-      reason: 'the newest of the two changed, and nothing moved',
-    );
+    expect(await order(tester, entries(flipped: true)), [
+      'alpha',
+      'beta',
+      'gamma',
+    ], reason: 'the newest of the two changed, and nothing moved');
   });
 
   testWidgets('a row that crosses into a new label does move', (tester) async {

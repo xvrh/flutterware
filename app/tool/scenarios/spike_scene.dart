@@ -66,9 +66,9 @@ class _SpikeBinding extends AutomatedTestWidgetsFlutterBinding {
 /// makes users do by hand (the golden_toolkit dance); here it is the harness's
 /// job.
 Future<List<String>> _loadBundleFonts() async {
-  var manifest =
-      jsonDecode(await rootBundle.loadString('FontManifest.json'))
-          as List<dynamic>;
+  var manifest = jsonDecode(
+    await rootBundle.loadString('FontManifest.json'),
+  ) as List<dynamic>;
   var families = <String>[];
   for (var entry in manifest.cast<Map<String, dynamic>>()) {
     var family = entry['family']! as String;

@@ -83,8 +83,6 @@ Future<void> _frame(Duration grace) {
   var timer = Timer(grace, () {
     if (!stalled.isCompleted) stalled.complete();
   });
-  return Future.any([
-    binding.endOfFrame,
-    stalled.future,
-  ]).whenComplete(timer.cancel);
+  return Future.any([binding.endOfFrame, stalled.future])
+      .whenComplete(timer.cancel);
 }

@@ -541,9 +541,8 @@ class PreviewsCore extends PluginCore {
     var scan = _scans[path];
     if (scan == null) return CatalogSetup.unknown;
     if (scan.entries.isNotEmpty) return CatalogSetup.ready;
-    return Directory(
-          p.join(host.worktree.path, path, rootFor(path)),
-        ).existsSync()
+    return Directory(p.join(host.worktree.path, path, rootFor(path)))
+            .existsSync()
         ? CatalogSetup.empty
         : CatalogSetup.missing;
   }

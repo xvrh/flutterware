@@ -12,12 +12,11 @@ import 'test_runner.dart';
 ///
 /// `sync` brings the harness up to date with the disk first, which costs about
 /// two seconds whether or not anything moved — see [PreviewTestRunner.capture].
-typedef PreviewRender =
-    Future<PreviewCaptureRow?> Function(
-      String entryId,
-      String outDir, {
-      required bool sync,
-    });
+typedef PreviewRender = Future<PreviewCaptureRow?> Function(
+  String entryId,
+  String outDir, {
+  required bool sync,
+});
 
 /// What the store has to say about one entry.
 sealed class Thumbnail {

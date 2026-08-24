@@ -954,10 +954,8 @@ class CatalogSession extends ChangeNotifier {
   void stageAs(DevicePlatform? platform) {
     var inspect = _inspect;
     if (inspect == null) return;
-    if (_staged case (
-      var told,
-      var was,
-    ) when identical(told, inspect) && was == platform) {
+    if (_staged case (var told, var was)
+        when identical(told, inspect) && was == platform) {
       return;
     }
     _staged = (inspect, platform);
@@ -990,10 +988,8 @@ class CatalogSession extends ChangeNotifier {
   void keyboardAs(KeyboardMode mode, double height, double? keypadHeight) {
     var inspect = _inspect;
     if (inspect == null) return;
-    if (_keyboarded case (
-      var told,
-      var was,
-    ) when identical(told, inspect) && was == (mode, height, keypadHeight)) {
+    if (_keyboarded case (var told, var was)
+        when identical(told, inspect) && was == (mode, height, keypadHeight)) {
       return;
     }
     _keyboarded = (inspect, (mode, height, keypadHeight));
@@ -1017,10 +1013,8 @@ class CatalogSession extends ChangeNotifier {
   void dismissKeyboard() {
     var inspect = _inspect;
     if (inspect == null) return;
-    if (_keyboarded case (
-      var told,
-      (KeyboardMode.up, var height, var keypad),
-    ) when identical(told, inspect)) {
+    if (_keyboarded case (var told, (KeyboardMode.up, var height, var keypad))
+        when identical(told, inspect)) {
       _keyboarded = (inspect, (KeyboardMode.auto, height, keypad));
     }
     _fireAndForget(inspect.dismissKeyboard(), 'dismissing the keyboard');

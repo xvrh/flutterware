@@ -258,9 +258,8 @@ class _ImageCellState extends State<_ImageCell> {
   }
 
   void _measure() {
-    if (widget.content case FileBytes(
-      :var bytes,
-    ) when !identical(bytes, _measuredBytes)) {
+    if (widget.content case FileBytes(:var bytes)
+        when !identical(bytes, _measuredBytes)) {
       _measuredBytes = bytes;
       unawaited(
         imageDimensions(bytes).then((size) {

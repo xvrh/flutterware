@@ -151,30 +151,27 @@ void main() {
       );
     });
 
-    test(
-      'a daemon that dies mid-request fails it, rather than hanging',
-      () async {
-        daemon.answerNothing();
-        var client = await daemon.attach();
-        addTearDown(client.close);
+    test('a daemon that dies mid-request fails it, rather than hanging', () async {
+      daemon.answerNothing();
+      var client = await daemon.attach();
+      addTearDown(client.close);
 
-        // Awaited *before* the daemon dies, which is both what a real caller does
-        // and what the test needs: an error delivered to a future nobody is
-        // listening to yet is reported unhandled, whoever listens afterwards.
-        var pending = expectLater(
-          client.select('demo/a.dart#a'),
-          throwsA(
-            isA<StateError>().having(
-              (e) => e.message,
-              'message',
-              contains('closed the connection'),
-            ),
+      // Awaited *before* the daemon dies, which is both what a real caller does
+      // and what the test needs: an error delivered to a future nobody is
+      // listening to yet is reported unhandled, whoever listens afterwards.
+      var pending = expectLater(
+        client.select('demo/a.dart#a'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('closed the connection'),
           ),
-        );
-        await daemon.dropConnections();
-        await pending;
-      },
-    );
+        ),
+      );
+      await daemon.dropConnections();
+      await pending;
+    });
 
     test(
       'a line the client cannot read is a log, not a broken connection',

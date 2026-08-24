@@ -372,34 +372,31 @@ void main() {
       );
     });
 
-    test(
-      'gets the kernel it asked for, not whatever was compiled last',
-      () async {
-        // The compiler, the generated entrypoint and the compiler's output file
-        // are one mutable thing shared between the two clients. When that leaked,
-        // one client decided what the other rendered — and it produced
-        // screenshots of the wrong entry that every test passed.
-        var mine = await daemon.select(entry('counter').id, full: true);
-        var theirs = await second.select(entry('dashboard').id, full: true);
-        expect(mine.ok, isTrue, reason: mine.error ?? '');
-        expect(theirs.ok, isTrue, reason: theirs.error ?? '');
-        expect(
-          mine.dill,
-          isNot(theirs.dill),
-          reason: 'each client got its own kernel, not one shared path',
-        );
-        expect(
-          const ListEquality<int>().equals(
-            File(mine.dill!).readAsBytesSync(),
-            File(theirs.dill!).readAsBytesSync(),
-          ),
-          isFalse,
-          reason:
-              'and the two differ — a shared file would have made them '
-              'identical',
-        );
-      },
-    );
+    test('gets the kernel it asked for, not whatever was compiled last', () async {
+      // The compiler, the generated entrypoint and the compiler's output file
+      // are one mutable thing shared between the two clients. When that leaked,
+      // one client decided what the other rendered — and it produced
+      // screenshots of the wrong entry that every test passed.
+      var mine = await daemon.select(entry('counter').id, full: true);
+      var theirs = await second.select(entry('dashboard').id, full: true);
+      expect(mine.ok, isTrue, reason: mine.error ?? '');
+      expect(theirs.ok, isTrue, reason: theirs.error ?? '');
+      expect(
+        mine.dill,
+        isNot(theirs.dill),
+        reason: 'each client got its own kernel, not one shared path',
+      );
+      expect(
+        const ListEquality<int>().equals(
+          File(mine.dill!).readAsBytesSync(),
+          File(theirs.dill!).readAsBytesSync(),
+        ),
+        isFalse,
+        reason:
+            'and the two differ — a shared file would have made them '
+            'identical',
+      );
+    });
 
     test('an ifChanged reflex survives the other client selecting '
         'elsewhere', () async {

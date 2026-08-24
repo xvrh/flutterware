@@ -449,11 +449,12 @@ void main() {
       ]);
       var section = screen.root!.children.whereType<ScreenRegion>().single;
       expect(section.label, 'SliverList @ section.dart:12');
-      expect(
-        section.box,
-        [0, 100, 400, 120],
-        reason: 'the box of what it holds, since it has none of its own',
-      );
+      expect(section.box, [
+        0,
+        100,
+        400,
+        120,
+      ], reason: 'the box of what it holds, since it has none of its own');
     });
 
     test('a screen survives the round trip', () {
@@ -502,11 +503,9 @@ void main() {
     test('find matches the type, the words and the label', () {
       expect(screenTree().matching('watch').map((n) => n.id), ['0']);
       expect(screenTree().matching('iconbutton').map((n) => n.id), ['2']);
-      expect(
-        screenTree().matching('read this').map((n) => n.id),
-        ['2'],
-        reason: 'the accessibility label is searched too',
-      );
+      expect(screenTree().matching('read this').map((n) => n.id), [
+        '2',
+      ], reason: 'the accessibility label is searched too');
       expect(screenTree().matching('nothing here'), isEmpty);
     });
 

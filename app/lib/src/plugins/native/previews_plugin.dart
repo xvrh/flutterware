@@ -383,9 +383,8 @@ class _CatalogPanelState extends State<_CatalogPanel> {
       package: package,
     );
     if (result == null || !context.mounted) return;
-    AddressScope.write(
-      context,
-    ).setSegments(catalogSegments(package, result.id));
+    AddressScope.write(context)
+        .setSegments(catalogSegments(package, result.id));
   }
 
   /// Lets go of whatever is bound, **through the plugin it was bound to**.

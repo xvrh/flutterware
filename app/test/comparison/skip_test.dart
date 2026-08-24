@@ -380,9 +380,9 @@ void main() {
         const ShotRecord(format: 'raw', width: 1, height: 1),
       );
 
-      var staging = Directory(
-        p.join(root.path, 'shots'),
-      ).listSync(recursive: true).where((e) => e.path.endsWith('.part'));
+      var staging = Directory(p.join(root.path, 'shots'))
+          .listSync(recursive: true)
+          .where((e) => e.path.endsWith('.part'));
 
       expect(staging, isEmpty);
     });

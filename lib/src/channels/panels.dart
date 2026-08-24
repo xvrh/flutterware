@@ -33,8 +33,9 @@ const panelStateMethod = 'fw:state';
 const panelKnobsMethod = 'fw:knobs';
 const panelSetKnobMethod = 'fw:knob';
 
-typedef PanelActionHandler =
-    FutureOr<Object?> Function(Map<String, Object?> args);
+typedef PanelActionHandler = FutureOr<Object?> Function(
+  Map<String, Object?> args,
+);
 typedef PanelStateReader = FutureOr<Map<String, Object?>> Function();
 typedef KnobReader = Object? Function();
 typedef KnobWriter = FutureOr<void> Function(Object? value);

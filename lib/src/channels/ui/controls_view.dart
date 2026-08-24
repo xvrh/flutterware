@@ -390,9 +390,8 @@ class _Parameter extends StatelessWidget {
               ? TextInputType.number
               : null,
           style: style.body,
-          decoration: _fieldDecoration(
-            style,
-          ).copyWith(labelText: label, helperText: parameter.description),
+          decoration: _fieldDecoration(style)
+              .copyWith(labelText: label, helperText: parameter.description),
         );
     }
   }

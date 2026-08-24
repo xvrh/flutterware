@@ -44,9 +44,9 @@ Widget avatarTileEmpty() => const Placeholder();
 
   tearDown(() => root.deleteSync(recursive: true));
 
-  String wrapper(int index) => File(
-    p.join(root.path, 'build', 'entrypoint', 'entry_$index.dart'),
-  ).readAsStringSync();
+  String wrapper(int index) =>
+      File(p.join(root.path, 'build', 'entrypoint', 'entry_$index.dart'))
+          .readAsStringSync();
   String entrypoint() => File(generator.entrypointPath).readAsStringSync();
 
   test('the entrypoint pins the clock outside the binding', () {
@@ -263,11 +263,9 @@ Widget avatarTileEmpty() => const Placeholder();
       var second = generator.select(empty);
 
       expect(first.map((u) => p.basename(u.path)), ['main.dart']);
-      expect(
-        second.map((u) => p.basename(u.path)),
-        ['main.dart'],
-        reason: 'both clients see the same delta, whoever got there first',
-      );
+      expect(second.map((u) => p.basename(u.path)), [
+        'main.dart',
+      ], reason: 'both clients see the same delta, whoever got there first');
     });
 
     test('is idempotent, so a rescan does not renumber live wrappers', () {
@@ -301,9 +299,8 @@ Widget avatarTileEmpty() => const Placeholder();
   group('carried imports', () {
     /// Rewrites the demo file and returns the wrapper generated for it.
     String wrapperFor(String source) {
-      File(
-        p.join(root.path, 'demo', 'team', 'avatar_tile.dart'),
-      ).writeAsStringSync(source);
+      File(p.join(root.path, 'demo', 'team', 'avatar_tile.dart'))
+          .writeAsStringSync(source);
       generator.select(members);
       return wrapper(0);
     }
@@ -411,9 +408,8 @@ Widget avatarTileMembers() => const Placeholder();
 
     setUp(() {
       libRoot = Directory.systemTemp.createTempSync('fw_entrypoint_lib_test');
-      File(
-        p.join(libRoot.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: my_app\n');
+      File(p.join(libRoot.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: my_app\n');
       var widgets = Directory(p.join(libRoot.path, 'lib', 'widgets'))
         ..createSync(recursive: true);
       File(p.join(widgets.path, 'tile.dart')).writeAsStringSync('''
@@ -432,9 +428,9 @@ Widget tile() => const Placeholder();
 
     tearDown(() => libRoot.deleteSync(recursive: true));
 
-    String libWrapper() => File(
-      p.join(libRoot.path, 'build', 'entrypoint', 'entry_0.dart'),
-    ).readAsStringSync();
+    String libWrapper() =>
+        File(p.join(libRoot.path, 'build', 'entrypoint', 'entry_0.dart'))
+            .readAsStringSync();
 
     test('is imported by its package: URI, twice', () {
       libGenerator.select(

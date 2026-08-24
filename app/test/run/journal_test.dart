@@ -50,9 +50,8 @@ void main() {
 
   test('a torn line is skipped, not fatal', () {
     appendJournal(handle, JournalEntry(at: 't1', verb: 'tap'));
-    File(
-      journalPathFor(handle)!,
-    ).writeAsStringSync('{"broken', mode: FileMode.append);
+    File(journalPathFor(handle)!)
+        .writeAsStringSync('{"broken', mode: FileMode.append);
 
     expect(readJournal(handle).single.verb, 'tap');
   });

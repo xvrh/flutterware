@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -6,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:pub_scores/pub_scores.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../address/address_scope.dart';
 import '../ui/empty_state.dart';
 import '../ui/theme.dart';

@@ -32,9 +32,8 @@ void main() {
             File(
               p.join(viewer.path, 'index.html'),
             ).writeAsStringSync('<base href="/">\n<title>Comparison</title>');
-            File(
-              p.join(viewer.path, 'main.dart.js'),
-            ).writeAsStringSync('// js');
+            File(p.join(viewer.path, 'main.dart.js'))
+                .writeAsStringSync('// js');
             return 0;
           };
   });
@@ -112,9 +111,9 @@ void main() {
     expect(File(p.join(out, 'index.html')).existsSync(), isTrue);
     expect(export.frames, 3);
 
-    var written =
-        jsonDecode(File(p.join(out, 'index.json')).readAsStringSync())
-            as Map<String, Object?>;
+    var written = jsonDecode(
+      File(p.join(out, 'index.json')).readAsStringSync(),
+    ) as Map<String, Object?>;
     expect(written['against'], 'master');
 
     // The preview row's cache keys became relative paths…
@@ -154,9 +153,9 @@ void main() {
       output: out,
     );
 
-    var written =
-        jsonDecode(File(p.join(out, 'index.json')).readAsStringSync())
-            as Map<String, Object?>;
+    var written = jsonDecode(
+      File(p.join(out, 'index.json')).readAsStringSync(),
+    ) as Map<String, Object?>;
     var shots =
         (((written['previews']! as Map)['items'] as List).single
                 as Map)['shots']

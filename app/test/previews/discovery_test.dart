@@ -530,9 +530,8 @@ Widget counter() => const Placeholder();
 
     /// Files written in the same millisecond as the last scan would keep their
     /// cached result. A real edit is never that quick; a test is.
-    void touch(String relative) => File(
-      p.join(root.path, 'demo', relative),
-    ).setLastModifiedSync(DateTime.now().add(const Duration(seconds: 1)));
+    void touch(String relative) => File(p.join(root.path, 'demo', relative))
+        .setLastModifiedSync(DateTime.now().add(const Duration(seconds: 1)));
 
     test('reports whether anything moved, which is what gates a rescan', () {
       // The daemon runs this on every `select` and on the panel's poll. It used

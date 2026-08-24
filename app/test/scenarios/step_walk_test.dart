@@ -56,30 +56,27 @@ void main() {
   );
 
   group('the graph a reader walks', () {
-    test(
-      'offers every branch a split opened, in the order it declared them',
-      () {
-        var steps = [
-          step(1),
-          step(2, parent: 1, branch: 'guest', name: 'Guest cart'),
-          step(3, parent: 1, branch: 'member', name: 'Member cart'),
-          step(4, parent: 2),
-        ];
+    test('offers every branch a split opened, in the order it declared them', () {
+      var steps = [
+        step(1),
+        step(2, parent: 1, branch: 'guest', name: 'Guest cart'),
+        step(3, parent: 1, branch: 'member', name: 'Member cart'),
+        step(4, parent: 2),
+      ];
 
-        var (previous, nexts) = scenarioNeighbours(steps, steps.first);
-        expect(previous, isNull, reason: 'the first step has no parent');
-        expect(nexts.map((s) => s.branch), ['guest', 'member']);
+      var (previous, nexts) = scenarioNeighbours(steps, steps.first);
+      expect(previous, isNull, reason: 'the first step has no parent');
+      expect(nexts.map((s) => s.branch), ['guest', 'member']);
 
-        // Inside a branch the links stay on the branch: step 2's next is its own
-        // child, and its previous is the split it came out of.
-        var (parent, inBranch) = scenarioNeighbours(steps, steps[1]);
-        expect(parent?.index, 1);
-        expect(inBranch.map((s) => s.index), [4]);
+      // Inside a branch the links stay on the branch: step 2's next is its own
+      // child, and its previous is the split it came out of.
+      var (parent, inBranch) = scenarioNeighbours(steps, steps[1]);
+      expect(parent?.index, 1);
+      expect(inBranch.map((s) => s.index), [4]);
 
-        // The branch that captured nothing after it is a dead end, not step 4.
-        expect(scenarioNeighbours(steps, steps[2]).$2, isEmpty);
-      },
-    );
+      // The branch that captured nothing after it is a dead end, not step 4.
+      expect(scenarioNeighbours(steps, steps[2]).$2, isEmpty);
+    });
 
     test('falls back to list order for artifacts that recorded no parents', () {
       var steps = [step(1), step(2), step(3)];

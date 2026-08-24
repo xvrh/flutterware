@@ -21,24 +21,20 @@ import '../../tool/generate_capabilities.dart'
 /// Flutter is the price of reading types rather than guessing them. That is
 /// the whole test suite's slowest single test and still worth it.
 void main() {
-  test(
-    'action_shapes.generated.dart matches the result classes',
-    () async {
-      var extracted = await ShapeExtractor(
-        packageRoots: [for (var root in shapeRoots) p.absolute(root)],
-      ).extract([for (var source in shapeSources) p.absolute(source)]);
+  test('action_shapes.generated.dart matches the result classes', () async {
+    var extracted = await ShapeExtractor(
+      packageRoots: [for (var root in shapeRoots) p.absolute(root)],
+    ).extract([for (var source in shapeSources) p.absolute(source)]);
 
-      expect(
-        File(shapesPath).readAsStringSync(),
-        renderShapes(extracted),
-        reason:
-            'The published result shapes no longer match the classes.\n'
-            'Regenerate them:\n'
-            '  cd app && dart run tool/generate_capabilities.dart',
-      );
-    },
-    timeout: const Timeout(Duration(minutes: 2)),
-  );
+    expect(
+      File(shapesPath).readAsStringSync(),
+      renderShapes(extracted),
+      reason:
+          'The published result shapes no longer match the classes.\n'
+          'Regenerate them:\n'
+          '  cd app && dart run tool/generate_capabilities.dart',
+    );
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('every shape is reachable by the name an action reports', () {
     // `PluginAction.returnsName` is the key a renderer looks up, so a shape

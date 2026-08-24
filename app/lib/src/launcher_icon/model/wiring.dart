@@ -154,9 +154,8 @@ AndroidWiring readAndroidWiring({
   required String manifestPath,
 }) {
   var (minSdk, minSdkSource) = readMinSdk(packageRoot);
-  var application = _parse(
-    File(manifestPath),
-  )?.rootElement.getElement('application');
+  var application = _parse(File(manifestPath))?.rootElement
+      .getElement('application');
 
   return AndroidWiring(
     minSdk: minSdk,

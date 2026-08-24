@@ -1,5 +1,7 @@
 import 'dart:io';
+
 import 'package:path/path.dart' as p;
+
 import 'ignore.dart';
 
 /// What a walk skips whatever `.gitignore` says, or fails to say.

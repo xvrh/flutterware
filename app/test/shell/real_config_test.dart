@@ -48,9 +48,8 @@ void main() {
     Directory(p.join(parent.path, 'tool')).createSync();
     File(p.join(parent.path, configFileName)).writeAsStringSync('// decoy');
     Directory(p.join(repo.path, '.git')).createSync(recursive: true);
-    Directory(
-      p.join(repo.path, 'packages', 'admin'),
-    ).createSync(recursive: true);
+    Directory(p.join(repo.path, 'packages', 'admin'))
+        .createSync(recursive: true);
 
     expect(
       findRepoRoot(p.join(repo.path, 'packages', 'admin')),

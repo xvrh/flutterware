@@ -27,26 +27,23 @@ void main() {
     untracked: untracked,
   );
 
-  test(
-    'an unchanged answer keeps the object the screen is already drawing',
-    () async {
-      // **The common case, not the rare one.** Most of what a working-tree watch
-      // fires on is build output git ignores, so most re-probes produce exactly
-      // this again — and keeping the old object is what keeps every expanded
-      // hunk's decoded text and stops the screen rebuilding for nothing.
-      var controller = ChangesController(
-        worktreePath: '/repo/feature',
-        load: (_) async => setOf(),
-      );
-      addTearDown(controller.dispose);
+  test('an unchanged answer keeps the object the screen is already drawing', () async {
+    // **The common case, not the rare one.** Most of what a working-tree watch
+    // fires on is build output git ignores, so most re-probes produce exactly
+    // this again — and keeping the old object is what keeps every expanded
+    // hunk's decoded text and stops the screen rebuilding for nothing.
+    var controller = ChangesController(
+      worktreePath: '/repo/feature',
+      load: (_) async => setOf(),
+    );
+    addTearDown(controller.dispose);
 
-      await controller.refresh();
-      var first = controller.value;
-      await controller.refresh();
+    await controller.refresh();
+    var first = controller.value;
+    await controller.refresh();
 
-      expect(identical(controller.value, first), isTrue);
-    },
-  );
+    expect(identical(controller.value, first), isTrue);
+  });
 
   test('an answer that moved replaces it', () async {
     var patches = ['a', 'a', 'b'];

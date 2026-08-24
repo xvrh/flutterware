@@ -138,9 +138,11 @@ const _dartReservedWords = {
 /// the same way, by prefixing `preview`, which reads as a name somebody might have
 /// chosen rather than as an escape.
 String catalogSymbolName(String name) {
-  var words = catalogFileName(
-    name,
-  ).replaceAll('.dart', '').split('_').where((w) => w.isNotEmpty).toList();
+  var words = catalogFileName(name)
+      .replaceAll('.dart', '')
+      .split('_')
+      .where((w) => w.isNotEmpty)
+      .toList();
   if (words.isEmpty) return 'preview';
   var symbol = [
     words.first,

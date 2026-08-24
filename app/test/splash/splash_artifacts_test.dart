@@ -83,9 +83,8 @@ void main() {
         isNot(contains(999)),
       );
       expect(
-        ios(
-          findSplashArtifacts(root.path, flavor: 'dev'),
-        ).map((a) => a.pixelWidth),
+        ios(findSplashArtifacts(root.path, flavor: 'dev'))
+            .map((a) => a.pixelWidth),
         isNot(contains(200)),
       );
     });
@@ -97,9 +96,8 @@ void main() {
         200,
       );
       expect(
-        ios(
-          findSplashArtifacts(root.path, flavor: 'dev'),
-        ).where((a) => a.theme == SplashTheme.dark),
+        ios(findSplashArtifacts(root.path, flavor: 'dev'))
+            .where((a) => a.theme == SplashTheme.dark),
         hasLength(1),
       );
     });

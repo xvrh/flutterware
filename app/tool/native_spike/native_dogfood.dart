@@ -120,9 +120,8 @@ Future<void> main(List<String> args) async {
       'target': 'Increment',
     });
   } finally {
-    File(
-      p.join(outDir.path, 'report.json'),
-    ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(report));
+    File(p.join(outDir.path, 'report.json'))
+        .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(report));
     stderr.writeln('\nartifacts in ${outDir.path}');
     session.dispose();
     exit(0);

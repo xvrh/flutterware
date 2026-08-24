@@ -83,9 +83,9 @@ void main() {
     'the reply still carries the result, not just the running commentary',
     () async {
       var result = await harness.call('narrate', progressToken: 'tok');
-      var payload =
-          jsonDecode(result.content.whereType<TextContent>().single.text)
-              as Map;
+      var payload = jsonDecode(
+        result.content.whereType<TextContent>().single.text,
+      ) as Map;
 
       expect(payload['action'], 'narrate');
       expect((payload['report']! as Map)['status'], {

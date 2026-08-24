@@ -75,9 +75,8 @@ class TileComposer {
           ui.Paint()
             ..style = ui.PaintingStyle.stroke
             ..strokeWidth = tileChipHairlineWidth
-            ..color = const ui.Color(
-              0xFFFFFFFF,
-            ).withValues(alpha: tileChipHairlineOpacity),
+            ..color = const ui.Color(0xFFFFFFFF)
+                .withValues(alpha: tileChipHairlineOpacity),
         );
     }
 

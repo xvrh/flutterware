@@ -1,8 +1,11 @@
 import 'package:flutter/widgets.dart';
+
 import 'core/typings.dart';
 
-typedef NodeCellBuilder =
-    Widget Function(BuildContext context, MatrixNode node);
+typedef NodeCellBuilder = Widget Function(
+  BuildContext context,
+  MatrixNode node,
+);
 
 Widget _defaultNodeCellBuilder(BuildContext context, MatrixNode node) {
   return Container(

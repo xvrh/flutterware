@@ -176,9 +176,10 @@ Widget a() => const Placeholder();
         output: 'docs/catalog',
         baseHref: '/catalog/',
       );
-      var flags = RegExp(
-        r'--([a-z-]+)=',
-      ).allMatches(printed).map((m) => m.group(1)!).toSet();
+      var flags = RegExp(r'--([a-z-]+)=')
+          .allMatches(printed)
+          .map((m) => m.group(1)!)
+          .toSet();
 
       expect(flags, isNotEmpty);
       // A flag renamed on the action and not here is a command that fails the

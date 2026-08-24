@@ -39,9 +39,8 @@ void main() {
     );
     File(p.join(viewer.path, 'main.dart.js')).writeAsStringSync('// viewer');
     Directory(p.join(viewer.path, 'assets')).createSync();
-    File(
-      p.join(viewer.path, 'assets', 'FontManifest.json'),
-    ).writeAsStringSync('[]');
+    File(p.join(viewer.path, 'assets', 'FontManifest.json'))
+        .writeAsStringSync('[]');
   });
 
   tearDown(() => root.deleteSync(recursive: true));
@@ -64,24 +63,20 @@ void main() {
       ..createSync(recursive: true);
     var base = '$index-$name';
     File(p.join(dir.path, '$base.png')).writeAsBytesSync([1, 2, 3, index]);
-    File(
-      p.join(dir.path, '$base.tree.json'),
-    ).writeAsStringSync('{"name":"Root$index"}');
-    File(
-      p.join(dir.path, '$base.semantics.json'),
-    ).writeAsStringSync('{"label":"hello"}');
+    File(p.join(dir.path, '$base.tree.json'))
+        .writeAsStringSync('{"name":"Root$index"}');
+    File(p.join(dir.path, '$base.semantics.json'))
+        .writeAsStringSync('{"label":"hello"}');
     if (events) {
-      File(
-        p.join(dir.path, '$base.events.json'),
-      ).writeAsStringSync('[{"title":"tapped"}]');
+      File(p.join(dir.path, '$base.events.json'))
+          .writeAsStringSync('[{"title":"tapped"}]');
     }
     if (frames > 0) {
       var recording = Directory(p.join(dir.path, '$base.frames'))
         ..createSync(recursive: true);
       for (var frame = 0; frame < frames; frame++) {
-        File(
-          p.join(recording.path, '${frame.toString().padLeft(4, '0')}.png'),
-        ).writeAsBytesSync([frame]);
+        File(p.join(recording.path, '${frame.toString().padLeft(4, '0')}.png'))
+            .writeAsBytesSync([frame]);
       }
     }
     var relative = p.join('build', 'runs', 'A', base);
@@ -136,14 +131,9 @@ void main() {
 
   String output() => p.join(root.path, 'build', 'scenarios', 'web');
 
-  Map<String, Object?> readReport() =>
-      (jsonDecode(
-                File(
-                  p.join(output(), scenarioWebReportFile),
-                ).readAsStringSync(),
-              )
-              as Map)
-          .cast<String, Object?>();
+  Map<String, Object?> readReport() => (jsonDecode(
+    File(p.join(output(), scenarioWebReportFile)).readAsStringSync(),
+  ) as Map).cast<String, Object?>();
 
   test(
     'every artifact is copied in and every path points at the copy',
@@ -228,9 +218,14 @@ void main() {
 
       // Three, not four: there was no events file to copy.
       expect(written.artifacts, 3);
-      var step0 = ScenarioWebReport.fromJson(
-        readReport(),
-      ).run.packages.single.scenarios.single.steps.single;
+      var step0 = ScenarioWebReport.fromJson(readReport())
+          .run
+          .packages
+          .single
+          .scenarios
+          .single
+          .steps
+          .single;
       expect(step0.events, isNull);
     },
   );
@@ -241,9 +236,8 @@ void main() {
       output: output(),
     );
     expect(
-      Directory(
-        p.join(output(), ScenarioWebExporter.artifactsDir, 's0'),
-      ).listSync(),
+      Directory(p.join(output(), ScenarioWebExporter.artifactsDir, 's0'))
+          .listSync(),
       hasLength(8),
     );
 
@@ -252,9 +246,8 @@ void main() {
     // them and nothing ever removing them.
     await exporter().export(report: report([step(1)]), output: output());
     expect(
-      Directory(
-        p.join(output(), ScenarioWebExporter.artifactsDir, 's0'),
-      ).listSync(),
+      Directory(p.join(output(), ScenarioWebExporter.artifactsDir, 's0'))
+          .listSync(),
       hasLength(4),
     );
   });
@@ -269,9 +262,14 @@ void main() {
     // bulkiest thing a run produces and a page is a thing people download.
     expect(written.artifacts, 4);
 
-    var step0 = ScenarioWebReport.fromJson(
-      readReport(),
-    ).run.packages.single.scenarios.single.steps.single;
+    var step0 = ScenarioWebReport.fromJson(readReport())
+        .run
+        .packages
+        .single
+        .scenarios
+        .single
+        .steps
+        .single;
     // Not merely uncopied — unmentioned. A step that kept its frame fields
     // would put a play button on the page that fetches nothing.
     expect(step0.hasMotion, isFalse);
@@ -385,9 +383,10 @@ void main() {
         baseHref: '/scenarios/',
         offline: true,
       );
-      var flags = RegExp(
-        r'--([a-z-]+)=',
-      ).allMatches(printed).map((m) => m.group(1)!).toSet();
+      var flags = RegExp(r'--([a-z-]+)=')
+          .allMatches(printed)
+          .map((m) => m.group(1)!)
+          .toSet();
 
       expect(flags, isNotEmpty);
       // A flag renamed on the action and not here is a command that fails the

@@ -1457,9 +1457,8 @@ class ScenariosCore extends PluginCore {
     var language = arguments['language'];
     if (language != null &&
         (language is! String ||
-            !RegExp(
-              r'^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})?$',
-            ).hasMatch(language))) {
+            !RegExp(r'^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})?$')
+                .hasMatch(language))) {
       throw ArgumentError.value(
         language,
         'language',
@@ -2324,9 +2323,8 @@ class ScenariosCore extends PluginCore {
               var name = '$number-${_shotSlug(step.name!)}.png';
               // `step.image` is relative to the worktree, which is what keeps
               // a result portable; `step.root` is this machine's copy of it.
-              File(
-                p.join(step.root, step.image),
-              ).copySync(p.join(into.path, name));
+              File(p.join(step.root, step.image))
+                  .copySync(p.join(into.path, name));
               kept.add(name);
               total++;
             }
@@ -2930,9 +2928,8 @@ class ScenariosCore extends PluginCore {
       // stays a record of its own run: which run came before it is the
       // caller's knowledge, not the report's.
       File(file).writeAsStringSync(
-        const JsonEncoder.withIndent(
-          '  ',
-        ).convert(ScenarioRunResult(packages: [run]).toJson()),
+        const JsonEncoder.withIndent('  ')
+            .convert(ScenarioRunResult(packages: [run]).toJson()),
       );
     } catch (_) {
       return carrying(run.report);

@@ -76,9 +76,9 @@ class PubDevPackage {
   /// `license:osi-approved` alongside the real one, which are properties of the
   /// licence rather than its name.
   String? get license {
-    var licenses = _tagValues(
-      'license',
-    ).where((e) => e != 'fsf-libre' && e != 'osi-approved').toList();
+    var licenses = _tagValues('license')
+        .where((e) => e != 'fsf-libre' && e != 'osi-approved')
+        .toList();
     return licenses.isEmpty ? null : licenses.first;
   }
 

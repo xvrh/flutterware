@@ -414,9 +414,8 @@ String formatFieldValue(FieldDescriptor field, Object? value) {
       return value is num ? formatBytes(value) : '$value';
     case FieldKind.timestamp:
       if (value is! num) return '$value';
-      return DateTime.fromMillisecondsSinceEpoch(
-        value.toInt(),
-      ).toIso8601String();
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt())
+          .toIso8601String();
     case FieldKind.json:
     case FieldKind.number:
     case FieldKind.text:

@@ -134,9 +134,8 @@ void main() {
     await loader.load(root.path);
     expect(runs.compiles, 1);
 
-    File(
-      p.join(root.path, '.dart_tool', 'flutterware', 'manifest.deps'),
-    ).deleteSync();
+    File(p.join(root.path, '.dart_tool', 'flutterware', 'manifest.deps'))
+        .deleteSync();
 
     await loader.load(root.path);
     expect(

@@ -53,9 +53,8 @@ void main() {
     });
 
     test('state rides along', () {
-      var toggle = NativeTarget.parse(
-        '{"role": "android.widget.Switch"}',
-      ).resolve(observation);
+      var toggle = NativeTarget.parse('{"role": "android.widget.Switch"}')
+          .resolve(observation);
       expect(toggle.checked, isTrue);
       expect(toggle.clickable, isTrue);
     });
@@ -83,9 +82,8 @@ void main() {
       // The whole reason an agent reaches for this layer is that Flutter could
       // not show it what a webview contains; erasing the word `WebView` while
       // collapsing wrappers would take away the explanation.
-      var webview = NativeTarget.parse(
-        '{"role": "android.webkit.WebView"}',
-      ).resolve(observation);
+      var webview = NativeTarget.parse('{"role": "android.webkit.WebView"}')
+          .resolve(observation);
       expect(webview.children.single.label, 'Web Button');
     });
 
@@ -128,9 +126,10 @@ void main() {
         ),
       );
       expect(
-        NativeTarget.parse(
-          '{"nth": {"target": "Go", "index": 1}}',
-        ).resolve(screen).bounds!.centerY,
+        NativeTarget.parse('{"nth": {"target": "Go", "index": 1}}')
+            .resolve(screen)
+            .bounds!
+            .centerY,
         2221.5,
       );
     });
@@ -174,9 +173,9 @@ void main() {
         'bounds="[53,1071][53,1071]"',
       );
       expect(
-        () => NativeTarget.parse(
-          'OK',
-        ).resolve(AdbNativeDriver.debugParse(collapsed)),
+        () =>
+            NativeTarget.parse('OK')
+                .resolve(AdbNativeDriver.debugParse(collapsed)),
         throwsA(isA<NativeRefusal>()),
       );
     });
@@ -197,9 +196,8 @@ void main() {
         'Products',
       );
       for (var configuration in configurations) {
-        Directory(
-          p.join(root, configuration, 'app.app', 'Contents', 'MacOS'),
-        ).createSync(recursive: true);
+        Directory(p.join(root, configuration, 'app.app', 'Contents', 'MacOS'))
+            .createSync(recursive: true);
       }
       return root;
     }
