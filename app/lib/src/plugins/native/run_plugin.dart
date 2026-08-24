@@ -722,14 +722,6 @@ class _NotYet extends StatelessWidget {
   );
 }
 
-/// PROTOTYPE SWITCH — flip and hot reload to compare the layouts.
-///
-/// 0: the shipped three columns — picture, tree, detail.
-/// 1: the picture as a full-width canvas with an [InspectDock] under it,
-///    which is what previews and the scenarios step page draw.
-/// 2: the columns kept, with the dock's tab strip over the right-hand pane.
-const _layout = 0;
-
 /// The picture and the widget tree, side by side — the design's Screen tab.
 ///
 /// One reading rather than two. Both come off a single `getRootWidgetTree` in
@@ -794,10 +786,6 @@ class _ScreenTabState extends State<_ScreenTab> {
   /// fixed 240: a phone screenshot at that width is a thumbnail, and the tree
   /// beside it never needed the rest.
   double _split = 0.34;
-
-  /// Prototype only — the dock's open tab and whether it is folded away.
-  var _tab = 'elements';
-  var _collapsed = false;
 
   /// Whether the human has moved the grip. Until they do, the split is
   /// chosen from the shape of the app — see [_fitSplit].
@@ -939,7 +927,6 @@ class _ScreenTabState extends State<_ScreenTab> {
         message: 'Its widget tree, and a picture of what it is showing.',
       );
     }
-    if (_layout == 1) return _docked(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         var width = (constraints.maxWidth * _split)
@@ -971,53 +958,19 @@ class _ScreenTabState extends State<_ScreenTab> {
                 );
               }),
             ),
-            Expanded(
-              child: _layout == 2
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        InspectTabStrip(
-                          tabs: const [
-                            InspectDockTab(
-                              id: 'elements',
-                              label: 'Elements',
-                              body: _nothing,
-                            ),
-                            InspectDockTab(
-                              id: 'semantics',
-                              label: 'Semantics',
-                              body: _nothing,
-                            ),
-                          ],
-                          current: _tab,
-                          onSelect: (id) => setState(() => _tab = id),
-                        ),
-                        Expanded(
-                          child: _tab == 'elements'
-                              ? _elements()
-                              : const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(FwSpacing.xl),
-                                    child: Text(
-                                      'PROTOTYPE — the guest already answers '
-                                      '`ext.flutterware.semantics`; the run '
-                                      'inspector does not ask it yet.',
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ],
-                    )
-                  : _elements(),
-            ),
+            // **The strip over this half is not here yet, on purpose.** It is
+            // where Semantics belongs, and a tab strip holding one tab reads
+            // as a broken tab bar rather than as a pane with room to grow —
+            // photographed, and that is exactly what it looked like. It lands
+            // with the second tab or not at all.
+            Expanded(child: _elements()),
           ],
         );
       },
     );
   }
 
-  /// PROTOTYPE — the share of the width that fits the app's own shape.
+  /// The share of the width that fits the app's own shape.
   ///
   /// A fixed default cannot be right for both: dividing the pane *vertically*
   /// gives the picture the full height and a slice of the width, which suits a
@@ -1058,45 +1011,6 @@ class _ScreenTabState extends State<_ScreenTab> {
     // app's own elements, so on a run launched through flutterware a node with
     // no box really has none. Said here rather than inferred from empty fields.
     readsWidgets: _fromGuest,
-  );
-
-  static Widget _nothing(BuildContext context) => const SizedBox.shrink();
-
-  /// PROTOTYPE — the picture as the canvas, the tree in a dock under it.
-  Widget _docked(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: RunScreenPicture(
-            picture: _picture,
-            undecodable: _undecodable,
-            loading: _loading,
-            highlight: _highlight,
-            tree: _tree,
-            canvas: RunScreenPicture.canvasOf(_tree),
-            readAt: _readAt,
-            movedSince: widget.clock.$1 != _readAtMoved,
-          ),
-        ),
-        InspectDock(
-          available: constraints.maxHeight,
-          current: _tab,
-          collapsed: _collapsed,
-          onChanged: (current, collapsed) => setState(() {
-            _tab = current;
-            _collapsed = collapsed;
-          }),
-          tabs: [
-            InspectDockTab(
-              id: 'elements',
-              label: 'Elements',
-              body: (context) => _elements(),
-            ),
-          ],
-        ),
-      ],
-    ),
   );
 }
 

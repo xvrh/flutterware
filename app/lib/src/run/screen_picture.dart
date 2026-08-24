@@ -7,6 +7,7 @@ import 'package:flutterware/src/inspect/node.dart';
 
 import '../inspect/node_highlight.dart';
 import '../ui/age.dart';
+import '../ui/stage.dart';
 import '../ui/design/design.dart';
 import '../ui/theme.dart';
 
@@ -101,10 +102,17 @@ class RunScreenPicture extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // **The app is never the pane's background** — the studio's rule wherever
+    // it shows you somebody else's app, arrived at in previews and the same
+    // question here. A screenshot of a Flutter app drawn flush on a Flutter
+    // panel is two apps sharing a design system with nothing between them: the
+    // reader has to work out which `Reload` button is real. The ground and the
+    // edge do that work, and they are the *same* ground and edge previews
+    // draws, because two greys would read as two conventions.
     return Container(
-      color: context.colors.panel,
+      color: stageGroundColor(context.colors),
       alignment: Alignment.topCenter,
-      padding: const EdgeInsets.all(FwSpacing.md),
+      padding: const EdgeInsets.all(stageInset),
       // Shrink-wrapped and top-aligned so the caption sits *under the
       // picture*, not at the bottom of whatever height the pane happens to
       // have. `Expanded` put it a screen away from what it describes.
@@ -114,24 +122,30 @@ class RunScreenPicture extends StatelessWidget {
         children: [
           if (picture case var picture?) ...[
             Flexible(
-              child: Stack(
-                fit: StackFit.passthrough,
-                children: [
-                  RawImage(
-                    image: picture,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.medium,
-                  ),
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: _Highlight(
-                        highlight: highlight,
-                        tree: tree,
-                        canvas: canvas,
+              // The edge hugs the picture rather than the pane it is centred
+              // in: `RawImage` under `BoxFit.contain` letterboxes inside
+              // whatever box it is given, and a border on the box would frame
+              // the empty margins with it.
+              child: StageEdge(
+                child: Stack(
+                  fit: StackFit.passthrough,
+                  children: [
+                    RawImage(
+                      image: picture,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.medium,
+                    ),
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: _Highlight(
+                          highlight: highlight,
+                          tree: tree,
+                          canvas: canvas,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const Gap(FwSpacing.sm),

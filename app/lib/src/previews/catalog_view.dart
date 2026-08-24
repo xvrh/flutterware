@@ -26,6 +26,7 @@ import 'catalog_entry.dart';
 import 'catalog_session.dart';
 import 'preview_popover.dart';
 import 'staged_device.dart';
+import '../ui/stage.dart';
 import 'stage_ground.dart';
 import 'stage_zoom.dart';
 import 'zoom_control.dart';
