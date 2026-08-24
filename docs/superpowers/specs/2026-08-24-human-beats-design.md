@@ -453,6 +453,42 @@ That is not a rendering bug and no UI change would have fixed it. Both paths
 now go through one `_writeHumanBeats`, so which mouth drained the guest is not
 something a reader of the story can tell.
 
+## Android, measured 2026-08-24 — same answer, and a cheaper beat
+
+Same probe, Android 15 emulator (API 35), debug build, `maxSide` 640 to match
+`beatMaxSide`. 102 encodes back to back in a 3s window.
+
+| phase | median | p95 | max |
+|---|---|---|---|
+| idle | 0.98 ms | 3.60 ms | 7.56 ms |
+| **102 encodes** | **0.99 ms** | 4.15 ms | **20.22 ms** |
+| 11 ms block (control) | 11.14 ms | 15.10 ms | 21.76 ms |
+
+**The encode is off the UI thread here too, and the median proves it.** With
+102 encodes of ~19 ms each inside 3 seconds the UI thread is doing nothing else
+worth mentioning; if the encode ran on it, the *median* gap would be ~19 ms.
+It is 0.99 ms — indistinguishable from idle.
+
+**Contention is visible, and it is small.** p95 moves 3.60 → 4.15 ms and there
+is one 20 ms outlier against idle's 7.56 ms worst. That is the predicted
+effect — the encode holds a core and the UI thread occasionally waits a little
+longer to be scheduled — at **34 encodes a second**, which is 20-60x what a
+human tapping produces. One frame could have been late, once, under twenty
+times the real load.
+
+**A mobile beat is ~18 KB, not ~250 KB.** A phone screen is tall and narrow, so
+capping the *long* side at 640 shrinks it far more than it shrinks a wide
+desktop window: 1080x2400 became 288x640. Mobile costs roughly a fourteenth of
+desktop on disk and on the wire, which is the opposite of the direction anyone
+would guess.
+
+**What this does not answer.** An emulator runs on the host's CPU, so it tests
+the Android engine's *dispatch* and not a real phone's *cores*. The
+architectural question is now answered on two very different engine paths —
+Metal/Impeller on macOS, Android's on the emulator — and the contention
+question still wants a physical device, which was not reachable when this was
+run. Given the margin above, it is a confirmation rather than a gate.
+
 ## Open, deliberately
 
 - **A human tap during an agent step is silently lost.** `HumanActions.suppress`
@@ -496,11 +532,11 @@ walk a beat does not do. Nothing below is blocked on a decision.
    bounded already (`journalMaxBytes`, 5MB, rotating); the pictures were not,
    and the pictures are where all the weight is.
 4. ~~**Steps tab.**~~ Done — renders unchanged. See *Step 4*.
-5. **Validate on a phone**, against the real implementation rather than a probe:
-   frame times with capture on and off, bytes per beat, beats per minute. This
-   is where "off the UI thread is not the same as free" gets tested — a
-   four-core device runs the encode pool on cores the UI thread also wants.
-
-Step 5 is the remaining gate. If a human tap costs a phone anything visible,
-the premise change is wrong there and capture becomes an explicit toggle on
-mobile while staying on for the desktop, where it is now measured as free.
+5. ~~**Validate on a phone.**~~ Measured on an Android emulator — see
+   *Android, measured*. **Capture is on everywhere, one behaviour**: the
+   platform split proposed earlier was withdrawn, because it would have been
+   two things to explain and two to test in exchange for a risk the numbers do
+   not show. Left over, and small: the same probe on a *physical* phone, whose
+   slower cores are the only part an emulator cannot stand in for. If it ever
+   does show dropped frames, the fix is a smaller `maxSide` — which costs every
+   platform equally and keeps one behaviour.
