@@ -772,16 +772,25 @@ class TrackedServer {
 /// and `content-length` are dropped because curl derives them; values the
 /// middleware redacted come through as `<redacted>` — a placeholder the user
 /// edits, deliberately visible rather than silently missing.
+/// The absolute URL [request] was made to, or null when the server never
+/// published a base to resolve its path against.
+///
+/// The derivation [curlCommand] was doing inline. Split out because the panel
+/// wants the URL on its own — a path pasted into a browser is the other thing
+/// people do with a request row — and two copies of "which URL was this" is
+/// one too many.
+String? requestUrl(ServerInfo info, ServerEvent request) {
+  var path = request.payload['path'];
+  if (path is! String || info.baseUrl == null) return null;
+  return resolveLinkUrl(path, baseUrl: info.baseUrl);
+}
+
 String? curlCommand(
   ServerInfo info,
   ServerEvent request, {
   Map<String, Object?>? details,
 }) {
-  var path = request.payload['path'];
-  if (path is! String) return null;
-  var url = info.baseUrl == null
-      ? null
-      : resolveLinkUrl(path, baseUrl: info.baseUrl);
+  var url = requestUrl(info, request);
   if (url == null) return null;
   var method = request.payload['method'];
   var methodFlag = method is String && method != 'GET' ? ' -X $method' : '';

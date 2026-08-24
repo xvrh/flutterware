@@ -25,7 +25,6 @@ void main() {
       const ServerPlace('api', requestId: 7),
       const ServerPlace.sql('api'),
       const ServerPlace.sql('api', queryKey: 'ab12cd34'),
-      const ServerPlace.info('api'),
       const ServerPlace.events('api'),
     ]) {
       expect(serverPlace(serverSegmentsOf(place)), place);
@@ -36,6 +35,10 @@ void main() {
     expect(serverPlace(['api', 'req']), const ServerPlace('api'));
     expect(serverPlace(['api', 'req', 'oops']), const ServerPlace('api'));
     expect(serverPlace(['api', 'other', '3']), const ServerPlace('api'));
+    // `info` was a pane before it became a popover on the header. A link
+    // somebody pasted then lands on the server, which is where the popover
+    // now is.
+    expect(serverPlace(['api', 'info']), const ServerPlace('api'));
   });
 
   test('no segments is no place', () {

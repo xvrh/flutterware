@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../ui/count_badge.dart';
+import '../ui/tappable.dart';
 import '../ui/theme.dart';
 
 /// One tab of an [InspectDock]: a label, an optional count badge, and a body
@@ -203,11 +204,12 @@ class InspectTabStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Its own (invisible) Material, for the same reason [InspectDock] has one
-    // and now more so: the tabs are `InkWell`s, and once the strip could be
-    // used *outside* the dock it stopped inheriting the dock's. It happened to
-    // work in the shell, which has one somewhere above — which is precisely
-    // the gamble a reusable widget should not be taking.
+    // Its own (invisible) Material. The tabs no longer need one — they are
+    // [Tappable]s — but [leading] and [trailing] are the host's widgets, and a
+    // host handing over an `IconButton` or a `CaptureButton` is handing over
+    // something that does need one. Keeping it here is what lets a host pass
+    // whatever it likes; it costs nothing and it is not the thing that was
+    // swallowing hover.
     return Material(
       type: MaterialType.transparency,
       child: Container(
@@ -314,11 +316,17 @@ class _Tab extends StatelessWidget {
   /// Zero draws nothing at all.
   final int badge;
 
+  /// [Tappable], not [InkWell], and the reason is that the [InkWell] painted
+  /// nothing. A [Material]'s ink features are painted *below* its child, and
+  /// the strip puts an opaque `Container(color: colors.panel)` between the two
+  /// — so every hover wash these tabs asked for was drawn and then covered.
+  /// Measured on the running app: hovering a tab moved no pixel, while a
+  /// [Tappable] row in the same pane tinted normally. [Tappable] paints its
+  /// wash inside its own subtree, where no ancestor can cover it.
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return Tappable(
       onTap: onTap,
-      hoverColor: context.colors.hoverOverlay,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
         alignment: Alignment.center,
@@ -377,8 +385,9 @@ class InspectStripButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: InkWell(
+      child: Tappable(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: FwSpacing.xxs),
           padding: const EdgeInsets.all(FwSpacing.sm),
