@@ -353,18 +353,44 @@ the human started from the cockpit is an explicit enough act, and a replay that
 has to be armed is a replay nobody has when they need it. The cost is one
 capture-and-encode per human tap, and nothing per frame.
 
+## What step 2 settled, and one thing it found
+
+**Nothing arms the guest.** The recorder runs from `runGuest`, as it already
+did; what was missing was only a mouth. The guest grew
+`ext.flutterware.beats`, which is deliberately *not* on the act queue and is
+not an observation: it hands over records that already exist and clears them,
+settling nothing and walking nothing, so a host may poll it on a timer without
+competing with a driver for the app.
+
+**The poller starts at launch, not when a panel opens.** `RunNetworkTracker` is
+started by the Network *tab*, which is right for a tab and wrong here: the
+human tapping their own app is exactly the case with no panel in front of it,
+and a recorder that only ran while somebody watched the Steps tab would be a
+recorder for the one case that does not need one. `RunCore` holds one
+`RunBeatTracker` per run, started in `launchApp`'s wake and stopped on `stop`
+and on `dispose`, beside the drive sessions it already keeps.
+
+**It opens no socket.** The design said "the host polls" and assumed a host
+connection; there is none — `RunCore` connects per operation. The one exception
+is `DriveSession`, which holds a socket per run *and repairs it on error*, so
+the tracker takes a `drain` callback rather than a connection and borrows that.
+A second socket per run, kept alive for a poll a second, would have been a new
+resource model for no gain.
+
+**And the thing worth writing down: a poller must reconcile.** `_reconcileHuman`
+exists because this process's own native input — an `adb shell input tap`, an
+`AXPress` — reaches the guest as ordinary platform input on the same global
+pointer route the recorder watches, and comes back indistinguishable from a
+finger. The act path already dropped those echoes. A second writer that did not
+would have journaled every native agent tap twice, once as its step and once as
+a phantom human, which is worse than the gap this feature exists to close.
+
 ## Open, deliberately
 
 - **A human tap during an agent step is silently lost.** `HumanActions.suppress`
   is a flag, not a filter on origin, so a real tap landing inside a drive verb's
   injection window is discarded. Minor today (one journal line); still minor
   with beats, but it is a known blind spot rather than an unknown one.
-- **Who arms the guest, and who starts the poller.** Capture is on for a
-  cockpit-launched run, so something has to tell the guest that. `NetworkTracker`
-  already has "armed by the run guest, or by poll" semantics to copy.
-- **Poll interval, and therefore ring size.** The two are one decision: the ring
-  must cover an interval plus slack. `NetworkTracker`'s own interval is the
-  place to start rather than a fresh guess.
 - **Retention.** Whether the bound on the run's journal is a count or bytes. A
   count is easier to state to a user; bytes is what actually hurts, and the
   161 MB measurement argues for bytes.
@@ -386,16 +412,15 @@ The performance gate has passed on the desktop — the picture costs the UI
 thread nothing, and the one Dart cost that would have been visible is the tree
 walk a beat does not do. Nothing below is blocked on a decision.
 
-1. **The guest side.** `HumanActions` records every tap as it does now, and
+1. ~~**The guest side.**~~ Done. `HumanActions` records every tap as it does now, and
    drives the burst window: on expiry, one capture on the shared `_queue`,
    abandoned if a newer tap arrived. Encoded beats are held in a bounded ring —
    `toImage`, `ImageByteFormat.png`, a beat-sized `maxSide`. Testable on its own:
    `handlePointerEvent` is already public so a test can feed events without a
    binding route.
-2. **The host side.** A poller on `NetworkTracker`'s shape drains the ring and
-   appends each beat to the journal as `actor: human`, with `screenshot` and
-   `texts`, no tree. Settles *who arms the guest and who starts the poller*, and
-   *the poll interval*, which is the same decision as the ring's size.
+2. ~~**The host side.**~~ Done — `RunBeatTracker`, drained through
+   `DriveSession`, journaled with `_reconcileHuman` in front of it. See *What
+   step 2 settled*.
 3. **A bound on the run's own journal growth** — count or bytes, stated where
    the user can see it. Separate from `sweepRunDir`, which keeps its job.
 4. **Steps tab.** Confirm human beats render as steps with no change. If they

@@ -9,6 +9,9 @@ import 'connection.dart';
 /// The drive transaction, as the guest registers it.
 const driveExtension = 'ext.flutterware.act';
 
+/// The human's own steps, as the guest registers the collection of them.
+const beatsExtension = 'ext.flutterware.beats';
+
 /// JSON-RPC's "Method not found" — what the VM answers for an extension the
 /// isolate in the request does not have.
 const _methodNotFound = -32601;
@@ -164,6 +167,26 @@ class DriveSession {
       throw DriveTimeout(
         'The app did not answer in ${deadline.inSeconds}s. $why',
       );
+    } on Object {
+      await _drop();
+      rethrow;
+    }
+  }
+
+  /// Everything the guest has buffered of what the human did, cleared as it
+  /// is handed over.
+  ///
+  /// Shares [act]'s connection and none of its diagnosis: this is called on a
+  /// timer, so an app that is restarting, gone, or was never driveable must
+  /// cost one dropped socket and not an isolate census. The caller counts
+  /// failures; here they only reconnect.
+  Future<List<Map>> beats() async {
+    var connection = await _ensure();
+    try {
+      var response = await connection.service
+          .callServiceExtension(beatsExtension, isolateId: connection.isolateId)
+          .timeout(const Duration(seconds: 5));
+      return (response.json?['human'] as List?)?.cast<Map>() ?? const [];
     } on Object {
       await _drop();
       rethrow;

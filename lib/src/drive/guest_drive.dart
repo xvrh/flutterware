@@ -114,6 +114,20 @@ class GuestDrive {
       });
       return completer.future;
     });
+    // Deliberately *not* on [_queue], and deliberately not an observation:
+    // this hands over records the recorder already made and clears them. It
+    // settles nothing, walks nothing and photographs nothing, so a host may
+    // poll it on a timer without competing with a driver for the app.
+    //
+    // The pictures were taken when their bursts closed; this is the collection.
+    developer.registerExtension('ext.flutterware.beats', (
+      method,
+      params,
+    ) async {
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode({'human': humanActions?.take() ?? const []}),
+      );
+    });
   }
 
   /// Whether anything has been built yet.

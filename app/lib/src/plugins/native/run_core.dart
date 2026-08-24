@@ -16,6 +16,7 @@ import 'package:vm_service/vm_service.dart'
     show DartIOExtension, HttpProfileRequest, HttpProfileRequestRef, RPCError;
 
 import '../../run/channel_client.dart';
+import '../../run/beat_tracker.dart';
 import '../../run/connection.dart';
 import '../../run/define_scripts.dart';
 import '../../run/entrypoint_knobs.dart';
@@ -2545,6 +2546,7 @@ class RunCore extends PluginCore {
       knobs: resolvedKnobs,
     );
     _handles = [handle, ..._handles];
+    _watchBeats(handle);
     notifyChanged();
     return handle;
   }
@@ -3089,6 +3091,7 @@ class RunCore extends PluginCore {
           // The app first, then its launcher. The other order leaves an
           // orphaned app running on the phone with nothing able to reload it,
           // which is the worst of both.
+          _stopWatchingBeats(handle);
           unawaited(_driveSessions.remove(_driveKey(handle))?.close());
           unawaited(_nativeSessions.remove(_driveKey(handle))?.close());
           _nativeEchoes.remove(_driveKey(handle));
@@ -3871,6 +3874,74 @@ class RunCore extends PluginCore {
   /// drops its connection on any error and reconnects on the next call;
   /// closed here on stop and on dispose.
   final _driveSessions = <String, DriveSession>{};
+
+  /// One collector per run, so a run nobody drives still tells its story.
+  ///
+  /// Started at launch rather than when a panel opens: the human tapping their
+  /// own app is exactly the case with no panel in front of it, and a recorder
+  /// that only runs while somebody is watching the Steps tab would be a
+  /// recorder for the one case that does not need one.
+  final _beatTrackers = <String, RunBeatTracker>{};
+
+  /// Collects the human's own steps from [handle] until it stops.
+  ///
+  /// Idempotent, and it shares the drive session's socket rather than opening
+  /// one of its own.
+  void _watchBeats(RunHandle handle) {
+    var key = _driveKey(handle);
+    if (_beatTrackers.containsKey(key)) return;
+    var tracker = RunBeatTracker(
+      drain: () => _driveSessionFor(handle).beats(),
+      onBeats: (beats) => _journalHumanBeats(handle, beats),
+    );
+    _beatTrackers[key] = tracker;
+    tracker.start();
+  }
+
+  void _stopWatchingBeats(RunHandle handle) =>
+      _beatTrackers.remove(_driveKey(handle))?.dispose();
+
+  /// Writes what the human did into the run's story, pictures and all.
+  ///
+  /// The same reconciliation the act path does, and for the same reason: this
+  /// process's own native taps reach the guest as ordinary platform input and
+  /// come back looking exactly like a finger. Without it every `adb shell
+  /// input tap` would be journaled twice, once as its step and once as a
+  /// phantom human.
+  void _journalHumanBeats(RunHandle handle, List<Map> beats) {
+    var (human, _) = _reconcileHuman(handle, beats);
+    for (var beat in human) {
+      var at =
+          beat['at'] as String? ?? DateTime.now().toUtc().toIso8601String();
+      var shot = (beat['screenshot'] as Map?)?.cast<String, Object?>();
+      var texts = (beat['texts'] as List?)?.cast<String>();
+      var capture = shot == null && texts == null
+          ? null
+          : _Capture.write(
+              handle: handle,
+              stamp:
+                  '${DateTime.tryParse(at)?.millisecondsSinceEpoch ?? 0}-$pid',
+              at: DateTime.tryParse(at) ?? DateTime.now(),
+              verb: beat['verb'] as String? ?? 'tap',
+              target: beat['target'] as String?,
+              shot: shot,
+              texts: texts,
+            );
+      appendJournal(
+        handle,
+        JournalEntry(
+          at: at,
+          verb: beat['verb'] as String? ?? 'tap',
+          actor: 'human',
+          target: beat['target'] as String?,
+          capture: capture?.address,
+          screenshot: capture?.shot,
+          texts: capture?.texts,
+        ),
+      );
+    }
+    notifyChanged();
+  }
 
   String _driveKey(RunHandle handle) =>
       handle.handlePath ?? handle.vmService ?? handle.entrypoint;
@@ -4760,6 +4831,10 @@ class RunCore extends PluginCore {
 
   @override
   void dispose() {
+    for (var tracker in _beatTrackers.values) {
+      tracker.dispose();
+    }
+    _beatTrackers.clear();
     for (var session in _driveSessions.values) {
       unawaited(session.close());
     }
