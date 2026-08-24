@@ -162,7 +162,53 @@ this runs on.
 so it cannot say which of these land on the UI thread on a real device. The
 Dart-side walks certainly do. `toImage` rasters off it, and `toByteData(png)`
 is believed to encode off it — that belief is load-bearing for the ~11 ms and
-**must be confirmed on a device before this ships**.
+**was confirmed on a device — see the next section.**
+
+## The encode is off the UI thread — confirmed, 2026-08-24
+
+The gate the bench above could not answer. `flutter_tester` single-threads the
+engine, so it was measured on a real one: a macOS debug build (what a driven
+run is, because hot reload needs one), window visible and animating, Impeller.
+
+**Method.** A `Timer.periodic(1ms)` on the UI thread records the largest gap
+between its own ticks. A timer cannot fire while the isolate is busy, so if the
+encode runs on the UI thread the gap rises to the encode's duration. Three
+phases: idle, back-to-back `toImage` + `toByteData(png)`, and a deliberate 11 ms
+busy-loop as a control that the probe can detect blocking at all.
+
+| phase | median gap | p95 | max gap |
+|---|---|---|---|
+| idle | 1.20 ms | 1.47 ms | 8.09 ms |
+| **126 encodes back to back** | 1.15 ms | 1.19 ms | **1.70 ms** |
+| 11 ms block (control) | 11.05 ms | 12.21 ms | 12.28 ms |
+
+**Neither `toImage` nor `toByteData(png)` blocks the UI thread.** Through
+roughly 2.95 s of encode work inside a 3 s window, the worst gap was 1.70 ms —
+*lower* than the idle phase's worst, and the control shows an 11 ms block is
+seen as an 11 ms gap. `dart:ui` agrees in shape: `Image::toByteData` is a
+callback-based native binding, not a synchronous return.
+
+**So the load-bearing assumption holds, and the picture is not the risk.** What
+remains on the UI thread is Dart-side only: the tree walk (which a beat does not
+do), `visibleTexts`, and base64.
+
+Two things the probe corrected on the way past:
+
+- **~107 KB a beat, not ~12 KB.** The bench's 11.8 KB was flat `ListTile` rows;
+  this screen — an antialiased rotating logo over 40 text rows, output 900x675 —
+  encodes to **107.3 KB**. Real screens carry gradients and photographs, so the
+  ring and the wire should be budgeted near 100 KB a beat, not 12. A 100-beat
+  ring is still only ~10 MB, so nothing about the design changes; the arithmetic
+  above does.
+- **23.4 ms mean per encode**, twice the tester's. Off-thread, so it costs no
+  frames — but it bounds how fast beats can be produced, and a burst window
+  shorter than one encode would simply queue behind it.
+
+**Still unmeasured: a phone.** The engine's task-runner architecture is shared,
+so the *threading* answer should carry. What will not carry is the assumption
+that off-the-UI-thread means free: a four-core phone runs that worker pool on
+cores the UI thread also wants. Worth a repeat on an Android emulator before
+this is called done.
 
 ## Where a beat lives
 
