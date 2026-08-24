@@ -32,7 +32,7 @@ Worth listing, because it is most of the feature:
 | pointer interception | `lib/src/drive/human_actions.dart` — a global pointer route, down/up paired within `kTouchSlop`, long-press split on `kLongPressTimeout` | **done** |
 | naming a hit | `describeHit` → hit test, leaf-most element, walk up to 100 hops for `Text` → `Tooltip` → `Semantics(label)` → `ValueKey<String>`, else `at (x, y)` | **done** |
 | `actor: human` in the journal | `JournalEntry.actor`, rendered by the Steps tab | **done** |
-| capture without waiting for pixels | `OffsetLayer.toImageSync`, proven by the motion recorder | **done** |
+| capturing the root view as PNG | `_screenshot` in `lib/src/drive/guest_drive.dart` — `toImage`, `ImageByteFormat.png`, `maxSide` | **done, reused as-is** |
 | stale-run cleanup | `sweepRunDir`, called once per launch from `run/launch.dart` — age gate (1 day) plus a liveness check | **done, and not what this needs** |
 | frame playback UI | `app/lib/src/scenarios/motion_player.dart` | **done** |
 
@@ -43,9 +43,9 @@ One line is architecturally significant, and it is the whole of v1:
 > **The guest captures on its own trigger, not only when asked.**
 
 Everything else on this wire is pull — the guest answers, never announces. That
-rule is not broken here: the guest writes into the run dir and the host still
-pulls the journal when it wants it. What changes is that the guest stops
-throwing away what it already saw.
+rule is not broken here: the guest captures into its own ring and the host
+still pulls, on its own schedule. What changes is that the guest stops throwing
+away what it already saw — see *Where a beat lives*.
 
 ## The unit: a human beat, shaped like a step
 
@@ -66,7 +66,7 @@ sentence an agent's own step makes.
 |---|---|
 | `actor` | `human` |
 | `verb`, `target` | from `HumanAction` — `tap` / `longPress`, named or `at (x, y)` |
-| `screenshot` | yes, 1× |
+| `screenshot` | yes — PNG, capped by `maxSide` |
 | `texts` | yes |
 | `tree` | **no** |
 | `semantics` | no |
@@ -78,9 +78,14 @@ spelling, not what lands on disk. Dropping it is most of a beat's cost, and it
 is exactly what `lens` gates for this reason. A beat defaults to the equivalent
 of `lens: act`.
 
-**When the name fails, record the node id**, not only the coordinates. The tree
-was walked for the capture on the same beat, so the id is free, and it turns
-`at (312, 640)` into something a reader can look up exactly.
+**When the name fails, a node id would beat bare coordinates** — it turns
+`at (312, 640)` into something a reader can look up exactly. But it is *not*
+free, and an earlier draft of this spec said it was: a beat walks no tree, so
+there is no numbering to borrow. `nameHit` does hold the leaf element from its
+hit test, so the question is whether an id can be minted from that without the
+inspector's walk. **Unresolved — see Open.** Bare coordinates plus the screen's
+texts are the v1 fallback, and they are legible enough for the consumer this is
+built for.
 
 ## The cost, and why it is affordable
 
@@ -89,32 +94,71 @@ Measured under `flutter_test` for the motion recorder
 
 | | |
 |---|---|
-| `toImageSync` | returns without waiting for pixels |
-| read as rawRgba | **0.24 ms/frame** |
-| encode as PNG | **7.4 ms/frame** |
+| read as rawRgba | **0.24 ms/frame**, **1.29 MB** |
+| encode as PNG | **7.4 ms/frame**, **~12 KB** |
 | pump | 2.3 ms/frame — **not paid here**, a live app produces its own frames |
-| decoded size | **1.29 MB/frame** against a 100 MB image cache |
 
-Two conclusions follow.
+**PNG, not raw — and not for the reason the motion recorder chose raw.** That
+recorder runs in `flutter_tester` *on the host* and writes to local disk, so
+there is no wire and CPU is the only cost; raw halves it. A run guest may be on
+a phone, and then every byte crosses the VM service base64'd, at +33%. ~12 KB
+against ~1.29 MB is the whole argument, and `_screenshot` in
+`lib/src/drive/guest_drive.dart` already made this call for agent steps, with
+the reason in the comment: *"base64 over the wire is the cost being bounded"*.
+A beat matches it — same `toImage`, same `ImageByteFormat.png`. (`toImageSync`
+is the motion recorder's trick for staying inside a frame budget; a beat
+captures after its settle and has no budget to protect.)
 
 **The encode is affordable because of when it happens.** 7.4 ms would be
 unaffordable inside a frame budget, and it is not inside one: a beat encodes
-*after* its settle, when the app is idle by definition. That is the same moment
-an agent step pays the same cost today.
+after its settle, when the app is idle by definition — the same moment an agent
+step pays the same cost today.
 
-**Memory cannot hold this; disk can.** At 1.29 MB decoded a ring of any useful
-length exceeds the whole image cache. The journal is already files-not-memory
-for the same reason, and disk buys the case that matters most: a replay that
-survives the crash it was recorded for.
+**`maxSide` is the lever, and it already exists.** It scales the render before
+encoding, so it cuts the encode *and* the bytes together, and `_screenshot`
+takes it today. A beat is for scanning a timeline, not for reading fine print,
+so it should take a smaller cap than an agent step. This is the largest cost
+reduction available and it costs nothing to take.
 
-**The bound is new work, and the existing sweep is not it.** `sweepRunDir` runs
-once per launch and clears what *dead* runs left behind — an age gate of a day
-and a liveness check. It says nothing about a live run's own captures, which is
-exactly what beats are: a long session accumulates them with nothing counting.
-That this matters is already measured — 2026-08-13, **161 MB of step captures,
-none of it reachable**, which is what gave the sweep its caller in the first
-place. Beats need a ring *within* the run, bounded and stated, and the sweep
-keeps its own separate job.
+## Where a beat lives
+
+The guest cannot write the run dir — on a phone it is not even the same
+machine. So the shape is three parts, and only the middle one is new:
+
+    guest: ring of encoded beats  →  host: poller  →  the journal on disk
+
+**The guest's ring is a buffer between polls, not a replay store.** That is the
+correction that makes the memory question disappear: it only has to cover one
+poll interval plus slack, so a few dozen PNG beats — single-digit MB — is
+generous. Raw could never have worked here (a 100-beat raw ring is ~129 MB
+inside the user's app); PNG is what makes an in-guest ring viable at all.
+
+**The host polls, and `NetworkTracker` is the shape to copy** — not a new
+organ. `app/lib/src/run/network_tracker.dart` already runs a `Timer.periodic`
+against the guest with a re-entrancy guard, a give-up-after-failures state, and
+"everything since capture was armed" semantics. A beat poller is the same
+thing with a different payload.
+
+**The journal is the replay store**, as it already is for agent steps.
+`appendJournal` is JSON-lines precisely because *"two processes append to the
+same story — a GUI and an `fw` are both actors"*, so a poller is one more
+appender and out-of-order arrival is a case the format was chosen for.
+
+This also collapses the desktop/device split: both go through the poller, and
+nothing needs device-side disk.
+
+**The cost of that, stated:** beats need a host holding the run. A run launched
+from `fw` where the CLI then exits has nobody polling, and its beats age out of
+the guest ring unseen. That is a real limit and it should be said in the panel
+rather than discovered.
+
+**The bound is still new work, and the existing sweep is not it.**
+`sweepRunDir` runs once per launch and clears what *dead* runs left behind — an
+age gate of a day and a liveness check. It says nothing about a live run's own
+journal, which is what beats grow. That this matters is already measured —
+2026-08-13, **161 MB of step captures, none of it reachable**, which is what
+gave the sweep its caller. Beats need a bound *within* the run; the sweep keeps
+its separate job.
 
 ## Why this is not a video
 
@@ -175,17 +219,48 @@ selector in generated code, and it is not going to.
 **Capture is on for a run launched from the cockpit, and off elsewhere.** A run
 the human started from the cockpit is an explicit enough act, and a replay that
 has to be armed is a replay nobody has when they need it. The cost is one
-`toImageSync` per human tap and nothing per frame.
+capture-and-encode per human tap, and nothing per frame.
 
 ## Open, deliberately
 
-- **Retention.** How many beats a ring holds, and whether the bound is a count
-  or bytes. A count is easier to state to a user; bytes is what actually hurts,
-  and the 161 MB measurement is the argument for bytes.
+- **A fast tapper outruns the capture.** A beat is settle + `toImage` + encode;
+  a human can tap five times a second. Something has to give, and the choice is
+  a real one: coalesce (one beat for a burst, the last screen wins), debounce
+  (skip a beat whose predecessor has not finished), or queue and fall behind.
+  **This must be decided before step 1**, because it decides whether a beat is
+  emitted from the pointer route or from a scheduler behind it. Whatever it is,
+  the drop is *stated* — `HumanActions.take()` already emits a `dropped` entry
+  past its cap, and that rule holds here.
+- **A queued beat can lie, and that is worse than no beat.** `GuestDrive`
+  serializes on a queue — *"two drivers interleave as transactions, never as
+  overlapping gestures"*. If a beat joins that queue it can capture seconds
+  after the tap that triggered it, and then it attributes a screen to a tap
+  that did not produce it. That is a correctness failure, not a slow one. Three
+  ways out, and one must be picked **before step 1**: share the queue and
+  *stamp both times*, marking a beat whose capture drifted; share the queue and
+  drop rather than mislead; or run beside it and accept overlapping `toImage`.
+  Related to the backlog policy but not the same question — that one is about
+  volume, this one is about truth.
+- **A human tap during an agent step is silently lost.** `HumanActions.suppress`
+  is a flag, not a filter on origin, so a real tap landing inside a drive verb's
+  injection window is discarded. Minor today (one journal line); still minor
+  with beats, but it is a known blind spot rather than an unknown one.
+- **Who arms the guest, and who starts the poller.** Capture is on for a
+  cockpit-launched run, so something has to tell the guest that. `NetworkTracker`
+  already has "armed by the run guest, or by poll" semantics to copy.
+- **Poll interval, and therefore ring size.** The two are one decision: the ring
+  must cover an interval plus slack. `NetworkTracker`'s own interval is the
+  place to start rather than a fresh guess.
+- **Retention.** Whether the bound on the run's journal is a count or bytes. A
+  count is easier to state to a user; bytes is what actually hurts, and the
+  161 MB measurement argues for bytes.
 - **Privacy.** This records a human's session in an app with real data. The
   frames stay on their disk and never leave it, but the retention window is a
   decision rather than a default, and it should be said out loud somewhere the
   user reads.
+- **A node id without a tree walk.** Whether `nameHit`'s leaf element can yield
+  an id the inspector would agree with, without paying for the walk a beat
+  deliberately skips. If it cannot, bare coordinates stand and nothing is lost.
 - **Naming quality.** `_nameFrom` finds the *first* name walking up, so an
   unlabelled icon button can be named for the card that contains it. Under the
   evidence framing this is tolerable. It should be measured on a real screen
@@ -193,17 +268,25 @@ has to be armed is a replay nobody has when they need it. The cost is one
 
 ## Order of work
 
-1. `HumanActions` settles and captures on pointer-up instead of buffering;
-   emits a beat.
-2. The beat is appended to the run journal as `actor: human`, with
-   `screenshot` and `texts`, no tree.
-3. Node id on the beat when `nameHit` returns null.
-4. A bound on the run's own beats — a ring, counted or in bytes, stated where
-   the user can see it. Separate from `sweepRunDir`, which keeps its job.
+0. **Decide the backlog policy** above. It shapes step 1 and cannot be
+   retrofitted cheaply.
+1. `HumanActions` settles and captures on pointer-up instead of buffering, and
+   holds encoded beats in a bounded ring — `toImage`, `ImageByteFormat.png`, a
+   beat-sized `maxSide`.
+2. A host poller on `NetworkTracker`'s shape drains the ring and appends each
+   beat to the journal as `actor: human`, with `screenshot` and `texts`, no
+   tree.
+4. A bound on the run's own journal growth — count or bytes, stated where the
+   user can see it. Separate from `sweepRunDir`, which keeps its job.
 5. Steps tab: confirm human beats render as steps with no change. If they need
    one, the beat shape is wrong.
-6. Measure a real session — beats per minute, bytes, and the app's own frame
-   times with capture on and off.
+6. Measure, on a real device and a real screen, not the example app:
+   **PNG bytes per beat** (the ~12 KB figure is a demo screen and will not
+   hold), **encode time on device** (7.4 ms was a Mac), **the `texts` walk**
+   — `visibleTextsOf` walks the widget tree, and dropping `tree` saves the
+   archive bytes but not this, so it may well be the dominant per-beat cost
+   rather than the encode — beats per minute, and the app's own frame times
+   with capture on and off.
 
 The gate is step 6. If a human tap costs the app anything visible, the premise
 change is wrong and the feature goes back to an explicit toggle.
