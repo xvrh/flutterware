@@ -55,10 +55,30 @@ class _ServerPanel extends StatefulWidget {
 class _ServerPanelState extends State<_ServerPanel> {
   ServerCore get _core => widget.plugin.core;
 
+  /// The request list's filter, held here rather than in the list.
+  ///
+  /// Selecting a request swaps the child of the `switch` below from a bare
+  /// [_RequestList] to a [FwSplitPane] wrapping one — a different runtime type
+  /// in the same slot, so the element is thrown away and any state inside it
+  /// with it. Held in the list, the filter and the typed path reset on every
+  /// selection *and* again on every deselection, which is the one moment a
+  /// person is most sure they did not change them.
+  var _requestFilter = _RequestFilter.all;
+
+  /// The path box's text. A controller, not a `String`, because the field's
+  /// own state dies with the same element — see [FwSearchBox.controller].
+  final _requestPath = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _core.track();
+  }
+
+  @override
+  void dispose() {
+    _requestPath.dispose();
+    super.dispose();
   }
 
   /// Mounting starts tracking, and a config reload is not a mount: the session
@@ -70,6 +90,26 @@ class _ServerPanelState extends State<_ServerPanel> {
     super.didUpdateWidget(old);
     if (old.plugin != widget.plugin) _core.track();
   }
+
+  /// One [_RequestList], wherever the switch puts it, reading the filter this
+  /// `State` owns.
+  Widget _requestList({
+    required TrackedServer server,
+    required List<ServerEvent> requests,
+    required Map<String, List<ServerEvent>> byRid,
+    required int? selectedId,
+    bool oneLine = false,
+  }) => _RequestList(
+    server: server,
+    requests: requests.reversed.toList(),
+    byRid: byRid,
+    selectedId: selectedId,
+    oneLine: oneLine,
+    filter: _requestFilter,
+    onFilter: (it) => setState(() => _requestFilter = it),
+    path: _requestPath,
+    onPath: () => setState(() {}),
+  );
 
   ServerPlace? _resolve(BuildContext context) => serverPlace(
     [for (var i = 0; i < 3; i++) AddressScope.segment(context, i) ?? '']
@@ -176,7 +216,13 @@ class _ServerPanelState extends State<_ServerPanel> {
                             selectedKey: place!.queryKey,
                             narrow: true,
                           ),
+                          // Keyed by the shape, so clicking another one in
+                          // the list beside it builds a *new* detail. Without
+                          // it the same `State` is reused and its explain
+                          // result — which belongs to the shape you just left
+                          // — stays on screen under the new statement.
                           detail: _QueryDetail(
+                            key: ValueKey(place.queryKey),
                             server: server,
                             queryKey: place.queryKey!,
                           ),
@@ -184,18 +230,18 @@ class _ServerPanelState extends State<_ServerPanel> {
                 ServerViewKind.events => _EventTimeline(server, events),
                 // The raw stream lives under Events, not behind an unselected
                 // detail.
-                _ when selected == null => _RequestList(
+                _ when selected == null => _requestList(
                   server: server,
-                  requests: requests.reversed.toList(),
+                  requests: requests,
                   byRid: byRid,
                   selectedId: null,
-                  showTime: true,
+                  oneLine: true,
                 ),
                 _ => FwSplitPane(
                   key: const ValueKey('requests'),
-                  list: _RequestList(
+                  list: _requestList(
                     server: server,
-                    requests: requests.reversed.toList(),
+                    requests: requests,
                     byRid: byRid,
                     selectedId: selected.id,
                   ),
@@ -699,7 +745,7 @@ class _Sql extends StatelessWidget {
 /// One query shape: its stats, its occurrences with their parameters, and
 /// the two commands that run inside the live server — explain and requery.
 class _QueryDetail extends StatefulWidget {
-  const _QueryDetail({required this.server, required this.queryKey});
+  const _QueryDetail({super.key, required this.server, required this.queryKey});
 
   final TrackedServer server;
   final String queryKey;
@@ -918,13 +964,19 @@ enum _RequestFilter {
   };
 }
 
-class _RequestList extends StatefulWidget {
+/// The request list. **Stateless on purpose** — see [_ServerPanelState] for
+/// where the filter lives and why it cannot live here.
+class _RequestList extends StatelessWidget {
   const _RequestList({
     required this.server,
     required this.requests,
     required this.byRid,
     required this.selectedId,
-    this.showTime = false,
+    required this.filter,
+    required this.onFilter,
+    required this.path,
+    required this.onPath,
+    this.oneLine = false,
   });
 
   final TrackedServer server;
@@ -934,29 +986,30 @@ class _RequestList extends StatefulWidget {
   final Map<String, List<ServerEvent>> byRid;
   final int? selectedId;
 
+  final _RequestFilter filter;
+  final ValueChanged<_RequestFilter> onFilter;
+
+  /// The path box's text, owned above so it survives a selection.
+  final TextEditingController path;
+
+  /// Called when [path] changes, so the owner can rebuild.
+  final VoidCallback onPath;
+
   /// True in the full-width form, where the row can be one line.
-  final bool showTime;
-
-  @override
-  State<_RequestList> createState() => _RequestListState();
-}
-
-class _RequestListState extends State<_RequestList> {
-  var _filter = _RequestFilter.all;
-  var _path = '';
+  final bool oneLine;
 
   @override
   Widget build(BuildContext context) {
     // The repeat count is what the N+1 badge and the N+1 filter both read, so
     // it is computed once per row here rather than twice.
     var rows = [
-      for (var request in widget.requests)
+      for (var request in requests)
         (
           request,
           () {
             var caused = request.rid == null
                 ? const <ServerEvent>[]
-                : widget.byRid[request.rid] ?? const [];
+                : byRid[request.rid] ?? const [];
             var repeated = repeatedQueries(caused);
             return repeated.isEmpty
                 ? 0
@@ -964,10 +1017,10 @@ class _RequestListState extends State<_RequestList> {
           }(),
         ),
     ];
-    var needle = _path.trim().toLowerCase();
+    var needle = path.text.trim().toLowerCase();
     var shown = [
       for (var (request, repeated) in rows)
-        if (_filter.matches(request, repeated) &&
+        if (filter.matches(request, repeated) &&
             (needle.isEmpty ||
                 '${request.payload['method']} ${request.payload['path']}'
                     .toLowerCase()
@@ -980,15 +1033,12 @@ class _RequestListState extends State<_RequestList> {
       children: [
         FwFilterBar(
           pills: [
-            for (var filter in _RequestFilter.values)
-              (
-                filter.label,
-                filter == _filter,
-                () => setState(() => _filter = filter),
-              ),
+            for (var it in _RequestFilter.values)
+              (it.label, it == filter, () => onFilter(it)),
           ],
           hint: 'Filter paths…',
-          onSearch: (value) => setState(() => _path = value),
+          searchController: path,
+          onSearch: (_) => onPath(),
           count: '${shown.length} of ${rows.length}',
         ),
         Expanded(
@@ -1004,10 +1054,10 @@ class _RequestListState extends State<_RequestList> {
                   itemBuilder: (context, index) {
                     var (request, repeated) = shown[index];
                     return _RequestRow(
-                      server: widget.server,
+                      server: server,
                       request: request,
-                      selected: request.id == widget.selectedId,
-                      oneLine: widget.showTime,
+                      selected: request.id == selectedId,
+                      oneLine: oneLine,
                       repeatedCount: repeated,
                     );
                   },
@@ -1206,11 +1256,17 @@ class _RequestDetail extends StatelessWidget {
             children: [
               HttpMethodToken('${p['method']}'),
               const Gap(FwSpacing.sm),
+              // Scrolled rather than `maxLines: 1`: `SelectableText` takes
+              // no `overflow`, so one line clips mid-character and says
+              // nothing about the tail it dropped.
               Expanded(
-                child: SelectableText(
-                  '${p['path']}',
-                  maxLines: 1,
-                  style: context.type.mono.copyWith(fontSize: 14),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SelectableText(
+                    '${p['path']}',
+                    maxLines: 1,
+                    style: context.type.mono.copyWith(fontSize: 14),
+                  ),
                 ),
               ),
               const Gap(FwSpacing.md),
@@ -1647,7 +1703,10 @@ class _HttpMessageTab extends StatelessWidget {
                 // the first character beats trusting content-type, which lies.
                 : body.trimLeft().startsWith(RegExp(r'[\[{]'))
                 ? JsonView.source(body, maxHeight: 520)
-                : FwCodeBlock(body, maxHeight: 520),
+                // Wrapped, unlike a statement: a form-urlencoded or
+                // single-line text body is one line as wide as it is long,
+                // and scrolling 140,000px sideways is not reading it.
+                : FwCodeBlock(body, maxHeight: 520, wrap: true),
           ],
         );
       },

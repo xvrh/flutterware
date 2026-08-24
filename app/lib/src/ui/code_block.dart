@@ -30,6 +30,7 @@ class FwCodeBlock extends StatelessWidget {
     super.key,
     this.language,
     this.copy = true,
+    this.wrap = false,
     this.maxHeight,
     this.padding = const EdgeInsets.all(FwSpacing.lg),
   });
@@ -42,6 +43,15 @@ class FwCodeBlock extends StatelessWidget {
 
   /// A quiet copy button in the top-right corner.
   final bool copy;
+
+  /// Wrap long lines instead of scrolling them.
+  ///
+  /// Off by default, because the block's usual subject is *code*: a wrapped
+  /// `select … where … order by …` reads as three statements. On for text
+  /// that is not code and has no line breaks of its own — an HTTP body is
+  /// often one line as wide as it is long, and a horizontal scrollbar the
+  /// width of the whole payload is not a way to read it.
+  final bool wrap;
 
   /// Above this the block scrolls vertically as well. Null lets it be as tall
   /// as it is, for a caller that is already inside a list.
@@ -61,13 +71,15 @@ class FwCodeBlock extends StatelessWidget {
       style: context.type.mono,
     );
 
-    Widget body = Scrollbar(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: padding,
-        child: text,
-      ),
-    );
+    var body = wrap
+        ? Padding(padding: padding, child: text)
+        : Scrollbar(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: padding,
+              child: text,
+            ),
+          );
     if (maxHeight case var it?) {
       body = ConstrainedBox(
         constraints: BoxConstraints(maxHeight: it),

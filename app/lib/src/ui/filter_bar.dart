@@ -22,6 +22,7 @@ class FwFilterBar extends StatelessWidget {
     required this.count,
     this.hint,
     this.onSearch,
+    this.searchController,
     this.trailing,
   });
 
@@ -35,6 +36,9 @@ class FwFilterBar extends StatelessWidget {
 
   /// Null draws no search box, and the pills take the whole bar.
   final ValueChanged<String>? onSearch;
+
+  /// Passed to [FwSearchBox.controller] — see there for when a host needs one.
+  final TextEditingController? searchController;
 
   /// Hard right, after the count — a clear button, a refresh.
   final Widget? trailing;
@@ -61,7 +65,11 @@ class FwFilterBar extends StatelessWidget {
               if (onSearch case var it?) ...[
                 const Gap(FwSpacing.sm),
                 Expanded(
-                  child: FwSearchBox(hint: hint ?? 'Filter…', onChanged: it),
+                  child: FwSearchBox(
+                    hint: hint ?? 'Filter…',
+                    onChanged: it,
+                    controller: searchController,
+                  ),
                 ),
               ] else
                 const Spacer(),
@@ -120,10 +128,23 @@ class FwPill extends StatelessWidget {
 
 /// A one-line filter box, sized to whatever it is given.
 class FwSearchBox extends StatelessWidget {
-  const FwSearchBox({super.key, required this.hint, required this.onChanged});
+  const FwSearchBox({
+    super.key,
+    required this.hint,
+    required this.onChanged,
+    this.controller,
+  });
 
   final String hint;
   final ValueChanged<String> onChanged;
+
+  /// Owned by the host when the typed text has to outlive this widget.
+  ///
+  /// Without one the text lives in the field's own `EditableText` state, which
+  /// dies with the element — so a host that lifts its filter value up but
+  /// leaves the box uncontrolled ends up showing an empty box over a list that
+  /// is still filtered. Either both survive or neither does.
+  final TextEditingController? controller;
 
   @override
   Widget build(BuildContext context) {
@@ -142,6 +163,7 @@ class FwSearchBox extends StatelessWidget {
           const Gap(FwSpacing.sm),
           Expanded(
             child: TextField(
+              controller: controller,
               onChanged: onChanged,
               style: context.type.bodySmall,
               decoration: InputDecoration(

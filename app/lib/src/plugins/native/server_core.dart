@@ -765,13 +765,6 @@ class TrackedServer {
   void dispose() => markStopped();
 }
 
-/// A curl invocation reproducing [request], or null when one cannot be built
-/// — no published `baseUrl` to make the URL absolute, or no recorded path.
-///
-/// Headers and body come from the event's lazy details when captured. `host`
-/// and `content-length` are dropped because curl derives them; values the
-/// middleware redacted come through as `<redacted>` — a placeholder the user
-/// edits, deliberately visible rather than silently missing.
 /// The absolute URL [request] was made to, or null when the server never
 /// published a base to resolve its path against.
 ///
@@ -785,6 +778,13 @@ String? requestUrl(ServerInfo info, ServerEvent request) {
   return resolveLinkUrl(path, baseUrl: info.baseUrl);
 }
 
+/// A curl invocation reproducing [request], or null when one cannot be built
+/// — no published `baseUrl` to make the URL absolute, or no recorded path.
+///
+/// Headers and body come from the event's lazy details when captured. `host`
+/// and `content-length` are dropped because curl derives them; values the
+/// middleware redacted come through as `<redacted>` — a placeholder the user
+/// edits, deliberately visible rather than silently missing.
 String? curlCommand(
   ServerInfo info,
   ServerEvent request, {

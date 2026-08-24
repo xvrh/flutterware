@@ -28,9 +28,10 @@ first event publishes the server.
 
 The one piece that is typed API rather than a snippet, because both halves
 speak it: where the server listens, which environment, what it talks to,
-and the pages worth a click. The GUI's Info tab renders it, the environment
-chip and base URL sit beside the panel tabs, and `flutterware_invoke`'s
-`info` action returns it to agents.
+and the pages worth a click. The GUI's **Details** popover on the panel header
+renders it — reachable from every pane, because which database you are pointed
+at is context for all of them — the environment chip and base URL sit beside
+the title, and `flutterware_invoke`'s `info` action returns it to agents.
 
 ```dart
 var server = await shelf_io.serve(handler, InternetAddress.loopbackIPv4, 8080);

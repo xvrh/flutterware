@@ -51,6 +51,14 @@ class _NetworkTabState extends State<NetworkTab> {
   var _loading = true;
   String? _selectedId;
 
+  /// The list's filter, held here rather than in the list — selecting a
+  /// request swaps the child of the branch below from a bare [_RequestList] to
+  /// a [FwSplitPane] wrapping one, a different runtime type in the same slot,
+  /// so anything held inside the list is discarded on every selection. The
+  /// server panel's Requests tab keeps its filter the same way.
+  var _failedOnly = false;
+  final _needle = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +67,7 @@ class _NetworkTabState extends State<NetworkTab> {
 
   @override
   void dispose() {
+    _needle.dispose();
     unawaited(_changes?.cancel());
     _tracker?.dispose();
     unawaited(_connection?.close());
@@ -125,12 +134,7 @@ class _NetworkTabState extends State<NetworkTab> {
                   message: 'Anything the app fetches lands here.',
                 )
               : selected == null
-              ? _RequestList(
-                  requests: newestFirst,
-                  selectedId: null,
-                  showTime: true,
-                  onSelect: _select,
-                )
+              ? _requestList(newestFirst, null, oneLine: true)
               : LayoutBuilder(
                   builder: (context, constraints) {
                     var detail = _RequestDetail(
@@ -149,11 +153,7 @@ class _NetworkTabState extends State<NetworkTab> {
                     // way back.
                     if (constraints.maxWidth < 640) return detail;
                     return FwSplitPane(
-                      list: _RequestList(
-                        requests: newestFirst,
-                        selectedId: selected.id,
-                        onSelect: _select,
-                      ),
+                      list: _requestList(newestFirst, selected.id),
                       detail: detail,
                     );
                   },
@@ -189,14 +189,37 @@ class _NetworkTabState extends State<NetworkTab> {
   }
 
   void _select(String? id) => setState(() => _selectedId = id);
+
+  /// One [_RequestList], wherever the branch above puts it, reading the filter
+  /// this `State` owns.
+  Widget _requestList(
+    List<HttpProfileRequestRef> requests,
+    String? selectedId, {
+    bool oneLine = false,
+  }) => _RequestList(
+    requests: requests,
+    selectedId: selectedId,
+    onSelect: _select,
+    oneLine: oneLine,
+    failedOnly: _failedOnly,
+    onFailedOnly: (it) => setState(() => _failedOnly = it),
+    needle: _needle,
+    onNeedle: () => setState(() {}),
+  );
 }
 
-class _RequestList extends StatefulWidget {
+/// The request list. **Stateless on purpose** — see [_NetworkTabState] for
+/// where the filter lives and why it cannot live here.
+class _RequestList extends StatelessWidget {
   const _RequestList({
     required this.requests,
     required this.selectedId,
     required this.onSelect,
-    this.showTime = false,
+    required this.failedOnly,
+    required this.onFailedOnly,
+    required this.needle,
+    required this.onNeedle,
+    this.oneLine = false,
   });
 
   /// Newest first.
@@ -204,26 +227,27 @@ class _RequestList extends StatefulWidget {
   final String? selectedId;
   final ValueChanged<String?> onSelect;
 
+  final bool failedOnly;
+  final ValueChanged<bool> onFailedOnly;
+
+  /// The URL box's text, owned above so it survives a selection.
+  final TextEditingController needle;
+
+  /// Called when [needle] changes, so the owner can rebuild.
+  final VoidCallback onNeedle;
+
   /// True in the full-width form, where the row can be one line.
-  final bool showTime;
-
-  @override
-  State<_RequestList> createState() => _RequestListState();
-}
-
-class _RequestListState extends State<_RequestList> {
-  var _failedOnly = false;
-  var _needle = '';
+  final bool oneLine;
 
   @override
   Widget build(BuildContext context) {
-    var needle = _needle.trim().toLowerCase();
+    var query = needle.text.trim().toLowerCase();
     var shown = [
-      for (var request in widget.requests)
-        if ((!_failedOnly || _isFailure(request)) &&
-            (needle.isEmpty ||
+      for (var request in requests)
+        if ((!failedOnly || _isFailure(request)) &&
+            (query.isEmpty ||
                 '${request.method} ${request.uri}'.toLowerCase().contains(
-                  needle,
+                  query,
                 )))
           request,
     ];
@@ -232,12 +256,13 @@ class _RequestListState extends State<_RequestList> {
       children: [
         FwFilterBar(
           pills: [
-            ('All', !_failedOnly, () => setState(() => _failedOnly = false)),
-            ('Errors', _failedOnly, () => setState(() => _failedOnly = true)),
+            ('All', !failedOnly, () => onFailedOnly(false)),
+            ('Errors', failedOnly, () => onFailedOnly(true)),
           ],
           hint: 'Filter URLs…',
-          onSearch: (value) => setState(() => _needle = value),
-          count: '${shown.length} of ${widget.requests.length}',
+          searchController: needle,
+          onSearch: (_) => onNeedle(),
+          count: '${shown.length} of ${requests.length}',
         ),
         Expanded(
           child: shown.isEmpty
@@ -249,9 +274,9 @@ class _RequestListState extends State<_RequestList> {
                   itemCount: shown.length,
                   itemBuilder: (context, index) => _RequestRow(
                     request: shown[index],
-                    selected: shown[index].id == widget.selectedId,
-                    oneLine: widget.showTime,
-                    onSelect: widget.onSelect,
+                    selected: shown[index].id == selectedId,
+                    oneLine: oneLine,
+                    onSelect: onSelect,
                   ),
                 ),
         ),

@@ -40,6 +40,14 @@ final _cache = Logger('example_server.cache');
 /// Where this process is listening, once it is. The seeder calls itself.
 String? _base;
 
+/// Whether a seed run is already in flight.
+///
+/// `/demo/seed` is a link, and a link gets clicked twice, reloaded, and
+/// prefetched by the browser. Two overlapping runs would interleave their
+/// requests, which is exactly the property [_seed] spaces its calls out to
+/// protect: a request list is read as a timeline.
+var _seeding = false;
+
 Future<void> main(List<String> args) async {
   // Launched in the background — by `tool/stack.dart up`, which is what the
   // `DevStack` plugin runs — this process has no terminal to print into, so the
@@ -384,6 +392,7 @@ Future<Response> _route(Request request) async {
       });
       return Response.ok('cached\n');
     case '/demo/seed':
+      if (_seeding) return Response.ok('already seeding\n');
       // Fire-and-forget: the click that starts this should come back at once
       // and let the lists fill behind it, rather than reporting itself as the
       // longest request in the panel.
@@ -470,8 +479,22 @@ class _ToyDatabase {
 /// is read as a timeline, and forty requests sharing a millisecond is a
 /// timeline that says nothing. The whole run takes about a second.
 Future<void> _seed() async {
-  var base = _base;
-  if (base == null) return;
+  if (_base == null || _seeding) return;
+  _seeding = true;
+  // In a `finally`, so a throw anywhere below cannot leave the flag latched —
+  // that would make `/demo/seed` permanently dead, which is a worse fault than
+  // the overlapping runs it is here to prevent.
+  try {
+    await _seedRun();
+  } finally {
+    _seeding = false;
+  }
+}
+
+/// The run itself. Split from [_seed] only so the in-flight flag has a
+/// `finally` to be cleared in.
+Future<void> _seedRun() async {
+  var base = _base!;
   var client = HttpClient();
   _log.info('seeding the panel');
 
