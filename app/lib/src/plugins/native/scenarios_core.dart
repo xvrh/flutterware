@@ -2206,6 +2206,8 @@ class ScenariosCore extends PluginCore {
               '${outcome.stepCount} steps',
               if (outcome.unchangedCount > 0)
                 '${outcome.unchangedCount} unchanged',
+              if (outcome.unsettledCount > 0)
+                '${outcome.unsettledCount} still animating',
               outcome.skipped
                   ? 'skipped'
                   : outcome.ok

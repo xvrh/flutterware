@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -678,8 +679,28 @@ class ScenarioTester {
   /// ```dart
   /// var bytes = await s.runAsync(() => report.generatePdf());
   /// ```
-  Future<T?> runAsync<T>(Future<T> Function() callback) =>
-      watchRunAsync(() => tester.runAsync(callback));
+  ///
+  /// A verb like the rest of them: it settles afterwards and captures what
+  /// landed. Real work arriving is exactly the moment the tree has something
+  /// new to paint — a query returns and the list fills in — and before this
+  /// it was the one method on this surface that sat among `tap` and `drag`
+  /// and quietly did neither, so every site that needed the repaint settled
+  /// by hand.
+  ///
+  /// Work that lands nothing on screen still takes no step: the automatic
+  /// shot is skipped where the settle drew no frame, so the `generatePdf`
+  /// above is followed by its [document] and by nothing else.
+  Future<T?> runAsync<T>(
+    Future<T> Function() callback, {
+    Shot? shot,
+    Settle? settle,
+  }) => _step(
+    shot,
+    settle,
+    () => watchRunAsync(() => tester.runAsync(callback)),
+    verb: 'runAsync',
+    autoShotNeedsFrames: true,
+  );
 
   /// Lets whatever the app started on its first frame actually happen.
   ///
@@ -765,18 +786,78 @@ class ScenarioTester {
   /// Drags [target] by [by] — a swipe, a dismiss, a slider, a sheet pulled
   /// down. Negative `dy` moves the finger up the screen, the touch convention
   /// `flutter_test` itself uses.
-  Future<void> drag(dynamic target, Offset by, {Shot? shot, Settle? settle}) =>
-      _step(
-        shot,
-        settle,
-        () async {
-          var finder = await _resolve(target, 'drag');
-          _aimAt(finder, by: by);
-          await tester.drag(finder, by, warnIfMissed: false);
-        },
-        verb: 'drag',
-        target: describeTarget(target),
-      );
+  ///
+  /// [duration] spreads the same travel over that much of the clock, which is
+  /// how a drag says anything at all about *velocity*.
+  ///
+  /// Without it the finger moves in one jump, so the velocity tracker sees the
+  /// whole distance in no time and reports **none**: the list stops dead where
+  /// the finger stopped, and no offset will make it overscroll. Right for a
+  /// dismiss or a slider, and the reason a fling was not previously
+  /// expressible. Measured on a 200-row list: `Offset(0, -300)` bare lands at
+  /// exactly 300, over a second it carries to ~324, and over 300ms — the same
+  /// distance at three times the speed — it flies past 450.
+  Future<void> drag(
+    dynamic target,
+    Offset by, {
+    Duration? duration,
+    Shot? shot,
+    Settle? settle,
+  }) => _step(
+    shot,
+    settle,
+    () async {
+      var finder = await _resolve(target, 'drag');
+      _aimAt(finder, by: by);
+      if (duration == null) {
+        await tester.drag(finder, by, warnIfMissed: false);
+      } else {
+        await tester.timedDrag(finder, by, duration, warnIfMissed: false);
+      }
+    },
+    verb: 'drag',
+    target: describeTarget(target),
+  );
+
+  /// Drags from a point rather than from a widget — the same gesture as
+  /// [drag], aimed where no finder can reach.
+  ///
+  /// A canvas, a chart, a map, a signature pad: the thing to grab is a
+  /// painted region inside one widget, so naming the widget grabs its centre
+  /// and naming nothing was the only other option. [Target.at] does not
+  /// close this — it resolves the widget *under* the point and the drag still
+  /// starts from that widget's centre, which on a full-bleed canvas is
+  /// somewhere else entirely.
+  ///
+  /// The coordinates are the ones every box in a report is in: the view's
+  /// logical pixels, top-left origin — what a step's aim rectangle reads back
+  /// in, so a point can be lifted straight off one.
+  ///
+  /// [duration] means what it means on [drag].
+  Future<void> dragFrom(
+    Offset from,
+    Offset by, {
+    Duration? duration,
+    Shot? shot,
+    Settle? settle,
+  }) => _step(
+    shot,
+    settle,
+    () async {
+      // No ladder to climb: there is no target to prove reachable, only a
+      // point the author named. That is the trade this verb makes — it goes
+      // where it is told, and a point over nothing drags nothing silently,
+      // where every finder verb would have refused.
+      _aimAtPoint(from, by: by);
+      if (duration == null) {
+        await tester.dragFrom(from, by);
+      } else {
+        await tester.timedDragFrom(from, by, duration);
+      }
+    },
+    verb: 'dragFrom',
+    target: '${from.dx.round()},${from.dy.round()}',
+  );
 
   /// Scrolls until [target] is on screen, then captures it there.
   ///
@@ -932,6 +1013,46 @@ class ScenarioTester {
   Future<void> settle([Settle? policy]) =>
       _step(Shot.skip, policy, () async {}, verb: 'settle');
 
+  /// A step whose cause is not a finger: [description] says what happened,
+  /// [body] makes it happen, and the screen it produces is captured under
+  /// that name.
+  ///
+  /// The verbs above all reach into the widget tree, and a great deal of what
+  /// moves a real app does not. A push arrives, a deep link lands, a socket
+  /// pushes a row, a completer the scenario is holding resolves, a fake
+  /// backend is seeded mid-flow:
+  ///
+  /// ```dart
+  /// await s.act('A photo-ready push arrives', () {
+  ///   app.notifications.onOpen(data);
+  /// });
+  /// ```
+  ///
+  /// The waiting was never the gap — [settle] does that, and did before this
+  /// existed. The report was: the screen changed and nothing in the run said
+  /// why, so a reader had to infer the cause from the two pictures either
+  /// side of it. [document] and [notification] are beats that are not
+  /// screens; this is the same idea one step earlier, the beat that *causes*
+  /// one.
+  ///
+  /// [body] may be synchronous or return a future, and whatever it returns
+  /// comes back — a handle the rest of the scenario needs is not worth a
+  /// variable declared a line above. It runs under fake time like everything
+  /// else, and it is not the place for work that needs the *real* event loop:
+  /// [runAsync] is its own step, so putting one inside this one captures
+  /// twice, once for what landed and once for the name.
+  Future<T> act<T>(
+    String description,
+    FutureOr<T> Function() body, {
+    List<String> tags = const [],
+    Settle? settle,
+  }) => _step(
+    Shot(description, tags: tags),
+    settle,
+    () async => await body(),
+    verb: 'act',
+  );
+
   /// Names the screen as it stands, without performing an action.
   ///
   /// Where nothing has moved since the last verb captured — the ordinary
@@ -956,11 +1077,30 @@ class ScenarioTester {
   /// exists:
   ///
   /// ```dart
-  /// await s.tap(Keys.takePicture, pumpFrames: false);
+  /// await s.tap(Keys.takePicture);
   /// await s.screen('Capturing');        // names the tap's frame
   /// await s.wait(const Duration(seconds: 5));
   /// await s.screen('Captured');         // a new frame: its own step
   /// ```
+  ///
+  /// It settles first, like every other verb — a capture wants a screen that
+  /// has finished moving, and which verb waits and which does not is exactly
+  /// the knowledge [Settle] exists to remove. **To photograph a screen
+  /// mid-flight, say so here**, on the name rather than only on the verb
+  /// before it:
+  ///
+  /// ```dart
+  /// await s.tap(Keys.takePicture, settle: Settle.none);
+  /// await s.screen('Capturing', settle: Settle.none);
+  /// ```
+  ///
+  /// Both halves, because the wait is per step and the second one would
+  /// otherwise undo the first. On a screen holding an indefinite animation
+  /// that is not pedantry: a bounded policy never sees a quiet frame there,
+  /// so it spends its whole budget, and a spent budget under fake time is a
+  /// clock that **moved** — every timer due inside the window fires, and the
+  /// thing the scenario meant to photograph may have finished. True of any
+  /// verb that follows, not only of this one.
   ///
   /// A name never overwrites a name: two `screen` calls on one frame stay two
   /// steps. [force] declines the adoption outright, for a deliberate second
@@ -1158,6 +1298,25 @@ class ScenarioTester {
     );
   }
 
+  /// The mark for a verb aimed at a bare point — [dragFrom].
+  ///
+  /// A box of no size, which is the honest shape of what the author said: a
+  /// point verb names a coordinate and not a widget, and inventing a box
+  /// around it would draw a ring over whatever happens to be under the finger
+  /// as though the verb had resolved it. Viewers already mark the point as
+  /// well as the box, and [ScenarioAim.point] derives it from the rect, so an
+  /// empty rect at the point reads back as exactly that point.
+  void _aimAtPoint(Offset at, {Offset? by}) {
+    _aim = ScenarioAim(
+      x: at.dx,
+      y: at.dy,
+      width: 0,
+      height: 0,
+      dx: by?.dx,
+      dy: by?.dy,
+    );
+  }
+
   /// The mark for a `scrollTo`: **the target where it stands** when it is
   /// already wholly inside the viewport, and otherwise **the viewport and the
   /// way to it**.
@@ -1281,10 +1440,10 @@ class ScenarioTester {
   /// One verb: act, wait per the policy, capture. The settle result rides the
   /// step, so a screen that never stopped animating is reported instead of
   /// throwing.
-  Future<void> _step(
+  Future<T> _step<T>(
     Shot? shot,
     Settle? settle,
-    Future<void> Function() action, {
+    Future<T> Function() action, {
     String? verb,
     String? target,
     bool adopt = false,
@@ -1297,12 +1456,13 @@ class ScenarioTester {
     _aim = null;
     bool settled;
     bool landed;
+    T result;
     try {
       // The frame the transition starts from, banked before the verb acts —
       // otherwise a movie of a tap opens on the frame after the tap and the
       // "before" is nowhere in it.
       _recorder?.capture(tester);
-      await action();
+      result = await action();
       var policy = settle ?? _settle;
       // One purse for the whole step: the policy's frames draw whatever has
       // announced itself as they go — otherwise fake time runs the transition
@@ -1352,6 +1512,7 @@ class ScenarioTester {
       adopt: adopt,
       autoShotNeedsFrames: autoShotNeedsFrames,
     );
+    return result;
   }
 
   /// Forks the scenario: every branch runs, each in its own replay of the

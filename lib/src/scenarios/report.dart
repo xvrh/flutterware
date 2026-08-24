@@ -266,6 +266,10 @@ class ScenarioRunOutcome {
         json['unchangedCount'],
         steps.where((step) => step.unchanged).length,
       ),
+      unsettledCount: _int(
+        json['unsettledCount'],
+        steps.where((step) => !step.settled).length,
+      ),
       errors: _listOf(json['errors'], ScenarioRunError.fromJson),
       translations: _translationsOrNull(json['translations']),
       stepsElided: _int(json['stepsElided'], 0),
@@ -283,6 +287,7 @@ class ScenarioRunOutcome {
     this.steps = const [],
     this.stepCount = 0,
     this.unchangedCount = 0,
+    this.unsettledCount = 0,
     this.errors = const [],
     this.translations,
     this.stepsElided = 0,
@@ -331,6 +336,22 @@ class ScenarioRunOutcome {
   /// that makes a stall visible in it.
   final int unchangedCount;
 
+  /// How many of those steps were captured with the app still animating —
+  /// `settled: false`, the bounded settle giving up with frames still
+  /// scheduled.
+  ///
+  /// Not a failure and not usually a surprise: a spinner does it, and the
+  /// default policy exists to survive one. It is here because nothing at a
+  /// *call site* distinguishes a verb that settled from one that gave up, so
+  /// a suite acquires them silently and a reader has to open steps one at a
+  /// time to find out. Reported by a consumer who swept a 397-call
+  /// `pumpAndSettle` cleanup through 125 scenarios: the deletions that broke
+  /// the suite were all at places the settle had already stopped short of,
+  /// and this number is the one that would have said so before the sweep.
+  /// Carried beside [unchangedCount] for the same reason it is: the summary
+  /// is the copy a reader gets.
+  final int unsettledCount;
+
   /// The failure, when [ok] is false. The last captured step is the frame
   /// just before it.
   final List<ScenarioRunError> errors;
@@ -374,6 +395,7 @@ class ScenarioRunOutcome {
     steps: keep,
     stepCount: stepCount,
     unchangedCount: unchangedCount,
+    unsettledCount: unsettledCount,
     errors: errors,
     translations: translations,
     stepsElided: stepCount - keep.length,
@@ -407,6 +429,7 @@ class ScenarioRunOutcome {
         steps: keep,
         stepCount: stepCount,
         unchangedCount: unchangedCount,
+        unsettledCount: unsettledCount,
         errors: errors,
         stepsElided: stepCount - keep.length,
       );
@@ -434,6 +457,7 @@ class ScenarioRunOutcome {
     'steps': steps,
     'stepCount': stepCount,
     'unchangedCount': unchangedCount,
+    'unsettledCount': unsettledCount,
     if (stepsElided > 0) 'stepsElided': stepsElided,
     if (errors.isNotEmpty) 'errors': errors,
     if (translations != null) 'translations': translations,

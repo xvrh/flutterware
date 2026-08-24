@@ -1402,6 +1402,7 @@ Future<Map<String, Object?>> _runOne(
     steps: steps,
     stepCount: steps.length,
     unchangedCount: steps.where((step) => step.unchanged).length,
+    unsettledCount: steps.where((step) => !step.settled).length,
     errors: passed ? const [] : errors,
     translations: read.isNotEmpty ? read : null,
   );

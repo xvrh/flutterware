@@ -262,6 +262,22 @@ skipped otherwise.
   renames the step before the fork, a failure's picture is never renamed, and
   `screen('X', force: true)` declines outright.
 
+  **`screen()` still settles, and that was re-decided rather than assumed**
+  (2026-08-24). A consumer asked for `Settle.none` as its default, on the
+  grounds that the verb acts on nothing and that on a screen holding an
+  indefinite animation its settle spends a whole five-second budget — which
+  under fake time is a clock that *moved*, firing every timer due inside the
+  window and finishing the thing the scenario meant to photograph. Both
+  observations are true and neither is about this verb: a bounded budget on a
+  non-converging screen is spent by *whatever* verb comes next, and a `tap`
+  written there instead fires the same timer. What is about this verb is that
+  it captures, and a capture wants a screen that has stopped moving. Flipping
+  its default would have bought the mid-flight case at the price of the
+  invariant the policy exists for — that no author has to know which verb
+  waits. Mid-flight is said out loud instead, on the name as well as on the
+  verb before it, and the doc example that read as though the verb before it
+  were enough has been corrected.
+
   Two consequences. A capture is handed over **one step late**, because the
   name has to land before any artifact is written — every file stem is built
   from the step's label. And an adopted `screen`'s events move onto the step it
