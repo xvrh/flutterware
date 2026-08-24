@@ -6,7 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import 'package:vm_service/vm_service.dart';
 
+import '../ui/filter_bar.dart';
+import '../ui/http_row.dart';
 import '../ui/json_view.dart';
+import '../ui/split_pane.dart';
 import '../ui/tappable.dart';
 import 'connection.dart';
 import 'handle.dart';
@@ -48,6 +51,14 @@ class _NetworkTabState extends State<NetworkTab> {
   var _loading = true;
   String? _selectedId;
 
+  /// The list's filter, held here rather than in the list — selecting a
+  /// request swaps the child of the branch below from a bare [_RequestList] to
+  /// a [FwSplitPane] wrapping one, a different runtime type in the same slot,
+  /// so anything held inside the list is discarded on every selection. The
+  /// server panel's Requests tab keeps its filter the same way.
+  var _failedOnly = false;
+  final _needle = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +67,7 @@ class _NetworkTabState extends State<NetworkTab> {
 
   @override
   void dispose() {
+    _needle.dispose();
     unawaited(_changes?.cancel());
     _tracker?.dispose();
     unawaited(_connection?.close());
@@ -122,12 +134,7 @@ class _NetworkTabState extends State<NetworkTab> {
                   message: 'Anything the app fetches lands here.',
                 )
               : selected == null
-              ? _RequestList(
-                  requests: newestFirst,
-                  selectedId: null,
-                  showTime: true,
-                  onSelect: _select,
-                )
+              ? _requestList(newestFirst, null, oneLine: true)
               : LayoutBuilder(
                   builder: (context, constraints) {
                     var detail = _RequestDetail(
@@ -145,20 +152,9 @@ class _NetworkTabState extends State<NetworkTab> {
                     // 380px list — the detail takes the pane and close is the
                     // way back.
                     if (constraints.maxWidth < 640) return detail;
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(
-                          width: 380,
-                          child: _RequestList(
-                            requests: newestFirst,
-                            selectedId: selected.id,
-                            onSelect: _select,
-                          ),
-                        ),
-                        const VerticalDivider(width: 1),
-                        Expanded(child: detail),
-                      ],
+                    return FwSplitPane(
+                      list: _requestList(newestFirst, selected.id),
+                      detail: detail,
                     );
                   },
                 ),
@@ -193,14 +189,37 @@ class _NetworkTabState extends State<NetworkTab> {
   }
 
   void _select(String? id) => setState(() => _selectedId = id);
+
+  /// One [_RequestList], wherever the branch above puts it, reading the filter
+  /// this `State` owns.
+  Widget _requestList(
+    List<HttpProfileRequestRef> requests,
+    String? selectedId, {
+    bool oneLine = false,
+  }) => _RequestList(
+    requests: requests,
+    selectedId: selectedId,
+    onSelect: _select,
+    oneLine: oneLine,
+    failedOnly: _failedOnly,
+    onFailedOnly: (it) => setState(() => _failedOnly = it),
+    needle: _needle,
+    onNeedle: () => setState(() {}),
+  );
 }
 
+/// The request list. **Stateless on purpose** — see [_NetworkTabState] for
+/// where the filter lives and why it cannot live here.
 class _RequestList extends StatelessWidget {
   const _RequestList({
     required this.requests,
     required this.selectedId,
     required this.onSelect,
-    this.showTime = false,
+    required this.failedOnly,
+    required this.onFailedOnly,
+    required this.needle,
+    required this.onNeedle,
+    this.oneLine = false,
   });
 
   /// Newest first.
@@ -208,21 +227,68 @@ class _RequestList extends StatelessWidget {
   final String? selectedId;
   final ValueChanged<String?> onSelect;
 
-  /// True in the full-width form, where there is room for a timestamp.
-  final bool showTime;
+  final bool failedOnly;
+  final ValueChanged<bool> onFailedOnly;
+
+  /// The URL box's text, owned above so it survives a selection.
+  final TextEditingController needle;
+
+  /// Called when [needle] changes, so the owner can rebuild.
+  final VoidCallback onNeedle;
+
+  /// True in the full-width form, where the row can be one line.
+  final bool oneLine;
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: requests.length,
-      itemBuilder: (context, index) => _RequestRow(
-        request: requests[index],
-        selected: requests[index].id == selectedId,
-        showTime: showTime,
-        onSelect: onSelect,
-      ),
+    var query = needle.text.trim().toLowerCase();
+    var shown = [
+      for (var request in requests)
+        if ((!failedOnly || _isFailure(request)) &&
+            (query.isEmpty ||
+                '${request.method} ${request.uri}'.toLowerCase().contains(
+                  query,
+                )))
+          request,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FwFilterBar(
+          pills: [
+            ('All', !failedOnly, () => onFailedOnly(false)),
+            ('Errors', failedOnly, () => onFailedOnly(true)),
+          ],
+          hint: 'Filter URLs…',
+          searchController: needle,
+          onSearch: (_) => onNeedle(),
+          count: '${shown.length} of ${requests.length}',
+        ),
+        Expanded(
+          child: shown.isEmpty
+              ? const EmptyState(
+                  icon: Icons.swap_vert,
+                  title: 'Nothing matches this filter',
+                )
+              : ListView.builder(
+                  itemCount: shown.length,
+                  itemBuilder: (context, index) => _RequestRow(
+                    request: shown[index],
+                    selected: shown[index].id == selectedId,
+                    oneLine: oneLine,
+                    onSelect: onSelect,
+                  ),
+                ),
+        ),
+      ],
     );
   }
+}
+
+/// A request worth filtering to: a 4xx, a 5xx, or one that never answered.
+bool _isFailure(HttpProfileRequestRef request) {
+  var status = networkStatusOf(request);
+  return status is String || (status is int && status >= 400);
 }
 
 class _RequestRow extends StatelessWidget {
@@ -230,86 +296,84 @@ class _RequestRow extends StatelessWidget {
     required this.request,
     required this.selected,
     required this.onSelect,
-    this.showTime = false,
+    this.oneLine = false,
   });
 
   final HttpProfileRequestRef request;
   final bool selected;
   final ValueChanged<String?> onSelect;
-  final bool showTime;
+
+  /// One line at full width, two in the split's column — the server panel's
+  /// row, for the reason its own comment gives: narrowing used to drop the
+  /// timestamp, which is the column a request is correlated by.
+  final bool oneLine;
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
+    var colors = context.colors;
+    var mono = context.type.mono;
     var status = networkStatusOf(request);
+    var time = Text(
+      oneLine ? _timestamp(request.startTime) : _clock(request.startTime),
+      style: mono.copyWith(color: colors.mut2),
+    );
+    var path = Text(
+      _pathOf(request.uri),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: mono,
+    );
+    var duration = Text(
+      _ms(networkDurationOf(request)),
+      style: mono.copyWith(color: colors.mut2),
+    );
     return Tappable(
       onTap: () => onSelect(request.id),
       child: Container(
-        color: selected
-            ? theme.colorScheme.primary.withValues(alpha: 0.08)
-            : null,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Row(
-          children: [
-            if (showTime) ...[
-              Text(
-                _timestamp(request.startTime),
-                style: _mono(context, color: theme.hintColor),
-              ),
-              const SizedBox(width: 10),
-            ],
-            _StatusDot(status: status),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '${request.method} ${_pathOf(request.uri)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: _mono(context, fontSize: 13),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              status is int
-                  ? '$status'
-                  : status is String
-                  ? status
-                  : '…',
-              style: _mono(
-                context,
-                color: status is int && status >= 400
-                    ? theme.colorScheme.error
-                    : theme.hintColor,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              _ms(networkDurationOf(request)),
-              style: _mono(context, color: theme.hintColor),
-            ),
-          ],
+        color: selected ? colors.accentSoft : null,
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.lg,
+          vertical: FwSpacing.sm,
         ),
+        child: oneLine
+            ? Row(
+                children: [
+                  time,
+                  const Gap(FwSpacing.lg),
+                  HttpMethodToken(request.method),
+                  const Gap(FwSpacing.md),
+                  Expanded(child: path),
+                  const Gap(FwSpacing.md),
+                  HttpStatusCode(status),
+                  const Gap(FwSpacing.md),
+                  duration,
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      HttpMethodToken(request.method),
+                      const Gap(FwSpacing.md),
+                      Expanded(child: path),
+                      const Gap(FwSpacing.md),
+                      duration,
+                    ],
+                  ),
+                  const Gap(2),
+                  Row(
+                    children: [
+                      time,
+                      const Gap(FwSpacing.md),
+                      HttpStatusCode(status),
+                    ],
+                  ),
+                ],
+              ),
       ),
     );
   }
-}
-
-class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.status});
-
-  /// An int code, `ERR`, or null while in flight.
-  final Object? status;
-
-  @override
-  Widget build(BuildContext context) => Icon(
-    Icons.circle,
-    size: 8,
-    color: status == null
-        ? Theme.of(context).hintColor
-        : status is int && (status! as int) < 400
-        ? Colors.green.shade600
-        : Colors.red.shade600,
-  );
 }
 
 /// The selected request, in tabs: the request and response messages, and the
@@ -636,6 +700,10 @@ TextStyle _mono(BuildContext context, {Color? color, double? fontSize}) =>
       color: color,
       fontSize: fontSize,
     );
+
+/// `hh:mm:ss`, for a row with no width for the milliseconds.
+String _clock(DateTime time) =>
+    '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}';
 
 String _timestamp(DateTime time) =>
     '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}'

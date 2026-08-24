@@ -11,7 +11,6 @@
 ///     …/flutterware.server/<name>/req/<eventId>     one request
 ///     …/flutterware.server/<name>/sql               the SQL view
 ///     …/flutterware.server/<name>/sql/<shapeKey>    one query shape
-///     …/flutterware.server/<name>/info              the self-description
 ///     …/flutterware.server/<name>/events            the raw event stream
 ///
 /// The server is named, not pid-qualified — an address a person pastes
@@ -24,7 +23,7 @@
 library;
 
 /// Which pane of one server the address names.
-enum ServerViewKind { overview, request, sql, info, events }
+enum ServerViewKind { overview, request, sql, events }
 
 /// A place in the inspector: a server, and which of its panes.
 class ServerPlace {
@@ -38,11 +37,6 @@ class ServerPlace {
   const ServerPlace.sql(this.server, {this.queryKey})
     : requestId = null,
       view = ServerViewKind.sql;
-
-  const ServerPlace.info(this.server)
-    : requestId = null,
-      queryKey = null,
-      view = ServerViewKind.info;
 
   const ServerPlace.events(this.server)
     : requestId = null,
@@ -89,9 +83,6 @@ List<String> sqlSegments(String server, {String? queryKey}) => [
   ?queryKey,
 ];
 
-/// The segments naming the self-description pane.
-List<String> infoSegments(String server) => [server, 'info'];
-
 /// The segments naming the raw event stream.
 List<String> eventsSegments(String server) => [server, 'events'];
 
@@ -102,7 +93,6 @@ List<String> serverSegmentsOf(ServerPlace place) => switch (place.view) {
     requestId: place.requestId,
   ),
   ServerViewKind.sql => sqlSegments(place.server, queryKey: place.queryKey),
-  ServerViewKind.info => infoSegments(place.server),
   ServerViewKind.events => eventsSegments(place.server),
 };
 
@@ -114,9 +104,6 @@ List<String> serverSegmentsOf(ServerPlace place) => switch (place.view) {
 ServerPlace? serverPlace(List<String> segments) {
   if (segments.isEmpty || segments.first.isEmpty) return null;
   var server = segments.first;
-  if (segments.length >= 2 && segments[1] == 'info') {
-    return ServerPlace.info(server);
-  }
   if (segments.length >= 2 && segments[1] == 'events') {
     return ServerPlace.events(server);
   }

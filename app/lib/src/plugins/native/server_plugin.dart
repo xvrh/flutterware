@@ -7,8 +7,15 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../address/address_scope.dart';
 import '../../inspect/inspect_dock.dart';
+import '../../ui/code_block.dart';
+import '../../ui/filter_bar.dart';
+import '../../ui/http_row.dart';
 import '../../ui/json_view.dart';
 import '../../ui/panel_header.dart';
+import '../../ui/popover.dart';
+import '../../ui/popover_menu.dart';
+import '../../ui/split_pane.dart';
+import '../../ui/syntax.dart';
 import '../../ui/tappable.dart';
 import '../native_plugin.dart';
 import 'server_address.dart';
@@ -48,10 +55,30 @@ class _ServerPanel extends StatefulWidget {
 class _ServerPanelState extends State<_ServerPanel> {
   ServerCore get _core => widget.plugin.core;
 
+  /// The request list's filter, held here rather than in the list.
+  ///
+  /// Selecting a request swaps the child of the `switch` below from a bare
+  /// [_RequestList] to a [FwSplitPane] wrapping one — a different runtime type
+  /// in the same slot, so the element is thrown away and any state inside it
+  /// with it. Held in the list, the filter and the typed path reset on every
+  /// selection *and* again on every deselection, which is the one moment a
+  /// person is most sure they did not change them.
+  var _requestFilter = _RequestFilter.all;
+
+  /// The path box's text. A controller, not a `String`, because the field's
+  /// own state dies with the same element — see [FwSearchBox.controller].
+  final _requestPath = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _core.track();
+  }
+
+  @override
+  void dispose() {
+    _requestPath.dispose();
+    super.dispose();
   }
 
   /// Mounting starts tracking, and a config reload is not a mount: the session
@@ -63,6 +90,26 @@ class _ServerPanelState extends State<_ServerPanel> {
     super.didUpdateWidget(old);
     if (old.plugin != widget.plugin) _core.track();
   }
+
+  /// One [_RequestList], wherever the switch puts it, reading the filter this
+  /// `State` owns.
+  Widget _requestList({
+    required TrackedServer server,
+    required List<ServerEvent> requests,
+    required Map<String, List<ServerEvent>> byRid,
+    required int? selectedId,
+    bool oneLine = false,
+  }) => _RequestList(
+    server: server,
+    requests: requests.reversed.toList(),
+    byRid: byRid,
+    selectedId: selectedId,
+    oneLine: oneLine,
+    filter: _requestFilter,
+    onFilter: (it) => setState(() => _requestFilter = it),
+    path: _requestPath,
+    onPath: () => setState(() {}),
+  );
 
   ServerPlace? _resolve(BuildContext context) => serverPlace(
     [for (var i = 0; i < 3; i++) AddressScope.segment(context, i) ?? '']
@@ -130,7 +177,14 @@ class _ServerPanelState extends State<_ServerPanel> {
                 else if (!server.connected)
                   'attaching',
               ],
-              trailing: info.baseUrl == null ? null : _UrlLink(info.baseUrl!),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (info.baseUrl case var it?) _UrlLink(it),
+                  const Gap(FwSpacing.md),
+                  _InfoButton(info),
+                ],
+              ),
               // The rail already lists every server, so one healthy server
               // needs no switcher. Two do: the rail row beside this one cannot
               // say which of them the panel is showing.
@@ -146,45 +200,56 @@ class _ServerPanelState extends State<_ServerPanel> {
             Divider(height: 1, color: context.colors.line),
             Expanded(
               child: switch (view) {
+                // No selection: the list has the whole width. With one, the
+                // list narrows and the detail opens beside it — the same
+                // shape as Requests below, because a panel that opens a
+                // detail two different ways is a panel you have to learn
+                // twice. The SQL half used to replace the pane outright and
+                // hand back a ✕.
                 ServerViewKind.sql =>
                   place?.queryKey == null
-                      ? _SqlView(server)
-                      : _QueryDetail(
-                          server: server,
-                          queryKey: place!.queryKey!,
+                      ? _SqlView(server: server, selectedKey: null)
+                      : FwSplitPane(
+                          key: const ValueKey('sql'),
+                          list: _SqlView(
+                            server: server,
+                            selectedKey: place!.queryKey,
+                            narrow: true,
+                          ),
+                          // Keyed by the shape, so clicking another one in
+                          // the list beside it builds a *new* detail. Without
+                          // it the same `State` is reused and its explain
+                          // result — which belongs to the shape you just left
+                          // — stays on screen under the new statement.
+                          detail: _QueryDetail(
+                            key: ValueKey(place.queryKey),
+                            server: server,
+                            queryKey: place.queryKey!,
+                          ),
                         ),
-                ServerViewKind.info => _InfoView(info: info),
-                ServerViewKind.events => _EventTimeline(events),
-                // No selection: the request list has the whole width. The raw
-                // stream lives under Events, not behind an unselected detail.
-                _ when selected == null => _RequestList(
+                ServerViewKind.events => _EventTimeline(server, events),
+                // The raw stream lives under Events, not behind an unselected
+                // detail.
+                _ when selected == null => _requestList(
                   server: server,
-                  requests: requests.reversed.toList(),
+                  requests: requests,
                   byRid: byRid,
                   selectedId: null,
-                  showTime: true,
+                  oneLine: true,
                 ),
-                _ => Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(
-                      width: 380,
-                      child: _RequestList(
-                        server: server,
-                        requests: requests.reversed.toList(),
-                        byRid: byRid,
-                        selectedId: selected.id,
-                      ),
-                    ),
-                    const VerticalDivider(width: 1),
-                    Expanded(
-                      child: _RequestDetail(
-                        server: server,
-                        request: selected,
-                        caused: byRid[selected.rid] ?? const [],
-                      ),
-                    ),
-                  ],
+                _ => FwSplitPane(
+                  key: const ValueKey('requests'),
+                  list: _requestList(
+                    server: server,
+                    requests: requests,
+                    byRid: byRid,
+                    selectedId: selected.id,
+                  ),
+                  detail: _RequestDetail(
+                    server: server,
+                    request: selected,
+                    caused: byRid[selected.rid] ?? const [],
+                  ),
                 ),
               },
             ),
@@ -342,7 +407,6 @@ class _ViewTabs extends StatelessWidget {
     var current = switch (view) {
       ServerViewKind.overview || ServerViewKind.request => 'requests',
       ServerViewKind.sql => 'sql',
-      ServerViewKind.info => 'info',
       ServerViewKind.events => 'events',
     };
     return InspectTabStrip(
@@ -354,13 +418,11 @@ class _ViewTabs extends StatelessWidget {
           body: _unused,
         ),
         const InspectDockTab(id: 'sql', label: 'SQL', body: _unused),
-        const InspectDockTab(id: 'info', label: 'Info', body: _unused),
         const InspectDockTab(id: 'events', label: 'Events', body: _unused),
       ],
       current: current,
       onSelect: (id) => AddressScope.write(context).setSegments(switch (id) {
         'sql' => sqlSegments(name),
-        'info' => infoSegments(name),
         'events' => eventsSegments(name),
         _ => serverSegments(name),
       }),
@@ -401,6 +463,72 @@ class _InspectStrip extends StatelessWidget {
     current: current,
     onSelect: onSelect,
   );
+}
+
+/// What the server says about itself, on the header rather than in a tab.
+///
+/// It was a quarter of the tab strip and it is not a working surface: three
+/// links, a DSN and a handful of config values that do not change while you
+/// work. Worse, it is context for *every* pane — checking which database you
+/// are pointed at meant leaving Requests and coming back. On the header it is
+/// one click from wherever you are, and the strip is down to the three panes
+/// that are actually panes.
+class _InfoButton extends StatelessWidget {
+  const _InfoButton(this.info);
+
+  final ServerInfo info;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Popover(
+      align: PopoverAlign.end,
+      anchor: (context, controller) => Tooltip(
+        message: 'What this server says about itself',
+        child: Tappable.builder(
+          onTap: controller.toggle,
+          borderRadius: BorderRadius.circular(context.radii.pill),
+          builder: (context, hovered) => Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.md,
+              vertical: FwSpacing.xs,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(context.radii.pill),
+              border: Border.all(
+                color: controller.isOpen
+                    ? colors.accent
+                    : hovered
+                    ? colors.mut3
+                    : colors.line,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: FwIconSize.sm,
+                  color: controller.isOpen ? colors.accent : colors.mut,
+                ),
+                const Gap(FwSpacing.sm),
+                Text('Details', style: context.type.bodySmall),
+              ],
+            ),
+          ),
+        ),
+      ),
+      content: (context, controller) => PopoverMenuSurface(
+        width: 520,
+        maxHeight: 480,
+        // Something in the card has to be able to hold focus or Escape never
+        // reaches the overlay that listens for it: the content is a list of
+        // text and icon buttons, none of which takes focus on its own, so
+        // opening moved focus nowhere and the key went to the root scope.
+        child: Focus(autofocus: true, child: _InfoView(info: info)),
+      ),
+    );
+  }
 }
 
 /// The declared environment, colored by how much it should worry you: quiet
@@ -481,12 +609,26 @@ class _UrlLink extends StatelessWidget {
 
 /// The aggregate: every query shape this server ran, heaviest first.
 class _SqlView extends StatelessWidget {
-  const _SqlView(this.server);
+  const _SqlView({
+    required this.server,
+    required this.selectedKey,
+    this.narrow = false,
+  });
 
   final TrackedServer server;
 
+  /// The shape the detail beside this list is showing, or null when the list
+  /// has the whole width.
+  final String? selectedKey;
+
+  /// True in the split's left column. Only `total` survives the narrowing:
+  /// avg and max are numbers you read once you have chosen a shape, and the
+  /// detail states all four anyway.
+  final bool narrow;
+
   @override
   Widget build(BuildContext context) {
+    var colors = context.colors;
     var stats = sqlStats(server.events);
     if (stats.isEmpty) {
       return const EmptyState(
@@ -494,84 +636,66 @@ class _SqlView extends StatelessWidget {
         title: 'No queries recorded',
       );
     }
-    var header = context.type.micro.copyWith(color: context.colors.mut2);
+    var header = context.type.micro.copyWith(color: colors.mut2);
     var numbers = context.type.mono;
+    var gutter = narrow ? FwSpacing.lg : panelGutter;
+
+    Widget number(String text) => SizedBox(
+      width: 70,
+      child: Text(text, style: numbers, textAlign: TextAlign.right),
+    );
+    Widget headerCell(String text) => SizedBox(
+      width: 70,
+      child: Text(text, style: header, textAlign: TextAlign.right),
+    );
+
+    // **Not selectable, deliberately.** Every row here is a tap target, and a
+    // row that is both shows a text caret over a control that responds to a
+    // click — two affordances on one target, and the caret wins because
+    // Flutter's own text region sits below [Tappable]'s (see its doc comment).
+    // Copying a statement happens in the detail beside this, where the block
+    // has a button for it.
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: panelGutter,
+          padding: EdgeInsets.symmetric(
+            horizontal: gutter,
             vertical: FwSpacing.xs,
           ),
           child: Row(
             children: [
-              SizedBox(width: 50, child: Text('count', style: header)),
+              SizedBox(width: 44, child: Text('count', style: header)),
               Expanded(child: Text('query shape', style: header)),
-              SizedBox(
-                width: 70,
-                child: Text('total', style: header, textAlign: TextAlign.right),
-              ),
-              SizedBox(
-                width: 70,
-                child: Text('avg', style: header, textAlign: TextAlign.right),
-              ),
-              SizedBox(
-                width: 70,
-                child: Text('max', style: header, textAlign: TextAlign.right),
-              ),
+              headerCell('total'),
+              if (!narrow) ...[headerCell('avg'), headerCell('max')],
             ],
           ),
         ),
-        Divider(height: 1, color: context.colors.line),
+        Divider(height: 1, color: colors.line),
         for (var shape in stats)
           Tappable(
             onTap: () => AddressScope.write(
               context,
             ).setSegments(sqlSegments(server.handle.name, queryKey: shape.key)),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: panelGutter,
+            child: Container(
+              color: shape.key == selectedKey ? colors.accentSoft : null,
+              padding: EdgeInsets.symmetric(
+                horizontal: gutter,
                 vertical: FwSpacing.sm,
               ),
               child: Row(
                 children: [
                   SizedBox(
-                    width: 50,
+                    width: 44,
                     child: Text('${shape.count}×', style: numbers),
                   ),
-                  Expanded(
-                    child: Text(
-                      shape.normalized,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.type.mono,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 70,
-                    child: Text(
-                      _ms(shape.totalMs),
-                      style: numbers,
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 70,
-                    child: Text(
-                      _ms(shape.averageMs),
-                      style: numbers,
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 70,
-                    child: Text(
-                      _ms(shape.maxMs),
-                      style: numbers,
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
+                  Expanded(child: _Sql(shape.normalized)),
+                  number(_ms(shape.totalMs)),
+                  if (!narrow) ...[
+                    number(_ms(shape.averageMs)),
+                    number(_ms(shape.maxMs)),
+                  ],
                 ],
               ),
             ),
@@ -581,10 +705,47 @@ class _SqlView extends StatelessWidget {
   }
 }
 
+/// A statement, coloured.
+///
+/// One line, ellipsised, for a list row; [maxLines] opens it up for a detail.
+/// The tokeniser is `syntax.dart`'s and it already speaks SQL — every place a
+/// query appeared in this panel was drawing it as prose in `mono`, which is
+/// what makes a column of `select … from … where …` unscannable.
+class _Sql extends StatelessWidget {
+  const _Sql(this.query, {this.maxLines = 1, this.color});
+
+  final String query;
+  final int maxLines;
+
+  /// Overrides the colour of text no rule claimed — for a row that is already
+  /// tinted, where the palette's plain ink would fight it.
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    var style = context.type.mono;
+    return Text.rich(
+      TextSpan(
+        children: codeSpans(
+          context,
+          // A list row is one line whatever the source did. Collapsing here
+          // rather than leaning on maxLines keeps the ellipsis at the end of
+          // the *statement* instead of at the end of its first line.
+          maxLines == 1 ? query.replaceAll(RegExp(r'\s+'), ' ').trim() : query,
+          language: 'sql',
+        ),
+      ),
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+      style: color == null ? style : style.copyWith(color: color),
+    );
+  }
+}
+
 /// One query shape: its stats, its occurrences with their parameters, and
 /// the two commands that run inside the live server — explain and requery.
 class _QueryDetail extends StatefulWidget {
-  const _QueryDetail({required this.server, required this.queryKey});
+  const _QueryDetail({super.key, required this.server, required this.queryKey});
 
   final TrackedServer server;
   final String queryKey;
@@ -638,32 +799,32 @@ class _QueryDetailState extends State<_QueryDetail> {
       );
     }
     return ListView(
-      padding: const EdgeInsets.all(panelGutter),
+      padding: const EdgeInsets.all(FwSpacing.xl),
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Text(
-                stats.normalized,
-                style: context.type.mono.copyWith(fontSize: 14),
+                '${stats.count}× · total ${_ms(stats.totalMs)} · '
+                'avg ${_ms(stats.averageMs)} · max ${_ms(stats.maxMs)}',
+                style: context.type.caption,
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.close, size: FwIconSize.lg),
+            _SmallIconButton(
+              Icons.close,
               tooltip: 'Back to all queries',
-              onPressed: () =>
+              onTap: () =>
                   AddressScope.write(context)
                       .setSegments(sqlSegments(widget.server.handle.name)),
             ),
           ],
         ),
-        const Gap(FwSpacing.xs),
-        Text(
-          '${stats.count}× · total ${_ms(stats.totalMs)} · '
-          'avg ${_ms(stats.averageMs)} · max ${_ms(stats.maxMs)}',
-          style: context.type.caption,
-        ),
+        const Gap(FwSpacing.sm),
+        // The shape as a block rather than as a heading: it is the one thing
+        // on this pane somebody wants in an editor a moment later, and a long
+        // statement scrolls here instead of being ellipsised out of reach.
+        FwCodeBlock(stats.normalized, language: 'sql'),
         const Gap(FwSpacing.lg),
         Row(
           children: [
@@ -702,8 +863,15 @@ class _QueryDetailState extends State<_QueryDetail> {
         const _SectionLabel('Occurrences'),
         const Gap(FwSpacing.xs),
         // Newest first, and every one of them — the ring already bounds it.
-        for (var occurrence in stats.occurrences.reversed)
-          _OccurrenceRow(server: widget.server, occurrence: occurrence),
+        SelectionArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var occurrence in stats.occurrences.reversed)
+                _OccurrenceRow(server: widget.server, occurrence: occurrence),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -728,6 +896,7 @@ class _OccurrenceRow extends StatelessWidget {
               .where((e) => e.channel == 'http' && e.rid == occurrence.rid)
               .firstOrNull;
     var time = occurrence.time;
+    var query = '${occurrence.payload['query']}';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: FwSpacing.xxs),
       child: Row(
@@ -746,7 +915,10 @@ class _OccurrenceRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${occurrence.payload['query']}', style: mono),
+                // Not ellipsised: this is the statement the database really
+                // ran, and a row of the shape above it already says what it
+                // looks like. If it wraps, that is the length it is.
+                _Sql(query, maxLines: 3),
                 if (params != null)
                   Text(
                     'params: ${jsonEncode(params)}',
@@ -755,12 +927,13 @@ class _OccurrenceRow extends StatelessWidget {
               ],
             ),
           ),
+          CopyIconButton(query, tooltip: 'Copy this statement'),
           if (request != null)
-            IconButton(
-              icon: const Icon(Icons.north_east, size: FwIconSize.sm),
+            _SmallIconButton(
+              Icons.north_east,
               tooltip:
                   '${request.payload['method']} ${request.payload['path']}',
-              onPressed: () => AddressScope.write(context).setSegments(
+              onTap: () => AddressScope.write(context).setSegments(
                 serverSegments(server.handle.name, requestId: request.id),
               ),
             ),
@@ -770,13 +943,40 @@ class _OccurrenceRow extends StatelessWidget {
   }
 }
 
+/// What a request list is showing.
+///
+/// Three, not a dozen: this is a filter for the two questions anybody asks a
+/// request list — *what broke* and *what is slow because it queries in a
+/// loop*. Everything finer is what the path box is for.
+enum _RequestFilter {
+  all('All'),
+  failed('Errors'),
+  repeated('N+1');
+
+  const _RequestFilter(this.label);
+
+  final String label;
+
+  bool matches(ServerEvent request, int repeatedCount) => switch (this) {
+    _RequestFilter.all => true,
+    _RequestFilter.failed => _failed(request),
+    _RequestFilter.repeated => repeatedCount > 0,
+  };
+}
+
+/// The request list. **Stateless on purpose** — see [_ServerPanelState] for
+/// where the filter lives and why it cannot live here.
 class _RequestList extends StatelessWidget {
   const _RequestList({
     required this.server,
     required this.requests,
     required this.byRid,
     required this.selectedId,
-    this.showTime = false,
+    required this.filter,
+    required this.onFilter,
+    required this.path,
+    required this.onPath,
+    this.oneLine = false,
   });
 
   final TrackedServer server;
@@ -786,32 +986,84 @@ class _RequestList extends StatelessWidget {
   final Map<String, List<ServerEvent>> byRid;
   final int? selectedId;
 
-  /// True in the full-width form, where there is room for a timestamp.
-  final bool showTime;
+  final _RequestFilter filter;
+  final ValueChanged<_RequestFilter> onFilter;
+
+  /// The path box's text, owned above so it survives a selection.
+  final TextEditingController path;
+
+  /// Called when [path] changes, so the owner can rebuild.
+  final VoidCallback onPath;
+
+  /// True in the full-width form, where the row can be one line.
+  final bool oneLine;
 
   @override
   Widget build(BuildContext context) {
-    if (requests.isEmpty) {
-      return const EmptyState(icon: Icons.swap_vert, title: 'No requests yet');
-    }
-    return ListView.builder(
-      itemCount: requests.length,
-      itemBuilder: (context, index) {
-        var request = requests[index];
-        var caused = request.rid == null
-            ? const <ServerEvent>[]
-            : byRid[request.rid] ?? const [];
-        var repeated = repeatedQueries(caused);
-        return _RequestRow(
-          server: server,
-          request: request,
-          selected: request.id == selectedId,
-          showTime: showTime,
-          repeatedCount: repeated.isEmpty
-              ? 0
-              : repeated.values.reduce((a, b) => a > b ? a : b),
-        );
-      },
+    // The repeat count is what the N+1 badge and the N+1 filter both read, so
+    // it is computed once per row here rather than twice.
+    var rows = [
+      for (var request in requests)
+        (
+          request,
+          () {
+            var caused = request.rid == null
+                ? const <ServerEvent>[]
+                : byRid[request.rid] ?? const [];
+            var repeated = repeatedQueries(caused);
+            return repeated.isEmpty
+                ? 0
+                : repeated.values.reduce((a, b) => a > b ? a : b);
+          }(),
+        ),
+    ];
+    var needle = path.text.trim().toLowerCase();
+    var shown = [
+      for (var (request, repeated) in rows)
+        if (filter.matches(request, repeated) &&
+            (needle.isEmpty ||
+                '${request.payload['method']} ${request.payload['path']}'
+                    .toLowerCase()
+                    .contains(needle)))
+          (request, repeated),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FwFilterBar(
+          pills: [
+            for (var it in _RequestFilter.values)
+              (it.label, it == filter, () => onFilter(it)),
+          ],
+          hint: 'Filter paths…',
+          searchController: path,
+          onSearch: (_) => onPath(),
+          count: '${shown.length} of ${rows.length}',
+        ),
+        Expanded(
+          child: shown.isEmpty
+              ? EmptyState(
+                  icon: Icons.swap_vert,
+                  title: rows.isEmpty
+                      ? 'No requests yet'
+                      : 'Nothing matches this filter',
+                )
+              : ListView.builder(
+                  itemCount: shown.length,
+                  itemBuilder: (context, index) {
+                    var (request, repeated) = shown[index];
+                    return _RequestRow(
+                      server: server,
+                      request: request,
+                      selected: request.id == selectedId,
+                      oneLine: oneLine,
+                      repeatedCount: repeated,
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }
@@ -822,13 +1074,20 @@ class _RequestRow extends StatelessWidget {
     required this.request,
     required this.selected,
     required this.repeatedCount,
-    this.showTime = false,
+    this.oneLine = false,
   });
 
   final TrackedServer server;
   final ServerEvent request;
   final bool selected;
-  final bool showTime;
+
+  /// One line at full width, two in the split's column.
+  ///
+  /// Narrowing used to *drop* the timestamp, which is the one column that
+  /// lines a request up against a log — so selecting a request cost you the
+  /// thing you selected it to correlate. A second line gives the path its
+  /// width back and keeps the time, the status and the badge.
+  final bool oneLine;
 
   /// The largest repeat count among this request's queries; 0 for none.
   final int repeatedCount;
@@ -838,7 +1097,19 @@ class _RequestRow extends StatelessWidget {
     var colors = context.colors;
     var mono = context.type.mono;
     var p = request.payload;
-    var failed = _failed(request);
+    var status = p['status'];
+    var time = Text(
+      oneLine ? _timestamp(request.time) : _clock(request.time),
+      style: mono.copyWith(color: colors.mut2),
+    );
+    var path = Text(
+      '${p['path']}',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: mono,
+    );
+    var duration = Text(_ms(p['ms']), style: mono.copyWith(color: colors.mut2));
+
     return Tappable(
       onTap: () => AddressScope.write(
         context,
@@ -847,37 +1118,54 @@ class _RequestRow extends StatelessWidget {
         color: selected ? colors.accentSoft : null,
         padding: EdgeInsets.symmetric(
           // The full-width list sits on the panel gutter like everything else;
-          // the 380 px column beside a detail cannot afford it.
-          horizontal: showTime ? panelGutter : FwSpacing.lg,
+          // the column beside a detail cannot afford it.
+          horizontal: oneLine ? panelGutter : FwSpacing.lg,
           vertical: FwSpacing.sm,
         ),
-        child: Row(
-          children: [
-            if (showTime) ...[
-              Text(
-                _timestamp(request.time),
-                style: mono.copyWith(color: colors.mut2),
+        child: oneLine
+            ? Row(
+                children: [
+                  time,
+                  const Gap(FwSpacing.lg),
+                  HttpMethodToken('${p['method']}'),
+                  const Gap(FwSpacing.md),
+                  Expanded(child: path),
+                  if (repeatedCount > 0) ...[
+                    const Gap(FwSpacing.sm),
+                    _NPlusOneBadge(repeatedCount),
+                  ],
+                  const Gap(FwSpacing.md),
+                  HttpStatusCode(status),
+                  const Gap(FwSpacing.md),
+                  duration,
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      HttpMethodToken('${p['method']}'),
+                      const Gap(FwSpacing.md),
+                      Expanded(child: path),
+                      const Gap(FwSpacing.md),
+                      duration,
+                    ],
+                  ),
+                  const Gap(2),
+                  Row(
+                    children: [
+                      time,
+                      const Gap(FwSpacing.md),
+                      HttpStatusCode(status),
+                      if (repeatedCount > 0) ...[
+                        const Gap(FwSpacing.sm),
+                        _NPlusOneBadge(repeatedCount),
+                      ],
+                    ],
+                  ),
+                ],
               ),
-              const Gap(FwSpacing.lg),
-            ],
-            _StatusDot(failed: failed),
-            const Gap(FwSpacing.md),
-            Expanded(
-              child: Text(
-                '${p['method']} ${p['path']}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: mono,
-              ),
-            ),
-            if (repeatedCount > 0) ...[
-              const Gap(FwSpacing.sm),
-              _NPlusOneBadge(repeatedCount),
-            ],
-            const Gap(FwSpacing.md),
-            Text(_ms(p['ms']), style: mono.copyWith(color: colors.mut2)),
-          ],
-        ),
       ),
     );
   }
@@ -911,19 +1199,6 @@ class _NPlusOneBadge extends StatelessWidget {
       ),
     );
   }
-}
-
-class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.failed});
-
-  final bool failed;
-
-  @override
-  Widget build(BuildContext context) => Icon(
-    Icons.circle,
-    size: FwIconSize.xs - 4,
-    color: failed ? context.colors.red : context.colors.grn,
-  );
 }
 
 /// The selected request, in tabs: the waterfall (with its N+1 warnings),
@@ -979,17 +1254,34 @@ class _RequestDetail extends StatelessWidget {
           ),
           child: Row(
             children: [
+              HttpMethodToken('${p['method']}'),
+              const Gap(FwSpacing.sm),
+              // Scrolled rather than `maxLines: 1`: `SelectableText` takes
+              // no `overflow`, so one line clips mid-character and says
+              // nothing about the tail it dropped.
               Expanded(
-                child: Text(
-                  '${p['method']} ${p['path']} → ${p['status']}',
-                  style: context.type.mono.copyWith(fontSize: 14),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SelectableText(
+                    '${p['path']}',
+                    maxLines: 1,
+                    style: context.type.mono.copyWith(fontSize: 14),
+                  ),
                 ),
               ),
+              const Gap(FwSpacing.md),
+              HttpStatusCode(p['status']),
+              const Gap(FwSpacing.md),
               Text(
                 _ms(p['ms']),
                 style: context.type.mono.copyWith(fontSize: 14),
               ),
               const Gap(FwSpacing.md),
+              // The whole URL, which the curl button buries inside a command.
+              // Pasting a path into a browser is the other thing people do
+              // with a request row.
+              if (requestUrl(server.info, request) case var url?)
+                CopyIconButton(url, tooltip: 'Copy the URL'),
               _CopyAsCurlButton(server: server, request: request),
               IconButton(
                 icon: const Icon(Icons.close, size: FwIconSize.lg),
@@ -1141,7 +1433,10 @@ class _WaterfallTab extends StatelessWidget {
                         ),
                       ),
                       const Gap(FwSpacing.xxs),
-                      Text(entry.key, style: context.type.mono),
+                      // Tinted to the banner rather than to the palette: the
+                      // plain ink the highlighter leaves unclaimed reads as a
+                      // second voice on an amber card.
+                      _Sql(entry.key, maxLines: 3, color: colors.warningText),
                     ],
                   ),
                 ),
@@ -1223,14 +1518,7 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
                     color: colors.mut3,
                   ),
                   const Gap(FwSpacing.xs),
-                  Expanded(
-                    child: Text(
-                      '${event.payload['query']}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: mono,
-                    ),
-                  ),
+                  Expanded(child: _Sql('${event.payload['query']}')),
                   if (event.payload['rows'] is int) ...[
                     const Gap(FwSpacing.md),
                     Text(
@@ -1255,7 +1543,11 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SelectableText('${event.payload['query']}', style: mono),
+                  FwCodeBlock(
+                    '${event.payload['query']}',
+                    language: 'sql',
+                    padding: const EdgeInsets.all(FwSpacing.md),
+                  ),
                   if (event.payload['params'] != null)
                     Padding(
                       padding: const EdgeInsets.only(top: FwSpacing.xxs),
@@ -1328,31 +1620,9 @@ class _CommandResult extends StatelessWidget {
         maxHeight: 360,
       );
     }
-    return _Slab(child: SelectableText('$result', style: context.type.mono));
+    // An error rather than a result — plain, and worth copying into a search.
+    return FwCodeBlock('$result', maxHeight: 360);
   }
-}
-
-/// A block of machine text on the panel's own recessed surface.
-///
-/// Three call sites drew this by hand out of `colorScheme.surfaceContainer
-/// Highest` at half alpha — a Material surface that has no relationship to the
-/// palette the rest of the panel is painted from.
-class _Slab extends StatelessWidget {
-  const _Slab({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(FwSpacing.lg),
-    decoration: BoxDecoration(
-      color: context.colors.panel2,
-      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-      border: Border.all(color: context.colors.line),
-    ),
-    child: child,
-  );
 }
 
 /// One side of the HTTP exchange: headers and body, fetched lazily from the
@@ -1391,19 +1661,34 @@ class _HttpMessageTab extends StatelessWidget {
                 'version in doc/server_inspection.md.',
           );
         }
+        var headerText = [
+          for (var entry in headers.entries) '${entry.key}: ${entry.value}',
+        ].join('\n');
         return ListView(
           padding: const EdgeInsets.all(FwSpacing.xl),
           children: [
-            const _SectionLabel('Headers'),
+            Row(
+              children: [
+                const Expanded(child: _SectionLabel('Headers')),
+                // Selecting twenty headers by hand is the thing this replaces.
+                CopyIconButton(headerText, tooltip: 'Copy every header'),
+              ],
+            ),
             const Gap(FwSpacing.sm),
-            for (var entry in headers.entries)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 1),
-                child: SelectableText(
-                  '${entry.key}: ${entry.value}',
-                  style: mono,
-                ),
+            // One region over the block: a header list is read whole, and a
+            // selection that stops at the end of `content-type:` is no use.
+            SelectionArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var entry in headers.entries)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1),
+                      child: Text('${entry.key}: ${entry.value}', style: mono),
+                    ),
+                ],
               ),
+            ),
             const Gap(FwSpacing.xl),
             const _SectionLabel('Body'),
             const Gap(FwSpacing.sm),
@@ -1418,7 +1703,10 @@ class _HttpMessageTab extends StatelessWidget {
                 // the first character beats trusting content-type, which lies.
                 : body.trimLeft().startsWith(RegExp(r'[\[{]'))
                 ? JsonView.source(body, maxHeight: 520)
-                : _Slab(child: SelectableText(body, style: mono)),
+                // Wrapped, unlike a statement: a form-urlencoded or
+                // single-line text body is one line as wide as it is long,
+                // and scrolling 140,000px sideways is not reading it.
+                : FwCodeBlock(body, maxHeight: 520, wrap: true),
           ],
         );
       },
@@ -1426,31 +1714,180 @@ class _HttpMessageTab extends StatelessWidget {
   }
 }
 
-class _RequestLogsTab extends StatelessWidget {
+/// How loud a log line is, and what a filter pill means by it.
+///
+/// `package:logging`'s names, folded to the three bands anybody filters on.
+/// An unknown word is [info] rather than dropped: the level is whatever the
+/// adapter put in the payload, and this panel does not own that vocabulary.
+enum _LogBand {
+  error,
+  warning,
+  info;
+
+  static _LogBand of(Object? level) => switch ('$level'.toUpperCase()) {
+    'SEVERE' || 'SHOUT' || 'ERROR' || 'FATAL' => _LogBand.error,
+    'WARNING' || 'WARN' => _LogBand.warning,
+    _ => _LogBand.info,
+  };
+
+  Color color(BuildContext context) => switch (this) {
+    _LogBand.error => context.colors.red,
+    _LogBand.warning => context.colors.amber,
+    _LogBand.info => context.colors.mut,
+  };
+}
+
+/// One log line, wherever it appears.
+///
+/// The per-request Logs tab and the raw Events stream draw the same row, which
+/// they did not: one was a bare `SelectableText` of `"INFO: listed 3 users"`
+/// and the other a plain `Text` of the same string, coloured by *channel* — so
+/// a `SEVERE` and an `INFO` came out the same grey. The level was in the
+/// payload the whole time.
+class _LogRow extends StatelessWidget {
+  const _LogRow(this.event, {this.showLogger = true});
+
+  final ServerEvent event;
+
+  /// False when every line in the list came from the same logger.
+  ///
+  /// A column that says `example_server` on all eleven rows is 85px of the
+  /// message's width spent saying nothing — and in a request's own Logs tab,
+  /// beside a detail, that is a third of what the message had.
+  final bool showLogger;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var mono = context.type.mono;
+    var p = event.payload;
+    var band = _LogBand.of(p['level']);
+    var color = band.color(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _timestamp(event.time),
+            style: mono.copyWith(color: colors.mut2),
+          ),
+          const Gap(FwSpacing.md),
+          SizedBox(
+            width: 62,
+            child: Text(
+              '${p['level'] ?? 'LOG'}',
+              maxLines: 1,
+              overflow: TextOverflow.clip,
+              style: context.type.micro.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const Gap(FwSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${p['message']}',
+                  style: mono.copyWith(
+                    color: band == _LogBand.info ? colors.ink : color,
+                  ),
+                ),
+                // Never shown before, in either surface — a log line that
+                // carried an exception said only its message.
+                if (p['error'] case var error?)
+                  Text('$error', style: mono.copyWith(color: colors.red)),
+              ],
+            ),
+          ),
+          if (showLogger)
+            if (p['logger'] case var logger? when '$logger'.isNotEmpty) ...[
+              const Gap(FwSpacing.md),
+              Text(
+                '$logger',
+                style: context.type.micro.copyWith(color: colors.mut3),
+              ),
+            ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RequestLogsTab extends StatefulWidget {
   const _RequestLogsTab(this.logs);
 
   final List<ServerEvent> logs;
 
   @override
+  State<_RequestLogsTab> createState() => _RequestLogsTabState();
+}
+
+class _RequestLogsTabState extends State<_RequestLogsTab> {
+  /// Null for all of them.
+  _LogBand? _band;
+  var _needle = '';
+
+  @override
   Widget build(BuildContext context) {
-    var mono = context.type.mono;
-    if (logs.isEmpty) {
+    if (widget.logs.isEmpty) {
       return const EmptyState(
         icon: Icons.article_outlined,
         title: 'No logs in this request',
       );
     }
-    return ListView(
-      padding: const EdgeInsets.all(FwSpacing.xl),
+    var needle = _needle.trim().toLowerCase();
+    var shown = [
+      for (var log in widget.logs)
+        if ((_band == null || _matchesBand(log, _band!)) &&
+            (needle.isEmpty || _summary(log).toLowerCase().contains(needle)))
+          log,
+    ];
+    var manyLoggers =
+        {for (var log in widget.logs) '${log.payload['logger']}'}.length > 1;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var log in logs)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: FwSpacing.xxs),
-            child: SelectableText(_summary(log), style: mono),
+        FwFilterBar(
+          pills: [
+            ('All', _band == null, () => setState(() => _band = null)),
+            for (var band in [_LogBand.warning, _LogBand.error])
+              (
+                band == _LogBand.error ? 'Errors' : 'Warnings+',
+                _band == band,
+                () => setState(() => _band = band),
+              ),
+          ],
+          hint: 'Filter lines…',
+          onSearch: (value) => setState(() => _needle = value),
+          count: '${shown.length} of ${widget.logs.length}',
+        ),
+        Expanded(
+          child: SelectionArea(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: FwSpacing.xl,
+                vertical: FwSpacing.sm,
+              ),
+              children: [
+                for (var log in shown) _LogRow(log, showLogger: manyLoggers),
+              ],
+            ),
           ),
+        ),
       ],
     );
   }
+}
+
+/// `Warnings+` includes errors, the way a level threshold does — a filter that
+/// hid the errors when you asked for warnings would be a trap.
+bool _matchesBand(ServerEvent log, _LogBand band) {
+  var it = _LogBand.of(log.payload['level']);
+  return band == _LogBand.error ? it == _LogBand.error : it != _LogBand.info;
 }
 
 /// Spans as bars over the request's duration.
@@ -1597,8 +2034,12 @@ class _InfoViewState extends State<_InfoView> {
     var links = info.links ?? const [];
     var connections = info.connections ?? const [];
     var config = info.config ?? const {};
+    // Shrink-wrapped: the card is bounded but most servers publish a dozen
+    // lines, and a 480px card holding fourteen of content is a card with a
+    // hole in it. It scrolls when a real config outgrows the bound.
     return ListView(
-      padding: const EdgeInsets.all(panelGutter),
+      shrinkWrap: true,
+      padding: const EdgeInsets.all(FwSpacing.xl),
       children: [
         if (links.isNotEmpty) ...[
           const _SectionLabel('Links'),
@@ -1841,9 +2282,9 @@ class _NoInfoHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
+    return Padding(
+      padding: const EdgeInsets.all(FwSpacing.xl),
+      child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1858,15 +2299,13 @@ class _NoInfoHint extends StatelessWidget {
               style: context.type.caption.copyWith(color: colors.mut2),
             ),
             const Gap(FwSpacing.lg),
-            _Slab(
-              child: SelectableText(
-                'FlutterwareServer.info(ServerInfo(\n'
-                "  baseUrl: 'http://localhost:\$port',\n"
-                "  environment: 'dev',\n"
-                "  links: [ServerLink('Health', '/health')],\n"
-                '));',
-                style: context.type.mono.copyWith(color: colors.mut),
-              ),
+            const FwCodeBlock(
+              'FlutterwareServer.info(ServerInfo(\n'
+              "  baseUrl: 'http://localhost:\$port',\n"
+              "  environment: 'dev',\n"
+              "  links: [ServerLink('Health', '/health')],\n"
+              '));',
+              language: 'dart',
             ),
           ],
         ),
@@ -1875,57 +2314,163 @@ class _NoInfoHint extends StatelessWidget {
   }
 }
 
-class _EventTimeline extends StatelessWidget {
-  const _EventTimeline(this.events);
+class _EventTimeline extends StatefulWidget {
+  const _EventTimeline(this.server, this.events);
 
+  final TrackedServer server;
   final List<ServerEvent> events;
 
   @override
+  State<_EventTimeline> createState() => _EventTimelineState();
+}
+
+class _EventTimelineState extends State<_EventTimeline> {
+  /// Null for every channel.
+  String? _channel;
+  var _needle = '';
+
+  @override
   Widget build(BuildContext context) {
-    if (events.isEmpty) {
+    if (widget.events.isEmpty) {
       return const LoadingState(
         title: 'Attached — waiting for events',
         message: 'Anything this server reports will land here.',
       );
     }
-    var reversed = events.reversed.toList();
-    return ListView.builder(
-      itemCount: reversed.length,
-      itemBuilder: (context, index) => _EventRow(reversed[index]),
+    var needle = _needle.trim().toLowerCase();
+    var shown = [
+      for (var event in widget.events.reversed)
+        if ((_channel == null || event.channel == _channel) &&
+            (needle.isEmpty || _summary(event).toLowerCase().contains(needle)))
+          event,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FwFilterBar(
+          pills: [
+            ('All', _channel == null, () => setState(() => _channel = null)),
+            for (var (id, label) in const [
+              ('http', 'HTTP'),
+              ('sql', 'SQL'),
+              ('log', 'Logs'),
+            ])
+              (label, _channel == id, () => setState(() => _channel = id)),
+          ],
+          hint: 'Filter the stream…',
+          onSearch: (value) => setState(() => _needle = value),
+          count: '${shown.length} of ${widget.events.length}',
+        ),
+        // Not selectable, for the reason the SQL list gives: two thirds of
+        // these rows open something, and a caret over a control that responds
+        // to a click is one affordance too many. The per-request Logs tab is
+        // where a log line is selectable, because nothing there is a target.
+        Expanded(
+          child: ListView.builder(
+            itemCount: shown.length,
+            itemBuilder: (context, index) =>
+                _EventRow(server: widget.server, event: shown[index]),
+          ),
+        ),
+      ],
     );
   }
 }
 
+/// One event of the raw stream — and a door, when it has somewhere to go.
+///
+/// Every row here used to be an inert `Text`, though two of the three kinds
+/// name a place this panel can already show: an `http` event is a request the
+/// Requests tab has a detail for, and a `sql` event belongs to a shape the SQL
+/// tab has an aggregate for. Only a `log` line is a leaf.
 class _EventRow extends StatelessWidget {
-  const _EventRow(this.event);
+  const _EventRow({required this.server, required this.event});
 
+  final TrackedServer server;
   final ServerEvent event;
+
+  VoidCallback? _open(BuildContext context) {
+    var address = AddressScope.write(context);
+    var name = server.handle.name;
+    return switch (event.channel) {
+      'http' => () => address.setSegments(
+        serverSegments(name, requestId: event.id),
+      ),
+      'sql' when event.payload['query'] is String => () => address.setSegments(
+        sqlSegments(
+          name,
+          queryKey: queryShapeKey(
+            normalizeSql(event.payload['query']! as String),
+          ),
+        ),
+      ),
+      _ => null,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: panelGutter,
-        vertical: FwSpacing.xs,
-      ),
-      child: Row(
-        children: [
-          Text(
-            _timestamp(event.time),
-            style: context.type.mono.copyWith(color: context.colors.mut2),
-          ),
-          const Gap(FwSpacing.md),
-          _ChannelChip(event),
-          const Gap(FwSpacing.md),
-          Expanded(
-            child: Text(
-              _summary(event),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: context.type.mono,
+    var colors = context.colors;
+    var mono = context.type.mono;
+    return Tappable(
+      onTap: _open(context),
+      // A log line is not a link, so it must not take the click cursor.
+      cursor: _open(context) == null ? SystemMouseCursors.basic : null,
+      feedback: _open(context) == null ? TapFeedback.none : TapFeedback.overlay,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: panelGutter,
+          vertical: FwSpacing.xs,
+        ),
+        child: Row(
+          children: [
+            Text(
+              _timestamp(event.time),
+              style: mono.copyWith(color: colors.mut2),
             ),
-          ),
-        ],
+            const Gap(FwSpacing.md),
+            _ChannelChip(event),
+            const Gap(FwSpacing.md),
+            Expanded(
+              child: switch (event.channel) {
+                'sql' when event.payload['query'] is String => _Sql(
+                  '${event.payload['query']}',
+                ),
+                'log' => Row(
+                  children: [
+                    SizedBox(
+                      width: 62,
+                      child: Text(
+                        '${event.payload['level'] ?? 'LOG'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
+                        style: context.type.micro.copyWith(
+                          color: _LogBand.of(event.payload['level'])
+                              .color(context),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '${event.payload['message']}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: mono,
+                      ),
+                    ),
+                  ],
+                ),
+                _ => Text(
+                  _summary(event),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: mono,
+                ),
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1944,13 +2489,15 @@ class _ChannelChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var failed = _failed(event);
-    var color = failed
+    // A log's colour is its level, not its channel. Painting every `log`
+    // chip the same grey meant a SEVERE and an INFO were the same row until
+    // you read the words.
+    var color = _failed(event)
         ? colors.red
         : switch (event.channel) {
             'http' => colors.accent,
             'sql' => colors.grn,
-            'log' => colors.mut,
+            'log' => _LogBand.of(event.payload['level']).color(context),
             _ => colors.info,
           };
     return Container(
@@ -1986,10 +2533,14 @@ class _EmptyHint extends StatelessWidget {
   }
 }
 
+/// Whether a row should read as a failure.
+///
+/// `>= 400`, not `>= 500`. The dot used to go green on a 404, which is the
+/// one status a request list is most often opened to find.
 bool _failed(ServerEvent event) =>
     event.payload['error'] != null ||
     switch (event.payload['status']) {
-      int status => status >= 500,
+      int status => status >= 400,
       _ => false,
     };
 
@@ -2005,6 +2556,10 @@ String _summary(ServerEvent event) {
 
 String _ms(Object? value) =>
     value is num ? '${value.toStringAsFixed(1)}ms' : '';
+
+/// `hh:mm:ss`, for a row with no width for the milliseconds.
+String _clock(DateTime time) =>
+    '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}';
 
 String _timestamp(DateTime time) =>
     '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}'

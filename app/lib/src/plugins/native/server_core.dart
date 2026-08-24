@@ -765,6 +765,19 @@ class TrackedServer {
   void dispose() => markStopped();
 }
 
+/// The absolute URL [request] was made to, or null when the server never
+/// published a base to resolve its path against.
+///
+/// The derivation [curlCommand] was doing inline. Split out because the panel
+/// wants the URL on its own — a path pasted into a browser is the other thing
+/// people do with a request row — and two copies of "which URL was this" is
+/// one too many.
+String? requestUrl(ServerInfo info, ServerEvent request) {
+  var path = request.payload['path'];
+  if (path is! String || info.baseUrl == null) return null;
+  return resolveLinkUrl(path, baseUrl: info.baseUrl);
+}
+
 /// A curl invocation reproducing [request], or null when one cannot be built
 /// — no published `baseUrl` to make the URL absolute, or no recorded path.
 ///
@@ -777,11 +790,7 @@ String? curlCommand(
   ServerEvent request, {
   Map<String, Object?>? details,
 }) {
-  var path = request.payload['path'];
-  if (path is! String) return null;
-  var url = info.baseUrl == null
-      ? null
-      : resolveLinkUrl(path, baseUrl: info.baseUrl);
+  var url = requestUrl(info, request);
   if (url == null) return null;
   var method = request.payload['method'];
   var methodFlag = method is String && method != 'GET' ? ' -X $method' : '';

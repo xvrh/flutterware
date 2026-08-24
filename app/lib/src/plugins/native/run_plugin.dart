@@ -36,6 +36,7 @@ import '../../ui/empty_state.dart';
 import '../../ui/loading_state.dart';
 import '../../ui/popover.dart';
 import '../../ui/popover_menu.dart';
+import '../../ui/filter_bar.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../../utils/daemon/device.dart';
@@ -230,38 +231,6 @@ class _RunPanelState extends State<_RunPanel> {
             .showSnackBar(SnackBar(content: Text('$e')));
       }
     }
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Tappable(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(context.radii.pill),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: selected ? colors.accentSoft : null,
-          borderRadius: BorderRadius.circular(context.radii.pill),
-          border: Border.all(
-            color: selected ? colors.accentSoft2 : colors.line,
-          ),
-        ),
-        child: Text(label, style: context.type.bodySmall),
-      ),
-    );
   }
 }
 
@@ -1138,7 +1107,7 @@ class _LogsTabState extends State<_LogsTab> {
               ])
                 Padding(
                   padding: const EdgeInsets.only(right: FwSpacing.xs),
-                  child: _Pill(
+                  child: FwPill(
                     label: label,
                     selected: _only == value,
                     onTap: () {
