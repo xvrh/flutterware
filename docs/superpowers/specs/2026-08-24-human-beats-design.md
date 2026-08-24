@@ -489,6 +489,29 @@ Metal/Impeller on macOS, Android's on the emulator — and the contention
 question still wants a physical device, which was not reachable when this was
 run. Given the margin above, it is a confirmation rather than a gate.
 
+## The agent is told what it would otherwise have had to go and read
+
+A consequence I waved away during step 2 and had to come back for.
+
+The poller and an agent's `act` are two mouths on one buffer in the guest, and
+taking clears it. The note then was that this "is not worth controlling —
+both write it to the same story". True of the *journal*, and wrong about the
+*reply*: the poller asks once a second, so it wins nearly every race, and the
+`human` field an act reply carries — documented as *"what the human tapped
+since your last step"* — would come back empty almost always. The facts would
+still be on disk, but an agent would have to know to go and read them, where
+before they arrived unasked.
+
+So the host keeps them. `_journalHumanBeats` writes the beat *and* leaves it in
+`_humanSinceStep`, and the next act reply reports the poller's collection ahead
+of its own take, in the order things happened. Told once: the reply clears
+what it reported, so two acts in a row do not both claim the same tap, and
+nothing is journaled twice — the poller already wrote its half when it
+collected it.
+
+Bounded at 100, matching the guest's own action cap, because a run nobody ever
+drives would otherwise hold a whole session for an agent that never arrives.
+
 ## Open, deliberately
 
 - **A human tap during an agent step is silently lost.** `HumanActions.suppress`

@@ -3092,6 +3092,7 @@ class RunCore extends PluginCore {
           // orphaned app running on the phone with nothing able to reload it,
           // which is the worst of both.
           _stopWatchingBeats(handle);
+          _humanSinceStep.remove(_driveKey(handle));
           unawaited(_driveSessions.remove(_driveKey(handle))?.close());
           unawaited(_nativeSessions.remove(_driveKey(handle))?.close());
           _nativeEchoes.remove(_driveKey(handle));
@@ -3883,6 +3884,23 @@ class RunCore extends PluginCore {
   /// recorder for the one case that does not need one.
   final _beatTrackers = <String, RunBeatTracker>{};
 
+  /// What the poller collected that no agent has been told about yet, per run.
+  ///
+  /// The poller and an agent's `act` are two mouths on one buffer in the
+  /// guest, and taking clears it — so once the poller is running it wins
+  /// almost every race, and the `human` field of an act reply would come back
+  /// empty. The facts would still be in the journal, but an agent would have
+  /// to know to go and read it, where before they arrived unasked.
+  ///
+  /// So the host keeps them: the poller journals a beat *and* leaves it here,
+  /// and the next act reply says what happened while nobody was asking.
+  final _humanSinceStep = <String, List<Map>>{};
+
+  /// Bound on that, matching the guest's own action cap. A run nobody ever
+  /// drives would otherwise accumulate a session's worth of taps for an agent
+  /// that never arrives.
+  static const _humanSinceStepCap = 100;
+
   /// Collects the human's own steps from [handle] until it stops.
   ///
   /// Idempotent, and it shares the drive session's socket rather than opening
@@ -3898,6 +3916,12 @@ class RunCore extends PluginCore {
     tracker.start();
   }
 
+  /// Stands in for the poller so the collect-then-act sequence can be pumped
+  /// in a test — the same seam [debugAct] is for the guest wire.
+  @visibleForTesting
+  void debugCollectBeats(RunHandle handle, List<Map> beats) =>
+      _journalHumanBeats(handle, beats);
+
   void _stopWatchingBeats(RunHandle handle) =>
       _beatTrackers.remove(_driveKey(handle))?.dispose();
 
@@ -3911,6 +3935,11 @@ class RunCore extends PluginCore {
   void _journalHumanBeats(RunHandle handle, List<Map> beats) {
     var (human, _) = _reconcileHuman(handle, beats);
     _writeHumanBeats(handle, human);
+    var pending = _humanSinceStep[_driveKey(handle)] ??= [];
+    pending.addAll(human);
+    if (pending.length > _humanSinceStepCap) {
+      pending.removeRange(0, pending.length - _humanSinceStepCap);
+    }
     notifyChanged();
   }
 
@@ -4146,6 +4175,12 @@ class RunCore extends PluginCore {
       handle,
       (reply['human'] as List?)?.cast<Map>() ?? const [],
     );
+    // Told once. Anything the poller collected since the last step is reported
+    // now and dropped, so two acts in a row do not both claim the same tap.
+    var humanForReply = [
+      ...?_humanSinceStep.remove(_driveKey(handle)),
+      ...human,
+    ];
 
     var capture = _Capture.write(
       handle: handle,
@@ -4249,9 +4284,15 @@ class RunCore extends PluginCore {
       frames: settle?['frames'] as int?,
       framesEnabled: framesEnabled,
       lifecycle: reply['lifecycle'] as String?,
-      human: human.isEmpty
+      // What the poller already collected, then what this call's own take
+      // found — both in the order they happened. Only the second half is
+      // journaled here; the first was journaled when it was collected.
+      human: humanForReply.isEmpty
           ? null
-          : [for (var action in human) '${action['verb']} ${action['target']}'],
+          : [
+              for (var action in humanForReply)
+                '${action['verb']} ${action['target']}',
+            ],
       texts: texts,
       capture: capture?.address,
       // Named on every reply, because a pinned lens is state somebody else
@@ -4837,6 +4878,7 @@ class RunCore extends PluginCore {
       tracker.dispose();
     }
     _beatTrackers.clear();
+    _humanSinceStep.clear();
     for (var session in _driveSessions.values) {
       unawaited(session.close());
     }
