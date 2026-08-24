@@ -16,6 +16,7 @@ import 'package:vm_service/vm_service.dart'
     show DartIOExtension, HttpProfileRequest, HttpProfileRequestRef, RPCError;
 
 import '../../run/channel_client.dart';
+import '../../run/beat_tracker.dart';
 import '../../run/connection.dart';
 import '../../run/define_scripts.dart';
 import '../../run/entrypoint_knobs.dart';
@@ -2553,6 +2554,7 @@ class RunCore extends PluginCore {
       knobs: resolvedKnobs,
     );
     _handles = [handle, ..._handles];
+    _watchBeats(handle);
     notifyChanged();
     return handle;
   }
@@ -3066,6 +3068,19 @@ class RunCore extends PluginCore {
 
   /// Does one thing to one running app. The panel's entry point as well.
   Future<void> control(String action, RunHandle handle) async {
+    await _control(action, handle);
+    // A reload or a restart that *returned* is the cockpit changing the app's
+    // screen, and the Screen pane re-reads on it. Out here rather than beside
+    // the two RPCs so that the stub path counts as well — a test standing in
+    // for the VM service is standing in for a reload that worked — and so
+    // that a throw skips it, which a `finally` would not.
+    if (action == 'reload' || action == 'restart') {
+      _screenMovedBy(handle: handle, cockpit: true);
+      notifyChanged();
+    }
+  }
+
+  Future<void> _control(String action, RunHandle handle) async {
     if (debugControl case var stub?) return stub(action, handle);
     var uri = handle.vmService;
     if (uri == null && action != 'stop') {
@@ -3097,6 +3112,10 @@ class RunCore extends PluginCore {
           // The app first, then its launcher. The other order leaves an
           // orphaned app running on the phone with nothing able to reload it,
           // which is the worst of both.
+          _stopWatchingBeats(handle);
+          _humanSinceStep.remove(_driveKey(handle));
+          _screenMoved.remove(_driveKey(handle));
+          _screenMovedByCockpit.remove(_driveKey(handle));
           unawaited(_driveSessions.remove(_driveKey(handle))?.close());
           unawaited(_nativeSessions.remove(_driveKey(handle))?.close());
           _nativeEchoes.remove(_driveKey(handle));
@@ -3250,6 +3269,7 @@ class RunCore extends PluginCore {
     RunHandle handle, {
     bool tree = true,
     bool screenshot = true,
+    bool semantics = false,
     bool summary = true,
   }) =>
       debugRead?.call(handle) ??
@@ -3258,6 +3278,7 @@ class RunCore extends PluginCore {
         (i) => i.read(
           tree: tree,
           screenshot: screenshot,
+          semantics: semantics,
           summary: summary,
           preferGuest: true,
         ),
@@ -3880,6 +3901,147 @@ class RunCore extends PluginCore {
   /// closed here on stop and on dispose.
   final _driveSessions = <String, DriveSession>{};
 
+  /// One collector per run, so a run nobody drives still tells its story.
+  ///
+  /// Started at launch rather than when a panel opens: the human tapping their
+  /// own app is exactly the case with no panel in front of it, and a recorder
+  /// that only runs while somebody is watching the Steps tab would be a
+  /// recorder for the one case that does not need one.
+  final _beatTrackers = <String, RunBeatTracker>{};
+
+  /// What the poller collected that no agent has been told about yet, per run.
+  ///
+  /// The poller and an agent's `act` are two mouths on one buffer in the
+  /// guest, and taking clears it — so once the poller is running it wins
+  /// almost every race, and the `human` field of an act reply would come back
+  /// empty. The facts would still be in the journal, but an agent would have
+  /// to know to go and read it, where before they arrived unasked.
+  ///
+  /// So the host keeps them: the poller journals a beat *and* leaves it here,
+  /// and the next act reply says what happened while nobody was asking.
+  final _humanSinceStep = <String, List<Map>>{};
+
+  /// Bound on that, matching the guest's own action cap. A run nobody ever
+  /// drives would otherwise accumulate a session's worth of taps for an agent
+  /// that never arrives.
+  static const _humanSinceStepCap = 100;
+
+  /// How many times this run's screen is known to have changed, and how many
+  /// of those the cockpit itself caused.
+  ///
+  /// **Known**, never guessed. An app animates and takes in data with nobody
+  /// touching it, and nothing here pretends to see that — what these count is
+  /// the three moments the cockpit is *told* about: a reload or restart it
+  /// asked for, a drive step it took, and a tap the beat poller collected.
+  /// Anything else moves the app without moving these, which is why the pane
+  /// they feed keeps its button.
+  ///
+  /// Two numbers rather than one because the pane does two different things
+  /// with them. What the cockpit caused it re-reads, because the read is a
+  /// consequence of something the user just asked for. What the *human* did
+  /// it merely reports as stale — re-reading there would be a full render and
+  /// a tree walk per tap, which is polling wearing a finger.
+  final _screenMoved = <String, int>{};
+  final _screenMovedByCockpit = <String, int>{};
+
+  /// See [_screenMoved]. Safe on a handle nothing has moved yet: zero.
+  (int moved, int byCockpit) screenClockOf(RunHandle handle) {
+    var key = _driveKey(handle);
+    return (_screenMoved[key] ?? 0, _screenMovedByCockpit[key] ?? 0);
+  }
+
+  void _screenMovedBy({required RunHandle handle, required bool cockpit}) {
+    var key = _driveKey(handle);
+    _screenMoved[key] = (_screenMoved[key] ?? 0) + 1;
+    if (cockpit) {
+      _screenMovedByCockpit[key] = (_screenMovedByCockpit[key] ?? 0) + 1;
+    }
+  }
+
+  /// Collects the human's own steps from [handle] until it stops.
+  ///
+  /// Idempotent, and it shares the drive session's socket rather than opening
+  /// one of its own.
+  void _watchBeats(RunHandle handle) {
+    var key = _driveKey(handle);
+    if (_beatTrackers.containsKey(key)) return;
+    var tracker = RunBeatTracker(
+      drain: () => _driveSessionFor(handle).beats(),
+      onBeats: (beats) => _journalHumanBeats(handle, beats),
+    );
+    _beatTrackers[key] = tracker;
+    tracker.start();
+  }
+
+  /// Stands in for the poller so the collect-then-act sequence can be pumped
+  /// in a test — the same seam [debugAct] is for the guest wire.
+  @visibleForTesting
+  void debugCollectBeats(RunHandle handle, List<Map> beats) =>
+      _journalHumanBeats(handle, beats);
+
+  void _stopWatchingBeats(RunHandle handle) =>
+      _beatTrackers.remove(_driveKey(handle))?.dispose();
+
+  /// Writes what the human did into the run's story, pictures and all.
+  ///
+  /// The same reconciliation the act path does, and for the same reason: this
+  /// process's own native taps reach the guest as ordinary platform input and
+  /// come back looking exactly like a finger. Without it every `adb shell
+  /// input tap` would be journaled twice, once as its step and once as a
+  /// phantom human.
+  void _journalHumanBeats(RunHandle handle, List<Map> beats) {
+    var (human, _) = _reconcileHuman(handle, beats);
+    _writeHumanBeats(handle, human);
+    var pending = _humanSinceStep[_driveKey(handle)] ??= [];
+    pending.addAll(human);
+    if (pending.length > _humanSinceStepCap) {
+      pending.removeRange(0, pending.length - _humanSinceStepCap);
+    }
+    if (human.isNotEmpty) _screenMovedBy(handle: handle, cockpit: false);
+    notifyChanged();
+  }
+
+  /// Writes already-reconciled beats, pictures and all.
+  ///
+  /// **One writer, because there are two mouths.** A beat reaches the host
+  /// either through this poller or through an agent's `act`, whichever drained
+  /// the guest first — and which one it was is not something a reader of the
+  /// story should be able to tell. The act path used to write `at`, `verb` and
+  /// `target` only, so a tap the agent happened to collect lost the picture
+  /// the guest had already taken for it.
+  void _writeHumanBeats(RunHandle handle, List<Map> human) {
+    for (var beat in human) {
+      var at =
+          beat['at'] as String? ?? DateTime.now().toUtc().toIso8601String();
+      var shot = (beat['screenshot'] as Map?)?.cast<String, Object?>();
+      var texts = (beat['texts'] as List?)?.cast<String>();
+      var capture = shot == null && texts == null
+          ? null
+          : _Capture.write(
+              handle: handle,
+              stamp:
+                  '${DateTime.tryParse(at)?.millisecondsSinceEpoch ?? 0}-$pid',
+              at: DateTime.tryParse(at) ?? DateTime.now(),
+              verb: beat['verb'] as String? ?? 'tap',
+              target: beat['target'] as String?,
+              shot: shot,
+              texts: texts,
+            );
+      appendJournal(
+        handle,
+        JournalEntry(
+          at: at,
+          verb: beat['verb'] as String? ?? 'tap',
+          actor: 'human',
+          target: beat['target'] as String?,
+          capture: capture?.address,
+          screenshot: capture?.shot,
+          texts: capture?.texts,
+        ),
+      );
+    }
+  }
+
   String _driveKey(RunHandle handle) =>
       handle.handlePath ?? handle.vmService ?? handle.entrypoint;
 
@@ -4071,6 +4233,12 @@ class RunCore extends PluginCore {
       handle,
       (reply['human'] as List?)?.cast<Map>() ?? const [],
     );
+    // Told once. Anything the poller collected since the last step is reported
+    // now and dropped, so two acts in a row do not both claim the same tap.
+    var humanForReply = [
+      ...?_humanSinceStep.remove(_driveKey(handle)),
+      ...human,
+    ];
 
     var capture = _Capture.write(
       handle: handle,
@@ -4092,17 +4260,7 @@ class RunCore extends PluginCore {
     // What the human did on the way here, ahead of the step that saw it —
     // the guest buffers between transactions, so these precede this step in
     // wall time and must precede it in the story too.
-    for (var action in human) {
-      appendJournal(
-        handle,
-        JournalEntry(
-          at: action['at'] as String? ?? started.toUtc().toIso8601String(),
-          verb: action['verb'] as String? ?? 'tap',
-          actor: 'human',
-          target: action['target'] as String?,
-        ),
-      );
-    }
+    _writeHumanBeats(handle, human);
 
     appendJournal(
       handle,
@@ -4136,6 +4294,13 @@ class RunCore extends PluginCore {
         reconciled: reconciled == 0 ? null : reconciled,
       ),
     );
+
+    // `observe` is the one verb that changes nothing, so it is the one verb
+    // that does not make the Screen pane's reading stale.
+    if (((step?['verb'] as String?) ?? verb) != 'observe') {
+      _screenMovedBy(handle: handle, cockpit: true);
+      notifyChanged();
+    }
 
     return RunActResult(
       device: handle.device,
@@ -4184,9 +4349,15 @@ class RunCore extends PluginCore {
       frames: settle?['frames'] as int?,
       framesEnabled: framesEnabled,
       lifecycle: reply['lifecycle'] as String?,
-      human: human.isEmpty
+      // What the poller already collected, then what this call's own take
+      // found — both in the order they happened. Only the second half is
+      // journaled here; the first was journaled when it was collected.
+      human: humanForReply.isEmpty
           ? null
-          : [for (var action in human) '${action['verb']} ${action['target']}'],
+          : [
+              for (var action in humanForReply)
+                '${action['verb']} ${action['target']}',
+            ],
       texts: texts,
       capture: capture?.address,
       // Named on every reply, because a pinned lens is state somebody else
@@ -4768,6 +4939,13 @@ class RunCore extends PluginCore {
 
   @override
   void dispose() {
+    for (var tracker in _beatTrackers.values) {
+      tracker.dispose();
+    }
+    _beatTrackers.clear();
+    _humanSinceStep.clear();
+    _screenMoved.clear();
+    _screenMovedByCockpit.clear();
     for (var session in _driveSessions.values) {
       unawaited(session.close());
     }
@@ -4918,7 +5096,7 @@ class _Capture {
       if (reported.isNotEmpty) 'reported': reported,
     };
 
-    return _Capture(
+    var capture = _Capture(
       address: address,
       manifest: write('.capture.json', utf8.encode(jsonEncode(manifest))) ?? '',
       shot: shotPath,
@@ -4926,6 +5104,15 @@ class _Capture {
       semantics: semanticsPath,
       texts: textsPath,
     );
+    // **Writing is what makes the weight, so writing is what bounds it** — the
+    // same bargain `launchApp` strikes with `sweepRunDir`, and for the same
+    // reason: housekeeping that waits for somebody to open a panel is
+    // housekeeping that never runs on the sessions that need it most. The two
+    // do not overlap. That sweep clears what *dead* runs left behind, on age;
+    // this holds a *live* run's own pictures to a size, and a run the human
+    // taps through for an hour never dies and never ages.
+    boundJournalArtifacts(handle);
+    return capture;
   }
 
   static int _countTree(Object? node) {

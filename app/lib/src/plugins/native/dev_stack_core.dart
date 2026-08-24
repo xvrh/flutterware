@@ -6,6 +6,7 @@ import 'package:flutterware/plugins.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../../ui/age.dart';
 import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
@@ -912,15 +913,7 @@ String describeRun(StackRun run) => switch (run) {
 ///
 /// Shared with the panel: a reading's age is part of what the reading *means*,
 /// so the two surfaces must not word it differently.
-String? stackAge(DateTime? at) {
-  if (at == null) return null;
-  var elapsed = DateTime.now().difference(at);
-  if (elapsed.inSeconds < 10) return 'just now';
-  if (elapsed.inMinutes < 1) return '${elapsed.inSeconds}s ago';
-  if (elapsed.inHours < 1) return '${elapsed.inMinutes}m ago';
-  if (elapsed.inDays < 1) return '${elapsed.inHours}h ago';
-  return '${elapsed.inDays}d ago';
-}
+String? stackAge(DateTime? at) => ageOf(at);
 
 /// The real thing, and the value [DevStackCore.runProcess] is restored to.
 Future<ProcessResult> defaultRunProcess(

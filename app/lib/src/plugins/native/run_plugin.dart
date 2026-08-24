@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -27,6 +26,9 @@ import '../../run/logs.dart';
 import '../../run/native/native_logs.dart';
 import '../../inspect/elements_view.dart';
 import '../../inspect/inspect_dock.dart';
+import '../../inspect/semantics_node.dart';
+import '../../inspect/semantics_view.dart';
+import '../../inspect/transcript.dart';
 
 import '../../ui/capture_button.dart';
 import '../../ui/design/design.dart';
@@ -329,6 +331,7 @@ class _RunViewState extends State<_RunView> {
               key: _screen,
               core: core,
               handle: handle,
+              clock: core.screenClockOf(handle),
               onReadingChanged: () {
                 setState(() {});
                 widget.onReading(_screen.currentState?.isReading ?? false);
@@ -737,11 +740,18 @@ class _ScreenTab extends StatefulWidget {
     super.key,
     required this.core,
     required this.handle,
+    required this.clock,
     required this.onReadingChanged,
   });
 
   final RunCore core;
   final RunHandle handle;
+
+  /// What the cockpit knows about the app moving — see
+  /// [RunCore.screenClockOf]. Read here rather than in the pane so that a
+  /// rebuild is the only wire: the page already rebuilds on every core
+  /// notification, and `didUpdateWidget` is where a pane is told what changed.
+  final (int moved, int byCockpit) clock;
 
   /// So the strip above can swap its refresh button for a spinner. The pane
   /// owns the reading; the page only needs to know one is happening.
@@ -768,10 +778,19 @@ class _ScreenTabState extends State<_ScreenTab> {
   String? _error;
   var _loading = false;
 
-  /// How much of the pane the picture takes. Wider than the first build's
-  /// fixed 240: a phone screenshot at that width is a thumbnail, and the tree
-  /// beside it never needed the rest.
-  double _split = 0.34;
+  /// When the reading on screen was taken, and what the cockpit's `moved`
+  /// count stood at then. Together they are the caption: how old the picture
+  /// is, and whether anything has reported a change it does not show.
+  DateTime? _readAt;
+  var _readAtMoved = 0;
+
+  /// The dock's open tab, and whether it is folded away.
+  ///
+  /// Held here rather than in the address: which reading of the screen is open
+  /// is a posture rather than a place, and putting it in the URL would make
+  /// the back button undo a glance.
+  var _tab = 'elements';
+  var _collapsed = false;
 
   bool get isReading => _loading;
 
@@ -788,6 +807,18 @@ class _ScreenTabState extends State<_ScreenTab> {
   /// that: a node with no `layout` paints nothing, which is the same answer
   /// arrived at without a second flag to keep in step.
   final _highlight = ValueNotifier<String?>(null);
+
+  /// The Semantics tab's own hover, and its reading-order switch.
+  ///
+  /// Separate from [_highlight] because they are hovers of different trees:
+  /// a widget's box comes off [InspectLayout], an utterance's off the
+  /// semantics node's own rect, and one notifier holding either would have to
+  /// say which every time it was read.
+  final _semanticsHighlight = ValueNotifier<SemanticsSnapshotNode?>(null);
+  final _focusOrder = ValueNotifier<bool>(false);
+
+  SemanticsSnapshotNode? _semantics;
+  SemanticsTranscript? _transcript;
 
   @override
   void initState() {
@@ -807,15 +838,33 @@ class _ScreenTabState extends State<_ScreenTab> {
       _undecodable = false;
       _tree = null;
       _fromGuest = false;
+      _semantics = null;
+      _transcript = null;
+      _semanticsHighlight.value = null;
       _error = null;
+      _readAt = null;
+      _readAtMoved = 0;
       _read();
+      return;
     }
+    // **What the cockpit did, the cockpit shows.** A hot reload, a restart or
+    // a drive step is the user asking for the app to be different; leaving a
+    // picture of the old one up is the pane disagreeing with the button that
+    // was just pressed.
+    //
+    // A human's own taps deliberately do *not* land here. They arrive through
+    // the beat poller at up to one batch a second, and re-reading on each
+    // would be a render and a full tree walk per tap — polling, wearing a
+    // finger. Those move `moved` alone, and the caption says so.
+    if (widget.clock.$2 != old.clock.$2 && !_loading) _read();
   }
 
   @override
   void dispose() {
     _picture?.dispose();
     _highlight.dispose();
+    _semanticsHighlight.dispose();
+    _focusOrder.dispose();
     super.dispose();
   }
 
@@ -829,7 +878,12 @@ class _ScreenTabState extends State<_ScreenTab> {
     _loading = true;
     _tellThePage();
     try {
-      var read = await widget.core.inspectRead(widget.handle);
+      // **Semantics in the same reading, not when the tab opens.** One read
+      // is what makes the boxes over the picture exact — a semantics tree
+      // fetched later would describe a frame the picture is not of — and it
+      // is what makes switching tabs free rather than a second round trip
+      // through the app.
+      var read = await widget.core.inspectRead(widget.handle, semantics: true);
       // Decoded here rather than in the pane, so that the frame and the caption
       // describing it land in the same build. The picture already on screen is
       // held until this one is ready — a re-read should not blank the pane it
@@ -846,7 +900,25 @@ class _ScreenTabState extends State<_ScreenTab> {
         _undecodable = read.image != null && picture == null;
         _tree = read.tree;
         _fromGuest = read.fromGuest;
+        // Typed here rather than in the reading, because the reading is
+        // linked by `fw` and the MCP server and a `Rect` is `dart:ui`.
+        _semantics = switch (read.semantics?.root) {
+          var root? => SemanticsSnapshotNode.fromJson(root),
+          _ => null,
+        };
+        // Derived once per reading rather than per build: the tab badge wants
+        // the finding count whether or not the tab is open, and the view would
+        // otherwise walk the tree again to get it.
+        _transcript = _semantics == null
+            ? null
+            : SemanticsTranscript.of(_semantics!);
+        _semanticsHighlight.value = null;
         _error = null;
+        _readAt = DateTime.now();
+        // The count as it stands *now*, not as it stood when the read was
+        // asked for: a tap that arrived while the picture was being taken is
+        // a tap the picture may well show.
+        _readAtMoved = widget.clock.$1;
       });
     } on Object catch (e) {
       if (!mounted) return;
@@ -878,71 +950,113 @@ class _ScreenTabState extends State<_ScreenTab> {
   @override
   Widget build(BuildContext context) {
     if (_error case var error?) return _Failed(error);
-    // A grip divides two things. Until the first read lands there is only one
-    // — the picture pane draws nothing at all while loading, so what the page
-    // showed was a blank half, a hairline down the middle, and the tab's only
-    // words centred in the *other* half. That reads as a divider waiting for a
-    // panel, not as a pane that is busy. One state for one thing, and the
-    // split appears with the content it splits.
+    // One state for one thing. The dock draws a grip and a strip for a tree
+    // that is not there yet, which reads as furniture waiting for a panel
+    // rather than as a pane that is busy — so until the first reading lands
+    // there is nothing here but the sentence saying so.
     if (_loading && _image == null && _tree == null) {
       return const LoadingState(
         title: 'Reading the app…',
         message: 'Its widget tree, and a picture of what it is showing.',
       );
     }
+    // **The picture on top, the tree docked under it** — what previews and the
+    // scenarios step page draw, and now the third surface drawing it.
+    //
+    // What it costs is worth writing down, because it was measured and it is
+    // real: at 872×737 the dock draws a desktop app at 475×384 where a
+    // third-of-the-width column managed 280×227, and pays for it in tree —
+    // about eleven rows at the dock's resting height against thirty-two beside
+    // a column. The grip is the answer to that: the dock resizes and
+    // collapses, so the trade is the reader's to make per task, where a fixed
+    // column was nobody's.
     return LayoutBuilder(
-      builder: (context, constraints) {
-        var width = (constraints.maxWidth * _split)
-            .clamp(180.0, math.max(180.0, constraints.maxWidth - 320))
-            .toDouble();
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: width,
-              child: RunScreenPicture(
-                picture: _picture,
-                undecodable: _undecodable,
-                loading: _loading,
-                highlight: _highlight,
-                tree: _tree,
-                canvas: RunScreenPicture.canvasOf(_tree),
+      builder: (context, constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: RunScreenPicture(
+              picture: _picture,
+              undecodable: _undecodable,
+              loading: _loading,
+              highlight: _highlight,
+              tree: _tree,
+              canvas: RunScreenPicture.canvasOf(_tree),
+              semanticsHighlight: _semanticsHighlight,
+              focusOrder: _focusOrder,
+              // Only while the Semantics tab is the one showing — its toggle
+              // is the only way to turn the numbers off, so they must not
+              // outlive it.
+              focusNodes: _tab == 'semantics'
+                  ? _transcript?.utterances.map((u) => u.node).toList()
+                  : null,
+              readAt: _readAt,
+              movedSince: widget.clock.$1 != _readAtMoved,
+            ),
+          ),
+          InspectDock(
+            available: constraints.maxHeight,
+            current: _tab,
+            collapsed: _collapsed,
+            onChanged: (current, collapsed) => setState(() {
+              _tab = current;
+              _collapsed = collapsed;
+            }),
+            // No refresh of its own: the page's strip already carries one and
+            // it re-reads both halves. Two buttons for one reading would be
+            // two claims about what a reading is.
+            tabs: [
+              InspectDockTab(
+                id: 'elements',
+                label: 'Elements',
+                body: (context) => _elements(),
               ),
-            ),
-            InspectSplitGrip(
-              axis: Axis.vertical,
-              onDrag: (delta) => setState(() {
-                _split = ((width + delta) / constraints.maxWidth).clamp(
-                  0.15,
-                  0.7,
-                );
-              }),
-            ),
-            Expanded(
-              child: ElementsView(
-                root: _tree?.root,
-                placeholder: _loading
-                    ? 'Reading the app…'
-                    : 'The app has not built a frame yet.',
-                highlight: _highlight,
-                // Paths are shortened against the worktree, and live in the
-                // detail pane rather than on every row — which is what the
-                // shared view does and what the run panel's own tree did not.
-                displayRoot: widget.core.host.worktree.path,
-                // Per read, because this pane has two sources. The VM
-                // service hands out structure and creation locations and
-                // nothing else; the guest walks the app's own elements, so on
-                // a run launched through flutterware a node with no box
-                // really has none. Said here rather than inferred from empty
-                // fields.
-                readsWidgets: _fromGuest,
+              InspectDockTab(
+                id: 'semantics',
+                label: 'Semantics',
+                badge: _transcript?.findingCount ?? 0,
+                body: (context) => SemanticsView(
+                  root: _semantics,
+                  transcript: _transcript,
+                  highlight: _semanticsHighlight,
+                  focusOrder: _focusOrder,
+                  // Three absences, and they are not the same news. A run the
+                  // cockpit merely attached to has no guest to ask; a run that
+                  // has one is holding a `SemanticsHandle` for its whole life,
+                  // so an empty tree there is the app's own answer.
+                  placeholder: _loading
+                      ? 'Reading the app…'
+                      : !_fromGuest
+                      ? 'This run has no flutterware guest in it, and the '
+                            'service extension has no semantics to give. '
+                            'Launch it through flutterware to read them.'
+                      : 'The app has published no semantics tree.',
+                ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          ),
+        ],
+      ),
     );
   }
+
+  /// The tree and its detail pane, side by side — the dock's one tab.
+  Widget _elements() => ElementsView(
+    root: _tree?.root,
+    placeholder: _loading
+        ? 'Reading the app…'
+        : 'The app has not built a frame yet.',
+    highlight: _highlight,
+    // Paths are shortened against the worktree, and live in the detail pane
+    // rather than on every row — which is what the shared view does and what
+    // the run panel's own tree did not.
+    displayRoot: widget.core.host.worktree.path,
+    // Per read, because this pane has two sources. The VM service hands out
+    // structure and creation locations and nothing else; the guest walks the
+    // app's own elements, so on a run launched through flutterware a node with
+    // no box really has none. Said here rather than inferred from empty fields.
+    readsWidgets: _fromGuest,
+  );
 }
 
 /// Bytes to a frame, or null.

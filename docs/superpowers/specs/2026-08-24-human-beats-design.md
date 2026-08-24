@@ -1,0 +1,565 @@
+# A human tap lands the way an agent's does
+
+*2026-08-24. Designed, not built. Came out of a feature discussion with the
+owner: what an "instant replay" would be here, and what of it is worth v1.*
+
+## The journal is one-eyed
+
+`RunJournal` is the story of a run, and it tells half of it. Every agent step
+lands with its picture, its texts and what the app printed. What the human did
+between those steps lands as a bare line of prose, and only if an agent was
+driving at all.
+
+Two mechanisms cause that, and neither is the tagging — the tagging is already
+right:
+
+- **Nothing triggers a capture when a human acts.** `HumanActions` buffers
+  pointer-ups and they ride the *next* `act`/`observe` reply as a
+  since-last-step delta. With nobody driving, the buffer fills to its 100-entry
+  cap and the rest are counted and dropped.
+- **A human entry carries no picture.** By decision, recorded in
+  `app/lib/src/run/journal.dart`: *"No screenshot on those; the step that
+  follows photographs the screen they produced."*
+
+So the journal knows the human tapped "Pay" and has no idea what happened next.
+
+## What already exists
+
+Worth listing, because it is most of the feature:
+
+| | where | state |
+|---|---|---|
+| pointer interception | `lib/src/drive/human_actions.dart` — a global pointer route, down/up paired within `kTouchSlop`, long-press split on `kLongPressTimeout` | **done** |
+| naming a hit | `describeHit` → hit test, leaf-most element, walk up to 100 hops for `Text` → `Tooltip` → `Semantics(label)` → `ValueKey<String>`, else `at (x, y)` | **done** |
+| `actor: human` in the journal | `JournalEntry.actor`, rendered by the Steps tab | **done** |
+| capturing the root view as PNG | `_screenshot` in `lib/src/drive/guest_drive.dart` — `toImage`, `ImageByteFormat.png`, `maxSide` | **done, reused as-is** |
+| stale-run cleanup | `sweepRunDir`, called once per launch from `run/launch.dart` — age gate (1 day) plus a liveness check | **done, and not what this needs** |
+| frame playback UI | `app/lib/src/scenarios/motion_player.dart` | **done** |
+
+## The premise change
+
+One line is architecturally significant, and it is the whole of v1:
+
+> **The guest captures on its own trigger, not only when asked.**
+
+Everything else on this wire is pull — the guest answers, never announces. That
+rule is not broken here: the guest captures into its own ring and the host
+still pulls, on its own schedule. What changes is that the guest stops throwing
+away what it already saw — see *Where a beat lives*.
+
+## The unit: a human beat, shaped like a step
+
+A human beat is **the same transaction an agent step is** — act, settle,
+observe — with the actor different and the act not ours:
+
+    pointer-up  →  settle (bounded)  →  capture  →  append to the journal
+
+That shape is the point. It needs no new vocabulary, no new file format and no
+new UI: the Steps tab already renders journal entries, and human beats stop
+being second-class rows in it. It also gives the right thing to an agent
+reading back — *"tapped X, and then the screen showed Y"* — which is the same
+sentence an agent's own step makes.
+
+## What a beat carries
+
+| field | v1 |
+|---|---|
+| `actor` | `human` |
+| `verb`, `target` | from `HumanAction` — `tap` / `longPress`, named or `at (x, y)` |
+| `screenshot` | yes — PNG, capped by `maxSide` |
+| `texts` | yes |
+| `tree` | **no** — 47 ms of UI thread at 34k elements; see *Measured* |
+| `semantics` | no |
+
+**The tree is deliberately out**, and the archive is the argument rather than
+the wire. Measured 2026-08-13: a drive step archives **~730 KB**, of which the
+`tree.json` alone is **~460 KB** — the "~120 KB" the docs quote is the wire
+spelling, not what lands on disk. Dropping it is most of a beat's cost, and it
+is exactly what `lens` gates for this reason. A beat defaults to the equivalent
+of `lens: act`.
+
+**When the name fails, a node id would beat bare coordinates** — it turns
+`at (312, 640)` into something a reader can look up exactly. But it is *not*
+free, and an earlier draft of this spec said it was: a beat walks no tree, so
+there is no numbering to borrow. `nameHit` does hold the leaf element from its
+hit test, so the question is whether an id can be minted from that without the
+inspector's walk. **Unresolved — see Open.** Bare coordinates plus the screen's
+texts are the v1 fallback, and they are legible enough for the consumer this is
+built for.
+
+## The cost, and why it is affordable
+
+Measured under `flutter_test` for the motion recorder
+(`2026-08-11-scenario-motion-capture-findings.md`), phone size, 1×:
+
+| | |
+|---|---|
+| read as rawRgba | **0.24 ms/frame**, **1.29 MB** |
+| encode as PNG | **7.4 ms/frame**, **~12 KB** |
+| pump | 2.3 ms/frame — **not paid here**, a live app produces its own frames |
+
+**PNG, not raw — and not for the reason the motion recorder chose raw.** That
+recorder runs in `flutter_tester` *on the host* and writes to local disk, so
+there is no wire and CPU is the only cost; raw halves it. A run guest may be on
+a phone, and then every byte crosses the VM service base64'd, at +33%. ~12 KB
+against ~1.29 MB is the whole argument, and `_screenshot` in
+`lib/src/drive/guest_drive.dart` already made this call for agent steps, with
+the reason in the comment: *"base64 over the wire is the cost being bounded"*.
+A beat matches it — same `toImage`, same `ImageByteFormat.png`. (`toImageSync`
+is the motion recorder's trick for staying inside a frame budget; a beat
+captures after its settle and has no budget to protect.)
+
+**The encode is affordable because of when it happens.** 7.4 ms would be
+unaffordable inside a frame budget, and it is not inside one: a beat encodes
+after its settle, when the app is idle by definition — the same moment an agent
+step pays the same cost today.
+
+**`maxSide` is the lever, and it already exists.** It scales the render before
+encoding, so it cuts the encode *and* the bytes together, and `_screenshot`
+takes it today. A beat is for scanning a timeline, not for reading fine print,
+so it should take a smaller cap than an agent step. This is the largest cost
+reduction available and it costs nothing to take.
+
+## Measured, 2026-08-24 — and the risk is not where this spec put it
+
+`test/drive/beat_cost_bench.dart`, JIT under `flutter_tester`, one 2400x1800
+view capped by `maxSide: 900`. Tree size is varied with a non-lazy `Column`,
+because a lazy list builds only what is visible and the tree stops growing.
+
+| elements | inspect tree | tree + json | `visibleTexts` | semantics | `toImage` | PNG | base64 |
+|---|---|---|---|---|---|---|---|
+| 8,732 | 9.9 ms | 13.7 ms | 0.7 ms | 0.5 ms | 2.7 ms | 14.1 ms | 1.0 ms |
+| 34,232 | **46.6 ms** | **63.4 ms** | 3.1 ms | 1.0 ms | 0.7 ms | 10.9 ms | 0.4 ms |
+| 102,232 | **165.3 ms** | **211.2 ms** | 10.5 ms | 3.1 ms | 0.7 ms | 11.3 ms | 0.03 ms |
+
+**The inspect tree walk dominates everything and scales linearly** — about
+1.6 µs per element, pure Dart, on the UI thread. The picture does not scale
+with the tree at all: `maxSide` already bounds it, and PNG sits at ~11 ms for
+~11.8 KB whatever the tree does. That ~11.8 KB is the ~12 KB figure quoted
+above, now confirmed against something other than the example app.
+
+Three consequences, and the first two change the design.
+
+**A beat must not carry the inspect tree, and this is a stronger reason than
+the archive bytes.** The earlier argument here was about ~460 KB of
+`tree.json`. The real argument is 47 ms of UI thread at 34k elements — four
+dropped frames at 60 Hz, seven at 120 Hz — fired *immediately after the user
+taps*, which is the exact moment they are watching for a response. `texts` is
+15x cheaper than the tree for the same screen, because a predicate walk filters
+where `InspectTree` builds an object per node.
+
+**A beat therefore cannot reuse the observe bundle, which this spec assumed it
+could.** `_dispatch` builds the tree unconditionally — *"the guest built this
+tree on every observe already, including calls that asked for no tree at
+all"* — so a beat needs a leaner path beside it: picture, texts, the tap.
+That is new code rather than the pure reuse claimed above, and it is small.
+
+**JIT is the honest number here, not a pessimistic one.** A driven run is a
+debug build, because hot reload needs one. AOT would be faster and is not what
+this runs on.
+
+**What this bench cannot answer:** `flutter_tester` single-threads the engine,
+so it cannot say which of these land on the UI thread on a real device. The
+Dart-side walks certainly do. `toImage` rasters off it, and `toByteData(png)`
+is believed to encode off it — that belief is load-bearing for the ~11 ms and
+**was confirmed on a device — see the next section.**
+
+## The encode is off the UI thread — confirmed, 2026-08-24
+
+The gate the bench above could not answer. `flutter_tester` single-threads the
+engine, so it was measured on a real one: a macOS debug build (what a driven
+run is, because hot reload needs one), window visible and animating, Impeller.
+
+**Method.** A `Timer.periodic(1ms)` on the UI thread records the largest gap
+between its own ticks. A timer cannot fire while the isolate is busy, so if the
+encode runs on the UI thread the gap rises to the encode's duration. Three
+phases: idle, back-to-back `toImage` + `toByteData(png)`, and a deliberate 11 ms
+busy-loop as a control that the probe can detect blocking at all.
+
+| phase | median gap | p95 | max gap |
+|---|---|---|---|
+| idle | 1.20 ms | 1.47 ms | 8.09 ms |
+| **126 encodes back to back** | 1.15 ms | 1.19 ms | **1.70 ms** |
+| 11 ms block (control) | 11.05 ms | 12.21 ms | 12.28 ms |
+
+**Neither `toImage` nor `toByteData(png)` blocks the UI thread.** Through
+roughly 2.95 s of encode work inside a 3 s window, the worst gap was 1.70 ms —
+*lower* than the idle phase's worst, and the control shows an 11 ms block is
+seen as an 11 ms gap. `dart:ui` agrees in shape: `Image::toByteData` is a
+callback-based native binding, not a synchronous return.
+
+**So the load-bearing assumption holds, and the picture is not the risk.** What
+remains on the UI thread is Dart-side only: the tree walk (which a beat does not
+do), `visibleTexts`, and base64.
+
+Two things the probe corrected on the way past:
+
+- **~107 KB a beat, not ~12 KB.** The bench's 11.8 KB was flat `ListTile` rows;
+  this screen — an antialiased rotating logo over 40 text rows, output 900x675 —
+  encodes to **107.3 KB**. Real screens carry gradients and photographs, so the
+  ring and the wire should be budgeted near 100 KB a beat, not 12. A 100-beat
+  ring is still only ~10 MB, so nothing about the design changes; the arithmetic
+  above does.
+- **23.4 ms mean per encode**, twice the tester's. Off-thread, so it costs no
+  frames — but it bounds how fast beats can be produced, and a burst window
+  shorter than one encode would simply queue behind it.
+
+**Still unmeasured: a phone.** The engine's task-runner architecture is shared,
+so the *threading* answer should carry. What will not carry is the assumption
+that off-the-UI-thread means free: a four-core phone runs that worker pool on
+cores the UI thread also wants. Worth a repeat on an Android emulator before
+this is called done.
+
+## Where a beat lives
+
+The guest cannot write the run dir — on a phone it is not even the same
+machine. So the shape is three parts, and only the middle one is new:
+
+    guest: ring of encoded beats  →  host: poller  →  the journal on disk
+
+**The guest's ring is a buffer between polls, not a replay store.** That is the
+correction that makes the memory question disappear: it only has to cover one
+poll interval plus slack, so a few dozen PNG beats — single-digit MB — is
+generous. Raw could never have worked here (a 100-beat raw ring is ~129 MB
+inside the user's app); PNG is what makes an in-guest ring viable at all.
+
+**The host polls, and `NetworkTracker` is the shape to copy** — not a new
+organ. `app/lib/src/run/network_tracker.dart` already runs a `Timer.periodic`
+against the guest with a re-entrancy guard, a give-up-after-failures state, and
+"everything since capture was armed" semantics. A beat poller is the same
+thing with a different payload.
+
+**The journal is the replay store**, as it already is for agent steps.
+`appendJournal` is JSON-lines precisely because *"two processes append to the
+same story — a GUI and an `fw` are both actors"*, so a poller is one more
+appender and out-of-order arrival is a case the format was chosen for.
+
+This also collapses the desktop/device split: both go through the poller, and
+nothing needs device-side disk.
+
+**The cost of that, stated:** beats need a host holding the run. A run launched
+from `fw` where the CLI then exits has nobody polling, and its beats age out of
+the guest ring unseen. That is a real limit and it should be said in the panel
+rather than discovered.
+
+**The bound is still new work, and the existing sweep is not it.**
+`sweepRunDir` runs once per launch and clears what *dead* runs left behind — an
+age gate of a day and a liveness check. It says nothing about a live run's own
+journal, which is what beats grow. That this matters is already measured —
+2026-08-13, **161 MB of step captures, none of it reachable**, which is what
+gave the sweep its caller. Beats need a bound *within* the run; the sweep keeps
+its separate job.
+
+## Why this is not a video
+
+An app cannot encode video. Flutter ships no encoder, so doing it in-process
+means an ffmpeg-class plugin inside *the user's app*, which is where the
+performance objection becomes unanswerable.
+
+The way out, when it is wanted, is that **the platform records outside the
+process** — `xcrun simctl io … recordVideo`, `adb shell screenrecord` — and the
+journal's timestamps correlate it. The app pays nothing because it is not
+doing it. `screenrecord` caps at ~3 minutes per invocation, so chunking is
+forced rather than chosen, and chunks are also the retention ring.
+
+That is a separable layer and it is not v1. Stills at beats answer *"what was
+on screen when it broke"*; video only adds *"what did the transition look
+like"*, which is one class of bug. It also stops at the simulator, the emulator
+and physical Android — a physical iOS device cannot be recorded this way, and
+macOS desktop would need window capture instead.
+
+## What this is for
+
+**Immediately:** co-driving stops being half-blind. Today the Steps tab shows
+what the agent did in pictures and what the human did as prose.
+
+**The goal:** *"I tested it, it seems to work — write a scenario for that
+feature"* becomes a real instruction. The agent reads the journal, finds a
+sequence of screens with what was tapped on each, and already has the source.
+
+That framing is the owner's and it sets the fidelity bar, so it is worth
+stating plainly: **the recording is evidence, not a program.** It is never
+replayed verbatim. Nothing here has to reconstruct a fling as a `scrollTo`,
+produce stable selectors, or be gap-free — an agent that can also read the code
+fills those in. A name only had to be perfect when it was going to become a
+selector in generated code, and it is not going to.
+
+## Not in v1
+
+- **Video.** Above. Separable, and the app must never encode.
+- **Screen-change beats.** A tap almost always *causes* the screen change, and a
+  beat captured after settle already shows the result; an unprompted change is
+  a smaller class. It is also the only part with per-frame cost, so it is the
+  only part that could regress the app. If it is built later, the hook is
+  semantics updates — the run guest already holds a semantics handle for the
+  life of the run — never a per-frame tree walk.
+- **Text entry.** The one real hole: a login or search flow will not record what
+  was typed. Partial mitigation is that the beat *after* the typing shows the
+  resulting screen, so it is often inferable. Reachable through the surface
+  `enterText` already uses (`TextInput.updateEditingValue`), by observing the
+  focused `EditableText` or interposing a `TextInputControl`. **v1.1**, and the
+  first thing after v1.
+- **A "save as scenario" button.** There is nothing to build: the agent writes
+  the scenario by reading the journal.
+- **Scroll intent.** Only ever needed for verbatim replay. Dropped with it.
+- **Anything retroactive across runs.** One run, one ring.
+
+## Pictures are per burst, and a late one degrades to prose
+
+The backlog question and the queue question have one answer between them.
+
+**Every tap lands as an entry, immediately.** That part is cheap and already
+written — `HumanActions` records the pointer-up and names the hit.
+
+**Pictures are per *burst*, not per tap.** A pointer-up restarts a short window;
+when it expires with no further tap, *one* capture is enqueued, and its picture
+attaches to the burst's last tap. The window is `kDoubleTapTimeout` (300 ms) —
+the framework's own definition of "these taps belong together", and a constant
+the drive layer already reasons in.
+
+Three things fall out of that, which is why it is the whole policy:
+
+- **Bounded by construction.** One pending capture regardless of tap rate. No
+  queue growth, no coalescing heuristic, no drop rule to state.
+- **It is what the screen means.** After a five-tap burst the interesting frame
+  is the one the burst produced, and it belongs to the last tap. Capturing per
+  tap would write five near-identical mid-flight frames and call four of them
+  evidence.
+- **Nothing an agent needs is lost.** The *sequence of taps* is what a scenario
+  is written from; the pictures are context. Every tap still lands.
+
+**The capture shares the drive queue** — the existing `_queue` future chain in
+`GuestDrive`, the same one an agent step goes through. Running beside it was
+rejected because it contradicts the doctrine this design already rests on:
+*"two calls against a live app are two moments, and the gap between them is
+where computer-use's bugs live."* A capture overlapping an agent's gesture
+photographs a screen mid-transaction.
+
+**And before it captures, it checks whether another tap has arrived since the
+burst closed.** If one has, it abandons the picture — a newer window is already
+pending and will take it. This is exact rather than a drift threshold: a
+threshold is a guess, and "was there another tap in between" is *the* thing
+that makes a picture wrong, is free, and is already timestamped.
+
+**The fallback is today's behaviour, which is what makes this safe.** A beat
+whose picture is abandoned is exactly the `actor: human` entry the journal
+writes now. So the change is strictly additive: the worst case is what already
+ships, and a picture that would lie is never written at all.
+
+## Decided by the owner, 2026-08-24
+
+**Capture is on for a run launched from the cockpit, and off elsewhere.** A run
+the human started from the cockpit is an explicit enough act, and a replay that
+has to be armed is a replay nobody has when they need it. The cost is one
+capture-and-encode per human tap, and nothing per frame.
+
+## What step 2 settled, and one thing it found
+
+**Nothing arms the guest.** The recorder runs from `runGuest`, as it already
+did; what was missing was only a mouth. The guest grew
+`ext.flutterware.beats`, which is deliberately *not* on the act queue and is
+not an observation: it hands over records that already exist and clears them,
+settling nothing and walking nothing, so a host may poll it on a timer without
+competing with a driver for the app.
+
+**The poller starts at launch, not when a panel opens.** `RunNetworkTracker` is
+started by the Network *tab*, which is right for a tab and wrong here: the
+human tapping their own app is exactly the case with no panel in front of it,
+and a recorder that only ran while somebody watched the Steps tab would be a
+recorder for the one case that does not need one. `RunCore` holds one
+`RunBeatTracker` per run, started in `launchApp`'s wake and stopped on `stop`
+and on `dispose`, beside the drive sessions it already keeps.
+
+**It opens no socket.** The design said "the host polls" and assumed a host
+connection; there is none — `RunCore` connects per operation. The one exception
+is `DriveSession`, which holds a socket per run *and repairs it on error*, so
+the tracker takes a `drain` callback rather than a connection and borrows that.
+A second socket per run, kept alive for a poll a second, would have been a new
+resource model for no gain.
+
+**And the thing worth writing down: a poller must reconcile.** `_reconcileHuman`
+exists because this process's own native input — an `adb shell input tap`, an
+`AXPress` — reaches the guest as ordinary platform input on the same global
+pointer route the recorder watches, and comes back indistinguishable from a
+finger. The act path already dropped those echoes. A second writer that did not
+would have journaled every native agent tap twice, once as its step and once as
+a phantom human, which is worse than the gap this feature exists to close.
+
+## Confirmed against a live app, 2026-08-24
+
+The studio driving itself, real fingers on a real window, drained through the
+real host path — `DriveSession.beats()` polled by `RunBeatTracker`. 20 taps
+over two rounds.
+
+**Every tap was named. 20 of 20**, no `at (x, y)` fallbacks: `"Previews"`,
+`"Splash screen"`, `key 'changes-list'`, `"human_actions.dart"`. The naming
+question in Open is answered for a dense real screen rather than a fixture.
+
+**But a row inside a list is named for the list.** `key 'changes-list'` came
+back six times for six taps on six different rows, because `_nameFrom` takes
+the first nameable ancestor and a row carrying no text or key of its own has
+none. So a beat says *what area* was touched, not *which row* — tolerable under
+the evidence framing, since the same beat carries the picture and the texts,
+and worth knowing rather than discovering later.
+
+**The burst rule works on real input, which is the part no unit test could
+settle.** Three taps 149ms and 151ms apart:
+
+    14:06:13.907  tap key 'changes-list'   (no picture)
+    14:06:14.056  tap key 'changes-list'   (no picture)
+    14:06:14.207  tap key 'changes-list'   [252KB]
+
+One picture, on the last tap of the burst, and every tap still landed. The
+same shape again at 15.265 / 15.465, 200ms apart. Those pictures were
+*abandoned* rather than evicted — 15 beats at ~240KB is 3.6MB against an 8MB
+ring, so the byte cap never fired.
+
+**A beat is 72–259KB, and the screen decides.** Simple sidebar panels encoded
+to 72–126KB; the Changes screen — a dense syntax-highlighted diff — to
+231–259KB, at `maxSide: 640`. Both figures are base64 length, which is what
+crosses the wire. The lesson repeated from the earlier measurements: every
+estimate of this number has been low, so it belongs in a budget rather than in
+a head.
+
+**Which clarifies what the ring is for.** At a 1s poll the ring only ever holds
+about a second of tapping, so 8MB is two orders of magnitude of headroom rather
+than a history. **The journal is the store**, and it grows at ~250KB a beat on
+a heavy screen — 100 beats is 25MB. That is the number step 3 is really about,
+and it is now measured rather than guessed.
+
+## Step 4: the Steps tab needed nothing, and said so by finding a bug
+
+A human beat put in front of the live tab renders as a step with no change at
+all — the row, the caption, the thumbnail and the detail pane are all written
+against `JournalEntry` rather than against an actor:
+
+    3 · tap key 'changes-list' · human · 16:13:11
+    2 · tap the point 115,107  · agent · native · 15:25:36
+    1 · observe                · agent · 15:25:19
+
+with `by human` in the detail's facts and the picture behind the same
+`CaptureButton` an agent step gets. So the beat shape is right — which is what
+this step was for.
+
+**What it did find is that a beat had two writers and only one of them wrote
+it whole.** A beat reaches the host through whichever mouth drained the guest
+first: this poller, or an agent's `act`. The act path predates beats and wrote
+`at`, `verb` and `target` only — measured on a live run, **0 of 16 human
+entries carried a screenshot**, though the guest had attached one to every
+burst-ender. A tap the agent happened to collect lost its picture; the same tap
+a second earlier or later kept it.
+
+That is not a rendering bug and no UI change would have fixed it. Both paths
+now go through one `_writeHumanBeats`, so which mouth drained the guest is not
+something a reader of the story can tell.
+
+## Android, measured 2026-08-24 — same answer, and a cheaper beat
+
+Same probe, Android 15 emulator (API 35), debug build, `maxSide` 640 to match
+`beatMaxSide`. 102 encodes back to back in a 3s window.
+
+| phase | median | p95 | max |
+|---|---|---|---|
+| idle | 0.98 ms | 3.60 ms | 7.56 ms |
+| **102 encodes** | **0.99 ms** | 4.15 ms | **20.22 ms** |
+| 11 ms block (control) | 11.14 ms | 15.10 ms | 21.76 ms |
+
+**The encode is off the UI thread here too, and the median proves it.** With
+102 encodes of ~19 ms each inside 3 seconds the UI thread is doing nothing else
+worth mentioning; if the encode ran on it, the *median* gap would be ~19 ms.
+It is 0.99 ms — indistinguishable from idle.
+
+**Contention is visible, and it is small.** p95 moves 3.60 → 4.15 ms and there
+is one 20 ms outlier against idle's 7.56 ms worst. That is the predicted
+effect — the encode holds a core and the UI thread occasionally waits a little
+longer to be scheduled — at **34 encodes a second**, which is 20-60x what a
+human tapping produces. One frame could have been late, once, under twenty
+times the real load.
+
+**A mobile beat is ~18 KB, not ~250 KB.** A phone screen is tall and narrow, so
+capping the *long* side at 640 shrinks it far more than it shrinks a wide
+desktop window: 1080x2400 became 288x640. Mobile costs roughly a fourteenth of
+desktop on disk and on the wire, which is the opposite of the direction anyone
+would guess.
+
+**What this does not answer.** An emulator runs on the host's CPU, so it tests
+the Android engine's *dispatch* and not a real phone's *cores*. The
+architectural question is now answered on two very different engine paths —
+Metal/Impeller on macOS, Android's on the emulator — and the contention
+question still wants a physical device, which was not reachable when this was
+run. Given the margin above, it is a confirmation rather than a gate.
+
+## The agent is told what it would otherwise have had to go and read
+
+A consequence I waved away during step 2 and had to come back for.
+
+The poller and an agent's `act` are two mouths on one buffer in the guest, and
+taking clears it. The note then was that this "is not worth controlling —
+both write it to the same story". True of the *journal*, and wrong about the
+*reply*: the poller asks once a second, so it wins nearly every race, and the
+`human` field an act reply carries — documented as *"what the human tapped
+since your last step"* — would come back empty almost always. The facts would
+still be on disk, but an agent would have to know to go and read them, where
+before they arrived unasked.
+
+So the host keeps them. `_journalHumanBeats` writes the beat *and* leaves it in
+`_humanSinceStep`, and the next act reply reports the poller's collection ahead
+of its own take, in the order things happened. Told once: the reply clears
+what it reported, so two acts in a row do not both claim the same tap, and
+nothing is journaled twice — the poller already wrote its half when it
+collected it.
+
+Bounded at 100, matching the guest's own action cap, because a run nobody ever
+drives would otherwise hold a whole session for an agent that never arrives.
+
+## Open, deliberately
+
+- **A human tap during an agent step is silently lost.** `HumanActions.suppress`
+  is a flag, not a filter on origin, so a real tap landing inside a drive verb's
+  injection window is discarded. Minor today (one journal line); still minor
+  with beats, but it is a known blind spot rather than an unknown one.
+- **Saying it out loud.** The bound is stated in the code and degrades
+  gracefully — an aged-out step keeps its line and loses its thumbnail — but
+  nothing tells a person looking at a picture-less old step *why* it has no
+  picture. Cheap to add when somebody asks; not worth guessing at a wording
+  now.
+- **Privacy.** This records a human's session in an app with real data. The
+  frames stay on their disk and never leave it, but the retention window is a
+  decision rather than a default, and it should be said out loud somewhere the
+  user reads.
+- **A node id without a tree walk.** Whether `nameHit`'s leaf element can yield
+  an id the inspector would agree with, without paying for the walk a beat
+  deliberately skips. If it cannot, bare coordinates stand and nothing is lost.
+- **Naming precision, now that it is measured.** Everything gets *a* name, but
+  a row inside a list gets the list's. Whether that is worth a second rule —
+  preferring a descendant's text over an ancestor's key, say — is a question
+  for when somebody is reading beats in anger, not before.
+
+## Order of work
+
+The performance gate has passed on the desktop — the picture costs the UI
+thread nothing, and the one Dart cost that would have been visible is the tree
+walk a beat does not do. Nothing below is blocked on a decision.
+
+1. ~~**The guest side.**~~ Done. `HumanActions` records every tap as it does now, and
+   drives the burst window: on expiry, one capture on the shared `_queue`,
+   abandoned if a newer tap arrived. Encoded beats are held in a bounded ring —
+   `toImage`, `ImageByteFormat.png`, a beat-sized `maxSide`. Testable on its own:
+   `handlePointerEvent` is already public so a test can feed events without a
+   binding route.
+2. ~~**The host side.**~~ Done — `RunBeatTracker`, drained through
+   `DriveSession`, journaled with `_reconcileHuman` in front of it. See *What
+   step 2 settled*.
+3. ~~**A bound on the run's own growth.**~~ Done — `journalArtifactsMaxBytes`,
+   64MB, enforced from `_Capture.write`. The journal *file* turned out to be
+   bounded already (`journalMaxBytes`, 5MB, rotating); the pictures were not,
+   and the pictures are where all the weight is.
+4. ~~**Steps tab.**~~ Done — renders unchanged. See *Step 4*.
+5. ~~**Validate on a phone.**~~ Measured on an Android emulator — see
+   *Android, measured*. **Capture is on everywhere, one behaviour**: the
+   platform split proposed earlier was withdrawn, because it would have been
+   two things to explain and two to test in exchange for a risk the numbers do
+   not show. Left over, and small: the same probe on a *physical* phone, whose
+   slower cores are the only part an emulator cannot stand in for. If it ever
+   does show dropped frames, the fix is a smaller `maxSide` — which costs every
+   platform equally and keeps one behaviour.

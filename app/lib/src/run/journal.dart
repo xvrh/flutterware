@@ -202,6 +202,89 @@ String? journalArtifactsDirFor(RunHandle handle) {
 /// session keeps its recent story and a runaway loop cannot fill the disk.
 const journalMaxBytes = 5 << 20;
 
+/// What a run's *artifacts* may weigh — the pictures, which is all the weight
+/// there is. [journalMaxBytes] bounds the story; this bounds the evidence.
+///
+/// It needs its own number because the two grew at wildly different rates once
+/// the human's own steps were journaled. A line of JSON is ~200 bytes; the
+/// picture it points at is ~187KB on a dense screen (measured 2026-08-24), so
+/// a person simply *using* their app at 20-40 bursts a minute writes
+/// **0.23-0.46 GB an hour**. For scale, the litter that gave `sweepRunDir` its
+/// caller was 161MB over two days.
+///
+/// 64MB is about 340 dense beats or 1,100 plain ones — days of an agent's
+/// steps, or a long sitting of a human's. Past it the oldest are let go, which
+/// is the same degradation everything else here takes: the entry stays, the
+/// picture does not, and the Steps tab draws a verb icon where the thumbnail
+/// was.
+const journalArtifactsMaxBytes = 64 << 20;
+
+/// Lets go of a run's oldest step artifacts until the directory is inside
+/// [maxBytes]. Returns how many bytes were freed.
+///
+/// Whole steps at a time. A step writes several files under one stamp — the
+/// picture, the texts, the tree, the semantics — and deleting the picture
+/// alone would leave a detail pane reading from artifacts whose screenshot has
+/// gone, which is worse than a step with no picture at all.
+///
+/// Best-effort throughout, like the rotation above: this is housekeeping, and
+/// another process winning a race to delete the same file is the expected case
+/// rather than an error. The newest step is never let go, however big it is —
+/// a bound that could delete the step somebody is looking at is a bug, not a
+/// bound.
+int boundJournalArtifacts(
+  RunHandle handle, {
+  int maxBytes = journalArtifactsMaxBytes,
+}) {
+  var dir = journalArtifactsDirFor(handle);
+  if (dir == null) return 0;
+  List<FileSystemEntity> entries;
+  try {
+    entries = Directory(dir).listSync();
+  } on FileSystemException {
+    return 0;
+  }
+  // Grouped by the stamp every one of a step's files starts with, which is
+  // `<millis>-<pid>` and therefore sorts chronologically as a number.
+  var groups = <String, List<File>>{};
+  var bytes = <String, int>{};
+  var total = 0;
+  for (var entity in entries) {
+    if (entity is! File) continue;
+    var name = p.basename(entity.path);
+    var stamp = name.split('.').first;
+    int length;
+    try {
+      length = entity.lengthSync();
+    } on FileSystemException {
+      continue;
+    }
+    (groups[stamp] ??= []).add(entity);
+    bytes[stamp] = (bytes[stamp] ?? 0) + length;
+    total += length;
+  }
+  if (total <= maxBytes || groups.length < 2) return 0;
+  int millisOf(String stamp) => int.tryParse(stamp.split('-').first) ?? 0;
+  var oldest = groups.keys.toList()
+    ..sort((a, b) => millisOf(a).compareTo(millisOf(b)));
+  // Never the last one.
+  oldest.removeLast();
+  var freed = 0;
+  for (var stamp in oldest) {
+    if (total <= maxBytes) break;
+    for (var file in groups[stamp]!) {
+      try {
+        file.deleteSync();
+      } on FileSystemException {
+        // Somebody else got there first, which is fine.
+      }
+    }
+    total -= bytes[stamp]!;
+    freed += bytes[stamp]!;
+  }
+  return freed;
+}
+
 /// Appends one entry. JSON-lines because two processes append to the same
 /// story — a GUI and an `fw` are both actors — and appending a line is the
 /// one write that composes.

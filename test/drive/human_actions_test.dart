@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -135,5 +137,122 @@ void main() {
     );
 
     expect(actions.take().single['verb'], 'longPress');
+  });
+
+  group('the burst window', () {
+    Future<void> pumpRows(WidgetTester tester) => tester.pumpWidget(
+      MaterialApp(
+        home: Column(
+          children: [
+            for (var label in ['One', 'Two', 'Three'])
+              TextButton(onPressed: () {}, child: Text(label)),
+          ],
+        ),
+      ),
+    );
+
+    HumanCapture shot([String base64 = 'xxxxxxxx']) =>
+        HumanCapture(picture: {'base64': base64}, texts: const ['Pay']);
+
+    /// Past the window, then far enough for the capture's own futures.
+    Future<void> closeBurst(WidgetTester tester) async {
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 20));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a burst of taps takes one picture, on its last tap', (
+      tester,
+    ) async {
+      await pumpRows(tester);
+      var taken = 0;
+      var actions = HumanActions(
+        capture: () async {
+          taken++;
+          return shot();
+        },
+      )..install();
+      addTearDown(actions.dispose);
+
+      await tester.tap(find.text('One'));
+      await tester.tap(find.text('Two'));
+      await tester.tap(find.text('Three'));
+      await closeBurst(tester);
+
+      expect(taken, 1, reason: 'one picture for the burst, not one per tap');
+      var records = actions.take();
+      expect(records, hasLength(3), reason: 'every tap still lands');
+      expect(records[0]['screenshot'], isNull);
+      expect(records[1]['screenshot'], isNull);
+      expect(
+        records[2]['screenshot'],
+        isNotNull,
+        reason: 'the frame belongs to the gesture that ended the burst',
+      );
+      expect(records[2]['texts'], ['Pay']);
+    });
+
+    testWidgets('a picture is abandoned when a newer tap beats it home', (
+      tester,
+    ) async {
+      await pumpRows(tester);
+      var pending = Completer<HumanCapture?>();
+      var calls = 0;
+      var actions = HumanActions(
+        capture: () => calls++ == 0 ? pending.future : Future.value(null),
+      )..install();
+      addTearDown(actions.dispose);
+
+      await tester.tap(find.text('One'));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 20));
+      // The capture is in flight, and the human keeps going.
+      await tester.tap(find.text('Two'));
+      pending.complete(shot());
+      await closeBurst(tester);
+
+      expect(
+        actions.take().map((e) => e['screenshot']),
+        everyElement(isNull),
+        reason: 'that frame is not what the first tap produced',
+      );
+    });
+
+    testWidgets('over budget, the oldest picture goes and its tap stays', (
+      tester,
+    ) async {
+      await pumpRows(tester);
+      var actions = HumanActions(pictureBytes: 10, capture: () async => shot())
+        ..install();
+      addTearDown(actions.dispose);
+
+      await tester.tap(find.text('One'));
+      await closeBurst(tester);
+      await tester.tap(find.text('Two'));
+      await closeBurst(tester);
+
+      var records = actions.take();
+      expect(records, hasLength(2), reason: 'no gesture is dropped for bytes');
+      expect(records[0]['screenshot'], isNull, reason: 'the oldest let go');
+      expect(records[1]['screenshot'], isNotNull);
+    });
+
+    testWidgets('a take cancels the burst it would have photographed', (
+      tester,
+    ) async {
+      await pumpRows(tester);
+      var taken = 0;
+      var actions = HumanActions(
+        capture: () async {
+          taken++;
+          return shot();
+        },
+      )..install();
+      addTearDown(actions.dispose);
+
+      await tester.tap(find.text('One'));
+      expect(actions.take(), hasLength(1));
+      await closeBurst(tester);
+
+      expect(taken, 0, reason: 'nothing is left for the picture to attach to');
+    });
   });
 }

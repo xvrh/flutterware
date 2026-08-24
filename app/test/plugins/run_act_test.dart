@@ -678,6 +678,50 @@ void main() {
     expect(entries[2].actor, 'agent');
   });
 
+  test('what the poller collected is told to the next act, once', () async {
+    // The poller wins the race for the guest's buffer almost every time — it
+    // asks once a second — so without this an agent's `human` field would come
+    // back empty and the facts would only be in the journal.
+    core.debugCollectBeats(handle, [
+      {'at': '2026-08-24T10:00:00.000Z', 'verb': 'tap', 'target': '"Previews"'},
+    ]);
+    core.debugAct = (handle, args) async => {
+      'step': {
+        'verb': 'observe',
+        'settle': {'settled': true, 'elapsedMs': 5},
+      },
+      'human': [
+        {'at': '2026-08-24T10:00:05.000Z', 'verb': 'tap', 'target': '"Assets"'},
+      ],
+      'texts': <String>[],
+    };
+
+    var first = (await core.invoke('observe'))! as RunActResult;
+    expect(first.human, [
+      'tap "Previews"',
+      'tap "Assets"',
+    ], reason: 'what the poller saw, then what this call took, in order');
+
+    // Journaled once each: the poller wrote its own when it collected it, and
+    // the act path must not write it a second time.
+    var human = readJournal(handle).where((e) => e.actor == 'human').toList();
+    expect(human.map((e) => e.target), ['"Previews"', '"Assets"']);
+
+    core.debugAct = (handle, args) async => {
+      'step': {
+        'verb': 'observe',
+        'settle': {'settled': true, 'elapsedMs': 5},
+      },
+      'texts': <String>[],
+    };
+    var second = (await core.invoke('observe'))! as RunActResult;
+    expect(
+      second.human,
+      isNull,
+      reason: 'told once — a second act must not re-report the same taps',
+    );
+  });
+
   test('a sibling worktree running the same device/entrypoint pair does not '
       'make selection ambiguous', () async {
     var sibling = Directory.systemTemp.createTempSync('fw-act-sibling-');

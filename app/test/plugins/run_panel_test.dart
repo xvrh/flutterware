@@ -9,6 +9,8 @@ import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 // ignore: implementation_imports
+import 'package:flutterware/src/inspect/semantics.dart';
+// ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/context.dart';
@@ -56,10 +58,15 @@ void main() {
   });
 
   /// Mounts the panel on the Screen tab against one fake reading.
-  Future<void> pumpScreenTab(
+  ///
+  /// Answers with the core and the handle, so a test can go on doing things
+  /// to the run the pane is watching.
+  Future<(RunCore, RunHandle)> pumpScreenTab(
     WidgetTester tester,
     Uint8List? image, {
     InspectTree? tree,
+    Map<String, Object?>? semantics,
+    bool guest = false,
   }) async {
     var core = RunCore(
       PluginHost(
@@ -107,8 +114,11 @@ void main() {
               createdByLocalProject: true,
             ),
           ),
-      fromGuest: tree != null,
+      fromGuest: tree != null || guest,
       image: image,
+      semantics: semantics == null
+          ? null
+          : InspectSemantics(entryId: null, root: semantics),
     );
 
     var address = ValueNotifier(
@@ -139,7 +149,131 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await tester.pump();
+    return (core, handle);
   }
+
+  group('the Semantics tab', () {
+    /// One button with nothing to say, which is a finding — so the badge, the
+    /// script and the audit are all exercised by the smallest tree there is.
+    ///
+    /// In the guest's own wire shape rather than as a `SemanticsSnapshotNode`,
+    /// because that is what the reading carries: the decode into typed nodes
+    /// is the pane's job and belongs under test with it.
+    Map<String, Object?> aButton() => {
+      'rect': {'x': 0, 'y': 0, 'width': 100, 'height': 40},
+      'flags': ['isButton'],
+      'actions': ['tap'],
+      'children': <Object?>[],
+    };
+
+    testWidgets('reads with the picture, and is one tab away', (tester) async {
+      await pumpScreenTab(
+        tester,
+        Uint8List.fromList(_onePixelPng),
+        guest: true,
+        semantics: aButton(),
+      );
+
+      // The tab is there before it is opened, and its badge is the audit's
+      // count — which is what says the tab is worth opening at all.
+      expect(find.text('Semantics'), findsOneWidget);
+      expect(find.text('1'), findsWidgets);
+
+      await tester.tap(find.text('Semantics'));
+      await tester.pumpAndSettle();
+
+      // The screen reader's script, from the reading the picture came from.
+      expect(find.textContaining('nothing to read'), findsWidgets);
+    });
+
+    testWidgets('a run with no guest is told from an app with no tree', (
+      tester,
+    ) async {
+      // No guest at all: the service extension has no semantics to give, so
+      // this is news about the *run*, not about the app's accessibility.
+      await pumpScreenTab(tester, Uint8List.fromList(_onePixelPng));
+
+      await tester.tap(find.text('Semantics'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('no flutterware guest'),
+        findsOneWidget,
+        reason: 'the pane says which absence this is',
+      );
+    });
+  });
+
+  group('freshness', () {
+    testWidgets('the reading says how old it is', (tester) async {
+      await pumpScreenTab(tester, Uint8List.fromList(_onePixelPng));
+
+      // A photograph of a live app looks exactly like a mirror of one, and
+      // only the caption separates them.
+      expect(find.text('read just now'), findsOneWidget);
+    });
+
+    testWidgets('what the cockpit did to the app, the pane re-reads', (
+      tester,
+    ) async {
+      var (core, handle) = await pumpScreenTab(
+        tester,
+        Uint8List.fromList(_onePixelPng),
+      );
+
+      var reads = 0;
+      var first = core.debugRead!;
+      core.debugRead = (h) {
+        reads++;
+        return first(h);
+      };
+
+      // Stands in for the VM service round trip. A reload that returned is a
+      // reload that happened.
+      core.debugControl = (_, _) async {};
+      await core.control('reload', handle);
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+
+      expect(reads, 1, reason: 'the reload re-read the app');
+      expect(find.text('read just now'), findsOneWidget);
+      // Nothing to warn about: the picture is of the app as it now is.
+      expect(find.textContaining('has moved since'), findsNothing);
+    });
+
+    testWidgets("the human's own taps are reported, not chased", (
+      tester,
+    ) async {
+      var (core, handle) = await pumpScreenTab(
+        tester,
+        Uint8List.fromList(_onePixelPng),
+      );
+
+      var reads = 0;
+      var first = core.debugRead!;
+      core.debugRead = (h) {
+        reads++;
+        return first(h);
+      };
+
+      // What the beat poller collects, up to once a second. Re-reading on
+      // each would be a render and a full tree walk per tap.
+      core.debugCollectBeats(handle, [
+        {
+          'verb': 'tap',
+          'target': '"Pay"',
+          'at': DateTime.now().toIso8601String(),
+        },
+      ]);
+      await tester.pump();
+
+      expect(reads, 0, reason: 'a human tap does not spend a reading');
+      expect(find.textContaining('the app has moved since'), findsOneWidget);
+    });
+  });
 
   testWidgets('the screen pane finishes its read and draws both halves', (
     tester,
