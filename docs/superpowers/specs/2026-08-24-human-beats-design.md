@@ -385,6 +385,48 @@ finger. The act path already dropped those echoes. A second writer that did not
 would have journaled every native agent tap twice, once as its step and once as
 a phantom human, which is worse than the gap this feature exists to close.
 
+## Confirmed against a live app, 2026-08-24
+
+The studio driving itself, real fingers on a real window, drained through the
+real host path — `DriveSession.beats()` polled by `RunBeatTracker`. 20 taps
+over two rounds.
+
+**Every tap was named. 20 of 20**, no `at (x, y)` fallbacks: `"Previews"`,
+`"Splash screen"`, `key 'changes-list'`, `"human_actions.dart"`. The naming
+question in Open is answered for a dense real screen rather than a fixture.
+
+**But a row inside a list is named for the list.** `key 'changes-list'` came
+back six times for six taps on six different rows, because `_nameFrom` takes
+the first nameable ancestor and a row carrying no text or key of its own has
+none. So a beat says *what area* was touched, not *which row* — tolerable under
+the evidence framing, since the same beat carries the picture and the texts,
+and worth knowing rather than discovering later.
+
+**The burst rule works on real input, which is the part no unit test could
+settle.** Three taps 149ms and 151ms apart:
+
+    14:06:13.907  tap key 'changes-list'   (no picture)
+    14:06:14.056  tap key 'changes-list'   (no picture)
+    14:06:14.207  tap key 'changes-list'   [252KB]
+
+One picture, on the last tap of the burst, and every tap still landed. The
+same shape again at 15.265 / 15.465, 200ms apart. Those pictures were
+*abandoned* rather than evicted — 15 beats at ~240KB is 3.6MB against an 8MB
+ring, so the byte cap never fired.
+
+**A beat is 72–259KB, and the screen decides.** Simple sidebar panels encoded
+to 72–126KB; the Changes screen — a dense syntax-highlighted diff — to
+231–259KB, at `maxSide: 640`. Both figures are base64 length, which is what
+crosses the wire. The lesson repeated from the earlier measurements: every
+estimate of this number has been low, so it belongs in a budget rather than in
+a head.
+
+**Which clarifies what the ring is for.** At a 1s poll the ring only ever holds
+about a second of tapping, so 8MB is two orders of magnitude of headroom rather
+than a history. **The journal is the store**, and it grows at ~250KB a beat on
+a heavy screen — 100 beats is 25MB. That is the number step 3 is really about,
+and it is now measured rather than guessed.
+
 ## Open, deliberately
 
 - **A human tap during an agent step is silently lost.** `HumanActions.suppress`
@@ -401,10 +443,10 @@ a phantom human, which is worse than the gap this feature exists to close.
 - **A node id without a tree walk.** Whether `nameHit`'s leaf element can yield
   an id the inspector would agree with, without paying for the walk a beat
   deliberately skips. If it cannot, bare coordinates stand and nothing is lost.
-- **Naming quality.** `_nameFrom` finds the *first* name walking up, so an
-  unlabelled icon button can be named for the card that contains it. Under the
-  evidence framing this is tolerable. It should be measured on a real screen
-  before it is called fine.
+- **Naming precision, now that it is measured.** Everything gets *a* name, but
+  a row inside a list gets the list's. Whether that is worth a second rule —
+  preferring a descendant's text over an ancestor's key, say — is a question
+  for when somebody is reading beats in anger, not before.
 
 ## Order of work
 
