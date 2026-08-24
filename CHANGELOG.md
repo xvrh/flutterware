@@ -1,5 +1,42 @@
 ## Unreleased
 
+- **A finished copy stops carrying the build it will never build again.**
+  `dart run flutterware` mirrors the package out of the pub cache into
+  `~/.flutterware/<key>/` and builds the tools there. That copy is a mirror of
+  an *immutable* pub-cache package, so its stamp never moves and nothing ever
+  builds in it a second time — and yet it kept the whole incremental tree of
+  the build that did happen. Measured on a real install: **1479 MB, of which
+  the product is 65 MB and the `fw` binary 17 MB.**
+  `FlutterMacOS.framework.dSYM` alone was 501 MB of engine debug symbols, in a
+  release build, that nothing here symbolicates.
+
+  A successful build now keeps the product and the two binaries and drops the
+  rest: everything beside the product within `build/<platform>`,
+  `app/.dart_tool/flutter_build`, and the workspace's `.dart_tool/hooks_runner`.
+  **1479 MB → 107 MB, in 154 ms.** Nothing rebuilds because of it — the
+  freshness test both build sites use is whether the product's executable
+  exists, and a release bundle carries its own frameworks with rpaths relative
+  to the executable, so nothing outside it was ever referenced.
+
+  `build/` itself is never pruned: the `fw` binary, the warm compiler kernel
+  under `build/catalog` and the build logs all live there, and the logs are the
+  post-mortem for a build that failed. `.dart_tool/package_config.json` stays
+  too — that is the resolution, and losing it would turn a warm run into a
+  `pub get`.
+
+  Only ever after a build that worked. A failed one leaves a half-finished
+  incremental tree, and that tree is what the next attempt resumes from —
+  reclaiming it would turn every retry into a cold build. The product existing
+  is the precondition for all of it, so a copy that has only ever built the CLI
+  keeps its 12 MB of `hooks_runner`, which is genuinely an input to the GUI
+  build it has not run yet.
+
+  Otherwise it runs on **every** launch from a copy, not only the one that built
+  it, so a copy made by an older flutterware is reclaimed the next time anything
+  starts it. With nothing to delete it is a handful of directory listings, at
+  45–63 µs. A checkout is never touched: there the incremental state is the
+  whole point.
+
 - **A catalog can keep every locale on the key's own row.**
   `TranslationCatalog` read one shape: a file per locale, named for it, holding
   key to string. A project whose translations are filled in a key at a time — a

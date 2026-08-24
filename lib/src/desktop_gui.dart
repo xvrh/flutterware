@@ -25,7 +25,18 @@ class DesktopGui {
   String get flutter =>
       p.join(flutterSdk, 'bin', 'flutter${Platform.isWindows ? '.bat' : ''}');
 
-  File get binary => File(p.join(appPath, _relativeBinaryPath()));
+  File get binary => File(p.join(productDirectory.path, _relativeProduct().$2));
+
+  /// What `flutter build` produces and what has to survive to run it: the
+  /// `.app` bundle, the `Release` directory beside its DLLs, the Linux
+  /// `bundle`. [binary] lives inside it.
+  ///
+  /// Named separately from [binary] because that is the difference between
+  /// what runs and what is *kept*: `trimWorkingCopy` deletes everything beside
+  /// this within `build/<platform>`, and on macOS the executable is four levels
+  /// down inside the bundle it must not delete.
+  Directory get productDirectory =>
+      Directory(p.join(appPath, _relativeProduct().$1));
 
   /// Beside the artifact it explains rather than in the project: a failed build
   /// must not be the thing that creates `.flutterware/`.
@@ -45,32 +56,8 @@ class DesktopGui {
     verbose: verbose,
   );
 
-  String _relativeBinaryPath() {
-    if (Platform.isWindows) {
-      return p.join('build', 'windows', 'runner', 'Release', 'Flutterware.exe');
-    } else if (Platform.isLinux) {
-      return p.join(
-        'build',
-        'linux',
-        _linuxHostPlatform(),
-        'release',
-        'bundle',
-        'app',
-      );
-    }
-    // Both spellings are PRODUCT_NAME, set in macos/Runner/Configs/AppInfo.xcconfig.
-    return p.join(
-      'build',
-      'macos',
-      'Build',
-      'Products',
-      'Release',
-      'Flutterware.app',
-      'Contents',
-      'MacOS',
-      'Flutterware',
-    );
-  }
+  (String, String) _relativeProduct() =>
+      relativeProduct(Platform.operatingSystem, linuxArch: _linuxHostPlatform);
 
   static String _linuxHostPlatform() {
     var result = Process.runSync('uname', ['-m']);
@@ -78,6 +65,36 @@ class DesktopGui {
     return result.stdout.toString().trim().endsWith('x86_64') ? 'x64' : 'arm64';
   }
 }
+
+/// The product directory relative to an `app/`, and the executable relative to
+/// *it*. One switch rather than two, so the two answers cannot drift.
+///
+/// Top-level and taking [operatingSystem] so all three answers are reachable
+/// from one machine. Development happens on macOS and CI's only Linux job runs
+/// a previews audit rather than this suite, so the Windows and Linux literals
+/// are otherwise unexecuted anywhere — and `trimWorkingCopy` now decides what
+/// to keep from the first half of this pair.
+///
+/// [linuxArch] is a callback because it shells out to `uname`, which the other
+/// two platforms must not pay for and a test cannot answer for.
+(String, String) relativeProduct(
+  String operatingSystem, {
+  required String Function() linuxArch,
+}) => switch (operatingSystem) {
+  'windows' => (
+    p.join('build', 'windows', 'runner', 'Release'),
+    'Flutterware.exe',
+  ),
+  'linux' => (
+    p.join('build', 'linux', linuxArch(), 'release', 'bundle'),
+    'app',
+  ),
+  // Both spellings are PRODUCT_NAME, set in macos/Runner/Configs/AppInfo.xcconfig.
+  _ => (
+    p.join('build', 'macos', 'Build', 'Products', 'Release', 'Flutterware.app'),
+    p.join('Contents', 'MacOS', 'Flutterware'),
+  ),
+};
 
 /// The Flutter SDK containing [dartExecutable], or null.
 ///
