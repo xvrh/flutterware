@@ -382,24 +382,29 @@ capture-and-encode per human tap, and nothing per frame.
 
 ## Order of work
 
-1. `HumanActions` records every tap as now, and drives the burst window above:
-   on expiry, one capture on the shared `_queue`, abandoned if a newer tap
-   arrived. Beats are held in a bounded ring — `toImage`, `ImageByteFormat.png`, a
-   beat-sized `maxSide`.
-2. A host poller on `NetworkTracker`'s shape drains the ring and appends each
-   beat to the journal as `actor: human`, with `screenshot` and `texts`, no
-   tree.
-4. A bound on the run's own journal growth — count or bytes, stated where the
-   user can see it. Separate from `sweepRunDir`, which keeps its job.
-5. Steps tab: confirm human beats render as steps with no change. If they need
-   one, the beat shape is wrong.
-6. Measure, on a real device and a real screen, not the example app:
-   **PNG bytes per beat** (the ~12 KB figure is a demo screen and will not
-   hold), **encode time on device** (7.4 ms was a Mac), **the `texts` walk**
-   — `visibleTextsOf` walks the widget tree, and dropping `tree` saves the
-   archive bytes but not this, so it may well be the dominant per-beat cost
-   rather than the encode — beats per minute, and the app's own frame times
-   with capture on and off.
+The performance gate has passed on the desktop — the picture costs the UI
+thread nothing, and the one Dart cost that would have been visible is the tree
+walk a beat does not do. Nothing below is blocked on a decision.
 
-The gate is step 6. If a human tap costs the app anything visible, the premise
-change is wrong and the feature goes back to an explicit toggle.
+1. **The guest side.** `HumanActions` records every tap as it does now, and
+   drives the burst window: on expiry, one capture on the shared `_queue`,
+   abandoned if a newer tap arrived. Encoded beats are held in a bounded ring —
+   `toImage`, `ImageByteFormat.png`, a beat-sized `maxSide`. Testable on its own:
+   `handlePointerEvent` is already public so a test can feed events without a
+   binding route.
+2. **The host side.** A poller on `NetworkTracker`'s shape drains the ring and
+   appends each beat to the journal as `actor: human`, with `screenshot` and
+   `texts`, no tree. Settles *who arms the guest and who starts the poller*, and
+   *the poll interval*, which is the same decision as the ring's size.
+3. **A bound on the run's own journal growth** — count or bytes, stated where
+   the user can see it. Separate from `sweepRunDir`, which keeps its job.
+4. **Steps tab.** Confirm human beats render as steps with no change. If they
+   need one, the beat shape is wrong.
+5. **Validate on a phone**, against the real implementation rather than a probe:
+   frame times with capture on and off, bytes per beat, beats per minute. This
+   is where "off the UI thread is not the same as free" gets tested — a
+   four-core device runs the encode pool on cores the UI thread also wants.
+
+Step 5 is the remaining gate. If a human tap costs a phone anything visible,
+the premise change is wrong there and capture becomes an explicit toggle on
+mobile while staying on for the desktop, where it is now measured as free.
