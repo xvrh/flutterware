@@ -117,6 +117,81 @@ void main() {
 
       expect(closure.digests.keys, ['lib/a.dart']);
     });
+
+    // The bytes a shot key is made of, pinned. The separator between a path
+    // and its digest is a NUL, which is invisible in an editor and in `cat`,
+    // so the composition reads as though it used spaces and an eventual
+    // tidy-up of the "extra" spaces would silently move every key. Every
+    // picture in every `~/.flutterware/shots` on every machine is filed under
+    // this hash: moving it has to move `ShotKey.revision` too.
+    test('the composition is what every cached picture is filed under', () {
+      var closure = SourceClosure({'b': '2', 'a': '1'});
+
+      expect(SourceClosure.separator, '\u0000');
+      expect(closure.fingerprint, 'b6c288b17e96064d3d7b0b7b3f9f89d7e7427d12');
+    });
+
+    // The property the whole memo rests on. It caches the digest *lookup* and
+    // nothing above it, so the composition is untouched and no key moves —
+    // which is what recomposing a fingerprint outside the class would risk.
+    test('a shared cache does not move a fingerprint', () {
+      var checkoutPath = checkout('shared', {
+        'lib/a.dart': 'const a = 1;',
+        'lib/b.dart': 'const b = 2;',
+        'lib/c.dart': 'const c = 3;',
+      });
+      var digests = DigestCache();
+
+      var first = ['lib/a.dart', 'lib/b.dart'];
+      var second = ['lib/b.dart', 'lib/c.dart'];
+      for (var paths in [first, second]) {
+        var plain = SourceClosure.of(paths, root: checkoutPath);
+        var cached = SourceClosure.of(
+          paths,
+          root: checkoutPath,
+          digests: digests,
+        );
+
+        expect(cached.digests, plain.digests);
+        expect(cached.fingerprint, plain.fingerprint);
+      }
+      // Three files across two closures that name four paths between them.
+      expect(digests.files, 3);
+    });
+
+    // Why the cache is opened by a plan and dropped by it. A digest is only
+    // true of the file as it was read, so a cache that outlived the plan would
+    // answer for a file edited since — a skip rule reporting a regression as
+    // clean, which is the one mistake it may never make.
+    test('a cache answers for the pass it was opened in', () {
+      var checkoutPath = checkout('edited', {'lib/a.dart': 'const a = 1;'});
+      var digests = DigestCache();
+      var before = SourceClosure.of(
+        ['lib/a.dart'],
+        root: checkoutPath,
+        digests: digests,
+      );
+
+      File(p.join(checkoutPath, 'lib/a.dart'))
+          .writeAsStringSync('const a = 2;');
+
+      expect(
+        SourceClosure.of(
+          ['lib/a.dart'],
+          root: checkoutPath,
+          digests: digests,
+        ).fingerprint,
+        before.fingerprint,
+      );
+      expect(
+        SourceClosure.of(
+          ['lib/a.dart'],
+          root: checkoutPath,
+          digests: DigestCache(),
+        ).fingerprint,
+        isNot(before.fingerprint),
+      );
+    });
   });
 
   group('the skip rule', () {

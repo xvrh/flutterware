@@ -590,6 +590,10 @@ class _PlanInputs {
   })
   decide() {
     var memo = ClosureMemo(memoDirectory);
+    // Opened here and dropped at the end of this method, which is the whole
+    // of its life: a digest is true of the file as it was read, and a plan is
+    // the longest stretch over which that stays true.
+    var digests = DigestCache();
     // The graphs are built once per side and reused across every entry: their
     // closures overlap almost entirely, so this is one parse of each package
     // rather than one per entry.
@@ -618,10 +622,11 @@ class _PlanInputs {
         baseRoot: baseRoot,
         headRoot: headRoot,
         pixels: pixels,
+        digests: digests,
       );
       keys[id] = (
-        base: _keyFor(id, baseGraph, baseRoot, file, pixels),
-        head: _keyFor(id, headGraph, headRoot, file, pixels),
+        base: _keyFor(id, baseGraph, baseRoot, file, pixels, digests),
+        head: _keyFor(id, headGraph, headRoot, file, pixels, digests),
       );
 
       if (decision.skip) {
@@ -650,12 +655,14 @@ class _PlanInputs {
     String root,
     String file,
     PixelInputs pixels,
+    DigestCache digests,
   ) => ShotKey.of(
     kind: 'preview',
     entryId: id,
     closure: SourceClosure.of(
       graph.closureOf(file),
       root: root,
+      digests: digests,
     ).merge(pixels.inRoot(root)).fingerprint,
     sdk: sdkKey,
   );
