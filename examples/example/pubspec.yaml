@@ -38,7 +38,17 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  flutter_secure_storage:
+  # **Pinned below 11, because 11 is ahead of the whole toolchain we pin.**
+  # `flutter_secure_storage 11.0.0` sets `compileSdk = 37` and makes every app
+  # that depends on it compile against 37 too; Flutter 3.48 pins compileSdk 36
+  # and AGP 9.1.0 reports 36 as the highest it recommends, so the Android build
+  # fails outright at `checkDebugAarMetadata`. 10.x asks for 36 and the panel
+  # here only calls `readAll` and `delete`, which both versions have.
+  #
+  # Drop the constraint when Flutter's own `compileSdkVersion` reaches 37 —
+  # `packages/flutter_tools/lib/src/android/gradle_utils.dart` is where it is
+  # written. Measured 2026-08-24.
+  flutter_secure_storage: ^10.0.0
   flutterware:
     path: ../..
   # For lib/network_spike.dart — the http-profile spike's traffic generator.

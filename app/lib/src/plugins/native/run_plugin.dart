@@ -10,6 +10,8 @@ import 'package:flutterware/src/inspect/node.dart';
 import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
+import '../../run/device/device_settings.dart';
+import '../../run/device_strip.dart';
 import '../../run/entrypoints.dart';
 import '../../run/flavors.dart';
 import '../../run/handle.dart';
@@ -265,6 +267,10 @@ class _RunViewState extends State<_RunView> {
   /// belongs to the pane; this is the one wire between them.
   final _screen = GlobalKey<_ScreenTabState>();
 
+  /// The device strip's, for the same reason: refresh means *read it all
+  /// again*, and on the Screen view the device is half of what is on screen.
+  final _device = GlobalKey<_DeviceStripHostState>();
+
   @override
   Widget build(BuildContext context) {
     var core = widget.core;
@@ -302,7 +308,10 @@ class _RunViewState extends State<_RunView> {
               view == RunViewKind.screen &&
               (_screen.currentState?.isReading ?? false),
           onRefresh: view == RunViewKind.screen && state.canInspect
-              ? () => _screen.currentState?.read()
+              ? () {
+                  _screen.currentState?.read();
+                  _device.currentState?.read();
+                }
               : null,
           capture: view == RunViewKind.screen && state.canInspect
               ? CaptureButton(
@@ -320,6 +329,24 @@ class _RunViewState extends State<_RunView> {
               : null,
         ),
         const Divider(height: 1),
+        // **Over the picture, not on a tab of its own.** A tab strip is
+        // exclusive: opening a *Device* tab would close *Screen*, which is a
+        // control writing to a page you are not on — the second dev-stack
+        // study's finding 12. Here the result of pressing one is in the frame
+        // underneath it.
+        //
+        // Outside the `switch` below, so it survives `!canInspect`: a device
+        // answers while a build is running and after an app has died, which
+        // makes this the second exception to the tab strip's disable after
+        // Steps. What goes unknown in that window is the one setting derived
+        // from the app's own geometry, and it says so.
+        if (view == RunViewKind.screen)
+          _DeviceStripHost(
+            key: _device,
+            core: core,
+            handle: handle,
+            canInspect: state.canInspect,
+          ),
         Expanded(
           child: switch (view) {
             // The journal is a file: it answers while the app builds and
@@ -678,6 +705,146 @@ class _ViewTabs extends StatelessWidget {
   /// The strip reads ids, labels and badges and never builds a body — the run
   /// page keeps its panes, because only one of them is cheap to rebuild.
   static Widget _unused(BuildContext context) => const SizedBox.shrink();
+}
+
+/// The device strip, with the reads and the writes behind it.
+///
+/// The Screen half of the split the launcher-icon research named: [DeviceStrip]
+/// takes a list and two callbacks and reads nothing, and this holds the backend
+/// and owns the busy state. Every ability it has is [RunCore]'s — the same two
+/// methods `run/device` and `run/setDevice` call — so the panel adds nothing an
+/// agent or the CLI cannot do.
+class _DeviceStripHost extends StatefulWidget {
+  const _DeviceStripHost({
+    super.key,
+    required this.core,
+    required this.handle,
+    required this.canInspect,
+  });
+
+  final RunCore core;
+  final RunHandle handle;
+
+  /// Whether the app is answering yet.
+  ///
+  /// Not an enable flag — the device answers either way, which is why this
+  /// strip sits outside the tab strip's disable. It is a *read trigger*: the
+  /// one setting whose value is derived from the app's own geometry cannot be
+  /// known until there is an app, and the strip mounts while the build is
+  /// still running.
+  final bool canInspect;
+
+  @override
+  State<_DeviceStripHost> createState() => _DeviceStripHostState();
+}
+
+class _DeviceStripHostState extends State<_DeviceStripHost> {
+  List<DeviceSetting> _settings = const [];
+
+  /// What the strip has to say that no chip can hold — in v1, the refusal from
+  /// a target with no backend, which names what would work instead.
+  String? _notice;
+
+  var _reading = false;
+  final _busy = <DeviceSettingId>{};
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_read());
+  }
+
+  @override
+  void didUpdateWidget(_DeviceStripHost old) {
+    super.didUpdateWidget(old);
+    // A different run in the same slot is a different device, not a stale
+    // reading of this one.
+    if (old.handle.key != widget.handle.key) {
+      _settings = const [];
+      _notice = null;
+      _busy.clear();
+      unawaited(_read());
+      return;
+    }
+    // **The app started answering, so one of these has an answer now.** The
+    // strip mounts while the build is still running — that is the point of it
+    // being outside the disable — and at that moment `orientation` on an iOS
+    // simulator is honestly unknown, because it is read from the running app's
+    // width and height and there is no running app. Left there, the chip went
+    // on saying `—` beside a tree reporting 402×874. Measured on a real
+    // simulator, 2026-08-24.
+    if (widget.canInspect && !old.canInspect) unawaited(_read());
+  }
+
+  /// Public so the tab strip's refresh can reach it, the way it reaches the
+  /// picture beside it.
+  Future<void> read() => _read();
+
+  Future<void> _read() async {
+    // Assigned rather than `setState`, because this is reached from `initState`
+    // and `didUpdateWidget`, both of which run inside a build.
+    _reading = true;
+    try {
+      var settings = await widget.core.readDeviceSettings(widget.handle);
+      if (!mounted) return;
+      setState(() {
+        _settings = settings;
+        _notice = null;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      // A refusal is the strip's whole content on a target with no backend, and
+      // it is drawn rather than hidden: a control that vanishes reads as an
+      // oversight, and the sentence names the mechanism that would work.
+      setState(() {
+        _settings = const [];
+        _notice = '$e';
+      });
+    } finally {
+      if (mounted) setState(() => _reading = false);
+    }
+  }
+
+  Future<void> _set(DeviceSettingId id, String value) async {
+    setState(() => _busy.add(id));
+    try {
+      var written = await widget.core.writeDeviceSetting(
+        widget.handle,
+        id,
+        value,
+      );
+      if (!mounted) return;
+      // Spliced rather than followed by a second full read, and the reason is
+      // that the reply already **is** the read: `writeDeviceSetting` answers
+      // with that setting re-read from the command that owns it. A second pass
+      // over the other seven would be seven subprocesses asking about settings
+      // this write cannot have touched.
+      setState(() {
+        _settings = [
+          for (var setting in _settings)
+            if (setting.id == id) written else setting,
+        ];
+        _notice = null;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() => _notice = '$e');
+    } finally {
+      if (mounted) setState(() => _busy.remove(id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => DeviceStrip(
+    settings: _settings,
+    notice: _notice,
+    reading: _reading,
+    busy: _busy,
+    // Null only where there is nothing to write to. A dead app is not that:
+    // the device answers either way, which is the whole reason this sits
+    // outside the tab strip's disable.
+    onSet: _settings.isEmpty ? null : _set,
+  );
 }
 
 /// Shown while a run has no app to ask — a build in flight, or one that failed.

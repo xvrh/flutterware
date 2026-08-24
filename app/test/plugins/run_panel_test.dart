@@ -18,6 +18,7 @@ import 'package:flutterware_app/src/inspect/node_highlight.dart';
 import 'package:flutterware_app/src/plugins/native/run_address.dart';
 import 'package:flutterware_app/src/plugins/native/run_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
+import 'package:flutterware_app/src/run/device_strip.dart';
 import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/inspect.dart';
 import 'package:flutterware_app/src/run/inventory.dart';
@@ -273,6 +274,25 @@ void main() {
       expect(reads, 0, reason: 'a human tap does not spend a reading');
       expect(find.textContaining('the app has moved since'), findsOneWidget);
     });
+  });
+
+  testWidgets('the device strip is over the picture, and only there', (
+    tester,
+  ) async {
+    // Above the picture rather than on a tab of its own: a tab strip is
+    // exclusive, so a *Device* tab would be a control writing to a page you
+    // are not on. And only on Screen, because that page is where the result of
+    // pressing one is visible.
+    await pumpScreenTab(tester, Uint8List.fromList(_onePixelPng));
+    expect(find.byType(DeviceStrip), findsOneWidget);
+
+    var strip = tester.getRect(find.byType(DeviceStrip));
+    var picture = tester.getRect(find.byType(RawImage));
+    expect(strip.bottom, lessThanOrEqualTo(picture.top));
+
+    await tester.tap(find.text('Logs'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DeviceStrip), findsNothing);
   });
 
   testWidgets('the screen pane finishes its read and draws both halves', (
