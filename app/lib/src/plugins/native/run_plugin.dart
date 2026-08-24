@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -782,14 +781,13 @@ class _ScreenTabState extends State<_ScreenTab> {
   DateTime? _readAt;
   var _readAtMoved = 0;
 
-  /// How much of the pane the picture takes. Wider than the first build's
-  /// fixed 240: a phone screenshot at that width is a thumbnail, and the tree
-  /// beside it never needed the rest.
-  double _split = 0.34;
-
-  /// Whether the human has moved the grip. Until they do, the split is
-  /// chosen from the shape of the app — see [_fitSplit].
-  var _splitIsMine = false;
+  /// The dock's open tab, and whether it is folded away.
+  ///
+  /// Held here rather than in the address: which reading of the screen is open
+  /// is a posture rather than a place, and putting it in the URL would make
+  /// the back button undo a glance.
+  var _tab = 'elements';
+  var _collapsed = false;
 
   bool get isReading => _loading;
 
@@ -879,7 +877,6 @@ class _ScreenTabState extends State<_ScreenTab> {
         _fromGuest = read.fromGuest;
         _error = null;
         _readAt = DateTime.now();
-        if (!_splitIsMine) _split = _fitSplit(read.tree) ?? _split;
         // The count as it stands *now*, not as it stood when the read was
         // asked for: a tap that arrived while the picture was being taken is
         // a tap the picture may well show.
@@ -915,87 +912,67 @@ class _ScreenTabState extends State<_ScreenTab> {
   @override
   Widget build(BuildContext context) {
     if (_error case var error?) return _Failed(error);
-    // A grip divides two things. Until the first read lands there is only one
-    // — the picture pane draws nothing at all while loading, so what the page
-    // showed was a blank half, a hairline down the middle, and the tab's only
-    // words centred in the *other* half. That reads as a divider waiting for a
-    // panel, not as a pane that is busy. One state for one thing, and the
-    // split appears with the content it splits.
+    // One state for one thing. The dock draws a grip and a strip for a tree
+    // that is not there yet, which reads as furniture waiting for a panel
+    // rather than as a pane that is busy — so until the first reading lands
+    // there is nothing here but the sentence saying so.
     if (_loading && _image == null && _tree == null) {
       return const LoadingState(
         title: 'Reading the app…',
         message: 'Its widget tree, and a picture of what it is showing.',
       );
     }
+    // **The picture on top, the tree docked under it** — what previews and the
+    // scenarios step page draw, and now the third surface drawing it.
+    //
+    // What it costs is worth writing down, because it was measured and it is
+    // real: at 872×737 the dock draws a desktop app at 475×384 where a
+    // third-of-the-width column managed 280×227, and pays for it in tree —
+    // about eleven rows at the dock's resting height against thirty-two beside
+    // a column. The grip is the answer to that: the dock resizes and
+    // collapses, so the trade is the reader's to make per task, where a fixed
+    // column was nobody's.
     return LayoutBuilder(
-      builder: (context, constraints) {
-        var width = (constraints.maxWidth * _split)
-            .clamp(180.0, math.max(180.0, constraints.maxWidth - 320))
-            .toDouble();
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: width,
-              child: RunScreenPicture(
-                picture: _picture,
-                undecodable: _undecodable,
-                loading: _loading,
-                highlight: _highlight,
-                tree: _tree,
-                canvas: RunScreenPicture.canvasOf(_tree),
-                readAt: _readAt,
-                movedSince: widget.clock.$1 != _readAtMoved,
+      builder: (context, constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: RunScreenPicture(
+              picture: _picture,
+              undecodable: _undecodable,
+              loading: _loading,
+              highlight: _highlight,
+              tree: _tree,
+              canvas: RunScreenPicture.canvasOf(_tree),
+              readAt: _readAt,
+              movedSince: widget.clock.$1 != _readAtMoved,
+            ),
+          ),
+          InspectDock(
+            available: constraints.maxHeight,
+            current: _tab,
+            collapsed: _collapsed,
+            onChanged: (current, collapsed) => setState(() {
+              _tab = current;
+              _collapsed = collapsed;
+            }),
+            // No refresh of its own: the page's strip already carries one and
+            // it re-reads both halves. Two buttons for one reading would be
+            // two claims about what a reading is.
+            tabs: [
+              InspectDockTab(
+                id: 'elements',
+                label: 'Elements',
+                body: (context) => _elements(),
               ),
-            ),
-            InspectSplitGrip(
-              axis: Axis.vertical,
-              onDrag: (delta) => setState(() {
-                _splitIsMine = true;
-                _split = ((width + delta) / constraints.maxWidth).clamp(
-                  0.15,
-                  0.7,
-                );
-              }),
-            ),
-            // **The strip over this half is not here yet, on purpose.** It is
-            // where Semantics belongs, and a tab strip holding one tab reads
-            // as a broken tab bar rather than as a pane with room to grow —
-            // photographed, and that is exactly what it looked like. It lands
-            // with the second tab or not at all.
-            Expanded(child: _elements()),
-          ],
-        );
-      },
+            ],
+          ),
+        ],
+      ),
     );
   }
 
-  /// The share of the width that fits the app's own shape.
-  ///
-  /// A fixed default cannot be right for both: dividing the pane *vertically*
-  /// gives the picture the full height and a slice of the width, which suits a
-  /// phone and starves a desktop window. Measured on this pane at 872×737 with
-  /// the shipped 0.34: a macOS app drew at 280×227 where a phone would draw at
-  /// 280×607 — the same slice, two and a half times the picture.
-  ///
-  /// So the slice follows the shape. Capped at 0.55 rather than solved
-  /// exactly, because a landscape app solves to more than the whole pane and
-  /// the tree beside it still has to be usable.
-  double? _fitSplit(InspectTree? tree) {
-    var canvas = RunScreenPicture.canvasOf(tree);
-    if (canvas == null || canvas.width <= 0 || canvas.height <= 0) return null;
-    var box = context.findRenderObject();
-    if (box is! RenderBox || !box.hasSize || box.size.width <= 0) return null;
-    var wanted = box.size.height * (canvas.width / canvas.height);
-    // The inspector's own floor, in pixels rather than as a fraction: what
-    // the tree needs to show a name *and* a size is about 330, and it takes
-    // 0.62 of this column, so the column needs about 530. A fraction would
-    // promise that on a wide window and break it on a narrow one.
-    var ceiling = math.max(180.0, box.size.width - 530);
-    return (math.min(wanted, ceiling) / box.size.width).clamp(0.15, 0.7);
-  }
-
-  /// The tree and its detail pane, whichever layout is holding them.
+  /// The tree and its detail pane, side by side — the dock's one tab.
   Widget _elements() => ElementsView(
     root: _tree?.root,
     placeholder: _loading
