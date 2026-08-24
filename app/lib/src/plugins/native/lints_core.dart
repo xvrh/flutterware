@@ -21,6 +21,12 @@ import 'lints_results.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const lintsPluginId = 'flutterware.lints';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    'Which lint rules this repo evaluated and — the point — which it never '
+    'did, across every `analysis_options.yaml` in it.';
+
 PluginCore lintsCoreFactory(PluginHost host) => LintsCore(host);
 
 /// Which lint rules this repo evaluated, and — the point — which it never did.
@@ -342,6 +348,7 @@ class LintsCore extends PluginCore {
     return PluginReport(
       id: host.id,
       label: host.label,
+      description: _pluginDescription,
       status: _statusLine(classification),
       badge: switch (classification?.count(LintBucket.unevaluated)) {
         null || 0 => StatusBadge.none,

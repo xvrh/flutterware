@@ -14,6 +14,12 @@ import 'dev_stack_results.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const devStackPluginId = 'flutterware.dev_stack';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    "The project's local dev stack — docker, the database, whatever the app "
+    "talks to locally — read and driven by running the project's own commands.";
+
 /// How much of a command's output to keep. Enough to see why something failed,
 /// far short of a log viewer — the command's own terminal has the rest.
 const _maxOutput = 8000;
@@ -697,6 +703,7 @@ class DevStackCore extends PluginCore {
     return PluginReport(
       id: id,
       label: label,
+      description: _pluginDescription,
       status: _statusFor(reading),
       badge: _badgeFor(reading),
       actions: _actions,

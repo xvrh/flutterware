@@ -21,6 +21,12 @@ import 'motion_results.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const motionPluginId = 'flutterware.motion';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    'The animations each declared package declares, rendered at any point on '
+    'their playhead so a curve can be looked at rather than described.';
+
 /// Motions per declared package: the syntactic scan projected into the report
 /// and the `list` action.
 ///
@@ -156,6 +162,7 @@ class MotionCore extends PluginCore {
   PluginReport get report => PluginReport(
     id: host.id,
     label: host.label,
+    description: _pluginDescription,
     status: _status(),
     children: [
       for (var path in packages)

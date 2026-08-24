@@ -146,6 +146,8 @@ Notes a human left on this checkout, and how you answer them. They are written o
 
 ### `flutterware.assets`
 
+What each declared package's asset bundle actually resolves to at run time — including what its dependencies contribute, and excluding the file sitting on disk that nothing declared.
+
 #### `list` — List
 
 Every key a package's bundle resolves to — the whole list, not the projection the report carries
@@ -263,6 +265,8 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 
 ### `flutterware.dependencies`
 
+Every pub dependency of each declared package: what the pubspec asked for, what pub resolved it to, and where it came from.
+
 #### `list` — List
 
 Every dependency of a package, with its version — the whole list, not the projection the report carries
@@ -297,6 +301,8 @@ packages: List<DependencyListPackage>
 
 
 ### `flutterware.run`
+
+Which devices exist, which are already running something, and launching one of the project's entry points onto one — then reloading, driving and observing the app that comes up.
 
 #### `devices` — Devices
 
@@ -1141,6 +1147,8 @@ note: String?
 
 ### `flutterware.server`
 
+The dev servers announcing themselves under this worktree, with the requests, errors and SQL each one has seen.
+
 #### `requests` — Recent requests
 
 The latest HTTP requests a running server reported, each with the SQL queries and log lines it caused. Narrow with path, minStatus and since rather than reading everything and filtering — a server up for an hour holds far more than the question usually wants.
@@ -1201,6 +1209,8 @@ fw run server sql [--name=…] [--top=…]
 
 
 ### `flutterware.motion`
+
+The animations each declared package declares, rendered at any point on their playhead so a curve can be looked at rather than described.
 
 #### `capture` — Capture
 
@@ -1286,6 +1296,8 @@ packages: List<MotionListPackage>
 
 
 ### `flutterware.scenarios`
+
+Scenarios — deterministic headless flows through the app — listed, run, and read back a step at a time with what each step had on screen.
 
 #### `list` — List
 
@@ -1599,6 +1611,8 @@ restarted: List<String>   # The package paths whose harness was dropped.
 
 ### `flutterware.launcher_icon`
 
+Every launcher icon each declared package has, and what each operating system actually shows of them.
+
 #### `inventory` — Inventory
 
 Every launcher icon on disk, what the OS does with each, and which of them the project never actually references
@@ -1651,6 +1665,8 @@ findings: List<IconFindingEntry>
 
 
 ### `flutterware.splash`
+
+What each declared package's `flutter_native_splash` config actually produces, per surface and per theme.
 
 #### `describe` — Describe
 
@@ -1784,6 +1800,8 @@ artifacts: List<SplashArtifactEntry>   # What exists afterwards — the point of
 
 
 ### `flutterware.previews`
+
+Your `@Preview` entries, rendered with the real fonts and the real theme — listed, screenshotted, inspected, and compared against the base branch.
 
 #### Authoring: what you write
 
@@ -2328,6 +2346,8 @@ scenariosNote: String?   # Why the scenario half has nothing to say, when it has
 
 ### `flutterware.dev_stack`
 
+The project's local dev stack — docker, the database, whatever the app talks to locally — read and driven by running the project's own commands.
+
 #### `status` — Check
 
 Runs the declared probe and reports what state the stack is in, with the time it was read. Every other surface shows a cached reading and how old it is; this is the one that goes and looks.
@@ -2344,6 +2364,8 @@ Takes no parameters.
 
 
 ### `flutterware.translations`
+
+Which translation key is on which screen, which locales are still missing one, and a picture of each string in the place it appeared.
 
 #### `export` — Export
 
@@ -2397,6 +2419,8 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 
 
 ### `flutterware.lints`
+
+Which lint rules this repo evaluated and — the point — which it never did, across every `analysis_options.yaml` in it.
 
 #### `status` — Status
 

@@ -44,6 +44,12 @@ import '../plugin_host.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const uiCatalogPluginId = 'flutterware.previews';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    'Your `@Preview` entries, rendered with the real fonts and the real theme '
+    '— listed, screenshotted, inspected, and compared against the base branch.';
+
 /// The action that compiles a browsable page.
 ///
 /// Named once because two places spell it: the declaration below, and the
@@ -587,6 +593,7 @@ class PreviewsCore extends PluginCore {
   PluginReport get report => PluginReport(
     id: host.id,
     label: host.label,
+    description: _pluginDescription,
     status: _status,
     badge: _failures.isNotEmpty || _scans.values.any((scan) => !scan.ok)
         ? const StatusBadge.dot(Tone.error)

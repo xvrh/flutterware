@@ -19,6 +19,12 @@ import 'splash_results.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const splashPluginId = 'flutterware.splash';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    "What each declared package's `flutter_native_splash` config actually "
+    'produces, per surface and per theme.';
+
 /// What each declared package's `flutter_native_splash` config will actually
 /// produce, per surface and per theme.
 ///
@@ -193,6 +199,7 @@ class SplashCore extends PluginCore {
   PluginReport get report => PluginReport(
     id: host.id,
     label: host.label,
+    description: _pluginDescription,
     status: _status,
     badge: _badge,
     children: [

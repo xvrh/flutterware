@@ -15,6 +15,12 @@ import '../plugin_host.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const dependenciesPluginId = 'flutterware.dependencies';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    'Every pub dependency of each declared package: what the pubspec asked '
+    'for, what pub resolved it to, and where it came from.';
+
 /// Pub dependencies for each declared package — all of the behaviour, none of
 /// the widgets.
 ///
@@ -99,6 +105,7 @@ class DependenciesCore extends PluginCore {
     return PluginReport(
       id: host.id,
       label: host.label,
+      description: _pluginDescription,
       status: _status(known),
       children: [
         for (var path in packages)

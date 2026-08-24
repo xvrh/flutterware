@@ -32,6 +32,12 @@ import 'scenarios_results.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const scenariosPluginId = 'flutterware.scenarios';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    'Scenarios — deterministic headless flows through the app — listed, run, '
+    'and read back a step at a time with what each step had on screen.';
+
 /// The action that writes a run out as a page, named once so the CLI, the
 /// dialog and the command the dialog echoes cannot drift apart.
 const webExportActionId = 'export';
@@ -568,6 +574,7 @@ class ScenariosCore extends PluginCore {
     return PluginReport(
       id: host.id,
       label: host.label,
+      description: _pluginDescription,
       status: _status(),
       children: [
         for (var path in packages)

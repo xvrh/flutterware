@@ -49,6 +49,13 @@ import 'previews_core.dart' show PreviewsCore;
 /// The registered id — also what `tool/flutterware.dart` declares.
 const runPluginId = 'flutterware.run';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    'Which devices exist, which are already running something, and launching '
+    "one of the project's entry points onto one — then reloading, driving and "
+    'observing the app that comes up.';
+
 /// How many dead runs to keep the reason for. Enough to cover a morning of
 /// fighting one signing problem across two devices, and far short of a list too
 /// long to read.
@@ -620,6 +627,7 @@ class RunCore extends PluginCore {
     return PluginReport(
       id: host.id,
       label: host.label,
+      description: _pluginDescription,
       status: _status,
       badge: _daemonError != null
           ? const StatusBadge.dot(Tone.error)

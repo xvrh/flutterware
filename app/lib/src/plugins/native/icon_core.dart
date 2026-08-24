@@ -14,6 +14,12 @@ import 'icon_results.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const launcherIconPluginId = 'flutterware.launcher_icon';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    'Every launcher icon each declared package has, and what each operating '
+    'system actually shows of them.';
+
 /// Every launcher icon a package has, and what each operating system does with
 /// it.
 ///
@@ -106,6 +112,7 @@ class LauncherIconCore extends PluginCore {
   PluginReport get report => PluginReport(
     id: host.id,
     label: host.label,
+    description: _pluginDescription,
     status: _status,
     badge: _badge,
     children: [

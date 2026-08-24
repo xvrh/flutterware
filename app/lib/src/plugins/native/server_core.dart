@@ -14,6 +14,12 @@ import '../plugin_host.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const serverPluginId = 'flutterware.server';
 
+/// What this plugin is, for a reader who has only the id — see
+/// `PluginReport.description`.
+const _pluginDescription =
+    'The dev servers announcing themselves under this worktree, with the '
+    'requests, errors and SQL each one has seen.';
+
 /// The servers currently announcing themselves under this worktree.
 ///
 /// Discovery is a run-dir scan for `srv-*.json` handles whose project root
@@ -153,6 +159,7 @@ class ServerCore extends PluginCore {
     return PluginReport(
       id: host.id,
       label: host.label,
+      description: _pluginDescription,
       status: status,
       badge: live > 0
           ? StatusBadge.count(live, tone: Tone.good)

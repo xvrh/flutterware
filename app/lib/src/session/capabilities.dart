@@ -177,6 +177,12 @@ String _actionsSection(
     buffer.writeln();
     buffer.writeln('### `${report.id}`');
     buffer.writeln();
+    // Above the no-actions line as well as above the actions: a plugin with
+    // nothing to invoke is the one whose id explains least.
+    if (report.description case var description?) {
+      buffer.writeln(description);
+      buffer.writeln();
+    }
     if (report.actions.isEmpty) {
       buffer.writeln('No actions.');
       continue;
