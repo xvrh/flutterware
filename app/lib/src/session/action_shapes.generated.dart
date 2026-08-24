@@ -4778,6 +4778,11 @@ final resultShapes = <String, ResultShape>{
         'doc': 'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
       },
       <String, Object?>{
+        'name': 'unsettledCount',
+        'type': 'int',
+        'doc': 'How many of those steps were captured with the app still animating — `settled: false`, the bounded settle giving up with frames still scheduled.',
+      },
+      <String, Object?>{
         'name': 'stepsElided',
         'type': 'int',
         'optional': true,
@@ -5128,6 +5133,11 @@ final resultShapes = <String, ResultShape>{
               'name': 'unchangedCount',
               'type': 'int',
               'doc': 'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
+            },
+            <String, Object?>{
+              'name': 'unsettledCount',
+              'type': 'int',
+              'doc': 'How many of those steps were captured with the app still animating — `settled: false`, the bounded settle giving up with frames still scheduled.',
             },
             <String, Object?>{
               'name': 'stepsElided',
@@ -5519,6 +5529,11 @@ final resultShapes = <String, ResultShape>{
                     'name': 'unchangedCount',
                     'type': 'int',
                     'doc': 'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
+                  },
+                  <String, Object?>{
+                    'name': 'unsettledCount',
+                    'type': 'int',
+                    'doc': 'How many of those steps were captured with the app still animating — `settled: false`, the bounded settle giving up with frames still scheduled.',
                   },
                   <String, Object?>{
                     'name': 'stepsElided',

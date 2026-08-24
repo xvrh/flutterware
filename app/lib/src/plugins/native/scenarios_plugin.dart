@@ -1323,6 +1323,42 @@ class _ScenarioPageState extends State<_ScenarioPage> {
               style: context.type.caption.copyWith(color: colors.mut2),
             ),
           ],
+          // The one fact about a green run that a green tick hides. A step
+          // captured mid-animation is amber on its own page, which is no help
+          // at all to a reader who has no reason to open it — and a suite
+          // acquires them silently, because nothing at a call site says which
+          // verbs stopped short.
+          if (_unsettled(run) case var unsettled when unsettled > 0) ...[
+            const Gap(FwSpacing.md),
+            Tooltip(
+              message: unsettled == 1
+                  ? 'One step was captured with the app still animating — '
+                        'the settle budget ran out with frames still '
+                        'scheduled. A spinner or a looping animation does '
+                        'that, and the picture is of a moving screen. Amber '
+                        'in the flow below.'
+                  : '$unsettled steps were captured with the app still '
+                        'animating — the settle budget ran out with frames '
+                        'still scheduled. A spinner or a looping animation '
+                        'does that, and their pictures are of moving '
+                        'screens. Amber in the flow below.',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.motion_photos_on_outlined,
+                    size: FwIconSize.md,
+                    color: colors.amber,
+                  ),
+                  const Gap(FwSpacing.xs),
+                  Text(
+                    '$unsettled still animating',
+                    style: context.type.caption.copyWith(color: colors.amber),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const Gap(FwSpacing.lg),
           _RunSplitButton(
             enabled: !running,
@@ -1342,6 +1378,15 @@ class _ScenarioPageState extends State<_ScenarioPage> {
       ),
     );
   }
+
+  /// Steps this run captured while something on them was still moving.
+  ///
+  /// Counted off the streamed steps rather than off `outcome.unsettledCount`,
+  /// which is the same number but only lands when the scenario finishes: the
+  /// flow fills in live, and a count that appears at the end would be news
+  /// about a screen the reader has already scrolled past.
+  int _unsettled(ScenarioPanelRun? run) =>
+      run?.steps.where((step) => !step.settled).length ?? 0;
 
   Widget _body(
     BuildContext context,

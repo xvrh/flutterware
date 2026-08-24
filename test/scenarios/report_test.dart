@@ -13,6 +13,7 @@ void main() {
     String? verb,
     String? target,
     bool unchanged = false,
+    bool settled = true,
   }) => ScenarioRunStep(
     index: index,
     position: '#$index',
@@ -26,6 +27,7 @@ void main() {
     verb: verb,
     target: target,
     unchanged: unchanged,
+    settled: settled,
   );
 
   group('a step', () {
@@ -213,16 +215,22 @@ void main() {
                   file: 'f',
                   name: 's',
                   ok: true,
-                  steps: [step(index: 1), step(index: 2, unchanged: true)],
+                  steps: [
+                    step(index: 1),
+                    step(index: 2, unchanged: true),
+                    step(index: 3, settled: false),
+                  ],
                 ),
               ),
             ) as Map).cast<String, Object?>()
             ..remove('stepCount')
-            ..remove('unchangedCount');
+            ..remove('unchangedCount')
+            ..remove('unsettledCount');
       var back = ScenarioRunOutcome.fromJson(wire);
 
-      expect(back.stepCount, 2);
+      expect(back.stepCount, 3);
       expect(back.unchangedCount, 1);
+      expect(back.unsettledCount, 1);
     });
 
     test('trusts the counts on a trimmed copy', () {
@@ -233,6 +241,7 @@ void main() {
         steps: [step(index: 1), step(index: 2)],
         stepCount: 2,
         unchangedCount: 1,
+        unsettledCount: 2,
       ).withoutSteps();
 
       var back = ScenarioRunOutcome.fromJson(
@@ -242,6 +251,9 @@ void main() {
       expect(back.steps, isEmpty);
       expect(back.stepCount, 2);
       expect(back.unchangedCount, 1);
+      // The number the summary exists to carry: with no steps to count, a
+      // recount would read zero and say the run was still.
+      expect(back.unsettledCount, 2);
     });
 
     test('carries its errors and translations', () {

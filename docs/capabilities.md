@@ -1388,6 +1388,7 @@ packages: List<ScenarioRunPackage>
       failure: String?   # The error, when this is the step a scenario broke on.
     stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
     unchangedCount: int   # How many of those steps a verb acted for nothing on — pictures byte-identical to their parent's.
+    unsettledCount: int   # How many of those steps were captured with the app still animating — `settled: false`, the bounded settle giving up with frames still scheduled.
     stepsElided: int?   # How many of [stepCount]'s steps are on disk rather than in this copy — zero when [steps] is the whole of them, which is what `run.json` and a `steps: all` request both hold.
     errors: List<ScenarioRunError>?   # The failure, when [ok] is false.
       error: String

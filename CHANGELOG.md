@@ -1,5 +1,66 @@
 ## Unreleased
 
+- **A change made outside the widget tree is a step.**
+
+  ```dart
+  await s.act('A photo-ready push arrives', () {
+    app.notifications.onOpen(data);
+  });
+  ```
+
+  Half of what moves a real app never touches the widget tree — a push
+  arrives, a deep link lands, a socket pushes a row, a completer the scenario
+  is holding resolves. The *waiting* was never the gap; `s.settle()` did that.
+  The report was: the screen changed and nothing in the run said why, so a
+  reader had to reverse-engineer the cause from the two pictures either side
+  of it. `document` and `notification` are beats that are not screens; this is
+  the same idea one step earlier, the beat that **causes** one. Two lines
+  become one, the body may be sync or async, and whatever it returns comes
+  back.
+
+- **A drag can start from a point, and can take time.**
+  `s.drag(target, by)` grabs a widget's centre in one jump. Neither half fits
+  a canvas, a chart, a map or a signature pad, where the thing to grab is
+  painted rather than built — `Target.at` does not close it either, since it
+  resolves the widget *under* the point and still drags from that widget's
+  centre. `s.dragFrom(Offset(200, 500), Offset(0, -400))` goes down where it
+  is told.
+
+  And `duration:`, on both, is how a drag says anything at all about
+  **velocity**. Without it the finger moves in one jump, so the velocity
+  tracker sees the whole distance in no time and reports none: measured on a
+  200-row list, `Offset(0, -300)` bare lands at exactly 300 and no offset will
+  make it overscroll. The same distance over a second carries to 324; over
+  300ms it flies to 494. A fling that must — or must not — overscroll was not
+  a question about an offset.
+
+- **`runAsync` is a verb like the others.**
+  It was the one method on the scenario surface that sat among `tap` and
+  `drag` and behaved like neither: it forwarded to `tester.runAsync` with a
+  watchdog and went through none of the step machinery, so it neither settled
+  nor captured. Real work landing is exactly the moment the tree has something
+  new to paint, and every site that needed the repaint settled by hand.
+
+  It settles and captures now. Work that lands nothing on screen still takes
+  no step — the automatic shot is skipped where the settle drew no frame — so
+  the `generatePdf` in its own doc is followed by its `document` and by
+  nothing else. A failure inside it now captures the frame it broke on, as
+  every other verb's does.
+
+- **A run says how many of its steps were still moving.**
+  A step captured with the app mid-animation reports `settled: false`, which
+  is amber on that step's own page and invisible to anyone with no reason to
+  open it. Nothing at a *call site* distinguishes a verb that settled from one
+  that gave up, so a suite acquires them silently — reported by a consumer for
+  whom that is what made an otherwise mechanical cleanup risky, the deletions
+  that broke their suite being all at places the settle had already stopped
+  short of.
+
+  `ScenarioRunOutcome.unsettledCount` carries the count beside `unchangedCount`
+  and rides back even with `steps: none`, `scenarios read` says
+  `3 still animating` on the run's line, and the panel's run header wears the
+  same count in amber while the flow is still filling in.
+
 - **A finished copy stops carrying the build it will never build again.**
   `dart run flutterware` mirrors the package out of the pub cache into
   `~/.flutterware/<key>/` and builds the tools there. That copy is a mirror of

@@ -95,6 +95,32 @@ void main() {
     });
   });
 
+  group('a screen parked mid-flight on purpose', () {
+    var fired = <String>[];
+    scenario('says so on the name as well as on the verb', (s) async {
+      fired.clear();
+      await s.pumpWidget(const _SpinnerApp());
+      Timer(const Duration(seconds: 3), () => fired.add('the flight ends'));
+      // Both halves. A bounded policy never sees a quiet frame on a screen
+      // that animates indefinitely, so it spends its whole budget — and a
+      // spent budget under fake time is a clock that moved. A `screen` left
+      // on the scenario's policy would run the thing being photographed to
+      // completion, exactly as any other verb written here would.
+      await s.tap('Start', settle: Settle.none);
+      await s.screen('Mid-flight', settle: Settle.none);
+      expect(fired, isEmpty);
+      await s.wait(const Duration(seconds: 3));
+      expect(fired, ['the flight ends']);
+    });
+    // And the name still lands on the tap's frame rather than on a second
+    // picture of it: the frame count cannot promise a spinner held still, but
+    // the bytes of a pump that moved no clock can.
+    tearDown(() {
+      expect(shape(), ['pumpWidget', 'Mid-flight', 'wait']);
+      expect(captures[1].verb, 'tap');
+    });
+  });
+
   group('a branch’s first screen', () {
     scenario('does not put its name on the step before the fork', (s) async {
       await s.pumpWidget(const _App());
