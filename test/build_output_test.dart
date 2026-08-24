@@ -277,6 +277,36 @@ void main() {
     );
   });
 
+  group('a failure whose message contains no fix gets one', () {
+    test('stale hook kernels name the cache and the command', () {
+      var directory = Directory.systemTemp.createTempSync('fw_log');
+      addTearDown(() => directory.deleteSync(recursive: true));
+      // What a consumer met after an SDK bump: the surfaced error names
+      // neither the cache nor the bump that invalidated it.
+      var log = File('${directory.path}/build.log')
+        ..writeAsStringSync(
+          "Can't load Kernel binary: Invalid kernel binary format version "
+          '(expected 139, found 138).\n'
+          '  Building assets for package:sqlite3 failed.\n'
+          'Error: Running build hooks failed.\n',
+        );
+
+      var err = StringBuffer();
+      describeFailure(
+        err,
+        'could not resolve the flutterware app.',
+        ProcessLog(1, log),
+      );
+
+      expect(err.toString(), contains('rm -rf .dart_tool/hooks_runner'));
+      expect(err.toString(), contains('a different Dart SDK'));
+    });
+
+    test('an ordinary failure is left to speak for itself', () {
+      expect(recogniseFailure(const ['Error: it broke']), isNull);
+    });
+  });
+
   test('describeFailure gives both the evidence and where the rest is', () {
     var directory = Directory.systemTemp.createTempSync('fw_log');
     addTearDown(() => directory.deleteSync(recursive: true));

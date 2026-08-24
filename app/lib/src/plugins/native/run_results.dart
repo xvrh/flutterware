@@ -859,6 +859,7 @@ class RunActResult implements PluginResult, ProducesArtifacts {
     this.layer,
     this.coordinateSpace,
     this.screenshotScale,
+    this.screenshotOrigin,
     this.nativeTree,
     this.reconciled,
   });
@@ -1025,6 +1026,15 @@ class RunActResult implements PluginResult, ProducesArtifacts {
   /// Divide a point read off the picture by this before passing it to
   /// `{"at": …}`.
   final double? screenshotScale;
+
+  /// Native steps only, and only when the picture is a crop: where its
+  /// top-left corner sits, as `x,y` in [coordinateSpace].
+  ///
+  /// macOS photographs this app's own windows rather than the desktop, so the
+  /// picture starts where they do. Add this to a point read off it — after
+  /// dividing by [screenshotScale] — to get a coordinate `{"at": …}` speaks.
+  /// Absent means the picture and the tree share an origin.
+  final String? screenshotOrigin;
 
   /// Native steps only, and only when asked for: the platform's view tree.
   final Map<String, Object?>? nativeTree;

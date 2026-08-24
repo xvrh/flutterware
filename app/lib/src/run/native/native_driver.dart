@@ -93,6 +93,7 @@ class NativeObservation {
     required this.root,
     this.screenshot,
     this.screenshotScale,
+    this.screenshotOrigin,
     this.note,
   });
 
@@ -113,6 +114,16 @@ class NativeObservation {
   /// passing it to `{"at": …}` — the trap the capture work already paid for
   /// once.
   final double? screenshotScale;
+
+  /// Where the picture's top-left corner sits in [coordinateSpace], when the
+  /// capture is a crop rather than the whole screen.
+  ///
+  /// Null means the picture starts at the origin the tree's coordinates do, so
+  /// dividing by [screenshotScale] is the whole translation. macOS crops to
+  /// the app's own windows — the desktop around them is other people's
+  /// business — and a crop moves the origin, which is a silent off-by-a-window
+  /// unless it is stated.
+  final NativeBounds? screenshotOrigin;
 
   /// Anything true about this observation that the tree cannot say — "the
   /// Flutter layer is invisible here", "the app is backgrounded".
@@ -159,6 +170,8 @@ class NativeObservation {
     'platform': platform,
     'coordinateSpace': coordinateSpace,
     if (screenshotScale != null) 'screenshotScale': screenshotScale,
+    if (screenshotOrigin != null)
+      'screenshotOrigin': screenshotOrigin!.toJson(),
     if (note != null) 'note': note,
     'root': root.toJson(),
   };

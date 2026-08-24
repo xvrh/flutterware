@@ -250,9 +250,35 @@ class ProcessLog {
 void describeFailure(StringSink err, String message, ProcessLog log) {
   err.writeln('fw: $message');
   if (log.file case var file?) {
-    for (var line in log.tail()) {
+    var tail = log.tail();
+    for (var line in tail) {
       err.writeln('  $line');
+    }
+    if (recogniseFailure(tail) case var hint?) {
+      err.writeln('  $hint');
     }
     err.writeln('  full log: ${file.path}');
   }
+}
+
+/// A fix for a failure whose message does not contain one, or null.
+///
+/// One entry so far and no framework around it: a list of patterns earns its
+/// keep when there is a second thing to put in it.
+///
+/// This can only speak for a process *flutterware* spawned. The same stale
+/// cache breaks `dart run flutterware` itself, and that one dies before a line
+/// of this package runs — nothing here can reach it.
+String? recogniseFailure(List<String> lines) {
+  // A build hook is compiled by the SDK that ran it and cached; the next SDK
+  // rejects its own cache's kernels and the surfaced error — "Running build
+  // hooks failed" — names neither the cache nor the SDK bump that invalidated
+  // it. Cost a consumer a few minutes the first time.
+  var stale = lines.any(
+    (line) => line.contains('Invalid kernel binary format version'),
+  );
+  if (!stale) return null;
+  return 'Those kernels were compiled by a different Dart SDK. Delete the '
+      'hook cache and resolve again: '
+      '`rm -rf .dart_tool/hooks_runner && dart pub get`.';
 }

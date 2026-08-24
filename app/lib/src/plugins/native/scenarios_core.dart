@@ -8,6 +8,8 @@ import 'package:flutterware/plugins.dart';
 import 'package:flutterware/app_events.dart' show AppChannel, AppEvent;
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/scenarios/selector.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
@@ -635,7 +637,8 @@ class ScenariosCore extends PluginCore {
               required: false,
               description:
                   'Run only this scenario file, package-relative — as `list` '
-                  'reports it',
+                  'reports it. A directory runs everything under it, which is '
+                  'the unit the folder profiles are declared in',
             ),
             const ActionParameter(
               'scenario',
@@ -774,8 +777,13 @@ class ScenariosCore extends PluginCore {
                   'arrives without asking: `failing` (default) is the frame '
                   'each red scenario died on, `all` is every step of every '
                   'scenario — a matrix suite is hundreds — and `none` is the '
-                  'summary alone. Every scenario reports its `stepCount` '
-                  'whatever this says.',
+                  'summary alone, which is the answer to "did it pass". '
+                  'Every scenario reports its `stepCount` whatever this says, '
+                  'and `stepsElided` says how many of them are in the file '
+                  'rather than here. Anything but `all` also leaves the '
+                  "scenario's translation reads on disk: a suite with a "
+                  'catalog registered spends more of the answer on those than '
+                  'on everything else together.',
               options: [
                 ActionOption('failing'),
                 ActionOption('all'),
@@ -1170,7 +1178,8 @@ class ScenariosCore extends PluginCore {
               required: false,
               description:
                   'Export only this scenario file, package-relative — as '
-                  '`list` reports it',
+                  '`list` reports it. A directory exports everything under '
+                  'it',
             ),
             const ActionParameter(
               'scenario',
@@ -1400,7 +1409,9 @@ class ScenariosCore extends PluginCore {
               'File',
               kind: ActionParameterKind.string,
               required: false,
-              description: 'Only this scenario file, package-relative',
+              description:
+                  'Only this scenario file, package-relative — or a directory, '
+                  'for everything under it',
             ),
           ],
         ),
@@ -2527,7 +2538,7 @@ class ScenariosCore extends PluginCore {
     if (scenarios == null) return null;
     if (scenario != null) return 1;
     if (file == null) return scenarios.length;
-    return scenarios.where((ref) => ref.file == file).length;
+    return scenarios.where((ref) => selectsFile(file, ref.file)).length;
   }
 
   /// Runs scenarios in the runner's `flutter_tester`.
@@ -3104,14 +3115,39 @@ class ScenariosCore extends PluginCore {
       return 'Nothing carries the tag "$tag". A scenario declares its tags as '
           "`scenario('…', tags: ['$tag'], (s) async { … })`.";
     }
-    var inFile = result.scenarios.where((ref) => ref.file == file).toList();
+    var inFile = result.scenarios
+        .where((ref) => selectsFile(file!, ref.file))
+        .toList();
     if (scenario != null && inFile.isNotEmpty) {
       return 'No scenario "$scenario" in $file. It declares: '
           '${inFile.map((ref) => '"${ref.name}"').join(', ')}.';
     }
     var files = {for (var ref in result.scenarios) ref.file};
-    return 'No scenarios in "$file". This package declares them in: '
-        '${files.join(', ')}.';
+    // A selector naming a directory that exists and declares nothing is a
+    // different mistake from one naming a path that is not there, and the
+    // old message told both of them the same thing: here is every file in
+    // the package, forty-odd paths of it. It reads as "your directory is
+    // invalid" when the directory is fine and simply empty.
+    var directory = file!.endsWith('/')
+        ? file.substring(0, file.length - 1)
+        : file;
+    var isDirectory = Directory(
+      p.join(host.workspace.packageFor(path).directory.path, directory),
+    ).existsSync();
+    if (isDirectory) {
+      var siblings = {
+        for (var declared in files)
+          if (p.isWithin(p.dirname(directory), declared))
+            p.split(p.relative(declared, from: p.dirname(directory))).first,
+      };
+      return 'No scenarios under "$file". The directory is there and declares '
+          'none — nothing below it calls `scenario(…)`'
+          '${siblings.isEmpty ? '' : ', where its siblings do: '
+                    '${(siblings.toList()..sort()).join(', ')}'}.';
+    }
+    return 'No scenarios in "$file" — and no such file or directory in this '
+        'package, which declares them in: ${files.join(', ')}. `file` takes a '
+        'directory too, and runs everything under it.';
   }
 
   static String _describeSelector(String? file, String? scenario, String? tag) {
