@@ -2888,6 +2888,12 @@ final resultShapes = <String, ResultShape>{
         'doc': 'Native steps only: how many screenshot pixels one coordinate unit is.',
       },
       <String, Object?>{
+        'name': 'screenshotOrigin',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Native steps only, and only when the picture is a crop: where its top-left corner sits, as `x,y` in [coordinateSpace].',
+      },
+      <String, Object?>{
         'name': 'nativeTree',
         'type': 'Map<String, Object?>',
         'optional': true,
@@ -4772,6 +4778,12 @@ final resultShapes = <String, ResultShape>{
         'doc': 'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
       },
       <String, Object?>{
+        'name': 'stepsElided',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many of [stepCount]\'s steps are on disk rather than in this copy — zero when [steps] is the whole of them, which is what `run.json` and a `steps: all` request both hold.',
+      },
+      <String, Object?>{
         'name': 'errors',
         'type': 'List<ScenarioRunError>',
         'optional': true,
@@ -5116,6 +5128,12 @@ final resultShapes = <String, ResultShape>{
               'name': 'unchangedCount',
               'type': 'int',
               'doc': 'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
+            },
+            <String, Object?>{
+              'name': 'stepsElided',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How many of [stepCount]\'s steps are on disk rather than in this copy — zero when [steps] is the whole of them, which is what `run.json` and a `steps: all` request both hold.',
             },
             <String, Object?>{
               'name': 'errors',
@@ -5501,6 +5519,12 @@ final resultShapes = <String, ResultShape>{
                     'name': 'unchangedCount',
                     'type': 'int',
                     'doc': 'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
+                  },
+                  <String, Object?>{
+                    'name': 'stepsElided',
+                    'type': 'int',
+                    'optional': true,
+                    'doc': 'How many of [stepCount]\'s steps are on disk rather than in this copy — zero when [steps] is the whole of them, which is what `run.json` and a `steps: all` request both hold.',
                   },
                   <String, Object?>{
                     'name': 'errors',

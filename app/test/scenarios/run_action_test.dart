@@ -138,6 +138,51 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
       );
     });
 
+    test('a directory that is there and declares nothing says that', () async {
+      // The old message answered this with every declaring file in the
+      // package — forty-odd paths on a real suite — which reads as "your
+      // directory is invalid" when the directory is fine and simply empty.
+      writeScenarios('desktop/order_test.dart', ['Place an order']);
+      Directory(p.join(root.path, 'test', 'scenarios', 'checkout'))
+          .createSync(recursive: true);
+
+      var result = await run(
+        core(_FakeRunner(matches: false)),
+        file: 'test/scenarios/checkout',
+      );
+
+      expect(result.ok, isFalse);
+      var error = result.packages.single.error!;
+      expect(error, contains('No scenarios under "test/scenarios/checkout"'));
+      expect(error, contains('declares none'));
+      // Its siblings, so the reader can see which folder they meant — not
+      // every file in the package.
+      expect(error, contains('desktop'));
+      expect(error, isNot(contains('case_test.dart')));
+    });
+
+    test(
+      'a path that is not there says so, and teaches the directory form',
+      () async {
+        writeScenarios('shop_test.dart', ['Around the shop']);
+
+        var result = await run(
+          core(_FakeRunner(matches: false)),
+          file: 'test/scenarios/checkout',
+        );
+
+        expect(result.ok, isFalse);
+        expect(
+          result.packages.single.error,
+          allOf(
+            contains('no such file or directory'),
+            contains('test/scenarios/shop_test.dart'),
+            contains('takes a directory too'),
+          ),
+        );
+      },
+    );
+
     test('hands back the authoring hint when there are none at all', () async {
       var result = await run(
         core(_FakeRunner(matches: false)),
@@ -233,6 +278,68 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
           ),
         ),
       );
+    });
+
+    test('the elided steps are counted, so no count stands alone', () async {
+      // `stepCount: 5, steps: []` and nothing else reads as "this run
+      // captured nothing", and an agent goes looking for a failure that is
+      // not there — reported by a consumer who read exactly that. The
+      // difference between the two numbers is stated rather than left to be
+      // inferred.
+      var green = await run(core(_FakeRunner(steps: 5)));
+      expect(green.packages.single.scenarios.single.stepsElided, 5);
+
+      var red = await run(core(_FakeRunner(ok: false, steps: 5)));
+      expect(red.packages.single.scenarios.single.stepsElided, 4);
+    });
+
+    test('nothing elided says nothing', () async {
+      var whole = await run(core(_FakeRunner(steps: 5)), steps: 'all');
+      var outcome = whole.packages.single.scenarios.single;
+      expect(outcome.stepsElided, 0);
+      expect(outcome.toJson().containsKey('stepsElided'), isFalse);
+    });
+
+    test('the translation reads stay in the file, not in the answer', () async {
+      // The largest thing in a summarised answer on any suite with a catalog
+      // registered, and read by nothing that summarises: the translations
+      // plugin asks for every step, so it never comes through here.
+      var runner = _FakeRunner(
+        steps: 5,
+        translations: const {
+          'shop': {'title': 'Brewline', 'total': 'Total'},
+        },
+      );
+      var result = await run(core(runner));
+
+      var outcome = result.packages.single.scenarios.single;
+      expect(outcome.translations, isNull);
+
+      var whole = ScenarioRunResult.fromJson(
+        jsonDecode(File(result.packages.single.report!).readAsStringSync())
+            as Map<String, dynamic>,
+      );
+      expect(whole.packages.single.scenarios.single.translations, {
+        'shop': {'title': 'Brewline', 'total': 'Total'},
+      });
+    });
+
+    test('steps: all keeps them, which is what the survey reads', () async {
+      var result = await run(
+        core(
+          _FakeRunner(
+            steps: 2,
+            translations: const {
+              'shop': {'title': 'Brewline'},
+            },
+          ),
+        ),
+        steps: 'all',
+      );
+
+      expect(result.packages.single.scenarios.single.translations, {
+        'shop': {'title': 'Brewline'},
+      });
     });
 
     test('stalled steps are counted in the summary, and flagged', () async {
@@ -433,6 +540,7 @@ class _FakeRunner extends ScenarioRunner {
     this.matches = true,
     this.steps = 0,
     this.unchangedSteps = const {},
+    this.translations,
   }) : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
 
   final bool ok;
@@ -445,6 +553,11 @@ class _FakeRunner extends ScenarioRunner {
   /// The indices the harness flagged as `unchanged` — verbs that acted and
   /// changed nothing on screen.
   final Set<int> unchangedSteps;
+
+  /// Every key the scenario's catalogs were asked for. Bounded by the catalog
+  /// rather than by the run, which is what makes it the largest thing in a
+  /// summarised answer on a real suite.
+  final Map<String, Map<String, String>>? translations;
 
   /// False stands for the harness running the suite and finding nothing the
   /// selector named — what a misspelling actually produces.
@@ -511,6 +624,7 @@ class _FakeRunner extends ScenarioRunner {
           'errors': [
             if (!ok) {'error': 'expected 2, found 1'},
           ],
+          if (translations != null) 'translations': translations,
         },
       ],
     };

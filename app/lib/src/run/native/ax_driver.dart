@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../../constants.dart';
@@ -147,12 +149,19 @@ class AxNativeDriver extends NativeDriver {
       role: 'application',
       children: [for (var tree in roots) _node(tree)],
     );
+    _windows = windowSpanOf(root.children);
+    var picture = screenshot ? await _screenshot() : null;
     return NativeObservation(
       platform: platform,
       coordinateSpace: coordinateSpace,
       root: root,
-      screenshot: screenshot ? await _screenshot() : null,
+      screenshot: picture,
       screenshotScale: _scale,
+      // Only where the picture is a crop. The simulator photographs the whole
+      // simulated display, which starts where the tree's coordinates do.
+      screenshotOrigin: simulatorUdid == null && picture != null
+          ? _windows
+          : null,
       note: platform == 'macos'
           ? 'On macOS this layer is for native chrome — menus, dialogs, save '
                 "panels, other applications. A Flutter app's own widgets "
@@ -162,9 +171,56 @@ class AxNativeDriver extends NativeDriver {
                 '— address the app by dropping `layer`. '
                 'Some apps do publish (an assistive client or VoiceOver '
                 'turned it on for that process); if you see Flutter content '
-                'below, it is real and you can use it.'
+                'below, it is real and you can use it. '
+                '${_pictureSentence(wanted: screenshot, got: picture != null)}'
           : null,
     );
+  }
+
+  /// What the reply says about the picture's scope, which on macOS is the
+  /// app's own windows rather than the screen they sit on.
+  static String _pictureSentence({required bool wanted, required bool got}) {
+    if (!wanted) return "The picture is this app's own windows.";
+    return got
+        ? "The picture is this app's own windows, not the desktop around them."
+        : 'There is no picture: this app has no window on screen to '
+              'photograph, and the desktop behind it is not this layer to '
+              'show.';
+  }
+
+  /// `screencapture -R`'s rectangle: `x,y,w,h` in the same top-left-origin
+  /// points the accessibility API reports, so nothing needs translating.
+  static String _rectArgument(NativeBounds box) =>
+      '${box.left.round()},${box.top.round()},'
+      '${box.width.round()},${box.height.round()}';
+
+  /// The rectangle this app's windows occupy, as of the last walk — what the
+  /// picture is cropped to, and what a point is checked against.
+  ///
+  /// Null when the walk found no window with a frame, which is the one case
+  /// where there is nothing of this app to photograph.
+  NativeBounds? _windows;
+
+  /// The smallest rectangle covering every one of [nodes] that has a frame.
+  ///
+  /// Null when none of them has one — the case the picture refuses on, rather
+  /// than widening to the desktop.
+  @visibleForTesting
+  static NativeBounds? windowSpanOf(List<NativeNode> nodes) {
+    NativeBounds? span;
+    for (var node in nodes) {
+      var box = node.bounds;
+      if (box == null) continue;
+      span = span == null
+          ? box
+          : NativeBounds(
+              math.min(span.left, box.left),
+              math.min(span.top, box.top),
+              math.max(span.right, box.right),
+              math.max(span.bottom, box.bottom),
+            );
+    }
+    return span;
   }
 
   NativeNode _node(Map<String, Object?> json) {
@@ -230,17 +286,38 @@ class AxNativeDriver extends NativeDriver {
         file.deleteSync();
         return bytes;
       }
-      // The whole screen on macOS, deliberately: this layer's macOS brief is
-      // native chrome, and a save panel or a permission alert is its own
-      // window — cropping to the app's would photograph everything except the
-      // thing the agent came here to see. `-x` silences the shutter.
+      // On macOS, this app's own windows and nothing else.
+      //
+      // The walk has been scoped that way from the start — "the tree includes
+      // the host's own menu bar, the user's recent documents among it, which
+      // is both noise in every reply and other people's business in an
+      // agent's context" — and the picture simply never was. It photographed
+      // the whole desktop, which on a real machine is other applications'
+      // windows, and it went straight into an agent transcript: reported by a
+      // consumer whose transcript ended up holding unrelated chat content and
+      // a video player.
+      //
+      // The span of the windows rather than one of them, so a save panel or a
+      // permission alert — the reason anyone comes to this layer — is in the
+      // frame beside the window it belongs to. No window with a frame means
+      // there is nothing of this app to photograph, and *that* is the case
+      // the old code answered with the desktop.
+      var within = _windows;
+      if (within == null || within.isEmpty) return null;
       var file = File(
         p.join(
           Directory.systemTemp.path,
           'flutterware-native-${DateTime.now().microsecondsSinceEpoch}.png',
         ),
       );
-      var result = await Process.run('screencapture', ['-x', file.path]);
+      // `-R` takes the same top-left-origin points the accessibility API
+      // reports, so the rect needs no translation. `-x` silences the shutter.
+      var result = await Process.run('screencapture', [
+        '-x',
+        '-R',
+        _rectArgument(within),
+        file.path,
+      ]);
       if (result.exitCode != 0 || !file.existsSync()) return null;
       var bytes = file.readAsBytesSync();
       file.deleteSync();

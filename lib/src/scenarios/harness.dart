@@ -26,6 +26,7 @@ import 'fonts.dart';
 import 'motion.dart';
 import 'notification.dart';
 import 'profile.dart';
+import 'selector.dart';
 import 'report.dart';
 import 'run_args.dart';
 import 'scenario.dart';
@@ -645,7 +646,7 @@ Future<Map<String, Object?>> _run(
       ? scenarioMains
       : {
           for (var entry in scenarioMains.entries)
-            if (entry.key == file) entry.key: entry.value,
+            if (selectsFile(file, entry.key)) entry.key: entry.value,
         };
   var declared = _declare(mains, shots: shots, keyboards: keyboards);
   var root = declared.root;

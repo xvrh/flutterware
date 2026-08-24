@@ -29,6 +29,19 @@ void main() {
     );
   });
 
+  // The target a painted surface is driven by, and the one an agent reading
+  // the schema used to conclude was native-only. `item: N` becomes this too,
+  // so a regression here takes every numbered tap with it.
+  test('a point is a target on this layer, not only on the native one', () {
+    expect(
+      '${wireTarget('{"at": {"x": 339, "y": 542}}')}',
+      '${Target.at(339, 542)}',
+    );
+    // Whole numbers arrive as ints over the wire and still have to land as a
+    // point: `num` rather than `double` in the pattern is what makes that so.
+    expect(wireTarget('{"at": {"x": 12, "y": 8}}'), isA<Target>());
+  });
+
   test('within and nth compose, recursively', () {
     var within = wireTarget(
       '{"within": {"scope": {"key": "card"}, "child": "Buy"}}',

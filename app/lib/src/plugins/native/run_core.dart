@@ -1095,13 +1095,16 @@ class RunCore extends PluginCore {
                   'What to act on. Bare text matches a visible string; JSON '
                   'names the rest: {"key": …}, {"label": …}, {"tooltip": …}, '
                   '{"containing": …}, {"within": {"scope": …, "child": …}}, '
-                  '{"nth": {"target": …, "index": …}}. Resolved inside the '
-                  'app at act time, and refused loudly on zero or several '
-                  'matches — never a silent wrong-target tap. A reply text '
-                  'ending in … was truncated: target it with '
-                  '{"containing": <prefix>}. On layer: native the grammar is '
-                  'the same minus key/tooltip/within, plus {"role": …} and '
-                  '{"at": {"x": …, "y": …}} for a point no element covers.',
+                  '{"nth": {"target": …, "index": …}}, {"at": {"x": …, '
+                  '"y": …}}. Resolved inside the app at act time, and refused '
+                  'loudly on zero or several matches — never a silent '
+                  'wrong-target tap. A reply text ending in … was truncated: '
+                  'target it with {"containing": <prefix>}. {"at"} is a hit '
+                  'test at that point, in logical pixels, taking the '
+                  'innermost widget under it — how a painted surface is '
+                  'driven when its zones share one box. On layer: native the '
+                  'grammar is the same minus key/tooltip/within, plus '
+                  '{"role": …}, and {"at"} is a screen coordinate there.',
             ),
             const ActionParameter(
               'text',
@@ -4368,11 +4371,20 @@ class RunCore extends PluginCore {
   /// passing it straight to `{"at": …}` would tap at half the intended place.
   /// Stating the factor is cheaper than a class of silent misses.
   static String _nativeNote(NativeObservation observation) {
+    var origin = observation.screenshotOrigin;
+    // The crop moved the origin, so the translation is two steps rather than
+    // one — and an unstated second step is exactly the silent miss the first
+    // one was written to prevent.
+    var cropped = origin == null
+        ? '.'
+        : ', then add its origin ${origin.left.round()},'
+              '${origin.top.round()}: the picture is cropped to this app'
+              "'s windows and starts there.";
     var picture =
         'This screenshot is the real device screen, not a raster of the '
         'Flutter layer. Coordinates are ${observation.coordinateSpace} and '
         'the picture is ${observation.screenshotScale ?? 1}× that, so divide '
-        'before passing a point you read off it to {"at": …}.';
+        'before passing a point you read off it to {"at": …}$cropped';
     return [
       picture,
       ?observation.note,
@@ -4481,6 +4493,10 @@ class RunCore extends PluginCore {
       elapsedMs: step?.elapsedMs,
       coordinateSpace: observation?.coordinateSpace,
       screenshotScale: observation?.screenshotScale,
+      screenshotOrigin: switch (observation?.screenshotOrigin) {
+        var origin? => '${origin.left.round()},${origin.top.round()}',
+        _ => null,
+      },
       texts: observation?.texts,
       nativeTree: wantsTree ? observation?.root.toJson() : null,
       nodes: observation?.nodes.length,

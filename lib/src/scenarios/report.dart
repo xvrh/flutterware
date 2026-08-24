@@ -268,6 +268,7 @@ class ScenarioRunOutcome {
       ),
       errors: _listOf(json['errors'], ScenarioRunError.fromJson),
       translations: _translationsOrNull(json['translations']),
+      stepsElided: _int(json['stepsElided'], 0),
     );
   }
 
@@ -284,6 +285,7 @@ class ScenarioRunOutcome {
     this.unchangedCount = 0,
     this.errors = const [],
     this.translations,
+    this.stepsElided = 0,
   });
 
   final String file;
@@ -347,7 +349,20 @@ class ScenarioRunOutcome {
   /// product never asks for it".
   final Map<String, Map<String, String>>? translations;
 
-  /// This outcome with [keep] of its steps; the rest are on disk.
+  /// How many of [stepCount]'s steps are on disk rather than in this copy —
+  /// zero when [steps] is the whole of them, which is what `run.json` and a
+  /// `steps: all` request both hold.
+  ///
+  /// The field exists so `stepCount` and `steps.length` can never disagree
+  /// silently: the difference is either zero or stated.
+  final int stepsElided;
+
+  /// This outcome with [keep] in place of its steps, and nothing else
+  /// changed.
+  ///
+  /// Not a trim by itself: the run description passes every step back through
+  /// here to re-point it at where its artifacts actually landed. [stepsElided]
+  /// falls out of the arithmetic, and is zero for that caller.
   ScenarioRunOutcome carrying(List<ScenarioRunStep> keep) => ScenarioRunOutcome(
     file: file,
     name: name,
@@ -361,15 +376,48 @@ class ScenarioRunOutcome {
     unchangedCount: unchangedCount,
     errors: errors,
     translations: translations,
+    stepsElided: stepCount - keep.length,
   );
 
+  /// This outcome as an *answer* carries it: [keep] of its steps, and the
+  /// bulk left in the `run.json` its package names.
+  ///
+  /// Two things stay behind, and they stay together because they are in the
+  /// same file — written whole, before anything here is trimmed. The steps
+  /// beyond [keep], and [translations], which is every key every catalog was
+  /// asked for: bounded by the catalog rather than by the run, and on a real
+  /// suite with one registered it is the largest thing in the answer by a
+  /// long way. Only the translations plugin reads them, and it asks for every
+  /// step, so it never comes through here.
+  ///
+  /// What is left says so. An outcome reading `stepCount: 27, steps: []` with
+  /// nothing else to go on reads as a run that captured nothing, and an agent
+  /// goes looking for a failure that is not there — reported by a consumer
+  /// who read exactly that. [stepsElided] is the difference, and it is
+  /// present whenever there is one.
+  ScenarioRunOutcome summarised(List<ScenarioRunStep> keep) =>
+      ScenarioRunOutcome(
+        file: file,
+        name: name,
+        ok: ok,
+        skipped: skipped,
+        skipReason: skipReason,
+        device: device,
+        ms: ms,
+        steps: keep,
+        stepCount: stepCount,
+        unchangedCount: unchangedCount,
+        errors: errors,
+        stepsElided: stepCount - keep.length,
+      );
+
   /// This outcome with its steps left on disk.
-  ScenarioRunOutcome withoutSteps() => carrying(const []);
+  ScenarioRunOutcome withoutSteps() => summarised(const []);
 
   /// This outcome carrying only the frame the failure was captured at — the
   /// last one, per [errors]. The trail that led there is in the file.
   ScenarioRunOutcome withFailingStepOnly() =>
-      steps.isEmpty ? this : carrying([steps.last]);
+      summarised(steps.isEmpty ? const [] : [steps.last]);
 
   Map<String, Object?> toJson() => {
     'file': file,
@@ -386,6 +434,7 @@ class ScenarioRunOutcome {
     'steps': steps,
     'stepCount': stepCount,
     'unchangedCount': unchangedCount,
+    if (stepsElided > 0) 'stepsElided': stepsElided,
     if (errors.isNotEmpty) 'errors': errors,
     if (translations != null) 'translations': translations,
   };

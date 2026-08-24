@@ -231,6 +231,7 @@ Map<String, dynamic> _$RunActResultToJson(RunActResult instance) =>
       'layer': ?instance.layer,
       'coordinateSpace': ?instance.coordinateSpace,
       'screenshotScale': ?instance.screenshotScale,
+      'screenshotOrigin': ?instance.screenshotOrigin,
       'nativeTree': ?instance.nativeTree,
       'reconciled': ?instance.reconciled,
     };

@@ -822,12 +822,18 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               'Bare text matches a visible string. JSON names the rest: '
               '{"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, '
               '{"within": {"scope": …, "child": …}}, '
-              '{"nth": {"target": …, "index": …}}. A reply text ending in … '
-              'was truncated — target it with {"containing": <prefix>}, not '
-              'the truncated string. On layer: native the same grammar minus '
-              'key/tooltip/within, plus {"role": …} and {"at": {"x": …, '
-              '"y": …}} for a point no element covers — divide a point read '
-              "off the screenshot by the reply's screenshotScale first.",
+              '{"nth": {"target": …, "index": …}}, {"at": {"x": …, "y": …}}. '
+              'A reply text ending in … was truncated — target it with '
+              '{"containing": <prefix>}, not the truncated string. {"at"} is '
+              'a hit test at that point, in the same logical pixels every box '
+              'in this reply uses, and it takes the innermost widget under it '
+              '— which is how a canvas is driven at all: an SVG map, a chart, '
+              'a signature pad, anything whose zones are painted rather than '
+              'laid out, where every widget shares one box and `item` can '
+              'only ever reach its centre. On layer: native the same grammar '
+              'minus key/tooltip/within, plus {"role": …}, and there {"at"} '
+              'is a screen coordinate — divide a point read off that '
+              "screenshot by the reply's screenshotScale first.",
         ),
         'text': Schema.string(
           description: 'What enterText types, as one editing value.',

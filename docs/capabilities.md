@@ -104,7 +104,7 @@ One transaction against the running app — the loop tool for live work: edit co
 |---|---|---|
 | `verb` | yes | tap \| doubleTap \| longPress \| secondaryTap \| hover \| unhover \| drag \| scroll \| scrollTo \| enterText \| key \| back \| wait \| observe \| navigate. observe is the act-less transaction — the opening move, and the call after a reload. doubleTap taps twice with a real gap between (a recognizer reads two taps closer than 40ms as one), and secondaryTap right-clicks, which is how a context menu is asked for. The mouse-and-keyboard verbs are what a desktop app needs and a phone does not. hover parks a mouse over a target and holds it there, which is how a tooltip, a hover tint or a control that only appears to a mouse gets onto the screen at all — the tooltip lands in `texts` like any other widget; the pointer stays put until unhover moves it, exactly as a real mouse would. scroll turns the wheel over a target, and a wheel is hit-tested, so it scrolls *that* pane — scrollTo picks a scrollable and walks it, which is the other question. key presses a chord (`keys`), and needs the app to hold focus: a keystroke dispatches from the focused widget upwards, so with nothing focused it misses every Shortcuts binding — tap or enterText something first, and a key that went nowhere says so rather than reporting success. It is for shortcuts and navigation, never for typing: enterText is the verb that types. On layer: native: observe \| tap \| enterText \| foreground. |
 | `layer` | no | Which tree to address. Omit for the app's own widget tree — fast, exact, and where everything Flutter draws lives. "native" addresses the platform's accessibility tree instead: slower (Android ~4s a step, iOS simulator ~0.6s) but it sees what Flutter cannot — permission dialogs and other native popups, the contents of a webview or map, another app the flow jumped to — and its screenshot is the real device screen rather than a raster of the Flutter layer. Two limits worth knowing: on Android the tree is the focused window, so a dialog is fully there but the soft keyboard is not; on macOS it is for native chrome, because a Flutter app usually publishes none of its own widgets to macOS accessibility — some processes do, and then you simply see more. Use verb: foreground here to bring back a suspended iOS app. |
-| `target` | no | Bare text matches a visible string. JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. A reply text ending in … was truncated — target it with {"containing": <prefix>}, not the truncated string. On layer: native the same grammar minus key/tooltip/within, plus {"role": …} and {"at": {"x": …, "y": …}} for a point no element covers — divide a point read off the screenshot by the reply's screenshotScale first. |
+| `target` | no | Bare text matches a visible string. JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}, {"at": {"x": …, "y": …}}. A reply text ending in … was truncated — target it with {"containing": <prefix>}, not the truncated string. {"at"} is a hit test at that point, in the same logical pixels every box in this reply uses, and it takes the innermost widget under it — which is how a canvas is driven at all: an SVG map, a chart, a signature pad, anything whose zones are painted rather than laid out, where every widget shares one box and `item` can only ever reach its centre. On layer: native the same grammar minus key/tooltip/within, plus {"role": …}, and there {"at"} is a screen coordinate — divide a point read off that screenshot by the reply's screenshotScale first. |
 | `text` | no | What enterText types, as one editing value. |
 | `route` | no | For navigate — needs the app to have registered a navigation handler. |
 | `dx` | no | For drag and scroll: horizontal distance, logical px. |
@@ -706,6 +706,7 @@ note: String?
 layer: String?   # Which tree this step addressed — absent for the drive layer, `native` when it went through the platform's own accessibility tree.
 coordinateSpace: String?   # Native steps only: the space [nativeTree]'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.
 screenshotScale: double?   # Native steps only: how many screenshot pixels one coordinate unit is.
+screenshotOrigin: String?   # Native steps only, and only when the picture is a crop: where its top-left corner sits, as `x,y` in [coordinateSpace].
 nativeTree: Map<String, Object?>?   # Native steps only, and only when asked for: the platform's view tree.
 reconciled: int?   # Native steps only: human entries dropped as this step's own echo — the guest cannot tell an injected tap from a finger, so the agent's own tap would otherwise be journaled twice.
 ```
@@ -718,7 +719,7 @@ reconciled: int?   # Native steps only: human entries dropped as this step's own
 | `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `verb` | choice | yes | — | What to do |
 | `layer` | choice | no | flutter | Which tree to address. `flutter` (default) is the app's own widget tree — fast, exact, and where everything Flutter draws lives. `native` is the platform's accessibility tree, reached through adb or the OS: slower (seconds, not milliseconds) and blunter, but it sees what Flutter cannot — permission dialogs and other native popups, the contents of a webview or map, another app the flow jumped to — and its screenshot is the real device screen rather than a raster of the Flutter layer. Reach for it when a drive target is refused for something you can see in the picture but not in the texts, or to bring a suspended iOS app back with verb: foreground. It does observe, tap, enterText (Android) and foreground; drag, scrollTo, back and navigate stay on the drive layer. |
-| `target` | string | no | — | What to act on. Bare text matches a visible string; JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. Resolved inside the app at act time, and refused loudly on zero or several matches — never a silent wrong-target tap. A reply text ending in … was truncated: target it with {"containing": <prefix>}. On layer: native the grammar is the same minus key/tooltip/within, plus {"role": …} and {"at": {"x": …, "y": …}} for a point no element covers. |
+| `target` | string | no | — | What to act on. Bare text matches a visible string; JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}, {"at": {"x": …, "y": …}}. Resolved inside the app at act time, and refused loudly on zero or several matches — never a silent wrong-target tap. A reply text ending in … was truncated: target it with {"containing": <prefix>}. {"at"} is a hit test at that point, in logical pixels, taking the innermost widget under it — how a painted surface is driven when its zones share one box. On layer: native the grammar is the same minus key/tooltip/within, plus {"role": …}, and {"at"} is a screen coordinate there. |
 | `text` | string | no | — | What enterText types, as one editing value |
 | `dx` | string | no | — | For drag and scroll: horizontal distance, logical pixels |
 | `dy` | string | no | — | Vertical distance, and the sign depends on which verb: drag is a finger, so negative moves it up the screen; scroll is a wheel, whose delta is added to the scroll offset, so positive moves *down* the list. Opposite conventions, both the platform's. |
@@ -794,6 +795,7 @@ note: String?
 layer: String?   # Which tree this step addressed — absent for the drive layer, `native` when it went through the platform's own accessibility tree.
 coordinateSpace: String?   # Native steps only: the space [nativeTree]'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.
 screenshotScale: double?   # Native steps only: how many screenshot pixels one coordinate unit is.
+screenshotOrigin: String?   # Native steps only, and only when the picture is a crop: where its top-left corner sits, as `x,y` in [coordinateSpace].
 nativeTree: Map<String, Object?>?   # Native steps only, and only when asked for: the platform's view tree.
 reconciled: int?   # Native steps only: human entries dropped as this step's own echo — the guest cannot tell an injected tap from a finger, so the agent's own tap would otherwise be journaled twice.
 ```
@@ -871,6 +873,7 @@ note: String?
 layer: String?   # Which tree this step addressed — absent for the drive layer, `native` when it went through the platform's own accessibility tree.
 coordinateSpace: String?   # Native steps only: the space [nativeTree]'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.
 screenshotScale: double?   # Native steps only: how many screenshot pixels one coordinate unit is.
+screenshotOrigin: String?   # Native steps only, and only when the picture is a crop: where its top-left corner sits, as `x,y` in [coordinateSpace].
 nativeTree: Map<String, Object?>?   # Native steps only, and only when asked for: the platform's view tree.
 reconciled: int?   # Native steps only: human entries dropped as this step's own echo — the guest cannot tell an injected tap from a finger, so the agent's own tap would otherwise be journaled twice.
 ```
@@ -1385,6 +1388,7 @@ packages: List<ScenarioRunPackage>
       failure: String?   # The error, when this is the step a scenario broke on.
     stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
     unchangedCount: int   # How many of those steps a verb acted for nothing on — pictures byte-identical to their parent's.
+    stepsElided: int?   # How many of [stepCount]'s steps are on disk rather than in this copy — zero when [steps] is the whole of them, which is what `run.json` and a `steps: all` request both hold.
     errors: List<ScenarioRunError>?   # The failure, when [ok] is false.
       error: String
       stack: String?
@@ -1400,7 +1404,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
-| `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it |
+| `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it. A directory runs everything under it, which is the unit the folder profiles are declared in |
 | `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
 | `output` | string | no | — | Where step artifacts are written, worktree-relative unless absolute; a fresh directory under the package's build/ when omitted. run.json lands in the same directory as the images it names. |
 | `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted lets each scenario run as its own folder says — the first device of the profile its `flutter_test_config.dart` declares, or iphone-13 where a folder declares none. `fit` means the bare 800×600 test surface. The same vocabulary Previews frames with. |
@@ -1411,7 +1415,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `orientations` | string | no | — | The third axis — `portrait,landscape`. Crossed with the other two, and overrides `orientation`. A device that cannot turn contributes one point rather than two identical ones, so mixing a desktop into the devices does not double the run. |
 | `matrix` | choice | no | — | `declared` runs every point the folder profiles declare — the union of their devices, languages and orientations, crossed exactly as explicit lists are. What CI wants instead of restating the declaration in `devices=` and watching the two drift. Instead of the axis lists, not beside them. |
 | `tag` | string | no | — | Run only scenarios carrying this tag — the same tag `scenario(tags: [...])` declares and `flutter test --tags` filters on |
-| `steps` | choice | no | failing | How many steps ride back in the answer. Every run writes all of them to `run.json` in its output directory either way and each package names that file — a script reads it back typed with `package:flutterware/scenarios_report.dart` — so this is about what arrives without asking: `failing` (default) is the frame each red scenario died on, `all` is every step of every scenario — a matrix suite is hundreds — and `none` is the summary alone. Every scenario reports its `stepCount` whatever this says. |
+| `steps` | choice | no | failing | How many steps ride back in the answer. Every run writes all of them to `run.json` in its output directory either way and each package names that file — a script reads it back typed with `package:flutterware/scenarios_report.dart` — so this is about what arrives without asking: `failing` (default) is the frame each red scenario died on, `all` is every step of every scenario — a matrix suite is hundreds — and `none` is the summary alone, which is the answer to "did it pass". Every scenario reports its `stepCount` whatever this says, and `stepsElided` says how many of them are in the file rather than here. Anything but `all` also leaves the scenario's translation reads on disk: a suite with a catalog registered spends more of the answer on those than on everything else together. |
 | `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
 | `brightness` | choice | no | — | The platform brightness the app sees |
 | `bold-text` | choice | no | — | The bold-text accessibility switch |
@@ -1504,7 +1508,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
-| `file` | string | no | — | Export only this scenario file, package-relative — as `list` reports it |
+| `file` | string | no | — | Export only this scenario file, package-relative — as `list` reports it. A directory exports everything under it |
 | `scenario` | string | no | — | Export only this scenario, by name. Needs `file` too. |
 | `tag` | string | no | — | Export only scenarios carrying this tag |
 | `output` | string | no | — | Where the page goes, worktree-relative unless absolute; defaults to `build/scenarios/web` under the package. Emptied before writing. |
@@ -1572,7 +1576,7 @@ count: int   # How many images were written, over every package and assignment.
 | `devices` | string | no | — | A comma-separated list — one directory per device. Omitted runs each scenario on its folder profile's first device. |
 | `languages` | string | no | — | A comma-separated list — one directory per language, crossed with `devices` |
 | `tag` | string | no | — | Keep only shots carrying this tag — `Shot('Home', tags: ['store'])`. Omitted keeps every named shot, which is what a project that tags nothing wants. |
-| `file` | string | no | — | Only this scenario file, package-relative |
+| `file` | string | no | — | Only this scenario file, package-relative — or a directory, for everything under it |
 
 #### `restart` — Restart
 

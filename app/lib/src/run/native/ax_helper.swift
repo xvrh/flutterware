@@ -265,6 +265,32 @@ func verify(_ element: AXUIElement, expects expected: String?) {
   }
 }
 
+/// Which process owns the frontmost on-screen window covering [point].
+///
+/// `CGWindowListCopyWindowInfo` lists front to back, so the first hit is what
+/// a click would reach. Bounds and owner pid need no screen-recording grant —
+/// only window *titles* do, and none are read here. Nil when nothing covers
+/// the point, or when the list cannot be had: an unknown owner is not
+/// evidence of a wrong one, and refusing on it would break clicking on a
+/// machine that answers no list.
+func ownerOfWindow(at point: CGPoint) -> pid_t? {
+  guard
+    let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
+      as? [[String: Any]]
+  else { return nil }
+  for window in list {
+    // Negative layers are the desktop and its picture; the cursor and menu
+    // bar sit above. Neither is something a click is aimed at.
+    if let layer = window[kCGWindowLayer as String] as? Int, layer < 0 { continue }
+    guard let bounds = window[kCGWindowBounds as String] as? [String: Any],
+      let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary),
+      rect.contains(point)
+    else { continue }
+    return (window[kCGWindowOwnerPID as String] as? pid_t)
+  }
+  return nil
+}
+
 // MARK: - Commands
 
 let roots = scopedRoots()
@@ -332,6 +358,22 @@ case "click":
   }
   usleep(250_000)
   let point = CGPoint(x: x, y: y)
+  // Raised first, checked after: this posts a real HID event at a screen
+  // coordinate, so a point outside this app lands in whatever else is there —
+  // reported by a consumer whose click went into an unrelated application.
+  // Asked of the window server rather than of the window frames, because the
+  // legitimate targets that are not in the frames are real: a menu the app
+  // opened, a sheet, a popover. All of them are windows this app owns.
+  if let owner = ownerOfWindow(at: point), owner != app.processIdentifier {
+    let other = NSRunningApplication(processIdentifier: owner)?.localizedName
+    fail(
+      "\(Int(x)),\(Int(y)) is not over \(app.localizedName ?? appQuery) — "
+        + (other.map { "\($0) owns the window there" } ?? "another application owns the window there")
+        + ". Nothing was clicked. Coordinates on this layer are screen "
+        + "points; a point read off the screenshot is relative to the "
+        + "picture's own origin, which the reply states.",
+      code: "outsideApp")
+  }
   let move = CGEvent(
     mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point,
     mouseButton: .left)

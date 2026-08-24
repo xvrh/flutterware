@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/native/adb_driver.dart';
+import 'package:flutterware_app/src/run/native/ax_driver.dart';
 import 'package:flutterware_app/src/run/native/native_driver.dart';
 import 'package:flutterware_app/src/run/native/native_session.dart';
 import 'package:path/path.dart' as p;
@@ -328,6 +329,43 @@ void main() {
         reason:
             'this plugin never launches release, so naming one would be a '
             'guess dressed as an answer',
+      );
+    });
+  });
+
+  group('the macOS picture is scoped the way the walk is', () {
+    // The walk has excluded the host's own chrome since it was written — "the
+    // user's recent documents … other people's business in an agent's
+    // context" — and the picture did not: it was `screencapture` of the whole
+    // desktop, and a consumer's transcript ended up holding another
+    // application's windows. What the picture covers is this span.
+    NativeNode window(double x, double y, double w, double h) =>
+        NativeNode(role: 'AXWindow', bounds: NativeBounds(x, y, x + w, y + h));
+
+    test('one window is its own frame', () {
+      var span = AxNativeDriver.windowSpanOf([window(100, 60, 800, 600)]);
+      expect(span!.describe(), '100,60 800x600');
+    });
+
+    test(
+      'a panel beside the window is inside the frame, the desktop is not',
+      () {
+        // The reason the span is the union rather than the front window: a save
+        // panel or a permission alert is its own window, and it is what anyone
+        // came to this layer to see.
+        var span = AxNativeDriver.windowSpanOf([
+          window(100, 60, 400, 300),
+          window(600, 200, 200, 150),
+        ]);
+        expect(span!.describe(), '100,60 700x300');
+      },
+    );
+
+    test('no window with a frame means no picture, never the desktop', () {
+      expect(AxNativeDriver.windowSpanOf([]), isNull);
+      expect(
+        AxNativeDriver.windowSpanOf([NativeNode(role: 'AXApplication')]),
+        isNull,
       );
     });
   });
