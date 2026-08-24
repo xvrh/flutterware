@@ -27,7 +27,41 @@ import 'resolve.dart';
 /// never as overlapping gestures.
 class GuestDrive {
   GuestDrive({Drive? drive, this.inspector, this.humanActions})
-    : drive = drive ?? Drive();
+    : drive = drive ?? Drive() {
+    // The cycle, closed here: the recorder knows when a burst of taps has
+    // ended, and this knows how to photograph a screen and how to do it
+    // without cutting into an agent's transaction.
+    humanActions?.capture = _captureBeat;
+  }
+
+  /// One beat's worth of observation, queued like any other transaction.
+  ///
+  /// Settles first, for the same reason every verb does: the picture wanted is
+  /// the one the tap *produced*, not the frame that happened to be up when the
+  /// finger left. No tree — see [HumanCapture].
+  Future<HumanCapture?> _captureBeat() {
+    var completer = Completer<HumanCapture?>();
+    _queue = _queue.then((_) async {
+      HumanCapture? result;
+      try {
+        if (_hasTree) {
+          // The act-less transaction, exactly as an agent's `observe` is: it
+          // settles and nothing else.
+          await drive.observe();
+          result = HumanCapture(
+            picture: await _screenshot(maxSide: beatMaxSide),
+            texts: drive.visibleTexts(),
+          );
+        }
+      } catch (_) {
+        // Nothing may escape this callback, exactly as in the extension: an
+        // error left in [_queue] wedges every later call, and for a long-lived
+        // app that is forever. A beat losing its picture is the cheap failure.
+      }
+      completer.complete(result);
+    });
+    return completer.future;
+  }
 
   final Drive drive;
 
@@ -43,6 +77,11 @@ class GuestDrive {
   /// own, or a package like router_outlet — sets this to jump straight to a
   /// screen; unset, `navigate` refuses loudly rather than tap-hunting.
   static void Function(String route)? navigator;
+
+  /// What a beat's picture is capped at, against an agent step's 900. A beat
+  /// is scanned in a timeline rather than read for fine print, and the cap
+  /// scales the render, so it bounds the encode and the bytes together.
+  static const beatMaxSide = 640;
 
   var _queue = Future<void>.value();
   var _logCursor = 0;
