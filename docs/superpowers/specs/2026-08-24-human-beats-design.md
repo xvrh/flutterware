@@ -68,7 +68,7 @@ sentence an agent's own step makes.
 | `verb`, `target` | from `HumanAction` — `tap` / `longPress`, named or `at (x, y)` |
 | `screenshot` | yes — PNG, capped by `maxSide` |
 | `texts` | yes |
-| `tree` | **no** |
+| `tree` | **no** — 47 ms of UI thread at 34k elements; see *Measured* |
 | `semantics` | no |
 
 **The tree is deliberately out**, and the archive is the argument rather than
@@ -119,6 +119,50 @@ encoding, so it cuts the encode *and* the bytes together, and `_screenshot`
 takes it today. A beat is for scanning a timeline, not for reading fine print,
 so it should take a smaller cap than an agent step. This is the largest cost
 reduction available and it costs nothing to take.
+
+## Measured, 2026-08-24 — and the risk is not where this spec put it
+
+`test/drive/beat_cost_bench.dart`, JIT under `flutter_tester`, one 2400x1800
+view capped by `maxSide: 900`. Tree size is varied with a non-lazy `Column`,
+because a lazy list builds only what is visible and the tree stops growing.
+
+| elements | inspect tree | tree + json | `visibleTexts` | semantics | `toImage` | PNG | base64 |
+|---|---|---|---|---|---|---|---|
+| 8,732 | 9.9 ms | 13.7 ms | 0.7 ms | 0.5 ms | 2.7 ms | 14.1 ms | 1.0 ms |
+| 34,232 | **46.6 ms** | **63.4 ms** | 3.1 ms | 1.0 ms | 0.7 ms | 10.9 ms | 0.4 ms |
+| 102,232 | **165.3 ms** | **211.2 ms** | 10.5 ms | 3.1 ms | 0.7 ms | 11.3 ms | 0.03 ms |
+
+**The inspect tree walk dominates everything and scales linearly** — about
+1.6 µs per element, pure Dart, on the UI thread. The picture does not scale
+with the tree at all: `maxSide` already bounds it, and PNG sits at ~11 ms for
+~11.8 KB whatever the tree does. That ~11.8 KB is the ~12 KB figure quoted
+above, now confirmed against something other than the example app.
+
+Three consequences, and the first two change the design.
+
+**A beat must not carry the inspect tree, and this is a stronger reason than
+the archive bytes.** The earlier argument here was about ~460 KB of
+`tree.json`. The real argument is 47 ms of UI thread at 34k elements — four
+dropped frames at 60 Hz, seven at 120 Hz — fired *immediately after the user
+taps*, which is the exact moment they are watching for a response. `texts` is
+15x cheaper than the tree for the same screen, because a predicate walk filters
+where `InspectTree` builds an object per node.
+
+**A beat therefore cannot reuse the observe bundle, which this spec assumed it
+could.** `_dispatch` builds the tree unconditionally — *"the guest built this
+tree on every observe already, including calls that asked for no tree at
+all"* — so a beat needs a leaner path beside it: picture, texts, the tap.
+That is new code rather than the pure reuse claimed above, and it is small.
+
+**JIT is the honest number here, not a pessimistic one.** A driven run is a
+debug build, because hot reload needs one. AOT would be faster and is not what
+this runs on.
+
+**What this bench cannot answer:** `flutter_tester` single-threads the engine,
+so it cannot say which of these land on the UI thread on a real device. The
+Dart-side walks certainly do. `toImage` rasters off it, and `toByteData(png)`
+is believed to encode off it — that belief is load-bearing for the ~11 ms and
+**must be confirmed on a device before this ships**.
 
 ## Where a beat lives
 
