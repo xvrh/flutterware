@@ -313,6 +313,16 @@ class ShellController extends ChangeNotifier {
   ///
   /// Built once the main checkout is known, because branch diffs are
   /// repository-wide and their cache is keyed by it.
+  ///
+  /// **Listened to where it is drawn, never forwarded to [notifyListeners].**
+  /// These facts are live by design — an agent appending to its session file
+  /// moves one worktree's "active 3s ago" every couple of seconds, and the
+  /// watchers floor that at one refresh per two seconds *per kind*. Forwarding
+  /// it here made every one of those a whole-window rebuild: measured on this
+  /// app, an idle window with no plugin panel mounted rebuilt the band, the
+  /// rail and the panel about twice a second for a timestamp on a screen that
+  /// was not even on. The three places that draw facts subscribe to this
+  /// directly instead, so a cell that ticks costs the cell.
   WorktreeFactsController? get worktreeFacts => _worktreeFacts;
   WorktreeFactsController? _worktreeFacts;
 
@@ -633,15 +643,13 @@ class ShellController extends ChangeNotifier {
       // reference until it is disposed — so an abandoned one would sit in
       // there for the life of the process, invisible, being asked whether it
       // is busy. `_startWatchingRepo` guards itself for the same reason.
-      _worktreeFacts?.removeListener(notifyListeners);
       _worktreeFacts?.dispose();
       _worktreeFacts =
           (_buildWorktreeFacts ??
-                (root) => WorktreeFactsController(
-                  repoRoot: root,
-                  settle: appContext.settle,
-                ))(main.path)
-            ..addListener(notifyListeners);
+          (root) => WorktreeFactsController(
+            repoRoot: root,
+            settle: appContext.settle,
+          ))(main.path);
       _startWatchingRepo(main.path);
     }
     notifyListeners();
@@ -689,11 +697,46 @@ class ShellController extends ChangeNotifier {
   /// the list current without a watcher.
   Future<void> rescanWorktrees() async {
     if (_worktrees.isEmpty) return;
+    var before = _worktrees;
     _worktrees = await _discovery.discover(_worktrees.first.path);
+    var closed = false;
     for (var path in _open.keys.toList()) {
-      if (_worktreeAt(path) == null) _closeAt(path);
+      if (_worktreeAt(path) == null) {
+        _closeAt(path);
+        closed = true;
+      }
     }
-    notifyListeners();
+    // **A git event is rarely news.** The watch fires for any write under
+    // `.git` — a commit, an index refresh, another window's `git status` — and
+    // is floored at one signal every two seconds, so on a machine with a few
+    // Studios open it arrives more or less continuously. The list it
+    // re-derives is the same list almost every time. Notifying regardless made
+    // each of those a whole-window rebuild, which is what an idle window was
+    // spending 15–40 ms on twice a second.
+    if (closed || !_sameWorktrees(before, _worktrees)) notifyListeners();
+  }
+
+  /// Everything about a worktree the shell itself draws: the tab's name comes
+  /// from [Worktree.title] and [Worktree.branch], the switcher's from the path,
+  /// and `head` is what tells a rescan that a commit landed.
+  ///
+  /// Not `==` on the list. [Worktree] is deliberately equal by path alone —
+  /// that is its identity, and what the open map and `_worktreeAt` key on — so
+  /// a list comparison through it would call a branch switch no change at all.
+  static bool _sameWorktrees(List<Worktree> a, List<Worktree> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      var x = a[i], y = b[i];
+      if (x.path != y.path ||
+          x.gitName != y.gitName ||
+          x.branch != y.branch ||
+          x.head != y.head ||
+          x.isMain != y.isMain ||
+          x.title != y.title) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Opens [worktree] at its home screen: the tab appears immediately, then its
@@ -902,13 +945,19 @@ class ShellController extends ChangeNotifier {
       open.workspace = workspace;
       _checkDeclarations(open, manifest);
 
+      // **Not `..addListener(notifyListeners)`.** A session merges every
+      // plugin's notifier, so forwarding it made any plugin's tick — a health
+      // probe, a compile step, a log line — rebuild the entire window,
+      // including the panels of the eleven plugins that did not move. The rail
+      // is the only part of the shell that reads a plugin's report, and it
+      // subscribes per row; a panel already listens to its own plugin.
       open.session = WorktreeSession.resolve(
         worktree: worktree,
         manifest: manifest,
         registry: registry,
         workspace: workspace,
         coreRegistry: coreRegistry,
-      )..addListener(notifyListeners);
+      );
       return null;
     } catch (e) {
       // Returned rather than only recorded. A caller that logged "opened, 3
@@ -1175,7 +1224,6 @@ class ShellController extends ChangeNotifier {
     unawaited(_watcherEvents?.cancel());
     unawaited(_worktreeWatcher?.dispose());
     unawaited(_gitMoved.close());
-    _worktreeFacts?.removeListener(notifyListeners);
     _worktreeFacts?.dispose();
     _address.dispose();
     super.dispose();
