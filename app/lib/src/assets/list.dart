@@ -6,6 +6,7 @@ import '../ui/matched_text.dart';
 import '../ui/theme.dart';
 import 'model/asset_catalog.dart';
 import 'model/asset_scan.dart';
+import '../ui/tappable.dart';
 
 /// The left half: every key in the bundle, filtered.
 ///
@@ -129,7 +130,9 @@ class _AssetListViewState extends State<AssetListView> {
     if (assets.isEmpty) return const [];
     var open = _expanded.contains(owner.package);
     return [
-      InkWell(
+      // [Tappable]: `_SectionHeader` is a `Container(color: panel2)`, which
+      // covered the ink an [InkWell] painted under it.
+      Tappable(
         onTap: () => setState(() {
           open ? _expanded.remove(owner.package) : _expanded.add(owner.package);
         }),
@@ -466,7 +469,10 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var accent = tone ?? colors.accent;
-    return InkWell(
+    // [Tappable] for the reason the dependencies filter chip gives: the fill
+    // is opaque `panel` when the chip is off, and Material ink paints below
+    // its child, so the hover was covered by the chip itself.
+    return Tappable(
       onTap: onTap,
       borderRadius: BorderRadius.circular(context.radii.radiusLarge),
       child: Container(

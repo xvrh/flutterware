@@ -603,58 +603,58 @@ class _SqlView extends StatelessWidget {
       child: Text(text, style: header, textAlign: TextAlign.right),
     );
 
-    // One region over the list, not one per row: a selection that cannot
-    // cross a row is not a selection of a query. The rows are tap targets, so
-    // each one opts its own text back in — see [Tappable.selectableChild].
-    return SelectionArea(
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
-        children: [
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: gutter,
-              vertical: FwSpacing.xs,
-            ),
-            child: Row(
-              children: [
-                SizedBox(width: 44, child: Text('count', style: header)),
-                Expanded(child: Text('query shape', style: header)),
-                headerCell('total'),
-                if (!narrow) ...[headerCell('avg'), headerCell('max')],
-              ],
+    // **Not selectable, deliberately.** Every row here is a tap target, and a
+    // row that is both shows a text caret over a control that responds to a
+    // click — two affordances on one target, and the caret wins because
+    // Flutter's own text region sits below [Tappable]'s (see its doc comment).
+    // Copying a statement happens in the detail beside this, where the block
+    // has a button for it.
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: gutter,
+            vertical: FwSpacing.xs,
+          ),
+          child: Row(
+            children: [
+              SizedBox(width: 44, child: Text('count', style: header)),
+              Expanded(child: Text('query shape', style: header)),
+              headerCell('total'),
+              if (!narrow) ...[headerCell('avg'), headerCell('max')],
+            ],
+          ),
+        ),
+        Divider(height: 1, color: colors.line),
+        for (var shape in stats)
+          Tappable(
+            onTap: () => AddressScope.write(
+              context,
+            ).setSegments(sqlSegments(server.handle.name, queryKey: shape.key)),
+            child: Container(
+              color: shape.key == selectedKey ? colors.accentSoft : null,
+              padding: EdgeInsets.symmetric(
+                horizontal: gutter,
+                vertical: FwSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 44,
+                    child: Text('${shape.count}×', style: numbers),
+                  ),
+                  Expanded(child: _Sql(shape.normalized)),
+                  number(_ms(shape.totalMs)),
+                  if (!narrow) ...[
+                    number(_ms(shape.averageMs)),
+                    number(_ms(shape.maxMs)),
+                  ],
+                ],
+              ),
             ),
           ),
-          Divider(height: 1, color: colors.line),
-          for (var shape in stats)
-            Tappable(
-              selectableChild: true,
-              onTap: () => AddressScope.write(context).setSegments(
-                sqlSegments(server.handle.name, queryKey: shape.key),
-              ),
-              child: Container(
-                color: shape.key == selectedKey ? colors.accentSoft : null,
-                padding: EdgeInsets.symmetric(
-                  horizontal: gutter,
-                  vertical: FwSpacing.sm,
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 44,
-                      child: Text('${shape.count}×', style: numbers),
-                    ),
-                    Expanded(child: _Sql(shape.normalized)),
-                    number(_ms(shape.totalMs)),
-                    if (!narrow) ...[
-                      number(_ms(shape.averageMs)),
-                      number(_ms(shape.maxMs)),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -2302,13 +2302,15 @@ class _EventTimelineState extends State<_EventTimeline> {
           onSearch: (value) => setState(() => _needle = value),
           count: '${shown.length} of ${widget.events.length}',
         ),
+        // Not selectable, for the reason the SQL list gives: two thirds of
+        // these rows open something, and a caret over a control that responds
+        // to a click is one affordance too many. The per-request Logs tab is
+        // where a log line is selectable, because nothing there is a target.
         Expanded(
-          child: SelectionArea(
-            child: ListView.builder(
-              itemCount: shown.length,
-              itemBuilder: (context, index) =>
-                  _EventRow(server: widget.server, event: shown[index]),
-            ),
+          child: ListView.builder(
+            itemCount: shown.length,
+            itemBuilder: (context, index) =>
+                _EventRow(server: widget.server, event: shown[index]),
           ),
         ),
       ],
@@ -2353,7 +2355,6 @@ class _EventRow extends StatelessWidget {
     var mono = context.type.mono;
     return Tappable(
       onTap: _open(context),
-      selectableChild: true,
       // A log line is not a link, so it must not take the click cursor.
       cursor: _open(context) == null ? SystemMouseCursors.basic : null,
       feedback: _open(context) == null ? TapFeedback.none : TapFeedback.overlay,

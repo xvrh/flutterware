@@ -5,8 +5,9 @@ import 'package:flutterware/channels.dart';
 import 'package:flutterware/channels_ui.dart';
 import 'package:logging/logging.dart';
 
-import '../ui/design/spacing.dart';
 import '../ui/design/tokens.dart';
+import '../inspect/inspect_dock.dart';
+import '../ui/theme.dart';
 import 'channel_client.dart';
 import 'connection.dart';
 import 'database_panel_view.dart';
@@ -233,12 +234,16 @@ class _PanelsTabState extends State<PanelsTab> {
       children: [
         // Only when there is a choice to make: one panel is the ordinary case,
         // and a chooser over a single entry is furniture.
-        if (_descriptors.length > 1)
+        if (_descriptors.length > 1) ...[
           _PanelStrip(
             panels: _descriptors,
             current: current,
             onSelect: (id) => setState(() => _selected = id),
           ),
+          // The rule the hand-rolled strip used to draw itself. [InspectTabStrip]
+          // does not, because its other hosts sit on one already.
+          Divider(height: 1, color: context.colors.line),
+        ],
         Expanded(
           // A database earns a bespoke browser; everything else renders from
           // its descriptor. The `db:` prefix is `DatabasePanelSource.panelId`.
@@ -305,9 +310,14 @@ class _PanelsTabState extends State<PanelsTab> {
   }
 }
 
-/// Which of the app's panels is showing — the dock strip's own idiom, so it
-/// reads as the App tab's second level rather than as widgets from another
-/// design system.
+/// Which of the app's panels is showing.
+///
+/// [InspectTabStrip] rather than a hand-rolled row, which is what this was —
+/// a copy of that widget's anatomy, down to the 34px `Container(color: panel)`
+/// and the 2px accent underline. It inherited the copy's bug with it: a
+/// [Material] paints its ink features *below* its child, so the opaque
+/// container swallowed every hover wash those `InkWell`s asked for, and this
+/// strip answered a pointer with nothing. Measured on the running app.
 class _PanelStrip extends StatelessWidget {
   const _PanelStrip({
     required this.panels,
@@ -321,46 +331,17 @@ class _PanelStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
-      child: Container(
-        height: 34,
-        padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
-        decoration: BoxDecoration(
-          color: context.colors.panel,
-          border: Border(bottom: BorderSide(color: context.colors.line)),
-        ),
-        child: Row(
-          children: [
-            for (var panel in panels)
-              InkWell(
-                onTap: () => onSelect(panel.id),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: panel.id == current
-                            ? context.colors.accent
-                            : Colors.transparent,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  child: Text(
-                    panel.label,
-                    style: context.type.caption.copyWith(
-                      color: panel.id == current
-                          ? context.colors.ink
-                          : context.colors.mut,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
+    return InspectTabStrip(
+      tabs: [
+        for (var panel in panels)
+          InspectDockTab(id: panel.id, label: panel.label, body: _unused),
+      ],
+      current: current,
+      onSelect: onSelect,
     );
   }
+
+  /// The strip reads ids and labels and never builds a body — this tab keeps
+  /// its own panes.
+  static Widget _unused(BuildContext context) => const SizedBox.shrink();
 }

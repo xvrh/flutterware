@@ -21,6 +21,7 @@ import 'model/service.dart';
 import 'upgrades.dart';
 import 'utils.dart';
 import '../ui/error_state.dart';
+import '../ui/tappable.dart';
 
 class DependenciesScreen extends StatefulWidget {
   final DependenciesService dependencies;
@@ -437,7 +438,12 @@ class _KindFilter extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var tone = _kindColor(context, kind);
-    return InkWell(
+    // [Tappable], not [InkWell]: the chip fills itself opaquely (`panel` when
+    // it is off, a status tint when it is on), and a [Material] paints its ink
+    // *below* its child — so the wash was drawn and then covered, and this
+    // chip answered a pointer with nothing at all. [Tappable] paints inside
+    // its own subtree, over the fill.
+    return Tappable(
       borderRadius: BorderRadius.circular(context.radii.radiusLarge),
       onTap: () => onChanged(!selected),
       child: Container(
