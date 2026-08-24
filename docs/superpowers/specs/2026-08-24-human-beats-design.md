@@ -459,9 +459,11 @@ something a reader of the story can tell.
   is a flag, not a filter on origin, so a real tap landing inside a drive verb's
   injection window is discarded. Minor today (one journal line); still minor
   with beats, but it is a known blind spot rather than an unknown one.
-- **Retention.** Whether the bound on the run's journal is a count or bytes. A
-  count is easier to state to a user; bytes is what actually hurts, and the
-  161 MB measurement argues for bytes.
+- **Saying it out loud.** The bound is stated in the code and degrades
+  gracefully — an aged-out step keeps its line and loses its thumbnail — but
+  nothing tells a person looking at a picture-less old step *why* it has no
+  picture. Cheap to add when somebody asks; not worth guessing at a wording
+  now.
 - **Privacy.** This records a human's session in an app with real data. The
   frames stay on their disk and never leave it, but the retention window is a
   decision rather than a default, and it should be said out loud somewhere the
@@ -489,8 +491,10 @@ walk a beat does not do. Nothing below is blocked on a decision.
 2. ~~**The host side.**~~ Done — `RunBeatTracker`, drained through
    `DriveSession`, journaled with `_reconcileHuman` in front of it. See *What
    step 2 settled*.
-3. **A bound on the run's own journal growth** — count or bytes, stated where
-   the user can see it. Separate from `sweepRunDir`, which keeps its job.
+3. ~~**A bound on the run's own growth.**~~ Done — `journalArtifactsMaxBytes`,
+   64MB, enforced from `_Capture.write`. The journal *file* turned out to be
+   bounded already (`journalMaxBytes`, 5MB, rotating); the pictures were not,
+   and the pictures are where all the weight is.
 4. ~~**Steps tab.**~~ Done — renders unchanged. See *Step 4*.
 5. **Validate on a phone**, against the real implementation rather than a probe:
    frame times with capture on and off, bytes per beat, beats per minute. This

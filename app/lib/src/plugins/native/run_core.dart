@@ -4987,7 +4987,7 @@ class _Capture {
       if (reported.isNotEmpty) 'reported': reported,
     };
 
-    return _Capture(
+    var capture = _Capture(
       address: address,
       manifest: write('.capture.json', utf8.encode(jsonEncode(manifest))) ?? '',
       shot: shotPath,
@@ -4995,6 +4995,15 @@ class _Capture {
       semantics: semanticsPath,
       texts: textsPath,
     );
+    // **Writing is what makes the weight, so writing is what bounds it** — the
+    // same bargain `launchApp` strikes with `sweepRunDir`, and for the same
+    // reason: housekeeping that waits for somebody to open a panel is
+    // housekeeping that never runs on the sessions that need it most. The two
+    // do not overlap. That sweep clears what *dead* runs left behind, on age;
+    // this holds a *live* run's own pictures to a size, and a run the human
+    // taps through for an hour never dies and never ages.
+    boundJournalArtifacts(handle);
+    return capture;
   }
 
   static int _countTree(Object? node) {
