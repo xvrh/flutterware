@@ -214,6 +214,48 @@ selector in generated code, and it is not going to.
 - **Scroll intent.** Only ever needed for verbatim replay. Dropped with it.
 - **Anything retroactive across runs.** One run, one ring.
 
+## Pictures are per burst, and a late one degrades to prose
+
+The backlog question and the queue question have one answer between them.
+
+**Every tap lands as an entry, immediately.** That part is cheap and already
+written — `HumanActions` records the pointer-up and names the hit.
+
+**Pictures are per *burst*, not per tap.** A pointer-up restarts a short window;
+when it expires with no further tap, *one* capture is enqueued, and its picture
+attaches to the burst's last tap. The window is `kDoubleTapTimeout` (300 ms) —
+the framework's own definition of "these taps belong together", and a constant
+the drive layer already reasons in.
+
+Three things fall out of that, which is why it is the whole policy:
+
+- **Bounded by construction.** One pending capture regardless of tap rate. No
+  queue growth, no coalescing heuristic, no drop rule to state.
+- **It is what the screen means.** After a five-tap burst the interesting frame
+  is the one the burst produced, and it belongs to the last tap. Capturing per
+  tap would write five near-identical mid-flight frames and call four of them
+  evidence.
+- **Nothing an agent needs is lost.** The *sequence of taps* is what a scenario
+  is written from; the pictures are context. Every tap still lands.
+
+**The capture shares the drive queue** — the existing `_queue` future chain in
+`GuestDrive`, the same one an agent step goes through. Running beside it was
+rejected because it contradicts the doctrine this design already rests on:
+*"two calls against a live app are two moments, and the gap between them is
+where computer-use's bugs live."* A capture overlapping an agent's gesture
+photographs a screen mid-transaction.
+
+**And before it captures, it checks whether another tap has arrived since the
+burst closed.** If one has, it abandons the picture — a newer window is already
+pending and will take it. This is exact rather than a drift threshold: a
+threshold is a guess, and "was there another tap in between" is *the* thing
+that makes a picture wrong, is free, and is already timestamped.
+
+**The fallback is today's behaviour, which is what makes this safe.** A beat
+whose picture is abandoned is exactly the `actor: human` entry the journal
+writes now. So the change is strictly additive: the worst case is what already
+ships, and a picture that would lie is never written at all.
+
 ## Decided by the owner, 2026-08-24
 
 **Capture is on for a run launched from the cockpit, and off elsewhere.** A run
@@ -223,24 +265,6 @@ capture-and-encode per human tap, and nothing per frame.
 
 ## Open, deliberately
 
-- **A fast tapper outruns the capture.** A beat is settle + `toImage` + encode;
-  a human can tap five times a second. Something has to give, and the choice is
-  a real one: coalesce (one beat for a burst, the last screen wins), debounce
-  (skip a beat whose predecessor has not finished), or queue and fall behind.
-  **This must be decided before step 1**, because it decides whether a beat is
-  emitted from the pointer route or from a scheduler behind it. Whatever it is,
-  the drop is *stated* — `HumanActions.take()` already emits a `dropped` entry
-  past its cap, and that rule holds here.
-- **A queued beat can lie, and that is worse than no beat.** `GuestDrive`
-  serializes on a queue — *"two drivers interleave as transactions, never as
-  overlapping gestures"*. If a beat joins that queue it can capture seconds
-  after the tap that triggered it, and then it attributes a screen to a tap
-  that did not produce it. That is a correctness failure, not a slow one. Three
-  ways out, and one must be picked **before step 1**: share the queue and
-  *stamp both times*, marking a beat whose capture drifted; share the queue and
-  drop rather than mislead; or run beside it and accept overlapping `toImage`.
-  Related to the backlog policy but not the same question — that one is about
-  volume, this one is about truth.
 - **A human tap during an agent step is silently lost.** `HumanActions.suppress`
   is a flag, not a filter on origin, so a real tap landing inside a drive verb's
   injection window is discarded. Minor today (one journal line); still minor
@@ -268,10 +292,9 @@ capture-and-encode per human tap, and nothing per frame.
 
 ## Order of work
 
-0. **Decide the backlog policy** above. It shapes step 1 and cannot be
-   retrofitted cheaply.
-1. `HumanActions` settles and captures on pointer-up instead of buffering, and
-   holds encoded beats in a bounded ring — `toImage`, `ImageByteFormat.png`, a
+1. `HumanActions` records every tap as now, and drives the burst window above:
+   on expiry, one capture on the shared `_queue`, abandoned if a newer tap
+   arrived. Beats are held in a bounded ring — `toImage`, `ImageByteFormat.png`, a
    beat-sized `maxSide`.
 2. A host poller on `NetworkTracker`'s shape drains the ring and appends each
    beat to the journal as `actor: human`, with `screenshot` and `texts`, no
