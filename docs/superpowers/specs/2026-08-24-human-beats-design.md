@@ -427,6 +427,32 @@ than a history. **The journal is the store**, and it grows at ~250KB a beat on
 a heavy screen — 100 beats is 25MB. That is the number step 3 is really about,
 and it is now measured rather than guessed.
 
+## Step 4: the Steps tab needed nothing, and said so by finding a bug
+
+A human beat put in front of the live tab renders as a step with no change at
+all — the row, the caption, the thumbnail and the detail pane are all written
+against `JournalEntry` rather than against an actor:
+
+    3 · tap key 'changes-list' · human · 16:13:11
+    2 · tap the point 115,107  · agent · native · 15:25:36
+    1 · observe                · agent · 15:25:19
+
+with `by human` in the detail's facts and the picture behind the same
+`CaptureButton` an agent step gets. So the beat shape is right — which is what
+this step was for.
+
+**What it did find is that a beat had two writers and only one of them wrote
+it whole.** A beat reaches the host through whichever mouth drained the guest
+first: this poller, or an agent's `act`. The act path predates beats and wrote
+`at`, `verb` and `target` only — measured on a live run, **0 of 16 human
+entries carried a screenshot**, though the guest had attached one to every
+burst-ender. A tap the agent happened to collect lost its picture; the same tap
+a second earlier or later kept it.
+
+That is not a rendering bug and no UI change would have fixed it. Both paths
+now go through one `_writeHumanBeats`, so which mouth drained the guest is not
+something a reader of the story can tell.
+
 ## Open, deliberately
 
 - **A human tap during an agent step is silently lost.** `HumanActions.suppress`
@@ -465,8 +491,7 @@ walk a beat does not do. Nothing below is blocked on a decision.
    step 2 settled*.
 3. **A bound on the run's own journal growth** — count or bytes, stated where
    the user can see it. Separate from `sweepRunDir`, which keeps its job.
-4. **Steps tab.** Confirm human beats render as steps with no change. If they
-   need one, the beat shape is wrong.
+4. ~~**Steps tab.**~~ Done — renders unchanged. See *Step 4*.
 5. **Validate on a phone**, against the real implementation rather than a probe:
    frame times with capture on and off, bytes per beat, beats per minute. This
    is where "off the UI thread is not the same as free" gets tested — a

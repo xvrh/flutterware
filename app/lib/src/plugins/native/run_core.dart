@@ -3910,6 +3910,19 @@ class RunCore extends PluginCore {
   /// phantom human.
   void _journalHumanBeats(RunHandle handle, List<Map> beats) {
     var (human, _) = _reconcileHuman(handle, beats);
+    _writeHumanBeats(handle, human);
+    notifyChanged();
+  }
+
+  /// Writes already-reconciled beats, pictures and all.
+  ///
+  /// **One writer, because there are two mouths.** A beat reaches the host
+  /// either through this poller or through an agent's `act`, whichever drained
+  /// the guest first — and which one it was is not something a reader of the
+  /// story should be able to tell. The act path used to write `at`, `verb` and
+  /// `target` only, so a tap the agent happened to collect lost the picture
+  /// the guest had already taken for it.
+  void _writeHumanBeats(RunHandle handle, List<Map> human) {
     for (var beat in human) {
       var at =
           beat['at'] as String? ?? DateTime.now().toUtc().toIso8601String();
@@ -3940,7 +3953,6 @@ class RunCore extends PluginCore {
         ),
       );
     }
-    notifyChanged();
   }
 
   String _driveKey(RunHandle handle) =>
@@ -4155,17 +4167,7 @@ class RunCore extends PluginCore {
     // What the human did on the way here, ahead of the step that saw it —
     // the guest buffers between transactions, so these precede this step in
     // wall time and must precede it in the story too.
-    for (var action in human) {
-      appendJournal(
-        handle,
-        JournalEntry(
-          at: action['at'] as String? ?? started.toUtc().toIso8601String(),
-          verb: action['verb'] as String? ?? 'tap',
-          actor: 'human',
-          target: action['target'] as String?,
-        ),
-      );
-    }
+    _writeHumanBeats(handle, human);
 
     appendJournal(
       handle,
