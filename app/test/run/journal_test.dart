@@ -81,4 +81,48 @@ void main() {
     appendJournal(loose, JournalEntry(at: 't', verb: 'tap'));
     expect(readJournal(loose), isEmpty);
   });
+
+  group('a device write is a step like any other', () {
+    test('what was asked and what was answered survive the round trip', () {
+      // Kept apart because they disagree in ordinary use: a locale set on the
+      // iOS simulator lands on the device and the running app keeps the old
+      // one until it is relaunched. An entry recording only the request would
+      // be testimony to something that did not happen.
+      var entry = JournalEntry(
+        at: 't',
+        verb: 'set',
+        actor: 'device',
+        target: 'language',
+        device: const {
+          'setting': 'language',
+          'asked': 'fr-FR',
+          'answered': 'en-US',
+          'provenance': 'written',
+        },
+      );
+
+      var back = JournalEntry.fromJson(
+        jsonDecode(jsonEncode(entry.toJson())) as Map<String, Object?>,
+      );
+      expect(back.verb, 'set');
+      expect(back.actor, 'device');
+      expect(back.device?['asked'], 'fr-FR');
+      expect(back.device?['answered'], 'en-US');
+      expect(back.device?['provenance'], 'written');
+    });
+
+    test('a step with no device facts writes no device key', () {
+      // The journal is read a line at a time by things that are not this test;
+      // an empty map on every tap would be bytes for nothing.
+      expect(
+        JournalEntry(at: 't', verb: 'tap').toJson().containsKey('device'),
+        isFalse,
+      );
+    });
+
+    test('an older journal, written before the field existed, still reads', () {
+      var back = JournalEntry.fromJson({'at': 't', 'verb': 'tap'});
+      expect(back.device, isNull);
+    });
+  });
 }

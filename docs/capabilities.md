@@ -1046,6 +1046,58 @@ note: String?
 | `panel` | string | yes | — | — |
 | `state` | string | yes | — | The state id `panels` reports |
 
+#### `device` — Device
+
+What the device this run is on is currently set to — appearance, text size, orientation, locale and the accessibility flags — with what each one costs to change and whether the value is evidence or an echo. Reads live, from the command that owns each setting; a value nothing owns says so in its `provenance` rather than passing for an answer. Settings this target cannot do come back as rows carrying the reason and the by-hand command, because a missing control reads as an oversight. iOS simulator and Android for now; everything else refuses and says what would work instead.
+
+```sh
+fw run run device [--device=…] [--entrypoint=…] [--worktree=…] [--run=…]
+```
+
+Returns `RunDeviceResult`:
+
+```
+device: String
+entrypoint: String
+platform: String   # `ios-simulator` or `android` — which mechanism answered, in the same spelling the native layer uses.
+settings: List<Map<String, Object?>>   # One row per setting, refusals included.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
+
+#### `setDevice` — Set a device setting
+
+Writes one device setting and answers with that setting **re-read** — what the device says now, not an echo of what it was asked. Most are live and cost nothing; a locale on the iOS simulator lands on the device and the running app keeps the old one until it is relaunched, and a rotation there needs the Simulator to be the front window, so it takes the keyboard focus for a moment. Both are said on the row before the call. Every write lands in the run journal as a `set` step: a device change is the only thing that alters a screen while leaving no trace in the app.
+
+```sh
+fw run run setDevice [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --setting=<string> --value=<string>
+```
+
+Returns `RunDeviceResult`:
+
+```
+device: String
+entrypoint: String
+platform: String   # `ios-simulator` or `android` — which mechanism answered, in the same spelling the native layer uses.
+settings: List<Map<String, Object?>>   # One row per setting, refusals included.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
+| `setting` | string | yes | — | What to change, as `device` reports it — brightness, textScale, orientation, language, invertColors, disableAnimations, highContrast, boldText |
+| `value` | string | yes | — | One of that row's `options`. An empty language hands the app back to the device default where the platform allows it. |
+
 #### `network` — Network
 
 The app's HTTP traffic, read from the VM's own http profile — the data source behind DevTools, so it needs no devbar and no wrapper client. Capture is armed at launch by the run guest; an app launched outside flutterware records from this call on. A request in flight has no `status` yet and comes back again, same id, once it completes — pass the reply's `cursor` as `since` to read only what changed.

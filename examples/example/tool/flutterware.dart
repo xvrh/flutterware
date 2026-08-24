@@ -68,6 +68,53 @@ void main() => Flutterware.configure((fw) {
       ],
     ),
   );
+  // **The entry points, and none of them platform-restricted.** This is an app
+  // you would put on a phone, so every one of them offers every platform the
+  // project has folders for — which is what makes the run cockpit's device
+  // controls reachable at all, since they need a run on a booted simulator or
+  // emulator to have a device to write to.
+  //
+  // `platforms:` exists for the entry point that genuinely cannot go
+  // everywhere — see the repo root's `Studio (dev)`, which is a desktop app —
+  // and declaring it here would only take devices away.
+  fw.use(
+    Run(
+      packages: [
+        .new(
+          app,
+          entrypoints: [
+            Entrypoint(
+              'lib/main.dart',
+              name: 'App',
+              description: 'The example app, with the devbar mounted',
+              knobs: [
+                Knob(
+                  'fwMarker',
+                  label: 'Marker',
+                  description:
+                      'Shown on the home page, to prove which launch is on '
+                      'the device',
+                ),
+              ],
+            ),
+            Entrypoint(
+              'lib/devbar_example.dart',
+              name: 'Devbar',
+              description: 'Every devbar plugin, on a demo screen',
+            ),
+            Entrypoint(
+              'lib/shop_devbar.dart',
+              name: 'Brewline (devbar)',
+              description:
+                  'The shop, with a plugin that pushes a notification into '
+                  'it — the sample for driving an app from the cockpit, '
+                  '`fw` or an agent',
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
   // No `directory:` — scenarios live in `test/scenarios/`.
   fw.use(
     Scenarios(

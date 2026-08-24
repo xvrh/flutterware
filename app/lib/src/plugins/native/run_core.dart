@@ -24,6 +24,7 @@ import '../../run/guest_entrypoint.dart';
 import '../../run/drive_session.dart';
 import '../../run/entrypoints.dart';
 import '../../run/flavors.dart';
+import '../../run/device/device_settings.dart';
 import '../../run/handle.dart';
 import '../../inspect/lens.dart';
 import '../../inspect/screen_read.dart';
@@ -1414,6 +1415,58 @@ class RunCore extends PluginCore {
           ],
         ),
         PluginAction(
+          'device',
+          'Device',
+          returns: RunDeviceResult,
+          description:
+              'What the device this run is on is currently set to — '
+              'appearance, text size, orientation, locale and the '
+              'accessibility flags — with what each one costs to change and '
+              'whether the value is evidence or an echo. Reads live, from the '
+              'command that owns each setting; a value nothing owns says so in '
+              'its `provenance` rather than passing for an answer. Settings '
+              'this target cannot do come back as rows carrying the reason and '
+              'the by-hand command, because a missing control reads as an '
+              'oversight. iOS simulator and Android for now; everything else '
+              'refuses and says what would work instead.',
+          parameters: [..._appSelector],
+        ),
+        PluginAction(
+          'setDevice',
+          'Set a device setting',
+          returns: RunDeviceResult,
+          description:
+              'Writes one device setting and answers with that setting **re-'
+              'read** — what the device says now, not an echo of what it was '
+              'asked. Most are live and cost nothing; a locale on the iOS '
+              'simulator lands on the device and the running app keeps the old '
+              'one until it is relaunched, and a rotation there needs the '
+              'Simulator to be the front window, so it takes the keyboard '
+              'focus for a moment. Both are said on the row before the call. '
+              'Every write lands in the run journal as a `set` step: a device '
+              'change is the only thing that alters a screen while leaving no '
+              'trace in the app.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'setting',
+              'Setting',
+              description:
+                  'What to change, as `device` reports it — brightness, '
+                  'textScale, orientation, language, invertColors, '
+                  'disableAnimations, highContrast, boldText',
+            ),
+            const ActionParameter(
+              'value',
+              'Value',
+              description:
+                  "One of that row's `options`. An empty language hands the "
+                  'app back to the device default where the platform allows '
+                  'it.',
+            ),
+          ],
+        ),
+        PluginAction(
           'network',
           'Network',
           returns: RunNetworkResult,
@@ -1959,6 +2012,8 @@ class RunCore extends PluginCore {
       'panelInvoke' => _panelInvokeAction(arguments),
       'panelKnob' => _panelKnobAction(arguments),
       'panelState' => _panelStateAction(arguments),
+      'device' => _deviceAction(arguments),
+      'setDevice' => _setDeviceAction(arguments),
       'network' => _networkAction(arguments),
       'networkRequest' => _networkRequestAction(arguments),
       'emulators' => _emulatorsAction(),
@@ -3550,6 +3605,206 @@ class RunCore extends PluginCore {
       return await body(connection, isolateId);
     } finally {
       await connection.close();
+    }
+  }
+
+  Future<RunDeviceResult> _deviceAction(Map<String, Object?> arguments) async {
+    var handle = await _selectRunningApp(arguments);
+    var settings = await _deviceSettingsFor(handle);
+    var read = await readDeviceSettings(handle);
+    return RunDeviceResult(
+      device: handle.device,
+      entrypoint: handle.entrypoint,
+      platform: settings.platform,
+      settings: [for (var setting in read) setting.toJson()],
+      note: _deviceNote(read),
+    );
+  }
+
+  Future<RunDeviceResult> _setDeviceAction(
+    Map<String, Object?> arguments,
+  ) async {
+    var handle = await _selectRunningApp(arguments);
+    var settings = await _deviceSettingsFor(handle);
+    var name = _requiredArgument(arguments, 'setting');
+    var id = DeviceSettingId.byName(name);
+    if (id == null) {
+      throw RunRefusal(
+        'No device setting called `$name`. `device` reports them: '
+        '${DeviceSettingId.values.map((v) => v.name).join(', ')}.',
+      );
+    }
+    var value = arguments['value'] as String? ?? '';
+    var written = await writeDeviceSetting(handle, id, value);
+
+    return RunDeviceResult(
+      device: handle.device,
+      entrypoint: handle.entrypoint,
+      platform: settings.platform,
+      settings: [written.toJson()],
+      note: written.value == value
+          ? null
+          : 'Asked for "$value" and the device answered '
+                '"${written.value ?? 'nothing'}". The reply is the re-read, '
+                'not the request.',
+    );
+  }
+
+  /// Every device setting for [handle], refusals included.
+  ///
+  /// Public because the strip over the Screen pane calls exactly this, and the
+  /// `device` action calls it too. The panel adds no abilities: a chip is a
+  /// drawing of what this returned, and pressing one is [writeDeviceSetting].
+  ///
+  /// Throws [RunRefusal] when nothing here can reach the device — the message
+  /// names what would work, which is the useful half and is what the strip
+  /// draws in place of chips.
+  Future<List<DeviceSetting>> readDeviceSettings(RunHandle handle) async {
+    // The same bargain [track] makes, and for the same reason: mounting a panel
+    // may not spawn a process in a widget test. Working out *which device this
+    // is* costs two, and reading it costs seven more — none of which a pumped
+    // panel can settle.
+    if (!debugLive) return const [];
+    var settings = await _deviceSettingsFor(handle);
+    return _refusing(() => settings.read(appSize: _appSizeFor(handle)));
+  }
+
+  /// Writes one setting, journals it, and answers with that setting **re-read**.
+  ///
+  /// The reply is what the device says now rather than what it was asked for.
+  /// A refusal is journalled too, and then rethrown as a [RunRefusal]: a
+  /// journal that only kept successes would read as a cleaner session than
+  /// anyone had, and a refused rotation is exactly the step somebody comes back
+  /// to when explaining a screenshot.
+  Future<DeviceSetting> writeDeviceSetting(
+    RunHandle handle,
+    DeviceSettingId id,
+    String value,
+  ) async {
+    var settings = await _deviceSettingsFor(handle);
+    var clock = Stopwatch()..start();
+    DeviceSetting written;
+    try {
+      written = await settings.write(id, value, appSize: _appSizeFor(handle));
+    } on DeviceRefusal catch (e) {
+      appendJournal(
+        handle,
+        JournalEntry(
+          at: DateTime.now().toUtc().toIso8601String(),
+          verb: 'set',
+          actor: 'device',
+          target: id.name,
+          elapsedMs: clock.elapsedMilliseconds,
+          error: e.toString(),
+          failure: 'refused',
+          device: {'setting': id.name, 'asked': value},
+        ),
+      );
+      throw RunRefusal(e.toString());
+    }
+
+    appendJournal(
+      handle,
+      JournalEntry(
+        at: DateTime.now().toUtc().toIso8601String(),
+        verb: 'set',
+        actor: 'device',
+        target: id.name,
+        elapsedMs: clock.elapsedMilliseconds,
+        device: {
+          'setting': id.name,
+          'asked': value,
+          'answered': ?written.value,
+          'provenance': written.provenance.name,
+        },
+      ),
+    );
+    return written;
+  }
+
+  /// The backend for this run, or a refusal naming what would work.
+  Future<DeviceSettings> _deviceSettingsFor(RunHandle handle) async {
+    var settings = await _nativeSessionFor(handle).settings();
+    if (settings != null) return settings;
+    throw RunRefusal(
+      "Nothing here can write ${handle.device}'s settings. A booted iOS "
+      'simulator answers to `simctl` and an Android device to `adb`; a '
+      'physical iPhone, macOS and the browser each have their own mechanisms '
+      'and none of them is built yet. Set it on the device by hand — the '
+      'commands are in '
+      'docs/superpowers/specs/2026-08-24-run-device-tab-capability-findings.md.',
+    );
+  }
+
+  /// The app's own root geometry, or null when nothing is answering.
+  ///
+  /// The one place a device and the app on it meet: an iOS simulator will not
+  /// say which way up it is, and the app's width and height do. Null rather
+  /// than an error when the app is dead or still building — the setting then
+  /// reports `unknown`, which is the truth.
+  AppSizeReader _appSizeFor(RunHandle handle) => () async {
+    try {
+      // `summary` left on, and it is load-bearing rather than a default taken
+      // by accident: [inspectRead] only asks the *guest* for the tree when it
+      // is summary, and the guest's walk is the one with boxes on it. Asking
+      // for the full service tree instead returns nodes with no layout at all,
+      // which read as "no app answering" against a perfectly healthy app.
+      var read = await inspectRead(handle, tree: true, screenshot: false);
+      var layout = _firstBox(read.tree?.root);
+      if (layout == null) return null;
+      return (width: layout.width, height: layout.height);
+    } on Object {
+      // No app answering — still building, already dead, or attached to
+      // without a guest. The setting then says `unknown`, which is true.
+      return null;
+    }
+  };
+
+  /// The outermost box in the tree.
+  ///
+  /// Not `root.layout`: the tree's root is above the app's own widgets —
+  /// `RootWidget` and the `View` under it lay nothing out — so the root's box
+  /// is null on a perfectly healthy app, and reading it as one made orientation
+  /// answer `unknown` against a running simulator. The first node that has a
+  /// box is the window, and it is the app's outermost widget rather than the
+  /// framework's.
+  InspectLayout? _firstBox(InspectNode? node) {
+    if (node == null) return null;
+    if (node.layout case var layout?) return layout;
+    for (var child in node.children) {
+      if (_firstBox(child) case var found?) return found;
+    }
+    return null;
+  }
+
+  /// Said out loud when the reply would otherwise be read as more than it is.
+  String? _deviceNote(List<DeviceSetting> settings) {
+    var echoes = [
+      for (var setting in settings)
+        if (setting.provenance == DeviceProvenance.written) setting.id.name,
+    ];
+    var refused = settings
+        .where((s) => s.state == DeviceSettingState.unavailable)
+        .length;
+    var echoed =
+        'The value of ${echoes.join(' and ')} is the store it was written to '
+        'rather than an answer — nothing on this platform reports it.';
+    var whose =
+        "These are the device's, not the run's: except where a row says "
+        'per-app, a write reaches every app on it and outlives the run.';
+    return [
+      if (echoes.isNotEmpty) echoed,
+      if (refused > 0)
+        '$refused setting(s) this target cannot do are listed with the reason.',
+      whose,
+    ].join(' ');
+  }
+
+  Future<T> _refusing<T>(Future<T> Function() body) async {
+    try {
+      return await body();
+    } on DeviceRefusal catch (e) {
+      throw RunRefusal(e.toString());
     }
   }
 

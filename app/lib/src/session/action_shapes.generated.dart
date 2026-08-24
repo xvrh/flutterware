@@ -3215,6 +3215,24 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'RunDeviceResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunDeviceResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'platform',
+        'type': 'String',
+        'doc': '`ios-simulator` or `android` — which mechanism answered, in the same spelling the native layer uses.',
+      },
+      <String, Object?>{
+        'name': 'settings',
+        'type': 'List<Map<String, Object?>>',
+        'doc': 'One row per setting, refusals included.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
   'RunDevicesResult': ResultShape.fromJson(<String, Object?>{
     'type': 'RunDevicesResult',
     'fields': <Object?>[

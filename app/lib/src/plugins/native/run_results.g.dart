@@ -264,6 +264,15 @@ Map<String, dynamic> _$RunNetworkResultToJson(RunNetworkResult instance) =>
       'note': ?instance.note,
     };
 
+Map<String, dynamic> _$RunDeviceResultToJson(RunDeviceResult instance) =>
+    <String, dynamic>{
+      'device': instance.device,
+      'entrypoint': instance.entrypoint,
+      'platform': instance.platform,
+      'settings': instance.settings,
+      'note': ?instance.note,
+    };
+
 Map<String, dynamic> _$RunNetworkRequestResultToJson(
   RunNetworkRequestResult instance,
 ) => <String, dynamic>{

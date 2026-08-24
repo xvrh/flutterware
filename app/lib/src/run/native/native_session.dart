@@ -5,6 +5,9 @@ import 'dart:io';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../device/adb_settings.dart';
+import '../device/device_settings.dart';
+import '../device/simctl_settings.dart';
 import '../handle.dart';
 import 'adb_driver.dart';
 import 'ax_driver.dart';
@@ -97,6 +100,40 @@ class NativeSession {
     if (await _bootedSimulator(handle.device) != null) {
       return AppleLogSource.simulator(udid: handle.device);
     }
+    return null;
+  }
+
+  /// This device's settings, or null when this machine has no way to write
+  /// them.
+  ///
+  /// The same identity question [driver] answers, with the same three answers
+  /// and the same caching-including-the-null — but a different object, because
+  /// setting a device and driving one are different concerns with different
+  /// platform matrices. See `DeviceSettings`' own doc comment for why they are
+  /// not one interface.
+  ///
+  /// Costs no Swift compile: `simctl` and `adb` are both already there, which
+  /// is the other reason this does not ride the driver.
+  Future<DeviceSettings?> settings() {
+    if (_resolvingSettings case var held?) return held;
+    return _resolvingSettings = _resolveSettings();
+  }
+
+  Future<DeviceSettings?>? _resolvingSettings;
+
+  Future<DeviceSettings?> _resolveSettings() async {
+    var adb = AdbNativeDriver.findAdb();
+    if (adb != null && await AdbNativeDriver.owns(handle.device, adb)) {
+      return AdbDeviceSettings(serial: handle.device, adb: adb);
+    }
+    if (!Platform.isMacOS) return null;
+    if (await _bootedSimulator(handle.device) != null) {
+      return SimctlDeviceSettings(udid: handle.device);
+    }
+    // macOS, web and a physical iPhone all land here. Each has settings a host
+    // can write — measured — and none of them shipped in v1, so the honest
+    // answer for now is that this session has no backend rather than a
+    // half-built one.
     return null;
   }
 

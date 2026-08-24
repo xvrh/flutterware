@@ -1162,6 +1162,49 @@ class RunNetworkResult implements PluginResult {
   Map<String, Object?> toJson() => _$RunNetworkResultToJson(this);
 }
 
+/// `device` and `setDevice` — the device this run is on, as something that can
+/// be written to.
+///
+/// One type for both actions, because a write answers with the setting it
+/// **re-read** afterwards rather than with an echo of what it was asked: the
+/// reply shape is the same, and a write's [settings] simply holds the one row.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunDeviceResult implements PluginResult {
+  RunDeviceResult({
+    required this.device,
+    required this.entrypoint,
+    required this.platform,
+    required this.settings,
+    this.note,
+  });
+
+  final String device;
+  final String entrypoint;
+
+  /// `ios-simulator` or `android` — which mechanism answered, in the same
+  /// spelling the native layer uses.
+  final String platform;
+
+  /// One row per setting, refusals included.
+  ///
+  /// A refused setting is a row and not an absence: *"Android accepts
+  /// high_text_contrast_enabled and no Flutter app sees it"* is the useful
+  /// half, and a missing row reads as an oversight. Each row carries its
+  /// `provenance` — whether a command that owns the setting answered, or the
+  /// value is an echo of the store it was written to — because a value on its
+  /// own is not evidence.
+  final List<Map<String, Object?>> settings;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunDeviceResultToJson(this);
+}
+
 /// `networkRequest` — one request in full: headers, bodies, timing events.
 @JsonSerializable(
   explicitToJson: true,

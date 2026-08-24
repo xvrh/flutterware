@@ -39,6 +39,7 @@ class JournalEntry {
     this.errorCount,
     this.layer,
     this.reconciled,
+    this.device,
     this.rotated = false,
   });
 
@@ -67,16 +68,22 @@ class JournalEntry {
     errorCount: json['errorCount'] as int?,
     layer: json['layer'] as String?,
     reconciled: json['reconciled'] as int?,
+    device: switch (json['device']) {
+      Map device => device.cast<String, Object?>(),
+      _ => null,
+    },
     rotated: json['rotated'] as bool? ?? false,
   );
 
   /// ISO-8601, UTC. Entries order by file position; this is for reading.
   final String at;
 
-  /// A drive verb, or `reload` / `restart` / `stop` / `launch`.
+  /// A drive verb, `reload` / `restart` / `stop` / `launch`, or `set` for a
+  /// write to the device the app is running on.
   final String verb;
 
-  /// Who acted — `agent`, `human`, or absent when the surface did not say.
+  /// Who acted — `agent`, `human`, `device`, or absent when the surface did not
+  /// say.
   final String? actor;
 
   final String? target;
@@ -148,6 +155,21 @@ class JournalEntry {
   /// subtraction.
   final int? reconciled;
 
+  /// What a `set` step asked the device for, and what the device answered.
+  ///
+  /// `{setting, asked, answered, provenance}`, and the reason it is four facts
+  /// rather than one: a device write is the only actor that changes a screen
+  /// while leaving **no** trace in the app. A native tap at least comes back in
+  /// the next observe's `human` field; this comes back as nothing at all, so
+  /// without the entry the Steps tab shows a screen changing with no cause.
+  ///
+  /// `asked` and `answered` are kept apart because they disagree in ordinary
+  /// use — a locale set on the iOS simulator lands on the device and the
+  /// running app keeps the old one until it is relaunched. An entry that
+  /// recorded only what was asked would be testimony to something that did not
+  /// happen.
+  final Map<String, Object?>? device;
+
   /// A marker entry: the file was rotated here (see [appendJournal]).
   final bool rotated;
 
@@ -173,6 +195,7 @@ class JournalEntry {
     if (errorCount != null) 'errorCount': errorCount,
     if (layer != null) 'layer': layer,
     if (reconciled != null) 'reconciled': reconciled,
+    if (device != null) 'device': device,
     if (rotated) 'rotated': true,
   };
 }
