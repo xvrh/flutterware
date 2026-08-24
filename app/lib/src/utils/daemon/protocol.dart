@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:json_annotation/json_annotation.dart';
 import 'package:logging/logging.dart';
+
 import 'commands.dart';
 import 'events.dart';
 

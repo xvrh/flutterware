@@ -506,9 +506,8 @@ class RunFailure {
   void write(String runDir) {
     try {
       Directory(runDir).createSync(recursive: true);
-      File(
-        p.join(runDir, '$key.failed'),
-      ).writeAsStringSync(jsonEncode(toJson()));
+      File(p.join(runDir, '$key.failed'))
+          .writeAsStringSync(jsonEncode(toJson()));
     } on Object catch (e) {
       _logger.warning('Could not record the failure of $key: $e');
     }

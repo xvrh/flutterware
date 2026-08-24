@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+
 import '../app_events/events.dart';
 import '../server/vm_transport.dart';
 import '../utils/value_stream.dart';
@@ -266,8 +268,9 @@ class DevbarState extends State<Devbar> {
   }
 }
 
-typedef DevbarPluginFactory =
-    FutureOr<DevbarPlugin> Function(DevbarState state);
+typedef DevbarPluginFactory = FutureOr<DevbarPlugin> Function(
+  DevbarState state,
+);
 
 abstract class DevbarPlugin {
   void dispose();

@@ -110,9 +110,8 @@ void main() {
 
   test("a scenario's face in the mosaic is its worst step with frames", () {
     var framePath = p.join(temp.path, 'pay.raw');
-    File(
-      framePath,
-    ).writeAsBytesSync(Uint8List(4 * 4 * 4)..fillRange(0, 4 * 4 * 4, 120));
+    File(framePath)
+        .writeAsBytesSync(Uint8List(4 * 4 * 4)..fillRange(0, 4 * 4 * 4, 120));
     var report = writePrReport(
       artifact: ComparisonArtifact(
         previews: previews(const []),

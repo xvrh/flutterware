@@ -79,9 +79,9 @@ void main() {
     test('a namespace replaces rather than compounds', () {
       // `?knob.count`, never `?axis.knob.count` — the address gets pasted into
       // terminals and filenames and has to stay legible however deep the tree.
-      var view = AddressView(
-        _catalog(),
-      ).nest(namespace: 'axis').nest(namespace: 'knob');
+      var view = AddressView(_catalog())
+          .nest(namespace: 'axis')
+          .nest(namespace: 'knob');
       expect(view.keyFor('count'), 'knob.count');
     });
 
@@ -132,11 +132,9 @@ void main() {
       ).update(segments: ['demo/team.dart#list'], drop: const {'knob'});
 
       expect(written!.segments, ['app', 'demo/team.dart#list']);
-      expect(
-        written!.axes,
-        {'axis.theme': 'dark'},
-        reason: 'an axis belongs to the shell and outlives the entry',
-      );
+      expect(written!.axes, {
+        'axis.theme': 'dark',
+      }, reason: 'an axis belongs to the shell and outlives the entry');
     });
 
     test('a parameter is written into its own namespace', () {

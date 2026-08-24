@@ -85,9 +85,8 @@ Future<void> main(List<String> args) async {
       '\na floor is a claim, and nothing below it has been run.',
     );
   } else {
-    File(
-      p.join(root.path, '.fvmrc'),
-    ).writeAsStringSync('{"flutter": "${target.flutter}"}\n');
+    File(p.join(root.path, '.fvmrc'))
+        .writeAsStringSync('{"flutter": "${target.flutter}"}\n');
     print('pin: .fvmrc -> ${target.flutter} (Dart ${target.dart})');
     print(
       '\nThe floor did not move. Run --floor only when something below it'
@@ -178,13 +177,10 @@ class _Release {
       exit(1);
     }
 
-    var json =
-        jsonDecode(
-              File(
-                p.join(sdk, 'bin', 'cache', 'flutter.version.json'),
-              ).readAsStringSync(),
-            )
-            as Map<String, dynamic>;
+    var json = jsonDecode(
+      File(p.join(sdk, 'bin', 'cache', 'flutter.version.json'))
+          .readAsStringSync(),
+    ) as Map<String, dynamic>;
     var running = json['frameworkVersion'] as String;
     if (running != pin) {
       stderr.writeln(
@@ -210,9 +206,8 @@ class _Release {
     var dir = p.dirname(Platform.resolvedExecutable);
     while (true) {
       if (File(p.join(dir, 'bin', 'flutter')).existsSync() &&
-          File(
-            p.join(dir, 'bin', 'cache', 'flutter.version.json'),
-          ).existsSync()) {
+          File(p.join(dir, 'bin', 'cache', 'flutter.version.json'))
+              .existsSync()) {
         return dir;
       }
       var parent = p.dirname(dir);
@@ -326,9 +321,8 @@ Directory _repoRoot() {
 /// `flutter` key.
 String readPin(Directory root) {
   var file = File(p.join(root.path, '.fvmrc'));
-  if (jsonDecode(file.readAsStringSync()) case {
-    'flutter': String pinned,
-  } when pinned.isNotEmpty) {
+  if (jsonDecode(file.readAsStringSync()) case {'flutter': String pinned}
+      when pinned.isNotEmpty) {
     return pinned;
   }
   stderr.writeln('${file.path} does not name a Flutter version.');

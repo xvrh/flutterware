@@ -36,9 +36,8 @@ void main() {
   Directory seedCatalog(List<Map<String, Object?>> rules) {
     var cache = Directory(p.join(scratch.path, 'catalog-cache'))
       ..createSync(recursive: true);
-    File(
-      p.join(cache.path, '$dartVersion.json'),
-    ).writeAsStringSync(jsonEncode(rules));
+    File(p.join(cache.path, '$dartVersion.json'))
+        .writeAsStringSync(jsonEncode(rules));
     return cache;
   }
 

@@ -296,9 +296,8 @@ class ProjectInit {
     }
 
     var encoded = const LineSplitter().convert(
-      JsonEncoder.withIndent(
-        memberIndent.substring(parentIndent.length),
-      ).convert({name: value}),
+      JsonEncoder.withIndent(memberIndent.substring(parentIndent.length))
+          .convert({name: value}),
     );
     var member = encoded
         .sublist(1, encoded.length - 1)

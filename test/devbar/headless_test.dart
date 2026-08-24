@@ -43,9 +43,8 @@ Future<Uint8List> _shot(WidgetTester tester, Widget child) async {
   );
   late Uint8List bytes;
   await tester.runAsync(() async {
-    bytes = (await image.toByteData(
-      format: ui.ImageByteFormat.rawRgba,
-    ))!.buffer.asUint8List();
+    bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer
+        .asUint8List();
   });
   image.dispose();
   return bytes;

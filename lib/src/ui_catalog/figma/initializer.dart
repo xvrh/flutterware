@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'service.dart';
 
 class FigmaServiceInitializer extends StatefulWidget {

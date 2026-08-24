@@ -1,6 +1,8 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../utils/string/plural.dart';
 import 'tappable.dart';
 import 'design/design.dart';

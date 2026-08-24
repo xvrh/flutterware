@@ -1,4 +1,5 @@
 import 'package:diacritic/diacritic.dart';
+
 import 'string/case.dart' as case_string;
 import 'string/case_format.dart';
 import 'string/split_words.dart';

@@ -93,9 +93,8 @@ class ComparisonWebExporter {
     index['against'] = against;
     var frames = _collect(index, cache: cache, output: output);
 
-    File(
-      p.join(output, 'index.json'),
-    ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(index));
+    File(p.join(output, 'index.json'))
+        .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(index));
 
     return ComparisonWebExport(
       output: output,

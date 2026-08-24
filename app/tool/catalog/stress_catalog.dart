@@ -69,16 +69,16 @@ Future<void> main(List<String> args) async {
   ]);
   var vmServiceUri = Completer<String>();
   var guestLog = <String>[];
-  StreamGroup.merge([
-    guest.stdout,
-    guest.stderr,
-  ]).transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
-    guestLog.add(line);
-    var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
-    if (match != null && !vmServiceUri.isCompleted) {
-      vmServiceUri.complete(match.group(1));
-    }
-  });
+  StreamGroup.merge([guest.stdout, guest.stderr])
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .listen((line) {
+        guestLog.add(line);
+        var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
+        if (match != null && !vmServiceUri.isCompleted) {
+          vmServiceUri.complete(match.group(1));
+        }
+      });
 
   var connected = await Future.any<Object?>([server.first, guest.exitCode]);
   if (connected is! Socket) {
@@ -192,14 +192,14 @@ Future<_Guest> _launchGuest(DaemonReady ready, String name) async {
   ]);
   var uri = Completer<String>();
   var log = <String>[];
-  StreamGroup.merge([
-    guest.stdout,
-    guest.stderr,
-  ]).transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
-    log.add(line);
-    var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
-    if (match != null && !uri.isCompleted) uri.complete(match.group(1));
-  });
+  StreamGroup.merge([guest.stdout, guest.stderr])
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .listen((line) {
+        log.add(line);
+        var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
+        if (match != null && !uri.isCompleted) uri.complete(match.group(1));
+      });
   var connected = await Future.any<Object?>([server.first, guest.exitCode]);
   if (connected is! Socket) {
     throw StateError('the $name guest exited before connecting');

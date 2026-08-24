@@ -113,16 +113,19 @@ void main() {
     });
   });
 
-  test('a depfile of nothing but dependencies still watches the resolution', () {
-    // Not a fallback case, which is what this test was written expecting. The
-    // `package_config.json` is inside the root it defines, so it is always in the
-    // answer — and it should be: a `pub get` that moves a dependency rewrites it,
-    // and a daemon linked against the old resolution has to be replaced.
-    expect(
-      readDaemonDepfile(
-        depfile('${config()} /Users/someone/.pub-cache/hosted/x/lib/x.dart'),
-      ),
-      [config()],
-    );
-  });
+  test(
+    'a depfile of nothing but dependencies still watches the resolution',
+    () {
+      // Not a fallback case, which is what this test was written expecting. The
+      // `package_config.json` is inside the root it defines, so it is always in the
+      // answer — and it should be: a `pub get` that moves a dependency rewrites it,
+      // and a daemon linked against the old resolution has to be replaced.
+      expect(
+        readDaemonDepfile(
+          depfile('${config()} /Users/someone/.pub-cache/hosted/x/lib/x.dart'),
+        ),
+        [config()],
+      );
+    },
+  );
 }

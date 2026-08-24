@@ -49,9 +49,9 @@ class DockIcon {
     // Fire-and-forget: nothing waits on the Dock, and a failure here must not
     // take a worktree open down with it.
     unawaited(
-      _apply(
-        face.file,
-      ).catchError((_) => _applied = null).whenComplete(() => _busy = false),
+      _apply(face.file)
+          .catchError((_) => _applied = null)
+          .whenComplete(() => _busy = false),
     );
   }
 

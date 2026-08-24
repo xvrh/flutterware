@@ -411,9 +411,9 @@ void main() {
     });
 
     test('survives a JSON round trip', () {
-      var layout = ColumnLayout.of(
-        columns,
-      ).withVisible('ACTIONS', false).withWidth('PACKAGE', 240);
+      var layout = ColumnLayout.of(columns)
+          .withVisible('ACTIONS', false)
+          .withWidth('PACKAGE', 240);
       expect(ColumnLayout.fromJson(layout.toJson()), layout);
     });
 

@@ -49,9 +49,8 @@ void main() {
       Process.run(_dart, [_child, lock, transcript, 'a']),
       // After the first is inside — its window is 500ms, so this lands well
       // within it.
-      Future<void>.delayed(
-        const Duration(milliseconds: 150),
-      ).then((_) => Process.run(_dart, [_child, lock, transcript, 'b'])),
+      Future<void>.delayed(const Duration(milliseconds: 150))
+          .then((_) => Process.run(_dart, [_child, lock, transcript, 'b'])),
     ]);
 
     for (var run in runs) {

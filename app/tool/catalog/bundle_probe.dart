@@ -99,9 +99,8 @@ void main() => runApp(
     packageConfig: requirePackageConfig(packageRoot),
     cache: cache,
   );
-  File(
-    p.join(toolDir, 'kernel_blob.bin'),
-  ).copySync(p.join(fastDir, 'kernel_blob.bin'));
+  File(p.join(toolDir, 'kernel_blob.bin'))
+      .copySync(p.join(fastDir, 'kernel_blob.bin'));
 
   // The scene never draws the framework shaders, so frame identity cannot
   // vouch for them; their compiled bytes are compared directly instead.

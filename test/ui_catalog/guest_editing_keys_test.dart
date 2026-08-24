@@ -98,120 +98,96 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets(
-    'backspace deletes the character before the caret',
-    (tester) async {
-      await pumpField(tester);
-      await type(tester, 'abc');
-      // Carrying DEL, the way a real keyboard delivers it — the character must
-      // not be mistaken for text.
-      tap(
-        LogicalKeyboardKey.backspace,
-        PhysicalKeyboardKey.backspace,
-        c: '\u{7F}',
-      );
-      await tester.pump();
-      expect(controller.text, 'ab');
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
-  );
+  testWidgets('backspace deletes the character before the caret', (
+    tester,
+  ) async {
+    await pumpField(tester);
+    await type(tester, 'abc');
+    // Carrying DEL, the way a real keyboard delivers it — the character must
+    // not be mistaken for text.
+    tap(
+      LogicalKeyboardKey.backspace,
+      PhysicalKeyboardKey.backspace,
+      c: '\u{7F}',
+    );
+    await tester.pump();
+    expect(controller.text, 'ab');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
-  testWidgets(
-    'the arrows move the caret',
-    (tester) async {
-      await pumpField(tester);
-      await type(tester, 'abc');
-      tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
-      await tester.pump();
-      expect(controller.selection.baseOffset, 2);
-      tap(LogicalKeyboardKey.arrowRight, PhysicalKeyboardKey.arrowRight);
-      await tester.pump();
-      expect(controller.selection.baseOffset, 3);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
-  );
+  testWidgets('the arrows move the caret', (tester) async {
+    await pumpField(tester);
+    await type(tester, 'abc');
+    tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(controller.selection.baseOffset, 2);
+    tap(LogicalKeyboardKey.arrowRight, PhysicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(controller.selection.baseOffset, 3);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
-  testWidgets(
-    'typing after moving the caret inserts in place',
-    (tester) async {
-      await pumpField(tester);
-      await type(tester, 'ac');
-      tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
-      await tester.pump();
-      await type(tester, 'b');
-      expect(controller.text, 'abc');
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
-  );
+  testWidgets('typing after moving the caret inserts in place', (tester) async {
+    await pumpField(tester);
+    await type(tester, 'ac');
+    tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await type(tester, 'b');
+    expect(controller.text, 'abc');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
-  testWidgets(
-    'shift and an arrow extends the selection',
-    (tester) async {
-      await pumpField(tester);
-      await type(tester, 'abc');
-      hold(LogicalKeyboardKey.shiftLeft, PhysicalKeyboardKey.shiftLeft);
-      tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
-      letGo(LogicalKeyboardKey.shiftLeft, PhysicalKeyboardKey.shiftLeft);
-      await tester.pump();
-      expect(controller.selection.isCollapsed, false);
-      expect(controller.selection.textInside('abc'), 'c');
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
-  );
+  testWidgets('shift and an arrow extends the selection', (tester) async {
+    await pumpField(tester);
+    await type(tester, 'abc');
+    hold(LogicalKeyboardKey.shiftLeft, PhysicalKeyboardKey.shiftLeft);
+    tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
+    letGo(LogicalKeyboardKey.shiftLeft, PhysicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(controller.selection.isCollapsed, false);
+    expect(controller.selection.textInside('abc'), 'c');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
-  testWidgets(
-    'alt and backspace deletes the word',
-    (tester) async {
-      await pumpField(tester);
-      await type(tester, 'one two');
-      hold(LogicalKeyboardKey.altLeft, PhysicalKeyboardKey.altLeft);
-      tap(LogicalKeyboardKey.backspace, PhysicalKeyboardKey.backspace);
-      letGo(LogicalKeyboardKey.altLeft, PhysicalKeyboardKey.altLeft);
-      await tester.pump();
-      expect(controller.text, 'one ');
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
-  );
+  testWidgets('alt and backspace deletes the word', (tester) async {
+    await pumpField(tester);
+    await type(tester, 'one two');
+    hold(LogicalKeyboardKey.altLeft, PhysicalKeyboardKey.altLeft);
+    tap(LogicalKeyboardKey.backspace, PhysicalKeyboardKey.backspace);
+    letGo(LogicalKeyboardKey.altLeft, PhysicalKeyboardKey.altLeft);
+    await tester.pump();
+    expect(controller.text, 'one ');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
-  testWidgets(
-    'meta and an arrow goes to the end of the line',
-    (tester) async {
-      await pumpField(tester);
-      await type(tester, 'abc');
-      tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
-      await tester.pump();
-      hold(LogicalKeyboardKey.metaLeft, PhysicalKeyboardKey.metaLeft);
-      tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
-      letGo(LogicalKeyboardKey.metaLeft, PhysicalKeyboardKey.metaLeft);
-      await tester.pump();
-      expect(controller.selection.baseOffset, 0);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
-  );
+  testWidgets('meta and an arrow goes to the end of the line', (tester) async {
+    await pumpField(tester);
+    await type(tester, 'abc');
+    tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    hold(LogicalKeyboardKey.metaLeft, PhysicalKeyboardKey.metaLeft);
+    tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
+    letGo(LogicalKeyboardKey.metaLeft, PhysicalKeyboardKey.metaLeft);
+    await tester.pump();
+    expect(controller.selection.baseOffset, 0);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
-  testWidgets(
-    'an editing key with no field focused is left alone',
-    (tester) async {
-      var seen = <KeyEvent>[];
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Focus(
-            autofocus: true,
-            onKeyEvent: (node, event) {
-              seen.add(event);
-              return KeyEventResult.handled;
-            },
-            child: const SizedBox(),
-          ),
+  testWidgets('an editing key with no field focused is left alone', (
+    tester,
+  ) async {
+    var seen = <KeyEvent>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Focus(
+          autofocus: true,
+          onKeyEvent: (node, event) {
+            seen.add(event);
+            return KeyEventResult.handled;
+          },
+          child: const SizedBox(),
         ),
-      );
-      await tester.pump();
-      tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
-      await tester.pump();
-      // Not swallowed as an editing command: with nothing attached there is no
-      // IME to be, and the key is whatever the demo binds it to.
-      expect(seen.whereType<KeyDownEvent>(), hasLength(1));
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
-  );
+      ),
+    );
+    await tester.pump();
+    tap(LogicalKeyboardKey.arrowLeft, PhysicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    // Not swallowed as an editing command: with nothing attached there is no
+    // IME to be, and the key is whatever the demo binds it to.
+    expect(seen.whereType<KeyDownEvent>(), hasLength(1));
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 }

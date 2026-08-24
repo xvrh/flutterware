@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutterware/server.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -206,9 +207,8 @@ void main() {
         pid: 1,
         startedAt: DateTime.now(),
       );
-      File(
-        p.join(runDir.path, 'srv-00000000-api-1.json'),
-      ).writeAsStringSync(jsonEncode(old.toJson()));
+      File(p.join(runDir.path, 'srv-00000000-api-1.json'))
+          .writeAsStringSync(jsonEncode(old.toJson()));
 
       var read = scanServerHandles(runDir.path).single;
       expect(read.baseUrl, isNull);

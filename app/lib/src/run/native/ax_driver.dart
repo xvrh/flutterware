@@ -309,9 +309,9 @@ class AxNativeDriver extends NativeDriver {
       var installed = await _installedApps(udid);
       await _run({'cmd': 'press', 'scope': 'window', 'label': 'Home'});
       await Future<void>.delayed(const Duration(milliseconds: 800));
-      var icons = (await observe(
-        screenshot: false,
-      )).speaking.where((node) => installed.contains(node.label)).toList();
+      var icons = (await observe(screenshot: false)).speaking
+          .where((node) => installed.contains(node.label))
+          .toList();
       if (icons.isEmpty) {
         throw NativeRefusal(
           'Pressed Home, but no icon on this screen belongs to an app '
@@ -445,9 +445,9 @@ class AxNativeDriver extends NativeDriver {
       var result = await Process.run(helper, [
         jsonEncode({'cmd': 'trusted'}),
       ]);
-      var reply =
-          jsonDecode('${result.stdout}'.trim().split('\n').last)
-              as Map<String, Object?>;
+      var reply = jsonDecode(
+        '${result.stdout}'.trim().split('\n').last,
+      ) as Map<String, Object?>;
       return reply['trusted'] == true;
     } on Object {
       return false;

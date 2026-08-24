@@ -128,9 +128,9 @@ void main() {
       // at 30%, where nothing about type or spacing can be judged.
       test('is not what the subtree opens on', () {
         expect(
-          coreWith(
-            canvases,
-          ).defaultFramingFor('.', entry: 'demo/desktop/bar.dart').device,
+          coreWith(canvases)
+              .defaultFramingFor('.', entry: 'demo/desktop/bar.dart')
+              .device,
           isNull,
         );
       });
@@ -139,9 +139,9 @@ void main() {
         // The declaration is not ignored — only the staging is. Losing the list
         // as well would leave a desktop subtree with no way to say which widths
         // it cares about.
-        var canvas = coreWith(
-          canvases,
-        ).canvasesFor('.').firstWhere((c) => c.root == 'demo/desktop');
+        var canvas = coreWith(canvases)
+            .canvasesFor('.')
+            .firstWhere((c) => c.root == 'demo/desktop');
         expect(canvas.devices.map((d) => d.id), ['window-wide']);
       });
 
@@ -196,9 +196,9 @@ void main() {
       // failure a raw `startsWith` would produce and the one nobody would
       // suspect from the picture.
       expect(
-        coreWith(
-          canvases,
-        ).defaultFramingFor('.', entry: 'demo/mobile_legacy/tile.dart').device,
+        coreWith(canvases)
+            .defaultFramingFor('.', entry: 'demo/mobile_legacy/tile.dart')
+            .device,
         isNull,
       );
     });

@@ -392,21 +392,18 @@ void main() {
       core.dispose();
     });
 
-    test(
-      'a transition wins over the last reading while it is in flight',
-      () async {
-        var core = coreWith(localEnvConfig());
-        var completer = Completer<ProcessResult>();
-        core.runProcess = (command, {workingDirectory}) => completer.future;
-        var pending = core.start();
-        // The probe cannot see a compose project that has not finished coming up,
-        // so the status must not fall back to what it last said.
-        expect(core.report.status.message, 'bringing up');
-        completer.complete(ProcessResult(0, 0, '', ''));
-        await pending;
-        core.dispose();
-      },
-    );
+    test('a transition wins over the last reading while it is in flight', () async {
+      var core = coreWith(localEnvConfig());
+      var completer = Completer<ProcessResult>();
+      core.runProcess = (command, {workingDirectory}) => completer.future;
+      var pending = core.start();
+      // The probe cannot see a compose project that has not finished coming up,
+      // so the status must not fall back to what it last said.
+      expect(core.report.status.message, 'bringing up');
+      completer.complete(ProcessResult(0, 0, '', ''));
+      await pending;
+      core.dispose();
+    });
 
     test('a transition is clocked, so a second surface agrees', () async {
       // The elapsed number lives on the core rather than on the widget: opening
@@ -504,9 +501,8 @@ void main() {
 
     test('a stack with no stop never offers one', () async {
       var core = coreWith(
-        DevStack.background(
-          probe: Probe.exitCode(StackRun.command(['check'])),
-        ).config,
+        DevStack.background(probe: Probe.exitCode(StackRun.command(['check'])))
+            .config,
       );
       await core.refresh();
       expect(core.report.teardown, isEmpty);
@@ -691,9 +687,8 @@ void main() {
     test('a fast probe leaves the declaration alone', () async {
       // The common case, and it must stay free of any adjustment.
       var core = coreWith(
-        DevStack.background(
-          probe: Probe.exitCode(StackRun.command(['check'])),
-        ).config,
+        DevStack.background(probe: Probe.exitCode(StackRun.command(['check'])))
+            .config,
       );
 
       await core.refresh();

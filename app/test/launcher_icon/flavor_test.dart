@@ -92,9 +92,8 @@ void main() {
     test('build types are not flavors, and the default set is not one', () {
       writePng('android/app/src/main/res/mipmap-hdpi/ic_launcher.png', 72);
       for (var reserved in ['debug', 'profile', 'release', 'androidTest']) {
-        Directory(
-          path('android/app/src/$reserved'),
-        ).createSync(recursive: true);
+        Directory(path('android/app/src/$reserved'))
+            .createSync(recursive: true);
       }
       expect(scan().flavors, isEmpty);
     });
@@ -171,28 +170,25 @@ void main() {
       expect(scanned.forRole(IconRole.iosDark)!.files, hasLength(1));
     });
 
-    test(
-      'macOS, web and Windows ignore the flavor, because the generator does',
-      () {
-        // `createIconsFromConfig` hands the flavor to Android and iOS only; the
-        // other three take none and write to the one fixed place. A flavored scan
-        // that hid them would be describing a project that does not exist.
-        writePng('android/app/src/dev/res/mipmap-hdpi/ic_launcher.png', 72);
-        writePng('web/icons/Icon-192.png', 192);
-        writePng('windows/runner/resources/app_icon.ico', 0);
-        writePng(
-          'macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_512.png',
-          512,
-        );
-        write(
-          'macos/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json',
-          '{"images":[{"size":"512x512","idiom":"mac","filename":"app_icon_512.png","scale":"1x"}]}',
-        );
+    test('macOS, web and Windows ignore the flavor, because the generator does', () {
+      // `createIconsFromConfig` hands the flavor to Android and iOS only; the
+      // other three take none and write to the one fixed place. A flavored scan
+      // that hid them would be describing a project that does not exist.
+      writePng('android/app/src/dev/res/mipmap-hdpi/ic_launcher.png', 72);
+      writePng('web/icons/Icon-192.png', 192);
+      writePng('windows/runner/resources/app_icon.ico', 0);
+      writePng(
+        'macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_512.png',
+        512,
+      );
+      write(
+        'macos/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json',
+        '{"images":[{"size":"512x512","idiom":"mac","filename":"app_icon_512.png","scale":"1x"}]}',
+      );
 
-        var scanned = scan(flavor: 'dev');
-        expect(scanned.forRole(IconRole.webIcon)!.files, isNotEmpty);
-        expect(scanned.forRole(IconRole.macosApp)!.files, isNotEmpty);
-      },
-    );
+      var scanned = scan(flavor: 'dev');
+      expect(scanned.forRole(IconRole.webIcon)!.files, isNotEmpty);
+      expect(scanned.forRole(IconRole.macosApp)!.files, isNotEmpty);
+    });
   });
 }

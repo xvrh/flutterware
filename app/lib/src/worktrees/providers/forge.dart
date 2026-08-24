@@ -18,12 +18,11 @@ import 'dart:io';
 import '../../utils/run_git.dart';
 import '../facts.dart';
 
-typedef RunProcess =
-    Future<ProcessResult> Function(
-      String executable,
-      List<String> arguments, {
-      String? workingDirectory,
-    });
+typedef RunProcess = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments, {
+  String? workingDirectory,
+});
 
 /// Every pull request the forge knows about, keyed by **head branch** — which
 /// is the only thing a worktree and a pull request have in common.

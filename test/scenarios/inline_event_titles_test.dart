@@ -82,9 +82,8 @@ void main() {
     });
 
     test('one that fits is left exactly alone', () {
-      var title = inlineEventTitles([
-        AppEvent.analytics('checkout_started'),
-      ])!.single;
+      var title = inlineEventTitles([AppEvent.analytics('checkout_started')])!
+          .single;
 
       expect(title, 'checkout_started');
     });

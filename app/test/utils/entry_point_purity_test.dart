@@ -56,9 +56,8 @@ void main() async {
               'this list — do not delete the entry.',
         );
 
-        var result = ImportWalker(
-          packageConfig,
-        ).walk(Uri.base.resolve(entryPoint));
+        var result = ImportWalker(packageConfig)
+            .walk(Uri.base.resolve(entryPoint));
 
         for (var target in _forbidden) {
           var hits = result.findReachable(target).toList();
@@ -79,16 +78,14 @@ void main() async {
     test('finds a real Flutter dependency, so a pass means something', () {
       // A GUI entry point must fail the same check the pure ones pass —
       // otherwise a walker that silently resolved nothing would look green.
-      var result = ImportWalker(
-        packageConfig,
-      ).walk(Uri.base.resolve('lib/main.dart'));
+      var result = ImportWalker(packageConfig)
+          .walk(Uri.base.resolve('lib/main.dart'));
       expect(result.findReachable('package:flutter'), isNotEmpty);
     });
 
     test('package:flutter does not match package:flutterware', () {
-      var result = ImportWalker(
-        packageConfig,
-      ).walk(Uri.base.resolve('tool/flutterware_purity_fixture.dart'));
+      var result = ImportWalker(packageConfig)
+          .walk(Uri.base.resolve('tool/flutterware_purity_fixture.dart'));
       // The fixture imports package:flutterware and nothing else. If the
       // prefix rule were `startsWith('package:flutter')` this would match.
       expect(result.findReachable('package:flutterware'), isNotEmpty);

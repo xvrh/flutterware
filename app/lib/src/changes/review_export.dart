@@ -112,9 +112,8 @@ class _ExportSheetState extends State<_ExportSheet> {
         case ExportRoute.copy:
           await Clipboard.setData(ClipboardData(text: widget.markdown));
           if (mounted) {
-            Navigator.of(
-              context,
-            ).pop((route: ExportRoute.copy, resolve: _resolve));
+            Navigator.of(context)
+                .pop((route: ExportRoute.copy, resolve: _resolve));
           }
         case ExportRoute.file:
           var location = await getSaveLocation(
@@ -131,9 +130,8 @@ class _ExportSheetState extends State<_ExportSheet> {
           }
           await File(location.path).writeAsString(widget.markdown);
           if (mounted) {
-            Navigator.of(
-              context,
-            ).pop((route: ExportRoute.file, resolve: _resolve));
+            Navigator.of(context)
+                .pop((route: ExportRoute.file, resolve: _resolve));
           }
       }
     } on Object catch (error) {

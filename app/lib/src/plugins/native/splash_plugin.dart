@@ -120,12 +120,12 @@ class _SplashPanelState extends State<_SplashPanel> {
         // The address is written from here rather than from the screen: this is
         // the half that lives inside an `AddressScope`, and keeping the screen
         // free of it is what lets a test mount it with no address at all.
-        onSelectCell: (surface, theme) => AddressScope.write(
-          context,
-        ).setParams({'surface': surface.name, 'theme': theme.name}),
-        onShowAll: () => AddressScope.write(
-          context,
-        ).setParams({'surface': null, 'theme': null}),
+        onSelectCell: (surface, theme) =>
+            AddressScope.write(context)
+                .setParams({'surface': surface.name, 'theme': theme.name}),
+        onShowAll: () =>
+            AddressScope.write(context)
+                .setParams({'surface': null, 'theme': null}),
         onSelectSize: (size) =>
             AddressScope.write(context).setParams({'size': size?.id}),
         // The flavor is a segment, not an axis: it selects a different config

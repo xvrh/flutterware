@@ -99,9 +99,8 @@ class ScenarioWebExporter {
       output,
     );
 
-    File(
-      p.join(output, scenarioWebReportFile),
-    ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(json));
+    File(p.join(output, scenarioWebReportFile))
+        .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(json));
 
     return ScenarioWebExport(
       output: output,

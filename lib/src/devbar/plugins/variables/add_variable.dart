@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+
 import '../../devbar.dart';
 import 'plugin.dart';
 
@@ -363,8 +364,10 @@ class __NumWidgetState<T extends num> extends State<_NumWidget<T>> {
   }
 }
 
-typedef DevbarVariableCreator =
-    DevbarVariable Function(VariablesPlugin, DevbarVariableDefinition);
+typedef DevbarVariableCreator = DevbarVariable Function(
+  VariablesPlugin,
+  DevbarVariableDefinition,
+);
 
 class _AddDevbarVariables extends StatefulWidget {
   final List<DevbarVariableDefinition> variables;

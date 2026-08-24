@@ -171,9 +171,8 @@ void main() {
     });
 
     /// Moves [entry]'s file on, the way an editor saving it would.
-    void touch(CatalogEntry entry) => File(
-      p.join(package.path, entry.path),
-    ).setLastModifiedSync(DateTime.now().add(const Duration(seconds: 5)));
+    void touch(CatalogEntry entry) => File(p.join(package.path, entry.path))
+        .setLastModifiedSync(DateTime.now().add(const Duration(seconds: 5)));
 
     test('a picture is stale once its own file moves', () async {
       var (store, asked) = storeOf();

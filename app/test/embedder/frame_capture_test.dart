@@ -82,9 +82,8 @@ void main() {
       var dir = Directory(p.join(work.path, 'cap'))
         ..createSync(recursive: true);
       // A 9x9 frame nobody asked for, left by an earlier attempt.
-      File(
-        p.join(dir.path, 'screenshot.rawframe'),
-      ).writeAsBytesSync(_rawFrame(9, 9));
+      File(p.join(dir.path, 'screenshot.rawframe'))
+          .writeAsBytesSync(_rawFrame(9, 9));
 
       var image = await obliging(width: 4, height: 3).capture();
 
@@ -215,9 +214,9 @@ void main() {
       workDir: p.join(work.path, 'cap'),
       // Writes the frame and never acks, which is what a guest that stopped
       // drawing looks like.
-      send: (message) async => File(
-        (message as CaptureMessage).path,
-      ).writeAsBytesSync(_rawFrame(64, 64)),
+      send: (message) async =>
+          File((message as CaptureMessage).path)
+              .writeAsBytesSync(_rawFrame(64, 64)),
     );
 
     await expectLater(

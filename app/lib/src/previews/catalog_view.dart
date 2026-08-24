@@ -447,9 +447,8 @@ class _CatalogViewState extends State<CatalogView> {
                           // `AddressScope` below has renamed.
                           void dismissKeyboard() {
                             if (keyboard == KeyboardMode.up) {
-                              AddressScope.write(
-                                context,
-                              ).setParam('keyboard', null);
+                              AddressScope.write(context)
+                                  .setParam('keyboard', null);
                             }
                             _session.dismissKeyboard();
                           }
@@ -1002,9 +1001,9 @@ class _Knob extends StatelessWidget {
 
   /// Writes the choice into the address, and stops there. The demo is told
   /// because the session is watching the address, not because this told it.
-  void _choose(BuildContext context, Object? value) => AddressScope.write(
-    context,
-  ).setParam(paramKeyFor(knob), paramValueSlug(knob, value));
+  void _choose(BuildContext context, Object? value) =>
+      AddressScope.write(context)
+          .setParam(paramKeyFor(knob), paramValueSlug(knob, value));
 
   @override
   Widget build(BuildContext context) {
@@ -1609,9 +1608,9 @@ class _Axis extends StatelessWidget {
 
   /// Writes the choice into the address, and stops there. The guest is told
   /// because the session is watching the address, not because this told it.
-  void _choose(BuildContext context, Object? value) => AddressScope.write(
-    context,
-  ).setParam(paramKeyFor(axis), paramValueSlug(axis, value));
+  void _choose(BuildContext context, Object? value) =>
+      AddressScope.write(context)
+          .setParam(paramKeyFor(axis), paramValueSlug(axis, value));
 
   @override
   Widget build(BuildContext context) {

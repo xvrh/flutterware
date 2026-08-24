@@ -88,9 +88,8 @@ String renderShapes(Map<String, ResultShape> shapes) {
   // rewrites the file after the generator wrote it, and the freshness test —
   // which compares the file to this function's output — fails forever on a
   // difference nobody made.
-  return DartFormatter(
-    languageVersion: DartFormatter.latestLanguageVersion,
-  ).format(_renderShapes(shapes));
+  return DartFormatter(languageVersion: DartFormatter.latestLanguageVersion)
+      .format(_renderShapes(shapes));
 }
 
 String _renderShapes(Map<String, ResultShape> shapes) {

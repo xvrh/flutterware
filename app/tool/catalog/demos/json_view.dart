@@ -34,8 +34,7 @@ Widget jsonKinds() => _Frame(
     'url': 'https://pub.dev/packages/flutterware',
     // The one that has bitten every JSON renderer: no spaces, so nothing to
     // wrap on, and long enough to force the decision.
-    'token':
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk',
+    'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk',
   },
 );
 

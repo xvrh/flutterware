@@ -34,8 +34,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'markers',
         'type': 'List<String>',
-        'doc':
-            'Named points an exporter left behind — what a caller would seek to.',
+        'doc': 'Named points an exporter left behind — what a caller would seek to.',
       },
     ],
   }),
@@ -69,15 +68,13 @@ final resultShapes = <String, ResultShape>{
         'name': 'text',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.',
+        'doc': 'The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.',
       },
       <String, Object?>{
         'name': 'meta',
         'type': 'Map<String, Object?>',
         'optional': true,
-        'doc':
-            'Anything the producer wants the reader to know: timings, compile stats, exit codes.',
+        'doc': 'Anything the producer wants the reader to know: timings, compile stats, exit codes.',
       },
     ],
   }),
@@ -87,8 +84,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'checked',
         'type': 'int',
-        'doc':
-            'How many keys were looked at — the denominator, so an empty findings list means "nothing wrong" rather than "nothing examined".',
+        'doc': 'How many keys were looked at — the denominator, so an empty findings list means "nothing wrong" rather than "nothing examined".',
       },
       <String, Object?>{
         'name': 'bytes',
@@ -105,8 +101,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'kind',
               'type': 'String',
-              'doc':
-                  'A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `oversized`, `over-budget`.',
+              'doc': 'A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `oversized`, `over-budget`.',
             },
             <String, Object?>{
               'name': 'summary',
@@ -116,8 +111,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'detail',
               'type': 'String',
-              'doc':
-                  'What was found, specifically — the sizes, the paths, the densities.',
+              'doc': 'What was found, specifically — the sizes, the paths, the densities.',
             },
             <String, Object?>{
               'name': 'package',
@@ -141,8 +135,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'path',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'A path relative to the package, for findings about a file rather than a key.',
+              'doc': 'A path relative to the package, for findings about a file rather than a key.',
             },
           ],
         },
@@ -150,8 +143,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'unreadable',
         'type': 'List<String>',
-        'doc':
-            'Packages that could not be scanned at all, which is not the same as a package with nothing wrong.',
+        'doc': 'Packages that could not be scanned at all, which is not the same as a package with nothing wrong.',
       },
       <String, Object?>{'name': 'ok', 'type': 'bool'},
     ],
@@ -180,8 +172,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'declaration',
         'type': 'String',
-        'doc':
-            'The pubspec entry that pulled it in — for a directory declaration this is the only answer to "why is this in my bundle".',
+        'doc': 'The pubspec entry that pulled it in — for a directory declaration this is the only answer to "why is this in my bundle".',
       },
       <String, Object?>{
         'name': 'file',
@@ -210,8 +201,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'scale',
               'type': 'double',
               'optional': true,
-              'doc':
-                  'Null for the main asset, which serves whatever no variant covers.',
+              'doc': 'Null for the main asset, which serves whatever no variant covers.',
             },
             <String, Object?>{'name': 'file', 'type': 'String'},
             <String, Object?>{'name': 'bytes', 'type': 'int'},
@@ -269,8 +259,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'markers',
               'type': 'List<String>',
-              'doc':
-                  'Named points an exporter left behind — what a caller would seek to.',
+              'doc': 'Named points an exporter left behind — what a caller would seek to.',
             },
           ],
         },
@@ -286,8 +275,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'family',
               'type': 'String',
-              'doc':
-                  'The family the pubspec declared, package prefix included where there is one.',
+              'doc': 'The family the pubspec declared, package prefix included where there is one.',
             },
             <String, Object?>{
               'name': 'weight',
@@ -344,8 +332,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'kind',
         'type': 'String',
-        'doc':
-            'A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `oversized`, `over-budget`.',
+        'doc': 'A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `oversized`, `over-budget`.',
       },
       <String, Object?>{
         'name': 'summary',
@@ -355,8 +342,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'detail',
         'type': 'String',
-        'doc':
-            'What was found, specifically — the sizes, the paths, the densities.',
+        'doc': 'What was found, specifically — the sizes, the paths, the densities.',
       },
       <String, Object?>{
         'name': 'package',
@@ -380,8 +366,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'path',
         'type': 'String',
         'optional': true,
-        'doc':
-            'A path relative to the package, for findings about a file rather than a key.',
+        'doc': 'A path relative to the package, for findings about a file rather than a key.',
       },
     ],
   }),
@@ -392,15 +377,13 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'own',
         'type': 'int',
-        'doc':
-            'Counts are always both, even when only the package\'s own assets are listed: a list that silently dropped 340 dependency assets would read as "this bundle has nine things in it".',
+        'doc': 'Counts are always both, even when only the package\'s own assets are listed: a list that silently dropped 340 dependency assets would read as "this bundle has nine things in it".',
       },
       <String, Object?>{'name': 'fromPackages', 'type': 'int'},
       <String, Object?>{
         'name': 'bytes',
         'type': 'int',
-        'doc':
-            'Every byte in the bundle, dependencies included, whatever was listed.',
+        'doc': 'Every byte in the bundle, dependencies included, whatever was listed.',
       },
       <String, Object?>{
         'name': 'assets',
@@ -422,8 +405,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'address',
               'type': 'String',
-              'doc':
-                  'Where it is, so a caller can act on it without a second lookup.',
+              'doc': 'Where it is, so a caller can act on it without a second lookup.',
             },
             <String, Object?>{
               'name': 'package',
@@ -445,8 +427,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'error',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Set when the package could not be scanned, in which case the counts mean nothing.',
+        'doc': 'Set when the package could not be scanned, in which case the counts mean nothing.',
       },
     ],
   }),
@@ -463,15 +444,13 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'own',
               'type': 'int',
-              'doc':
-                  'Counts are always both, even when only the package\'s own assets are listed: a list that silently dropped 340 dependency assets would read as "this bundle has nine things in it".',
+              'doc': 'Counts are always both, even when only the package\'s own assets are listed: a list that silently dropped 340 dependency assets would read as "this bundle has nine things in it".',
             },
             <String, Object?>{'name': 'fromPackages', 'type': 'int'},
             <String, Object?>{
               'name': 'bytes',
               'type': 'int',
-              'doc':
-                  'Every byte in the bundle, dependencies included, whatever was listed.',
+              'doc': 'Every byte in the bundle, dependencies included, whatever was listed.',
             },
             <String, Object?>{
               'name': 'assets',
@@ -493,21 +472,18 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'address',
                     'type': 'String',
-                    'doc':
-                        'Where it is, so a caller can act on it without a second lookup.',
+                    'doc': 'Where it is, so a caller can act on it without a second lookup.',
                   },
                   <String, Object?>{
                     'name': 'package',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The package that declared it; absent for the bundle\'s own.',
+                    'doc': 'The package that declared it; absent for the bundle\'s own.',
                   },
                   <String, Object?>{
                     'name': 'densities',
                     'type': 'List<double>',
-                    'doc':
-                        'Which densities exist beside the main file — `[2.0, 3.0]`.',
+                    'doc': 'Which densities exist beside the main file — `[2.0, 3.0]`.',
                   },
                 ],
               },
@@ -516,8 +492,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'error',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Set when the package could not be scanned, in which case the counts mean nothing.',
+              'doc': 'Set when the package could not be scanned, in which case the counts mean nothing.',
             },
           ],
         },
@@ -544,8 +519,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'device',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The screen it was rendered on — the entry\'s declared canvas, or whatever the call named for the whole run.',
+        'doc': 'The screen it was rendered on — the entry\'s declared canvas, or whatever the call named for the whole run.',
       },
       <String, Object?>{
         'name': 'errors',
@@ -558,15 +532,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'library',
               'type': 'String',
               'optional': true,
-              'doc':
-                  '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
+              'doc': '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
             },
             <String, Object?>{
               'name': 'context',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'What the framework was doing: `during layout`, `while painting`.',
+              'doc': 'What the framework was doing: `during layout`, `while painting`.',
             },
             <String, Object?>{
               'name': 'count',
@@ -596,14 +568,12 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'network',
         'type': 'int',
-        'doc':
-            'How many entries had a network fetch fail — which under `flutter_test` is every network fetch, the binding answering 400 to all of them.',
+        'doc': 'How many entries had a network fetch fail — which under `flutter_test` is every network fetch, the binding answering 400 to all of them.',
       },
       <String, Object?>{
         'name': 'broken',
         'type': 'int',
-        'doc':
-            'How many of them are broken — the number the whole thing exists to produce, so that a caller has an answer before it has read a list.',
+        'doc': 'How many of them are broken — the number the whole thing exists to produce, so that a caller has an answer before it has read a list.',
       },
       <String, Object?>{
         'name': 'entries',
@@ -629,8 +599,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'device',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The screen it was rendered on — the entry\'s declared canvas, or whatever the call named for the whole run.',
+              'doc': 'The screen it was rendered on — the entry\'s declared canvas, or whatever the call named for the whole run.',
             },
             <String, Object?>{
               'name': 'errors',
@@ -643,15 +612,13 @@ final resultShapes = <String, ResultShape>{
                     'name': 'library',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
+                    'doc': '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
                   },
                   <String, Object?>{
                     'name': 'context',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'What the framework was doing: `during layout`, `while painting`.',
+                    'doc': 'What the framework was doing: `during layout`, `while painting`.',
                   },
                   <String, Object?>{
                     'name': 'count',
@@ -667,8 +634,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'unreachable',
         'type': 'List<CatalogAuditFailure>',
-        'doc':
-            'Packages that could not be audited at all, which is not the same as a package whose entries are fine.',
+        'doc': 'Packages that could not be audited at all, which is not the same as a package whose entries are fine.',
         'shape': <String, Object?>{
           'type': 'CatalogAuditFailure',
           'fields': <Object?>[
@@ -731,8 +697,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'error',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Set when the daemon could not be reached at all, which is not the same as "everything failed to compile".',
+              'doc': 'Set when the daemon could not be reached at all, which is not the same as "everything failed to compile".',
             },
           ],
         },
@@ -758,8 +723,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'directory',
               'type': 'String',
-              'doc':
-                  'Where this package\'s demos were looked for, relative to the package.',
+              'doc': 'Where this package\'s demos were looked for, relative to the package.',
             },
             <String, Object?>{
               'name': 'entries',
@@ -770,35 +734,30 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'id',
                     'type': 'String',
-                    'doc':
-                        'What `screenshot --entry` and `describe --entry` take.',
+                    'doc': 'What `screenshot --entry` and `describe --entry` take.',
                   },
                   <String, Object?>{'name': 'name', 'type': 'String'},
                   <String, Object?>{
                     'name': 'address',
                     'type': 'String',
-                    'doc':
-                        'The `Address`, rendered — hand it back to `screenshot`, or later `show`.',
+                    'doc': 'The `Address`, rendered — hand it back to `screenshot`, or later `show`.',
                   },
                   <String, Object?>{
                     'name': 'group',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'One tree level between the directory and the leaf, when the entry declares or derives one.',
+                    'doc': 'One tree level between the directory and the leaf, when the entry declares or derives one.',
                   },
                   <String, Object?>{
                     'name': 'device',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'What a `screenshot` of this entry that names no device will be framed as — the head of [devices], absent when it is the plain rectangle.',
+                    'doc': 'What a `screenshot` of this entry that names no device will be framed as — the head of [devices], absent when it is the plain rectangle.',
                   },
                   <String, Object?>{
                     'name': 'devices',
                     'type': 'List<String>',
-                    'doc':
-                        'Every device the entry\'s canvas offers, [device] first.',
+                    'doc': 'Every device the entry\'s canvas offers, [device] first.',
                   },
                 ],
               },
@@ -806,23 +765,20 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'tree',
               'type': 'List<CatalogEntryNode>',
-              'doc':
-                  '[entries] arranged the way the catalog is meant to be read: folders, then a level per file that holds several entries, then the entries.',
+              'doc': '[entries] arranged the way the catalog is meant to be read: folders, then a level per file that holds several entries, then the entries.',
               'shape': <String, Object?>{
                 'type': 'CatalogEntryNode',
                 'fields': <Object?>[
                   <String, Object?>{
                     'name': 'label',
                     'type': 'String',
-                    'doc':
-                        'What the panel shows on this row: a directory segment as it is written on disk, a group as it was declared or humanised from the file name, or an entry\'s name.',
+                    'doc': 'What the panel shows on this row: a directory segment as it is written on disk, a group as it was declared or humanised from the file name, or an entry\'s name.',
                   },
                   <String, Object?>{
                     'name': 'entry',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The entry this leaf renders, as `screenshot --entry` takes it.',
+                    'doc': 'The entry this leaf renders, as `screenshot --entry` takes it.',
                   },
                   <String, Object?>{
                     'name': 'children',
@@ -836,15 +792,13 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'diagnostics',
               'type': 'List<String>',
-              'doc':
-                  'Discovery\'s complaints — a duplicate id, an uncallable target.',
+              'doc': 'Discovery\'s complaints — a duplicate id, an uncallable target.',
             },
             <String, Object?>{
               'name': 'error',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Set when the scan failed, in which case [entries] is empty and means nothing.',
+              'doc': 'Set when the scan failed, in which case [entries] is empty and means nothing.',
             },
             <String, Object?>{
               'name': 'authoring',
@@ -880,8 +834,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'annotation',
         'type': 'String',
-        'doc':
-            'The annotation\'s source text, verbatim — `Preview(name: \'Counter\')`.',
+        'doc': 'The annotation\'s source text, verbatim — `Preview(name: \'Counter\')`.',
       },
       <String, Object?>{'name': 'address', 'type': 'String'},
       <String, Object?>{'name': 'group', 'type': 'String', 'optional': true},
@@ -889,8 +842,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'knobs',
         'type': 'List<CatalogKnob>',
         'optional': true,
-        'doc':
-            'Present only when `--knobs` asked for them: reading a knob costs a compile and a frame, so absent means "not looked at" while an empty list means "this entry declares none".',
+        'doc': 'Present only when `--knobs` asked for them: reading a knob costs a compile and a frame, so absent means "not looked at" while an empty list means "this entry declares none".',
         'shape': <String, Object?>{
           'type': 'CatalogKnob',
           'fields': <Object?>[
@@ -910,8 +862,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'default',
               'type': 'Object',
               'optional': true,
-              'doc':
-                  'What the demo renders with when nothing is set — also what it shows outside the catalog.',
+              'doc': 'What the demo renders with when nothing is set — also what it shows outside the catalog.',
             },
             <String, Object?>{
               'name': 'min',
@@ -952,8 +903,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'default',
               'type': 'Object',
               'optional': true,
-              'doc':
-                  'What the demo renders with when nothing is set — also what it shows outside the catalog.',
+              'doc': 'What the demo renders with when nothing is set — also what it shows outside the catalog.',
             },
             <String, Object?>{
               'name': 'min',
@@ -984,8 +934,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'label',
         'type': 'String',
-        'doc':
-            'What the panel shows on this row: a directory segment as it is written on disk, a group as it was declared or humanised from the file name, or an entry\'s name.',
+        'doc': 'What the panel shows on this row: a directory segment as it is written on disk, a group as it was declared or humanised from the file name, or an entry\'s name.',
       },
       <String, Object?>{
         'name': 'entry',
@@ -1012,22 +961,19 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'address',
         'type': 'String',
-        'doc':
-            'The `Address`, rendered — hand it back to `screenshot`, or later `show`.',
+        'doc': 'The `Address`, rendered — hand it back to `screenshot`, or later `show`.',
       },
       <String, Object?>{
         'name': 'group',
         'type': 'String',
         'optional': true,
-        'doc':
-            'One tree level between the directory and the leaf, when the entry declares or derives one.',
+        'doc': 'One tree level between the directory and the leaf, when the entry declares or derives one.',
       },
       <String, Object?>{
         'name': 'device',
         'type': 'String',
         'optional': true,
-        'doc':
-            'What a `screenshot` of this entry that names no device will be framed as — the head of [devices], absent when it is the plain rectangle.',
+        'doc': 'What a `screenshot` of this entry that names no device will be framed as — the head of [devices], absent when it is the plain rectangle.',
       },
       <String, Object?>{
         'name': 'devices',
@@ -1044,8 +990,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'readFrom',
         'type': 'String',
-        'doc':
-            'Where this reading came from: `live` when it was taken from a session somebody has open — the demo in whatever state they left it, including anything they reached by clicking — and `render` when this call built and drew its own copy.',
+        'doc': 'Where this reading came from: `live` when it was taken from a session somebody has open — the demo in whatever state they left it, including anything they reached by clicking — and `render` when this call built and drew its own copy.',
       },
       <String, Object?>{
         'name': 'ok',
@@ -1063,15 +1008,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'library',
               'type': 'String',
               'optional': true,
-              'doc':
-                  '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
+              'doc': '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
             },
             <String, Object?>{
               'name': 'context',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'What the framework was doing: `during layout`, `while painting`.',
+              'doc': 'What the framework was doing: `during layout`, `while painting`.',
             },
             <String, Object?>{
               'name': 'count',
@@ -1084,29 +1027,25 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'lens',
         'type': 'String',
-        'doc':
-            'The lens the unset flags came from — `act`, `look`, `design` or `raw`.',
+        'doc': 'The lens the unset flags came from — `act`, `look`, `design` or `raw`.',
       },
       <String, Object?>{
         'name': 'screen',
         'type': 'Screen',
         'optional': true,
-        'doc':
-            'What rendered: the things that carry words or respond to touch, nested under the layout\'s branch points, with their boxes and their state.',
+        'doc': 'What rendered: the things that carry words or respond to touch, nested under the layout\'s branch points, with their boxes and their state.',
       },
       <String, Object?>{
         'name': 'styles',
         'type': 'List<InspectStyle>',
         'optional': true,
-        'doc':
-            'Every distinct text size, weight and colour, most-used first with a sample.',
+        'doc': 'Every distinct text size, weight and colour, most-used first with a sample.',
       },
       <String, Object?>{
         'name': 'nodes',
         'type': 'int',
         'optional': true,
-        'doc':
-            'How many nodes the preview drew, whether or not the tree rode back — the number that says whether asking for `tree` is affordable.',
+        'doc': 'How many nodes the preview drew, whether or not the tree rode back — the number that says whether asking for `tree` is affordable.',
       },
       <String, Object?>{
         'name': 'tree',
@@ -1119,8 +1058,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'id',
               'type': 'String',
-              'doc':
-                  'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
+              'doc': 'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
             },
             <String, Object?>{
               'name': 'type',
@@ -1130,15 +1068,13 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'depth',
               'type': 'int',
-              'doc':
-                  'How deep below the demo\'s root, so a flat list still reads as a tree.',
+              'doc': 'How deep below the demo\'s root, so a flat list still reads as a tree.',
             },
             <String, Object?>{
               'name': 'description',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
+              'doc': 'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
             },
             <String, Object?>{
               'name': 'source',
@@ -1149,15 +1085,13 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'local',
               'type': 'bool',
-              'doc':
-                  'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+              'doc': 'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
             },
             <String, Object?>{
               'name': 'offstage',
               'type': 'bool',
               'optional': true,
-              'doc':
-                  'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
+              'doc': 'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
             },
             <String, Object?>{
               'name': 'rect',
@@ -1175,15 +1109,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'flex',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
+              'doc': 'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
             },
             <String, Object?>{
               'name': 'flexChild',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
+              'doc': 'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
             },
           ],
         },
@@ -1199,8 +1131,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'id',
               'type': 'String',
-              'doc':
-                  'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
+              'doc': 'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
             },
             <String, Object?>{
               'name': 'type',
@@ -1210,15 +1141,13 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'depth',
               'type': 'int',
-              'doc':
-                  'How deep below the demo\'s root, so a flat list still reads as a tree.',
+              'doc': 'How deep below the demo\'s root, so a flat list still reads as a tree.',
             },
             <String, Object?>{
               'name': 'description',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
+              'doc': 'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
             },
             <String, Object?>{
               'name': 'source',
@@ -1229,15 +1158,13 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'local',
               'type': 'bool',
-              'doc':
-                  'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+              'doc': 'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
             },
             <String, Object?>{
               'name': 'offstage',
               'type': 'bool',
               'optional': true,
-              'doc':
-                  'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
+              'doc': 'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
             },
             <String, Object?>{
               'name': 'rect',
@@ -1255,15 +1182,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'flex',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
+              'doc': 'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
             },
             <String, Object?>{
               'name': 'flexChild',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
+              'doc': 'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
             },
           ],
         },
@@ -1272,16 +1197,14 @@ final resultShapes = <String, ResultShape>{
         'name': 'at',
         'type': 'List<CatalogTreeNode>',
         'optional': true,
-        'doc':
-            'The chain under `--at`, outermost first — the thing under a cursor is usually a `Text` and the thing meant is the button around it.',
+        'doc': 'The chain under `--at`, outermost first — the thing under a cursor is usually a `Text` and the thing meant is the button around it.',
         'shape': <String, Object?>{
           'type': 'CatalogTreeNode',
           'fields': <Object?>[
             <String, Object?>{
               'name': 'id',
               'type': 'String',
-              'doc':
-                  'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
+              'doc': 'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
             },
             <String, Object?>{
               'name': 'type',
@@ -1291,15 +1214,13 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'depth',
               'type': 'int',
-              'doc':
-                  'How deep below the demo\'s root, so a flat list still reads as a tree.',
+              'doc': 'How deep below the demo\'s root, so a flat list still reads as a tree.',
             },
             <String, Object?>{
               'name': 'description',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
+              'doc': 'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
             },
             <String, Object?>{
               'name': 'source',
@@ -1310,15 +1231,13 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'local',
               'type': 'bool',
-              'doc':
-                  'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+              'doc': 'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
             },
             <String, Object?>{
               'name': 'offstage',
               'type': 'bool',
               'optional': true,
-              'doc':
-                  'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
+              'doc': 'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
             },
             <String, Object?>{
               'name': 'rect',
@@ -1336,15 +1255,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'flex',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
+              'doc': 'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
             },
             <String, Object?>{
               'name': 'flexChild',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
+              'doc': 'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
             },
           ],
         },
@@ -1353,8 +1270,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'atOuterElided',
         'type': 'int',
         'optional': true,
-        'doc':
-            'How many outer nodes of the chain were left out, when the cap bit.',
+        'doc': 'How many outer nodes of the chain were left out, when the cap bit.',
       },
       <String, Object?>{
         'name': 'logs',
@@ -1366,8 +1282,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'logsDropped',
         'type': 'int',
         'optional': true,
-        'doc':
-            'How many earlier lines fell off the guest\'s buffer, when any did.',
+        'doc': 'How many earlier lines fell off the guest\'s buffer, when any did.',
       },
       <String, Object?>{
         'name': 'screenshot',
@@ -1397,15 +1312,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'text',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.',
+              'doc': 'The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.',
             },
             <String, Object?>{
               'name': 'meta',
               'type': 'Map<String, Object?>',
               'optional': true,
-              'doc':
-                  'Anything the producer wants the reader to know: timings, compile stats, exit codes.',
+              'doc': 'Anything the producer wants the reader to know: timings, compile stats, exit codes.',
             },
           ],
         },
@@ -1414,8 +1327,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'note',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Something this reading could not answer, said in a way a caller can act on — the render happened, so it is not an error.',
+        'doc': 'Something this reading could not answer, said in a way a caller can act on — the render happened, so it is not an error.',
       },
       <String, Object?>{
         'name': 'next',
@@ -1444,8 +1356,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'default',
         'type': 'Object',
         'optional': true,
-        'doc':
-            'What the demo renders with when nothing is set — also what it shows outside the catalog.',
+        'doc': 'What the demo renders with when nothing is set — also what it shows outside the catalog.',
       },
       <String, Object?>{
         'name': 'min',
@@ -1474,8 +1385,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'id',
         'type': 'String',
-        'doc':
-            'What `screenshot --entry` and `describe --entry` take for it, so the next call needs no translation.',
+        'doc': 'What `screenshot --entry` and `describe --entry` take for it, so the next call needs no translation.',
       },
       <String, Object?>{
         'name': 'next',
@@ -1517,8 +1427,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'error',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Set when the daemon could not be reached at all, which is not the same as "everything failed to compile".',
+        'doc': 'Set when the daemon could not be reached at all, which is not the same as "everything failed to compile".',
       },
     ],
   }),
@@ -1533,8 +1442,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'directory',
         'type': 'String',
-        'doc':
-            'Where this package\'s demos were looked for, relative to the package.',
+        'doc': 'Where this package\'s demos were looked for, relative to the package.',
       },
       <String, Object?>{
         'name': 'entries',
@@ -1551,22 +1459,19 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'address',
               'type': 'String',
-              'doc':
-                  'The `Address`, rendered — hand it back to `screenshot`, or later `show`.',
+              'doc': 'The `Address`, rendered — hand it back to `screenshot`, or later `show`.',
             },
             <String, Object?>{
               'name': 'group',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'One tree level between the directory and the leaf, when the entry declares or derives one.',
+              'doc': 'One tree level between the directory and the leaf, when the entry declares or derives one.',
             },
             <String, Object?>{
               'name': 'device',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'What a `screenshot` of this entry that names no device will be framed as — the head of [devices], absent when it is the plain rectangle.',
+              'doc': 'What a `screenshot` of this entry that names no device will be framed as — the head of [devices], absent when it is the plain rectangle.',
             },
             <String, Object?>{
               'name': 'devices',
@@ -1579,23 +1484,20 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'tree',
         'type': 'List<CatalogEntryNode>',
-        'doc':
-            '[entries] arranged the way the catalog is meant to be read: folders, then a level per file that holds several entries, then the entries.',
+        'doc': '[entries] arranged the way the catalog is meant to be read: folders, then a level per file that holds several entries, then the entries.',
         'shape': <String, Object?>{
           'type': 'CatalogEntryNode',
           'fields': <Object?>[
             <String, Object?>{
               'name': 'label',
               'type': 'String',
-              'doc':
-                  'What the panel shows on this row: a directory segment as it is written on disk, a group as it was declared or humanised from the file name, or an entry\'s name.',
+              'doc': 'What the panel shows on this row: a directory segment as it is written on disk, a group as it was declared or humanised from the file name, or an entry\'s name.',
             },
             <String, Object?>{
               'name': 'entry',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The entry this leaf renders, as `screenshot --entry` takes it.',
+              'doc': 'The entry this leaf renders, as `screenshot --entry` takes it.',
             },
             <String, Object?>{
               'name': 'children',
@@ -1615,8 +1517,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'error',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Set when the scan failed, in which case [entries] is empty and means nothing.',
+        'doc': 'Set when the scan failed, in which case [entries] is empty and means nothing.',
       },
       <String, Object?>{
         'name': 'authoring',
@@ -1634,8 +1535,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'library',
         'type': 'String',
         'optional': true,
-        'doc':
-            '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
+        'doc': '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
       },
       <String, Object?>{
         'name': 'context',
@@ -1668,15 +1568,13 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'depth',
         'type': 'int',
-        'doc':
-            'How deep below the demo\'s root, so a flat list still reads as a tree.',
+        'doc': 'How deep below the demo\'s root, so a flat list still reads as a tree.',
       },
       <String, Object?>{
         'name': 'description',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
+        'doc': 'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
       },
       <String, Object?>{
         'name': 'source',
@@ -1687,15 +1585,13 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'local',
         'type': 'bool',
-        'doc':
-            'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+        'doc': 'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
       },
       <String, Object?>{
         'name': 'offstage',
         'type': 'bool',
         'optional': true,
-        'doc':
-            'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
+        'doc': 'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
       },
       <String, Object?>{
         'name': 'rect',
@@ -1713,8 +1609,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'flex',
         'type': 'String',
         'optional': true,
-        'doc':
-            'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
+        'doc': 'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
       },
       <String, Object?>{
         'name': 'flexChild',
@@ -1732,8 +1627,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'output',
         'type': 'String',
-        'doc':
-            'The directory to serve, worktree-relative where it is inside the worktree — a path that survives being read on another machine.',
+        'doc': 'The directory to serve, worktree-relative where it is inside the worktree — a path that survives being read on another machine.',
       },
       <String, Object?>{
         'name': 'indexHtml',
@@ -1754,8 +1648,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'against',
         'type': 'String',
-        'doc':
-            'What the comparison was against — the ref\'s name, as a header shows it.',
+        'doc': 'What the comparison was against — the ref\'s name, as a header shows it.',
       },
       <String, Object?>{
         'name': 'baseSha',
@@ -1765,8 +1658,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'counts',
         'type': 'Map<String, int>',
-        'doc':
-            'Every row by state, both halves merged: `{"changed": 2, "skipped": 9}`.',
+        'doc': 'Every row by state, both halves merged: `{"changed": 2, "skipped": 9}`.',
       },
       <String, Object?>{
         'name': 'findings',
@@ -1788,22 +1680,19 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'state',
               'type': 'String',
-              'doc':
-                  '`broke`, `failed`, `wasBroken`, `added`, `removed` or `changed` — declared worst-first, and the list is sorted by it.',
+              'doc': '`broke`, `failed`, `wasBroken`, `added`, `removed` or `changed` — declared worst-first, and the list is sorted by it.',
             },
             <String, Object?>{
               'name': 'note',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Why it is in the state it is, when the state alone does not say.',
+              'doc': 'Why it is in the state it is, when the state alone does not say.',
             },
             <String, Object?>{
               'name': 'delta',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The size of the change: `0.38% · 2 regions` for pixels, the step that moved for a flow.',
+              'doc': 'The size of the change: `0.38% · 2 regions` for pixels, the step that moved for a flow.',
             },
           ],
         },
@@ -1811,8 +1700,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'index',
         'type': 'String',
-        'doc':
-            'The whole verdict as a file — every row, every channel, the shot keys.',
+        'doc': 'The whole verdict as a file — every row, every channel, the shot keys.',
       },
       <String, Object?>{
         'name': 'export',
@@ -1824,15 +1712,13 @@ final resultShapes = <String, ResultShape>{
         'name': 'report',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The PR report directory, when `report` asked for one: `comment.md`, `mosaic.png`, the page under `web/`.',
+        'doc': 'The PR report directory, when `report` asked for one: `comment.md`, `mosaic.png`, the page under `web/`.',
       },
       <String, Object?>{
         'name': 'scenariosNote',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Why the scenario half has nothing to say, when it has nothing to say — a base harness that would not build reads differently from a project with no scenarios.',
+        'doc': 'Why the scenario half has nothing to say, when it has nothing to say — a base harness that would not build reads differently from a project with no scenarios.',
       },
     ],
   }),
@@ -1852,8 +1738,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'state',
         'type': 'String',
-        'doc':
-            '`broke`, `failed`, `wasBroken`, `added`, `removed` or `changed` — declared worst-first, and the list is sorted by it.',
+        'doc': '`broke`, `failed`, `wasBroken`, `added`, `removed` or `changed` — declared worst-first, and the list is sorted by it.',
       },
       <String, Object?>{
         'name': 'note',
@@ -1866,8 +1751,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'delta',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The size of the change: `0.38% · 2 regions` for pixels, the step that moved for a flow.',
+        'doc': 'The size of the change: `0.38% · 2 regions` for pixels, the step that moved for a flow.',
       },
     ],
   }),
@@ -1878,8 +1762,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'direct',
         'type': 'bool',
-        'doc':
-            'Declared in this package\'s own pubspec, as opposed to pulled in by something else.',
+        'doc': 'Declared in this package\'s own pubspec, as opposed to pulled in by something else.',
       },
       <String, Object?>{
         'name': 'dev',
@@ -1901,15 +1784,13 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'source',
         'type': 'String',
-        'doc':
-            '`hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.',
+        'doc': '`hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.',
       },
       <String, Object?>{
         'name': 'origin',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The identifying detail behind [source]: the git repository and ref, the relative path, a non-pub.dev server.',
+        'doc': 'The identifying detail behind [source]: the git repository and ref, the relative path, a non-pub.dev server.',
       },
     ],
   }),
@@ -1920,8 +1801,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'direct',
         'type': 'int',
-        'doc':
-            'Counts are always all three, even when only the declared ones are listed: a list that silently dropped 156 packages and said nothing would read as "this package has 14 dependencies".',
+        'doc': 'Counts are always all three, even when only the declared ones are listed: a list that silently dropped 156 packages and said nothing would read as "this package has 14 dependencies".',
       },
       <String, Object?>{'name': 'dev', 'type': 'int'},
       <String, Object?>{'name': 'transitive', 'type': 'int'},
@@ -1935,14 +1815,12 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'direct',
               'type': 'bool',
-              'doc':
-                  'Declared in this package\'s own pubspec, as opposed to pulled in by something else.',
+              'doc': 'Declared in this package\'s own pubspec, as opposed to pulled in by something else.',
             },
             <String, Object?>{
               'name': 'dev',
               'type': 'bool',
-              'doc':
-                  'Declared in `dev_dependencies:` rather than `dependencies:`.',
+              'doc': 'Declared in `dev_dependencies:` rather than `dependencies:`.',
             },
             <String, Object?>{
               'name': 'version',
@@ -1954,21 +1832,18 @@ final resultShapes = <String, ResultShape>{
               'name': 'constraint',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The constraint the depending package wrote — `^1.2.0`, `any`.',
+              'doc': 'The constraint the depending package wrote — `^1.2.0`, `any`.',
             },
             <String, Object?>{
               'name': 'source',
               'type': 'String',
-              'doc':
-                  '`hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.',
+              'doc': '`hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.',
             },
             <String, Object?>{
               'name': 'origin',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The identifying detail behind [source]: the git repository and ref, the relative path, a non-pub.dev server.',
+              'doc': 'The identifying detail behind [source]: the git repository and ref, the relative path, a non-pub.dev server.',
             },
           ],
         },
@@ -1977,8 +1852,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'error',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Set when the package could not be loaded, in which case the counts mean nothing.',
+        'doc': 'Set when the package could not be loaded, in which case the counts mean nothing.',
       },
     ],
   }),
@@ -1995,8 +1869,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'direct',
               'type': 'int',
-              'doc':
-                  'Counts are always all three, even when only the declared ones are listed: a list that silently dropped 156 packages and said nothing would read as "this package has 14 dependencies".',
+              'doc': 'Counts are always all three, even when only the declared ones are listed: a list that silently dropped 156 packages and said nothing would read as "this package has 14 dependencies".',
             },
             <String, Object?>{'name': 'dev', 'type': 'int'},
             <String, Object?>{'name': 'transitive', 'type': 'int'},
@@ -2010,14 +1883,12 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'direct',
                     'type': 'bool',
-                    'doc':
-                        'Declared in this package\'s own pubspec, as opposed to pulled in by something else.',
+                    'doc': 'Declared in this package\'s own pubspec, as opposed to pulled in by something else.',
                   },
                   <String, Object?>{
                     'name': 'dev',
                     'type': 'bool',
-                    'doc':
-                        'Declared in `dev_dependencies:` rather than `dependencies:`.',
+                    'doc': 'Declared in `dev_dependencies:` rather than `dependencies:`.',
                   },
                   <String, Object?>{
                     'name': 'version',
@@ -2029,21 +1900,18 @@ final resultShapes = <String, ResultShape>{
                     'name': 'constraint',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The constraint the depending package wrote — `^1.2.0`, `any`.',
+                    'doc': 'The constraint the depending package wrote — `^1.2.0`, `any`.',
                   },
                   <String, Object?>{
                     'name': 'source',
                     'type': 'String',
-                    'doc':
-                        '`hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.',
+                    'doc': '`hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.',
                   },
                   <String, Object?>{
                     'name': 'origin',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The identifying detail behind [source]: the git repository and ref, the relative path, a non-pub.dev server.',
+                    'doc': 'The identifying detail behind [source]: the git repository and ref, the relative path, a non-pub.dev server.',
                   },
                 ],
               },
@@ -2052,8 +1920,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'error',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Set when the package could not be loaded, in which case the counts mean nothing.',
+              'doc': 'Set when the package could not be loaded, in which case the counts mean nothing.',
             },
           ],
         },
@@ -2066,8 +1933,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'family',
         'type': 'String',
-        'doc':
-            'The family the pubspec declared, package prefix included where there is one.',
+        'doc': 'The family the pubspec declared, package prefix included where there is one.',
       },
       <String, Object?>{
         'name': 'weight',
@@ -2084,8 +1950,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'path',
         'type': 'String',
-        'doc':
-            'Worktree-relative rather than package-relative: an agent\'s tools are scoped to the repo, not to one package inside it.',
+        'doc': 'Worktree-relative rather than package-relative: an agent\'s tools are scoped to the repo, not to one package inside it.',
       },
       <String, Object?>{'name': 'modified', 'type': 'String'},
       <String, Object?>{'name': 'width', 'type': 'int', 'optional': true},
@@ -2106,8 +1971,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'declaredSize',
         'type': 'int',
         'optional': true,
-        'doc':
-            'What an Apple asset catalog claims this file\'s size is, when it disagrees with [width].',
+        'doc': 'What an Apple asset catalog claims this file\'s size is, when it disagrees with [width].',
       },
     ],
   }),
@@ -2171,8 +2035,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'minSdk',
         'type': 'int',
         'optional': true,
-        'doc':
-            'Null when it could not be read, which is an answer rather than a failure: the current Flutter template writes `minSdk = flutter.minSdkVersion`, which is not a number until Gradle runs.',
+        'doc': 'Null when it could not be read, which is an answer rather than a failure: the current Flutter template writes `minSdk = flutter.minSdkVersion`, which is not a number until Gradle runs.',
       },
       <String, Object?>{
         'name': 'minSdkSource',
@@ -2195,8 +2058,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'treatment',
               'type': 'String',
-              'doc':
-                  'What the OS does to the pixels: `asAuthored`, `whiteSilhouette` or `desaturateAndTint`.',
+              'doc': 'What the OS does to the pixels: `asAuthored`, `whiteSilhouette` or `desaturateAndTint`.',
             },
             <String, Object?>{
               'name': 'mask',
@@ -2219,8 +2081,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'color',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The adaptive background when it is a colour rather than an image.',
+              'doc': 'The adaptive background when it is a colour rather than an image.',
             },
             <String, Object?>{
               'name': 'files',
@@ -2231,8 +2092,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'path',
                     'type': 'String',
-                    'doc':
-                        'Worktree-relative rather than package-relative: an agent\'s tools are scoped to the repo, not to one package inside it.',
+                    'doc': 'Worktree-relative rather than package-relative: an agent\'s tools are scoped to the repo, not to one package inside it.',
                   },
                   <String, Object?>{'name': 'modified', 'type': 'String'},
                   <String, Object?>{
@@ -2250,8 +2110,7 @@ final resultShapes = <String, ResultShape>{
                     'name': 'density',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        '`xxhdpi`, `3x`, or null where the platform has one size.',
+                    'doc': '`xxhdpi`, `3x`, or null where the platform has one size.',
                   },
                   <String, Object?>{
                     'name': 'icoFrames',
@@ -2262,8 +2121,7 @@ final resultShapes = <String, ResultShape>{
                     'name': 'declaredSize',
                     'type': 'int',
                     'optional': true,
-                    'doc':
-                        'What an Apple asset catalog claims this file\'s size is, when it disagrees with [width].',
+                    'doc': 'What an Apple asset catalog claims this file\'s size is, when it disagrees with [width].',
                   },
                 ],
               },
@@ -2302,8 +2160,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'treatment',
         'type': 'String',
-        'doc':
-            'What the OS does to the pixels: `asAuthored`, `whiteSilhouette` or `desaturateAndTint`.',
+        'doc': 'What the OS does to the pixels: `asAuthored`, `whiteSilhouette` or `desaturateAndTint`.',
       },
       <String, Object?>{
         'name': 'mask',
@@ -2338,8 +2195,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'path',
               'type': 'String',
-              'doc':
-                  'Worktree-relative rather than package-relative: an agent\'s tools are scoped to the repo, not to one package inside it.',
+              'doc': 'Worktree-relative rather than package-relative: an agent\'s tools are scoped to the repo, not to one package inside it.',
             },
             <String, Object?>{'name': 'modified', 'type': 'String'},
             <String, Object?>{'name': 'width', 'type': 'int', 'optional': true},
@@ -2364,8 +2220,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'declaredSize',
               'type': 'int',
               'optional': true,
-              'doc':
-                  'What an Apple asset catalog claims this file\'s size is, when it disagrees with [width].',
+              'doc': 'What an Apple asset catalog claims this file\'s size is, when it disagrees with [width].',
             },
           ],
         },
@@ -2386,8 +2241,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'samples',
         'type': 'Map<String, List<String>>',
-        'doc':
-            'Up to three concrete findings per rule, as `path:line — message`, so a reader can see what a rule is like in this repo without another run.',
+        'doc': 'Up to three concrete findings per rule, as `path:line — message`, so a reader can see what a rule is like in this repo without another run.',
       },
     ],
   }),
@@ -2399,14 +2253,12 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'unevaluatedWithoutIssues',
         'type': 'int',
-        'doc':
-            'Unevaluated rules that would flag nothing today — the ones that can be enabled and nothing changes.',
+        'doc': 'Unevaluated rules that would flag nothing today — the ones that can be enabled and nothing changes.',
       },
       <String, Object?>{
         'name': 'stale',
         'type': 'bool',
-        'doc':
-            'True when the candidate set changed since this run — counts still shown, but a re-run would cover the current rules.',
+        'doc': 'True when the candidate set changed since this run — counts still shown, but a re-run would cover the current rules.',
       },
     ],
   }),
@@ -2418,8 +2270,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'inheritsNothing',
         'type': 'bool',
-        'doc':
-            'True for a file with no `include:` — it severs inheritance, so every rule an ancestor enabled is off underneath it.',
+        'doc': 'True for a file with no `include:` — it severs inheritance, so every rule an ancestor enabled is off underneath it.',
       },
       <String, Object?>{'name': 'includeErrors', 'type': 'List<String>'},
       <String, Object?>{
@@ -2461,8 +2312,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'comment',
         'type': 'String',
         'optional': true,
-        'doc':
-            'For dismissed rules: the comment next to the `false`, when there is one.',
+        'doc': 'For dismissed rules: the comment next to the `false`, when there is one.',
       },
       <String, Object?>{
         'name': 'files',
@@ -2474,8 +2324,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'issues',
         'type': 'int',
         'optional': true,
-        'doc':
-            'How many issues this rule would flag today — from the last counting run, for every rule that is not already on, absent until one ran.',
+        'doc': 'How many issues this rule would flag today — from the last counting run, for every rule that is not already on, absent until one ran.',
       },
     ],
   }),
@@ -2486,20 +2335,17 @@ final resultShapes = <String, ResultShape>{
         'name': 'dartVersion',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The project SDK\'s Dart version — the tag the rule catalog was fetched at.',
+        'doc': 'The project SDK\'s Dart version — the tag the rule catalog was fetched at.',
       },
       <String, Object?>{
         'name': 'catalogAvailable',
         'type': 'bool',
-        'doc':
-            'False when no catalog could be loaded (first run offline): the local buckets still stand, but nothing can be called unevaluated.',
+        'doc': 'False when no catalog could be loaded (first run offline): the local buckets still stand, but nothing can be called unevaluated.',
       },
       <String, Object?>{
         'name': 'universe',
         'type': 'int',
-        'doc':
-            'How many rules the catalog offers this SDK (stable + experimental).',
+        'doc': 'How many rules the catalog offers this SDK (stable + experimental).',
       },
       <String, Object?>{
         'name': 'files',
@@ -2512,8 +2358,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'inheritsNothing',
               'type': 'bool',
-              'doc':
-                  'True for a file with no `include:` — it severs inheritance, so every rule an ancestor enabled is off underneath it.',
+              'doc': 'True for a file with no `include:` — it severs inheritance, so every rule an ancestor enabled is off underneath it.',
             },
             <String, Object?>{'name': 'includeErrors', 'type': 'List<String>'},
             <String, Object?>{
@@ -2572,8 +2417,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'comment',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'For dismissed rules: the comment next to the `false`, when there is one.',
+              'doc': 'For dismissed rules: the comment next to the `false`, when there is one.',
             },
             <String, Object?>{
               'name': 'files',
@@ -2585,8 +2429,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'issues',
               'type': 'int',
               'optional': true,
-              'doc':
-                  'How many issues this rule would flag today — from the last counting run, for every rule that is not already on, absent until one ran.',
+              'doc': 'How many issues this rule would flag today — from the last counting run, for every rule that is not already on, absent until one ran.',
             },
           ],
         },
@@ -2594,8 +2437,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'unknownNames',
         'type': 'List<String>',
-        'doc':
-            'Configured names the catalog does not know — typos or removed rules.',
+        'doc': 'Configured names the catalog does not know — typos or removed rules.',
       },
       <String, Object?>{
         'name': 'issueCounts',
@@ -2609,14 +2451,12 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'unevaluatedWithoutIssues',
               'type': 'int',
-              'doc':
-                  'Unevaluated rules that would flag nothing today — the ones that can be enabled and nothing changes.',
+              'doc': 'Unevaluated rules that would flag nothing today — the ones that can be enabled and nothing changes.',
             },
             <String, Object?>{
               'name': 'stale',
               'type': 'bool',
-              'doc':
-                  'True when the candidate set changed since this run — counts still shown, but a re-run would cover the current rules.',
+              'doc': 'True when the candidate set changed since this run — counts still shown, but a re-run would cover the current rules.',
             },
           ],
         },
@@ -2636,8 +2476,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'values',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The identifier passed to `motion:`, which names the values file\'s const.',
+        'doc': 'The identifier passed to `motion:`, which names the values file\'s const.',
       },
       <String, Object?>{
         'name': 'address',
@@ -2661,8 +2500,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'boxed',
               'type': 'bool',
-              'doc':
-                  'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
+              'doc': 'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
             },
           ],
         },
@@ -2694,15 +2532,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'values',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The identifier passed to `motion:`, which names the values file\'s const.',
+              'doc': 'The identifier passed to `motion:`, which names the values file\'s const.',
             },
             <String, Object?>{
               'name': 'address',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Where to open it, playhead included — append `?t=` to park it.',
+              'doc': 'Where to open it, playhead included — append `?t=` to park it.',
             },
             <String, Object?>{
               'name': 'targets',
@@ -2720,8 +2556,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'boxed',
                     'type': 'bool',
-                    'doc':
-                        'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
+                    'doc': 'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
                   },
                 ],
               },
@@ -2738,8 +2573,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'error',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Set when the package could not be scanned, in which case [motions] means nothing.',
+        'doc': 'Set when the package could not be scanned, in which case [motions] means nothing.',
       },
     ],
   }),
@@ -2774,15 +2608,13 @@ final resultShapes = <String, ResultShape>{
                     'name': 'values',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The identifier passed to `motion:`, which names the values file\'s const.',
+                    'doc': 'The identifier passed to `motion:`, which names the values file\'s const.',
                   },
                   <String, Object?>{
                     'name': 'address',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'Where to open it, playhead included — append `?t=` to park it.',
+                    'doc': 'Where to open it, playhead included — append `?t=` to park it.',
                   },
                   <String, Object?>{
                     'name': 'targets',
@@ -2800,8 +2632,7 @@ final resultShapes = <String, ResultShape>{
                         <String, Object?>{
                           'name': 'boxed',
                           'type': 'bool',
-                          'doc':
-                              'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
+                          'doc': 'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
                         },
                       ],
                     },
@@ -2818,8 +2649,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'error',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Set when the package could not be scanned, in which case [motions] means nothing.',
+              'doc': 'Set when the package could not be scanned, in which case [motions] means nothing.',
             },
           ],
         },
@@ -2839,8 +2669,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'boxed',
         'type': 'bool',
-        'doc':
-            'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
+        'doc': 'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
       },
     ],
   }),
@@ -2867,8 +2696,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'target',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The target as the guest described it — the same spelling the refusal and the journal use.',
+        'doc': 'The target as the guest described it — the same spelling the refusal and the journal use.',
       },
       <String, Object?>{
         'name': 'ok',
@@ -2885,15 +2713,13 @@ final resultShapes = <String, ResultShape>{
         'name': 'failure',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Which way it was refused: `notFound`, `multiple`, `covered`, `offscreen`.',
+        'doc': 'Which way it was refused: `notFound`, `multiple`, `covered`, `offscreen`.',
       },
       <String, Object?>{
         'name': 'attempts',
         'type': 'int',
         'optional': true,
-        'doc':
-            'Resolve attempts the actionability retry ladder spent; 1 when the first try reached the target.',
+        'doc': 'Resolve attempts the actionability retry ladder spent; 1 when the first try reached the target.',
       },
       <String, Object?>{
         'name': 'elapsedMs',
@@ -2905,8 +2731,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'settled',
         'type': 'bool',
         'optional': true,
-        'doc':
-            'False means the settle budget ran out with the app still animating — a spinner, an infinite animation.',
+        'doc': 'False means the settle budget ran out with the app still animating — a spinner, an infinite animation.',
       },
       <String, Object?>{'name': 'settleMs', 'type': 'int', 'optional': true},
       <String, Object?>{'name': 'frames', 'type': 'int', 'optional': true},
@@ -2914,8 +2739,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'framesEnabled',
         'type': 'bool',
         'optional': true,
-        'doc':
-            'False when the platform has the window hidden or occluded: every frame was forced, and what a human sees on screen may lag what these fields describe.',
+        'doc': 'False when the platform has the window hidden or occluded: every frame was forced, and what a human sees on screen may lag what these fields describe.',
       },
       <String, Object?>{
         'name': 'lifecycle',
@@ -2926,93 +2750,80 @@ final resultShapes = <String, ResultShape>{
         'name': 'human',
         'type': 'List<String>',
         'optional': true,
-        'doc':
-            'What the human did in the app since the previous step — `tap "Pay"`, oldest first.',
+        'doc': 'What the human did in the app since the previous step — `tap "Pay"`, oldest first.',
       },
       <String, Object?>{
         'name': 'texts',
         'type': 'List<String>',
         'optional': true,
-        'doc':
-            'Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.',
+        'doc': 'Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.',
       },
       <String, Object?>{
         'name': 'capture',
         'type': 'String',
         'optional': true,
-        'doc':
-            'This moment, on disk: `fw:///worktrees/<wt>/flutterware.run/<run>/steps/<stamp>`.',
+        'doc': 'This moment, on disk: `fw:///worktrees/<wt>/flutterware.run/<run>/steps/<stamp>`.',
       },
       <String, Object?>{
         'name': 'lens',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Which preset shaped this reply — `act`, `look`, `design`, `raw`, with `(pinned)` when it came from the run rather than from this call.',
+        'doc': 'Which preset shaped this reply — `act`, `look`, `design`, `raw`, with `(pinned)` when it came from the run rather than from this call.',
       },
       <String, Object?>{
         'name': 'screen',
         'type': 'Screen',
         'optional': true,
-        'doc':
-            'The screen: what is on it, what can be acted on, and how it is laid out.',
+        'doc': 'The screen: what is on it, what can be acted on, and how it is laid out.',
       },
       <String, Object?>{
         'name': 'tree',
         'type': 'Map<String, Object?>',
         'optional': true,
-        'doc':
-            'The widget tree, when asked for — scoped by `treeRoot`, `treeDepth` and `treeNoise`, and written in the compact spelling (`InspectTree.toJson`\'s `compact`): ids relative to the parent, sources indexed into `files`.',
+        'doc': 'The widget tree, when asked for — scoped by `treeRoot`, `treeDepth` and `treeNoise`, and written in the compact spelling (`InspectTree.toJson`\'s `compact`): ids relative to the parent, sources indexed into `files`.',
       },
       <String, Object?>{
         'name': 'find',
         'type': 'List<Map<String, Object?>>',
         'optional': true,
-        'doc':
-            'Nodes matching `find`, capped — the count is on the wire so a truncated answer says so.',
+        'doc': 'Nodes matching `find`, capped — the count is on the wire so a truncated answer says so.',
       },
       <String, Object?>{
         'name': 'at',
         'type': 'List<Map<String, Object?>>',
         'optional': true,
-        'doc':
-            'The chain of nodes under `at`, outermost first and innermost last.',
+        'doc': 'The chain of nodes under `at`, outermost first and innermost last.',
       },
       <String, Object?>{
         'name': 'styles',
         'type': 'List<InspectStyle>',
         'optional': true,
-        'doc':
-            'Every distinct text style on screen, most-used first, when `styles` asked.',
+        'doc': 'Every distinct text style on screen, most-used first, when `styles` asked.',
       },
       <String, Object?>{
         'name': 'nodes',
         'type': 'int',
         'optional': true,
-        'doc':
-            'How many nodes the tree has *as reported* — after the noise filter and any depth cut, so it counts what came back rather than what exists.',
+        'doc': 'How many nodes the tree has *as reported* — after the noise filter and any depth cut, so it counts what came back rather than what exists.',
       },
       <String, Object?>{
         'name': 'screenshot',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Where the step\'s PNG was written — under the run\'s journal directory, one file per step.',
+        'doc': 'Where the step\'s PNG was written — under the run\'s journal directory, one file per step.',
       },
       <String, Object?>{
         'name': 'logs',
         'type': 'List<RunLogEntry>',
         'optional': true,
-        'doc':
-            'What the app printed during this step — since the previous act call, not since launch.',
+        'doc': 'What the app printed during this step — since the previous act call, not since launch.',
         'shape': <String, Object?>{
           'type': 'RunLogEntry',
           'fields': <Object?>[
             <String, Object?>{
               'name': 'source',
               'type': 'String',
-              'doc':
-                  '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+              'doc': '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
             },
             <String, Object?>{'name': 'text', 'type': 'String'},
             <String, Object?>{
@@ -3034,8 +2845,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'source',
               'type': 'String',
-              'doc':
-                  '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+              'doc': '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
             },
             <String, Object?>{'name': 'text', 'type': 'String'},
             <String, Object?>{
@@ -3050,8 +2860,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'journal',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The run\'s journal file this step was appended to — and the index of every capture this run has taken.',
+        'doc': 'The run\'s journal file this step was appended to — and the index of every capture this run has taken.',
       },
       <String, Object?>{
         'name': 'next',
@@ -3064,36 +2873,31 @@ final resultShapes = <String, ResultShape>{
         'name': 'layer',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Which tree this step addressed — absent for the drive layer, `native` when it went through the platform\'s own accessibility tree.',
+        'doc': 'Which tree this step addressed — absent for the drive layer, `native` when it went through the platform\'s own accessibility tree.',
       },
       <String, Object?>{
         'name': 'coordinateSpace',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Native steps only: the space [nativeTree]\'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.',
+        'doc': 'Native steps only: the space [nativeTree]\'s bounds and `{"at": …}` speak — `px` on Android, window points elsewhere.',
       },
       <String, Object?>{
         'name': 'screenshotScale',
         'type': 'double',
         'optional': true,
-        'doc':
-            'Native steps only: how many screenshot pixels one coordinate unit is.',
+        'doc': 'Native steps only: how many screenshot pixels one coordinate unit is.',
       },
       <String, Object?>{
         'name': 'nativeTree',
         'type': 'Map<String, Object?>',
         'optional': true,
-        'doc':
-            'Native steps only, and only when asked for: the platform\'s view tree.',
+        'doc': 'Native steps only, and only when asked for: the platform\'s view tree.',
       },
       <String, Object?>{
         'name': 'reconciled',
         'type': 'int',
         'optional': true,
-        'doc':
-            'Native steps only: human entries dropped as this step\'s own echo — the guest cannot tell an injected tap from a finger, so the agent\'s own tap would otherwise be journaled twice.',
+        'doc': 'Native steps only: human entries dropped as this step\'s own echo — the guest cannot tell an injected tap from a finger, so the agent\'s own tap would otherwise be journaled twice.',
       },
     ],
   }),
@@ -3103,8 +2907,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'run',
         'type': 'String',
-        'doc':
-            'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
+        'doc': 'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
       },
       <String, Object?>{'name': 'device', 'type': 'String'},
       <String, Object?>{
@@ -3142,14 +2945,12 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'app',
         'type': 'bool',
-        'doc':
-            'The app answered on its VM service — it can be inspected and driven.',
+        'doc': 'The app answered on its VM service — it can be inspected and driven.',
       },
       <String, Object?>{
         'name': 'launcher',
         'type': 'bool',
-        'doc':
-            'The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.',
+        'doc': 'The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.',
       },
       <String, Object?>{
         'name': 'vmService',
@@ -3160,15 +2961,13 @@ final resultShapes = <String, ResultShape>{
         'name': 'log',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Where the launcher\'s output is being written, for a client that arrived after the interesting part scrolled past.',
+        'doc': 'Where the launcher\'s output is being written, for a client that arrived after the interesting part scrolled past.',
       },
       <String, Object?>{
         'name': 'error',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.',
+        'doc': 'Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.',
       },
     ],
   }),
@@ -3184,8 +2983,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'run',
               'type': 'String',
-              'doc':
-                  'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
+              'doc': 'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
             },
             <String, Object?>{'name': 'device', 'type': 'String'},
             <String, Object?>{
@@ -3228,14 +3026,12 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'app',
               'type': 'bool',
-              'doc':
-                  'The app answered on its VM service — it can be inspected and driven.',
+              'doc': 'The app answered on its VM service — it can be inspected and driven.',
             },
             <String, Object?>{
               'name': 'launcher',
               'type': 'bool',
-              'doc':
-                  'The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.',
+              'doc': 'The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.',
             },
             <String, Object?>{
               'name': 'vmService',
@@ -3246,15 +3042,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'log',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Where the launcher\'s output is being written, for a client that arrived after the interesting part scrolled past.',
+              'doc': 'Where the launcher\'s output is being written, for a client that arrived after the interesting part scrolled past.',
             },
             <String, Object?>{
               'name': 'error',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.',
+              'doc': 'Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.',
             },
           ],
         },
@@ -3303,8 +3097,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'run',
         'type': 'String',
-        'doc':
-            'Which run it was done to — the id `apps` reports and a selector takes.',
+        'doc': 'Which run it was done to — the id `apps` reports and a selector takes.',
       },
       <String, Object?>{'name': 'device', 'type': 'String'},
       <String, Object?>{'name': 'entrypoint', 'type': 'String'},
@@ -3312,8 +3105,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'ms',
         'type': 'int',
-        'doc':
-            'Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.',
+        'doc': 'Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.',
       },
       <String, Object?>{'name': 'error', 'type': 'String', 'optional': true},
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
@@ -3321,8 +3113,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'knobs',
         'type': 'Map<String, String>',
         'optional': true,
-        'doc':
-            'For `setKnobs`: everything the app is now running with, not only what this call changed.',
+        'doc': 'For `setKnobs`: everything the app is now running with, not only what this call changed.',
       },
     ],
   }),
@@ -3339,8 +3130,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'platform',
         'type': 'String',
         'optional': true,
-        'doc':
-            '`ios`, `android`, `macos`, `web` — the family, not the architecture.',
+        'doc': '`ios`, `android`, `macos`, `web` — the family, not the architecture.',
       },
       <String, Object?>{
         'name': 'sdk',
@@ -3352,14 +3142,12 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'physical',
         'type': 'bool',
-        'doc':
-            'False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.',
+        'doc': 'False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.',
       },
       <String, Object?>{
         'name': 'kind',
         'type': 'String',
-        'doc':
-            '`physical`, `virtual` or `host` — the distinction [physical] cannot make on its own.',
+        'doc': '`physical`, `virtual` or `host` — the distinction [physical] cannot make on its own.',
       },
       <String, Object?>{
         'name': 'connected',
@@ -3370,8 +3158,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'connection',
         'type': 'String',
         'optional': true,
-        'doc':
-            '`attached` for a cable or a built-in target, `wireless` over the network.',
+        'doc': '`attached` for a cable or a built-in target, `wireless` over the network.',
       },
       <String, Object?>{
         'name': 'running',
@@ -3410,14 +3197,12 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'canReload',
               'type': 'bool',
-              'doc':
-                  'Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.',
+              'doc': 'Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.',
             },
             <String, Object?>{
               'name': 'canInspect',
               'type': 'bool',
-              'doc':
-                  'The app answers on its VM service: it can be inspected and driven even if its launcher is gone.',
+              'doc': 'The app answers on its VM service: it can be inspected and driven even if its launcher is gone.',
             },
           ],
         },
@@ -3443,8 +3228,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'platform',
               'type': 'String',
               'optional': true,
-              'doc':
-                  '`ios`, `android`, `macos`, `web` — the family, not the architecture.',
+              'doc': '`ios`, `android`, `macos`, `web` — the family, not the architecture.',
             },
             <String, Object?>{
               'name': 'sdk',
@@ -3456,14 +3240,12 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'physical',
               'type': 'bool',
-              'doc':
-                  'False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.',
+              'doc': 'False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.',
             },
             <String, Object?>{
               'name': 'kind',
               'type': 'String',
-              'doc':
-                  '`physical`, `virtual` or `host` — the distinction [physical] cannot make on its own.',
+              'doc': '`physical`, `virtual` or `host` — the distinction [physical] cannot make on its own.',
             },
             <String, Object?>{
               'name': 'connected',
@@ -3474,8 +3256,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'connection',
               'type': 'String',
               'optional': true,
-              'doc':
-                  '`attached` for a cable or a built-in target, `wireless` over the network.',
+              'doc': '`attached` for a cable or a built-in target, `wireless` over the network.',
             },
             <String, Object?>{
               'name': 'running',
@@ -3515,14 +3296,12 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'canReload',
                     'type': 'bool',
-                    'doc':
-                        'Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.',
+                    'doc': 'Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.',
                   },
                   <String, Object?>{
                     'name': 'canInspect',
                     'type': 'bool',
-                    'doc':
-                        'The app answers on its VM service: it can be inspected and driven even if its launcher is gone.',
+                    'doc': 'The app answers on its VM service: it can be inspected and driven even if its launcher is gone.',
                   },
                 ],
               },
@@ -3533,8 +3312,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'live',
         'type': 'bool',
-        'doc':
-            'True when a `flutter daemon` is running in this process, so the list is what it saw rather than what somebody wrote down earlier.',
+        'doc': 'True when a `flutter daemon` is running in this process, so the list is what it saw rather than what somebody wrote down earlier.',
       },
       <String, Object?>{
         'name': 'updatedAt',
@@ -3552,8 +3330,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'note',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Said out loud when the list is empty or stale enough to explain, rather than left for the caller to infer from an empty array.',
+        'doc': 'Said out loud when the list is empty or stale enough to explain, rather than left for the caller to infer from an empty array.',
       },
     ],
   }),
@@ -3576,8 +3353,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'booted',
         'type': 'bool',
         'optional': true,
-        'doc':
-            'True when it is already up, false when it is not — and **null when the question has no answer for this row**.',
+        'doc': 'True when it is already up, false when it is not — and **null when the question has no answer for this row**.',
       },
     ],
   }),
@@ -3606,8 +3382,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'booted',
               'type': 'bool',
               'optional': true,
-              'doc':
-                  'True when it is already up, false when it is not — and **null when the question has no answer for this row**.',
+              'doc': 'True when it is already up, false when it is not — and **null when the question has no answer for this row**.',
             },
           ],
         },
@@ -3634,8 +3409,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'flavor',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package\'s `flutter: default-flavor:`.',
+        'doc': 'The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package\'s `flutter: default-flavor:`.',
       },
       <String, Object?>{
         'name': 'flavorSource',
@@ -3648,26 +3422,22 @@ final resultShapes = <String, ResultShape>{
         'name': 'flavorByPlatform',
         'type': 'Map<String, String>',
         'optional': true,
-        'doc':
-            '[flavor] where the declaration varies it by platform, as written — shorthand keys (`mobile`) unexpanded, absent when it does not.',
+        'doc': '[flavor] where the declaration varies it by platform, as written — shorthand keys (`mobile`) unexpanded, absent when it does not.',
       },
       <String, Object?>{
         'name': 'platforms',
         'type': 'List<String>',
-        'doc':
-            'What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.',
+        'doc': 'What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.',
       },
       <String, Object?>{
         'name': 'devices',
         'type': 'List<String>',
-        'doc':
-            'The ids of the devices currently connected that [platforms] allows.',
+        'doc': 'The ids of the devices currently connected that [platforms] allows.',
       },
       <String, Object?>{
         'name': 'knobs',
         'type': 'List<RunKnobEntry>',
-        'doc':
-            'The knobs this entry point\'s `main` takes — the optional named parameters of its signature, with what the config annotated them with.',
+        'doc': 'The knobs this entry point\'s `main` takes — the optional named parameters of its signature, with what the config annotated them with.',
         'shape': <String, Object?>{
           'type': 'RunKnobEntry',
           'fields': <Object?>[
@@ -3690,41 +3460,35 @@ final resultShapes = <String, ResultShape>{
               'name': 'kind',
               'type': 'String',
               'optional': true,
-              'doc':
-                  '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
+              'doc': '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
             },
             <String, Object?>{
               'name': 'default',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
+              'doc': 'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
             },
             <String, Object?>{
               'name': 'defaultSource',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
+              'doc': 'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
             },
             <String, Object?>{
               'name': 'options',
               'type': 'List<String>',
-              'doc':
-                  'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
+              'doc': 'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
             },
             <String, Object?>{
               'name': 'problem',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
+              'doc': 'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
             },
             <String, Object?>{
               'name': 'required',
               'type': 'bool',
-              'doc':
-                  'True when a launch that sets no value for this knob is refused — see [Knob.required].',
+              'doc': 'True when a launch that sets no value for this knob is refused — see [Knob.required].',
             },
           ],
         },
@@ -3742,15 +3506,13 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'declared',
         'type': 'bool',
-        'doc':
-            'True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.',
+        'doc': 'True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.',
       },
       <String, Object?>{
         'name': 'flavors',
         'type': 'Map<String, List<String>>',
         'optional': true,
-        'doc':
-            'The flavors this package declares per platform, as written — shorthand keys unexpanded, absent when it declares none.',
+        'doc': 'The flavors this package declares per platform, as written — shorthand keys unexpanded, absent when it declares none.',
       },
       <String, Object?>{
         'name': 'entrypoints',
@@ -3775,40 +3537,34 @@ final resultShapes = <String, ResultShape>{
               'name': 'flavor',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package\'s `flutter: default-flavor:`.',
+              'doc': 'The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package\'s `flutter: default-flavor:`.',
             },
             <String, Object?>{
               'name': 'flavorSource',
               'type': 'String',
               'optional': true,
-              'doc':
-                  '`entrypoint` or `pubspec` — which of the two put [flavor] there.',
+              'doc': '`entrypoint` or `pubspec` — which of the two put [flavor] there.',
             },
             <String, Object?>{
               'name': 'flavorByPlatform',
               'type': 'Map<String, String>',
               'optional': true,
-              'doc':
-                  '[flavor] where the declaration varies it by platform, as written — shorthand keys (`mobile`) unexpanded, absent when it does not.',
+              'doc': '[flavor] where the declaration varies it by platform, as written — shorthand keys (`mobile`) unexpanded, absent when it does not.',
             },
             <String, Object?>{
               'name': 'platforms',
               'type': 'List<String>',
-              'doc':
-                  'What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.',
+              'doc': 'What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.',
             },
             <String, Object?>{
               'name': 'devices',
               'type': 'List<String>',
-              'doc':
-                  'The ids of the devices currently connected that [platforms] allows.',
+              'doc': 'The ids of the devices currently connected that [platforms] allows.',
             },
             <String, Object?>{
               'name': 'knobs',
               'type': 'List<RunKnobEntry>',
-              'doc':
-                  'The knobs this entry point\'s `main` takes — the optional named parameters of its signature, with what the config annotated them with.',
+              'doc': 'The knobs this entry point\'s `main` takes — the optional named parameters of its signature, with what the config annotated them with.',
               'shape': <String, Object?>{
                 'type': 'RunKnobEntry',
                 'fields': <Object?>[
@@ -3832,41 +3588,35 @@ final resultShapes = <String, ResultShape>{
                     'name': 'kind',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
+                    'doc': '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
                   },
                   <String, Object?>{
                     'name': 'default',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
+                    'doc': 'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
                   },
                   <String, Object?>{
                     'name': 'defaultSource',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
+                    'doc': 'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
                   },
                   <String, Object?>{
                     'name': 'options',
                     'type': 'List<String>',
-                    'doc':
-                        'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
+                    'doc': 'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
                   },
                   <String, Object?>{
                     'name': 'problem',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
+                    'doc': 'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
                   },
                   <String, Object?>{
                     'name': 'required',
                     'type': 'bool',
-                    'doc':
-                        'True when a launch that sets no value for this knob is refused — see [Knob.required].',
+                    'doc': 'True when a launch that sets no value for this knob is refused — see [Knob.required].',
                   },
                 ],
               },
@@ -3893,15 +3643,13 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'declared',
               'type': 'bool',
-              'doc':
-                  'True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.',
+              'doc': 'True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.',
             },
             <String, Object?>{
               'name': 'flavors',
               'type': 'Map<String, List<String>>',
               'optional': true,
-              'doc':
-                  'The flavors this package declares per platform, as written — shorthand keys unexpanded, absent when it declares none.',
+              'doc': 'The flavors this package declares per platform, as written — shorthand keys unexpanded, absent when it declares none.',
             },
             <String, Object?>{
               'name': 'entrypoints',
@@ -3912,8 +3660,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'path',
                     'type': 'String',
-                    'doc':
-                        'Package-relative — what `launch` takes as its `entrypoint`.',
+                    'doc': 'Package-relative — what `launch` takes as its `entrypoint`.',
                   },
                   <String, Object?>{'name': 'name', 'type': 'String'},
                   <String, Object?>{
@@ -3926,48 +3673,41 @@ final resultShapes = <String, ResultShape>{
                     'name': 'flavor',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package\'s `flutter: default-flavor:`.',
+                    'doc': 'The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package\'s `flutter: default-flavor:`.',
                   },
                   <String, Object?>{
                     'name': 'flavorSource',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        '`entrypoint` or `pubspec` — which of the two put [flavor] there.',
+                    'doc': '`entrypoint` or `pubspec` — which of the two put [flavor] there.',
                   },
                   <String, Object?>{
                     'name': 'flavorByPlatform',
                     'type': 'Map<String, String>',
                     'optional': true,
-                    'doc':
-                        '[flavor] where the declaration varies it by platform, as written — shorthand keys (`mobile`) unexpanded, absent when it does not.',
+                    'doc': '[flavor] where the declaration varies it by platform, as written — shorthand keys (`mobile`) unexpanded, absent when it does not.',
                   },
                   <String, Object?>{
                     'name': 'platforms',
                     'type': 'List<String>',
-                    'doc':
-                        'What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.',
+                    'doc': 'What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.',
                   },
                   <String, Object?>{
                     'name': 'devices',
                     'type': 'List<String>',
-                    'doc':
-                        'The ids of the devices currently connected that [platforms] allows.',
+                    'doc': 'The ids of the devices currently connected that [platforms] allows.',
                   },
                   <String, Object?>{
                     'name': 'knobs',
                     'type': 'List<RunKnobEntry>',
-                    'doc':
-                        'The knobs this entry point\'s `main` takes — the optional named parameters of its signature, with what the config annotated them with.',
+                    'doc': 'The knobs this entry point\'s `main` takes — the optional named parameters of its signature, with what the config annotated them with.',
                     'shape': <String, Object?>{
                       'type': 'RunKnobEntry',
                       'fields': <Object?>[
                         <String, Object?>{
                           'name': 'knob',
                           'type': 'String',
-                          'doc':
-                              'The parameter\'s name — what `launch` takes as a key.',
+                          'doc': 'The parameter\'s name — what `launch` takes as a key.',
                         },
                         <String, Object?>{
                           'name': 'label',
@@ -3983,41 +3723,35 @@ final resultShapes = <String, ResultShape>{
                           'name': 'kind',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
+                          'doc': '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
                         },
                         <String, Object?>{
                           'name': 'default',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
+                          'doc': 'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
                         },
                         <String, Object?>{
                           'name': 'defaultSource',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
+                          'doc': 'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
                         },
                         <String, Object?>{
                           'name': 'options',
                           'type': 'List<String>',
-                          'doc':
-                              'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
+                          'doc': 'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
                         },
                         <String, Object?>{
                           'name': 'problem',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
+                          'doc': 'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
                         },
                         <String, Object?>{
                           'name': 'required',
                           'type': 'bool',
-                          'doc':
-                              'True when a launch that sets no value for this knob is refused — see [Knob.required].',
+                          'doc': 'True when a launch that sets no value for this knob is refused — see [Knob.required].',
                         },
                       ],
                     },
@@ -4064,14 +3798,12 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'canReload',
         'type': 'bool',
-        'doc':
-            'Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.',
+        'doc': 'Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.',
       },
       <String, Object?>{
         'name': 'canInspect',
         'type': 'bool',
-        'doc':
-            'The app answers on its VM service: it can be inspected and driven even if its launcher is gone.',
+        'doc': 'The app answers on its VM service: it can be inspected and driven even if its launcher is gone.',
       },
     ],
   }),
@@ -4090,21 +3822,18 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'up',
         'type': 'bool',
-        'doc':
-            'The app answered its VM service, so the tree and the picture are available.',
+        'doc': 'The app answered its VM service, so the tree and the picture are available.',
       },
       <String, Object?>{
         'name': 'reloadable',
         'type': 'bool',
-        'doc':
-            'The `flutter run` that launched it is alive, so it can still be reloaded.',
+        'doc': 'The `flutter run` that launched it is alive, so it can still be reloaded.',
       },
       <String, Object?>{
         'name': 'progress',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The launcher\'s most recent progress line, when it is still building — the only narration a ninety-second build has.',
+        'doc': 'The launcher\'s most recent progress line, when it is still building — the only narration a ninety-second build has.',
       },
       <String, Object?>{
         'name': 'tree',
@@ -4116,8 +3845,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'nodes',
         'type': 'int',
         'optional': true,
-        'doc':
-            'How many nodes it has, so a caller can tell an empty answer from a small one without walking it.',
+        'doc': 'How many nodes it has, so a caller can tell an empty answer from a small one without walking it.',
       },
       <String, Object?>{
         'name': 'summary',
@@ -4143,8 +3871,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'source',
               'type': 'String',
-              'doc':
-                  '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+              'doc': '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
             },
             <String, Object?>{'name': 'text', 'type': 'String'},
             <String, Object?>{
@@ -4172,8 +3899,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'source',
               'type': 'String',
-              'doc':
-                  '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+              'doc': '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
             },
             <String, Object?>{'name': 'text', 'type': 'String'},
             <String, Object?>{
@@ -4188,8 +3914,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'log',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The launcher\'s log file, for anyone who would rather tail it themselves.',
+        'doc': 'The launcher\'s log file, for anyone who would rather tail it themselves.',
       },
       <String, Object?>{
         'name': 'nativeLog',
@@ -4218,41 +3943,35 @@ final resultShapes = <String, ResultShape>{
         'name': 'kind',
         'type': 'String',
         'optional': true,
-        'doc':
-            '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
+        'doc': '`string`, `boolean`, `integer`, `number` or `picker` — how it draws.',
       },
       <String, Object?>{
         'name': 'default',
         'type': 'String',
         'optional': true,
-        'doc':
-            'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
+        'doc': 'What the launch uses when nothing overrides it: a script\'s answer when one was computed, else the parameter\'s own default.',
       },
       <String, Object?>{
         'name': 'defaultSource',
         'type': 'String',
         'optional': true,
-        'doc':
-            'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
+        'doc': 'How the default is written, when it is a reference this cannot evaluate — `ServerUrls.localPort`.',
       },
       <String, Object?>{
         'name': 'options',
         'type': 'List<String>',
-        'doc':
-            'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
+        'doc': 'Everything worth offering — an enum\'s constants, this machine\'s addresses, a list a project script printed, or what the config wrote.',
       },
       <String, Object?>{
         'name': 'problem',
         'type': 'String',
         'optional': true,
-        'doc':
-            'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
+        'doc': 'What is wrong with this knob, when something is: a source that could not answer, or a declaration naming a parameter that is not there.',
       },
       <String, Object?>{
         'name': 'required',
         'type': 'bool',
-        'doc':
-            'True when a launch that sets no value for this knob is refused — see [Knob.required].',
+        'doc': 'True when a launch that sets no value for this knob is refused — see [Knob.required].',
       },
     ],
   }),
@@ -4262,16 +3981,14 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'app',
         'type': 'RunAppEntry',
-        'doc':
-            'The run as the ledger now holds it — the same shape `apps` reports.',
+        'doc': 'The run as the ledger now holds it — the same shape `apps` reports.',
         'shape': <String, Object?>{
           'type': 'RunAppEntry',
           'fields': <Object?>[
             <String, Object?>{
               'name': 'run',
               'type': 'String',
-              'doc':
-                  'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
+              'doc': 'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
             },
             <String, Object?>{'name': 'device', 'type': 'String'},
             <String, Object?>{
@@ -4314,14 +4031,12 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'app',
               'type': 'bool',
-              'doc':
-                  'The app answered on its VM service — it can be inspected and driven.',
+              'doc': 'The app answered on its VM service — it can be inspected and driven.',
             },
             <String, Object?>{
               'name': 'launcher',
               'type': 'bool',
-              'doc':
-                  'The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.',
+              'doc': 'The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.',
             },
             <String, Object?>{
               'name': 'vmService',
@@ -4332,15 +4047,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'log',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Where the launcher\'s output is being written, for a client that arrived after the interesting part scrolled past.',
+              'doc': 'Where the launcher\'s output is being written, for a client that arrived after the interesting part scrolled past.',
             },
             <String, Object?>{
               'name': 'error',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.',
+              'doc': 'Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.',
             },
           ],
         },
@@ -4353,15 +4066,13 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'waited',
         'type': 'bool',
-        'doc':
-            'False when the call returned without waiting for the app to come up, so [status] is what was true a moment after spawning and nothing more.',
+        'doc': 'False when the call returned without waiting for the app to come up, so [status] is what was true a moment after spawning and nothing more.',
       },
       <String, Object?>{
         'name': 'progress',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The launcher\'s most recent narration — `Installing and launching…`.',
+        'doc': 'The launcher\'s most recent narration — `Installing and launching…`.',
       },
       <String, Object?>{
         'name': 'error',
@@ -4373,15 +4084,13 @@ final resultShapes = <String, ResultShape>{
         'name': 'headline',
         'type': 'String',
         'optional': true,
-        'doc':
-            '[error]\'s first line that names a fault, for a row with no room for the rest.',
+        'doc': '[error]\'s first line that names a fault, for a row with no room for the rest.',
       },
       <String, Object?>{
         'name': 'logPath',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Where the whole thing is, since [error] is bounded and a launcher that died in an unusual way may have put the interesting part above the cut.',
+        'doc': 'Where the whole thing is, since [error] is bounded and a launcher that died in an unusual way may have put the interesting part above the cut.',
       },
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
@@ -4405,14 +4114,12 @@ final resultShapes = <String, ResultShape>{
         'name': 'was',
         'type': 'String',
         'optional': true,
-        'doc':
-            'What it was before this call changed it — absent when nothing changed, so a caller can tell "I set it" from "it was already".',
+        'doc': 'What it was before this call changed it — absent when nothing changed, so a caller can tell "I set it" from "it was already".',
       },
       <String, Object?>{
         'name': 'lenses',
         'type': 'List<Map<String, Object?>>',
-        'doc':
-            'Every lens and what it contains, so the choice needs no second call.',
+        'doc': 'Every lens and what it contains, so the choice needs no second call.',
       },
     ],
   }),
@@ -4422,8 +4129,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'source',
         'type': 'String',
-        'doc':
-            '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+        'doc': '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
       },
       <String, Object?>{'name': 'text', 'type': 'String'},
       <String, Object?>{
@@ -4476,8 +4182,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'knobs',
         'type': 'List<Map<String, Object?>>',
         'optional': true,
-        'doc':
-            'The panel\'s knobs **after** the call — what the app now holds, which is not always what was asked for: an app may clamp a value or refuse it.',
+        'doc': 'The panel\'s knobs **after** the call — what the app now holds, which is not always what was asked for: an app may clamp a value or refuse it.',
       },
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
@@ -4490,14 +4195,12 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'panels',
         'type': 'List<Map<String, Object?>>',
-        'doc':
-            'One `PanelDescriptor` per panel: its knobs with their live values, its actions with their parameters, its states and its feeds.',
+        'doc': 'One `PanelDescriptor` per panel: its knobs with their live values, its actions with their parameters, its states and its feeds.',
       },
       <String, Object?>{
         'name': 'events',
         'type': 'Map<String, List<Map<String, Object?>>>',
-        'doc':
-            'Recent feed events, keyed `<panel>/<feed>` — the same channel name the descriptor gives.',
+        'doc': 'Recent feed events, keyed `<panel>/<feed>` — the same channel name the descriptor gives.',
       },
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
@@ -4518,8 +4221,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'note',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Stated when the picture may be incomplete — a run with platform views in it, which Flutter\'s layer tree cannot photograph.',
+        'doc': 'Stated when the picture may be incomplete — a run with platform views in it, which Flutter\'s layer tree cannot photograph.',
       },
     ],
   }),
@@ -4563,22 +4265,19 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'diagnostics',
         'type': 'List<String>',
-        'doc':
-            'What the scan noticed but could not act on — non-literal names, duplicates.',
+        'doc': 'What the scan noticed but could not act on — non-literal names, duplicates.',
       },
       <String, Object?>{
         'name': 'error',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Set when the package could not be scanned, in which case [scenarios] means nothing.',
+        'doc': 'Set when the package could not be scanned, in which case [scenarios] means nothing.',
       },
       <String, Object?>{
         'name': 'authoring',
         'type': 'String',
         'optional': true,
-        'doc':
-            'How to write one — present only when this package has none, which is exactly when the reader needs it and never when it would be noise.',
+        'doc': 'How to write one — present only when this package has none, which is exactly when the reader needs it and never when it would be noise.',
       },
     ],
   }),
@@ -4616,22 +4315,19 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'diagnostics',
               'type': 'List<String>',
-              'doc':
-                  'What the scan noticed but could not act on — non-literal names, duplicates.',
+              'doc': 'What the scan noticed but could not act on — non-literal names, duplicates.',
             },
             <String, Object?>{
               'name': 'error',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Set when the package could not be scanned, in which case [scenarios] means nothing.',
+              'doc': 'Set when the package could not be scanned, in which case [scenarios] means nothing.',
             },
             <String, Object?>{
               'name': 'authoring',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'How to write one — present only when this package has none, which is exactly when the reader needs it and never when it would be noise.',
+              'doc': 'How to write one — present only when this package has none, which is exactly when the reader needs it and never when it would be noise.',
             },
           ],
         },
@@ -4645,8 +4341,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'file',
         'type': 'String',
-        'doc':
-            'The written file, package-relative — the same spelling `list` reports and `run --file=` takes, so the next call needs no translation.',
+        'doc': 'The written file, package-relative — the same spelling `list` reports and `run --file=` takes, so the next call needs no translation.',
       },
       <String, Object?>{'name': 'name', 'type': 'String'},
       <String, Object?>{
@@ -4662,8 +4357,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'step',
         'type': 'String',
-        'doc':
-            'The capture this answers about, worktree-relative — the value to pass back as `step` to ask it something else.',
+        'doc': 'The capture this answers about, worktree-relative — the value to pass back as `step` to ask it something else.',
       },
       <String, Object?>{
         'name': 'lens',
@@ -4695,15 +4389,13 @@ final resultShapes = <String, ResultShape>{
         'name': 'screen',
         'type': 'Screen',
         'optional': true,
-        'doc':
-            'What is on the screen, what can be acted on, and how it is laid out.',
+        'doc': 'What is on the screen, what can be acted on, and how it is laid out.',
       },
       <String, Object?>{
         'name': 'texts',
         'type': 'List<String>',
         'optional': true,
-        'doc':
-            'Every Text and text field of the step, as the capture recorded them.',
+        'doc': 'Every Text and text field of the step, as the capture recorded them.',
       },
       <String, Object?>{
         'name': 'tree',
@@ -4728,8 +4420,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'eventCount',
         'type': 'int',
         'optional': true,
-        'doc':
-            'How many the step recorded, and on which channels — said whether or not [events] was asked for, because a read that does not advertise what it is sitting on cannot be drilled into by anyone who did not already know.',
+        'doc': 'How many the step recorded, and on which channels — said whether or not [events] was asked for, because a read that does not advertise what it is sitting on cannot be drilled into by anyone who did not already know.',
       },
       <String, Object?>{
         'name': 'eventChannels',
@@ -4755,8 +4446,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'note',
         'type': 'String',
         'optional': true,
-        'doc':
-            'A query that could not be answered, said so the caller can fix it.',
+        'doc': 'A query that could not be answered, said so the caller can fix it.',
       },
       <String, Object?>{
         'name': 'next',
@@ -4767,8 +4457,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'steps',
         'type': 'List<String>',
-        'doc':
-            'The other captures of the same scenario, as bare file names beside [step] — what makes walking a failing flow backwards one call each.',
+        'doc': 'The other captures of the same scenario, as bare file names beside [step] — what makes walking a failing flow backwards one call each.',
       },
     ],
   }),
@@ -4799,8 +4488,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'skipped',
         'type': 'bool',
         'optional': true,
-        'doc':
-            'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
+        'doc': 'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
       },
       <String, Object?>{
         'name': 'skipReason',
@@ -4818,8 +4506,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'steps',
         'type': 'List<ScenarioRunStep>',
-        'doc':
-            'Trimmed in an action\'s answer per its `steps=` mode; whole in the file `ScenarioRunPackage.report` names.',
+        'doc': 'Trimmed in an action\'s answer per its `steps=` mode; whole in the file `ScenarioRunPackage.report` names.',
         'shape': <String, Object?>{
           'type': 'ScenarioRunStep',
           'fields': <Object?>[
@@ -4831,22 +4518,19 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'position',
               'type': 'String',
-              'doc':
-                  'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
+              'doc': 'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
             },
             <String, Object?>{
               'name': 'parent',
               'type': 'int',
               'optional': true,
-              'doc':
-                  'The [index] of the step this one follows; null for the scenario\'s first.',
+              'doc': 'The [index] of the step this one follows; null for the scenario\'s first.',
             },
             <String, Object?>{
               'name': 'branch',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The `split` branch label when this step is a branch\'s first capture.',
+              'doc': 'The `split` branch label when this step is a branch\'s first capture.',
             },
             <String, Object?>{
               'name': 'name',
@@ -4857,8 +4541,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'auto',
               'type': 'bool',
-              'doc':
-                  'True when nothing named this capture — a collapsible detail step.',
+              'doc': 'True when nothing named this capture — a collapsible detail step.',
             },
             <String, Object?>{
               'name': 'tags',
@@ -4875,15 +4558,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'image',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
+              'doc': 'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
             },
             <String, Object?>{
               'name': 'format',
               'type': 'String',
               'optional': true,
-              'doc':
-                  '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+              'doc': '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
             },
             <String, Object?>{'name': 'width', 'type': 'int', 'optional': true},
             <String, Object?>{
@@ -4895,22 +4576,19 @@ final resultShapes = <String, ResultShape>{
               'name': 'tree',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The widget-tree JSON captured at the same moment, relative like [image].',
+              'doc': 'The widget-tree JSON captured at the same moment, relative like [image].',
             },
             <String, Object?>{
               'name': 'file',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
+              'doc': 'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
             },
             <String, Object?>{
               'name': 'mimeType',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'What the document is, when the scenario said — `application/pdf`.',
+              'doc': 'What the document is, when the scenario said — `application/pdf`.',
             },
             <String, Object?>{
               'name': 'bytes',
@@ -4922,28 +4600,24 @@ final resultShapes = <String, ResultShape>{
               'name': 'notification',
               'type': 'Map<String, String?>',
               'optional': true,
-              'doc':
-                  'The notification\'s message — the one line a banner always has.',
+              'doc': 'The notification\'s message — the one line a banner always has.',
             },
             <String, Object?>{
               'name': 'keys',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
+              'doc': 'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
             },
             <String, Object?>{
               'name': 'semantics',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The semantics-tree JSON — what a screen reader gets — relative like [image].',
+              'doc': 'The semantics-tree JSON — what a screen reader gets — relative like [image].',
             },
             <String, Object?>{
               'name': 'texts',
               'type': 'List<String>',
-              'doc':
-                  'The visible texts — the projection an agent reads next to the pixels.',
+              'doc': 'The visible texts — the projection an agent reads next to the pixels.',
             },
             <String, Object?>{
               'name': 'address',
@@ -4955,8 +4629,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'statusBrightness',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+              'doc': 'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
             },
             <String, Object?>{
               'name': 'navBrightness',
@@ -4967,8 +4640,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'verb',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
+              'doc': 'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
             },
             <String, Object?>{
               'name': 'target',
@@ -4979,22 +4651,19 @@ final resultShapes = <String, ResultShape>{
               'name': 'aim',
               'type': 'Map<String, Object?>',
               'optional': true,
-              'doc':
-                  'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
+              'doc': 'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
             },
             <String, Object?>{
               'name': 'events',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
+              'doc': 'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
             },
             <String, Object?>{
               'name': 'eventCount',
               'type': 'int',
               'optional': true,
-              'doc':
-                  'How many, and on which channels — `{platform: 3, print: 1}`.',
+              'doc': 'How many, and on which channels — `{platform: 3, print: 1}`.',
             },
             <String, Object?>{
               'name': 'eventChannels',
@@ -5005,8 +4674,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'eventTitles',
               'type': 'List<String>',
               'optional': true,
-              'doc':
-                  'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
+              'doc': 'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
             },
             <String, Object?>{
               'name': 'eventsDropped',
@@ -5019,8 +4687,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'frames',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
+              'doc': 'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
             },
             <String, Object?>{
               'name': 'frameCount',
@@ -5041,57 +4708,49 @@ final resultShapes = <String, ResultShape>{
               'name': 'frameIntervalMs',
               'type': 'int',
               'optional': true,
-              'doc':
-                  'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
+              'doc': 'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
             },
             <String, Object?>{
               'name': 'framesDropped',
               'type': 'int',
               'optional': true,
-              'doc':
-                  'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
+              'doc': 'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
             },
             <String, Object?>{
               'name': 'settled',
               'type': 'bool',
               'optional': true,
-              'doc':
-                  'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+              'doc': 'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
             },
             <String, Object?>{
               'name': 'landed',
               'type': 'bool',
               'optional': true,
-              'doc':
-                  'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
+              'doc': 'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
             },
             <String, Object?>{
               'name': 'digest',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'What this step captured, hashed — the pixels for a screen, the payload for a document.',
+              'doc': 'What this step captured, hashed — the pixels for a screen, the payload for a document.',
             },
             <String, Object?>{
               'name': 'strayFrames',
               'type': 'int',
               'optional': true,
-              'doc':
-                  'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+              'doc': 'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
             },
             <String, Object?>{
               'name': 'keyboard',
               'type': 'double',
               'optional': true,
-              'doc':
-                  'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
+              'doc': 'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
             },
             <String, Object?>{
               'name': 'unchanged',
               'type': 'bool',
               'optional': true,
-              'doc':
-                  'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+              'doc': 'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
             },
             <String, Object?>{
               'name': 'failure',
@@ -5105,14 +4764,12 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'stepCount',
         'type': 'int',
-        'doc':
-            'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
+        'doc': 'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
       },
       <String, Object?>{
         'name': 'unchangedCount',
         'type': 'int',
-        'doc':
-            'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
+        'doc': 'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
       },
       <String, Object?>{
         'name': 'errors',
@@ -5135,8 +4792,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'translations',
         'type': 'Map<String, Map<String, String>>',
         'optional': true,
-        'doc':
-            'Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.',
+        'doc': 'Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.',
       },
     ],
   }),
@@ -5153,8 +4809,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'axes',
         'type': 'Map<String, String>',
         'optional': true,
-        'doc':
-            'The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].',
+        'doc': 'The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].',
       },
       <String, Object?>{
         'name': 'ms',
@@ -5174,8 +4829,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'skipped',
               'type': 'bool',
               'optional': true,
-              'doc':
-                  'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
+              'doc': 'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
             },
             <String, Object?>{
               'name': 'skipReason',
@@ -5193,8 +4847,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'steps',
               'type': 'List<ScenarioRunStep>',
-              'doc':
-                  'Trimmed in an action\'s answer per its `steps=` mode; whole in the file `ScenarioRunPackage.report` names.',
+              'doc': 'Trimmed in an action\'s answer per its `steps=` mode; whole in the file `ScenarioRunPackage.report` names.',
               'shape': <String, Object?>{
                 'type': 'ScenarioRunStep',
                 'fields': <Object?>[
@@ -5207,22 +4860,19 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'position',
                     'type': 'String',
-                    'doc':
-                        'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
+                    'doc': 'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
                   },
                   <String, Object?>{
                     'name': 'parent',
                     'type': 'int',
                     'optional': true,
-                    'doc':
-                        'The [index] of the step this one follows; null for the scenario\'s first.',
+                    'doc': 'The [index] of the step this one follows; null for the scenario\'s first.',
                   },
                   <String, Object?>{
                     'name': 'branch',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The `split` branch label when this step is a branch\'s first capture.',
+                    'doc': 'The `split` branch label when this step is a branch\'s first capture.',
                   },
                   <String, Object?>{
                     'name': 'name',
@@ -5233,8 +4883,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'auto',
                     'type': 'bool',
-                    'doc':
-                        'True when nothing named this capture — a collapsible detail step.',
+                    'doc': 'True when nothing named this capture — a collapsible detail step.',
                   },
                   <String, Object?>{
                     'name': 'tags',
@@ -5251,15 +4900,13 @@ final resultShapes = <String, ResultShape>{
                     'name': 'image',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
+                    'doc': 'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
                   },
                   <String, Object?>{
                     'name': 'format',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+                    'doc': '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
                   },
                   <String, Object?>{
                     'name': 'width',
@@ -5275,56 +4922,48 @@ final resultShapes = <String, ResultShape>{
                     'name': 'tree',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The widget-tree JSON captured at the same moment, relative like [image].',
+                    'doc': 'The widget-tree JSON captured at the same moment, relative like [image].',
                   },
                   <String, Object?>{
                     'name': 'file',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
+                    'doc': 'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
                   },
                   <String, Object?>{
                     'name': 'mimeType',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'What the document is, when the scenario said — `application/pdf`.',
+                    'doc': 'What the document is, when the scenario said — `application/pdf`.',
                   },
                   <String, Object?>{
                     'name': 'bytes',
                     'type': 'int',
                     'optional': true,
-                    'doc':
-                        'How big [file] is, so a reader knows before opening it.',
+                    'doc': 'How big [file] is, so a reader knows before opening it.',
                   },
                   <String, Object?>{
                     'name': 'notification',
                     'type': 'Map<String, String?>',
                     'optional': true,
-                    'doc':
-                        'The notification\'s message — the one line a banner always has.',
+                    'doc': 'The notification\'s message — the one line a banner always has.',
                   },
                   <String, Object?>{
                     'name': 'keys',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
+                    'doc': 'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
                   },
                   <String, Object?>{
                     'name': 'semantics',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The semantics-tree JSON — what a screen reader gets — relative like [image].',
+                    'doc': 'The semantics-tree JSON — what a screen reader gets — relative like [image].',
                   },
                   <String, Object?>{
                     'name': 'texts',
                     'type': 'List<String>',
-                    'doc':
-                        'The visible texts — the projection an agent reads next to the pixels.',
+                    'doc': 'The visible texts — the projection an agent reads next to the pixels.',
                   },
                   <String, Object?>{
                     'name': 'address',
@@ -5336,8 +4975,7 @@ final resultShapes = <String, ResultShape>{
                     'name': 'statusBrightness',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+                    'doc': 'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
                   },
                   <String, Object?>{
                     'name': 'navBrightness',
@@ -5348,8 +4986,7 @@ final resultShapes = <String, ResultShape>{
                     'name': 'verb',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
+                    'doc': 'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
                   },
                   <String, Object?>{
                     'name': 'target',
@@ -5360,22 +4997,19 @@ final resultShapes = <String, ResultShape>{
                     'name': 'aim',
                     'type': 'Map<String, Object?>',
                     'optional': true,
-                    'doc':
-                        'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
+                    'doc': 'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
                   },
                   <String, Object?>{
                     'name': 'events',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
+                    'doc': 'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
                   },
                   <String, Object?>{
                     'name': 'eventCount',
                     'type': 'int',
                     'optional': true,
-                    'doc':
-                        'How many, and on which channels — `{platform: 3, print: 1}`.',
+                    'doc': 'How many, and on which channels — `{platform: 3, print: 1}`.',
                   },
                   <String, Object?>{
                     'name': 'eventChannels',
@@ -5386,22 +5020,19 @@ final resultShapes = <String, ResultShape>{
                     'name': 'eventTitles',
                     'type': 'List<String>',
                     'optional': true,
-                    'doc':
-                        'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
+                    'doc': 'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
                   },
                   <String, Object?>{
                     'name': 'eventsDropped',
                     'type': 'int',
                     'optional': true,
-                    'doc':
-                        'Events dropped to stay inside the per-step or per-run cap.',
+                    'doc': 'Events dropped to stay inside the per-step or per-run cap.',
                   },
                   <String, Object?>{
                     'name': 'frames',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
+                    'doc': 'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
                   },
                   <String, Object?>{
                     'name': 'frameCount',
@@ -5422,57 +5053,49 @@ final resultShapes = <String, ResultShape>{
                     'name': 'frameIntervalMs',
                     'type': 'int',
                     'optional': true,
-                    'doc':
-                        'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
+                    'doc': 'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
                   },
                   <String, Object?>{
                     'name': 'framesDropped',
                     'type': 'int',
                     'optional': true,
-                    'doc':
-                        'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
+                    'doc': 'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
                   },
                   <String, Object?>{
                     'name': 'settled',
                     'type': 'bool',
                     'optional': true,
-                    'doc':
-                        'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+                    'doc': 'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
                   },
                   <String, Object?>{
                     'name': 'landed',
                     'type': 'bool',
                     'optional': true,
-                    'doc':
-                        'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
+                    'doc': 'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
                   },
                   <String, Object?>{
                     'name': 'digest',
                     'type': 'String',
                     'optional': true,
-                    'doc':
-                        'What this step captured, hashed — the pixels for a screen, the payload for a document.',
+                    'doc': 'What this step captured, hashed — the pixels for a screen, the payload for a document.',
                   },
                   <String, Object?>{
                     'name': 'strayFrames',
                     'type': 'int',
                     'optional': true,
-                    'doc':
-                        'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+                    'doc': 'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
                   },
                   <String, Object?>{
                     'name': 'keyboard',
                     'type': 'double',
                     'optional': true,
-                    'doc':
-                        'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
+                    'doc': 'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
                   },
                   <String, Object?>{
                     'name': 'unchanged',
                     'type': 'bool',
                     'optional': true,
-                    'doc':
-                        'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+                    'doc': 'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
                   },
                   <String, Object?>{
                     'name': 'failure',
@@ -5487,14 +5110,12 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'stepCount',
               'type': 'int',
-              'doc':
-                  'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
+              'doc': 'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
             },
             <String, Object?>{
               'name': 'unchangedCount',
               'type': 'int',
-              'doc':
-                  'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
+              'doc': 'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
             },
             <String, Object?>{
               'name': 'errors',
@@ -5517,8 +5138,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'translations',
               'type': 'Map<String, Map<String, String>>',
               'optional': true,
-              'doc':
-                  'Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.',
+              'doc': 'Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.',
             },
           ],
         },
@@ -5527,29 +5147,25 @@ final resultShapes = <String, ResultShape>{
         'name': 'report',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
+        'doc': 'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
       },
       <String, Object?>{
         'name': 'log',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The harness process\'s console, whole, on disk — engine noise, and anything printed outside a test zone.',
+        'doc': 'The harness process\'s console, whole, on disk — engine noise, and anything printed outside a test zone.',
       },
       <String, Object?>{
         'name': 'error',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.',
+        'doc': 'Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.',
       },
       <String, Object?>{
         'name': 'drift',
         'type': 'Map<String, Object?>',
         'optional': true,
-        'doc':
-            'How this run\'s pictures compare with the previous run of the same package: `compared`, and a count plus a capped list of steps under `changed`, `added` and `removed` — a suite that is green every pass and draws different pixels every pass says so here and nowhere else.',
+        'doc': 'How this run\'s pictures compare with the previous run of the same package: `compared`, and a count plus a capped list of steps under `changed`, `added` and `removed` — a suite that is green every pass and draws different pixels every pass says so here and nowhere else.',
       },
     ],
   }),
@@ -5562,8 +5178,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'axes',
         'type': 'Map<String, String>',
         'optional': true,
-        'doc':
-            'The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.',
+        'doc': 'The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.',
       },
       <String, Object?>{
         'name': 'packages',
@@ -5581,8 +5196,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'axes',
               'type': 'Map<String, String>',
               'optional': true,
-              'doc':
-                  'The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].',
+              'doc': 'The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].',
             },
             <String, Object?>{
               'name': 'ms',
@@ -5602,8 +5216,7 @@ final resultShapes = <String, ResultShape>{
                     'name': 'skipped',
                     'type': 'bool',
                     'optional': true,
-                    'doc':
-                        'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
+                    'doc': 'True when the scenario declared `skip: true` and its body never ran — the same answer `flutter test` gives the same file.',
                   },
                   <String, Object?>{
                     'name': 'skipReason',
@@ -5621,49 +5234,42 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'steps',
                     'type': 'List<ScenarioRunStep>',
-                    'doc':
-                        'Trimmed in an action\'s answer per its `steps=` mode; whole in the file `ScenarioRunPackage.report` names.',
+                    'doc': 'Trimmed in an action\'s answer per its `steps=` mode; whole in the file `ScenarioRunPackage.report` names.',
                     'shape': <String, Object?>{
                       'type': 'ScenarioRunStep',
                       'fields': <Object?>[
                         <String, Object?>{
                           'name': 'index',
                           'type': 'int',
-                          'doc':
-                              '1-based position in the scenario\'s capture sequence.',
+                          'doc': '1-based position in the scenario\'s capture sequence.',
                         },
                         <String, Object?>{
                           'name': 'position',
                           'type': 'String',
-                          'doc':
-                              'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
+                          'doc': 'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
                         },
                         <String, Object?>{
                           'name': 'parent',
                           'type': 'int',
                           'optional': true,
-                          'doc':
-                              'The [index] of the step this one follows; null for the scenario\'s first.',
+                          'doc': 'The [index] of the step this one follows; null for the scenario\'s first.',
                         },
                         <String, Object?>{
                           'name': 'branch',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The `split` branch label when this step is a branch\'s first capture.',
+                          'doc': 'The `split` branch label when this step is a branch\'s first capture.',
                         },
                         <String, Object?>{
                           'name': 'name',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The `Shot`\'s name; null for an automatic capture.',
+                          'doc': 'The `Shot`\'s name; null for an automatic capture.',
                         },
                         <String, Object?>{
                           'name': 'auto',
                           'type': 'bool',
-                          'doc':
-                              'True when nothing named this capture — a collapsible detail step.',
+                          'doc': 'True when nothing named this capture — a collapsible detail step.',
                         },
                         <String, Object?>{
                           'name': 'tags',
@@ -5680,15 +5286,13 @@ final resultShapes = <String, ResultShape>{
                           'name': 'image',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
+                          'doc': 'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
                         },
                         <String, Object?>{
                           'name': 'format',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+                          'doc': '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
                         },
                         <String, Object?>{
                           'name': 'width',
@@ -5704,56 +5308,48 @@ final resultShapes = <String, ResultShape>{
                           'name': 'tree',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The widget-tree JSON captured at the same moment, relative like [image].',
+                          'doc': 'The widget-tree JSON captured at the same moment, relative like [image].',
                         },
                         <String, Object?>{
                           'name': 'file',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
+                          'doc': 'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
                         },
                         <String, Object?>{
                           'name': 'mimeType',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'What the document is, when the scenario said — `application/pdf`.',
+                          'doc': 'What the document is, when the scenario said — `application/pdf`.',
                         },
                         <String, Object?>{
                           'name': 'bytes',
                           'type': 'int',
                           'optional': true,
-                          'doc':
-                              'How big [file] is, so a reader knows before opening it.',
+                          'doc': 'How big [file] is, so a reader knows before opening it.',
                         },
                         <String, Object?>{
                           'name': 'notification',
                           'type': 'Map<String, String?>',
                           'optional': true,
-                          'doc':
-                              'The notification\'s message — the one line a banner always has.',
+                          'doc': 'The notification\'s message — the one line a banner always has.',
                         },
                         <String, Object?>{
                           'name': 'keys',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
+                          'doc': 'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
                         },
                         <String, Object?>{
                           'name': 'semantics',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The semantics-tree JSON — what a screen reader gets — relative like [image].',
+                          'doc': 'The semantics-tree JSON — what a screen reader gets — relative like [image].',
                         },
                         <String, Object?>{
                           'name': 'texts',
                           'type': 'List<String>',
-                          'doc':
-                              'The visible texts — the projection an agent reads next to the pixels.',
+                          'doc': 'The visible texts — the projection an agent reads next to the pixels.',
                         },
                         <String, Object?>{
                           'name': 'address',
@@ -5765,8 +5361,7 @@ final resultShapes = <String, ResultShape>{
                           'name': 'statusBrightness',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+                          'doc': 'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
                         },
                         <String, Object?>{
                           'name': 'navBrightness',
@@ -5777,8 +5372,7 @@ final resultShapes = <String, ResultShape>{
                           'name': 'verb',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
+                          'doc': 'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
                         },
                         <String, Object?>{
                           'name': 'target',
@@ -5789,22 +5383,19 @@ final resultShapes = <String, ResultShape>{
                           'name': 'aim',
                           'type': 'Map<String, Object?>',
                           'optional': true,
-                          'doc':
-                              'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
+                          'doc': 'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
                         },
                         <String, Object?>{
                           'name': 'events',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
+                          'doc': 'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
                         },
                         <String, Object?>{
                           'name': 'eventCount',
                           'type': 'int',
                           'optional': true,
-                          'doc':
-                              'How many, and on which channels — `{platform: 3, print: 1}`.',
+                          'doc': 'How many, and on which channels — `{platform: 3, print: 1}`.',
                         },
                         <String, Object?>{
                           'name': 'eventChannels',
@@ -5815,22 +5406,19 @@ final resultShapes = <String, ResultShape>{
                           'name': 'eventTitles',
                           'type': 'List<String>',
                           'optional': true,
-                          'doc':
-                              'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
+                          'doc': 'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
                         },
                         <String, Object?>{
                           'name': 'eventsDropped',
                           'type': 'int',
                           'optional': true,
-                          'doc':
-                              'Events dropped to stay inside the per-step or per-run cap.',
+                          'doc': 'Events dropped to stay inside the per-step or per-run cap.',
                         },
                         <String, Object?>{
                           'name': 'frames',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
+                          'doc': 'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
                         },
                         <String, Object?>{
                           'name': 'frameCount',
@@ -5851,64 +5439,55 @@ final resultShapes = <String, ResultShape>{
                           'name': 'frameIntervalMs',
                           'type': 'int',
                           'optional': true,
-                          'doc':
-                              'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
+                          'doc': 'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
                         },
                         <String, Object?>{
                           'name': 'framesDropped',
                           'type': 'int',
                           'optional': true,
-                          'doc':
-                              'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
+                          'doc': 'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
                         },
                         <String, Object?>{
                           'name': 'settled',
                           'type': 'bool',
                           'optional': true,
-                          'doc':
-                              'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+                          'doc': 'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
                         },
                         <String, Object?>{
                           'name': 'landed',
                           'type': 'bool',
                           'optional': true,
-                          'doc':
-                              'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
+                          'doc': 'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
                         },
                         <String, Object?>{
                           'name': 'digest',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'What this step captured, hashed — the pixels for a screen, the payload for a document.',
+                          'doc': 'What this step captured, hashed — the pixels for a screen, the payload for a document.',
                         },
                         <String, Object?>{
                           'name': 'strayFrames',
                           'type': 'int',
                           'optional': true,
-                          'doc':
-                              'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+                          'doc': 'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
                         },
                         <String, Object?>{
                           'name': 'keyboard',
                           'type': 'double',
                           'optional': true,
-                          'doc':
-                              'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
+                          'doc': 'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
                         },
                         <String, Object?>{
                           'name': 'unchanged',
                           'type': 'bool',
                           'optional': true,
-                          'doc':
-                              'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+                          'doc': 'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
                         },
                         <String, Object?>{
                           'name': 'failure',
                           'type': 'String',
                           'optional': true,
-                          'doc':
-                              'The error, when this is the step a scenario broke on.',
+                          'doc': 'The error, when this is the step a scenario broke on.',
                         },
                       ],
                     },
@@ -5916,14 +5495,12 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'stepCount',
                     'type': 'int',
-                    'doc':
-                        'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
+                    'doc': 'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
                   },
                   <String, Object?>{
                     'name': 'unchangedCount',
                     'type': 'int',
-                    'doc':
-                        'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
+                    'doc': 'How many of those steps a verb acted for nothing on — pictures byte-identical to their parent\'s.',
                   },
                   <String, Object?>{
                     'name': 'errors',
@@ -5946,8 +5523,7 @@ final resultShapes = <String, ResultShape>{
                     'name': 'translations',
                     'type': 'Map<String, Map<String, String>>',
                     'optional': true,
-                    'doc':
-                        'Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.',
+                    'doc': 'Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.',
                   },
                 ],
               },
@@ -5956,29 +5532,25 @@ final resultShapes = <String, ResultShape>{
               'name': 'report',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
+              'doc': 'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
             },
             <String, Object?>{
               'name': 'log',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The harness process\'s console, whole, on disk — engine noise, and anything printed outside a test zone.',
+              'doc': 'The harness process\'s console, whole, on disk — engine noise, and anything printed outside a test zone.',
             },
             <String, Object?>{
               'name': 'error',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.',
+              'doc': 'Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.',
             },
             <String, Object?>{
               'name': 'drift',
               'type': 'Map<String, Object?>',
               'optional': true,
-              'doc':
-                  'How this run\'s pictures compare with the previous run of the same package: `compared`, and a count plus a capped list of steps under `changed`, `added` and `removed` — a suite that is green every pass and draws different pixels every pass says so here and nowhere else.',
+              'doc': 'How this run\'s pictures compare with the previous run of the same package: `compared`, and a count plus a capped list of steps under `changed`, `added` and `removed` — a suite that is green every pass and draws different pixels every pass says so here and nowhere else.',
             },
           ],
         },
@@ -5997,22 +5569,19 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'position',
         'type': 'String',
-        'doc':
-            'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
+        'doc': 'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
       },
       <String, Object?>{
         'name': 'parent',
         'type': 'int',
         'optional': true,
-        'doc':
-            'The [index] of the step this one follows; null for the scenario\'s first.',
+        'doc': 'The [index] of the step this one follows; null for the scenario\'s first.',
       },
       <String, Object?>{
         'name': 'branch',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The `split` branch label when this step is a branch\'s first capture.',
+        'doc': 'The `split` branch label when this step is a branch\'s first capture.',
       },
       <String, Object?>{
         'name': 'name',
@@ -6041,8 +5610,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'image',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
+        'doc': 'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
       },
       <String, Object?>{
         'name': 'format',
@@ -6057,15 +5625,13 @@ final resultShapes = <String, ResultShape>{
         'name': 'tree',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The widget-tree JSON captured at the same moment, relative like [image].',
+        'doc': 'The widget-tree JSON captured at the same moment, relative like [image].',
       },
       <String, Object?>{
         'name': 'file',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
+        'doc': 'The payload of a [ScenarioStepKind.document], **relative to the worktree root** like [image] — a path rather than the bytes, for the reason the tree and the events beside it are: a run\'s report stays readable, and what a reader wants to do with a document is open it.',
       },
       <String, Object?>{
         'name': 'mimeType',
@@ -6091,21 +5657,18 @@ final resultShapes = <String, ResultShape>{
         'name': 'keys',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
+        'doc': 'The translation keys on this screen, and the words that belonged to no catalog — relative like [image].',
       },
       <String, Object?>{
         'name': 'semantics',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The semantics-tree JSON — what a screen reader gets — relative like [image].',
+        'doc': 'The semantics-tree JSON — what a screen reader gets — relative like [image].',
       },
       <String, Object?>{
         'name': 'texts',
         'type': 'List<String>',
-        'doc':
-            'The visible texts — the projection an agent reads next to the pixels.',
+        'doc': 'The visible texts — the projection an agent reads next to the pixels.',
       },
       <String, Object?>{
         'name': 'address',
@@ -6117,8 +5680,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'statusBrightness',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+        'doc': 'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
       },
       <String, Object?>{
         'name': 'navBrightness',
@@ -6129,23 +5691,20 @@ final resultShapes = <String, ResultShape>{
         'name': 'verb',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
+        'doc': 'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
       },
       <String, Object?>{'name': 'target', 'type': 'String', 'optional': true},
       <String, Object?>{
         'name': 'aim',
         'type': 'Map<String, Object?>',
         'optional': true,
-        'doc':
-            'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
+        'doc': 'Where the verb\'s finger went — the box it resolved, in the view\'s own logical pixels, measured on the frame it was about to act on.',
       },
       <String, Object?>{
         'name': 'events',
         'type': 'String',
         'optional': true,
-        'doc':
-            'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
+        'doc': 'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordAppEvent`.',
       },
       <String, Object?>{
         'name': 'eventCount',
@@ -6162,8 +5721,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'eventTitles',
         'type': 'List<String>',
         'optional': true,
-        'doc':
-            'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
+        'doc': 'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
       },
       <String, Object?>{
         'name': 'eventsDropped',
@@ -6175,8 +5733,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'frames',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
+        'doc': 'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
       },
       <String, Object?>{'name': 'frameCount', 'type': 'int', 'optional': true},
       <String, Object?>{'name': 'frameWidth', 'type': 'int', 'optional': true},
@@ -6185,57 +5742,49 @@ final resultShapes = <String, ResultShape>{
         'name': 'frameIntervalMs',
         'type': 'int',
         'optional': true,
-        'doc':
-            'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
+        'doc': 'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
       },
       <String, Object?>{
         'name': 'framesDropped',
         'type': 'int',
         'optional': true,
-        'doc':
-            'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
+        'doc': 'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
       },
       <String, Object?>{
         'name': 'settled',
         'type': 'bool',
         'optional': true,
-        'doc':
-            'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+        'doc': 'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
       },
       <String, Object?>{
         'name': 'landed',
         'type': 'bool',
         'optional': true,
-        'doc':
-            'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
+        'doc': 'False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.',
       },
       <String, Object?>{
         'name': 'digest',
         'type': 'String',
         'optional': true,
-        'doc':
-            'What this step captured, hashed — the pixels for a screen, the payload for a document.',
+        'doc': 'What this step captured, hashed — the pixels for a screen, the payload for a document.',
       },
       <String, Object?>{
         'name': 'strayFrames',
         'type': 'int',
         'optional': true,
-        'doc':
-            'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+        'doc': 'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
       },
       <String, Object?>{
         'name': 'keyboard',
         'type': 'double',
         'optional': true,
-        'doc':
-            'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
+        'doc': 'How tall the software keyboard was when this frame was taken, in logical pixels, or null when it was down — which is nearly every step.',
       },
       <String, Object?>{
         'name': 'unchanged',
         'type': 'bool',
         'optional': true,
-        'doc':
-            'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
+        'doc': 'True when this step\'s picture is byte-identical to its parent\'s: the verb acted and nothing on screen changed.',
       },
       <String, Object?>{
         'name': 'failure',
@@ -6251,15 +5800,13 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'directory',
         'type': 'String',
-        'doc':
-            'Relative to `ScenarioShotsPackage.output`, so the whole tree can be moved or uploaded as it stands.',
+        'doc': 'Relative to `ScenarioShotsPackage.output`, so the whole tree can be moved or uploaded as it stands.',
       },
       <String, Object?>{'name': 'axes', 'type': 'Map<String, String>'},
       <String, Object?>{
         'name': 'images',
         'type': 'List<String>',
-        'doc':
-            'File names, in the order they were captured — which is the order they were numbered with.',
+        'doc': 'File names, in the order they were captured — which is the order they were numbered with.',
       },
       <String, Object?>{
         'name': 'failed',
@@ -6286,15 +5833,13 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'directory',
               'type': 'String',
-              'doc':
-                  'Relative to `ScenarioShotsPackage.output`, so the whole tree can be moved or uploaded as it stands.',
+              'doc': 'Relative to `ScenarioShotsPackage.output`, so the whole tree can be moved or uploaded as it stands.',
             },
             <String, Object?>{'name': 'axes', 'type': 'Map<String, String>'},
             <String, Object?>{
               'name': 'images',
               'type': 'List<String>',
-              'doc':
-                  'File names, in the order they were captured — which is the order they were numbered with.',
+              'doc': 'File names, in the order they were captured — which is the order they were numbered with.',
             },
             <String, Object?>{
               'name': 'failed',
@@ -6337,8 +5882,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'directory',
                     'type': 'String',
-                    'doc':
-                        'Relative to `ScenarioShotsPackage.output`, so the whole tree can be moved or uploaded as it stands.',
+                    'doc': 'Relative to `ScenarioShotsPackage.output`, so the whole tree can be moved or uploaded as it stands.',
                   },
                   <String, Object?>{
                     'name': 'axes',
@@ -6347,8 +5891,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'images',
                     'type': 'List<String>',
-                    'doc':
-                        'File names, in the order they were captured — which is the order they were numbered with.',
+                    'doc': 'File names, in the order they were captured — which is the order they were numbered with.',
                   },
                   <String, Object?>{
                     'name': 'failed',
@@ -6381,8 +5924,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'output',
         'type': 'String',
-        'doc':
-            'The directory to serve, worktree-relative where it sits inside one.',
+        'doc': 'The directory to serve, worktree-relative where it sits inside one.',
       },
       <String, Object?>{'name': 'indexHtml', 'type': 'String'},
       <String, Object?>{'name': 'scenarios', 'type': 'int'},
@@ -6390,8 +5932,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'artifacts',
         'type': 'int',
-        'doc':
-            'Files copied in beside the page — screenshots, trees, semantics, events.',
+        'doc': 'Files copied in beside the page — screenshots, trees, semantics, events.',
       },
       <String, Object?>{'name': 'durationMs', 'type': 'int'},
       <String, Object?>{
@@ -6414,8 +5955,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'path',
         'type': 'String',
-        'doc':
-            'Worktree-relative, so an agent whose tools are scoped to the repo can open it.',
+        'doc': 'Worktree-relative, so an agent whose tools are scoped to the repo can open it.',
       },
       <String, Object?>{'name': 'surface', 'type': 'String'},
       <String, Object?>{'name': 'theme', 'type': 'String'},
@@ -6450,8 +5990,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'generated',
         'type': 'bool',
-        'doc':
-            'False when nothing has been generated yet, which is what distinguishes "run `generate` first" from "the generator produced nothing".',
+        'doc': 'False when nothing has been generated yet, which is what distinguishes "run `generate` first" from "the generator produced nothing".',
       },
       <String, Object?>{
         'name': 'stale',
@@ -6467,16 +6006,14 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'path',
               'type': 'String',
-              'doc':
-                  'Worktree-relative, so an agent whose tools are scoped to the repo can open it.',
+              'doc': 'Worktree-relative, so an agent whose tools are scoped to the repo can open it.',
             },
             <String, Object?>{'name': 'surface', 'type': 'String'},
             <String, Object?>{'name': 'theme', 'type': 'String'},
             <String, Object?>{
               'name': 'role',
               'type': 'String',
-              'doc':
-                  'Which layer this is — `image`, `background`, `branding`, `icon`.',
+              'doc': 'Which layer this is — `image`, `background`, `branding`, `icon`.',
             },
             <String, Object?>{
               'name': 'density',
@@ -6532,14 +6069,12 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'placement',
         'type': 'String',
-        'doc':
-            'Where the image lands, in words — so the CLI answers the question without rendering anything.',
+        'doc': 'Where the image lands, in words — so the CLI answers the question without rendering anything.',
       },
       <String, Object?>{
         'name': 'generated',
         'type': 'bool',
-        'doc':
-            '[placement] was read back from the files `create` wrote, rather than derived from the config.',
+        'doc': '[placement] was read back from the files `create` wrote, rather than derived from the config.',
       },
       <String, Object?>{
         'name': 'predictedBecause',
@@ -6572,8 +6107,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'fallsBackToLight',
         'type': 'bool',
-        'doc':
-            'The dark chain resolved nothing, so the OS will show the light splash.',
+        'doc': 'The dark chain resolved nothing, so the OS will show the light splash.',
       },
       <String, Object?>{
         'name': 'problems',
@@ -6602,8 +6136,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'device',
               'type': 'String',
               'optional': true,
-              'doc':
-                  'The screen this is about, for the rules that sweep the device table — `iphone-se`.',
+              'doc': 'The screen this is about, for the rules that sweep the device table — `iphone-se`.',
             },
             <String, Object?>{
               'name': 'blocksGeneration',
@@ -6637,16 +6170,14 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'path',
               'type': 'String',
-              'doc':
-                  'Worktree-relative, so an agent whose tools are scoped to the repo can open it.',
+              'doc': 'Worktree-relative, so an agent whose tools are scoped to the repo can open it.',
             },
             <String, Object?>{'name': 'surface', 'type': 'String'},
             <String, Object?>{'name': 'theme', 'type': 'String'},
             <String, Object?>{
               'name': 'role',
               'type': 'String',
-              'doc':
-                  'Which layer this is — `image`, `background`, `branding`, `icon`.',
+              'doc': 'Which layer this is — `image`, `background`, `branding`, `icon`.',
             },
             <String, Object?>{
               'name': 'density',
@@ -6687,8 +6218,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'device',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The screen this is about, for the rules that sweep the device table — `iphone-se`.',
+        'doc': 'The screen this is about, for the rules that sweep the device table — `iphone-se`.',
       },
       <String, Object?>{
         'name': 'blocksGeneration',
@@ -6722,8 +6252,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'configPath',
         'type': 'String',
         'optional': true,
-        'doc':
-            'Which file the re-read found, or null when the package has no splash config at all.',
+        'doc': 'Which file the re-read found, or null when the package has no splash config at all.',
       },
       <String, Object?>{'name': 'scannedAt', 'type': 'String'},
       <String, Object?>{
@@ -6770,14 +6299,12 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'occurrences',
         'type': 'int',
-        'doc':
-            'Every place a key was seen — the sum over all keys, and roughly what a service push will cost in calls.',
+        'doc': 'Every place a key was seen — the sum over all keys, and roughly what a service push will cost in calls.',
       },
       <String, Object?>{
         'name': 'shots',
         'type': 'int',
-        'doc':
-            'Frames written, deduplicated: several keys on one screen cost one file.',
+        'doc': 'Frames written, deduplicated: several keys on one screen cost one file.',
       },
       <String, Object?>{
         'name': 'missingShots',
@@ -6787,8 +6314,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'fallingBack',
         'type': 'int',
-        'doc':
-            'Places the app showed the source language to a reader who asked for another one.',
+        'doc': 'Places the app showed the source language to a reader who asked for another one.',
       },
       <String, Object?>{
         'name': 'disagrees',
@@ -6828,21 +6354,18 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'maxLengthLimits',
         'type': 'int',
-        'doc':
-            'Of those, keys with a *real* limit — a longer string was rendered and clipped.',
+        'doc': 'Of those, keys with a *real* limit — a longer string was rendered and clipped.',
       },
       <String, Object?>{
         'name': 'maxLengthDevices',
         'type': 'String',
         'optional': true,
-        'doc':
-            'The devices the measurement ran on — what every `maxLength` claim is true for.',
+        'doc': 'The devices the measurement ran on — what every `maxLength` claim is true for.',
       },
       <String, Object?>{
         'name': 'expansionBreaks',
         'type': 'int',
-        'doc':
-            'Screens that broke under expansion — a layout overflow, or a scenario red at some growth level.',
+        'doc': 'Screens that broke under expansion — a layout overflow, or a scenario red at some growth level.',
       },
       <String, Object?>{'name': 'durationMs', 'type': 'int'},
       <String, Object?>{

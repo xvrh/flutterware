@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
+
 import 'core/graph.dart';
 import 'core/matrix.dart';
 import 'core/typings.dart';

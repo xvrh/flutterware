@@ -121,11 +121,10 @@ void main() {
     var link = described.actions.first.parameters.singleWhere(
       (p) => p.id == 'link',
     );
-    expect(
-      link.options.map((o) => o.value),
-      ['/cart', '/menu'],
-      reason: 'the choices are the screens the app actually has',
-    );
+    expect(link.options.map((o) => o.value), [
+      '/cart',
+      '/menu',
+    ], reason: 'the choices are the screens the app actually has');
   });
 
   /// The refusal is the app's, in the app's words — not the bridge inventing

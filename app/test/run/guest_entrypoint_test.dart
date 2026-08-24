@@ -12,9 +12,8 @@ void main() {
 
   setUp(() {
     root = Directory.systemTemp.createTempSync('guest_entrypoint_test');
-    File(
-      p.join(root.path, 'pubspec.yaml'),
-    ).writeAsStringSync('name: shop_app\n');
+    File(p.join(root.path, 'pubspec.yaml'))
+        .writeAsStringSync('name: shop_app\n');
   });
 
   tearDown(() => root.deleteSync(recursive: true));
@@ -27,9 +26,8 @@ void main() {
 
     expect(result.guest, isTrue);
     expect(result.target, '.dart_tool/flutterware/run/main_dev_guest.dart');
-    var content = File(
-      p.joinAll([root.path, ...p.posix.split(result.target)]),
-    ).readAsStringSync();
+    var content = File(p.joinAll([root.path, ...p.posix.split(result.target)]))
+        .readAsStringSync();
     expect(content, contains("import 'package:shop_app/main_dev.dart'"));
     expect(content, contains("import 'package:flutterware/run_guest.dart'"));
     // The wrapper forwards `args` when the app's main takes them — a
@@ -67,9 +65,8 @@ void main() {
       result.target,
       '.dart_tool/flutterware/run/main_desktop_dev_guest.dart',
     );
-    var content = File(
-      p.joinAll([root.path, ...p.posix.split(result.target)]),
-    ).readAsStringSync();
+    var content = File(p.joinAll([root.path, ...p.posix.split(result.target)]))
+        .readAsStringSync();
     // Three levels out of `.dart_tool/flutterware/run/`, then back down.
     expect(
       content,
@@ -171,9 +168,8 @@ void main() {
         entrypoint: 'lib/main.dart',
         knobs: knobs,
       );
-      return File(
-        p.joinAll([root.path, ...p.posix.split(result.target)]),
-      ).readAsStringSync();
+      return File(p.joinAll([root.path, ...p.posix.split(result.target)]))
+          .readAsStringSync();
     }
 
     void writeLib(String relative, String content) =>

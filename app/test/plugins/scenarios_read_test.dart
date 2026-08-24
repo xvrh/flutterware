@@ -180,11 +180,11 @@ void main() {
     // And the handles for going on: what else to ask, and where the other
     // steps of the same flow are.
     expect(result.next, contains('find'));
-    expect(
-      result.steps,
-      ['1-step.tree.json', '2-step.tree.json', '3-step.tree.json'],
-      reason: 'names beside `step`, not the same directory five times',
-    );
+    expect(result.steps, [
+      '1-step.tree.json',
+      '2-step.tree.json',
+      '3-step.tree.json',
+    ], reason: 'names beside `step`, not the same directory five times');
   });
 
   test('the newest run is the one read', () async {

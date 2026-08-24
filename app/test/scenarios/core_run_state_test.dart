@@ -370,9 +370,9 @@ void main() {
       'language': 'en',
     });
 
-    var index =
-        jsonDecode(File(p.join(output, 'index.json')).readAsStringSync())
-            as Map<String, Object?>;
+    var index = jsonDecode(
+      File(p.join(output, 'index.json')).readAsStringSync(),
+    ) as Map<String, Object?>;
     var runs = (index['runs']! as List).cast<Map<String, Object?>>();
     expect(runs, hasLength(4));
     expect(runs.first['axes'], {'device': 'iphone-se', 'language': 'en'});
@@ -477,9 +477,8 @@ void main() {
       // Emptied first: yesterday's screenshot of a screen that no longer exists
       // must not ship beside today's.
       expect(
-        File(
-          p.join(output, 'en', 'iphone-16', '02-order-placed.png'),
-        ).existsSync(),
+        File(p.join(output, 'en', 'iphone-16', '02-order-placed.png'))
+            .existsSync(),
         isFalse,
       );
     },

@@ -74,9 +74,8 @@ class _ProbeState extends State<_Probe> {
     var landscape = await _once('landscape');
     if (mounted) setState(() => _report = '$portrait\n$landscape');
     // Also on disk, for a device whose console is hard to read.
-    await File(
-      '${Directory.systemTemp.path}/kbresult.txt',
-    ).writeAsString('$portrait\n$landscape\n');
+    await File('${Directory.systemTemp.path}/kbresult.txt')
+        .writeAsString('$portrait\n$landscape\n');
   }
 
   /// Raises the keyboard and waits for the insets to stop moving.

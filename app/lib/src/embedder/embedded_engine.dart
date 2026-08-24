@@ -436,9 +436,8 @@ class EmbeddedEngine extends ChangeNotifier {
     // directory itself, which would otherwise accumulate one per session id.
     // The run-dir sweep ages out what a crash skips.
     try {
-      Directory(
-        p.join(flutterwareRunDir(), 'cap-$name'),
-      ).deleteSync(recursive: true);
+      Directory(p.join(flutterwareRunDir(), 'cap-$name'))
+          .deleteSync(recursive: true);
     } on FileSystemException {
       // Housekeeping only.
     }

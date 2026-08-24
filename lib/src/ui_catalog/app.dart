@@ -106,9 +106,8 @@ class UICatalogAppState extends State<UICatalog> {
     var entries = _mapToEntries(allCatalog);
     TreeEntry? selected;
     if (_selected case var selectedPath?) {
-      selected = _flatEntries(
-        entries,
-      ).firstWhereOrNull((e) => e.path == selectedPath);
+      selected = _flatEntries(entries)
+          .firstWhereOrNull((e) => e.path == selectedPath);
     } else {
       selected = TreeEntry(null, MapEntry('', allCatalog));
     }

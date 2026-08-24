@@ -5,12 +5,11 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 /// Injectable process seam, same shape as the dependencies plugin's.
-typedef RunProcess =
-    Future<ProcessResult> Function(
-      String executable,
-      List<String> arguments, {
-      String? workingDirectory,
-    });
+typedef RunProcess = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments, {
+  String? workingDirectory,
+});
 
 Future<ProcessResult> _defaultRunProcess(
   String executable,

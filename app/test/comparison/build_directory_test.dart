@@ -27,9 +27,8 @@ void main() {
   test('release deletes the claim and only the claim', () {
     var kept = claimComparisonBuildDirectory(root.path);
     var released = claimComparisonBuildDirectory(root.path);
-    File(
-      p.join(root.path, released, 'previews.dill'),
-    ).writeAsStringSync('kernel');
+    File(p.join(root.path, released, 'previews.dill'))
+        .writeAsStringSync('kernel');
 
     releaseComparisonBuildDirectory(root.path, released);
 
@@ -63,9 +62,8 @@ void main() {
     File(p.join(root.path, crashed, 'scenarios.dill')).writeAsStringSync('k');
     // The stamp's mtime is when the claim was made; a run is minutes, so two
     // days is safely past expiry.
-    File(
-      p.join(root.path, crashed, '.claim'),
-    ).setLastModifiedSync(DateTime.now().subtract(const Duration(days: 2)));
+    File(p.join(root.path, crashed, '.claim'))
+        .setLastModifiedSync(DateTime.now().subtract(const Duration(days: 2)));
     var live = claimComparisonBuildDirectory(root.path);
     // Not a claim — no stamp — so however old, it is not the sweep's to touch.
     var foreign = Directory(p.join(root.path, comparisonBuildRoot, 'foreign'))

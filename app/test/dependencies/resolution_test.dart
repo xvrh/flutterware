@@ -73,9 +73,9 @@ void main() {
     });
 
     test('excludes what only a sibling member reaches', () {
-      var names = resolveFor(
-        'flutterware_example',
-      ).dependencies.map((e) => e.name).toSet();
+      var names = resolveFor('flutterware_example').dependencies
+          .map((e) => e.name)
+          .toSet();
 
       // `file_picker` and `dart_mcp` are dependencies of flutterware_app. They
       // are in the shared resolution but unreachable from this member — 107 of
@@ -86,9 +86,9 @@ void main() {
     });
 
     test('a sibling member reaches its own dependencies', () {
-      var names = resolveFor(
-        'flutterware_app',
-      ).dependencies.map((e) => e.name).toSet();
+      var names = resolveFor('flutterware_app').dependencies
+          .map((e) => e.name)
+          .toSet();
       expect(names, contains('file_picker'));
       expect(names, hasLength(147));
     });
@@ -107,9 +107,9 @@ void main() {
       // dev_dependencies to leak. Traversal follows directDependencies for
       // exactly this reason: pub does not resolve a dependency's dev deps for
       // its consumers, so propagating them would invent edges.
-      var names = resolveFor(
-        'flutterware_example',
-      ).dependencies.map((e) => e.name).toSet();
+      var names = resolveFor('flutterware_example').dependencies
+          .map((e) => e.name)
+          .toSet();
       expect(names, contains('flutterware'));
       for (var devOnly in [
         'build_runner',

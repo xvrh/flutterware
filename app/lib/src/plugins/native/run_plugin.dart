@@ -226,9 +226,8 @@ class _RunPanelState extends State<_RunPanel> {
       await _core.control(action, handle);
     } on Object catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
       }
     }
   }

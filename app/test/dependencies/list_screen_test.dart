@@ -27,9 +27,8 @@ import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 /// completes inside one and `pumpAndSettle` waits forever. That injection seam
 /// is why `DependenciesService` takes a `runProcess`.
 void main() {
-  var fixture = File(
-    'test/dependencies/fixtures/pub_deps.json',
-  ).readAsStringSync();
+  var fixture = File('test/dependencies/fixtures/pub_deps.json')
+      .readAsStringSync();
 
   Future<void> pumpScreen(
     WidgetTester tester, {

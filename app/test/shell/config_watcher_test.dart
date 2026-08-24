@@ -283,36 +283,33 @@ void main() {
     expect(calls, 1);
   });
 
-  test(
-    'a reload that throws leaves the same bytes able to fire again',
-    () async {
-      var attempts = 0;
-      var reported = <Object>[];
-      var angry = ConfigWatcher(
-        worktreePath: root.path,
-        onChanged: () async {
-          attempts++;
-          throw StateError('reload blew up');
-        },
-        onError: reported.add,
-        debounce: _debounce,
-        watch: (_) => events.stream,
-      );
-      addTearDown(angry.dispose);
-      await angry.start();
+  test('a reload that throws leaves the same bytes able to fire again', () async {
+    var attempts = 0;
+    var reported = <Object>[];
+    var angry = ConfigWatcher(
+      worktreePath: root.path,
+      onChanged: () async {
+        attempts++;
+        throw StateError('reload blew up');
+      },
+      onError: reported.add,
+      debounce: _debounce,
+      watch: (_) => events.stream,
+    );
+    addTearDown(angry.dispose);
+    await angry.start();
 
-      // Both saves are the *same* content. Without rewinding the hash the second
-      // is indistinguishable from a no-op save and the file stays unreloadable.
-      await save('void main() { print(1); }');
-      config.setLastModifiedSync(DateTime.now());
-      events.add(WatchEvent(ChangeType.MODIFY, config.path));
-      await Future<void>.delayed(_debounce * 4);
+    // Both saves are the *same* content. Without rewinding the hash the second
+    // is indistinguishable from a no-op save and the file stays unreloadable.
+    await save('void main() { print(1); }');
+    config.setLastModifiedSync(DateTime.now());
+    events.add(WatchEvent(ChangeType.MODIFY, config.path));
+    await Future<void>.delayed(_debounce * 4);
 
-      expect(attempts, 2);
-      // Reported, not swallowed: a timer callback has nobody to rethrow to.
-      expect(reported, hasLength(2));
-    },
-  );
+    expect(attempts, 2);
+    // Reported, not swallowed: a timer callback has nobody to rethrow to.
+    expect(reported, hasLength(2));
+  });
 
   test('disposing stops it firing', () async {
     await watcher.start();

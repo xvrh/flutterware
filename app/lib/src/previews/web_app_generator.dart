@@ -70,9 +70,8 @@ class WebAppGenerator {
     var index = <String, int>{};
     for (var (i, entry) in entries.indexed) {
       index[entry.id] = i;
-      File(
-        p.join(outputDir, 'entry_$i.dart'),
-      ).writeAsStringSync(_wrappers.source(entry, i));
+      File(p.join(outputDir, 'entry_$i.dart'))
+          .writeAsStringSync(_wrappers.source(entry, i));
     }
 
     File(entrypointPath).writeAsStringSync(_main(entries, index));

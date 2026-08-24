@@ -120,9 +120,9 @@ Widget demo({m.Backend backend = m.Backend.dev}) => Placeholder();
 
   test('a built-in knob carries no type — there is nothing to generate', () {
     expect(
-      knobsOf(
-        "Widget demo({String label = 'x'}) => Placeholder();",
-      ).single.enumType,
+      knobsOf("Widget demo({String label = 'x'}) => Placeholder();")
+          .single
+          .enumType,
       isNull,
     );
   });
@@ -299,16 +299,14 @@ Widget demo({String? host, Backend? backend}) => Placeholder();
       expect(knobs.map((k) => k.name), ['serverHost', 'serverPort']);
       expect(knobs[0].defaultSource, 'ServerUrls.localHost');
       expect(knobs[1].defaultSource, 'ServerUrls.localPort');
-      expect(
-        knobs.map((k) => k.knob.defaultValue),
-        [null, null],
-        reason: 'the value field stays honest about not knowing',
-      );
-      expect(
-        knobs.map((k) => k.knob.kind),
-        [KnobKind.string, KnobKind.integer],
-        reason: 'the type is still read off the signature',
-      );
+      expect(knobs.map((k) => k.knob.defaultValue), [
+        null,
+        null,
+      ], reason: 'the value field stays honest about not knowing');
+      expect(knobs.map((k) => k.knob.kind), [
+        KnobKind.string,
+        KnobKind.integer,
+      ], reason: 'the type is still read off the signature');
     });
 
     /// The pair is what carries the meaning, so they may never both be set:

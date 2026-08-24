@@ -73,9 +73,8 @@ void main() {
   test('symlinks are dropped rather than followed', () {
     write('lib/main.dart');
     write('elsewhere/big.dart');
-    Link(
-      p.join(root.path, 'lib', 'link'),
-    ).createSync(p.join(root.path, 'elsewhere'));
+    Link(p.join(root.path, 'lib', 'link'))
+        .createSync(p.join(root.path, 'elsewhere'));
 
     expect(list('lib'), ['lib/main.dart']);
   });

@@ -107,9 +107,8 @@ class RunConnection {
       var registered = false;
       try {
         registered =
-            (await service.getIsolate(
-              isolate.id!,
-            )).extensionRPCs?.contains(extension) ??
+            (await service.getIsolate(isolate.id!)).extensionRPCs
+                ?.contains(extension) ??
             false;
       } on Object {
         // An isolate that exited between the two calls is not an answer, and

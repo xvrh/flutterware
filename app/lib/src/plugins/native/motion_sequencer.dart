@@ -26,13 +26,12 @@ import '../../ui/design/design.dart';
 
 /// Rewrites one segment in place. Every edit the panel makes — retime, trim,
 /// re-value, re-curve — is this one call with a different closure.
-typedef MotionEdit =
-    Future<void> Function(
-      String target,
-      String property,
-      int index,
-      MotionSpan Function(MotionSpan) change,
-    );
+typedef MotionEdit = Future<void> Function(
+  String target,
+  String property,
+  int index,
+  MotionSpan Function(MotionSpan) change,
+);
 
 /// The gutter width, and the reason there is no separate target rail: an
 /// outline panel beside lane names is the same information twice.

@@ -119,9 +119,8 @@ class MotionCore extends PluginCore {
           ? [MotionFileProblem('the values file could not be read')]
           : result.problems;
     }
-    File(
-      valuesPathFor(package, motionFile),
-    ).writeAsStringSync(result.file!.rewrite(targets));
+    File(valuesPathFor(package, motionFile))
+        .writeAsStringSync(result.file!.rewrite(targets));
     return const [];
   }
 

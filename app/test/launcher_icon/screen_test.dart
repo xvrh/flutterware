@@ -314,9 +314,8 @@ void main() {
   testWidgets('an Icon Composer project is explained, not reported empty', (
     tester,
   ) async {
-    Directory(
-      p.join(root.path, 'ios', 'Runner', 'AppIcon.icon'),
-    ).createSync(recursive: true);
+    Directory(p.join(root.path, 'ios', 'Runner', 'AppIcon.icon'))
+        .createSync(recursive: true);
     writePng('web/icons/Icon-192.png', 192);
 
     await mount(tester);

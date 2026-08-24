@@ -20,8 +20,10 @@ import '../panel_source.dart';
 /// be wired to a read path (sqlite_async's `getAll` runs on the read pool, so
 /// a write smuggled into it dies at the sqlite layer); `execute` is the write
 /// door and exists only when the app provides it.
-typedef DatabaseQuery =
-    Future<List<Map<String, Object?>>> Function(String sql, List<Object?> args);
+typedef DatabaseQuery = Future<List<Map<String, Object?>>> Function(
+  String sql,
+  List<Object?> args,
+);
 
 /// A live query: emits the result rows now and again on every relevant
 /// change — sqlite_async's `watch` is the reference implementation.

@@ -10,8 +10,8 @@ import 'shop_app.dart';
 /// stack with another menu leaves *two*, and the second one wears a back arrow
 /// pointing at the first. Clearing the stack puts you exactly where `Get
 /// started` does.
-void backToMenu(BuildContext context) =>
-    Navigator.of(context).pushAndRemoveUntil(
+void backToMenu(BuildContext context) => Navigator.of(context)
+    .pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const MenuScreen()),
       (route) => false,
     );

@@ -314,15 +314,18 @@ void main() {
       );
     });
 
-    test('a published live session, which is bounded and self-healing', () async {
-      // One file per project ever, and `attachToLiveSession` already deletes one
-      // that will not connect. Ageing these out would break attach for a GUI
-      // that has simply been open a long time.
-      aged('live-${'e' * 16}.json', const Duration(days: 30));
+    test(
+      'a published live session, which is bounded and self-healing',
+      () async {
+        // One file per project ever, and `attachToLiveSession` already deletes one
+        // that will not connect. Ageing these out would break attach for a GUI
+        // that has simply been open a long time.
+        aged('live-${'e' * 16}.json', const Duration(days: 30));
 
-      expect(await sweep(), 0);
-      expect(runDir.listSync(), hasLength(1));
-    });
+        expect(await sweep(), 0);
+        expect(runDir.listSync(), hasLength(1));
+      },
+    );
 
     test('a file it does not recognise', () async {
       aged('something-a-person-put-here.txt', const Duration(days: 30));

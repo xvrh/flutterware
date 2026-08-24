@@ -957,9 +957,8 @@ bool _accountsFor(
   FlutterErrorDetails details,
   List<ScenarioCaughtError> caught,
 ) {
-  var counted = RegExp(
-    r'^Multiple exceptions \((\d+)\) were detected',
-  ).firstMatch(details.exceptionAsString());
+  var counted = RegExp(r'^Multiple exceptions \((\d+)\) were detected')
+      .firstMatch(details.exceptionAsString());
   if (counted != null) return int.parse(counted.group(1)!) <= caught.length;
   return caught.any((c) => identical(c.exception, details.exception));
 }

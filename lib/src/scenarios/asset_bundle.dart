@@ -116,9 +116,9 @@ class ScenarioAssetBundle extends AssetBundle {
     if (_structuredBinary.containsKey(key)) {
       return SynchronousFuture(_structuredBinary[key] as T);
     }
-    return load(
-      key,
-    ).then(parser).then((value) => _structuredBinary[key] = value);
+    return load(key)
+        .then(parser)
+        .then((value) => _structuredBinary[key] = value);
   }
 
   @override

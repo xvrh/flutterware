@@ -467,19 +467,17 @@ void main() {
     expect(finder.evaluate(), isNotEmpty);
   });
 
-  testWidgets(
-    'the semantics probe stays quiet when semantics is off',
-    (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: Text('Buy')));
-      var resolver = TargetResolver(tester);
+  testWidgets('the semantics probe stays quiet when semantics is off', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: Text('Buy')));
+    var resolver = TargetResolver(tester);
 
-      var error = await _refusal(() => resolver.resolve('Add to cart', 'tap'));
+    var error = await _refusal(() => resolver.resolve('Add to cart', 'tap'));
 
-      expect('$error', isNot(contains('semantics label')));
-      expect('$error', contains('Nothing on this screen scrolls'));
-    },
-    semanticsEnabled: false,
-  );
+    expect('$error', isNot(contains('semantics label')));
+    expect('$error', contains('Nothing on this screen scrolls'));
+  }, semanticsEnabled: false);
 
   testWidgets('below the fold resolves after the ladder scrolls to it', (
     tester,

@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../utils/value_stream.dart';
 
 class AutoScroller<T> extends StatefulWidget {

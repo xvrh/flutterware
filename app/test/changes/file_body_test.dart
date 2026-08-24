@@ -106,9 +106,8 @@ void main() {
   }
 
   testWidgets('an untracked markdown file opens rendered', (tester) async {
-    File(
-      '${temp.path}/notes.md',
-    ).writeAsStringSync('# A heading\n\nA paragraph of prose.\n');
+    File('${temp.path}/notes.md')
+        .writeAsStringSync('# A heading\n\nA paragraph of prose.\n');
     await pump(
       tester,
       setOf(untracked: const [UntrackedEntry('notes.md')]),

@@ -103,9 +103,8 @@ void main() {
     test('an explicit size stretches it without flattening it', () {
       // Asking for a taller iPhone is asking for a taller iPhone, not for a
       // slab of glass with no notch.
-      var viewport = CaptureViewport.of(
-        deviceById('iphone-13')!,
-      ).resized(height: 3000);
+      var viewport = CaptureViewport.of(deviceById('iphone-13')!)
+          .resized(height: 3000);
 
       expect(viewport.width, 1170);
       expect(viewport.height, 3000);

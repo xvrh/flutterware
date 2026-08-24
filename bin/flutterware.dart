@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:isolate';
+
 import 'package:flutterware/src/build_lock.dart';
 import 'package:flutterware/src/build_output.dart';
 import 'package:flutterware/src/constants.dart';

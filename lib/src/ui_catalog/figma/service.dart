@@ -1,7 +1,9 @@
 import 'dart:io';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import '../../utils/value_stream.dart';
 import 'clipboard_watcher.dart';
 import 'downloader_io.dart';

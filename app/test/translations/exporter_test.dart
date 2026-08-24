@@ -280,9 +280,9 @@ void main() {
     test('no probe leaves the format without a max length anywhere', () {
       var written = write(survey(sightings: [sighting()]));
 
-      var json =
-          jsonDecode(File(written.keysJson).readAsStringSync())
-              as Map<String, Object?>;
+      var json = jsonDecode(
+        File(written.keysJson).readAsStringSync(),
+      ) as Map<String, Object?>;
       expect(json.containsKey('maxLengths'), isFalse);
       expect('${json['keys']}'.contains('maxLength'), isFalse);
     });

@@ -515,8 +515,10 @@ class _FakeSide implements ComparisonSide {
   /// (entry, checkout) pairs this was asked to render.
   final renderedFor = <(String, String)>[];
 
-  RenderedEntry Function(String entry, String checkout) frame =
-      (entry, checkout) => _frame(entry);
+  RenderedEntry Function(String entry, String checkout) frame = (
+    entry,
+    checkout,
+  ) => _frame(entry);
 
   String? Function(String entry, String checkout)? refuse;
 

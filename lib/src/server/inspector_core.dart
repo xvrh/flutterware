@@ -28,8 +28,9 @@ import 'frames.dart';
 
 /// What a command handler receives and returns. A returned map becomes the
 /// response payload as-is; anything else is wrapped as `{"value": …}`.
-typedef InspectorCommandHandler =
-    FutureOr<Object?> Function(Map<String, Object?> params);
+typedef InspectorCommandHandler = FutureOr<Object?> Function(
+  Map<String, Object?> params,
+);
 
 /// One attached peer, from the core's point of view: somewhere frames go.
 ///

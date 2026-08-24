@@ -14,17 +14,17 @@ List<Object?> targetsOf(Map<String, Object?> scope) =>
     scope['targets']! as List<Object?>;
 
 Map<String, Object?> targetNamed(Map<String, Object?> scope, String name) =>
-    targetsOf(scope).cast<Map<String, Object?>>().firstWhere(
-      (target) => target['name'] == name,
-    );
+    targetsOf(scope)
+        .cast<Map<String, Object?>>()
+        .firstWhere((target) => target['name'] == name);
 
 List<Object?> propertiesOf(Map<String, Object?> target) =>
     target['properties']! as List<Object?>;
 
 Map<String, Object?> propertyNamed(Map<String, Object?> target, String name) =>
-    propertiesOf(target).cast<Map<String, Object?>>().firstWhere(
-      (property) => property['name'] == name,
-    );
+    propertiesOf(target)
+        .cast<Map<String, Object?>>()
+        .firstWhere((property) => property['name'] == name);
 
 final _values = MotionValues(
   targets: {

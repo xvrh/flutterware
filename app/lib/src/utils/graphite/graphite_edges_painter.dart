@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui';
+
 import 'package:flutter/widgets.dart';
+
 import 'arrow_path.dart';
 import 'core/matrix.dart';
 import 'graphite.dart';

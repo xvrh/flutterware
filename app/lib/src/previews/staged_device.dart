@@ -395,9 +395,9 @@ class _DevicePicker extends StatelessWidget {
       // **The only place a device is chosen, and it writes the address.** It
       // used to set the staging and let the panel copy that into the address a
       // frame later; the copy came back stale and undid the pick.
-      onSelected: (value) => AddressScope.write(
-        context,
-      ).setParam('device', value?.id ?? fitDeviceId),
+      onSelected: (value) =>
+          AddressScope.write(context)
+              .setParam('device', value?.id ?? fitDeviceId),
       groups: [
         (
           heading: null,

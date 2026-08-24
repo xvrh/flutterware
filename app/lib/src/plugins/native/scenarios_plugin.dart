@@ -354,9 +354,9 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
             title: 'Pick a scenario',
             message: 'Opening one runs it.',
             action: TextButton(
-              onPressed: () => AddressScope.write(
-                context,
-              ).setSegments(scenarioSegments(place.package, help: true)),
+              onPressed: () =>
+                  AddressScope.write(context)
+                      .setSegments(scenarioSegments(place.package, help: true)),
               child: const Text('How to write one'),
             ),
           );
@@ -502,9 +502,9 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
           scanning: core.isScanning(package),
           onRefresh: () => core.refresh(package),
           onNew: () => unawaited(_newScenario(context, core, package)),
-          onHelp: () => AddressScope.write(
-            context,
-          ).setSegments(scenarioSegments(package, help: true)),
+          onHelp: () =>
+              AddressScope.write(context)
+                  .setSegments(scenarioSegments(package, help: true)),
           helpSelected: widget.selected.help,
         ),
         if (scanned.isNotEmpty)
@@ -974,9 +974,8 @@ class _ScenarioRow extends StatelessWidget {
             : hovered
             ? colors.panel
             : Colors.transparent,
-        padding: _treeRowPadding(
-          depth,
-        ).add(const EdgeInsets.symmetric(vertical: FwSpacing.sm)),
+        padding: _treeRowPadding(depth)
+            .add(const EdgeInsets.symmetric(vertical: FwSpacing.sm)),
         child: Row(
           children: [
             Icon(
@@ -1659,9 +1658,9 @@ class _AxesBar extends StatelessWidget {
                 for (var language in languages)
                   MenuItem(
                     language,
-                    onSelected: () => AddressScope.write(
-                      context,
-                    ).setParam('language', language),
+                    onSelected: () =>
+                        AddressScope.write(context)
+                            .setParam('language', language),
                   ),
               ],
               builder: (context, controller) => _AxisChip(
@@ -1760,9 +1759,9 @@ class _AccessibilityPanel extends StatelessWidget {
             Checkbox(
               value: value,
               visualDensity: VisualDensity.compact,
-              onChanged: (checked) => AddressScope.write(
-                context,
-              ).setParam(param, (checked ?? false) ? 'true' : null),
+              onChanged: (checked) =>
+                  AddressScope.write(context)
+                      .setParam(param, (checked ?? false) ? 'true' : null),
             ),
           ],
         ),

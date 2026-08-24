@@ -53,11 +53,9 @@ void main() {
   test('entrypoint and device do not split a project memory', () {
     memory.wish(key(handleFor(entrypoint: 'lib/main_dev.dart')), 'flag', true);
 
-    expect(
-      memory.wishes(key(handleFor(device: 'iphone'))),
-      {'flag': true},
-      reason: 'same worktree, same package',
-    );
+    expect(memory.wishes(key(handleFor(device: 'iphone'))), {
+      'flag': true,
+    }, reason: 'same worktree, same package');
   });
 
   test('a different package in the same worktree keeps its own', () {

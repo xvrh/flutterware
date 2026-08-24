@@ -57,9 +57,9 @@ void main() {
       // Raw rgba8888: the length is the dimensions, no decode to check.
       expect(image.lengthSync(), row.width * row.height * 4);
       expect(row.width, greaterThan(0));
-      var tree =
-          jsonDecode(File(row.tree!).readAsStringSync())
-              as Map<String, dynamic>;
+      var tree = jsonDecode(
+        File(row.tree!).readAsStringSync(),
+      ) as Map<String, dynamic>;
       expect(tree['root'], isNotNull);
 
       // The lane's whole argument over the embedder: the same entry

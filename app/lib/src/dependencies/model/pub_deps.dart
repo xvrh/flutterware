@@ -94,12 +94,11 @@ class PubDeps {
   }
 }
 
-typedef RunProcess =
-    Future<ProcessResult> Function(
-      String executable,
-      List<String> arguments, {
-      String? workingDirectory,
-    });
+typedef RunProcess = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments, {
+  String? workingDirectory,
+});
 
 /// `pub deps` refused. Almost always an unresolved project, so the message says
 /// what to run rather than only what failed.

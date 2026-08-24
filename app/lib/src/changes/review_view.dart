@@ -788,9 +788,8 @@ class ReviewIndexRow extends StatelessWidget {
                       color: colors.line2,
                       child: Text(
                         line,
-                        style: diffTextStyle(
-                          context,
-                        ).copyWith(color: colors.mut3),
+                        style: diffTextStyle(context)
+                            .copyWith(color: colors.mut3),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         softWrap: false,

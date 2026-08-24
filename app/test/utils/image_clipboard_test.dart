@@ -46,15 +46,12 @@ void main() {
     expect(argument, png);
   });
 
-  test(
-    'a platform that says it did not write is a failure, not a shrug',
-    () async {
-      answerWith((_) => false);
-      // The alternative is a copy that reports success and puts nothing on the
-      // clipboard, which is discovered at the paste — by then nowhere near here.
-      await expectLater(ImageClipboard.setPng(png), throwsA(isA<StateError>()));
-    },
-  );
+  test('a platform that says it did not write is a failure, not a shrug', () async {
+    answerWith((_) => false);
+    // The alternative is a copy that reports success and puts nothing on the
+    // clipboard, which is discovered at the paste — by then nowhere near here.
+    await expectLater(ImageClipboard.setPng(png), throwsA(isA<StateError>()));
+  });
 
   test('an error from the platform is not swallowed', () async {
     answerWith((_) => throw PlatformException(code: 'decode_failed'));

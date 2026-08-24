@@ -377,11 +377,9 @@ void main() {
 
       invocations.clear();
       expect((await loader.load(dir.path))!.plugins.single.id, 'a.one');
-      expect(
-        invocations.map((a) => a.first),
-        [endsWith('.dill')],
-        reason: 'the second load must not compile again',
-      );
+      expect(invocations.map((a) => a.first), [
+        endsWith('.dill'),
+      ], reason: 'the second load must not compile again');
     });
 
     test('recompiles when the config file changes', () async {
@@ -390,9 +388,8 @@ void main() {
       invocations.clear();
 
       // Size is part of the key, so this is a change even at the same mtime.
-      File(
-        p.join(dir.path, configFilePath),
-      ).writeAsStringSync('// config, edited');
+      File(p.join(dir.path, configFilePath))
+          .writeAsStringSync('// config, edited');
 
       await loader.load(dir.path);
       expect(invocations.first.first, 'compile');

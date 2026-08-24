@@ -456,9 +456,8 @@ void main() {
         logPath: p.join(runDir.path, 'app-failed.log'),
         launcherPid: await _deadPid(),
       );
-      File(
-        handle.logPath!,
-      ).writeAsStringSync('Error: could not code sign the application\n');
+      File(handle.logPath!)
+          .writeAsStringSync('Error: could not code sign the application\n');
 
       await core.invoke('apps');
 
@@ -479,9 +478,8 @@ void main() {
         logPath: p.join(runDir.path, 'app-ran.log'),
         launcherPid: await _deadPid(),
       );
-      File(
-        handle.logPath!,
-      ).writeAsStringSync('${_event('app.started', {'appId': 'a1'})}\n');
+      File(handle.logPath!)
+          .writeAsStringSync('${_event('app.started', {'appId': 'a1'})}\n');
 
       await core.invoke('apps');
 
@@ -1063,11 +1061,10 @@ void main({
         'ServerUrls.localHost',
         'ServerUrls.localPort',
       ]);
-      expect(
-        knobs.map((k) => k.defaultValue),
-        [null, null],
-        reason: 'the value field may not carry source text',
-      );
+      expect(knobs.map((k) => k.defaultValue), [
+        null,
+        null,
+      ], reason: 'the value field may not carry source text');
       // Not a fault: the parameter is drawable and has a default. Reporting a
       // problem here would put a warning on the ordinary case.
       expect(knobs.every((k) => k.problem == null), isTrue);
@@ -1137,40 +1134,36 @@ void main({
       expect(knobs.last.kind, isNull);
     });
 
-    test(
-      'a parameter that cannot be drawn says so instead of vanishing',
-      () async {
-        // The reason was computed at the skip site and thrown away, so a control
-        // simply went missing with nothing to explain it — which looks like a
-        // broken tool rather than a type nothing can draw.
-        _writePackage(worktree, 'app', {
-          'pubspec.yaml': 'name: app\n',
-          'lib/main.dart': 'void main({int port = 1, Uri? base}) {}',
-        });
-        core = _coreFor(
-          worktree,
-          config: {
-            'packages': [
-              {
-                'path': 'app',
-                'entrypoints': [
-                  {'path': 'lib/main.dart', 'name': 'App'},
-                ],
-              },
-            ],
-          },
-        );
+    test('a parameter that cannot be drawn says so instead of vanishing', () async {
+      // The reason was computed at the skip site and thrown away, so a control
+      // simply went missing with nothing to explain it — which looks like a
+      // broken tool rather than a type nothing can draw.
+      _writePackage(worktree, 'app', {
+        'pubspec.yaml': 'name: app\n',
+        'lib/main.dart': 'void main({int port = 1, Uri? base}) {}',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
 
-        var result =
-            (await core.invoke('entrypoints'))! as RunEntrypointsResult;
-        var knobs = result.packages.single.entrypoints.single.knobs;
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var knobs = result.packages.single.entrypoints.single.knobs;
 
-        expect(knobs.map((k) => k.name), ['port', 'base']);
-        expect(knobs.last.kind, isNull);
-        expect(knobs.last.problem, contains('main takes `base`'));
-        expect(knobs.last.problem, contains('`Uri?`'));
-      },
-    );
+      expect(knobs.map((k) => k.name), ['port', 'base']);
+      expect(knobs.last.kind, isNull);
+      expect(knobs.last.problem, contains('main takes `base`'));
+      expect(knobs.last.problem, contains('`Uri?`'));
+    });
 
     test('a knob on such a parameter names the type, not a typo', () async {
       // The constraint: "main takes no `x` parameter" is right for a misspelled
@@ -1880,11 +1873,9 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       // being overridden). The script still knows the port this worktree got.
       expect(running, {'serverPort': '8186'});
       expect(_wrapperFor(worktree), contains('serverPort: 8186,'));
-      expect(
-        RunHandle.tryRead(File(handle.handlePath!))!.knobs,
-        {'serverPort': '8186'},
-        reason: 'and the cockpit is told what it is actually running',
-      );
+      expect(RunHandle.tryRead(File(handle.handlePath!))!.knobs, {
+        'serverPort': '8186',
+      }, reason: 'and the cockpit is told what it is actually running');
     });
 
     test('finds the declaration by name when a file has several', () async {

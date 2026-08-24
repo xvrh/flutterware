@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:built_value/serializer.dart';
 import 'package:collection/collection.dart';
 import 'package:logging/logging.dart';
 import 'package:stream_channel/stream_channel.dart';
+
 import 'message.dart';
 
 final _logger = Logger('connection');

@@ -126,14 +126,14 @@ class PatchIndex {
   /// in the user's files, and a lone invalid byte in one line must not cost the
   /// whole view — the alternative is a screen that works until somebody commits
   /// a latin-1 file.
-  String textFor(FileChange file) => const Utf8Decoder(
-    allowMalformed: true,
-  ).convert(bytes, file.byteStart, file.byteEnd);
+  String textFor(FileChange file) =>
+      const Utf8Decoder(allowMalformed: true)
+          .convert(bytes, file.byteStart, file.byteEnd);
 
   /// One hunk's text, for a view that materialises a file a hunk at a time.
-  String textForHunk(HunkSpan hunk) => const Utf8Decoder(
-    allowMalformed: true,
-  ).convert(bytes, hunk.byteStart, hunk.byteEnd);
+  String textForHunk(HunkSpan hunk) =>
+      const Utf8Decoder(allowMalformed: true)
+          .convert(bytes, hunk.byteStart, hunk.byteEnd);
 }
 
 const _lf = 0x0a;
@@ -468,9 +468,8 @@ _HunkHeader? _parseHunkHeader(Uint8List bytes, int start, int end) {
 /// A path from a header line: unquoted if git quoted it, and with the trailing
 /// tab git appends when the path contains a space.
 String _decodePath(Uint8List bytes, int start, int end) {
-  var text = const Utf8Decoder(
-    allowMalformed: true,
-  ).convert(bytes, start, end < start ? start : end);
+  var text = const Utf8Decoder(allowMalformed: true)
+      .convert(bytes, start, end < start ? start : end);
   // git writes `+++ b/with space.txt\t` — the tab is the unified-diff
   // convention for making a spaced path parseable, and it is not in the name.
   var tab = text.indexOf('\t');

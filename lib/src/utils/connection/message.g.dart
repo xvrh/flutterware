@@ -146,20 +146,16 @@ class _$MessageSerializer implements StructuredSerializer<Message> {
                   as String;
           break;
         case 'serializedParameter2':
-          result.serializedParameter2 =
-              serializers.deserialize(
-                    value,
-                    specifiedType: const FullType(String),
-                  )
-                  as String?;
+          result.serializedParameter2 = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String?;
           break;
         case 'serializedParameter3':
-          result.serializedParameter3 =
-              serializers.deserialize(
-                    value,
-                    specifiedType: const FullType(String),
-                  )
-                  as String?;
+          result.serializedParameter3 = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String?;
           break;
       }
     }

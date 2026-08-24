@@ -1,6 +1,7 @@
 // From https://github.com/yrom/flutter_raw_image_provider/blob/master/lib/raw_image_provider.dart
 
 import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 

@@ -138,11 +138,9 @@ void main() {
     });
 
     test('and nothing at all about what this build does not declare', () {
-      expect(
-        paramPayloadFor(const [_theme], const {'flavor': 'pro'}),
-        {'Theme': null},
-        reason: 'the stale one stays in the address, unmentioned here',
-      );
+      expect(paramPayloadFor(const [_theme], const {'flavor': 'pro'}), {
+        'Theme': null,
+      }, reason: 'the stale one stays in the address, unmentioned here');
     });
   });
 

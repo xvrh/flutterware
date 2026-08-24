@@ -322,9 +322,8 @@ void main() {
       var seen = <String>[];
       addTearDown(addAppEventListener((e) => seen.add(e.title)));
 
-      await DevbarHttpClient(
-        MockClient((request) async => Response('{}', 200)),
-      ).get(Uri.parse('https://api.example.com/me'));
+      await DevbarHttpClient(MockClient((request) async => Response('{}', 200)))
+          .get(Uri.parse('https://api.example.com/me'));
 
       expect(seen, ['GET https://api.example.com/me']);
     });
@@ -338,9 +337,8 @@ void main() {
         ),
       );
 
-      await DevbarHttpClient(
-        MockClient((request) async => Response('{}', 200)),
-      ).get(Uri.parse('https://api.example.com/me'));
+      await DevbarHttpClient(MockClient((request) async => Response('{}', 200)))
+          .get(Uri.parse('https://api.example.com/me'));
 
       expect(seen, isEmpty);
     });

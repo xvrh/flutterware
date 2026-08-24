@@ -23,9 +23,8 @@ void main() {
   setUpAll(() {
     root = Directory.systemTemp.createTempSync('splash_render_test');
     logo = p.join(root.path, 'logo.png');
-    File(
-      logo,
-    ).writeAsBytesSync(img.encodePng(img.Image(width: 1024, height: 1024)));
+    File(logo)
+        .writeAsBytesSync(img.encodePng(img.Image(width: 1024, height: 1024)));
   });
 
   tearDownAll(() => root.deleteSync(recursive: true));

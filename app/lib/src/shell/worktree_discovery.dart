@@ -128,9 +128,8 @@ String? gitNameFrom(String? contents) {
 
 String? _readPointerFile(String worktreePath) {
   try {
-    return File(
-      '$worktreePath${Platform.pathSeparator}.git',
-    ).readAsStringSync();
+    return File('$worktreePath${Platform.pathSeparator}.git')
+        .readAsStringSync();
   } on IOException {
     // Missing, or a directory because this is the main checkout.
     return null;

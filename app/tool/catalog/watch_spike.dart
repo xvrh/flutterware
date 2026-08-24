@@ -237,13 +237,13 @@ class _Guest {
     ]);
 
     var uri = Completer<String>();
-    StreamGroup.merge([
-      process.stdout,
-      process.stderr,
-    ]).transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
-      var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
-      if (match != null && !uri.isCompleted) uri.complete(match.group(1));
-    });
+    StreamGroup.merge([process.stdout, process.stderr])
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((line) {
+          var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
+          if (match != null && !uri.isCompleted) uri.complete(match.group(1));
+        });
 
     var connected = await Future.any<Object?>([server.first, process.exitCode]);
     if (connected is! Socket) throw StateError('the guest never connected');

@@ -58,11 +58,10 @@ void main() {
 
     var mcpReply = await call('mcp', request('panel', 'act'));
 
-    expect(
-      mcpReply.map((f) => f['t']),
-      ['event', 'res'],
-      reason: "the acting peer's call carries its own broadcast and reply",
-    );
+    expect(mcpReply.map((f) => f['t']), [
+      'event',
+      'res',
+    ], reason: "the acting peer's call carries its own broadcast and reply");
     expect(nudges, ['cockpit']);
     var cockpitFrames = await call('cockpit');
     expect(cockpitFrames.single['ch'], 'panel/feed');
