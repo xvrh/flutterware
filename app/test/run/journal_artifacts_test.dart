@@ -32,15 +32,17 @@ void main() {
   void writeStep(String stamp, {required int bytes}) {
     var dir = Directory(journalArtifactsDirFor(handle)!)
       ..createSync(recursive: true);
-    File(
-      p.join(dir.path, '$stamp.png'),
-    ).writeAsBytesSync(List.filled(bytes, 0));
+    File(p.join(dir.path, '$stamp.png'))
+        .writeAsBytesSync(List.filled(bytes, 0));
     File(p.join(dir.path, '$stamp.texts.json')).writeAsStringSync('[]');
   }
 
-  List<String> remaining() => Directory(
-    journalArtifactsDirFor(handle)!,
-  ).listSync().map((e) => p.basename(e.path)).toList()..sort();
+  List<String> remaining() =>
+      Directory(journalArtifactsDirFor(handle)!)
+          .listSync()
+          .map((e) => p.basename(e.path))
+          .toList()
+        ..sort();
 
   test('under budget, nothing is touched', () {
     writeStep('100-1', bytes: 1000);
@@ -58,11 +60,12 @@ void main() {
     var freed = boundJournalArtifacts(handle, maxBytes: 9000);
 
     expect(freed, greaterThan(0));
-    expect(
-      remaining(),
-      ['200-1.png', '200-1.texts.json', '300-1.png', '300-1.texts.json'],
-      reason: 'a step loses its picture and its texts together, never half',
-    );
+    expect(remaining(), [
+      '200-1.png',
+      '200-1.texts.json',
+      '300-1.png',
+      '300-1.texts.json',
+    ], reason: 'a step loses its picture and its texts together, never half');
   });
 
   test('the newest step is never let go, however big', () {

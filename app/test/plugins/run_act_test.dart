@@ -697,11 +697,10 @@ void main() {
     };
 
     var first = (await core.invoke('observe'))! as RunActResult;
-    expect(
-      first.human,
-      ['tap "Previews"', 'tap "Assets"'],
-      reason: 'what the poller saw, then what this call took, in order',
-    );
+    expect(first.human, [
+      'tap "Previews"',
+      'tap "Assets"',
+    ], reason: 'what the poller saw, then what this call took, in order');
 
     // Journaled once each: the poller wrote its own when it collected it, and
     // the act path must not write it a second time.
