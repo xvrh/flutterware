@@ -233,7 +233,18 @@ Future<ProcessLog?> _prepare(
 
   var stages = [?unpack, ?resolve, ?buildCli, ?buildGui];
   // The warm path, which is every run but a handful: say nothing, cost nothing.
-  if (stages.isEmpty) return null;
+  if (stages.isEmpty) {
+    // Except this. A copy made before the trim existed is carrying ~1.4GB of
+    // build state nobody will ever read, and a warm run is the only thing that
+    // will ever visit it again. Reaching here is itself the proof that the last
+    // build worked — every stage above decided there was nothing left to do.
+    // With nothing to delete it is a few `listSync` calls, which is why it can
+    // sit on the path that costs nothing.
+    if (!editable && gui != null) {
+      trimWorkingCopy(appPath, guiProduct: gui.productDirectory);
+    }
+    return null;
+  }
 
   var log = File(p.join(appPath, 'build', 'cli-build.log'));
   var plan = LaunchPlan(
@@ -316,6 +327,17 @@ Future<ProcessLog?> _prepare(
     plan.finish();
     describeFailure(stderr, 'could not build the CLI.', cliResult);
     exit(70);
+  }
+
+  // After both builds, never between them: the CLI build and the GUI build
+  // share `.dart_tool`, and they were running concurrently a line ago.
+  //
+  // Only on success. A failed build leaves a half-finished incremental tree,
+  // and that tree is exactly what the next attempt resumes from — reclaiming it
+  // would turn every retry into a cold build. A failed CLI build has already
+  // exited above; the GUI's is the one still to test here.
+  if (!editable && gui != null && (guiResult == null || guiResult.ok)) {
+    trimWorkingCopy(appPath, guiProduct: gui.productDirectory);
   }
 
   // A failed GUI build is not reported here — see

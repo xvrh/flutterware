@@ -98,6 +98,126 @@ void copyPackageInto(String packageRoot, String destination, String stamp) {
   workingCopyStampFile(destination).writeAsStringSync(stamp);
 }
 
+/// Deletes the build state a working copy will never build in again, and
+/// answers how many entries it removed.
+///
+/// A copy is a mirror of an *immutable* pub-cache package: its sources cannot
+/// change, so [workingCopyStamp] never moves and nothing here ever builds a
+/// second time. Everything a build leaves behind to make the next one
+/// incremental is therefore dead the moment the first one succeeds — and it is
+/// most of the copy. Measured on this machine: a built copy is ~1500 MB, of
+/// which the product is 65 MB and the `fw` binary 17 MB. `FlutterMacOS
+/// .framework.dSYM` alone is 501 MB of engine debug symbols, in a release
+/// build, that nothing here symbolicates.
+///
+/// Two things are removed:
+///
+/// - **Everything beside [guiProduct]** within the platform build directory
+///   that holds it. The freshness test both build sites use is
+///   `DesktopGui.binary.existsSync()` — the product and nothing else — and a
+///   release bundle is self-contained: its frameworks are embedded and its
+///   rpaths are relative to the executable, so nothing outside it is
+///   referenced. Trimming to it is measured at 1188 MB → 66 MB.
+/// - **The Dart and Flutter build caches** — `app/.dart_tool/flutter_build` and
+///   the workspace's `.dart_tool/hooks_runner`, ~265 MB together. Both are
+///   inputs to a next build, not to running; `dart build cli` copies the build
+///   assets it needs into its own bundle and `flutter build` embeds them in the
+///   product. `.dart_tool/package_config.json` is deliberately **not** touched:
+///   that is the resolution, and losing it would turn a warm run into a
+///   `pub get`.
+///
+/// **Only ever a copy.** A checkout builds again constantly, and there the
+/// incremental state is the whole point — the caller passes `editable` before
+/// it gets here.
+///
+/// **Only ever after a build that worked**, and that takes two tests rather
+/// than one.
+///
+/// [guiProduct] existing is the precondition for all of it, not just for the
+/// pruning around it: a copy with no product is either mid-way through a first
+/// build or holding the wreckage of one that failed, and that wreckage is what
+/// the next attempt resumes from. It is asked here rather than left to each
+/// caller so there is no way to reach the deletions without it.
+///
+/// The caller owes the other half — that no build *in this pass* failed — and
+/// the two are not redundant. Observed: a GUI build that failed in the Dart
+/// kernel step had **already staged a partial `.app`**, so the product was
+/// there and the tree was not finished. Product-exists alone would have
+/// reclaimed 1129 MB the retry was about to resume from.
+///
+/// The cost of that precondition is a copy that only ever built the CLI, which
+/// keeps `hooks_runner` — 12 MB, and genuinely an input to the GUI build it has
+/// not run yet.
+///
+/// Safe to call on every launch rather than only after a build: with nothing to
+/// delete it is a handful of `listSync` calls, measured at 45–63 µs, and
+/// calling it on the warm path is what reclaims the copies made before this
+/// existed. It must be called under the same build lock as the build itself, so
+/// it cannot delete intermediates from under another process's `flutter build`.
+///
+/// Every failure is swallowed per entry. This is housekeeping, and no launch
+/// should fail over reclaiming disk.
+int trimWorkingCopy(String appPath, {required Directory guiProduct}) {
+  if (!guiProduct.existsSync()) return 0;
+
+  // Walk up from the product to the platform directory under `build/`,
+  // recording the chain — and only act once it is known to terminate there. A
+  // product that is not under this copy's `build/` is somebody else's tree, and
+  // the failure mode of guessing is deleting it.
+  var buildDir = p.join(appPath, 'build');
+  var chain = <String>[guiProduct.path];
+  var here = p.dirname(guiProduct.path);
+  while (!p.equals(here, buildDir)) {
+    var parent = p.dirname(here);
+    if (parent == here) return 0;
+    chain.add(here);
+    here = parent;
+  }
+
+  // Deepest first, so each step names what its parent must keep. The last entry
+  // is `build/<platform>`; `build/` itself is never pruned, because that is
+  // where `cli/`, `catalog/` and the build logs live.
+  var deleted = 0;
+  for (var i = 0; i < chain.length - 1; i++) {
+    deleted += _deleteBeside(chain[i], within: chain[i + 1]);
+  }
+
+  for (var cache in [
+    p.join(appPath, '.dart_tool', 'flutter_build'),
+    p.join(p.dirname(appPath), '.dart_tool', 'hooks_runner'),
+  ]) {
+    if (_delete(Directory(cache))) deleted++;
+  }
+
+  return deleted;
+}
+
+/// Deletes every child of [within] except [keep].
+int _deleteBeside(String keep, {required String within}) {
+  List<FileSystemEntity> entries;
+  try {
+    entries = Directory(within).listSync();
+  } on FileSystemException {
+    return 0;
+  }
+  var deleted = 0;
+  for (var entity in entries) {
+    if (p.equals(entity.path, keep)) continue;
+    if (_delete(entity)) deleted++;
+  }
+  return deleted;
+}
+
+bool _delete(FileSystemEntity entity) {
+  try {
+    if (!entity.existsSync()) return false;
+    entity.deleteSync(recursive: true);
+    return true;
+  } on FileSystemException {
+    return false;
+  }
+}
+
 String userHomePath() {
   var envKey = Platform.isWindows ? 'APPDATA' : 'HOME';
   return Platform.environment[envKey] ?? '.';

@@ -346,6 +346,16 @@ class GuiLauncher {
   /// Normally the launcher has already done this, beside the CLI build. This
   /// remains for every other way in: `--force-compile`, a deleted binary, a
   /// `fw app` whose launcher predicted no GUI.
+  /// Deliberately does **not** call `trimWorkingCopy`, though this is a copy's
+  /// build like the launcher's.
+  ///
+  /// The launcher trims under `withBuildLock`, which is what stops it deleting
+  /// intermediates from under another process's `flutter build` — two projects
+  /// share a working copy whenever they resolve the same flutterware version.
+  /// This build runs inside the CLI, after the launcher has released that lock,
+  /// so a trim here would have no such protection. What it leaves behind is
+  /// reclaimed by the next launcher pass instead, which costs a warm run
+  /// microseconds and is the one place the lock is held.
   Future<int> _build() async {
     var result = await Step(
       'Building the flutterware GUI',
