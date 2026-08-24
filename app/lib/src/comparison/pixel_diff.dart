@@ -41,8 +41,13 @@ class PixelDiff {
   /// because [fraction] hides it and both are worth having.
   final int comparedPixels;
 
-  /// Where the changes are, as rects, largest first. Rects whose boxes
-  /// overlap are folded into their union, so none of these draw over another.
+  /// Where the changes are, as rects, largest first.
+  ///
+  /// Never a tangle: boxes that overlap are folded into their union so none
+  /// draws over another, and when there are more than [readableRegions] of
+  /// them, changes near each other are grouped until there are few enough to
+  /// read. So a font change over a paragraph is the paragraph, not a box per
+  /// word.
   final List<DiffRect> clusters;
 
   /// Whether the two frames were different sizes.
@@ -88,6 +93,26 @@ class PixelDiff {
   /// A cluster this big is a change however small the frame's fraction.
   /// 8×8 is roughly the smallest thing a person notices moving.
   static const clusterThreshold = 64;
+
+  /// How many boxes a reader can take in at once — above this, and only above
+  /// this, the boxes are grouped. See [_grouped].
+  ///
+  /// A number, not a formula: it is the point where a picture stops pointing
+  /// somewhere and starts being decorated, and no measurement of the frame
+  /// decides that. Deliberately generous, because everything under it is left
+  /// exactly as the components came out: five changed fields down a form are
+  /// five boxes, and grouping them would lose the finding.
+  static const readableRegions = 12;
+
+  /// What grouping aims for once it is needed.
+  ///
+  /// Lower than [readableRegions], and the two numbers answer different
+  /// questions: *when is this a tangle* and *what should be left of it*.
+  /// Stopping at the first radius that merely scrapes under a dozen leaves a
+  /// picture that reads as an accident — a paragraph cut into four boxes at
+  /// the line the descenders happened to touch. A tangle worth grouping at all
+  /// is worth grouping into the handful of blocks a person would have drawn.
+  static const groupedRegions = 3;
 
   /// Compares two rgba8888 buffers.
   ///
@@ -144,42 +169,114 @@ class PixelDiff {
 
   /// Connected components over the changed mask, merged into bounding rects.
   ///
+  /// Grouped when there are too many boxes to read — see [_grouped].
+  static List<DiffRect> _clusters(Uint8List mask, int width, int height) =>
+      _grouped(mask, width, height)
+        ..sort((a, b) => b.pixels.compareTo(a.pixels));
+
+  /// The components, at the narrowest grouping radius that leaves few enough
+  /// boxes to read.
+  ///
+  /// A change in the *font* does not move a block of pixels, it moves every
+  /// glyph in it: a paragraph set 0.4px smaller shatters into a box per word,
+  /// seventy of them drawn over the very text they are meant to point at.
+  /// Boxes that dense are worse than no boxes at all, because a reader has to
+  /// find the change inside the scribble rather than being shown it.
+  ///
+  /// So changes closer together than a radius count as one region, and the
+  /// radius widens until few enough boxes are left. Two numbers, because they
+  /// are two questions: nothing at all is grouped below [readableRegions] —
+  /// every box there is exactly the component it always was — and a tangle
+  /// past it is grouped down to [groupedRegions], the handful of blocks a
+  /// person would have drawn.
+  ///
+  /// What keeps that from answering "somewhere in here": the radii stop
+  /// widening ([_radii]), so however hard grouping is pushed, changes further
+  /// apart than the widest of them stay separate boxes.
+  ///
+  /// A single box round the whole tangle then arrives on its own, without
+  /// anything having to decide that a paragraph is a paragraph: it is one
+  /// dense region, so it collapses to one box, while a change at each end of
+  /// the frame is two and stays two.
+  ///
+  /// Measured on the worst frame there is — a third of a 1170×2532 screen
+  /// shattered into 50,000 components — grouping takes the diff from 43ms to
+  /// 185ms, in the JIT. A frame that is already readable pays nothing but the
+  /// count.
+  static List<DiffRect> _grouped(Uint8List mask, int width, int height) {
+    var rects = _foldOverlaps(_components(mask, width, height, 0));
+    if (rects.length <= readableRegions) return rects;
+    for (var radius in _radii(width, height)) {
+      rects = _foldOverlaps(_components(mask, width, height, radius));
+      if (rects.length <= groupedRegions) break;
+    }
+    return rects;
+  }
+
+  /// The radii tried, narrowest first.
+  ///
+  /// Proportional to the frame rather than fixed, because the gap the eye
+  /// reads is a fraction of the picture: the same screen captured at 3× has
+  /// its word gaps three times as wide in pixels, and a constant 4px would
+  /// group a paragraph at 1× and nothing at all at 3×.
+  static List<int> _radii(int width, int height) {
+    var unit = math.max(2, math.min(width, height) ~/ 100);
+    return [unit, unit * 2, unit * 4, unit * 8];
+  }
+
+  /// Bounding rects of the connected components, taking anything within
+  /// [radius] of a change to belong to the same region.
+  ///
+  /// The grouping is done by dilating the mask and running the components over
+  /// *that*, rather than by measuring the gaps between boxes afterwards. Two
+  /// reasons: a dilation is one pass over the frame however shattered the diff
+  /// is, where comparing every box against every other is quadratic in exactly
+  /// the case that has thousands of them; and pixels are what the eye groups —
+  /// two boxes can have near edges while their changed pixels are nowhere near
+  /// each other.
+  ///
+  /// The rects are the bounds of the **real** changed pixels, never of the
+  /// dilated ones: the radius decides what belongs together, and nothing else.
+  ///
   /// Iterative rather than recursive: a full-frame change is one component of
   /// a million pixels, and a recursive flood fill overflows the stack on the
   /// first entry that changes its background colour.
-  static List<DiffRect> _clusters(Uint8List mask, int width, int height) {
+  static List<DiffRect> _components(
+    Uint8List mask,
+    int width,
+    int height,
+    int radius,
+  ) {
+    var reach = radius == 0 ? mask : _dilate(mask, width, height, radius);
     var seen = Uint8List(width * height);
     var rects = <DiffRect>[];
     var stack = <int>[];
 
-    for (var start = 0; start < mask.length; start++) {
-      if (mask[start] == 0 || seen[start] == 1) continue;
+    for (var start = 0; start < reach.length; start++) {
+      if (reach[start] == 0 || seen[start] == 1) continue;
       seen[start] = 1;
       stack.add(start);
-      var (minX, minY, maxX, maxY) = (
-        start % width,
-        start ~/ width,
-        start % width,
-        start ~/ width,
-      );
+      var (minX, minY, maxX, maxY) = (width, height, -1, -1);
       var area = 0;
 
       while (stack.isNotEmpty) {
         var index = stack.removeLast();
         var x = index % width;
         var y = index ~/ width;
-        area++;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
+        if (mask[index] == 1) {
+          area++;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
 
         // Four-connected. Eight would join two changes that touch only at a
         // corner, which for antialiased text is most of them.
         for (var (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]) {
           if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
           var next = ny * width + nx;
-          if (mask[next] == 0 || seen[next] == 1) continue;
+          if (reach[next] == 0 || seen[next] == 1) continue;
           seen[next] = 1;
           stack.add(next);
         }
@@ -196,7 +293,41 @@ class PixelDiff {
       );
     }
 
-    return _foldOverlaps(rects)..sort((a, b) => b.pixels.compareTo(a.pixels));
+    return rects;
+  }
+
+  /// The mask grown by [radius] in every direction, so that changes with less
+  /// than that between them touch.
+  ///
+  /// Separable — a horizontal pass then a vertical one, each carrying a
+  /// running count of set pixels in the window — so the cost is two reads of
+  /// the frame whatever the radius, rather than the radius squared per pixel.
+  static Uint8List _dilate(Uint8List mask, int width, int height, int radius) {
+    var horizontal = Uint8List(width * height);
+    for (var y = 0; y < height; y++) {
+      var row = y * width;
+      var count = 0;
+      for (var x = 0; x < width + radius; x++) {
+        if (x < width && mask[row + x] == 1) count++;
+        var left = x - 2 * radius - 1;
+        if (left >= 0 && mask[row + left] == 1) count--;
+        var centre = x - radius;
+        if (centre >= 0 && count > 0) horizontal[row + centre] = 1;
+      }
+    }
+
+    var dilated = Uint8List(width * height);
+    for (var x = 0; x < width; x++) {
+      var count = 0;
+      for (var y = 0; y < height + radius; y++) {
+        if (y < height && horizontal[y * width + x] == 1) count++;
+        var top = y - 2 * radius - 1;
+        if (top >= 0 && horizontal[top * width + x] == 1) count--;
+        var centre = y - radius;
+        if (centre >= 0 && count > 0) dilated[centre * width + x] = 1;
+      }
+    }
+    return dilated;
   }
 
   /// Bounding rects folded together until none overlap.
@@ -209,8 +340,9 @@ class PixelDiff {
   /// undo exactly what four-connected components preserve.
   static List<DiffRect> _foldOverlaps(List<DiffRect> rects) {
     // Quadratic, so a diff noisy enough to shatter into thousands of
-    // components — past the point where boxes help anyone — keeps them as
-    // they are.
+    // components keeps them as they are for this pass — grouping is what
+    // answers that case, and it runs over the mask rather than over the
+    // boxes.
     if (rects.length > 2048) return rects;
     var folded = List.of(rects);
     var again = true;
