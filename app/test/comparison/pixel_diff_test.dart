@@ -133,6 +133,104 @@ void main() {
     expect(diff(frame(40, 40), head).clusters, hasLength(2));
   });
 
+  group('a change too shattered to box', () {
+    /// A grid of [count]×[count] specks 8px apart, which is what a font change
+    /// over a paragraph amounts to: hundreds of components, none of them
+    /// overlapping, all of them within a few pixels of each other.
+    void scatter(
+      Uint8List frame,
+      int frameWidth,
+      int x,
+      int y, {
+      int count = 12,
+    }) {
+      for (var row = 0; row < count; row++) {
+        for (var column = 0; column < count; column++) {
+          paint(frame, frameWidth, x + column * 8, y + row * 8, 2, 2, 255);
+        }
+      }
+    }
+
+    // 144 boxes over one paragraph point nowhere: the reader has to find the
+    // change inside the scribble.
+    test('is grouped down to something a reader can take in', () {
+      var head = frame(200, 200);
+      scatter(head, 200, 10, 10);
+
+      var clusters = diff(
+        frame(200, 200),
+        head,
+        width: 200,
+        height: 200,
+      ).clusters;
+
+      expect(
+        clusters.length,
+        lessThanOrEqualTo(PixelDiff.groupedRegions),
+        reason: '144 components should not stay 144 boxes',
+      );
+    });
+
+    // The radius decides what belongs together and nothing else: a box that
+    // grew by it would point at pixels that never changed.
+    test('is boxed on the real pixels, not on the grouping radius', () {
+      var head = frame(200, 200);
+      scatter(head, 200, 10, 10);
+
+      var box = diff(
+        frame(200, 200),
+        head,
+        width: 200,
+        height: 200,
+      ).clusters.single;
+
+      expect(box.x, 10);
+      expect(box.y, 10);
+      // The last speck starts at 10 + 11×8 and is 2 wide.
+      expect(box.width, 90);
+      expect(box.height, 90);
+      // Every speck's pixels, and only those.
+      expect(box.pixels, 144 * 4);
+    });
+
+    // Grouping is a readability step, never a licence to answer "somewhere in
+    // here": two findings at opposite ends of a frame are two findings.
+    test('does not swallow a second change on the other side of the frame', () {
+      var head = frame(400, 400);
+      scatter(head, 400, 10, 10);
+      scatter(head, 400, 290, 290);
+
+      var clusters = diff(
+        frame(400, 400),
+        head,
+        width: 400,
+        height: 400,
+      ).clusters;
+
+      expect(clusters, hasLength(2));
+      for (var box in clusters) {
+        expect(box.width, lessThan(200));
+      }
+    });
+
+    // Under the threshold every box is exactly the component it always was —
+    // five changed rows down a form are five findings, and grouping them to
+    // the handful a tangle gets would lose four of them.
+    test('leaves a readable number of regions alone', () {
+      var head = frame(200, 200);
+      // Close enough together that a grouping pass would fuse them, and more
+      // of them than grouping would ever leave.
+      for (var row = 0; row < 5; row++) {
+        paint(head, 200, 10, 10 + row * 12, 6, 6, 255);
+      }
+
+      expect(
+        diff(frame(200, 200), head, width: 200, height: 200).clusters,
+        hasLength(5),
+      );
+    });
+  });
+
   // A single stray pixel is under both thresholds and no eye would find it.
   test('one pixel is below the noise floor', () {
     var head = frame(200, 200);

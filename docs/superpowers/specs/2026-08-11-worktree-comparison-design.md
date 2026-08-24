@@ -168,6 +168,18 @@ branches, not decided here.
 changed mask, emitted as rects. One computation, three consumers: the agent's
 coordinates, the UI's jump-to-next-change, and the crop for a zoomed thumbnail.
 
+Shipped with one addition the first real text diff forced: **components are
+grouped when there are too many boxes to read**. A font change moves every
+glyph rather than a block, so a paragraph comes back as a box per word — 70 of
+them drawn over the text they point at. Changes within a radius of each other
+are taken as one region and the radius widens until few enough boxes are left.
+Two numbers rather than one, because they answer different questions: nothing
+is grouped at all below a dozen regions — five changed rows down a form are
+five findings — and a tangle past that is grouped down to a handful. The
+paragraph becomes one box; a second change across the frame is still its own,
+because the radii stop widening. The radius is a fraction of the frame, because the same screen at 3× has
+its word gaps three times as wide in pixels.
+
 ### Alignment, because a naive pixel diff is mostly noise
 
 A card that grows 24px taller makes an unaligned diff report most of the screen.

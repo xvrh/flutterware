@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -132,5 +133,140 @@ ui.Image _frame({required bool head}) {
     ),
     Paint()..color = head ? const Color(0xff1d4ed8) : const Color(0xff3b82f6),
   );
+  return recorder.endRecording().toImageSync(390, 280);
+}
+
+/// The same stage over a **text** diff — the case the boxes are hardest at.
+///
+/// A body of copy set 0.4px smaller shatters into a component per glyph
+/// fragment: hundreds of boxes, none of them overlapping, drawn over the
+/// paragraph they are supposed to point at. Written as a live diff rather than
+/// by hand because that scatter is exactly what cannot be faked convincingly.
+@Preview(
+  name: 'Comparison stage · text · pixels',
+  group: 'Comparison',
+  wrapper: wrapInAppTheme,
+)
+Widget comparisonStageText() => const _TextDemo(mode: StageMode.pixels);
+
+@Preview(
+  name: 'Comparison stage · text',
+  group: 'Comparison',
+  wrapper: wrapInAppTheme,
+)
+Widget comparisonStageTextSideBySide() => const _TextDemo();
+
+class _TextDemo extends StatefulWidget {
+  const _TextDemo({this.mode = StageMode.sideBySide});
+
+  final StageMode mode;
+
+  @override
+  State<_TextDemo> createState() => _TextDemoState();
+}
+
+class _TextDemoState extends State<_TextDemo> {
+  late var _mode = widget.mode;
+
+  late final _base = _textFrame(head: false);
+  late final _head = _textFrame(head: true);
+  late final _shots = ShotPair(const _NoStore())
+    ..base = Shot(_base)
+    ..head = Shot(_head)
+    ..settled = true;
+
+  PixelDiff? _diff;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_compare());
+  }
+
+  Future<void> _compare() async {
+    var base = await _base.toByteData(format: ui.ImageByteFormat.rawRgba);
+    var head = await _head.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (!mounted) return;
+    setState(() {
+      _diff = PixelDiff.of(
+        base: base!.buffer.asUint8List(),
+        baseWidth: _base.width,
+        baseHeight: _base.height,
+        head: head!.buffer.asUint8List(),
+        headWidth: _head.width,
+        headHeight: _head.height,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 860,
+    height: 480,
+    child: ComparisonStage(
+      shots: _shots,
+      mode: _mode,
+      onMode: (mode) => setState(() => _mode = mode),
+      diff: _diff,
+    ),
+  );
+
+  @override
+  void dispose() {
+    _shots.dispose();
+    super.dispose();
+  }
+}
+
+/// A page of copy, set 0.4px smaller on the head — a font change, which is the
+/// diff that shatters.
+ui.Image _textFrame({required bool head}) {
+  var recorder = ui.PictureRecorder();
+  var canvas = Canvas(recorder)
+    ..drawRect(
+      const Rect.fromLTWH(0, 0, 390, 280),
+      Paint()..color = const Color(0xffffffff),
+    );
+
+  var builder =
+      ui.ParagraphBuilder(
+          ui.ParagraphStyle(
+            fontSize: head ? 13.6 : 14,
+            height: 1.5,
+            textAlign: TextAlign.left,
+          ),
+        )
+        ..pushStyle(
+          ui.TextStyle(
+            color: const Color(0xff111827),
+            fontWeight: FontWeight.w600,
+            fontSize: head ? 17.5 : 18,
+          ),
+        )
+        ..addText('Release notes\n')
+        ..pop()
+        ..pushStyle(ui.TextStyle(color: const Color(0xff374151)))
+        ..addText(
+          'The picker now remembers the last folder it was pointed at, and a '
+          'run that ends while the panel is closed no longer keeps its frames '
+          'around. Two crashes on startup are fixed: one when the cache was '
+          'written by an older build, one when the window opened on a display '
+          'that had gone away.',
+        );
+
+  var paragraph = builder.build()
+    ..layout(const ui.ParagraphConstraints(width: 358));
+  canvas.drawParagraph(paragraph, const Offset(16, 20));
+
+  // Something that is not text, so the picture is not only the shattered case:
+  // a status chip that changed colour.
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(
+      const Rect.fromLTWH(16, 236, 96, 26),
+      const Radius.circular(13),
+    ),
+    Paint()..color = head ? const Color(0xff16a34a) : const Color(0xff9ca3af),
+  );
+
   return recorder.endRecording().toImageSync(390, 280);
 }
