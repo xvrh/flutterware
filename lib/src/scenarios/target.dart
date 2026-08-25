@@ -2,6 +2,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../inspect/node.dart';
+
 /// Resolves a verb's polymorphic target to a `Finder`.
 ///
 /// A `Finder` passes through, a `String` is visible text, a `Key`, an
@@ -38,10 +40,29 @@ Finder finderForTarget(dynamic target) {
 /// `[<'shop.getStarted'>]` — three kinds of bracket around the only part
 /// anybody wrote. Said as `key 'shop.getStarted'` it stays distinct from the
 /// quoted visible-text form, which means something else entirely.
+///
+/// **A `Finder` is asked what it looks for, never what it found.** Interpolated,
+/// a finder is `FinderBase.toString()`, which *evaluates* and returns the
+/// widgets it matched — measured at 388 characters for a plain
+/// `find.byType(TextField)`, carrying `TextEditingController#b4419`,
+/// `_TextFieldState#…` and a `_LocalizationsScope-[GlobalKey#…]`. Every one of
+/// those is an identity hash, so the same step recorded in two processes is
+/// two different strings, and a comparison aligns steps by this: 38 steps of
+/// one real suite reported as retargeted with nothing retargeted about them,
+/// each under a title four hundred characters long. `describeMatch` is the
+/// finder saying what it *searches for*, which is both the question being
+/// asked and the same in every process — 28 characters, and none of them a
+/// hash.
 String describeTarget(dynamic target) => switch (target) {
   String() => '"$target"',
   ValueKey(:var value) => "key '$value'",
-  _ => '$target',
+  FinderBase<Object?>() => withoutIdentityHash(
+    target.describeMatch(Plurality.one),
+  ),
+  // Belt and braces for the targets with a `toString` of their own: a step
+  // label is compared across processes, so nothing that reaches one may be an
+  // address. See [withoutIdentityHash].
+  _ => withoutIdentityHash('$target'),
 };
 
 /// The target and index inside a `Target.nth`, or null for anything else.
