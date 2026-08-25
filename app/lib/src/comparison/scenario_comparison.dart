@@ -260,7 +260,12 @@ class ScenarioComparison {
         label: item.label,
         pixels: item.pixels,
         tree: item.tree,
-        note: 'retargeted: ${pair.base!.target} → ${pair.head!.target}',
+        // Named *and* explained: "retargeted" is this model's word, not a
+        // word a reader arrives with, and the whole point of the note is that
+        // two identical pictures still deserve a sentence.
+        note:
+            'retargeted — same step, but it aimed at something else: '
+            '${pair.base!.target} → ${pair.head!.target}',
       );
     }
     return item;
