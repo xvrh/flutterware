@@ -149,12 +149,32 @@ class _NoFingerSheet extends StatelessWidget {
     toward: 'down',
   );
 
+  /// The big phone's width.
+  ///
+  /// Five of these have to sit side by side on the plain rectangle the studio
+  /// stages a desktop subtree at — 900×700, because a window has no true size
+  /// and `PreviewCanvas.defaultDevice` therefore stages none. Five columns and
+  /// four gaps in 900 less its padding leaves 154 each, so: 150.
+  ///
+  /// It was 200, which wanted 1100 and overflowed by 248 — and the column it
+  /// made was 56 too tall as well. Neither showed up as anything but a red
+  /// box, since an overflow is reported from layout and this sheet is only
+  /// ever looked at as a picture.
+  static const _big = 150.0;
+
+  /// And the small one, which is the size the step page actually draws a mark
+  /// at. This one is a measurement rather than a layout choice, so it does not
+  /// move — the whole question the sheet asks is whether a mark still reads
+  /// here.
+  static const _small = 110.0;
+
   @override
   Widget build(BuildContext context) => Container(
     color: context.colors.panel2,
     padding: const EdgeInsets.all(24),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 20,
       children: [
         for (var (label, verb, aim) in [
           ('enterText', 'enterText', _field),
@@ -171,14 +191,14 @@ class _NoFingerSheet extends StatelessWidget {
           ),
           ('keyboard.show', 'keyboard', _rising),
           ('keyboard.hide', 'keyboard', _leaving),
-        ]) ...[
+        ])
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(label, style: context.type.sectionLabel),
               const SizedBox(height: 8),
               _Phone(
-                width: 200,
+                width: _big,
                 verb: verb,
                 aim: aim,
                 picture: _search,
@@ -186,7 +206,7 @@ class _NoFingerSheet extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _Phone(
-                width: 110,
+                width: _small,
                 verb: verb,
                 aim: aim,
                 picture: _search,
@@ -194,8 +214,6 @@ class _NoFingerSheet extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(width: 20),
-        ],
       ],
     ),
   );

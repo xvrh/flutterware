@@ -1627,26 +1627,52 @@ class _Note extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(
-      horizontal: FwSpacing.md,
-      vertical: FwSpacing.sm,
-    ),
-    decoration: BoxDecoration(
-      color: context.colors.panel,
-      border: Border(
-        left: BorderSide(color: context.colors.amber, width: 2),
-        top: BorderSide(color: context.colors.line),
-        right: BorderSide(color: context.colors.line),
-        bottom: BorderSide(color: context.colors.line),
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var radius = BorderRadius.circular(context.radii.radiusSmall);
+    // **The edge is drawn, not bordered.** A `BoxDecoration` cannot paint a
+    // `Border` whose sides differ *and* a `borderRadius` — it asserts in
+    // `paint`, which is after every check that runs before a frame, so this
+    // compiled, reloaded and analysed cleanly while rendering nothing but a
+    // red box. Both sequencer previews were failing on it.
+    //
+    // So the outline stays uniform and the amber is a strip laid over it,
+    // clipped to the same shape as the box that holds it. Same picture, minus
+    // the assert.
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: colors.panel,
+        border: Border.all(color: colors.line),
+        borderRadius: radius,
       ),
-      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-    ),
-    child: Text(
-      text,
-      style: context.type.caption.copyWith(color: context.colors.ink2),
-    ),
-  );
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 2,
+            child: ColoredBox(color: colors.amber),
+          ),
+          Padding(
+            // The strip sits over the first two pixels of the content box, so
+            // the text is inset past it rather than by it.
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.md + 2,
+              FwSpacing.sm,
+              FwSpacing.md,
+              FwSpacing.sm,
+            ),
+            child: Text(
+              text,
+              style: context.type.caption.copyWith(color: colors.ink2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Heading extends StatelessWidget {
