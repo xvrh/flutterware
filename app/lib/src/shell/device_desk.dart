@@ -124,6 +124,18 @@ class _DeskButtonState extends State<DeskButton> {
     );
   }
 
+  /// The Run panel of whichever worktree is open — the page with the launch
+  /// form, the emulators and the boot control on it.
+  ///
+  /// **This menu can only read.** It has no `RunCore` and starts no daemon by
+  /// design, so it can tell you a device is free and cannot offer to use it.
+  /// Until this row existed it did not say where the offer lived either, and
+  /// the two surfaces read as unrelated lists of the same machines.
+  void _openRunPanel(Worktree worktree) {
+    _menuController.close();
+    widget.shell.go(Address(worktree: worktree.name, plugin: runPluginId));
+  }
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
@@ -211,6 +223,62 @@ class _DeskButtonState extends State<DeskButton> {
             ),
           for (var device in devices) _deviceRow(context, device),
           for (var handle in unlisted) _unlistedRow(context, handle),
+          // Where the offers are. This list can say a phone is free and cannot
+          // hand it to you; the panel can boot an emulator, take a fresh
+          // reading and start an app on one. Two surfaces over the same
+          // machines read as unrelated until one of them points at the other.
+          if (widget.shell.selected case var worktree?) ...[
+            const Gap(FwSpacing.sm),
+            Divider(height: 1, color: colors.line),
+            const Gap(FwSpacing.sm),
+            InkWell(
+              onTap: () => _openRunPanel(worktree),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: FwSpacing.xl,
+                  vertical: FwSpacing.sm,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.play_circle_outline,
+                      size: FwIconSize.sm,
+                      color: colors.accent,
+                    ),
+                    const Gap(FwSpacing.sm),
+                    // The offer takes the slack and the name is capped, which
+                    // is the only arrangement of the two that survives both
+                    // ways round. An `Expanded` label beside an unbounded name
+                    // let a branch called
+                    // `claude/missing-run-creation-buttons-121458` truncate the
+                    // sentence to `Start …` and keep its own name whole; an
+                    // unbounded label overflowed the 340px menu by 93px the
+                    // moment the text got wider than this Mac's UI font, which
+                    // is every widget test and any large text scale.
+                    Expanded(
+                      child: Text(
+                        'Start one, or boot an emulator',
+                        style: context.type.bodySmall.copyWith(
+                          color: colors.accent,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Gap(FwSpacing.sm),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 96),
+                      child: Text(
+                        worktree.displayName,
+                        style: context.type.micro.copyWith(color: colors.mut2),
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

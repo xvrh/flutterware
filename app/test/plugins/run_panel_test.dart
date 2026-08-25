@@ -22,6 +22,7 @@ import 'package:flutterware_app/src/run/device_strip.dart';
 import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/inspect.dart';
 import 'package:flutterware_app/src/run/inventory.dart';
+import 'package:flutterware_app/src/run/launch.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/split_button.dart';
@@ -556,10 +557,10 @@ void main() {
     );
     addTearDown(core.dispose);
 
-    // One run in the ledger, purely so the desk is not drawn under the form.
-    // The desk is the whole machine and lists this Mac on purpose; the claim
-    // under test is about the *picker*, and with both on screen no assertion
-    // can tell them apart.
+    // One run in the ledger. It used to be here to make the desk disappear, so
+    // that `macOS` being nowhere would prove the picker had filtered it; the
+    // desk is drawn whether or not anything is running now, so the claim is
+    // made by scoping instead — this Mac is on the desk and nowhere else.
     RunHandle(
       worktree: worktree.path,
       worktreeName: Worktree(path: worktree.path).name,
@@ -595,9 +596,15 @@ void main() {
     // the mobile half of a desk that also holds this Mac.
     expect(find.text('Kiosk'), findsWidgets);
     expect(find.text('Pixel'), findsWidgets);
-    // The one that matters. This Mac is on the desk and in the cache, and the
-    // only reason it is nowhere on this page is that `Kiosk` said `mobile`.
-    expect(find.text('macOS'), findsNothing);
+    // The one that matters. This Mac is in the cache and on the desk, and the
+    // only reason it is nowhere *else* on this page is that `Kiosk` said
+    // `mobile`. Scoped rather than absolute: the desk lists the whole machine
+    // by design, so its row is not the picker failing to filter.
+    expect(find.text('macOS'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byKey(deskKey), matching: find.text('macOS')),
+      findsOneWidget,
+    );
     expect(find.text('Kiosk runs on mobile'), findsOneWidget);
 
     // The flavor is read, not asked for: `default-flavor: dev` in the pubspec
@@ -876,6 +883,191 @@ void main() {
 
     expect(find.text('staging.example.com'), findsOneWidget);
   });
+
+  testWidgets('Run lands on the page that starts one, not on whichever run '
+      'sorts first', (tester) async {
+    // The bug this is about. With an app running, the rail's `Run` row opened
+    // that app's cockpit — so the only page carrying a device list, an
+    // emulator to boot and a launch form was unreachable for as long as
+    // anything was up, and the only way back to it was a `+` that appeared
+    // while the mouse was over the row.
+    var core = _homeCore(worktree);
+    addTearDown(core.dispose);
+    _publishRun(runDir, worktree, device: 'phone');
+    await tester.runAsync(core.computeAll);
+
+    await _mountRun(tester, core, const []);
+
+    expect(find.text('New run'), findsOneWidget);
+    // Not the cockpit, which is what an address naming no run used to reach.
+    expect(find.text('Hot reload'), findsNothing);
+  });
+
+  testWidgets('the desk is drawn while a run is going, with what it can boot', (
+    tester,
+  ) async {
+    // The report, in one test. `boot` lived only on a page that was hidden as
+    // soon as this worktree had a run, and an unbooted emulator is not a
+    // device — so one running app made every other machine unreachable.
+    var core = _homeCore(worktree);
+    addTearDown(core.dispose);
+    core.debugEmulators = const [
+      DaemonEmulator(id: 'Pixel_8', name: 'Pixel 8', platformType: 'android'),
+      DaemonEmulator(id: 'apple_ios_simulator', platformType: 'ios'),
+    ];
+    _publishRun(runDir, worktree, device: 'phone');
+    await tester.runAsync(core.computeAll);
+
+    await _mountRun(tester, core, const []);
+
+    expect(find.byKey(deskKey), findsOneWidget);
+    // An AVD is booted and the Simulator is opened — different verbs because
+    // they are different acts.
+    expect(find.text('boot'), findsOneWidget);
+    expect(find.text('open'), findsOneWidget);
+    // And the reading can be taken again, which the GUI could never ask for.
+    expect(find.text('Refresh'), findsOneWidget);
+  });
+
+  testWidgets('Run here answers the Device field rather than navigating', (
+    tester,
+  ) async {
+    // A desk row is a fact with one offer on the end of it, and the offer is
+    // for the form above: the entry point, the flavor and the knobs have
+    // already been chosen up there, so a jump would ask for them again.
+    var core = _homeCore(worktree);
+    addTearDown(core.dispose);
+    await tester.runAsync(core.computeAll);
+
+    await _mountRun(tester, core, const []);
+
+    // The form opened on one machine; the desk offers the other, and only the
+    // other — a row offering the device already chosen is offering nothing.
+    var offered = find.descendant(
+      of: find.byKey(deskKey),
+      matching: find.text('Run here'),
+    );
+    expect(offered, findsOneWidget);
+
+    // A name is on screen once while only the desk carries it and twice once
+    // the picker holds it too, so the count says which machine is chosen
+    // without the test having to know which one the form opened on.
+    int macs() => find.text('macOS').evaluate().length;
+    var before = macs();
+    await tester.tap(offered);
+    await tester.pump();
+
+    expect({before, macs()}, {1, 2}, reason: 'the field took what was offered');
+  });
+
+  testWidgets('a live run outranks a failure wearing its key', (tester) async {
+    // A run's key is its entry point, device and flavor, so relaunching what
+    // just failed produces a handle and a failure record with the *same* key.
+    // Reading the failure first made both rail rows open the obituary while
+    // the app they were about was up and driveable, with no way to reach it
+    // but Dismiss.
+    var core = _homeCore(worktree);
+    addTearDown(core.dispose);
+    var handle = _publishRun(runDir, worktree, device: 'phone');
+    var logPath = p.join(runDir.path, 'app-failed.log');
+    File(
+      logPath,
+    ).writeAsStringSync('Error: Build process failed\nApp failed to start\n');
+    core.recordFailure(handle, LaunchLog.read(logPath));
+    await tester.runAsync(core.computeAll);
+
+    expect(core.failureFor(handle.key), isNotNull, reason: 'both exist');
+
+    await _mountRun(tester, core, [handle.key]);
+
+    expect(find.text('Error: Build process failed'), findsNothing);
+    expect(find.text('Hot reload'), findsOneWidget);
+  });
+}
+
+/// A core over two machines and one entry point that runs on either — enough
+/// for the form to open filled in and the desk to have something to offer.
+RunCore _homeCore(Directory worktree) {
+  File(p.join(worktree.path, 'pubspec.yaml'))
+    ..createSync(recursive: true)
+    ..writeAsStringSync('name: app\n');
+  File(p.join(worktree.path, 'lib', 'main.dart'))
+    ..createSync(recursive: true)
+    ..writeAsStringSync('void main() {}');
+  DeviceCache.write(RunCore.runDirProvider(), const [
+    DaemonDevice(id: 'phone', name: 'Pixel', platformType: 'android'),
+    DaemonDevice(
+      id: 'macos',
+      name: 'macOS',
+      platformType: 'macos',
+      ephemeral: false,
+    ),
+  ]);
+  return RunCore(
+    PluginHost(
+      id: runPluginId,
+      label: 'Run',
+      worktree: Worktree(path: worktree.path),
+      workspace: Workspace(
+        root: worktree.path,
+        declared: [Pkg('.')],
+        discovered: ['.'],
+        appContext: AppContext(logger: LogClient.print()),
+        flutterSdk: FlutterSdkPath('/tmp/flutter'),
+      ),
+      config: const {
+        'packages': [
+          {
+            'path': '.',
+            'entrypoints': [
+              {'path': 'lib/main.dart', 'name': 'App'},
+            ],
+          },
+        ],
+      },
+    ),
+  );
+}
+
+RunHandle _publishRun(
+  Directory runDir,
+  Directory worktree, {
+  required String device,
+}) {
+  var handle = RunHandle(
+    worktree: worktree.path,
+    worktreeName: Worktree(path: worktree.path).name,
+    device: device,
+    entrypoint: 'lib/main.dart',
+    // This process, so a probe reads it as alive.
+    launcherPid: pid,
+    startedAt: DateTime.now(),
+  );
+  handle.publish(runDir.path);
+  return handle;
+}
+
+Future<void> _mountRun(
+  WidgetTester tester,
+  RunCore core,
+  List<String> segments,
+) async {
+  var address = ValueNotifier(
+    Address(worktree: 'wt', plugin: runPluginId, segments: segments),
+  );
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: appTheme,
+      home: Scaffold(
+        body: AddressRoot(
+          address: address,
+          onChanged: (a) => address.value = a,
+          child: Builder(builder: RunPlugin(core).buildPanel),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
 }
 
 /// One opaque white pixel: signature, IHDR, IDAT, IEND.

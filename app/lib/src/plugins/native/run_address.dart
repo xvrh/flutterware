@@ -59,8 +59,9 @@ enum RunViewKind {
   /// app chose to say.
   panels,
 
-  /// The values this run's `main` was called with, changeable here because the
-  /// only other route to the launch form is Stop — which is a rebuild.
+  /// The values this run's `main` was called with, changeable here because
+  /// the launch form is a different page and starting again there is a
+  /// rebuild.
   knobs;
 
   static RunViewKind? byName(String name) {

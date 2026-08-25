@@ -290,6 +290,34 @@ void main() {
     expect(shell.address.plugin, runPluginId);
   });
 
+  testWidgets('the desk points at the panel it cannot be', (tester) async {
+    // This menu reads files and starts no daemon, so it can say a device is
+    // free and can never offer to use it. The Run panel is where booting,
+    // refreshing and launching live, and until this row existed the two
+    // surfaces over the same machines read as unrelated lists.
+    var runDir = Directory.systemTemp.createTempSync('fw-desk-');
+    DeskButton.runDirProvider = () => runDir.path;
+    addTearDown(() {
+      DeskButton.runDirProvider = flutterwareRunDir;
+      runDir.deleteSync(recursive: true);
+    });
+    DeviceCache.write(runDir.path, const [
+      DaemonDevice(id: 'phone', name: 'Xavier iPhone'),
+    ]);
+
+    var shell = await _pumpShell(tester);
+    await tester.tap(find.byType(DeskButton));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Start one, or boot an emulator'));
+    await tester.pumpAndSettle();
+
+    // The plugin's own page — no run named, which is what the panel reads as
+    // *the page that starts one*.
+    expect(shell.address.plugin, runPluginId);
+    expect(shell.address.segments, isEmpty);
+  });
+
   testWidgets('mounts the selected plugin panel and switches', (tester) async {
     await _pumpShell(tester);
 

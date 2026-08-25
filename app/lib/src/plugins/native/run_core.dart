@@ -3212,14 +3212,47 @@ class RunCore extends PluginCore {
 
   /// The one running app a control action means.
   /// What the desk can offer to boot. Empty until [loadEmulators] has run.
-  List<DaemonEmulator> get emulators => _daemon?.emulators ?? const [];
+  List<DaemonEmulator> get emulators =>
+      debugEmulators ?? _daemon?.emulators ?? const [];
+
+  /// A bootable list without a daemon, for a widget test.
+  ///
+  /// The desk's `boot` is the control the whole of this page exists to reach,
+  /// and the only other way to put a row under it is to spawn a real
+  /// `flutter daemon` — which [debugLive] exists to keep out of a test.
+  @visibleForTesting
+  List<DaemonEmulator>? debugEmulators;
 
   /// Asks the daemon what it could boot, for the desk.
   ///
   /// Separate from [track] because it is a second round trip that opening the
-  /// panel does not need, and the desk only shows when nothing is running.
+  /// panel does not need: a device list is what the cockpit opens with, and
+  /// enumerating every AVD and simulator is a cost only the desk needs paid.
+  ///
+  /// Behind [debugLive] for the same reason [track] is. The desk is drawn
+  /// whenever the launch form is, so mounting that page now asks for a daemon
+  /// — right in the app, and in a widget test a subprocess and a pending timer
+  /// that a pumped panel cannot settle. The tests that used to dodge this by
+  /// publishing a run so the desk would not draw at all no longer can.
   Future<void> loadEmulators() async {
+    if (!debugLive) return;
     var daemon = await _acquireDaemon();
+    await daemon.refreshEmulators();
+    if (!isDisposed) notifyChanged();
+  }
+
+  /// Takes the device list again, and the bootable list with it. The desk's
+  /// **Refresh**.
+  ///
+  /// A device list is a reading with an age on it, and until this existed the
+  /// GUI could only report that age. `devices(refresh: true)` has always been
+  /// there for an agent; a person looking at *taken 27m ago* beside a phone
+  /// they had just plugged in had nothing to press. Both halves, because they
+  /// go stale together — an emulator booted from a terminal is a new device
+  /// *and* one fewer thing to boot.
+  Future<void> refreshDesk() async {
+    var daemon = await _acquireDaemon();
+    await daemon.refresh();
     await daemon.refreshEmulators();
     if (!isDisposed) notifyChanged();
   }
