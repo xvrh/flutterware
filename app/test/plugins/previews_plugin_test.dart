@@ -945,4 +945,82 @@ Widget added() => const Placeholder();
       );
     });
   });
+
+  group('search — the palette reaches the whole catalog', () {
+    test('an entry says where it is', () async {
+      var subject = catalog();
+      await subject.computeAll();
+
+      var hits = subject.search('Counter');
+      expect(hits, isNotEmpty);
+      expect(
+        '${hits.first.address}',
+        '${subject.addressFor('.', 'demo/counter.dart#counter')}',
+      );
+    });
+
+    test('search reaches past what the projection lists', () async {
+      // Sorted by id, so `zebra` lands last — well past the cut-off, where the
+      // default report walk would never see it. This is the shape the bug had
+      // on a real catalog: 160 entries, twenty findable, all of them from files
+      // beginning `a`–`c`.
+      for (var i = 0; i < 40; i++) {
+        write('demo/zebra_${i.toString().padLeft(2, '0')}.dart', '''
+@Preview(name: 'Zebra $i')
+Widget zebra$i() => const Placeholder();
+''');
+      }
+
+      var subject = catalog();
+      await subject.computeAll();
+
+      expect(subject.report.view.toText(), isNot(contains('Zebra 39')));
+      expect(
+        subject.search('Zebra 39').map((h) => h.title),
+        contains('Zebra 39'),
+      );
+    });
+
+    test('the title is the one the projection shows', () async {
+      var subject = catalog();
+      await subject.computeAll();
+
+      // Grouped entries read `group / name` in the panel — and the group is
+      // the file's own stem, spelled the way the source spells it. A row found
+      // in the palette has to read the same way or they look like two things.
+      expect(
+        subject.search('Members').map((h) => h.title),
+        contains('avatar_tile / Members'),
+      );
+    });
+
+    test('an entry is offered once, not once per surface', () async {
+      var subject = catalog();
+      await subject.computeAll();
+
+      // `Counter` is inside the projection *and* found by the walk over the
+      // scan. The dedupe is what keeps it from arriving twice.
+      expect(
+        subject.search('Counter').where((h) => h.title == 'Counter').length,
+        1,
+      );
+    });
+
+    test('the plugin row itself is still findable', () async {
+      var subject = catalog();
+      await subject.computeAll();
+
+      expect(
+        subject.search('Previews').map((h) => h.reason),
+        contains(SearchReason.plugin),
+      );
+    });
+
+    test('an empty query finds nothing', () async {
+      var subject = catalog();
+      await subject.computeAll();
+
+      expect(subject.search('   '), isEmpty);
+    });
+  });
 }

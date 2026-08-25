@@ -45,6 +45,7 @@ import '../../utils/daemon/device.dart';
 import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
+import 'run_address.dart';
 import 'run_results.dart';
 import 'previews_core.dart' show PreviewsCore;
 
@@ -91,6 +92,15 @@ const _maxRememberedFailures = 8;
 /// Sockets, subprocesses and the daemon live behind both.
 class RunCore extends PluginCore {
   RunCore(super.host);
+
+  /// Where one run's screen is — the same segments the panel reads back.
+  Address addressFor(RunHandle handle) => Address(
+    worktree: host.worktree.name,
+    plugin: host.id,
+    segments: runSegments(
+      runHandleKey(handle.worktree, handle.device, handle.entrypoint),
+    ),
+  );
 
   /// Where the ledger and the device cache live. A seam for tests, which point
   /// it at a temp dir rather than the developer's real run dir.
@@ -1602,6 +1612,11 @@ class RunCore extends PluginCore {
                     '${handle.entrypointLabel} on '
                     '${handle.deviceName ?? handle.device}',
                     detail: _handleDetail(handle),
+                    // The run's own screen, which is where a row naming a run
+                    // should take you. The key is stable across relaunch — see
+                    // `run_address.dart` — so the address outlives the process
+                    // the row is currently describing.
+                    address: addressFor(handle),
                   ),
               ]),
           ]),

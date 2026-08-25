@@ -549,13 +549,29 @@ class MotionCore extends PluginCore {
           if (_errors[path] case var error?)
             ViewText('$error', tone: Tone.error)
           else if (_results[path] case var result?) ...[
-            for (var motion in result.motions)
-              ViewText(
-                '${motion.values ?? '<expression>'} — '
-                '${motion.file}:${motion.line}, '
-                '${motion.targets.length} target'
-                '${motion.targets.length == 1 ? '' : 's'}',
-              ),
+            // Items rather than text, because a row that says where it is can
+            // be searched and a line of prose cannot — `searchReport` walks
+            // `ViewItem` and skips `ViewText`. The address is the one the
+            // `list` action already hands out, under the same rule: a motion
+            // whose values file is an anonymous expression names no place, so
+            // it carries no address rather than a guessed one.
+            ViewItems([
+              for (var motion in result.motions)
+                ViewItem(
+                  motion.values ?? '<expression>',
+                  detail:
+                      '${motion.file}:${motion.line}, '
+                      '${motion.targets.length} target'
+                      '${motion.targets.length == 1 ? '' : 's'}',
+                  address: motion.values == null
+                      ? null
+                      : addressFor(
+                          path,
+                          file: motion.file,
+                          motion: motion.values,
+                        ),
+                ),
+            ]),
             if (result.motions.isEmpty) const ViewText('No motions found.'),
             for (var diagnostic in result.diagnostics)
               ViewText(diagnostic, tone: Tone.warn),
