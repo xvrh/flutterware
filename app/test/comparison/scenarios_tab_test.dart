@@ -164,6 +164,40 @@ void main() {
       panned,
     );
   });
+
+  // A scenario is named by whoever wrote it, and a name with a `/` in it —
+  // `scenario('Contacts & collaboration / Create group')` — used to be cut in
+  // half by the address parse. The flow still drew, because the lookup for the
+  // scenario falls back; every step id parsed out of the tail matched nothing,
+  // so tapping a step selected an address that resolved back to the canvas it
+  // came from and the page did nothing at all.
+  testWidgets('a scenario named with a slash still opens its steps', (
+    tester,
+  ) async {
+    var scenarios = [
+      const ScenarioComparison(
+        scenario: 'test/cart_test.dart#Shop & basket / Create cart',
+        state: ComparedState.changed,
+        items: [ComparedItem(id: 'Cart', state: ComparedState.changed)],
+        branches: [],
+      ),
+    ];
+
+    await pump(
+      tester,
+      scenarios,
+      selected: 'test/cart_test.dart#Shop & basket / Create cart',
+    );
+    expect(find.byKey(stepPageKey), findsNothing);
+
+    await pump(
+      tester,
+      scenarios,
+      selected: 'test/cart_test.dart#Shop & basket / Create cart/Cart',
+    );
+    expect(find.byKey(stepPageKey), findsOneWidget);
+    expect(find.text('Cart'), findsOneWidget);
+  });
 }
 
 /// Every frame evicted — the store is not what these tests are about, and a

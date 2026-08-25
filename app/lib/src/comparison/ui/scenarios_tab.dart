@@ -104,16 +104,37 @@ class _ScenariosTabState extends State<ScenariosTab> {
     if (mounted) _load();
   }
 
-  /// The address is `<scenario id>/<step path>`; a scenario id has a `#` in it
-  /// and a step path does not, so the split is at the first `/` after it.
+  /// The address is `<scenario id>/<step path>`, and where it splits cannot be
+  /// worked out from the string: a scenario is named by whoever wrote it, and
+  /// `scenario('Contacts & collaboration / Create group')` is a name with a
+  /// separator in it. Splitting at the first `/` after the `#` cut that name in
+  /// half, and the half-a-name matched no scenario — so `_scenario` fell
+  /// through to its own fallback, which happened to be the right flow, and
+  /// every step id parsed out of the tail matched nothing. The canvas drew, the
+  /// steps looked live, and tapping one selected an address that resolved back
+  /// to the same canvas: a whole page that did nothing.
+  ///
+  /// So the boundary is matched against the ids there actually are rather than
+  /// guessed at a character, which also frees a step to carry a `/` in its
+  /// name.
   (String? scenario, String? step) get _address {
     var selected = widget.selected;
     if (selected == null) return (null, null);
-    var hash = selected.indexOf('#');
-    var slash = selected.indexOf('/', hash < 0 ? 0 : hash);
-    return slash < 0
-        ? (selected, null)
-        : (selected.substring(0, slash), selected.substring(slash + 1));
+    String? id;
+    for (var known in widget.half.scenarios) {
+      var candidate = known.scenario;
+      if (selected != candidate && !selected.startsWith('$candidate/')) {
+        continue;
+      }
+      // Longest wins: a file holding both `X` and `X/Y` would otherwise read
+      // the second as the first with a step called `Y`.
+      if (id == null || candidate.length > id.length) id = candidate;
+    }
+    if (id == null) return (selected, null);
+    return (
+      id,
+      selected.length == id.length ? null : selected.substring(id.length + 1),
+    );
   }
 
   ScenarioComparison? get _scenario {
