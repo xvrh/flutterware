@@ -451,6 +451,10 @@ class RunInspector {
   /// need a live `Element`: what a node's box is, and which render object it
   /// belongs to.
   ///
+  /// `InspectNode.widgetKey` is split off the description by
+  /// [InspectNode.splitKey], which is shared with the guest precisely so that
+  /// this field cannot drift between the two.
+  ///
   /// `InspectNode.offstage` and `InspectNode.properties` are known,
   /// deliberate divergences: the first takes the render chain and the second
   /// the widget itself, neither of which this path can reach — so trees read
@@ -467,9 +471,13 @@ class RunInspector {
   /// position, and by `main.dart:66:11`.
   @visibleForTesting
   static InspectNode convertNode(Map<String, Object?> json, String path) {
-    var description = json['description'] as String?;
-    var type = json['widgetRuntimeType'] as String? ?? description ?? '';
+    var described = json['description'] as String?;
+    var type = json['widgetRuntimeType'] as String? ?? described ?? '';
     var preview = json['textPreview'] as String?;
+    // Split off the widget's key before anything else looks at the string —
+    // the same call the guest makes, on the same string, which is what keeps
+    // the two spellings identical.
+    var (:description, key: widgetKey) = InspectNode.splitKey(described, type);
     return InspectNode(
       id: path,
       type: type,
@@ -480,6 +488,7 @@ class RunInspector {
           : description == type
           ? null
           : description,
+      widgetKey: widgetKey,
       createdByLocalProject: json['createdByLocalProject'] as bool? ?? false,
       source: switch (json['creationLocation']) {
         Map location => InspectSource.fromJson(

@@ -98,7 +98,9 @@ class TreeDiff {
       }
     }
 
-    for (var pair in _align(_onstage(base.children), _onstage(head.children))) {
+    for (var pair in _fuse(
+      _align(_onstage(base.children), _onstage(head.children)),
+    )) {
       switch (pair) {
         case (var only?, null):
           deltas.add(TreeDelta.removed('$here › ${_label(only)}', only.type));
@@ -173,17 +175,99 @@ class TreeDiff {
     return pairs;
   }
 
+  /// Takes back the unambiguous half of what [_signature] gives up.
+  ///
+  /// An unmatched node is reported and then **not walked** — `_walk` recurses
+  /// into matched pairs only — so a signature miss on a container hides every
+  /// real change beneath it. Where a run of leftovers holds exactly one node
+  /// on each side and the two are the same kind of widget, there is only one
+  /// thing that can have happened to it, and pairing them turns
+  /// `- Text("Save") / + Text("Pay")` into `description Save→Pay` with the
+  /// subtree underneath still examined.
+  ///
+  /// One-to-one only, same type, same key. Two same-type leftovers on a side
+  /// is a real ambiguity and guessing which is which is the nonsense
+  /// [_signature] exists to refuse. A differing key is not an ambiguity at
+  /// all — it is the author saying these are two different widgets, and it is
+  /// the one thing this must never fuse across, or the split above buys
+  /// nothing.
+  static List<(InspectNode?, InspectNode?)> _fuse(
+    List<(InspectNode?, InspectNode?)> pairs,
+  ) {
+    var fused = <(InspectNode?, InspectNode?)>[];
+    var run = <(InspectNode?, InspectNode?)>[];
+
+    void flush() {
+      if (run.length > 1) {
+        var lefts = [for (var (left, _) in run) ?left];
+        var rights = [for (var (_, right) in run) ?right];
+        if (lefts.length == 1 &&
+            rights.length == 1 &&
+            lefts.single.type == rights.single.type &&
+            lefts.single.widgetKey == rights.single.widgetKey) {
+          fused.add((lefts.single, rights.single));
+          run.clear();
+          return;
+        }
+      }
+      fused.addAll(run);
+      run.clear();
+    }
+
+    for (var pair in pairs) {
+      if (pair.$1 == null || pair.$2 == null) {
+        run.add(pair);
+      } else {
+        flush();
+        fused.add(pair);
+      }
+    }
+    flush();
+    return fused;
+  }
+
   /// What makes two nodes "the same node" across two runs.
   ///
-  /// Type alone pairs the wrong `Text` in a column of them. The description
-  /// carries the content — `Text("Save")` — so it separates them, at the cost
-  /// of reporting a re-worded label as a removal plus an addition rather than
-  /// a change. That is the right way round: a diff that pairs two different
-  /// widgets reports nonsense about both.
-  static String _signature(InspectNode node) =>
-      '${node.type}|${node.description ?? ''}';
+  /// A key that [_names] its widget wins outright. It is the author's own
+  /// statement of which widget this is — the whole reason the framework has
+  /// keys — and it survives a re-worded label, a changed property and a moved
+  /// sibling, none of which a description does.
+  ///
+  /// Otherwise the description. Type alone pairs the wrong `Text` in a column
+  /// of them; the description carries the content — `Text("Save")` — so it
+  /// separates them, at the cost of reporting a re-worded label as a removal
+  /// plus an addition rather than a change. That is the right way round: a
+  /// diff that pairs two different widgets reports nonsense about both. What
+  /// softens the cost is [_fuse], which takes the unambiguous half of it back.
+  static String _signature(InspectNode node) => switch (node.widgetKey) {
+    var key? when _names(key) => '${node.type} key $key',
+    _ => '${node.type} is ${node.description ?? ''}',
+  };
 
-  static String _label(InspectNode node) => node.description ?? node.type;
+  /// Whether a key says *which* widget this is, or only that there is one.
+  ///
+  /// A key with no value of its own is the same string on every node once its
+  /// identity hash goes — every `GlobalKey()` in the tree is `[GlobalKey#]`,
+  /// every `UniqueKey()` is `[#]`. It must therefore never displace the
+  /// description in [_signature]: two sibling `Text`s given a `GlobalKey`
+  /// each would otherwise share one signature, and deleting the first would
+  /// align the second against it and report the wrong node as removed — a
+  /// diff made *worse* by keys than it was without them.
+  static bool _names(String key) => !key.endsWith('#]');
+
+  /// `Text("Save")`, or `Form-[<'draft'>]`, or `Padding`.
+  ///
+  /// The key is spelled back on the way out — the framework's own `type-key`
+  /// — because it is the name a reader would use for that node, and because
+  /// two sibling `Form`s in a path are otherwise indistinguishable.
+  static String _label(InspectNode node) =>
+      node.description ??
+      switch (node.widgetKey) {
+        // A key that distinguishes nothing is a string the path would repeat
+        // on every line of the report — see [_names].
+        var key? when _names(key) => '${node.type}-$key',
+        _ => node.type,
+      };
 
   static String _size(InspectLayout layout) =>
       '${_number(layout.width)}×${_number(layout.height)}';

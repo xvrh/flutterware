@@ -70,6 +70,29 @@ void main() {
     );
   });
 
+  // The one field that has to be identical here and in the guest, because the
+  // guest is where the previews comparison reads it and this is where the run
+  // cockpit does. Both call `InspectNode.splitKey`, on the same string.
+  test('splits the key off the description, hash and all', () {
+    var form = RunInspector.convertNode(
+      node('Form', description: 'Form-[LabeledGlobalKey<FormState>#acc1d]'),
+      '',
+    );
+
+    expect(form.widgetKey, '[LabeledGlobalKey<FormState>#]');
+    expect(form.description, isNull);
+  });
+
+  test('a keyed text keeps its preview and its key', () {
+    var text = RunInspector.convertNode(
+      node('Text', description: "Text-[<'save'>]", preview: 'Save'),
+      '',
+    );
+
+    expect(text.description, 'Text("Save")');
+    expect(text.widgetKey, "[<'save'>]");
+  });
+
   test('a text preview becomes the description', () {
     expect(
       RunInspector.convertNode(node('Text', preview: 'Save'), '').description,

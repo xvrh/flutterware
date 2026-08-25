@@ -357,8 +357,11 @@ class GuestInspector {
     bool ancestorClaimed,
   ) {
     var children = json['children'] as List? ?? const [];
-    var description = json['description'] as String?;
-    var type = json['widgetRuntimeType'] as String? ?? description ?? '';
+    var described = json['description'] as String?;
+    var type = json['widgetRuntimeType'] as String? ?? described ?? '';
+    // The key is a fact of its own, and one that has to survive the wire —
+    // see [InspectNode.splitKey], which the VM-service path calls too.
+    var (:description, key: widgetKey) = InspectNode.splitKey(described, type);
     // Resolved once for the three readers below: the id round-trips through
     // the inspector's object registry, which is not free per node.
     var element = _elementOf(json);
@@ -397,6 +400,7 @@ class GuestInspector {
       // place; a `Padding` described as "Padding" is the type twice.
       description:
           _preview(element) ?? (description == type ? null : description),
+      widgetKey: widgetKey,
       createdByLocalProject: json['createdByLocalProject'] as bool? ?? false,
       offstage: offstage,
       properties: _propertiesOf(element?.widget, textStyle.keys.toSet()),

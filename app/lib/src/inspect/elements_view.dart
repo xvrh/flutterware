@@ -505,12 +505,15 @@ class _TreeRow extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (node.description case var description?
-                        when description != node.type) ...[
+                    // The key when that is all there was: a `Form` keyed
+                    // `[<'draft'>]` says which form it is, and the key is no
+                    // longer inside the description to say it.
+                    if (node.description ?? node.widgetKey case var detail?
+                        when detail != node.type) ...[
                       const SizedBox(width: FwSpacing.sm),
                       Flexible(
                         child: Text(
-                          description,
+                          detail,
                           overflow: TextOverflow.ellipsis,
                           softWrap: false,
                           style: context.type.caption.copyWith(
@@ -613,9 +616,10 @@ class _Detail extends StatelessWidget {
             it.type,
             style: context.type.bodyStrong.copyWith(color: colors.ink),
           ),
-          if (it.description case var description? when description != it.type)
+          if (it.description ?? it.widgetKey case var detail?
+              when detail != it.type)
             SelectableText(
-              description,
+              detail,
               style: context.type.caption.copyWith(color: colors.mut),
             ),
           const SizedBox(height: FwSpacing.md),
