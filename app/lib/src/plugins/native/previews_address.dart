@@ -15,9 +15,24 @@
 /// all.
 library;
 
-/// A place in the catalog: a package, and an entry inside it if one is named.
+/// A place in the catalog: a package, and inside it either one entry or the
+/// part of the tree being looked at.
+///
+/// **Three states, told apart by a `#`.** An entry id is
+/// `path/to/file.dart#symbol` and always has one; anything else after the
+/// package is a *path prefix* — a directory, or a single file whose variants
+/// are wanted. That is a discriminator rather than a convention: no directory
+/// can contain a `#` in an entry id's position, so nothing has to be escaped
+/// and nothing is ambiguous.
+///
+/// Deliberately a path prefix rather than a branch of the tree. A branch's id
+/// is a path of *labels* — real directories below the common prefix, then
+/// whatever `@Preview(group:)` said — which would be a second namespace living
+/// in the same slot as the first. Truncating a real entry address is how a
+/// person reaches this state, so what they land on has to be something a real
+/// entry address contains.
 class CatalogPlace {
-  const CatalogPlace(this.package, {this.entryId});
+  const CatalogPlace(this.package, {this.entryId, this.directory});
 
   /// The workspace-relative package path — `app`, `examples/example`.
   final String package;
@@ -27,17 +42,44 @@ class CatalogPlace {
   /// the rail leaves you.
   final String? entryId;
 
+  /// What the catalog is narrowed to — `tool/catalog/demos`, or one file. Null
+  /// when the whole package is being shown, which is the whole index.
+  ///
+  /// **A selection, which is why it belongs in the address.** Picking a folder
+  /// in the tree shows that folder and nothing else; the way out is the row
+  /// above every folder. It is a place, so it can be linked to and come back
+  /// to — unlike a scroll position, which is what this briefly became and why
+  /// it stopped being written.
+  ///
+  /// It also settles the address bar's own invitation to truncate at a middle
+  /// segment. That used to answer `No entry "tool/catalog/demos" in this
+  /// package`; it is now the folder, which is what somebody truncating an entry
+  /// address is reaching for.
+  ///
+  /// Never set at the same time as [entryId]: an address names one place, and
+  /// an entry already says which file it is in.
+  final String? directory;
+
+  /// The tail either of them puts in the address.
+  String? get path => entryId ?? directory;
+
+  /// Whether [entryPath] is inside [directory] — the whole of what narrowing
+  /// means. A file scope matches the entries declared in it; a directory scope
+  /// matches everything below it.
+  bool covers(String entryPath) => scopeCovers(directory, entryPath);
+
   @override
   bool operator ==(Object other) =>
       other is CatalogPlace &&
       other.package == package &&
-      other.entryId == entryId;
+      other.entryId == entryId &&
+      other.directory == directory;
 
   @override
-  int get hashCode => Object.hash(package, entryId);
+  int get hashCode => Object.hash(package, entryId, directory);
 
   @override
-  String toString() => 'CatalogPlace($package${entryId ?? ''})';
+  String toString() => 'CatalogPlace($package${path ?? ''})';
 }
 
 /// The address segments naming [package] and, if given, [entryId].
@@ -46,9 +88,12 @@ class CatalogPlace {
 /// readable — `…/app/tool/catalog/demos/avatar.dart%23members` instead of one
 /// percent-encoded blob. Only `#` ends up escaped, and that is the part a
 /// reader most wants to see.
-List<String> catalogSegments(String package, [String? entryId]) => [
+/// [path] is an entry id or a directory — see [CatalogPlace]. Both serialise
+/// the same way, which is the point: one slot, one split, and which of the two
+/// it is comes back out of the `#`.
+List<String> catalogSegments(String package, [String? path]) => [
   package,
-  if (entryId != null && entryId.isNotEmpty) ...entryId.split('/'),
+  if (path != null && path.isNotEmpty) ...path.split('/'),
 ];
 
 /// The inverse of [catalogSegments].
@@ -58,8 +103,11 @@ List<String> catalogSegments(String package, [String? entryId]) => [
 /// address that named no package at all.
 CatalogPlace? catalogPlace(List<String> segments) {
   if (segments.isEmpty) return null;
-  var entry = segments.skip(1).join('/');
-  return CatalogPlace(segments.first, entryId: entry.isEmpty ? null : entry);
+  var tail = segments.skip(1).join('/');
+  if (tail.isEmpty) return CatalogPlace(segments.first);
+  return tail.contains('#')
+      ? CatalogPlace(segments.first, entryId: tail)
+      : CatalogPlace(segments.first, directory: tail);
 }
 
 /// Whether the address has *moved*, and so has something new to ask of the
@@ -87,3 +135,14 @@ bool addressMoved({
   required String? followed,
   required String? place,
 }) => !hasFollowed || sessionChanged || place != followed;
+
+/// Whether [entryPath] is inside [scope] — null being the whole package.
+///
+/// The rule the sheet narrows by, and the same one [CatalogPlace.covers]
+/// answers with: a file scope matches the entries declared in it, a directory
+/// scope matches everything below it, and a scope that is merely a prefix of
+/// the *name* — `demo/team` against `demo/teamwork/x.dart` — matches nothing.
+bool scopeCovers(String? scope, String entryPath) {
+  if (scope == null) return true;
+  return entryPath == scope || entryPath.startsWith('$scope/');
+}

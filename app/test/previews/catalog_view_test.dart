@@ -135,13 +135,35 @@ void main() {
     );
   }
 
+  /// [name] as the *tree* shows it.
+  ///
+  /// The demo's name is in two places now: its row here, and the title above
+  /// the stage that says what is on it and carries the way back off it. A bare
+  /// `find.text` would be ambiguous for whichever entry is selected, and
+  /// ambiguous only sometimes — which is worse than ambiguous always.
+  Finder treeText(String name) =>
+      find.descendant(of: find.byType(ListView), matching: find.text(name));
+
+  /// A folder's chevron, which is the only thing that folds it now.
+  ///
+  /// The row itself picks what the pane beside the tree shows, so the two had
+  /// to stop being one target: a click that both folded a branch and changed
+  /// what was on screen was one gesture with two results and no way to ask for
+  /// either alone.
+  Finder foldOf(String folder) => find
+      .descendant(
+        of: find.ancestor(of: treeText(folder), matching: find.byType(Row)),
+        matching: find.byType(Icon),
+      )
+      .first;
+
   testWidgets('a broken entry keeps its place in the tree', (tester) async {
     var session = sessionWithBroken(beta, 'boom');
     await pump(tester, session);
 
     // Ordered by where they sit on screen, which is the claim: a demo that
     // stops compiling does not move.
-    double y(String name) => tester.getTopLeft(find.text(name)).dy;
+    double y(String name) => tester.getTopLeft(treeText(name)).dy;
     expect(y('Alpha'), lessThan(y('Beta')));
     expect(y('Beta'), lessThan(y('Gamma')));
   });
@@ -211,9 +233,9 @@ void main() {
     session.browsing.filter = 'alp';
     await tester.pump();
 
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Beta'), findsNothing);
-    expect(find.text('Gamma'), findsNothing);
+    expect(treeText('Alpha'), findsOneWidget);
+    expect(treeText('Beta'), findsNothing);
+    expect(treeText('Gamma'), findsNothing);
   });
 
   testWidgets('a filter that matches nothing says so', (tester) async {
@@ -243,11 +265,30 @@ void main() {
     await pump(tester, session);
     expect(find.text('One'), findsOneWidget);
 
-    await tester.tap(find.text('team'));
+    await tester.tap(foldOf('team'));
     await tester.pump();
     expect(find.text('One'), findsNothing);
     expect(find.text('team'), findsOneWidget, reason: 'the folder remains');
     expect(find.text('Two'), findsOneWidget, reason: 'its neighbour is intact');
+  });
+
+  testWidgets('and the folder row itself does not fold them', (tester) async {
+    // The row's job is to say what the pane shows. It used to fold as well,
+    // from the same click, which meant neither could be asked for on its own.
+    const one = CatalogEntry(
+      path: 'demo/team/one.dart',
+      symbol: 'one',
+      annotation: 'Demo()',
+      name: 'One',
+    );
+    var session = sessionOf([one, beta], beta, 'boom');
+    await pump(tester, session);
+    expect(treeText('One'), findsOneWidget);
+
+    await tester.tap(treeText('team'));
+    await tester.pump();
+
+    expect(treeText('One'), findsOneWidget, reason: 'still open');
   });
 
   group('the folder around the selection', () {
@@ -270,12 +311,12 @@ void main() {
       // visible effect anywhere was the collapse-all button changing its mind.
       var session = sessionOf([inside, outside], inside, 'boom');
       await pump(tester, session);
-      expect(find.text('One'), findsOneWidget);
+      expect(treeText('One'), findsOneWidget);
 
-      await tester.tap(find.text('team'));
+      await tester.tap(foldOf('team'));
       await tester.pump();
 
-      expect(find.text('One'), findsNothing);
+      expect(treeText('One'), findsNothing);
       expect(session.selected?.id, inside.id, reason: 'and it is still yours');
     });
 
@@ -286,11 +327,11 @@ void main() {
       // return would re-reveal the selection and undo the fold.
       var session = sessionOf([inside, outside], inside, 'boom');
       await pump(tester, session);
-      await tester.tap(find.text('team'));
+      await tester.tap(foldOf('team'));
       await tester.pump();
 
       await pump(tester, session);
-      expect(find.text('One'), findsNothing);
+      expect(treeText('One'), findsNothing);
     });
 
     testWidgets('opens once for a selection that arrives folded away', (
@@ -315,9 +356,9 @@ void main() {
             ]
             ..selected = inside;
       await pump(tester, session);
-      await tester.tap(find.text('team'));
+      await tester.tap(foldOf('team'));
       await tester.pump();
-      expect(find.text('One'), findsNothing);
+      expect(treeText('One'), findsNothing);
 
       session
         ..selected = outside
@@ -331,7 +372,7 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('One'), findsOneWidget);
+      expect(treeText('One'), findsOneWidget);
     });
   });
 
@@ -548,8 +589,8 @@ void main() {
 
     expect(find.text('left'), findsOneWidget);
     expect(find.text('right'), findsOneWidget);
-    expect(find.text('Left 0'), findsNothing);
-    expect(find.text('Right 0'), findsNothing);
+    expect(treeText('Left 0'), findsNothing);
+    expect(treeText('Right 0'), findsNothing);
     expect(
       find.byTooltip('Expand all'),
       findsOneWidget,
@@ -561,16 +602,16 @@ void main() {
     // Folded is not hidden: a folder opens on a click like any other.
     await tester.tap(find.text('left'));
     await tester.pump();
-    expect(find.text('Left 0'), findsOneWidget);
-    expect(find.text('Right 0'), findsNothing);
+    expect(treeText('Left 0'), findsOneWidget);
+    expect(treeText('Right 0'), findsNothing);
 
     // And the two rules compose. A fresh catalog this long folds, and then
     // opens the branches over whatever is selected: the entry the panel is
     // showing is never one you have to go looking for.
     await pump(tester, sessionOf([...many, beta], many.first, 'boom'));
     await tester.pump();
-    expect(find.text('Left 0'), findsOneWidget);
-    expect(find.text('Right 0'), findsNothing);
+    expect(treeText('Left 0'), findsOneWidget);
+    expect(treeText('Right 0'), findsNothing);
   });
 
   testWidgets('one button folds everything, then unfolds it', (tester) async {

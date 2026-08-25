@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import 'flutter_cache.dart';
 import 'frontend_server.dart';
 
@@ -25,6 +27,12 @@ Future<File> compileToKernel({
     packageConfig: packageConfig,
     sdkRoot: cache.flutterPatchedSdkDir,
     platformDill: cache.platformDill,
+    // Nothing here attributes a diagnostic to anything — an error is thrown
+    // with the compiler's own words in it — so this only decides how the paths
+    // in that message read. The package config sits at
+    // `<root>/.dart_tool/package_config.json`, so its grandparent is the root
+    // the message should be relative to.
+    workingDirectory: p.dirname(p.dirname(p.absolute(packageConfig))),
   );
   try {
     var result = await server.compile();

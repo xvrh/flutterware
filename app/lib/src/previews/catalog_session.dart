@@ -188,6 +188,25 @@ class CatalogBrowsing extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// What part of the catalog the sheet is showing — a directory, or one file
+  /// — or null for the whole index. See `CatalogPlace.directory`.
+  ///
+  /// **Picked in the tree, and the tree marks it.** That is what was missing
+  /// the first time this existed: narrowing was a hover-chevron on a heading
+  /// and announced itself with a filter icon, so it read as a filter having
+  /// been applied rather than as somewhere you had gone, and the tree beside it
+  /// said nothing at all. A selected row is unambiguous about both.
+  ///
+  /// Kept while an entry is open, so that leaving a demo returns to the part of
+  /// the catalog it was picked from rather than to all of it.
+  String? get scope => _scope;
+  String? _scope;
+  set scope(String? value) {
+    if (value == _scope) return;
+    _scope = value;
+    notifyListeners();
+  }
+
   /// Whether resting the pointer on a row shows that entry's picture.
   ///
   /// On by default and switchable from the list's own header, because whether
@@ -338,6 +357,7 @@ class CatalogSession extends ChangeNotifier {
     this.roots = const [defaultCatalogRoot],
     this.previewAnnotations = defaultPreviewAnnotations,
     this.canvases = const [],
+    this.scannedEntries = const [],
     this.connectToDaemon = CompilerDaemonClient.connect,
   }) {
     // Forwarded, so a renderer has one thing to listen to.
@@ -358,12 +378,58 @@ class CatalogSession extends ChangeNotifier {
   final staging = CatalogStaging();
 
   /// Everything discovery found, populated when the daemon reports ready.
-  List<CatalogEntry> entries = const [];
+  ///
+  /// Assigning it is what retires [scannedEntries]: the daemon has spoken, so
+  /// the listing is its answer from here on. Said in the setter rather than at
+  /// the call sites so that nothing can report entries without also meaning it.
+  List<CatalogEntry> get entries => _entries;
+  List<CatalogEntry> _entries = const [];
+
+  set entries(List<CatalogEntry> value) {
+    _entries = value;
+    _daemonReported = true;
+    _allEntries = null;
+  }
+
+  /// The listing to show until the daemon has reported: what the plugin's own
+  /// scan already found.
+  ///
+  /// The panel is only built once that scan has entries — it is the gate on
+  /// starting a session at all — so this is known before the first frame, while
+  /// [entries] is a daemon handshake away. Measured on this repo's example
+  /// package, that gap is **8 seconds**, and the list spent all of it saying
+  /// "No entries", which was not merely slow but false.
+  ///
+  /// The two lists are the same set: both sides run the same scanner over the
+  /// same roots, and the daemon serves everything it discovered with the
+  /// unbuildable ones quarantined rather than dropped. So the daemon's arrival
+  /// adds error marks to rows that are already there rather than replacing one
+  /// list with another. Empty for a session nobody scanned for — the standalone
+  /// entry point and the motion panel — which then behaves as it always did.
+  final List<CatalogEntry> scannedEntries;
+
+  /// Whether the daemon's answer is in, which is when [allEntries] stops
+  /// answering from [scannedEntries]. Either half of that answer sets it.
+  ///
+  /// Not `phase == ready`: that waits for the guest as well, several seconds
+  /// past the point the entry list is known.
+  var _daemonReported = false;
 
   /// Entries discovery found but the compiler cannot build, with the error to
   /// show for each. Kept out of [entries] rather than hidden: a demo you are
   /// midway through editing should say why it is unavailable.
-  List<QuarantinedEntry> quarantined = const [];
+  ///
+  /// The other half of the daemon's answer, so assigning it retires the scan
+  /// too — a catalog whose every entry is quarantined reports an empty
+  /// [entries] and would otherwise go on showing the seed.
+  List<QuarantinedEntry> get quarantined => _quarantined;
+  List<QuarantinedEntry> _quarantined = const [];
+
+  set quarantined(List<QuarantinedEntry> value) {
+    _quarantined = value;
+    _daemonReported = true;
+    _allEntries = null;
+  }
 
   /// Warnings the scan produced; the daemon refuses to start on errors.
   List<String> diagnostics = const [];
@@ -433,6 +499,25 @@ class CatalogSession extends ChangeNotifier {
   /// while the guest goes on rendering whatever it last managed to load.
   CatalogEntry? selected;
 
+  /// Puts the stage back to nothing selected — which is the catalog, drawn as
+  /// pictures.
+  ///
+  /// The **deliberate** counterpart of a null [wantedEntryId], which means "no
+  /// request" and leaves whatever is selected alone. The two look identical at
+  /// this level and are opposite intentions: one is the panel being remounted
+  /// at an address that happens not to name an entry, the other is somebody
+  /// asking to go back to the catalog. Only the caller can tell them apart, so
+  /// only the caller may say this.
+  ///
+  /// The guest keeps whatever it is holding. Nothing about deciding not to look
+  /// at a demo makes the next click worth twelve seconds again.
+  void deselect() {
+    if (selected == null && _wantedEntryId == null) return;
+    selected = null;
+    _wantedEntryId = null;
+    notifyListeners();
+  }
+
   /// The entry the address names, which is **a request rather than a call**.
   ///
   /// Nothing here can be selected until the daemon reports what exists, and on
@@ -442,14 +527,32 @@ class CatalogSession extends ChangeNotifier {
   /// and again whenever the entry list moves. Setting it while ready switches
   /// immediately.
   ///
-  /// Null means the address named no entry, and the session picks for itself.
+  /// Null is **no request**, not a request for nothing: whatever is selected
+  /// stays selected. That is what makes leaving the plugin and coming back
+  /// return you to the demo you were on — the panel unmounts, the session does
+  /// not, and the address it is remounted at names no entry. On a session that
+  /// has never selected anything it means the stage stays empty, which is the
+  /// other half of the same rule.
   String? get wantedEntryId => _wantedEntryId;
   String? _wantedEntryId;
 
   set wantedEntryId(String? id) {
     if (_wantedEntryId == id) return;
     _wantedEntryId = id;
-    if (phase == CatalogSessionPhase.ready) _applyWanted();
+    if (phase == CatalogSessionPhase.ready) {
+      _applyWanted();
+    } else if (wantedEntry case var entry?) {
+      // Nothing to switch yet — but the ask is still the ask, and [selected] is
+      // what the user last asked for rather than what the guest holds. Saying
+      // so here is what makes a click during the boot visible: the row lights,
+      // and the stage says what it is compiling instead of going on inviting
+      // you to pick something.
+      //
+      // Resolvable this early because the listing is too, off the plugin's own
+      // scan — see [scannedEntries].
+      selected = entry;
+      notifyListeners();
+    }
   }
 
   /// The entry [wantedEntryId] names, if the catalog has one.
@@ -1145,9 +1248,20 @@ class CatalogSession extends ChangeNotifier {
   /// Sorted by id because that is how the scanner sorts, so merging the two
   /// lists puts a quarantined entry back exactly where it was rather than in a
   /// section of its own. A demo you are midway through editing should not move.
-  List<CatalogEntry> get allEntries =>
-      [...entries, ...quarantined.map((q) => q.entry)]
-        ..sort((a, b) => a.id.compareTo(b.id));
+  ///
+  /// [scannedEntries] until the daemon has spoken — the same set, in the same
+  /// order, without the marks saying which of them build.
+  ///
+  /// **Held, not recomputed.** This is read from `build` by both panes, and it
+  /// allocates and sorts the whole catalog — which for 145 entries is a
+  /// measurable slice of every frame the panel draws, for an answer that only
+  /// changes when the daemon reports. Both setters drop it; nothing else can
+  /// change what it is made of.
+  List<CatalogEntry> get allEntries => _allEntries ??= _daemonReported
+      ? ([...entries, ...quarantined.map((q) => q.entry)]
+          ..sort((a, b) => a.id.compareTo(b.id)))
+      : scannedEntries;
+  List<CatalogEntry>? _allEntries;
 
   /// The compiler's complaint about [entry], or null if it builds.
   String? compileErrorFor(CatalogEntry entry) {
@@ -1344,15 +1458,12 @@ class CatalogSession extends ChangeNotifier {
       if (daemon.lastChange case var missed?) _onCatalogChanged(missed);
       if (_disposed) return;
 
-      // What the address asked for if the daemon turned out to have it, else
-      // the first — the fallback is for an address that named no entry, not a
-      // correction of one that named the wrong entry.
-      //
       // The daemon refuses to start with an empty catalog, and the panel no
       // longer asks for a session until its own scan has found an entry, so
-      // there are two gates in front of this. It is still stated rather than
-      // assumed: `entries.first` on an empty list is `Bad state: No element`,
-      // which names neither the catalog nor the directory it is empty of.
+      // there are two gates in front of the line below. It is still stated
+      // rather than assumed: `entries.first` on an empty list is `Bad state: No
+      // element`, which names neither the catalog nor the directory it is empty
+      // of.
       if (entries.isEmpty) {
         throw StateError(
           'the catalog daemon reported no entries, so there is nothing to '
@@ -1360,7 +1471,23 @@ class CatalogSession extends ChangeNotifier {
           'tool/flutterware.dart.',
         );
       }
-      var first = wantedEntry ?? entries.first;
+      // **What to boot on, which is not the same as what to select.** The
+      // guest has to come up rendering *something*, and which entry that is
+      // costs nothing to change afterwards: measured on this repo, a cold start
+      // is ~12.5s and a switch on the warm guest is ~49ms. So an address that
+      // named no entry still warms the guest on the first one — it just does
+      // not call that a selection.
+      //
+      // Which it used to, and the pick was arbitrary twice over: entries sort
+      // by id while the tree sorts folders first and then by label, so the demo
+      // that opened — rendered, its folder revealed, its id written into the
+      // address — was routinely not even the row at the top of the list.
+      //
+      // The other half of the argument is one branch away, in [missingEntryId]:
+      // an address naming an entry that does not exist is reported rather than
+      // repaired, precisely because "silently showing the first demo" is not
+      // information. Neither is showing it when the address named none.
+      var warmUp = wantedEntry ?? entries.first;
       // Compiled before the guest exists, and whole.
       //
       // A session's bundle symlinks the kernel the daemon compiled when it
@@ -1377,7 +1504,7 @@ class CatalogSession extends ChangeNotifier {
       // Asking for a whole kernel first is what closes that: ~40ms on a warm
       // daemon, once per session, and it is what `HeadlessCatalog` has always
       // done before it launches a guest.
-      var compiled = await daemon.select(first.id, full: true);
+      var compiled = await daemon.select(warmUp.id, full: true);
       if (_disposed) return;
 
       var engine = _engine = EmbeddedEngine(
@@ -1434,16 +1561,24 @@ class CatalogSession extends ChangeNotifier {
       );
       _published = true;
 
-      selected = first;
-      // [active] is what the guest actually holds. A demo that did not compile
-      // leaves it on the daemon's own kernel, so naming this entry there would
-      // be a claim the status bar goes on repeating; the report below is what
-      // puts the compiler's error where the widget would have been.
+      // Only when it was asked for. Nothing selected is a real state — the
+      // stage says so and waits — and it is what a panel opened at the bare
+      // plugin address lands in.
+      selected = wantedEntry;
+      // [active] is what the guest actually holds, asked for or not. A demo
+      // that did not compile leaves it on the daemon's own kernel, so naming
+      // this entry there would be a claim the status bar goes on repeating; the
+      // report below is what puts the compiler's error where the widget would
+      // have been.
       if (compiled.ok) {
-        active = first;
-      } else {
+        active = warmUp;
+      } else if (selected != null) {
+        // Reported only for an entry somebody asked for. A warm-up that failed
+        // to compile is not a thing to complain about: nobody is looking at it,
+        // and the complaint would occupy the stage that is meant to be saying
+        // "pick a demo".
         lastSwitch = SwitchReport(
-          entry: first,
+          entry: warmUp,
           compile: compiled.compile,
           reload: Duration.zero,
           newSourceCount: compiled.newSourceCount,
@@ -1453,6 +1588,17 @@ class CatalogSession extends ChangeNotifier {
       }
       phase = CatalogSessionPhase.ready;
       _idle();
+
+      // **A request that arrived while the guest was booting.** Clicking a row
+      // is live from the moment the list is — seconds before the guest — so
+      // what was asked for can have moved since [warmUp] was chosen, and the
+      // guest would otherwise sit on one entry while the panel named another.
+      // Only when they differ: a warm-up that *is* the selection has already
+      // been compiled, failure included, and re-asking for it would pay a
+      // second compile to reach the same error.
+      if (selected case var entry? when entry.id != warmUp.id) {
+        unawaited(switchTo(entry));
+      }
     } catch (e) {
       _fail('$e');
     }

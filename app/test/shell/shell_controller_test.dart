@@ -34,15 +34,20 @@ var _disposedIds = <String>[];
 var _builtIds = <String>[];
 
 class _FakeCore extends PluginCore {
-  _FakeCore(super.host, {this.guards = const []}) {
+  _FakeCore(super.host, {this.guards = const [], this.children = const []}) {
     _builtIds.add('${host.worktree.path}:${host.id}');
   }
 
   final List<Guard> guards;
+  final List<PluginChild> children;
 
   @override
-  PluginReport get report =>
-      PluginReport(id: host.id, label: host.label, guards: guards);
+  PluginReport get report => PluginReport(
+    id: host.id,
+    label: host.label,
+    guards: guards,
+    children: children,
+  );
 
   /// Closing a worktree has to reach the core: that is where watchers,
   /// subscriptions and processes live, and the panel is only a screen.
@@ -273,6 +278,50 @@ void main() {
 
     shell.select(main);
     expect(shell.selectedPluginId, 'a.two');
+  });
+
+  group('the rail returns you to the sub-entry you were on', () {
+    Map<String, PluginCoreFactory> coresWith(List<String> ids) => {
+      'a.one': (h) => _FakeCore(
+        h,
+        children: [for (var id in ids) PluginChild(id: id, label: id)],
+      ),
+      'a.two': _FakeCore.new,
+    };
+
+    test('rather than to whichever one sorts first', () async {
+      var shell = _controller(cores: coresWith(['app', 'examples/example']));
+      await shell.start('/repo');
+
+      shell.selectChild('a.one', 'examples/example');
+      shell.selectPlugin('a.two');
+      shell.selectPlugin('a.one');
+
+      expect(shell.selectedChildId, 'examples/example');
+    });
+
+    test('and to the first one when you have never been', () async {
+      var shell = _controller(cores: coresWith(['app', 'examples/example']));
+      await shell.start('/repo');
+
+      shell.selectPlugin('a.one');
+
+      expect(shell.selectedChildId, 'app');
+    });
+
+    test('never to one the plugin does not report', () async {
+      // The remembered id is checked against what the plugin says *now*, which
+      // is what keeps a package a config edit removed — or one an address
+      // simply made up — from becoming a rail link to nowhere.
+      var shell = _controller(cores: coresWith(['app', 'examples/example']));
+      await shell.start('/repo');
+
+      shell.selectChild('a.one', 'packages/gone');
+      shell.selectPlugin('a.two');
+      shell.selectPlugin('a.one');
+
+      expect(shell.selectedChildId, 'app');
+    });
   });
 
   test('reloading an unchanged config disposes nothing at all', () async {

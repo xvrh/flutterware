@@ -1,5 +1,72 @@
 ## Unreleased
 
+- **The catalog is a page of pictures, and it is rendered once.**
+  Opening Previews used to be a list of names beside an empty stage. The
+  question at that moment is *which* demo, and a name answers it only for
+  somebody who already knows what the name means. The panel now opens on a
+  contact sheet: every entry photographed with the real fonts and the real
+  theme, at the screen it is declared to open on.
+
+  The cost is the whole design problem. Measured on this repo's 154 previews,
+  rendering them all is **~13 seconds** of `flutter_tester`, and paying that on
+  every launch — in every worktree — is a page nobody waits for. So a picture is
+  filed under **what made it** rather than under the session that took it: the
+  entry's whole import closure, the pixel inputs no compile mentions, and the
+  SDK. Two checkouts of one commit share a picture, a restart shows the catalog
+  with nothing to compile, and an edit moves the key of the entries that read
+  what changed and of no others — here, a demo's own edit invalidates one entry
+  and an edit to the design system invalidates 129, which it should. Deciding
+  what a whole catalog already has costs **0.6s cold and 41 µs warm**, off the
+  isolate that paints; the digests are shared across the pass, which turns 874 ms
+  of hashing into 87 ms.
+
+  Keeping a picture per entry is only affordable because of what is kept.
+  Against a median entry that takes **43 ms to render**, the two things beside
+  the picture are what cost:
+
+  | | per entry | whole catalog |
+  |---|---|---|
+  | raw rgba | 0.11 ms | 368 MB |
+  | PNG at 700 px | 7.77 ms | 4.2 MB |
+  | the `tree.json` beside it | 9.07 ms | — |
+
+  So `PreviewTestRunner.capture` takes `format`, `scale`, `tree` and `timings`.
+  A thumbnail is PNG with no tree — about 8 ms of encode for **38× less disk** —
+  and a comparison stays raw, because it diffs pixels and would decode a PNG
+  straight back out. The page draws the *encoded* form, so decoding, caching and
+  bounding are Flutter's own; only the hover popover asks for a `ui.Image`, and
+  it wants one at a time.
+
+  The page renders itself in the order it is read — a grid builds the tiles near
+  the viewport and asks for exactly those — so scrolling changes what is being
+  rendered rather than queueing behind a hundred and fifty entries nobody is
+  looking at. Every tile reserves its box before any picture exists, so a sheet
+  of empty frames and a sheet of photographs have identical layouts.
+
+- **A folder is somewhere you can be.**
+  The entry tree and the sheet are a sidebar and a content pane now, not two
+  lists of the same catalog. A row picks what the pane shows — one folder, or
+  `All demos` — the chevron folds and does nothing else, and a folder is a place
+  the address can name, so `…/app/tool/catalog/demos` is a link rather than
+  `No entry "tool/catalog/demos" in this package`. There is no back control and
+  nothing is remembered: every way off a demo is a row naming where you are
+  going, and the folder a demo sits in is selected and open beside it the whole
+  time it is on the stage.
+
+  The stage also stops flashing the wrong demo. The guest paints one texture and
+  switches which entry is inside it, so for the 35–96 ms a warm switch takes it
+  still holds the previous one — right when you came from another demo, and a
+  glimpse of something you never picked when you came from the catalog. It now
+  holds the catalog until the guest confirms.
+
+- **A compiler that speaks from nowhere blames nobody.**
+  `FrontendServer.start` inherited its working directory from whoever launched
+  the app, so the same compiler reported a diagnostic's path differently
+  depending on where the process happened to be started — and a path that did
+  not resolve against the root the panel blames with left an error attached to
+  no file at all. It is a required argument now, because inheriting it makes the
+  compiler speak differently to different callers, and that is not a default
+  anybody can reason about.
 - **A change made outside the widget tree is a step.**
 
   ```dart

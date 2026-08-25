@@ -17,7 +17,10 @@ import '../../previews/web_build_dialog.dart';
 import '../../previews/web_server.dart';
 import '../native_plugin.dart';
 import 'previews_address.dart';
+import '../../comparison/shot_cache.dart';
+import '../../previews/thumbnail_keys.dart';
 import '../../previews/thumbnails.dart';
+import '../../utils/run_dir.dart';
 import 'previews_core.dart';
 import '../../ui/design/design.dart';
 import '../../ui/loading_state.dart';
@@ -70,10 +73,31 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   final _thumbnails = <String, PreviewThumbnails>{};
 
   /// [path]'s photographed previews, started on first use.
+  ///
+  /// Given the **machine's** shot store rather than one of its own, which is
+  /// the same store a comparison files under and for the same reason: a key
+  /// says everything about a picture, so five worktrees off one commit render
+  /// the catalog once between them and a restart re-renders nothing at all.
   PreviewThumbnails thumbnailsFor(String path) => _thumbnails.putIfAbsent(
     path,
-    () => PreviewThumbnails.of(core.testRunnerFor(path)),
+    () => PreviewThumbnails.of(
+      core.testRunnerFor(path),
+      cache: _shots,
+      keys: ThumbnailKeys(
+        packageRoot: p.join(core.host.worktree.path, path),
+        // Two SDKs lay text out differently, so a picture is only ever this
+        // one's — the same thing `ComparisonRunner` puts in its own keys.
+        sdkKey: core.host.workspace.flutterSdk.root,
+        // What this caller does to a frame that its source does not say. The
+        // capture is whole-size PNG and the decode is bounded by
+        // [PreviewThumbnails.longestSide]; a caller that changed either would
+        // want its own pictures, not these.
+        extra: {'format': 'png', 'longest': '${PreviewThumbnails.longestSide}'},
+      ),
+    ),
   );
+
+  late final _shots = ShotCache(p.join(flutterwareDir(), 'shots'));
 
   /// A server per served directory, so a rebuild of the same page reuses the
   /// port a browser tab already has open — the tab reloads onto the new build
@@ -125,6 +149,10 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
       // The whole list, not one resolved device: which of them applies is a
       // function of the entry on screen, and the panel is where that changes.
       canvases: core.canvasesFor(path),
+      // What the listing draws until the daemon reports. Known already — the
+      // scan finding entries is the gate this session is created behind — and
+      // without it the panel shows an empty list for the whole cold compile.
+      scannedEntries: core.entriesFor(path),
       connectToDaemon: connectToDaemon,
     )..addListener(core.notifyChanged);
     unawaited(session.start());
@@ -151,8 +179,12 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
       }
       if (session.busyWith case var busy?) return busy;
       if (session.selectedError != null) continue;
-      if (session.selected?.id != session.active?.id) {
-        return 'loading ${session.selected?.id}';
+      // Nothing selected is nothing to wait for: the guest holds the entry it
+      // was warmed on, and the stage is not showing it. Without the pattern
+      // this read `selected?.id != active?.id` as a mismatch and answered
+      // `loading null` for as long as the panel sat unselected.
+      if (session.selected case var entry?) {
+        if (entry.id != session.active?.id) return 'loading ${entry.id}';
       }
     }
     return null;
@@ -337,12 +369,43 @@ class _CatalogPanelState extends State<_CatalogPanel> {
       hasFollowed: _hasFollowed,
       sessionChanged: sessionChanged,
       followed: _followed,
-      place: place?.entryId,
+      place: place?.path,
     )) {
+      // **Going up to the package is a request to see the catalog**, where
+      // arriving at it is not. Both are an address naming no entry, and the
+      // difference is only whether this panel was already following one: a
+      // remount — the rail link, a plugin switch — has followed nothing yet and
+      // must leave the selection alone, which is what takes you back to the
+      // demo you were on. A breadcrumb click inside a panel that *was* on an
+      // entry is somebody asking to go back to the sheet, and without this
+      // there is no way to.
+      var wentUp = _hasFollowed && !sessionChanged && place?.entryId == null;
       _hasFollowed = true;
-      _followed = place?.entryId;
-      _session?.wantedEntryId = place?.entryId;
+      _followed = place?.path;
+      // **What the sheet is showing, when the address says.** A directory sets
+      // it; the bare package clears it, which is the All demos row; an entry
+      // leaves it alone, so that leaving a demo returns to the folder it was
+      // picked from. See [CatalogBrowsing.scope].
+      if (_session case var session? when place?.entryId == null) {
+        session.browsing.scope = place?.directory;
+      }
+      if (wentUp) {
+        _session?.deselect();
+      } else {
+        _session?.wantedEntryId = place?.entryId;
+      }
     }
+
+    // **And say back where that left us.** Until now the address was only ever
+    // restated from a session *notify*, which is fine while one is working and
+    // wrong the moment it is not: coming back to a settled session — the rail
+    // link, which names the package and stops there — restored the demo on
+    // screen and left the address naming the package alone. Whether it caught
+    // up was down to whether some timer happened to notify.
+    //
+    // Costs nothing when it is already right: the write resolves to the same
+    // segments, which the shell reads as no move at all.
+    _settled();
   }
 
   /// Starts the compile loop for [package], but only once the scan says there
@@ -368,6 +431,11 @@ class _CatalogPanelState extends State<_CatalogPanel> {
     // asked for has to be restated to it. [_follow] would otherwise only do
     // this when the address *moves*, and it has not moved since the mount.
     if (_hasFollowed) _session!.wantedEntryId = _followed;
+    // The other direction, for the same reason [_follow] ends with it: this is
+    // usually called from `build` — the scan lands after the mount — so the
+    // binding that finds a session already on an entry happens here rather
+    // than there.
+    _settled();
   }
 
   /// Writes the first demo, then goes to it.
@@ -434,20 +502,36 @@ class _CatalogPanelState extends State<_CatalogPanel> {
 
       // **Nor before it has landed anywhere.** A session notifies while it is
       // starting — `building`, and again for every step of it — and until the
-      // daemon reports there is no selection to write back. Writing one anyway
-      // states the package alone, which reads as *this catalog is on no entry*
-      // and is not something the session ever said; the shell then drops
-      // `knob` and `inspect` along with the segment, because the write looks
-      // like the end of an entry. A config reload builds a fresh session under
-      // a mounted panel, so that turned saving `tool/flutterware.dart` into
-      // losing whatever the demo's knobs were set to.
-      if (session.selected == null) return;
+      // daemon reports it has nothing to say about where it is. Writing anyway
+      // states the package alone, which reads as *this catalog is on no entry*;
+      // the shell then drops `knob` and `inspect` along with the segment,
+      // because the write looks like the end of an entry. A config reload
+      // builds a fresh session under a mounted panel, so that turned saving
+      // `tool/flutterware.dart` into losing whatever the demo's knobs were set
+      // to.
+      //
+      // The phase rather than the selection, which is the difference between
+      // *not yet* and *deliberately nothing*. A ready session with nothing
+      // selected has landed: it is the panel opened at the bare plugin address,
+      // and the package alone is exactly what it should say. By the time the
+      // phase turns, `start` has already applied whatever the address asked
+      // for, so there is no window where this writes a bare package over an
+      // entry somebody named.
+      if (session.phase != CatalogSessionPhase.ready) return;
 
       // Nothing about the device or the axes here. Neither is state to write
       // back: their controls write the address directly, and what is on screen
       // is read from the address every time it is drawn.
       var handle = AddressScope.write(context);
-      var segments = catalogSegments(package, session.selected?.id);
+      // The entry when there is one, else whichever folder the catalog is
+      // narrowed to — an address names one place, and these are the two it can
+      // name. Both are selections, which is what makes them worth writing:
+      // where the page happens to be *scrolled* is not, and briefly writing
+      // that produced an address restated on every scroll frame.
+      var segments = catalogSegments(
+        package,
+        session.selected?.id ?? session.browsing.scope,
+      );
       handle.update(
         segments: segments,
         // A knob belongs to the entry, so it cannot outlive one. Dropped here

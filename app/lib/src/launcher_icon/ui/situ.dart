@@ -436,34 +436,51 @@ class _Dock extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: FwSpacing.lg,
-                vertical: FwSpacing.md,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _DockNeighbour(seed: 0, size: _size),
-                  const Gap(FwSpacing.md),
-                  IconRender(
-                    image: image,
-                    role: role,
-                    size: _size,
-                    showSafeZone: showSafeZone,
-                    inspector: false,
+            // **The strip is scaled to the stage, not sized to it.** Four
+            // 54-pixel icons, their gaps, the padding and the hairline come to
+            // 266, and the stage this is drawn on is 300 wide with 24 of
+            // padding each side — 252. It overflowed by exactly 14, in both
+            // previews that show a Dock, and had done since the sizes were
+            // chosen.
+            //
+            // Scaling rather than shrinking a number, because a stage is
+            // whatever width it is given: `situAspectRatio` exists precisely so
+            // each surface can be drawn at its own shape and size, and a strip
+            // that only fits one of them is one token change from overflowing
+            // again. `scaleDown` leaves it alone wherever it already fits.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: FwSpacing.lg,
+                  vertical: FwSpacing.md,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.25),
                   ),
-                  const Gap(FwSpacing.md),
-                  _DockNeighbour(seed: 3, size: _size),
-                  const Gap(FwSpacing.md),
-                  _DockNeighbour(seed: 5, size: _size),
-                ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _DockNeighbour(seed: 0, size: _size),
+                    const Gap(FwSpacing.md),
+                    IconRender(
+                      image: image,
+                      role: role,
+                      size: _size,
+                      showSafeZone: showSafeZone,
+                      inspector: false,
+                    ),
+                    const Gap(FwSpacing.md),
+                    _DockNeighbour(seed: 3, size: _size),
+                    const Gap(FwSpacing.md),
+                    _DockNeighbour(seed: 5, size: _size),
+                  ],
+                ),
               ),
             ),
           ],

@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../address/address_scope.dart';
+// A leaf module with no imports of its own — the address grammar this panel
+// both reads and writes. See `catalogPlace`.
+import '../plugins/native/previews_address.dart';
 import '../capture/capture_mode.dart';
 import '../embedder/embedded_engine.dart';
 import '../embedder/input_region.dart';
@@ -19,12 +22,14 @@ import '../ui/empty_state.dart';
 import '../ui/loading_state.dart';
 import '../ui/capture_button.dart';
 import '../ui/design/design.dart';
+import '../ui/tappable.dart';
 import 'app_chords.dart';
 import 'catalog_params.dart';
 import 'catalog_devices.dart';
 import 'catalog_entry.dart';
 import 'catalog_session.dart';
 import 'preview_popover.dart';
+import 'preview_sheet.dart';
 import 'staged_device.dart';
 import '../ui/stage.dart';
 import 'stage_ground.dart';
@@ -384,6 +389,7 @@ class _CatalogViewState extends State<CatalogView> {
                 child: _EntryList(
                   session: _session,
                   thumbnails: widget.thumbnails,
+                  onGoTo: (scope) => _goTo(context, _session, scope),
                 ),
               ),
               Expanded(
@@ -510,6 +516,42 @@ class _CatalogViewState extends State<CatalogView> {
     KeyboardMode keyboard,
     VoidCallback onDismissKeyboard,
   ) {
+    // **Before the phase**, because with nothing selected the phase is about
+    // work nobody asked for: the guest warms on the first entry so that the
+    // click that follows costs ~49ms instead of ~12.5s, and counting the
+    // seconds of that on the stage would be progress towards a demo the stage
+    // is not going to show. The error phase still wins — a session that cannot
+    // start is worth saying whether or not a demo was picked.
+    // **Answered before anything returns**, including the paths that do not
+    // draw the stage at all: it is a running answer, and a build that skipped
+    // it would leave "the stage is holding a demo" true across a trip to the
+    // catalog — which is exactly the trip it exists to catch.
+    _holdsGuest = stageHoldsGuest(
+      guestEntryId: _session.active?.id,
+      selectedEntryId: _session.selected?.id,
+      alreadyHolding: _holdsGuest,
+    );
+    if (_session.phase != CatalogSessionPhase.error &&
+        _session.selected == null) {
+      // **The catalog as pictures, which is what you are here to look at.**
+      // A stage that says "pick a demo" over blank space is polite and useless:
+      // the question at this moment is *which* one, and a list of names answers
+      // it only for someone who already knows what the names mean.
+      //
+      // It is not a mode and there is no button for it. Nothing selected is
+      // exactly when a page of pictures is worth the room, and picking one
+      // replaces it with the thing that was picked.
+      if (widget.thumbnails case var thumbnails?) {
+        return _catalog(thumbnails);
+      }
+      // The words, for a session photographing nothing — the standalone entry
+      // point, and the motion panel's borrowed catalog.
+      return const EmptyState(
+        icon: Icons.widgets_outlined,
+        title: 'Pick a demo',
+        message: 'Opening one renders it here.',
+      );
+    }
     switch (_session.phase) {
       case CatalogSessionPhase.starting:
         // The seconds are the message rather than the title: a cold start is
@@ -517,7 +559,13 @@ class _CatalogViewState extends State<CatalogView> {
         // that distinguishes "slow" from "hung".
         return LoadingState(
           title: 'Building the guest…',
-          message: 'Compiling the first entry — ${_session.busyFor.inSeconds}s',
+          // Named, because it is reachable only with a selection — the guard
+          // above takes every unselected session — and by then the demo being
+          // waited for is a better word than "the first entry", which since the
+          // list stopped picking one is not even true.
+          message:
+              'Compiling ${_session.selected!.name} — '
+              '${_session.busyFor.inSeconds}s',
         );
       case CatalogSessionPhase.error:
         return Center(
@@ -532,24 +580,46 @@ class _CatalogViewState extends State<CatalogView> {
           ),
         );
       case CatalogSessionPhase.ready:
+        // **The catalog stays up until the guest has caught up.** The stage is
+        // a texture the guest paints into, and for the ~35–70ms a warm switch
+        // takes it still holds the demo that was on it before. Coming off the
+        // catalog that is a demo you did not ask for and were not looking at,
+        // which arrives and is replaced — a flash of the wrong thing on every
+        // click. Coming off *another demo* the same stale frame is the demo you
+        // were just looking at, so it is the right thing to hold: hence the
+        // rule in [stageHoldsGuest] rather than a blanket "hide it".
+        //
+        // The tile you clicked is marked while this lasts, so the click is not
+        // silent, and a switch slow enough to need saying so still gets
+        // [_SwitchingOverlay] over the top.
         // The error goes where the widget would have been. The guest is still
         // rendering the last entry that loaded, and showing that under a
         // selection it does not belong to is how you end up wondering why your
         // edit did nothing.
-        var canvas = _session.selectedError == null
-            ? _buildTexture(
-                context,
-                _session.engine!,
-                device,
-                orientation,
-                keyboard,
-                onDismissKeyboard,
-              )
-            : _CompileError(
-                entry: _session.selected!,
-                error: _session.selectedError!,
-                onRetry: _session.busyWith == null ? _reload : null,
-              );
+        //
+        // **And it is answered before the wait**, because it is not the guest's
+        // picture: an entry that will not compile has nothing to wait for, and
+        // holding the catalog up in front of the compiler's complaint would
+        // hide the one thing worth reading.
+        Widget canvas;
+        if (_session.selectedError case var error?) {
+          canvas = _CompileError(
+            entry: _session.selected!,
+            error: error,
+            onRetry: _session.busyWith == null ? _reload : null,
+          );
+        } else if (!_holdsGuest && widget.thumbnails != null) {
+          canvas = _catalog(widget.thumbnails!);
+        } else {
+          canvas = _buildTexture(
+            context,
+            _session.engine!,
+            device,
+            orientation,
+            keyboard,
+            onDismissKeyboard,
+          );
+        }
         // Over whichever of the two it is: both are a picture of where you
         // were, and a switch that has to compile obscures both the same way.
         if (_session.compilingSwitch case var entry?) {
@@ -558,6 +628,16 @@ class _CatalogViewState extends State<CatalogView> {
         return canvas;
     }
   }
+
+  /// Whether the stage is currently drawing the guest's picture — the input
+  /// [stageHoldsGuest] needs, and a cache of what the last build decided rather
+  /// than state anything else may read.
+  var _holdsGuest = false;
+
+  /// The catalog as pictures. Drawn with nothing selected, and again while a
+  /// switch off it is in flight.
+  Widget _catalog(PreviewThumbnails thumbnails) =>
+      _Landing(session: _session, thumbnails: thumbnails);
 
   /// The guest, sized either to the panel or to a device.
   ///
@@ -1555,7 +1635,13 @@ class _CaptureButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var running = session.engine?.phase == EmbeddedEnginePhase.running;
+    // A running guest is not enough: with nothing selected it is holding the
+    // entry it was warmed on, which the stage is deliberately not showing, and
+    // a capture would hand back a correct picture of something that was never
+    // on screen.
+    var running =
+        session.engine?.phase == EmbeddedEnginePhase.running &&
+        session.selected != null;
     var node = _croppedNode(context, session);
     return CaptureButton(
       key: captureButton,
@@ -1663,10 +1749,17 @@ class _Axis extends StatelessWidget {
 
 /// The entry browser: a filter, then the tree.
 class _EntryList extends StatefulWidget {
-  const _EntryList({required this.session, required this.thumbnails});
+  const _EntryList({
+    required this.session,
+    required this.thumbnails,
+    required this.onGoTo,
+  });
 
   final CatalogSession session;
   final PreviewThumbnails? thumbnails;
+
+  /// Show this much of the catalog — a folder's path, or null for all of it.
+  final void Function(String? scope) onGoTo;
 
   @override
   State<_EntryList> createState() => _EntryListState();
@@ -1693,6 +1786,20 @@ class _EntryListState extends State<_EntryList> {
   void dispose() {
     session.browsing.removeListener(_onBrowsing);
     super.dispose();
+  }
+
+  /// A folder row: show that folder, and open it in the tree.
+  ///
+  /// **Selecting, not toggling.** The row and the chevron do one thing each —
+  /// the row picks what the pane shows, the chevron folds — because a row that
+  /// did both meant one click with two results and no way to ask for either
+  /// alone. Opening the branch is not the toggle in disguise: it is a
+  /// consequence of arriving somewhere, clicking the same folder again does not
+  /// undo it, and it is what keeps switching between a demo's siblings to one
+  /// click while the stage has one of them up.
+  void _showBranch(CatalogBranch branch) {
+    session.browsing.reveal([branch.id]);
+    widget.onGoTo(branch.scopePath);
   }
 
   /// Toggled from the notification rather than read during a build: showing an
@@ -1747,14 +1854,24 @@ class _EntryListState extends State<_EntryList> {
                 broken: session.compileErrorFor(entry),
                 selected: entry.id == session.selected?.id,
                 highlight: browsing.filter.trim(),
-                onTap: session.phase == CatalogSessionPhase.ready
-                    ? () {
-                        // Before the switch, so the card is gone by the frame
-                        // the selection moves in.
-                        browsing.endHover();
-                        unawaited(session.switchTo(entry));
-                      }
-                    : null,
+                // **Live before the guest is.** The list now arrives off the
+                // plugin's scan rather than off the daemon, which is seconds
+                // earlier — and a row you can read but not click, with nothing
+                // saying why, is worse than no row. So a click during the boot
+                // is recorded as a *request*, which is what [wantedEntryId]
+                // exists for and what a search hit has always done: the session
+                // picks it up when it lands, and if the click beat the daemon
+                // the guest boots straight onto it.
+                onTap: () {
+                  // Before the switch, so the card is gone by the frame the
+                  // selection moves in.
+                  browsing.endHover();
+                  if (session.phase == CatalogSessionPhase.ready) {
+                    unawaited(session.switchTo(entry));
+                  } else {
+                    session.wantedEntryId = entry.id;
+                  }
+                },
                 // The popover carries the file and the symbol now, and two
                 // things arriving on one hover is one too many. The selected
                 // row shows no popover, so it keeps its tooltip.
@@ -1774,7 +1891,16 @@ class _EntryListState extends State<_EntryList> {
                 depth: depth,
                 open: open,
                 highlight: browsing.filter.trim(),
-                onTap: filtering ? null : () => browsing.toggle(node.id),
+                // Marked when the pane beside it is this folder — never while
+                // a demo is up, where the row worth marking is the entry's.
+                showing:
+                    session.selected == null &&
+                    browsing.scope != null &&
+                    node.scopePath == browsing.scope,
+                onTap: () => _showBranch(node),
+                // A filtered tree is already the answer to a question; folding
+                // part of it away would only hide what was asked for.
+                onToggleFold: filtering ? null : () => browsing.toggle(node.id),
               ),
             );
             if (open) walk(children, depth + 1);
@@ -1824,17 +1950,27 @@ class _EntryListState extends State<_EntryList> {
           children: [
             _FilterField(session: session, browsing: browsing, tree: tree),
             const Divider(height: 1),
+            // **The way out, and the only row that never scrolls away.** It is
+            // above the list rather than the first thing in it because an
+            // unfolded catalog is hundreds of rows long, and a way out you have
+            // to scroll to find is the state narrowing had the first time
+            // round: something you could get into and then had to work out how
+            // to leave. It carries the total for the same reason a folded
+            // folder carries its count.
+            //
+            // It is also the whole of the way back off a demo, along with the
+            // folder rows below it. There is no separate back control: every
+            // destination is one of these rows, so leaving a demo is choosing
+            // where to go rather than undoing something.
+            _AllRow(
+              count: session.allEntries.length,
+              selected: session.selected == null && browsing.scope == null,
+              onTap: () => widget.onGoTo(null),
+            ),
+            const Divider(height: 1),
             Expanded(
               child: rows.isEmpty
-                  ? EmptyState(
-                      icon: filtering
-                          ? Icons.search_off_outlined
-                          : Icons.widgets_outlined,
-                      title: filtering ? 'Nothing matches' : 'No entries',
-                      message: filtering
-                          ? 'No demo in this package has a name like that.'
-                          : 'A demo is a top-level function marked @Preview.',
-                    )
+                  ? _nothingToList(session, filtering: filtering)
                   : ListView(
                       padding: const EdgeInsets.symmetric(
                         vertical: FwSpacing.xs,
@@ -1849,10 +1985,217 @@ class _EntryListState extends State<_EntryList> {
   }
 }
 
+/// Whether the stage may draw the guest's picture this frame.
+///
+/// The guest paints one texture and switches which demo is in it, so between
+/// the click and the guest's next frame that texture holds the *previous*
+/// demo. Whether showing it is right depends on where you came from, and only
+/// on that:
+///
+/// - Coming off the catalog it is a demo you were not looking at and did not
+///   ask for. It appears for ~35–70ms and is replaced, which reads as a
+///   glitch. Hold the catalog instead.
+/// - Coming off another demo it is the demo you *were* looking at, and holding
+///   it is what makes a warm switch look like one frame rather than a blink.
+///   Hiding it here would be a flash on every click — the same reason
+///   `CatalogSession.compilingSwitch` covers only the slow path.
+///
+/// So the answer is not about the delay, which is why nothing here is timed.
+bool stageHoldsGuest({
+  required String? guestEntryId,
+  required String? selectedEntryId,
+  required bool alreadyHolding,
+}) {
+  // Nothing selected: the catalog is what is on the stage, whatever the guest
+  // happens to be holding.
+  if (selectedEntryId == null) return false;
+  // The guest is showing what was asked for. Always drawable, and this is what
+  // ends the wait.
+  if (guestEntryId == selectedEntryId) return true;
+  // Stale, so it comes down to what the stage was already doing.
+  return alreadyHolding;
+}
+
+/// Shows [scope] — a folder's path, or null for the whole index.
+///
+/// Through the address rather than by setting the field, so that a folder is a
+/// place you can link to, come back to and go up from, and so the panel's own
+/// reader stays the single thing deciding what the state is. Writing a scope
+/// also gives up the stage: an address names one place, and this one names a
+/// part of the catalog rather than a demo.
+void _goTo(BuildContext context, CatalogSession session, String? scope) {
+  var package = catalogPlace(AddressScope.segments(context))?.package;
+  if (package == null) return;
+  AddressScope.of(context).setSegments(catalogSegments(package, scope));
+}
+
+/// The catalog as pictures, for a stage with nothing on it.
+///
+/// **The tree picks what this shows.** They are not two lists of the same thing:
+/// one is the selector, the other is what was selected — the folder, or all of
+/// them. Nothing here scrolls itself and nothing tracks the scroll, because
+/// moving around the catalog is a click in the tree rather than a journey down
+/// a page.
+///
+/// Which is also why the sheet has no filter of its own — it draws the same
+/// filtered tree the list beside it does, so typing in one place narrows both.
+class _Landing extends StatelessWidget {
+  const _Landing({required this.session, required this.thumbnails});
+
+  final CatalogSession session;
+  final PreviewThumbnails thumbnails;
+
+  /// The screen an entry opens on, which is what its tile reserves room for.
+  ///
+  /// A desktop canvas stages nothing — `PreviewCanvas.defaultDevice` is null
+  /// for one, because a window has no true size — so those entries get the
+  /// plain rectangle the harness actually frames them at rather than a guess.
+  Size _screenOf(CatalogEntry entry) {
+    var device = session.canvasOf(entry)?.defaultDevice;
+    var screen = device == null
+        ? CaptureViewport.panel
+        : CaptureViewport.of(device);
+    return Size(screen.width.toDouble(), screen.height.toDouble());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var browsing = session.browsing;
+    return ListenableBuilder(
+      listenable: Listenable.merge([thumbnails, browsing]),
+      builder: (context, _) {
+        var scope = browsing.scope;
+        var tree = filterCatalogTree(
+          buildCatalogTree([
+            for (var entry in session.allEntries)
+              if (scopeCovers(scope, entry.path)) entry,
+          ]),
+          browsing.filter,
+        );
+        var sections = previewSheetSections(tree, screenOf: _screenOf);
+        if (sections.isEmpty) {
+          return _nothingToList(
+            session,
+            filtering: browsing.filter.trim().isNotEmpty,
+          );
+        }
+        return PreviewSheet(
+          sections: sections,
+          screenOf: _screenOf,
+          bytesOf: thumbnails.bytesOf,
+          // Marked while a switch off the catalog is in flight, so the click
+          // is not silent for the frames the guest takes to catch up. A live
+          // selection, not a memory of one.
+          selectedId: session.selected?.id,
+          problemOf: (entry) => switch (thumbnails.of(entry)) {
+            ThumbnailFailed(:var reason) => reason,
+            _ => session.compileErrorFor(entry),
+          },
+          // The page renders itself in the order it is read: the grid builds
+          // the tiles near the viewport and this hands exactly those back, so
+          // scrolling changes what is being rendered rather than queueing
+          // behind a hundred and fifty entries nobody is looking at.
+          onVisible: thumbnails.wantAll,
+          onUndecodable: thumbnails.discard,
+          onTap: (entry) {
+            browsing.endHover();
+            if (session.phase == CatalogSessionPhase.ready) {
+              unawaited(session.switchTo(entry));
+            } else {
+              session.wantedEntryId = entry.id;
+            }
+          },
+        );
+      },
+    );
+  }
+}
+
+/// What stands in for the tree when it has no rows.
+///
+/// Three answers, and the third is the one that used to be missing: "No
+/// entries" is a claim about the package, so it waits until something has
+/// actually looked. A session seeded with its plugin's scan has the list before
+/// its first frame; one that was not — the standalone entry point, the motion
+/// panel — is still waiting on the daemon, and used to spend that waiting
+/// saying nobody had written a demo.
+Widget _nothingToList(CatalogSession session, {required bool filtering}) {
+  if (filtering) {
+    return const EmptyState(
+      icon: Icons.search_off_outlined,
+      title: 'Nothing matches',
+      message: 'No demo in this package has a name like that.',
+    );
+  }
+  if (session.phase == CatalogSessionPhase.starting) {
+    return const LoadingState(title: 'Looking for demos…');
+  }
+  return const EmptyState(
+    icon: Icons.widgets_outlined,
+    title: 'No entries',
+    message: 'A demo is a top-level function marked @Preview.',
+  );
+}
+
 /// Indent for [depth], plus the width a branch spends on its chevron so that
 /// leaves and folders at the same level start at the same place.
 EdgeInsets _rowPadding(int depth) =>
     EdgeInsets.only(left: FwSpacing.md + depth * 14.0, right: FwSpacing.md);
+
+/// The whole catalog, and the way out of a folder.
+class _AllRow extends StatelessWidget {
+  const _AllRow({
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        color: selected ? colors.accentSoft : null,
+        padding: const EdgeInsets.fromLTRB(
+          FwSpacing.md,
+          FwSpacing.xs,
+          FwSpacing.md,
+          FwSpacing.xs,
+        ),
+        child: SizedBox(
+          height: 26,
+          child: Row(
+            children: [
+              Icon(
+                Icons.grid_view_outlined,
+                size: FwIconSize.sm,
+                color: selected ? colors.accentDark : colors.mut,
+              ),
+              const Gap(FwSpacing.xs),
+              Expanded(
+                child: Text(
+                  'All demos',
+                  style: context.type.caption.copyWith(
+                    color: selected ? colors.accentDark : colors.ink2,
+                  ),
+                ),
+              ),
+              Text(
+                '$count',
+                style: context.type.micro.copyWith(color: colors.mut2),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _BranchRow extends StatelessWidget {
   const _BranchRow({
@@ -1860,39 +2203,69 @@ class _BranchRow extends StatelessWidget {
     required this.depth,
     required this.open,
     required this.highlight,
+    required this.showing,
     required this.onTap,
+    required this.onToggleFold,
   });
 
   final CatalogBranch branch;
   final int depth;
   final bool open;
 
+  /// Whether this folder is what the pane beside the tree is showing.
+  final bool showing;
+
   /// What the filter is showing this row for, marked in the label.
   final String highlight;
+
+  /// Show this folder. The row's own job, and the reason folding had to move
+  /// off it.
   final VoidCallback? onTap;
+
+  /// Fold this folder away, or open it. The chevron's job and nothing else's.
+  ///
+  /// A smaller target than the row it used to have, which is the price of the
+  /// row meaning one thing. It is affordable because folding stopped being how
+  /// you look inside a folder: the pane does that, and the filter finds by name
+  /// — what is left for the chevron is tidying a tree you are done with.
+  final VoidCallback? onToggleFold;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
     return InkWell(
       onTap: onTap,
-      child: Padding(
+      child: Container(
+        color: showing ? colors.accentSoft : null,
         padding: _rowPadding(depth),
         child: SizedBox(
           height: 26,
           child: Row(
             children: [
-              Icon(
-                open ? Icons.expand_more : Icons.chevron_right,
-                size: FwIconSize.sm,
-                color: colors.mut,
+              // Padded out to a real target, and stopping the tap here so the
+              // chevron never also selects.
+              Tappable(
+                onTap: onToggleFold,
+                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FwSpacing.xxs,
+                    vertical: FwSpacing.xs,
+                  ),
+                  child: Icon(
+                    open ? Icons.expand_more : Icons.chevron_right,
+                    size: FwIconSize.sm,
+                    color: showing ? colors.accentDark : colors.mut,
+                  ),
+                ),
               ),
-              const Gap(FwSpacing.xs),
               Expanded(
                 child: _Marked(
                   text: branch.label,
                   mark: highlight,
-                  style: context.type.caption.copyWith(color: colors.ink2),
+                  style: context.type.caption.copyWith(
+                    color: showing ? colors.accentDark : colors.ink2,
+                  ),
                 ),
               ),
               if (!open) ...[

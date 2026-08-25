@@ -142,6 +142,7 @@ class PreviewCaptureRow {
     this.failure,
     this.errors = const [],
     this.image,
+    this.format = 'raw',
     this.width = 0,
     this.height = 0,
     this.tree,
@@ -159,8 +160,13 @@ class PreviewCaptureRow {
   /// What the framework reported, as `InspectErrors.toJson` wrote it.
   final List<Map<String, Object?>> errors;
 
-  /// The settled screen as raw rgba on disk, or null when nothing rendered.
+  /// The settled screen on disk, or null when nothing rendered.
   final String? image;
+
+  /// How [image] is encoded — `raw` (rgba8888 rows) or `png`. The same
+  /// vocabulary `ShotRecord.format` uses, so a captured row can be filed
+  /// without translating.
+  final String format;
 
   final int width;
   final int height;
@@ -263,6 +269,35 @@ class PreviewTestRunner {
   ///
   /// Frames land under `<outDir>/<index>/`, one directory per entry so the
   /// harness's own within-call numbering cannot collide across calls.
+  /// **Three knobs for the caller that wants pictures rather than evidence.**
+  /// Measured on this repo's 154 previews, warm, against a median entry that
+  /// takes 43ms to render — so what these move is the disk, not the clock,
+  /// with one exception:
+  ///
+  /// | | per entry | whole catalog |
+  /// |---|---|---|
+  /// | raw, full scale | 0.11ms | 368MB |
+  /// | raw, quarter | 0.11ms | 23MB |
+  /// | png, 700px side | 7.77ms | 4.2MB |
+  /// | png, quarter | 1.07ms | 0.6MB |
+  /// | `tree.json` beside it | 9.07ms | — |
+  ///
+  /// [scale] renders the frame smaller: barely a millisecond either way, and
+  /// 16× the bytes.
+  ///
+  /// [format] is `raw` or `png`, the same vocabulary `ShotRecord` files under.
+  /// PNG costs about 8ms of encode and takes the store from hundreds of
+  /// megabytes to single-digit ones, which is what makes keeping a picture per
+  /// entry affordable at all. A comparison stays raw — it diffs pixels, so a
+  /// PNG would be encoded on the way in and decoded straight back out.
+  ///
+  /// [tree] off skips the `InspectTree` walk and the JSON beside the frame,
+  /// which is **9× what the picture costs**. A caller that only wants pixels
+  /// should say so.
+  ///
+  /// [timings] makes the harness narrate its stages onto stderr, for measuring
+  /// this. Off by default; see `tool/spike/capture_cost.dart`.
+  ///
   /// [sync] brings the harness up to date with what is on disk first, which
   /// is a sweep of every source and the asset bundle — measured at 1.5–1.9s
   /// even when nothing moved. Right for a comparison or an audit, which are
@@ -275,6 +310,10 @@ class PreviewTestRunner {
     required String outDir,
     required Future<void> Function(PreviewCaptureRow row) onRow,
     bool sync = true,
+    double scale = 1,
+    bool tree = true,
+    bool timings = false,
+    String format = 'raw',
   }) => _host.exclusive(() async {
     // Only when syncing. The quarantine is filled by the blame rounds inside
     // [_bringUp], so clearing it without one would throw away what the last
@@ -289,7 +328,14 @@ class PreviewTestRunner {
       }
       var response = await _host.vm.requireExtension(
         'ext.flutterware.previews.audit',
-        args: {'entries': id, 'output': p.join(outDir, '$index')},
+        args: {
+          'entries': id,
+          'output': p.join(outDir, '$index'),
+          if (scale != 1) 'scale': '$scale',
+          if (!tree) 'tree': 'false',
+          if (timings) 'timings': 'true',
+          if (format != 'raw') 'format': format,
+        },
       );
       if (response!['error'] case String error) {
         throw StateError('the previews harness failed:\n$error');
@@ -319,6 +365,10 @@ class PreviewTestRunner {
                 if (error case Map found) found.cast<String, Object?>(),
             ],
             image: row['image'] as String?,
+            // What the harness says it wrote, not what was asked for: a base
+            // checkout's `package:flutterware` may predate the option and
+            // answer in raw whatever the request said.
+            format: row['format'] as String? ?? 'raw',
             width: row['width'] as int? ?? 0,
             height: row['height'] as int? ?? 0,
             tree: row['tree'] as String?,
