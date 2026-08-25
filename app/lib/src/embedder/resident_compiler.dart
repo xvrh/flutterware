@@ -66,6 +66,11 @@ class ResidentCompiler {
     required String packageConfig,
     required FlutterCache cache,
 
+    /// What the compiler's diagnostic paths are relative to — see
+    /// [FrontendServer.start]. Whatever reads them back has to resolve them
+    /// against this same directory, and the daemon's blame does.
+    required String workingDirectory,
+
     /// Persist the cold kernel and start from it next time.
     ///
     /// Off by default because it costs a file copy and a correctness
@@ -97,6 +102,7 @@ class ResidentCompiler {
       packageConfig: packageConfig,
       sdkRoot: cache.flutterPatchedSdkDir,
       platformDill: cache.platformDill,
+      workingDirectory: workingDirectory,
       initializeFromDill: warm,
       extraArguments: [if (trackWidgetCreation) '--track-widget-creation'],
     );

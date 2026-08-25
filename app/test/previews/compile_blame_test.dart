@@ -106,4 +106,30 @@ void main() {
 
     expect(result.entryIds, {counter.id, members.id, empty.id});
   });
+
+  test('a compiler speaking from the wrong directory blames nobody', () {
+    // Not a defect in here — this is what the contract *says* happens, and it
+    // is recorded because of what it costs when the contract is broken
+    // upstream. `FrontendServer.start` used to inherit the compiler's working
+    // directory from whoever launched the app, so the same catalog reported
+    // `demo/counter.dart` under a `dart test` from the package and
+    // `pkg/demo/counter.dart` under the GUI, whose directory is the worktree
+    // above it. The second form matches nothing here, and an audit with
+    // nothing to blame is a fatal audit: one deliberately broken fixture
+    // failed the whole catalog, and went on failing every later run until the
+    // build directory was deleted.
+    //
+    // Hence [FrontendServer.start] requires the directory rather than
+    // defaulting it, and the tester host passes the same root this resolves
+    // against.
+    var result = CompileBlame.of(
+      ['pkg/demo/counter.dart:5:1: Error: Nope.'],
+      entries: const [counter],
+      projectRoot: root,
+      workingDirectory: root,
+    );
+
+    expect(result.entryIds, isEmpty);
+    expect(result.unattributed, {'/project/pkg/demo/counter.dart'});
+  });
 }

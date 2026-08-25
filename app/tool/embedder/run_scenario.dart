@@ -74,6 +74,7 @@ Future<void> main(List<String> args) async {
     packageConfig: p.join(repoRoot, '.dart_tool', 'package_config.json'),
     sdkRoot: cache.flutterPatchedSdkDir,
     platformDill: cache.platformDill,
+    workingDirectory: repoRoot,
   );
   var first = await compiler.compile();
   if (first.errorCount > 0) {

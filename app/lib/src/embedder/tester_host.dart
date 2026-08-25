@@ -216,6 +216,12 @@ class TesterHost {
       packageConfig: packageConfig,
       sdkRoot: _cache.flutterPatchedSdkDir,
       platformDill: _cache.platformDill,
+      // What [CompileBlame] resolves a diagnostic against, so it is what the
+      // compiler has to be speaking relative to. Stated rather than inherited:
+      // this host runs both inside the GUI, whose directory is the worktree,
+      // and under a `dart run` from the package, and blame silently attributed
+      // nothing in the first case — one unbuildable demo failed the catalog.
+      workingDirectory: packageRoot,
       extraArguments: program.compilerArguments,
     );
     // The cold start's long pole, and now its only slow step — narrated

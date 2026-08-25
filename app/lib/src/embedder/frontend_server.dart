@@ -53,6 +53,20 @@ class FrontendServer {
   /// an earlier run produced, which is what makes the *first* compile of a
   /// session incremental rather than cold. A missing or stale file is not an
   /// error — the compiler falls back to compiling everything.
+  ///
+  /// **[workingDirectory] decides what a diagnostic's path looks like**, and it
+  /// is required rather than inherited because inheriting it makes the compiler
+  /// speak differently depending on who launched the app. The compiler reports
+  /// `<path>:<line>:<col>: Error:` relative to its own directory, and
+  /// `CompileBlame` resolves those paths against a root it was told — so the
+  /// two have to be the same directory or every error is attributed to no
+  /// entry at all.
+  ///
+  /// Measured: the same catalog audited from `app/` reported
+  /// `tool/catalog/demos/broken.dart` and quarantined it, and audited from the
+  /// worktree above it reported `app/tool/catalog/demos/broken.dart`, matched
+  /// nothing, and failed the whole catalog on one deliberately broken fixture.
+  /// Pass the root whatever reads the diagnostics resolves against.
   static Future<FrontendServer> start({
     required String executable,
     required String snapshot,
@@ -61,6 +75,7 @@ class FrontendServer {
     required String packageConfig,
     required String sdkRoot,
     required String platformDill,
+    required String workingDirectory,
     String target = 'flutter',
     String? initializeFromDill,
     List<String> extraArguments = const [],
@@ -82,7 +97,7 @@ class FrontendServer {
       // the protocol either way.
       '--verbosity=error',
       ...extraArguments,
-    ]);
+    ], workingDirectory: workingDirectory);
     process.stderr
         .transform(utf8.decoder)
         .transform(const LineSplitter())

@@ -1021,6 +1021,9 @@ class _Daemon {
     outputDill: _outputDill,
     packageConfig: config.packageConfig,
     cache: _cache,
+    // The same directory `_blame` resolves the compiler's paths against. They
+    // were only ever the same by whoever happened to spawn this daemon.
+    workingDirectory: config.appPackageRoot,
     warmDill: _warmDill,
     trackWidgetCreation: config.trackWidgetCreation,
   );
