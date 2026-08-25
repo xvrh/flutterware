@@ -28,6 +28,23 @@ class CatalogBranch extends CatalogNode {
 
   final List<CatalogNode> children;
 
+  /// The path prefix this branch covers — what selecting it narrows the
+  /// catalog to.
+  ///
+  /// A *path*, not this branch's id, because that is what an address can carry:
+  /// a branch id is a chain of labels, half of them from `@Preview(group:)`,
+  /// and putting those in the address would be a second namespace in the slot
+  /// entry ids already use. See `CatalogPlace`.
+  ///
+  /// A directory branch covers its directory; a group branch covers the file
+  /// its variants are declared in. Which leaves one blunt edge, and it is the
+  /// right one to be blunt on: a `group:` shared across two files covers the
+  /// directory holding both, so selecting it shows their neighbours too. Groups
+  /// are per-file in every catalog seen so far — discovery derives one whenever
+  /// a file holds more than one entry — and the alternative is an address that
+  /// cannot be written down.
+  late final String scopePath = _commonPath(entries);
+
   /// Entries below this branch, at any depth.
   Iterable<CatalogEntry> get entries sync* {
     for (var child in children) {
@@ -204,4 +221,27 @@ class _Builder {
       ),
     ...leaves..sort((a, b) => a.label.compareTo(b.label)),
   ];
+}
+
+/// The longest path every one of [entries] is inside.
+///
+/// Segment-wise rather than character-wise, so `demo/team` and `demo/teamwork`
+/// have `demo` in common and not `demo/team`.
+String _commonPath(Iterable<CatalogEntry> entries) {
+  List<String>? common;
+  for (var entry in entries) {
+    var segments = entry.path.split('/');
+    if (common == null) {
+      common = segments;
+      continue;
+    }
+    var shared = 0;
+    while (shared < common.length &&
+        shared < segments.length &&
+        common[shared] == segments[shared]) {
+      shared++;
+    }
+    common = common.take(shared).toList();
+  }
+  return common?.join('/') ?? '';
 }

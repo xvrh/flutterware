@@ -50,6 +50,54 @@ void main() {
     });
   });
 
+  group('a directory narrows the catalog', () {
+    // The third state. Reached by picking a folder in the tree, and also by
+    // truncating an entry address in the address bar — a gesture the bar
+    // advertises and which used to report `No entry "tool/catalog/demos" in
+    // this package`.
+    const scopes = [
+      'tool/catalog/demos',
+      'tool/catalog/demos/avatar_tile.dart',
+      'demo',
+    ];
+    for (var scope in scopes) {
+      test(scope, () {
+        var place = catalogPlace(catalogSegments('app', scope));
+        expect(place, CatalogPlace('app', directory: scope));
+        expect(place!.entryId, isNull, reason: 'no # means no entry');
+      });
+    }
+
+    test('a `#` is the whole discriminator, at any depth', () {
+      expect(catalogPlace(['app', 'a', 'b.dart#c'])!.entryId, 'a/b.dart#c');
+      expect(catalogPlace(['app', 'a', 'b.dart#c'])!.directory, isNull);
+      expect(catalogPlace(['app', 'a', 'b.dart'])!.directory, 'a/b.dart');
+      expect(catalogPlace(['app', 'a', 'b.dart'])!.entryId, isNull);
+    });
+
+    test('covers what is under it and nothing beside it', () {
+      const place = CatalogPlace('app', directory: 'demo/team');
+      expect(place.covers('demo/team/avatar.dart'), isTrue);
+      expect(place.covers('demo/team'), isTrue);
+      expect(
+        place.covers('demo/teamwork/other.dart'),
+        isFalse,
+        reason: 'a prefix of the name is not a prefix of the path',
+      );
+      expect(place.covers('demo/other.dart'), isFalse);
+    });
+
+    test('a file scope covers the entries declared in it', () {
+      const place = CatalogPlace('app', directory: 'demo/x.dart');
+      expect(place.covers('demo/x.dart'), isTrue);
+      expect(place.covers('demo/y.dart'), isFalse);
+    });
+
+    test('and no directory covers everything — the All demos row', () {
+      expect(const CatalogPlace('app').covers('anything/at/all.dart'), isTrue);
+    });
+  });
+
   test('an address naming nothing is nowhere, not a package called ""', () {
     expect(catalogPlace([]), isNull);
   });

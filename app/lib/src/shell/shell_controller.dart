@@ -1106,6 +1106,14 @@ class ShellController extends ChangeNotifier {
 
     _address.value = destination;
     _open[worktree.path]?.remembered = destination;
+    // Recorded on the way through, so every route to a sub-entry counts: the
+    // rail, a search hit, the address bar, a panel writing back where it
+    // landed. [selectPlugin] is the only reader.
+    if (destination.plugin case var plugin?) {
+      if (destination.segments.firstOrNull case var child?) {
+        _lastChild[(worktree.path, plugin)] = child;
+      }
+    }
 
     // **Only when the shell's own reading of the address changed.** Everything
     // this notification serves — the tabs, the rail, which panel is mounted —
@@ -1134,23 +1142,41 @@ class ShellController extends ChangeNotifier {
     if (address.worktree case var name?) go(Address(worktree: name));
   }
 
-  /// Selecting a plugin defaults to its first child, so a panel always has a
-  /// concrete sub-entry to render rather than an ambiguous null.
+  /// Which sub-entry each plugin was last on, so that coming back to it off
+  /// the rail returns you there rather than to whichever one sorts first.
   ///
-  /// The one place navigation fills in something it was not told, and it is
-  /// allowed here because choosing a plugin off the rail carries no deeper
-  /// intent. An address that arrived *already* naming something is never
+  /// Keyed by worktree *and* plugin: the same plugin id in two checkouts is two
+  /// different sets of packages, and letting one inherit the other's choice is
+  /// a rail link that opens a package this worktree may not have.
+  ///
+  /// In memory, and only ever consulted for the fill-in below. An address that
+  /// names a sub-entry is obeyed, never overridden.
+  final _lastChild = <(String, String), String>{};
+
+  /// Selecting a plugin defaults to a child, so a panel always has a concrete
+  /// sub-entry to render rather than an ambiguous null.
+  ///
+  /// Where you last were in that plugin, and its first child only if you have
+  /// never been. Both are fill-ins, and the remembered one is simply the better
+  /// guess: a rail that always reopened the first package sent you back to
+  /// `app` every time you left the one you were working in.
+  ///
+  /// The remembered id is checked against the children the plugin reports
+  /// *now*, so a package that a config edit removed cannot be navigated to.
+  ///
+  /// This is the one place navigation fills in something it was not told, and
+  /// it is allowed here because choosing a plugin off the rail carries no
+  /// deeper intent. An address that arrived *already* naming something is never
   /// completed or corrected — see [GoResult].
   void selectPlugin(String id) {
     var name = address.worktree;
     if (name == null) return;
-    var child = selectedSession
-        ?.pluginById(id)
-        ?.core
-        .report
-        .children
-        .firstOrNull
-        ?.id;
+    var children =
+        selectedSession?.pluginById(id)?.core.report.children ?? const [];
+    var remembered = _lastChild[(selected?.path ?? '', id)];
+    var child = children.any((c) => c.id == remembered)
+        ? remembered
+        : children.firstOrNull?.id;
     go(Address(worktree: name, plugin: id, segments: [?child]));
   }
 

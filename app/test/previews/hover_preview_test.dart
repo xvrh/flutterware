@@ -339,8 +339,19 @@ void main() {
     var pointer = TestPointer(1, PointerDeviceKind.mouse);
     // `Beta` is the selection. Its picture is the canvas already, a few
     // hundred pixels away and full size.
+    //
+    // Named in the tree, not by `find.text`: the selection's name is also
+    // above the stage now, on the title that says what is showing and carries
+    // the way back off it.
     await tester.sendEventToBinding(
-      pointer.hover(tester.getCenter(find.text('Beta'))),
+      pointer.hover(
+        tester.getCenter(
+          find.descendant(
+            of: find.byType(ListView),
+            matching: find.text('Beta'),
+          ),
+        ),
+      ),
     );
     await tester.pump(CatalogBrowsing.hoverDelay);
     await tester.pumpAndSettle();
@@ -356,7 +367,14 @@ void main() {
     // Arriving on the selection from a row that had one has to close it, not
     // strand it: the pointer left, and only this row knows that.
     await tester.sendEventToBinding(
-      pointer.hover(tester.getCenter(find.text('Beta'))),
+      pointer.hover(
+        tester.getCenter(
+          find.descendant(
+            of: find.byType(ListView),
+            matching: find.text('Beta'),
+          ),
+        ),
+      ),
     );
     await tester.pump(CatalogBrowsing.hoverDelay);
     await tester.pumpAndSettle();

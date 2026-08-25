@@ -561,6 +561,17 @@ class PreviewsCore extends PluginCore {
     for (var path in packages) ...?_scans[path]?.entries,
   ];
 
+  /// What the scan found in [path] alone, before any daemon has run.
+  ///
+  /// The panel's listing is drawn from this until the daemon reports. It is
+  /// the same set the daemon will send — both sides run [CatalogScanner] over
+  /// the same roots, and the daemon serves everything it discovered, quarantine
+  /// included. What the daemon adds is which of them *build*, and that is a
+  /// mark on a row rather than a reason to withhold every row for the length of
+  /// a cold compile.
+  List<CatalogEntry> entriesFor(String path) =>
+      _scans[path]?.entries ?? const [];
+
   /// Where an entry *is*, as the one identifier every surface carries.
   ///
   /// ```
