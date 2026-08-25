@@ -441,6 +441,7 @@ class InspectNode {
     required this.id,
     required this.type,
     this.description,
+    this.widgetKey,
     this.source,
     this.createdByLocalProject = false,
     this.offstage = false,
@@ -457,6 +458,62 @@ class InspectNode {
     this.children = const [],
     this.elidedChildren = 0,
   });
+
+  /// `Form-[LabeledGlobalKey<FormState>#acc1d]` → `('Form', '[LabeledGlobalKey<FormState>#]')`.
+  ///
+  /// The framework's `Widget.toStringShort()` is `'$type-$key'`, so a keyed
+  /// widget reaches either converter with two facts fused into one string.
+  /// This takes them apart, and is the *only* place that does — the guest and
+  /// the VM-service path both call it, on the same string, so a tree read
+  /// through one is spelled exactly like a tree read through the other.
+  ///
+  /// **The identity hash goes.** A key with no value of its own stringifies
+  /// through `describeIdentity`/`shortHash`, which is `hashCode` — assigned per
+  /// allocation, so the same `GlobalKey<FormState>()` spells itself `#acc1d`
+  /// in one process and `#0507e` in the next. [InspectNode] exists to be
+  /// carried between processes; a value that means nothing outside the one
+  /// that minted it has no business travelling in it. Left in, it cost a
+  /// previews comparison 21 entries reported as changed with zero pixels
+  /// changed, each one a `Form` failing to match itself — and worse than the
+  /// noise, an unmatched node's subtree is never walked, so every one of those
+  /// false positives was hiding whatever really did change beneath it.
+  ///
+  /// Returns the description with the key removed, which for the common case
+  /// is the bare type and so goes on to be dropped as saying nothing.
+  static ({String? description, String? key}) splitKey(
+    String? description,
+    String type,
+  ) {
+    const none = (description: null, key: null);
+    if (description == null) return none;
+    var open = type.length + 1;
+    // `type` + `-` + at least `[]`.
+    if (description.length < open + 2 ||
+        !description.startsWith(type) ||
+        description[type.length] != '-' ||
+        description[open] != '[') {
+      return (description: description, key: null);
+    }
+    // Balanced rather than "up to the last `]`": a `ValueKey` of a list spells
+    // itself `[<[1, 2]>]`, and a description can carry properties after the
+    // key that have brackets of their own.
+    var depth = 0;
+    for (var i = open; i < description.length; i++) {
+      switch (description[i]) {
+        case '[':
+          depth++;
+        case ']':
+          depth--;
+          if (depth == 0) {
+            return (
+              description: type + description.substring(i + 1),
+              key: withoutIdentityHash(description.substring(open, i + 1)),
+            );
+          }
+      }
+    }
+    return (description: description, key: null);
+  }
 
   /// The ambient style as [toJson] wrote it: a map, or `"same"` standing in
   /// for one byte-identical to [textStyle].
@@ -484,6 +541,7 @@ class InspectNode {
       id: json['id'] as String? ?? '',
       type: json['type'] as String? ?? '',
       description: json['description'] as String?,
+      widgetKey: json['widgetKey'] as String?,
       createdByLocalProject: json['local'] as bool? ?? false,
       offstage: json['offstage'] as bool? ?? false,
       elidedChildren: json['elided'] as int? ?? 0,
@@ -542,7 +600,25 @@ class InspectNode {
   /// The framework's own one-line description, which carries more than the
   /// type: `Text("Save")`, `SizedBox(width: 8.0)`. Null when it says nothing
   /// the type does not.
+  ///
+  /// The widget's key is **not** in here, though the framework spells the two
+  /// as one string — see [splitKey], which takes them apart.
   final String? description;
+
+  /// The widget's key as the framework spells one — `[<'save'>]`,
+  /// `[GlobalKey#]` — or null for the great majority of widgets, which have
+  /// none.
+  ///
+  /// Its own field rather than half of [description], because it answers a
+  /// different question. A description says what a widget *is*; a key is the
+  /// author saying *which one* it is, and so is the strongest evidence there
+  /// can be that two nodes read in two places are the same node. Fused into
+  /// the description it was the exact opposite of that — see [splitKey].
+  ///
+  /// Identity hashes are elided, so this is comparable across processes and
+  /// across rebuilds. `[GlobalKey#]` says *keyed by a GlobalKey* and no more,
+  /// which is all a bare `GlobalKey()` ever said about itself.
+  final String? widgetKey;
 
   final InspectSource? source;
 
@@ -763,6 +839,7 @@ class InspectNode {
     'id': id,
     'type': type,
     if (description != null) 'description': description,
+    if (widgetKey != null) 'widgetKey': widgetKey,
     if (source != null) 'source': source!.toJson(),
     'local': createdByLocalProject,
     // Sparse: nearly every node is on stage, and the flag is only news when
@@ -797,6 +874,7 @@ class InspectNode {
       'id': own,
       'type': type,
       if (description != null) 'description': description,
+      if (widgetKey != null) 'widgetKey': widgetKey,
       if (source case var source?)
         'source':
             '${files.putIfAbsent(source.file, () => files.length)}'
@@ -843,6 +921,7 @@ class InspectNode {
         id: id,
         type: type,
         description: description,
+        widgetKey: widgetKey,
         source: source,
         createdByLocalProject: createdByLocalProject,
         offstage: offstage,
@@ -850,6 +929,9 @@ class InspectNode {
         textStyle: textStyle,
         inheritedStyle: inheritedStyle,
         styleReplacesInherited: styleReplacesInherited,
+        keys: keys,
+        unkeyedText: unkeyedText,
+        textOverflowed: textOverflowed,
         layout: layout,
         label: label,
         selected: selected,
@@ -1032,10 +1114,45 @@ class InspectFilter {
 /// overflowed did so because they had a colour spelled out inside them, and
 /// once it is six characters the whole value fits.
 String shortenPropertyValue(String value) {
-  var short = value.replaceAllMapped(_colorPattern, _hexColor);
+  // A quoted value is somebody's own words — a `Text`'s data, a hint, a label
+  // — and `describeIdentity` never renders one. An order number that reads
+  // `"Order#12345"` is content, and editing the app's content out of its own
+  // report would be worse than the noise this is removing.
+  var short = _quotedValue.hasMatch(value) ? value : withoutIdentityHash(value);
+  short = short.replaceAllMapped(_colorPattern, _hexColor);
   if (short.length <= _maxPropertyLength) return short;
   return '${short.substring(0, _maxPropertyLength - 1)}…';
 }
+
+final _quotedValue = RegExp(r'^".*"$', dotAll: true);
+
+/// `ScrollController#cf895(offset 0.0)` → `ScrollController#(offset 0.0)`,
+/// and `[#a1b2c]` → `[#]`.
+///
+/// `describeIdentity` and `shortHash` render an object as its type followed by
+/// five hex characters of `hashCode`, which the VM assigns per allocation. The
+/// same controller therefore spells itself differently in every process and
+/// after every rebuild, and [InspectNode] exists to be *carried between*
+/// processes — so a value that means nothing outside the one that minted it
+/// cannot travel in it. Left in, it cost a previews comparison 21 entries
+/// reported as changed with nothing changed about them.
+///
+/// Anchored on a **type-shaped** token — uppercase or `_` initial, generics
+/// allowed — or on the `[` of a bare `UniqueKey`, because that is precisely
+/// what `describeIdentity` emits. A lower-case word before the `#` is nobody's
+/// hash: `ValueKey('build#a1b2c')` is the author's own value, and the only
+/// thing telling two of those apart, so it keeps every character.
+///
+/// Both the fields that carry a rendered object go through here — a widget's
+/// [InspectNode.properties] and its resolved [InspectNode.textStyle] — which
+/// is the point of doing it beside [shortenPropertyValue] rather than at each
+/// call site. [InspectNode.splitKey] uses it for the same reason on keys.
+String withoutIdentityHash(String value) =>
+    value.replaceAllMapped(_identityHash, (match) => '${match[1]}#');
+
+final _identityHash = RegExp(
+  r'(\[|[_A-Z][A-Za-z0-9_]*(?:<[^#]*>)?)#[0-9a-f]{5}(?![0-9a-f])',
+);
 
 const _maxPropertyLength = 96;
 
@@ -1101,6 +1218,7 @@ class InspectTree {
       id: id,
       type: json['type'] as String? ?? '',
       description: json['description'] as String?,
+      widgetKey: json['widgetKey'] as String?,
       createdByLocalProject: json['local'] as bool? ?? false,
       offstage: json['offstage'] as bool? ?? false,
       elidedChildren: json['elided'] as int? ?? 0,

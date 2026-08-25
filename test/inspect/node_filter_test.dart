@@ -43,6 +43,40 @@ void main() {
     for (var node in tree.nodes) node.type,
   ];
 
+  // The guest filters before it serialises, so anything the collapse forgets
+  // to carry over never leaves the process — and the survivor of a single-box
+  // chain is exactly the node that was carrying the words.
+  test('a collapsed chain keeps everything the survivor was carrying', () {
+    var tree = InspectTree(
+      entryId: null,
+      root: InspectNode(
+        id: '',
+        type: 'Padding',
+        layout: box(),
+        children: [
+          InspectNode(
+            id: '0',
+            type: 'Text',
+            description: 'Text("Save")',
+            widgetKey: "[<'save'>]",
+            layout: box(),
+            keys: const [InspectKey(catalog: 'app', key: 'action.save')],
+            unkeyedText: const ['Save'],
+            textOverflowed: true,
+          ),
+        ],
+      ),
+    );
+
+    var survivor = tree.filtered(const InspectFilter()).nodes.last;
+
+    expect(survivor.type, 'Text');
+    expect(survivor.widgetKey, "[<'save'>]");
+    expect(survivor.keys.single.key, 'action.save');
+    expect(survivor.unkeyedText, ['Save']);
+    expect(survivor.textOverflowed, isTrue);
+  });
+
   group('the noise filter', () {
     test("drops the wrapper that shares its only child's box", () {
       // What every list row on the measured screen looked like: a tap handler

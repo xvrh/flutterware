@@ -13,6 +13,7 @@ void main() {
     double y = 0,
     double width = 10,
     double height = 10,
+    String? widgetKey,
     bool laidOut = true,
     bool offstage = false,
     List<InspectNode> children = const [],
@@ -20,6 +21,7 @@ void main() {
     id: '',
     type: type,
     description: description,
+    widgetKey: widgetKey,
     createdByLocalProject: true,
     offstage: offstage,
     layout: laidOut
@@ -33,6 +35,27 @@ void main() {
         : null,
     children: children,
   );
+
+  /// A node built the way a converter builds one — from the framework's own
+  /// `type-key` spelling, through the same split both converters call. The
+  /// hash goes in raw, exactly as `flutter_tester` minted it.
+  InspectNode keyed(
+    String type,
+    String described, {
+    double width = 10,
+    double height = 10,
+    List<InspectNode> children = const [],
+  }) {
+    var (:description, :key) = InspectNode.splitKey(described, type);
+    return node(
+      type,
+      description: description == type ? null : description,
+      widgetKey: key,
+      width: width,
+      height: height,
+      children: children,
+    );
+  }
 
   test('two identical trees have nothing to say', () {
     var tree = node(
@@ -55,14 +78,194 @@ void main() {
     expect(deltas.single.head, '100×64');
   });
 
+  // Nested, not as the root pair. The root pair skips signature matching
+  // altogether, so a root-only version of this passed while the same rewording
+  // one level down came back as a removal plus an addition — the test named
+  // behaviour the code did not have anywhere a real tree would reach it.
   test('a re-worded label reads as its description changing', () {
     var deltas = TreeDiff.of(
-      node('Text', description: 'Text("Save")'),
-      node('Text', description: 'Text("Pay")'),
+      node('Card', children: [node('Text', description: 'Text("Save")')]),
+      node('Card', children: [node('Text', description: 'Text("Pay")')]),
     ).deltas;
 
     expect(deltas.single.property, 'description');
+    expect(deltas.single.base, 'Text("Save")');
     expect(deltas.single.head, 'Text("Pay")');
+  });
+
+  // Two candidates on a side, and nothing says which re-worded into which.
+  test('two leftovers of one type stay a removal and an addition', () {
+    var deltas = TreeDiff.of(
+      node(
+        'Column',
+        children: [
+          node('Text', description: 'Text("Save")'),
+          node('Text', description: 'Text("Cancel")'),
+        ],
+      ),
+      node(
+        'Column',
+        children: [
+          node('Text', description: 'Text("Pay")'),
+          node('Text', description: 'Text("Back")'),
+        ],
+      ),
+    ).deltas;
+
+    expect(deltas.map((it) => it.kind).toSet(), {
+      TreeDeltaKind.added,
+      TreeDeltaKind.removed,
+    });
+    expect(deltas, hasLength(4));
+  });
+
+  test('a widget that changed kind is not fused into a description change', () {
+    var deltas = TreeDiff.of(
+      node('Row', children: [node('Text', description: 'Text("Save")')]),
+      node('Row', children: [node('Icon', description: 'Icon(check)')]),
+    ).deltas;
+
+    expect(deltas.map((it) => it.kind), [
+      TreeDeltaKind.added,
+      TreeDeltaKind.removed,
+    ]);
+  });
+
+  group('a key is identity, not content', () {
+    // The defect this channel shipped with: `#acc1d` is an identity hash, the
+    // two sides are two processes, and every keyed widget in the tree reported
+    // itself as removed and re-added with zero pixels changed.
+    test('the same GlobalKey in two processes is the same node', () {
+      var base = node(
+        'Panel',
+        children: [keyed('Form', 'Form-[LabeledGlobalKey<FormState>#acc1d]')],
+      );
+      var head = node(
+        'Panel',
+        children: [keyed('Form', 'Form-[LabeledGlobalKey<FormState>#0507e]')],
+      );
+
+      expect(TreeDiff.of(base, head).deltas, isEmpty);
+    });
+
+    // Worse than the noise: an unmatched node is reported and then not walked,
+    // so the false positive was hiding everything underneath it.
+    test('a real change under a keyed widget is still reported', () {
+      InspectNode form(String hash, double height) => node(
+        'Panel',
+        children: [
+          keyed(
+            'Form',
+            'Form-[LabeledGlobalKey<FormState>#$hash]',
+            children: [node('TextField', height: height)],
+          ),
+        ],
+      );
+
+      var deltas = TreeDiff.of(form('acc1d', 40), form('0507e', 64)).deltas;
+
+      expect(deltas.single.property, 'size');
+      expect(deltas.single.base, '10×40');
+      expect(deltas.single.head, '10×64');
+      expect(deltas.single.path, 'Panel › Form › TextField');
+    });
+
+    test('a UniqueKey per row does not report the whole list as replaced', () {
+      List<InspectNode> rows(List<String> hashes) => [
+        for (var (index, hash) in hashes.indexed)
+          keyed(
+            'Row',
+            'Row-[#$hash]',
+            children: [node('Text', description: 'Text("$index")')],
+          ),
+      ];
+
+      expect(
+        TreeDiff.of(
+          node('Column', children: rows(['17f35', '20f45', '4fbac'])),
+          node('Column', children: rows(['009c2', 'ff198', 'dfeed'])),
+        ).deltas,
+        isEmpty,
+      );
+    });
+
+    // The trap the first cut of this fell into: every value-less key spells
+    // itself the same way once the hash goes, so letting one displace the
+    // description makes two keyed siblings indistinguishable — and a diff
+    // that is worse for having keys than for not.
+    test('a value-less key does not stand in for the words', () {
+      // What the guest hands back for `Text('Save', key: GlobalKey())`: the
+      // words as the description, the key beside them with its hash gone.
+      InspectNode column(List<String> words) => node(
+        'Column',
+        children: [
+          for (var word in words)
+            node(
+              'Text',
+              description: 'Text("$word")',
+              widgetKey: InspectNode.splitKey(
+                'Text-[GlobalKey#acc1d]',
+                'Text',
+              ).key,
+            ),
+        ],
+      );
+
+      var deltas = TreeDiff.of(
+        column(['Save', 'Cancel']),
+        column(['Cancel']),
+      ).deltas;
+
+      expect(deltas.single.kind, TreeDeltaKind.removed);
+      expect(
+        deltas.single.path,
+        'Column › Text("Save")',
+        reason: 'the node that went is the one that went',
+      );
+    });
+
+    // What the split buys beyond the fix: a key the author gave a value is
+    // stable, so it outranks the description and a rewording under it reads
+    // as the change it is.
+    test('a stable key matches through a re-worded label', () {
+      var deltas = TreeDiff.of(
+        node(
+          'Column',
+          children: [
+            keyed(
+              'Chip',
+              "Chip-[<'primary'>]",
+              children: [node('Text', description: 'Text("Save")')],
+            ),
+          ],
+        ),
+        node(
+          'Column',
+          children: [
+            keyed(
+              'Chip',
+              "Chip-[<'primary'>]",
+              children: [node('Text', description: 'Text("Pay")')],
+            ),
+          ],
+        ),
+      ).deltas;
+
+      expect(deltas.single.property, 'description');
+      expect(deltas.single.path, "Column › Chip-[<'primary'>] › Text(\"Pay\")");
+    });
+
+    test('two different stable keys are two different nodes', () {
+      var deltas = TreeDiff.of(
+        node('Column', children: [keyed('Chip', "Chip-[<'save'>]")]),
+        node('Column', children: [keyed('Chip', "Chip-[<'pay'>]")]),
+      ).deltas;
+
+      expect(deltas.map((it) => it.kind), [
+        TreeDeltaKind.added,
+        TreeDeltaKind.removed,
+      ]);
+    });
   });
 
   // The whole reason children are aligned rather than zipped: one inserted

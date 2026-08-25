@@ -13,6 +13,92 @@ import 'package:test/test.dart';
 /// milliseconds, on every push, without an SDK or a GPU.
 void main() {
   _ambientSentinel();
+  group('InspectNode.splitKey', () {
+    test('leaves an unkeyed description alone', () {
+      var split = InspectNode.splitKey('Text("Save")', 'Text');
+      expect(split.description, 'Text("Save")');
+      expect(split.key, isNull);
+    });
+
+    test('takes the key off, leaving the bare type behind', () {
+      var split = InspectNode.splitKey("Form-[<'draft'>]", 'Form');
+      expect(split.description, 'Form');
+      expect(split.key, "[<'draft'>]");
+    });
+
+    // The whole defect: `#acc1d` is `hashCode`, minted per allocation, so the
+    // same key in two `flutter_tester` processes never spells itself twice.
+    test('elides the identity hash a value-less key stringifies through', () {
+      for (var pair in const [
+        ('Form-[LabeledGlobalKey<FormState>#acc1d]', 'Form'),
+        ('Form-[LabeledGlobalKey<FormState>#0507e]', 'Form'),
+      ]) {
+        expect(
+          InspectNode.splitKey(pair.$1, pair.$2).key,
+          '[LabeledGlobalKey<FormState>#]',
+        );
+      }
+      expect(
+        InspectNode.splitKey('Card-[GlobalKey#04a2f]', 'Card').key,
+        '[GlobalKey#]',
+      );
+      expect(InspectNode.splitKey('Row-[#a1b2c]', 'Row').key, '[#]');
+      expect(
+        InspectNode.splitKey('Tile-[GlobalObjectKey Item#1234f]', 'Tile').key,
+        '[GlobalObjectKey Item#]',
+      );
+    });
+
+    // A hash-shaped *value* is the author's, is stable, and is the only thing
+    // telling two of these apart.
+    test('keeps a ValueKey whose value merely looks like a hash', () {
+      expect(
+        InspectNode.splitKey("Chip-[<'#abc12'>]", 'Chip').key,
+        "[<'#abc12'>]",
+      );
+    });
+
+    test('balances brackets rather than taking the last one', () {
+      var split = InspectNode.splitKey('Row-[<[1, 2]>]', 'Row');
+      expect(split.key, '[<[1, 2]>]');
+      expect(split.description, 'Row');
+    });
+
+    test('keeps whatever the description said after the key', () {
+      var split = InspectNode.splitKey(
+        "SizedBox-[<'gap'>](width: 8.0)",
+        'SizedBox',
+      );
+      expect(split.key, "[<'gap'>]");
+      expect(split.description, 'SizedBox(width: 8.0)');
+    });
+
+    test('says nothing about a description that is not type-then-key', () {
+      expect(InspectNode.splitKey(null, 'Padding').key, isNull);
+      expect(InspectNode.splitKey('Padding', 'Padding').key, isNull);
+      expect(InspectNode.splitKey('Form-[unclosed', 'Form').key, isNull);
+      expect(InspectNode.splitKey('OtherForm-[<%27a%27>]', 'Form').key, isNull);
+    });
+
+    test('rides the wire in both spellings', () {
+      var tree = InspectTree(
+        entryId: 'e',
+        root: const InspectNode(
+          id: '',
+          type: 'Form',
+          widgetKey: '[GlobalKey#]',
+        ),
+      );
+      for (var compact in [false, true]) {
+        expect(
+          InspectTree.fromJson(tree.toJson(compact: compact)).root?.widgetKey,
+          '[GlobalKey#]',
+          reason: 'compact: $compact',
+        );
+      }
+    });
+  });
+
   group('InspectSource', () {
     test('prints a file URI as a path relative to the worktree', () {
       var source = const InspectSource(
