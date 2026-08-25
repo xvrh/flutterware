@@ -24,6 +24,7 @@ class FwFilterBar extends StatelessWidget {
     this.onSearch,
     this.searchController,
     this.trailing,
+    this.toggles = const [],
   });
 
   /// Label, whether it is the current one, what to do about it.
@@ -42,6 +43,19 @@ class FwFilterBar extends StatelessWidget {
 
   /// Hard right, after the count — a clear button, a refresh.
   final Widget? trailing;
+
+  /// Filters that narrow whatever [pills] chose, rather than replacing it.
+  ///
+  /// A second axis, drawn as a second group. The run cockpit's log tab has
+  /// both: the pills pick who is talking — the app, the build, the platform —
+  /// and `Errors` narrows that to the lines that went wrong. Folding the second
+  /// axis into the first as a fifth pill would have made `Errors` mean
+  /// *everyone's* errors, which throws away the app/build split at the one
+  /// moment it earns its keep: a launch that failed, where whether the build or
+  /// the app produced the error is the whole question.
+  ///
+  /// Kept visually apart, because [FwPill] means one-of and these do not.
+  final List<(String, bool, VoidCallback)> toggles;
 
   static const _roomy = 520.0;
 
@@ -62,6 +76,22 @@ class FwFilterBar extends StatelessWidget {
                   padding: const EdgeInsets.only(right: FwSpacing.xs),
                   child: FwPill(label: label, selected: selected, onTap: onTap),
                 ),
+              if (toggles.isNotEmpty) ...[
+                if (pills.isNotEmpty) ...[
+                  const Gap(FwSpacing.xs),
+                  Container(width: 1, height: 16, color: context.colors.line),
+                  const Gap(FwSpacing.sm),
+                ],
+                for (var (label, selected, onTap) in toggles)
+                  Padding(
+                    padding: const EdgeInsets.only(right: FwSpacing.xs),
+                    child: FwFilterToggle(
+                      label: label,
+                      selected: selected,
+                      onTap: onTap,
+                    ),
+                  ),
+              ],
               if (onSearch case var it?) ...[
                 const Gap(FwSpacing.sm),
                 Expanded(
@@ -121,6 +151,60 @@ class FwPill extends StatelessWidget {
           ),
         ),
         child: Text(label, style: context.type.bodySmall),
+      ),
+    );
+  }
+}
+
+/// A filter that is on or off, beside pills that are one-of.
+///
+/// The same height and radius as [FwPill] so the bar stays one row of one
+/// thing, and a tick when it is on so it does not read as a fifth pill that
+/// happens to be selected. That distinction is the whole reason it exists:
+/// `App` and `Errors` next to each other are two questions, and a reader has to
+/// be able to see that turning one on does not turn the other off.
+class FwFilterToggle extends StatelessWidget {
+  const FwFilterToggle({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tappable(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(context.radii.pill),
+      child: Container(
+        padding: EdgeInsets.only(
+          left: selected ? 6 : 10,
+          right: 10,
+          top: 3,
+          bottom: 3,
+        ),
+        decoration: BoxDecoration(
+          color: selected ? colors.accentSoft : null,
+          borderRadius: BorderRadius.circular(context.radii.pill),
+          border: Border.all(
+            color: selected ? colors.accentSoft2 : colors.line,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selected) ...[
+              Icon(Icons.check, size: 13, color: colors.ink2),
+              const Gap(2),
+            ],
+            Text(label, style: context.type.bodySmall),
+          ],
+        ),
       ),
     );
   }

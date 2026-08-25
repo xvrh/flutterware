@@ -229,4 +229,150 @@ void main() {
       expect(errors.single.text, unhandled);
     });
   });
+
+  group('RunLogTail', () {
+    late String path;
+    late File file;
+
+    setUp(() {
+      path = p.join(dir.path, 'tail.log');
+      file = File(path)..writeAsStringSync('');
+    });
+
+    void append(String text) =>
+        file.writeAsStringSync(text, mode: FileMode.append);
+
+    test('reads only what is new, and the answer is the whole log', () {
+      var tail = RunLogTail(path);
+      append('flutter: one\n');
+      tail.read();
+      expect([for (var line in tail.lines) line.text], ['one']);
+
+      append('flutter: two\nBuilding\n');
+      tail.read();
+      expect(
+        [for (var line in tail.lines) line.text],
+        ['one', 'two', 'Building'],
+      );
+      expect(
+        [for (var line in tail.lines) line.source],
+        [RunLogSource.app, RunLogSource.app, RunLogSource.tool],
+      );
+    });
+
+    test('a line arriving in pieces lands once, whole', () {
+      var tail = RunLogTail(path);
+      // A poll between the `[` and the `]`: half a machine event.
+      var whole = event('daemon.logMessage', {
+        'level': 'error',
+        'message': 'it broke',
+      });
+      append(whole.substring(0, 20));
+      tail.read();
+      expect(
+        tail.lines,
+        isEmpty,
+        reason: 'half an event is held back, not shown as half an event',
+      );
+
+      append('${whole.substring(20)}\n');
+      tail.read();
+      expect([for (var line in tail.lines) line.text], ['it broke']);
+      expect(tail.lines.single.error, isTrue);
+    });
+
+    test('a character split across two reads survives', () {
+      var tail = RunLogTail(path);
+      // Three bytes of one glyph, cut after the first.
+      var bytes = utf8.encode('flutter: héllo ☕ world\n');
+      var cut = utf8.encode('flutter: héllo ').length + 1;
+      file.writeAsBytesSync(bytes.sublist(0, cut));
+      tail.read();
+      file.writeAsBytesSync(bytes.sublist(cut), mode: FileMode.append);
+      tail.read();
+      expect([for (var line in tail.lines) line.text], ['héllo ☕ world']);
+    });
+
+    test('a file that got shorter is read again from the top', () {
+      var tail = RunLogTail(path);
+      append('flutter: old one\nflutter: old two\n');
+      tail.read();
+      expect(tail.lines, hasLength(2));
+
+      // A relaunch reusing the path.
+      file.writeAsStringSync('flutter: new one\n');
+      tail.read();
+      expect([for (var line in tail.lines) line.text], ['new one']);
+      expect(tail.dropped, 0, reason: 'starting over is not dropping');
+    });
+
+    test('the last line of a log nobody finished is still shown', () {
+      var tail = RunLogTail(path);
+      append('flutter: done\nflutter: killed mid-');
+      tail.read();
+      expect([for (var line in tail.lines) line.text], ['done', 'killed mid-']);
+
+      // And it is not shown twice once the rest arrives.
+      append('sentence\n');
+      tail.read();
+      expect(
+        [for (var line in tail.lines) line.text],
+        ['done', 'killed mid-sentence'],
+      );
+    });
+
+    test('beyond what it keeps, the oldest go and are counted', () {
+      var tail = RunLogTail(path, keep: 3);
+      append([for (var i = 0; i < 5; i++) 'flutter: line $i\n'].join());
+      tail.read();
+      expect(
+        [for (var line in tail.lines) line.text],
+        ['line 2', 'line 3', 'line 4'],
+      );
+      expect(tail.dropped, 2);
+    });
+
+    test('a carriage return ends a line, as it does for readRunLog', () {
+      // A build tool redrawing its progress in place, and then a machine event
+      // on the end of it. Split on newlines alone this is one line, which no
+      // longer starts with `[{` — so the event is never decoded and the error
+      // it carried is never flagged.
+      var body =
+          'Building 10%\rBuilding 90%\r'
+          '${event('daemon.logMessage', {'level': 'error', 'message': 'it broke'})}\n';
+      file.writeAsStringSync(body);
+      var tail = RunLogTail(path)..read();
+
+      expect(
+        [for (var line in tail.lines) line.text],
+        [for (var line in readRunLog(path)) line.text],
+        reason: 'the two readers must agree about where a line ends',
+      );
+      expect(
+        [for (var line in tail.lines) line.text],
+        ['Building 10%', 'Building 90%', 'it broke'],
+      );
+      expect(tail.lines.last.error, isTrue);
+    });
+
+    test(r'a \r\n cut in half by a poll does not invent a line', () {
+      var tail = RunLogTail(path);
+      append('flutter: one\r');
+      tail.read();
+      append('\nflutter: two\r\n');
+      tail.read();
+      expect([for (var line in tail.lines) line.text], ['one', 'two']);
+    });
+
+    test('a log that does not exist is empty rather than an error', () {
+      var tail = RunLogTail(p.join(dir.path, 'nothing.log'))..read();
+      expect(tail.lines, isEmpty);
+      expect(tail.dropped, 0);
+    });
+
+    test('no log path at all is the early state of a run, not a failure', () {
+      var tail = RunLogTail(null)..read();
+      expect(tail.lines, isEmpty);
+    });
+  });
 }

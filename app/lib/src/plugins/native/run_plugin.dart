@@ -24,8 +24,8 @@ import '../../run/network_tab.dart';
 import '../../run/panels_tab.dart';
 import '../../run/screen_picture.dart';
 import '../../run/launch.dart';
-import '../../run/logs.dart';
-import '../../run/native/native_logs.dart';
+import '../../run/file_refresh.dart';
+import '../../run/logs_tab.dart';
 import '../../inspect/elements_view.dart';
 import '../../inspect/inspect_dock.dart';
 import '../../inspect/semantics_node.dart';
@@ -40,7 +40,6 @@ import '../../ui/empty_state.dart';
 import '../../ui/loading_state.dart';
 import '../../ui/popover.dart';
 import '../../ui/popover_menu.dart';
-import '../../ui/filter_bar.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../../utils/daemon/device.dart';
@@ -364,7 +363,7 @@ class _RunViewState extends State<_RunView> {
                 widget.onReading(_screen.currentState?.isReading ?? false);
               },
             ),
-            RunViewKind.logs => _LogsTab(core: core, handle: handle),
+            RunViewKind.logs => LogsTab(core: core, handle: handle),
             RunViewKind.network => NetworkTab(
               // Keyed by run, like the App tab: a different run behind the
               // same tab is a different app to attach to.
@@ -1244,233 +1243,6 @@ Future<ui.Image?> _decodePicture(Uint8List? bytes) async {
   }
 }
 
-/// Re-reads a file-backed tab the moment its file changes.
-///
-/// A watch on the file's directory (the pattern the server tracker uses),
-/// debounced because one step is several writes, with a poll underneath: a
-/// watch can be unavailable (directory not there yet, filesystem without
-/// events) and a tab that silently stopped updating would read as a dead run.
-/// The poll runs slow when the watch is live and at the watchless tabs' old
-/// cadence when it is not.
-class _FileRefresh {
-  _FileRefresh(String? path, this.onChanged) {
-    if (path != null) {
-      var directory = File(path).parent;
-      if (directory.existsSync()) {
-        _watch = directory.watch().listen((event) {
-          if (!event.path.startsWith(path)) return;
-          _debounce?.cancel();
-          _debounce = Timer(const Duration(milliseconds: 50), onChanged);
-        }, onError: (_) {});
-      }
-    }
-    _poll = Timer.periodic(
-      _watch != null
-          ? const Duration(seconds: 2)
-          : const Duration(milliseconds: 700),
-      (_) => onChanged(),
-    );
-  }
-
-  final void Function() onChanged;
-  StreamSubscription<FileSystemEvent>? _watch;
-  Timer? _debounce;
-  Timer? _poll;
-
-  void dispose() {
-    _debounce?.cancel();
-    _poll?.cancel();
-    unawaited(_watch?.cancel());
-  }
-}
-
-/// What the launcher wrote, with the app's own output separable from the
-/// build's.
-///
-/// Read from the file rather than from a stream, which is why it works before
-/// the app exists and after it has gone.
-class _LogsTab extends StatefulWidget {
-  const _LogsTab({required this.core, required this.handle});
-
-  final RunCore core;
-  final RunHandle handle;
-
-  @override
-  State<_LogsTab> createState() => _LogsTabState();
-}
-
-class _LogsTabState extends State<_LogsTab> {
-  RunLogSource? _only;
-  List<RunLogLine> _lines = const [];
-  _FileRefresh? _refresh;
-
-  /// The platform log, once it has been asked for.
-  ///
-  /// A fetch rather than a filter, which the tab shows by loading. The other
-  /// three pills narrow a file this tab already holds; this one spends a `log
-  /// show` or an `adb logcat` against the device. Selecting it is the request,
-  /// and selecting it again refreshes — there is nothing to poll, because
-  /// unlike the launcher's log nothing here changes on disk.
-  NativeLogRead? _native;
-  var _readingNative = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _reread();
-    _refresh = _FileRefresh(widget.handle.logPath, _reread);
-  }
-
-  @override
-  void didUpdateWidget(_LogsTab old) {
-    super.didUpdateWidget(old);
-    if (old.handle.key != widget.handle.key) {
-      _refresh?.dispose();
-      _refresh = _FileRefresh(widget.handle.logPath, _reread);
-      _native = null;
-      _reread();
-      // A different run is a different device: what was read for the last one
-      // says nothing about this one, and an empty list would read as "it
-      // logged nothing" rather than as "nobody has asked yet".
-      if (_only == RunLogSource.native) unawaited(_rereadNative());
-    }
-  }
-
-  @override
-  void dispose() {
-    _refresh?.dispose();
-    super.dispose();
-  }
-
-  /// Not in `build`. A log is a file, the panel rebuilds on every probe and
-  /// on every frame of any animation above it, and `RunCore.logOf` says in as
-  /// many words why a panel must not read one from there. [_FileRefresh] is
-  /// the right shape: the file changing is what makes this stale.
-  void _reread() {
-    if (!mounted) return;
-    var lines = widget.core.readLogs(widget.handle, only: _only, tail: 2000);
-    setState(() => _lines = lines);
-  }
-
-  /// Never on [_FileRefresh]. The launcher's log file changes constantly while
-  /// an app runs, and this spawns a process: hanging it off the same callback
-  /// would fire a `log show` every poll. It runs on request — which is what
-  /// selecting the filter is.
-  Future<void> _rereadNative() async {
-    setState(() => _readingNative = true);
-    var read = await widget.core.readNativeLogs(widget.handle, tail: 2000);
-    if (!mounted) return;
-    setState(() {
-      _native = read;
-      _readingNative = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    var native = _only == RunLogSource.native;
-    var lines = native ? _native?.lines ?? const <RunLogLine>[] : _lines;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: FwSpacing.lg,
-            vertical: FwSpacing.xs,
-          ),
-          child: Row(
-            children: [
-              for (var (label, value) in [
-                ('All', null),
-                ('App', RunLogSource.app),
-                ('Build', RunLogSource.tool),
-                ('Platform', RunLogSource.native),
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(right: FwSpacing.xs),
-                  child: FwPill(
-                    label: label,
-                    selected: _only == value,
-                    onTap: () {
-                      _only = value;
-                      // Immediately, not on the next tick: a filter that took
-                      // most of a second to answer would read as broken.
-                      if (value == RunLogSource.native) {
-                        unawaited(_rereadNative());
-                      } else {
-                        _reread();
-                      }
-                    },
-                  ),
-                ),
-              const Spacer(),
-              Text(
-                _readingNative ? 'reading…' : '${lines.length} lines',
-                style: context.type.micro.copyWith(color: context.colors.mut3),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: lines.isEmpty
-              ? _Hint(switch (_only) {
-                  RunLogSource.app =>
-                    'The app has printed nothing. The build output is '
-                        'under Build.',
-                  RunLogSource.native =>
-                    _readingNative
-                        ? 'Asking the platform…'
-                        : _native?.note ??
-                              'The native half of this app has logged '
-                                  'nothing.',
-                  _ => 'Nothing logged yet.',
-                })
-              // `reverse` rather than a scroll controller: it pins the view to
-              // the newest line, which is the one anybody opening a log is
-              // looking for, and keeps it pinned as more arrive. The list is
-              // indexed from the end to match, so it still reads top-to-bottom
-              // oldest-to-newest.
-              : ListView.builder(
-                  reverse: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: FwSpacing.lg,
-                    vertical: FwSpacing.sm,
-                  ),
-                  itemCount: lines.length,
-                  itemBuilder: (context, i) =>
-                      _LogRow(lines[lines.length - 1 - i]),
-                ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LogRow extends StatelessWidget {
-  const _LogRow(this.line);
-
-  final RunLogLine line;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
-      child: SelectableText(
-        line.text,
-        style: _mono(
-          context,
-          color: line.error
-              ? colors.red
-              : line.source == RunLogSource.app
-              ? colors.ink
-              : colors.mut2,
-        ),
-      ),
-    );
-  }
-}
-
 /// The run's journal, reviewable: what the tools did to this app, step by
 /// step, each with its screenshot.
 ///
@@ -1494,13 +1266,13 @@ class _StepsTabState extends State<_StepsTab> {
   /// the tab opens in, and returns to when you select the last row.
   int? _selected;
 
-  _FileRefresh? _refresh;
+  FileRefresh? _refresh;
 
   @override
   void initState() {
     super.initState();
     _reread();
-    _refresh = _FileRefresh(journalPathFor(widget.handle), _reread);
+    _refresh = FileRefresh(journalPathFor(widget.handle), _reread);
   }
 
   @override
@@ -1509,7 +1281,7 @@ class _StepsTabState extends State<_StepsTab> {
     if (old.handle.key != widget.handle.key) {
       _selected = null;
       _refresh?.dispose();
-      _refresh = _FileRefresh(journalPathFor(widget.handle), _reread);
+      _refresh = FileRefresh(journalPathFor(widget.handle), _reread);
       _reread();
     }
   }

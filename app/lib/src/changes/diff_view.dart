@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/syntax.dart';
 import '../ui/tappable.dart';
+import '../ui/selectable_line.dart';
 import '../ui/theme.dart';
 import 'change_set.dart';
 import 'diff_lines.dart';
@@ -234,24 +235,26 @@ class HunkHeaderLine extends StatelessWidget {
         horizontal: FwSpacing.lg,
         vertical: FwSpacing.xxs,
       ),
-      child: Row(
-        children: [
-          Text(
-            '@@ -${hunk.oldStart},${hunk.oldCount} '
-            '+${hunk.newStart},${hunk.newCount} @@',
-            style: diffTextStyle(context).copyWith(color: colors.mut3),
-          ),
-          if (hunk.context case var it?) ...[
-            const Gap(FwSpacing.md),
-            Expanded(
-              child: Text(
-                it,
-                style: diffTextStyle(context).copyWith(color: colors.mut2),
-                overflow: TextOverflow.ellipsis,
-              ),
+      child: FwSelectableLine(
+        child: Row(
+          children: [
+            Text(
+              '@@ -${hunk.oldStart},${hunk.oldCount} '
+              '+${hunk.newStart},${hunk.newCount} @@',
+              style: diffTextStyle(context).copyWith(color: colors.mut3),
             ),
+            if (hunk.context case var it?) ...[
+              const Gap(FwSpacing.md),
+              Expanded(
+                child: Text(
+                  it,
+                  style: diffTextStyle(context).copyWith(color: colors.mut2),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -417,30 +420,48 @@ class _DiffLineViewState extends State<DiffLineView> {
       child: Container(
         color: widget.selected ? colors.accentSoft : background,
         padding: const EdgeInsets.only(right: FwSpacing.lg),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _AddComment(
-              visible: _hovered,
-              onTap: widget.onComment,
-              style: style,
-            ),
-            _Gutter(line.oldNumber, colors.mut3, style),
-            _Gutter(line.newNumber, colors.mut3, style),
-            const Gap(FwSpacing.sm),
-            SizedBox(
-              width: 10,
-              child: Text(marker, style: style.copyWith(color: tone)),
-            ),
-            Expanded(
-              child: _Code(
-                line: line,
-                tokens: widget.tokens,
+        // One line for the purpose of a selection, so a drag down the diff
+        // comes back as lines rather than as one run-together string — see
+        // [FwSelectableLine], which is where the mechanics are.
+        child: FwSelectableLine(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _AddComment(
+                visible: _hovered,
+                onTap: widget.onComment,
                 style: style,
-                scrollX: widget.scrollX,
               ),
-            ),
-          ],
+              // The furniture stays out of the clipboard. What a selected diff
+              // is for is pasting the code somewhere — an editor, a message, a
+              // shell — and line numbers welded to the front of every line
+              // make it paste as nothing at all. The `+`/`-` goes for the same
+              // reason: it is how the row says *added* on screen, not a
+              // character of the file.
+              SelectionContainer.disabled(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Gutter(line.oldNumber, colors.mut3, style),
+                    _Gutter(line.newNumber, colors.mut3, style),
+                    const Gap(FwSpacing.sm),
+                    SizedBox(
+                      width: 10,
+                      child: Text(marker, style: style.copyWith(color: tone)),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _Code(
+                  line: line,
+                  tokens: widget.tokens,
+                  style: style,
+                  scrollX: widget.scrollX,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

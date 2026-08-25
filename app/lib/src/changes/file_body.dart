@@ -18,6 +18,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../ui/selectable_line.dart';
 import '../ui/theme.dart';
 import 'change_set.dart';
 import 'diff_view.dart';
@@ -600,46 +601,52 @@ class _TextLineView extends StatelessWidget {
     scrollX.see(text.length * charWidth);
     return Padding(
       padding: const EdgeInsets.only(left: FwSpacing.md, right: FwSpacing.lg),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 44,
-            child: Text(
-              '$number',
-              textAlign: TextAlign.right,
-              style: style.copyWith(color: context.colors.mut3),
+      // The diff body's argument, unchanged: one line for the purpose of a
+      // selection, and the line number is furniture rather than content.
+      child: FwSelectableLine(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SelectionContainer.disabled(
+              child: SizedBox(
+                width: 44,
+                child: Text(
+                  '$number',
+                  textAlign: TextAlign.right,
+                  style: style.copyWith(color: context.colors.mut3),
+                ),
+              ),
             ),
-          ),
-          const Gap(FwSpacing.sm),
-          Expanded(
-            // The same translate-inside-a-clip as the diff's `_Code`, and for
-            // the same reason: every row must move by the same amount or the
-            // indentation stops lining up.
-            child: SizedBox(
-              height: diffLineHeight(style),
-              child: ClipRect(
-                child: AnimatedBuilder(
-                  animation: scrollX,
-                  builder: (context, child) => Transform.translate(
-                    offset: Offset(-scrollX.x, 0),
-                    child: OverflowBox(
-                      alignment: Alignment.centerLeft,
-                      maxWidth: double.infinity,
-                      child: child,
+            const Gap(FwSpacing.sm),
+            Expanded(
+              // The same translate-inside-a-clip as the diff's `_Code`, and for
+              // the same reason: every row must move by the same amount or the
+              // indentation stops lining up.
+              child: SizedBox(
+                height: diffLineHeight(style),
+                child: ClipRect(
+                  child: AnimatedBuilder(
+                    animation: scrollX,
+                    builder: (context, child) => Transform.translate(
+                      offset: Offset(-scrollX.x, 0),
+                      child: OverflowBox(
+                        alignment: Alignment.centerLeft,
+                        maxWidth: double.infinity,
+                        child: child,
+                      ),
                     ),
-                  ),
-                  child: Text(
-                    text,
-                    style: style,
-                    softWrap: false,
-                    overflow: TextOverflow.clip,
+                    child: Text(
+                      text,
+                      style: style,
+                      softWrap: false,
+                      overflow: TextOverflow.clip,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

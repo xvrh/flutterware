@@ -132,10 +132,15 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: appTheme,
-        home: AddressRoot(
-          address: address,
-          onChanged: (a) => address.value = a,
-          child: Builder(builder: RunPlugin(core).buildPanel),
+        // As the shell mounts it: `shell_view.dart` puts the panel inside a
+        // Scaffold, and the log tab's search box is a TextField, which asserts
+        // without a Material over it.
+        home: Scaffold(
+          body: AddressRoot(
+            address: address,
+            onChanged: (a) => address.value = a,
+            child: Builder(builder: RunPlugin(core).buildPanel),
+          ),
         ),
       ),
     );
@@ -575,8 +580,6 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: appTheme,
-        // The shell puts the panel inside one; the other test gets away
-        // without because it never builds a text field.
         home: Scaffold(
           body: AddressRoot(
             address: address,
