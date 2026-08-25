@@ -89,15 +89,12 @@ class RunPlugin extends NativePlugin<RunCore> {
     notifyChanged();
   }
 
-  /// `+` beside `Run` in the rail.
-  ///
-  /// The runs themselves are the rail's child rows, so the one thing the list
-  /// needs that a list of runs cannot express is *starting another*. Same shape
-  /// as the scenarios panel's `+` on a folder header, one level up.
-  @override
-  List<PluginRowCommand> rowCommands() => const [
-    PluginRowCommand(label: 'New run', icon: Icons.add, opens: newRunSegment),
-  ];
+  // **No `+` in the rail.** There was one, and it was the only way to start a
+  // second run: an icon that appeared while the mouse crossed the `Run` row and
+  // was invisible the rest of the time. Reported as *the buttons are absent*,
+  // which is what a hover-only affordance is. `Run` now lands on the page that
+  // starts one ([_RunPanel.build]), so the row itself is the door and a `+`
+  // beside it would be a second one to the same place.
 
   @override
   Widget buildPanel(BuildContext context) => _RunPanel(this);
@@ -153,26 +150,21 @@ class _RunPanelState extends State<_RunPanel> {
       ..removeWhere((s) => s.isEmpty),
   );
 
-  /// The run the place names, or this worktree's first one.
+  /// The run this key names, from anybody's worktree.
   ///
   /// By key rather than by identity, because the handle object is replaced on
-  /// every probe — and by *falling back* rather than by showing nothing,
-  /// because an address to a run that has since stopped should land you in the
-  /// cockpit rather than in an error.
+  /// every probe. Unscoped on purpose: the read-only page exists precisely so
+  /// a tool that knows about another checkout's run will say so.
   ///
-  /// The two lookups scope differently on purpose. An explicit key finds any
-  /// worktree's run — the read-only page exists precisely so a tool that
-  /// knows will say. The fallback is own runs only: it used to be the newest
-  /// handle on the machine, so opening Run in a fresh worktree landed you on
-  /// whatever another checkout launched last.
-  RunHandle? _select(List<RunHandle> handles, RunPlace place) {
-    if (place.runKey case var key?) {
-      for (var handle in handles) {
-        if (handle.key == key) return handle;
-      }
-    }
+  /// **It no longer falls back to your first run.** It did, and that is what
+  /// left the plugin without a page of its own: `Run` in the rail meant
+  /// *whichever run sorts first*, so the one place that could have offered a
+  /// device list, an emulator to boot and a launch form was unreachable for as
+  /// long as anything was running. An address naming a run that has since
+  /// stopped now lands on the same page a fresh worktree lands on.
+  RunHandle? _byKey(List<RunHandle> handles, String key) {
     for (var handle in handles) {
-      if (_core.isMine(handle)) return handle;
+      if (handle.key == key) return handle;
     }
     return null;
   }
@@ -184,27 +176,32 @@ class _RunPanelState extends State<_RunPanel> {
       builder: (context, _) {
         var handles = _core.handles;
         var place = _resolve(context);
-        // A failure is looked up before a handle is fallen back to, so the
-        // address you were already watching turns into the reason it died
-        // rather than bouncing you to the form with nothing said.
-        var failed = place.isNew || place.runKey == null
+        var key = place.isNew ? null : place.runKey;
+        // **The live run wins over a failure wearing its key.** A run's key is
+        // its entry point, device and flavor, so relaunching what just failed
+        // produces a handle and a failure record with the *same* key — and
+        // reading the failure first made both rail rows open the obituary
+        // while the app they were about was up and driveable, with no way to
+        // reach it but Dismiss. A failure is what is left when nothing is
+        // running under that name; it is never the more current of the two.
+        var shown = key == null ? null : _byKey(handles, key);
+        var failed = key == null || shown != null
             ? null
-            : _core.failureFor(place.runKey!);
-        var shown = place.isNew || failed != null
-            ? null
-            : _select(handles, place);
+            : _core.failureFor(key);
 
         // No chip row. The runs are the rail's child rows and were being drawn
         // twice — the mockup had both, and building it made the duplication
-        // plain. `+ New run` moved to the rail with them, as [rowCommands].
+        // plain. Which is also why nothing named a run was added back when this
+        // page became the plugin's landing: the rail is the list.
         return switch ((failed, shown)) {
           (var failure?, _) => _FailedRunPage(
             failure: failure,
             onDismiss: () {
               _core.dismissFailure(failure.key);
-              if (mounted) {
-                AddressScope.write(context).setSegments(const [newRunSegment]);
-              }
+              // Back to the plugin's own page, which is where the rail's `Run`
+              // row goes — the bare address rather than `/new`, so dismissing
+              // lands you exactly where clicking `Run` would.
+              if (mounted) AddressScope.write(context).setSegments(const []);
             },
           ),
           (_, var handle?) => _RunView(
@@ -1937,15 +1934,40 @@ class _NewRunPageState extends State<_NewRunPage> {
                     ),
                   ),
                 ],
-                // The desk also lives in the shell's chrome, where it can jump you
-                // to the worktree holding a busy device — but nobody who never
-                // looks up there should lose the list. Gated on *this worktree's*
-                // runs: another checkout holding the phone is exactly when the
-                // desk has something to say here.
-                if (_core.ownHandles.isEmpty) ...[
-                  const Gap(FwSpacing.xl),
-                  _Desk(core: _core),
-                ],
+                // The desk also lives in the shell's chrome, where it can jump
+                // you to the worktree holding a busy device — but that copy can
+                // only read, so this is the one that boots anything.
+                //
+                // **Ungated.** It used to appear only while this worktree had
+                // no runs, on the reasoning that a busy desk is what an idle
+                // worktree wants to know about. What that actually did was make
+                // booting an emulator impossible for anyone with an app
+                // already running: an unbooted AVD is not a device, so it is
+                // not in the picker above, and this was the only control in the
+                // GUI that could start one. One run and the second device was
+                // unreachable.
+                const Gap(FwSpacing.xl),
+                Divider(height: 1, color: context.colors.line),
+                const Gap(FwSpacing.lg),
+                _Desk(
+                  // Named so a test can say *this Mac is on the desk and
+                  // nowhere else on this page*, which is the claim about the
+                  // picker's platform filter. The desk lists the whole machine
+                  // by design, so a bare `findsNothing` cannot make it.
+                  key: deskKey,
+                  core: _core,
+                  canRun: (device) =>
+                      device.isConnected &&
+                      device.id != _device &&
+                      allowed.any((offered) => offered.id == device.id),
+                  onPickDevice: (id) => setState(() {
+                    _device = id;
+                    // Same as choosing it in the picker, because it is the same
+                    // choice: a declared flavor can differ per device, and a
+                    // value the user typed over it stays theirs.
+                    if (!_overridingFlavor) _resetFlavor();
+                  }),
+                ),
               ],
             ),
           ),
@@ -2096,15 +2118,42 @@ class _EntrypointPicker extends StatelessWidget {
       '${choice.package}|${choice.entry.path}';
 }
 
+/// Names the desk for a test that has to tell it apart from the picker above
+/// it. See where it is passed.
+@visibleForTesting
+const deskKey = ValueKey('run.desk');
+
 /// What is on this machine, and who has it.
 ///
-/// The interim home of the desk: it belongs beside the worktree tabs, because a
-/// busy device should take you to the worktree holding it and only the shell
-/// can switch worktrees. Rendered here so the list exists before that lands.
+/// The desk also lives beside the worktree tabs, because a busy device should
+/// take you to the worktree holding it and only the shell can switch worktrees.
+/// **This is the copy that can act**: the chrome has no `RunCore` and starts no
+/// daemon, so booting, refreshing and launching are here.
 class _Desk extends StatefulWidget {
-  const _Desk({required this.core});
+  const _Desk({
+    super.key,
+    required this.core,
+    required this.canRun,
+    required this.onPickDevice,
+  });
 
   final RunCore core;
+
+  /// Whether the form above would accept this device: connected, not already
+  /// the one chosen, and among what the entry point declares it runs on.
+  ///
+  /// Held by another run is deliberately not a reason to withhold the offer —
+  /// a phone can carry two apps, and the picker above does not withhold it
+  /// either. A desk that refused what the field beside it accepts would be the
+  /// two disagreeing about the same launch.
+  final bool Function(DaemonDevice device) canRun;
+
+  /// Where **Run here** goes: the form above, not a route.
+  ///
+  /// A free device is an answer to the Device field, so pressing it fills that
+  /// field rather than navigating — the entry point, the flavor and the knobs
+  /// are already chosen up there, and a jump would ask for them again.
+  final ValueChanged<String> onPickDevice;
 
   @override
   State<_Desk> createState() => _DeskState();
@@ -2115,6 +2164,8 @@ class _DeskState extends State<_Desk> {
   /// cannot start a second boot of one machine.
   final _booting = <String>{};
 
+  var _refreshing = false;
+
   RunCore get core => widget.core;
 
   @override
@@ -2122,6 +2173,21 @@ class _DeskState extends State<_Desk> {
     super.initState();
     // A second round trip, asked for only when the desk is actually on screen.
     unawaited(core.loadEmulators());
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _refreshing = true);
+    try {
+      await core.refreshDesk();
+    } on Object catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not read the devices: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   Future<void> _boot(DaemonEmulator emulator) async {
@@ -2158,8 +2224,18 @@ class _DeskState extends State<_Desk> {
             Text('On this machine', style: context.type.fieldLabel),
             const Gap(FwSpacing.sm),
             Text(
-              core.isLive ? 'live' : 'cached',
+              _refreshing
+                  ? 'reading…'
+                  : core.isLive
+                  ? 'live'
+                  : 'cached',
               style: context.type.micro.copyWith(color: colors.mut3),
+            ),
+            const Spacer(),
+            _DeskLink(
+              label: 'Refresh',
+              icon: Icons.refresh,
+              onTap: _refreshing ? null : _refresh,
             ),
           ],
         ),
@@ -2180,10 +2256,26 @@ class _DeskState extends State<_Desk> {
                   ),
                 ),
                 const Gap(FwSpacing.sm),
-                Text(
-                  _status(device, core),
-                  style: context.type.caption.copyWith(color: colors.mut2),
+                // `Expanded` rather than `Flexible` beside a `Spacer`: two
+                // flex children share what is left evenly, so a long status
+                // would ellipsise at half the row with the other half empty.
+                Expanded(
+                  child: Text(
+                    _status(device, core),
+                    style: context.type.caption.copyWith(color: colors.mut2),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
+                // **Only where it would work.** The field this fills is the
+                // form's, and the form only offers what the chosen entry point
+                // declares it runs on — so a row offering to run a
+                // desktop-only entry point on a phone would be offering the
+                // Start button's own refusal.
+                if (widget.canRun(device))
+                  _DeskLink(
+                    label: 'Run here',
+                    onTap: () => widget.onPickDevice(device.id),
+                  ),
               ],
             ),
           ),
@@ -2207,23 +2299,23 @@ class _DeskState extends State<_Desk> {
                   ),
                 ),
                 const Gap(FwSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'offline',
+                    style: context.type.caption.copyWith(color: colors.mut2),
+                  ),
+                ),
                 if (_booting.contains(emulator.id))
                   Text(
                     'starting…',
                     style: context.type.caption.copyWith(color: colors.mut2),
                   )
                 else
-                  Tappable(
+                  _DeskLink(
+                    // The iOS row opens the Simulator; an AVD row boots one
+                    // machine. Different verbs because they are different acts.
+                    label: emulator.platformType == 'ios' ? 'open' : 'boot',
                     onTap: () => _boot(emulator),
-                    child: Text(
-                      // The iOS row opens the Simulator; an AVD row boots one
-                      // machine. Different verbs because they are different
-                      // acts.
-                      emulator.platformType == 'ios' ? 'open' : 'boot',
-                      style: context.type.caption.copyWith(
-                        color: colors.accent,
-                      ),
-                    ),
                   ),
               ],
             ),
@@ -2257,6 +2349,44 @@ class _DeskState extends State<_Desk> {
     MachineKind.virtual => Icons.phone_iphone_outlined,
     MachineKind.physical => Icons.smartphone_outlined,
   };
+}
+
+/// The desk's one control shape: a word at the row's right edge.
+///
+/// A word rather than a button because a desk row is a fact with an offer on
+/// the end of it, and five bordered buttons down the right of a list would
+/// read as the list being a form. Disabled goes muted rather than vanishing —
+/// a Refresh that disappears while it refreshes is a control you cannot find
+/// twice.
+class _DeskLink extends StatelessWidget {
+  const _DeskLink({required this.label, required this.onTap, this.icon});
+
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var color = onTap == null ? colors.mut3 : colors.accent;
+    return Tappable(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon case var icon?) ...[
+              Icon(icon, size: FwIconSize.xs, color: color),
+              const Gap(FwSpacing.xs),
+            ],
+            Text(label, style: context.type.caption.copyWith(color: color)),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// The `--flavor`: a line of text until it needs changing.

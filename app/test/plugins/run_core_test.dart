@@ -359,14 +359,16 @@ void main() {
       expect(scanRunHandles(runDir.path), isEmpty);
     });
 
-    test('the rail carries the one thing a list of runs cannot say', () {
-      // `+ New run` was a chip in the panel; the chips are gone, so it is a
-      // command on the plugin's own rail row. It names a place rather than a
-      // callback, so the button and a typed address do the same thing.
-      var command = RunPlugin(core).rowCommands().single;
-      expect(command.label, 'New run');
-      expect(command.opens, newRunSegment);
-      expect(runPlace([command.opens]).isNew, isTrue);
+    test('the rail row carries no command of its own', () {
+      // It carried `+ New run`, which was the only way to start a second one
+      // and appeared only while the mouse was over the row — reported as the
+      // buttons being absent, which is what a hover-only affordance is. The
+      // row itself now opens the page that starts a run, so a `+` beside it
+      // would be a second door to the same place.
+      expect(RunPlugin(core).rowCommands(), isEmpty);
+      // The address it opened still parses: it is a real place, and one that
+      // may be written down.
+      expect(runPlace([newRunSegment]).isNew, isTrue);
     });
 
     test('a failed run is a rail row, not only a panel state', () async {

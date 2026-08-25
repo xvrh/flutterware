@@ -179,6 +179,19 @@ from a plugin. So:
    one worktree session. A busy device's row jumps straight to the run's page
    in the worktree that holds it; booting emulators stays in the panel's desk,
    with the daemon.
+
+   **"The panel's empty state" was the mistake, corrected 2026-08-25.** The
+   panel desk was drawn only while the worktree had no runs — and it is the
+   only surface in the GUI that can boot anything, because the chrome copy has
+   no `RunCore`. An unbooted emulator is not a device, so it is not in the
+   launch form's picker either: one running app and every machine that was not
+   already up became unreachable, reported as *the buttons are absent*. The
+   desk is now drawn whenever the launch form is, and has gained the two
+   controls it never had — a **Refresh** (the list could say `27m ago` and
+   nothing could take a new one) and **Run here** on a free device, which fills
+   the form's Device field rather than navigating. The chrome copy stays
+   read-only and now carries a row into the panel, so the two surfaces over the
+   same machines are visibly one thing.
 6. ~~Fix the `host` labels~~ **built**, and the fix went deeper than labels: the
    distinction is now `DaemonDevice.kind` (`physical`/`virtual`/`host`) and it
    is reported by the `devices` action, because `physical: false` covered both

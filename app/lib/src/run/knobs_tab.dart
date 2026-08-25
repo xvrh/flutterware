@@ -8,11 +8,10 @@ import 'knob_field.dart';
 
 /// The knobs of the run being shown, editable, with **Restart to apply**.
 ///
-/// This is what makes the measurement reachable. The launch form lives on
-/// the New run page, and the only route back to it is Stop — which is a
-/// relaunch, which is the rebuild this design exists to remove. Editing here
-/// costs a wrapper rewrite and a hot restart: 262ms on desktop, 3.07s on an
-/// Android emulator.
+/// This is what makes the measurement reachable. The launch form is a
+/// different page — reaching it means leaving this run, and starting a second
+/// one there is a fresh build. Editing here costs a wrapper rewrite and a hot
+/// restart: 262ms on desktop, 3.07s on an Android emulator.
 ///
 /// The bar is pinned rather than last in the list. A knob is a short
 /// list today and an app with eight of them is ordinary; a button that scrolls
