@@ -65,7 +65,10 @@ DatabaseAdapter(
 
 ## What you get on the wire
 
-- **`schema`** (state) — tables, columns, row counts, read live.
+- **`schema`** (state) — tables *and views*, columns, row counts, read
+  live. Each entry carries its `type`, so a database that presents itself
+  through views — PowerSync, where every schema table is a view over a
+  `ps_data__*` table — reads as itself rather than as its storage.
 - **`query`** (action) — one statement, rows inline, capped at `limit`
   (default 100) with a `truncated` flag rather than a silent cut. The cap
   protects the reply, not the fetch: put a `LIMIT` in the SQL to page a big

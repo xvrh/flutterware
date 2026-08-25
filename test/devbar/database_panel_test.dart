@@ -214,7 +214,8 @@ void main() {
     db.onQuery = (sql, _) async {
       if (sql.contains('sqlite_master')) {
         return [
-          {'name': 'todos'},
+          {'name': 'ps_data__todos', 'type': 'table'},
+          {'name': 'todos', 'type': 'view'},
         ];
       }
       if (sql.startsWith('PRAGMA')) {
@@ -231,9 +232,34 @@ void main() {
     var schema = await panel.readState('schema');
     expect(schema, {
       'tables': [
-        {'name': 'todos', 'rows': 12, 'columns': 'id INTEGER, title TEXT'},
+        {
+          'name': 'ps_data__todos',
+          'type': 'table',
+          'rows': 12,
+          'columns': 'id INTEGER, title TEXT',
+        },
+        {
+          'name': 'todos',
+          'type': 'view',
+          'rows': 12,
+          'columns': 'id INTEGER, title TEXT',
+        },
       ],
     });
+  });
+
+  test('schema asks sqlite_master for views as well as tables', () async {
+    db.onQuery = (sql, _) async => sql.contains('sqlite_master')
+        ? const []
+        : const [
+            {'c': 0},
+          ];
+    var (panel, _) = mount(db.adapter());
+    await panel.readState('schema');
+    var listing = db.queried
+        .map((q) => q.$1)
+        .firstWhere((sql) => sql.contains('sqlite_master'));
+    expect(listing, contains("type IN ('table', 'view')"));
   });
 
   group('changes', () {

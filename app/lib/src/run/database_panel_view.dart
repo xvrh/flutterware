@@ -62,11 +62,17 @@ class _ActivityPane extends _Pane {
 }
 
 class _TableInfo {
-  _TableInfo(this.name, this.rows, this.columns);
+  _TableInfo(this.name, this.type, this.rows, this.columns);
 
   final String name;
+
+  /// `table` or `view`, straight from sqlite_master.
+  final String type;
+
   final int? rows;
   final String columns;
+
+  bool get isView => type == 'view';
 }
 
 class _DatabasePanelViewState extends State<DatabasePanelView> {
@@ -137,6 +143,7 @@ class _DatabasePanelViewState extends State<DatabasePanelView> {
         for (var table in schema['tables'] as List? ?? const [])
           _TableInfo(
             '${(table as Map)['name']}',
+            '${table['type'] ?? 'table'}',
             table['rows'] as int?,
             '${table['columns'] ?? ''}',
           ),
@@ -219,7 +226,10 @@ class _DatabasePanelViewState extends State<DatabasePanelView> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text('TABLES', style: context.type.sectionLabel),
+                  child: Text(
+                    'TABLES & VIEWS',
+                    style: context.type.sectionLabel,
+                  ),
                 ),
                 _IconAction(
                   icon: Icons.refresh,
@@ -253,7 +263,7 @@ class _DatabasePanelViewState extends State<DatabasePanelView> {
                         Padding(
                           padding: const EdgeInsets.all(FwSpacing.lg),
                           child: Text(
-                            'No tables yet.',
+                            'No tables or views yet.',
                             style: context.type.bodyMuted,
                           ),
                         ),
@@ -271,6 +281,10 @@ class _DatabasePanelViewState extends State<DatabasePanelView> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              if (table.isView) ...[
+                                const Gap(FwSpacing.sm),
+                                const _TypeBadge('view'),
+                              ],
                               const Gap(FwSpacing.md),
                               Text(
                                 table.rows == null ? '' : '${table.rows}',
@@ -359,6 +373,27 @@ class _DatabasePanelViewState extends State<DatabasePanelView> {
       ),
     ),
   };
+}
+
+class _TypeBadge extends StatelessWidget {
+  const _TypeBadge(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: context.colors.line,
+        borderRadius: BorderRadius.circular(context.radii.micro),
+      ),
+      child: Text(
+        label,
+        style: context.type.micro.copyWith(color: context.colors.mut2),
+      ),
+    );
+  }
 }
 
 class _SidebarItem extends StatelessWidget {
@@ -453,6 +488,10 @@ class _TableView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(table, style: context.type.heading),
+              if (info?.isView ?? false) ...[
+                const Gap(FwSpacing.sm),
+                const _TypeBadge('view'),
+              ],
               const Gap(FwSpacing.md),
               Expanded(
                 child: Text(

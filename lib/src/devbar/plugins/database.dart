@@ -204,8 +204,8 @@ class DatabasePanelSource implements DevbarPanelSource {
       'schema',
       'Schema',
       description:
-          'Every table, its columns and its row count, read live from '
-          'sqlite_master.',
+          'Every table and view, its columns and its row count, read live '
+          'from sqlite_master.',
       read: _schema,
     );
 
@@ -335,9 +335,15 @@ class DatabasePanelSource implements DevbarPanelSource {
     }
   }
 
+  /// Views are listed alongside tables, and both carry their `type`. A schema
+  /// that lists only tables is wrong for anything that presents itself through
+  /// views — PowerSync is the case that found this: every table in its schema
+  /// is a view over a `ps_data__*` table of opaque JSON, so a table-only list
+  /// shows the storage and hides the data. `PRAGMA table_info` and `count(*)`
+  /// answer for a view exactly as they do for a table.
   Future<Map<String, Object?>> _schema() async {
     var tables = await adapter.query(
-      "SELECT name FROM sqlite_master WHERE type = 'table' "
+      "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') "
       "AND name NOT LIKE 'sqlite_%' ORDER BY name",
       const [],
     );
@@ -352,6 +358,7 @@ class DatabasePanelSource implements DevbarPanelSource {
       );
       result.add({
         'name': name,
+        'type': '${table['type']}',
         'rows': count.isEmpty ? null : count.first['c'],
         'columns': [
           for (var column in columns)
