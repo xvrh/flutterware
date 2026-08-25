@@ -1487,6 +1487,74 @@ class PreviewsCore extends PluginCore {
     return PluginView(nodes);
   }
 
+  /// Every entry, not just the projected ones.
+  ///
+  /// The default walks [report], which lists only the first
+  /// [_projectedEntries] of each package — and since entries are sorted by id,
+  /// that is the alphabetical head of the catalog. A 160-entry package offered
+  /// twenty, all of them from files beginning `a`–`c`, and the palette looked
+  /// like it worked. The same hole `AssetsCore.search` closes, for the same
+  /// reason: the scan is already in memory, so walking all of it costs a fuzzy
+  /// match per entry and stays the pure read the contract requires.
+  ///
+  /// The title is the one the projection shows, so a row found here and a row
+  /// read there are the same row.
+  @override
+  List<SearchHit> search(String query) {
+    var trimmed = query.trim();
+    if (trimmed.isEmpty) return const [];
+
+    var hits = <SearchHit>[];
+    var seen = <String>{};
+    for (var path in packages) {
+      var scan = _scans[path];
+      if (scan == null) continue;
+      for (var entry in scan.entries) {
+        var title = entry.group == null
+            ? entry.name
+            : '${entry.group} / ${entry.name}';
+        var match = fuzzyMatch(trimmed, title);
+        var score = match?.score;
+        if (score == null) {
+          // The subtitle fallback the default walk applies to a `detail`, kept
+          // so the entries that were findable before behave identically now:
+          // substring, not subsequence, because an id is a long path and a long
+          // string contains almost any short subsequence.
+          var index = entry.id.toLowerCase().indexOf(trimmed.toLowerCase());
+          if (index < 0) continue;
+          score = 10 + (20 - index).clamp(0, 20);
+        }
+        var address = addressFor(path, entry.id);
+        if (!seen.add('$address')) continue;
+        hits.add(
+          SearchHit(
+            address: address,
+            title: title,
+            subtitle: entry.id,
+            group: host.label,
+            reason: SearchReason.item,
+            score: score,
+            matched: match?.matched ?? const [],
+          ),
+        );
+      }
+    }
+
+    // The plugin row and the package children still come from the projection —
+    // there is no reason to reimplement those, and keying the dedupe on the
+    // address alone keeps the projected entries from arriving a second time.
+    for (var hit in searchReport(
+      report,
+      trimmed,
+      worktree: host.worktree.name,
+    )) {
+      if (seen.add('${hit.address}')) hits.add(hit);
+    }
+
+    hits.sort((a, b) => b.score - a.score);
+    return hits;
+  }
+
   @override
   Future<Object?> invoke(
     String actionId, {

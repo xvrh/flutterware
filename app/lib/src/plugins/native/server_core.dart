@@ -10,6 +10,7 @@ import 'package:meta/meta.dart';
 import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
+import 'server_address.dart';
 
 /// The registered id — also what `tool/flutterware.dart` declares.
 const serverPluginId = 'flutterware.server';
@@ -46,6 +47,17 @@ class ServerCore extends PluginCore {
   List<TrackedServer> get servers =>
       _servers.values.toList()
         ..sort((a, b) => b.handle.startedAt.compareTo(a.handle.startedAt));
+
+  /// Where one server's overview is — the same segments the panel reads back.
+  ///
+  /// A server is named rather than pid-qualified, for the reason
+  /// `server_address.dart` gives: an address a person pastes tomorrow should
+  /// survive tonight's restart.
+  Address addressFor(String server) => Address(
+    worktree: host.worktree.name,
+    plugin: host.id,
+    segments: serverSegments(server),
+  );
 
   @override
   Future<void> computeAll() async {
@@ -258,6 +270,11 @@ class ServerCore extends PluginCore {
             for (var server in servers)
               ViewItem(
                 server.handle.name,
+                // The overview the panel already reads back — see
+                // `server_address.dart`. Without it a row names a server the
+                // shell can open and the palette cannot reach, which is the
+                // one gap `searchReport` cannot close on a plugin's behalf.
+                address: addressFor(server.handle.name),
                 detail: switch (server) {
                   _ when server.stopped => 'stopped',
                   _ when server.connected =>
