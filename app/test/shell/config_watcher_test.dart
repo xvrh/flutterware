@@ -8,6 +8,21 @@ import 'package:flutterware_app/src/shell/config_watcher.dart';
 import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 
+/// Every test here that involves the debounce runs on virtual time.
+///
+/// The subject is a timer, and a timer asserted against the wall clock is an
+/// assertion about the machine. This file passed alone and failed twice inside
+/// a full suite: a 1ms gap between two writes in a burst outlasts a 10ms
+/// debounce the moment something else wants the CPU, and the single fire the
+/// test was counting lands mid-burst instead. Widening the windows buys a
+/// slower suite and a rarer failure, not a correct test — the ratio the test
+/// depends on is still at the scheduler's mercy. Under [fakeAsync] a gap *is*
+/// the fraction of the debounce the test means it to be, on any machine and
+/// under any load.
+///
+/// Nothing about the watcher resists it: every file operation it makes is
+/// synchronous, and its one asynchronous edge — the event stream — is a
+/// microtask, which fake time drives like any other.
 const _debounce = Duration(milliseconds: 10);
 
 void main() {
@@ -17,29 +32,20 @@ void main() {
   late List<String?> seen;
   late ConfigWatcher watcher;
 
+  /// Starts a watcher inside virtual time. [ConfigWatcher.start] awaits
+  /// nothing, so a flush is the whole of the wait.
+  void start(FakeAsync async, [ConfigWatcher? which]) {
+    unawaited((which ?? watcher).start());
+    async.flushMicrotasks();
+  }
+
   /// A save: write the bytes, then announce it the way a directory watcher
   /// would. Separate steps on purpose — the watcher must decide from the
   /// content, not from the event.
-  Future<void> save(String contents, {String? path}) async {
+  void save(FakeAsync async, String contents, {String? path}) {
     File(path ?? config.path).writeAsStringSync(contents);
     events.add(WatchEvent(ChangeType.MODIFY, path ?? config.path));
-    await Future<void>.delayed(_debounce * 4);
-  }
-
-  /// Waits for a fire to land, instead of for a fixed slice of clock.
-  ///
-  /// The paths through the empty-file confirmation — a delete, a truncate —
-  /// cost two debounce windows by design, so a budget written as a small
-  /// multiple of a 10ms debounce leaves a few milliseconds of slack and
-  /// ordinary scheduler jitter spends it: that 20ms path measured over 70ms on
-  /// an *idle* machine, and on CI it failed for a reason that had nothing to do
-  /// with the watcher. A test that asserts nothing fired still has to spend the
-  /// time; these have an outcome to wait for.
-  Future<void> fires(int count) async {
-    var deadline = DateTime.now().add(const Duration(seconds: 5));
-    while (seen.length < count && DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 1));
-    }
+    async.elapse(_debounce * 4);
   }
 
   setUp(() {
@@ -70,47 +76,46 @@ void main() {
     expect(watcher.isWatching, isTrue);
   });
 
-  test('a real edit fires once', () async {
-    await watcher.start();
-    await save('void main() { print(1); }');
-    expect(seen, hasLength(1));
+  test('a real edit fires once', () {
+    fakeAsync((async) {
+      start(async);
+      save(async, 'void main() { print(1); }');
+      expect(seen, hasLength(1));
+    });
   });
 
-  test('a save that changed no bytes does not fire', () async {
-    await watcher.start();
-    // What a save-all, or a formatter that had nothing to do, produces.
-    await save('void main() {}');
-    expect(seen, isEmpty);
+  test('a save that changed no bytes does not fire', () {
+    fakeAsync((async) {
+      start(async);
+      // What a save-all, or a formatter that had nothing to do, produces.
+      save(async, 'void main() {}');
+      expect(seen, isEmpty);
+    });
   });
 
-  test('a burst of writes inside one window fires once, for the last', () async {
-    await watcher.start();
+  test('a burst of writes inside one window fires once, for the last', () {
+    fakeAsync((async) {
+      start(async);
 
-    // Distinct content each time: with no debounce every write is its own fire,
-    // and counting a burst of events over *one* content cannot tell them apart.
-    for (var i = 0; i < 5; i++) {
-      config.writeAsStringSync('void main() { print($i); }');
-      events.add(WatchEvent(ChangeType.MODIFY, config.path));
-      await Future<void>.delayed(const Duration(milliseconds: 1));
-    }
-    await Future<void>.delayed(_debounce * 6);
+      // Distinct content each time: with no debounce every write is its own
+      // fire, and counting a burst of events over *one* content cannot tell
+      // them apart.
+      for (var i = 0; i < 5; i++) {
+        config.writeAsStringSync('void main() { print($i); }');
+        events.add(WatchEvent(ChangeType.MODIFY, config.path));
+        async.elapse(const Duration(milliseconds: 1));
+      }
+      async.elapse(_debounce * 6);
 
-    expect(seen, [
-      'void main() { print(4); }',
-    ], reason: 'one fire, for the content it settled on');
+      expect(seen, [
+        'void main() { print(4); }',
+      ], reason: 'one fire, for the content it settled on');
+    });
   });
 
-  // The one test here on fake time, because it is the only one whose subject
-  // *is* the timing. The others assert an outcome and can afford to wait for
-  // it; this one asserts what has not happened yet at a moment defined by the
-  // clock, and on a loaded CI runner a 3ms delay outlasted the 10ms debounce,
-  // firing mid-churn and failing it for a reason that had nothing to do with
-  // the watcher. Virtual time makes the gaps exactly the fraction of the
-  // debounce the test means them to be.
   test('sustained churn defers the fire until it stops', () {
     fakeAsync((async) {
-      unawaited(watcher.start());
-      async.flushMicrotasks();
+      start(async);
       config.writeAsStringSync('void main() { print(1); }');
 
       // What `git rebase` looks like: events arriving faster than the debounce,
@@ -129,47 +134,57 @@ void main() {
     });
   });
 
-  test('an event for a sibling file is ignored', () async {
-    await watcher.start();
+  test('an event for a sibling file is ignored', () {
+    fakeAsync((async) {
+      start(async);
 
-    // The config's bytes move too. Otherwise the hash gate absorbs the event
-    // and the test passes with the path filter deleted.
-    config.writeAsStringSync('void main() { print(99); }');
-    var sibling = p.join(root.path, 'tool', 'other.dart');
-    await save('// unrelated', path: sibling);
+      // The config's bytes move too. Otherwise the hash gate absorbs the event
+      // and the test passes with the path filter deleted.
+      config.writeAsStringSync('void main() { print(99); }');
+      var sibling = p.join(root.path, 'tool', 'other.dart');
+      save(async, '// unrelated', path: sibling);
 
-    expect(seen, isEmpty, reason: 'only the config file may wake it');
+      expect(seen, isEmpty, reason: 'only the config file may wake it');
+    });
   });
 
-  test('the file going away is a change', () async {
-    await watcher.start();
-    config.deleteSync();
-    events.add(WatchEvent(ChangeType.REMOVE, config.path));
-    await fires(1);
-    expect(seen, [null], reason: 'the fire reports a config that is gone');
+  test('the file going away is a change', () {
+    fakeAsync((async) {
+      start(async);
+      config.deleteSync();
+      events.add(WatchEvent(ChangeType.REMOVE, config.path));
+      // An absent file is confirmed before it is believed, so this path costs
+      // two windows rather than one.
+      async.elapse(_debounce * 3);
+      expect(seen, [null], reason: 'the fire reports a config that is gone');
+    });
   });
 
-  test('broken twice fires once', () async {
-    await watcher.start();
+  test('broken twice fires once', () {
+    fakeAsync((async) {
+      start(async);
 
-    await save('void main() { syntax error');
-    expect(seen, hasLength(1));
+      save(async, 'void main() { syntax error');
+      expect(seen, hasLength(1));
 
-    // Saving the same broken file again changes nothing, and re-running would
-    // reproduce the same error.
-    await save('void main() { syntax error');
-    expect(seen, hasLength(1));
+      // Saving the same broken file again changes nothing, and re-running would
+      // reproduce the same error.
+      save(async, 'void main() { syntax error');
+      expect(seen, hasLength(1));
+    });
   });
 
-  test('fixing back to the original content still fires', () async {
-    await watcher.start();
-    await save('void main() { broken');
-    expect(seen, hasLength(1));
+  test('fixing back to the original content still fires', () {
+    fakeAsync((async) {
+      start(async);
+      save(async, 'void main() { broken');
+      expect(seen, hasLength(1));
 
-    // The manifest currently running came from this content, but the *file* did
-    // not have it a moment ago, so the save is real and must be acted on.
-    await save('void main() {}');
-    expect(seen, hasLength(2));
+      // The manifest currently running came from this content, but the *file*
+      // did not have it a moment ago, so the save is real and must be acted on.
+      save(async, 'void main() {}');
+      expect(seen, hasLength(2));
+    });
   });
 
   test('nothing is watched when the config directory does not exist', () async {
@@ -188,133 +203,156 @@ void main() {
     await w.dispose();
   });
 
-  test('a truncate-then-write is one fire, not an empty one first', () async {
-    await watcher.start();
+  test('a truncate-then-write is one fire, not an empty one first', () {
+    fakeAsync((async) {
+      start(async);
 
-    // What python's `open(w)`, and `git checkout`, actually do: the file passes
-    // through nothing on the way to its new content. Acting on the empty state
-    // produces "it printed nothing" — a red banner for a file that is fine.
-    config.writeAsStringSync('');
-    events.add(WatchEvent(ChangeType.MODIFY, config.path));
-    await Future<void>.delayed(_debounce * 2);
-    config.writeAsStringSync('void main() { print(1); }');
-    // The event a real watcher sends for the second write. Without it the test
-    // passes whether or not the empty state is confirmed, because nothing ever
-    // asks again.
-    events.add(WatchEvent(ChangeType.MODIFY, config.path));
-    await Future<void>.delayed(_debounce * 6);
+      // What python's `open(w)`, and `git checkout`, actually do: the file
+      // passes through nothing on the way to its new content. Acting on the
+      // empty state produces "it printed nothing" — a red banner for a file
+      // that is fine.
+      config.writeAsStringSync('');
+      events.add(WatchEvent(ChangeType.MODIFY, config.path));
+      // A window and a half: far enough that the empty state is *seen* and the
+      // confirmation armed, not far enough that the confirmation closes behind
+      // it. The second write is what has to arrive first, and on fake time
+      // "first" is decided by this number rather than by which of two timers
+      // due at the same microsecond was created earlier.
+      async.elapse(_debounce * 1.5);
+      config.writeAsStringSync('void main() { print(1); }');
+      // The event a real watcher sends for the second write. Without it the
+      // test passes whether or not the empty state is confirmed, because
+      // nothing ever asks again.
+      events.add(WatchEvent(ChangeType.MODIFY, config.path));
+      async.elapse(_debounce * 6);
 
-    expect(seen, [
-      'void main() { print(1); }',
-    ], reason: 'the empty state must never reach the loader');
+      expect(seen, [
+        'void main() { print(1); }',
+      ], reason: 'the empty state must never reach the loader');
+    });
   });
 
-  test('a file that really is emptied still lands', () async {
-    await watcher.start();
+  test('a file that really is emptied still lands', () {
+    fakeAsync((async) {
+      start(async);
 
-    config.writeAsStringSync('');
-    events.add(WatchEvent(ChangeType.MODIFY, config.path));
-    await fires(1);
+      config.writeAsStringSync('');
+      events.add(WatchEvent(ChangeType.MODIFY, config.path));
+      async.elapse(_debounce * 3);
 
-    expect(seen, [''], reason: 'one settle later, the empty file is believed');
+      expect(seen, [
+        '',
+      ], reason: 'one settle later, the empty file is believed');
+    });
   });
 
-  test('a save during a reload becomes one follow-up', () async {
-    var running = Completer<void>();
-    var calls = <String>[];
-    var slow = ConfigWatcher(
-      worktreePath: root.path,
-      onChanged: () async {
-        calls.add(config.readAsStringSync());
-        await running.future;
-      },
-      debounce: _debounce,
-      watch: (_) => events.stream,
-    );
-    addTearDown(slow.dispose);
-    await slow.start();
+  test('a save during a reload becomes one follow-up', () {
+    fakeAsync((async) {
+      var running = Completer<void>();
+      var calls = <String>[];
+      var slow = ConfigWatcher(
+        worktreePath: root.path,
+        onChanged: () async {
+          calls.add(config.readAsStringSync());
+          await running.future;
+        },
+        debounce: _debounce,
+        watch: (_) => events.stream,
+      );
+      addTearDown(slow.dispose);
+      start(async, slow);
 
-    await save('void main() { print(1); }');
-    expect(calls, hasLength(1));
+      save(async, 'void main() { print(1); }');
+      expect(calls, hasLength(1));
 
-    // Two more saves while the first reload is still going.
-    config.writeAsStringSync('void main() { print(2); }');
-    events.add(WatchEvent(ChangeType.MODIFY, config.path));
-    await Future<void>.delayed(_debounce * 2);
-    config.writeAsStringSync('void main() { print(3); }');
-    events.add(WatchEvent(ChangeType.MODIFY, config.path));
-    await Future<void>.delayed(_debounce * 2);
-    expect(calls, hasLength(1), reason: 'nothing races the reload in flight');
+      // Two more saves while the first reload is still going.
+      config.writeAsStringSync('void main() { print(2); }');
+      events.add(WatchEvent(ChangeType.MODIFY, config.path));
+      async.elapse(_debounce * 2);
+      config.writeAsStringSync('void main() { print(3); }');
+      events.add(WatchEvent(ChangeType.MODIFY, config.path));
+      async.elapse(_debounce * 2);
+      expect(calls, hasLength(1), reason: 'nothing races the reload in flight');
 
-    running.complete();
-    await Future<void>.delayed(_debounce * 6);
+      running.complete();
+      async.elapse(_debounce * 6);
 
-    // One follow-up, for the content as it finally is — not one per save.
-    expect(calls, hasLength(2));
-    expect(calls.last, contains('print(3)'));
+      // One follow-up, for the content as it finally is — not one per save.
+      expect(calls, hasLength(2));
+      expect(calls.last, contains('print(3)'));
+    });
   });
 
-  test('disposing during a reload cancels the follow-up', () async {
-    var running = Completer<void>();
-    var calls = 0;
-    var slow = ConfigWatcher(
-      worktreePath: root.path,
-      onChanged: () async {
-        calls++;
-        await running.future;
-      },
-      debounce: _debounce,
-      watch: (_) => events.stream,
-    );
-    await slow.start();
+  test('disposing during a reload cancels the follow-up', () {
+    fakeAsync((async) {
+      var running = Completer<void>();
+      var calls = 0;
+      var slow = ConfigWatcher(
+        worktreePath: root.path,
+        onChanged: () async {
+          calls++;
+          await running.future;
+        },
+        debounce: _debounce,
+        watch: (_) => events.stream,
+      );
+      start(async, slow);
 
-    await save('void main() { print(1); }');
-    expect(calls, 1);
+      save(async, 'void main() { print(1); }');
+      expect(calls, 1);
 
-    // A second save coalesced behind the one in flight, then the user turns the
-    // watch off. The queued follow-up must not land afterwards.
-    config.writeAsStringSync('void main() { print(2); }');
-    events.add(WatchEvent(ChangeType.MODIFY, config.path));
-    await Future<void>.delayed(_debounce * 2);
-    await slow.dispose();
-    running.complete();
-    await Future<void>.delayed(_debounce * 6);
+      // A second save coalesced behind the one in flight, then the user turns
+      // the watch off. The queued follow-up must not land afterwards.
+      config.writeAsStringSync('void main() { print(2); }');
+      events.add(WatchEvent(ChangeType.MODIFY, config.path));
+      async.elapse(_debounce * 2);
+      unawaited(slow.dispose());
+      async.flushMicrotasks();
+      running.complete();
+      async.elapse(_debounce * 6);
 
-    expect(calls, 1);
+      expect(calls, 1);
+    });
   });
 
-  test('a reload that throws leaves the same bytes able to fire again', () async {
-    var attempts = 0;
-    var reported = <Object>[];
-    var angry = ConfigWatcher(
-      worktreePath: root.path,
-      onChanged: () async {
-        attempts++;
-        throw StateError('reload blew up');
-      },
-      onError: reported.add,
-      debounce: _debounce,
-      watch: (_) => events.stream,
-    );
-    addTearDown(angry.dispose);
-    await angry.start();
+  test('a reload that throws leaves the same bytes able to fire again', () {
+    fakeAsync((async) {
+      var attempts = 0;
+      var reported = <Object>[];
+      var angry = ConfigWatcher(
+        worktreePath: root.path,
+        onChanged: () async {
+          attempts++;
+          throw StateError('reload blew up');
+        },
+        onError: reported.add,
+        debounce: _debounce,
+        watch: (_) => events.stream,
+      );
+      addTearDown(angry.dispose);
+      start(async, angry);
 
-    // Both saves are the *same* content. Without rewinding the hash the second
-    // is indistinguishable from a no-op save and the file stays unreloadable.
-    await save('void main() { print(1); }');
-    config.setLastModifiedSync(DateTime.now());
-    events.add(WatchEvent(ChangeType.MODIFY, config.path));
-    await Future<void>.delayed(_debounce * 4);
+      // Both saves are the *same* content. Without rewinding the hash the
+      // second is indistinguishable from a no-op save and the file stays
+      // unreloadable.
+      save(async, 'void main() { print(1); }');
+      config.setLastModifiedSync(DateTime.now());
+      events.add(WatchEvent(ChangeType.MODIFY, config.path));
+      async.elapse(_debounce * 4);
 
-    expect(attempts, 2);
-    // Reported, not swallowed: a timer callback has nobody to rethrow to.
-    expect(reported, hasLength(2));
+      expect(attempts, 2);
+      // Reported, not swallowed: a timer callback has nobody to rethrow to.
+      expect(reported, hasLength(2));
+    });
   });
 
-  test('disposing stops it firing', () async {
-    await watcher.start();
-    await watcher.dispose();
-    await save('void main() { print(2); }');
-    expect(seen, isEmpty);
+  test('disposing stops it firing', () {
+    fakeAsync((async) {
+      start(async);
+      unawaited(watcher.dispose());
+      async.flushMicrotasks();
+      save(async, 'void main() { print(2); }');
+      expect(seen, isEmpty);
+    });
   });
 }
