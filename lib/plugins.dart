@@ -26,6 +26,7 @@ export 'src/plugins/report.dart';
 export 'src/plugins/result_shape.dart';
 export 'src/plugins/search.dart';
 export 'src/plugins/status.dart';
+export 'src/plugins/store.dart';
 export 'src/plugins/teardown.dart';
 export 'src/plugins/tone.dart';
 export 'src/plugins/view.dart';

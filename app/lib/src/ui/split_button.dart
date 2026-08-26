@@ -107,10 +107,18 @@ class FwSplitButton extends StatelessWidget {
       );
     }
 
+    // The border is a **foreground** decoration, and it has to be. A
+    // `Container` paints its `decoration` behind the child, and `Border.all`
+    // strokes inside the clip path — so the segments' opaque fill lands on top
+    // of the border and eats it, leaving the corners reading as a square block
+    // poking out of a rounded outline. In front, the stroke is the last thing
+    // painted and the corner is whole.
+    var shape = BorderRadius.circular(context.radii.radiusSmall);
     return Container(
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+      decoration: BoxDecoration(borderRadius: shape),
+      foregroundDecoration: BoxDecoration(
+        borderRadius: shape,
         border: Border.all(color: colors.line),
       ),
       child: IntrinsicHeight(

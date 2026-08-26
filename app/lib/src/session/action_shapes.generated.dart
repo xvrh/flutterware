@@ -6319,6 +6319,197 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'StoreExportPackage': ResultShape.fromJson(<String, Object?>{
+    'type': 'StoreExportPackage',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'path', 'type': 'String'},
+      <String, Object?>{
+        'name': 'output',
+        'type': 'String',
+        'doc':
+            'The root of the tree — the layout decides what sits beneath it.',
+      },
+      <String, Object?>{
+        'name': 'sets',
+        'type': 'List<StoreExportSet>',
+        'shape': <String, Object?>{
+          'type': 'StoreExportSet',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'store',
+              'type': 'String',
+              'doc': '`app-store` or `play`.',
+            },
+            <String, Object?>{
+              'name': 'deviceClass',
+              'type': 'String',
+              'doc': 'The display class — `iphone-6-9`, `phone`.',
+            },
+            <String, Object?>{
+              'name': 'locale',
+              'type': 'String',
+              'doc': 'The **store\'s** locale tag, which is what the directory is named for.',
+            },
+            <String, Object?>{
+              'name': 'directory',
+              'type': 'String',
+              'doc': 'Relative to [StoreExportPackage.output], so the whole tree can be moved or uploaded as it stands.',
+            },
+            <String, Object?>{
+              'name': 'width',
+              'type': 'int',
+              'doc':
+                  'The canvas, in physical pixels — what the store receives.',
+            },
+            <String, Object?>{'name': 'height', 'type': 'int'},
+            <String, Object?>{
+              'name': 'images',
+              'type': 'List<String>',
+              'doc': 'File names, in the order they were captured, which is the order they were numbered in and the order the store will show them.',
+            },
+            <String, Object?>{
+              'name': 'failed',
+              'type': 'int',
+              'doc': 'Scenarios that failed while producing this set.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Set when the package could not be run at all.',
+      },
+    ],
+  }),
+  'StoreExportResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'StoreExportResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'packages',
+        'type': 'List<StoreExportPackage>',
+        'shape': <String, Object?>{
+          'type': 'StoreExportPackage',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'path', 'type': 'String'},
+            <String, Object?>{
+              'name': 'output',
+              'type': 'String',
+              'doc': 'The root of the tree — the layout decides what sits beneath it.',
+            },
+            <String, Object?>{
+              'name': 'sets',
+              'type': 'List<StoreExportSet>',
+              'shape': <String, Object?>{
+                'type': 'StoreExportSet',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'store',
+                    'type': 'String',
+                    'doc': '`app-store` or `play`.',
+                  },
+                  <String, Object?>{
+                    'name': 'deviceClass',
+                    'type': 'String',
+                    'doc': 'The display class — `iphone-6-9`, `phone`.',
+                  },
+                  <String, Object?>{
+                    'name': 'locale',
+                    'type': 'String',
+                    'doc': 'The **store\'s** locale tag, which is what the directory is named for.',
+                  },
+                  <String, Object?>{
+                    'name': 'directory',
+                    'type': 'String',
+                    'doc': 'Relative to [StoreExportPackage.output], so the whole tree can be moved or uploaded as it stands.',
+                  },
+                  <String, Object?>{
+                    'name': 'width',
+                    'type': 'int',
+                    'doc': 'The canvas, in physical pixels — what the store receives.',
+                  },
+                  <String, Object?>{'name': 'height', 'type': 'int'},
+                  <String, Object?>{
+                    'name': 'images',
+                    'type': 'List<String>',
+                    'doc': 'File names, in the order they were captured, which is the order they were numbered in and the order the store will show them.',
+                  },
+                  <String, Object?>{
+                    'name': 'failed',
+                    'type': 'int',
+                    'doc': 'Scenarios that failed while producing this set.',
+                  },
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Set when the package could not be run at all.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'count',
+        'type': 'int',
+        'doc': 'How many images were written, over every package, listing and locale.',
+      },
+    ],
+  }),
+  'StoreExportSet': ResultShape.fromJson(<String, Object?>{
+    'type': 'StoreExportSet',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'store',
+        'type': 'String',
+        'doc': '`app-store` or `play`.',
+      },
+      <String, Object?>{
+        'name': 'deviceClass',
+        'type': 'String',
+        'doc': 'The display class — `iphone-6-9`, `phone`.',
+      },
+      <String, Object?>{
+        'name': 'locale',
+        'type': 'String',
+        'doc': 'The **store\'s** locale tag, which is what the directory is named for.',
+      },
+      <String, Object?>{
+        'name': 'directory',
+        'type': 'String',
+        'doc': 'Relative to [StoreExportPackage.output], so the whole tree can be moved or uploaded as it stands.',
+      },
+      <String, Object?>{
+        'name': 'width',
+        'type': 'int',
+        'doc': 'The canvas, in physical pixels — what the store receives.',
+      },
+      <String, Object?>{'name': 'height', 'type': 'int'},
+      <String, Object?>{
+        'name': 'images',
+        'type': 'List<String>',
+        'doc': 'File names, in the order they were captured, which is the order they were numbered in and the order the store will show them.',
+      },
+      <String, Object?>{
+        'name': 'failed',
+        'type': 'int',
+        'doc': 'Scenarios that failed while producing this set.',
+      },
+    ],
+  }),
+  'StoreOpenResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'StoreOpenResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'paths',
+        'type': 'List<String>',
+        'doc': 'One per package, absolute — the tree\'s root, not a file inside it.',
+      },
+    ],
+  }),
   'TranslationExportResult': ResultShape.fromJson(<String, Object?>{
     'type': 'TranslationExportResult',
     'fields': <Object?>[

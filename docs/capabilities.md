@@ -1488,7 +1488,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. Omitted means the package's configured captureScale (tool/flutterware.dart), or 1. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
 | `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at — `2026-01-01T09:00:00Z`. A scenario clock already advances deterministically under FakeAsync, but it starts at the wall time of the run, so any screen showing a date differs run to run. Pinning it is what makes two runs comparable. Reaches code that reads `package:clock`; a direct `DateTime.now()` cannot be intercepted by anything. |
 | `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips the encoder, which costs ~7.5ms a picture, and hands a pipeline pixels with nothing to decode. Worth it where the pictures are many or the reader has no codec: measured, 4.3× on a run recording motion and 31% on one that is not, for 80× to 160× the bytes. `none` skips pixels entirely — trees, keys and texts are still written; for probe passes that read the walk rather than the frames. |
-| `pixels` | choice | no | — | `all` (the default) photographs every step. `keyed` photographs only the steps whose read found a translation key, plus any step that failed — what a translation export wants, since it files a shot against a string id and a screen showing no key can contribute none. Measured on the example suite, 23 of 62 steps showed no key. Orthogonal to `format`, which says how the pixels are encoded; `format: none` still means no pixels at all. |
+| `pixels` | choice | no | — | `all` (the default) photographs every step. `keyed` photographs only the steps whose read found a translation key, plus any step that failed — what a translation export wants, since it files a shot against a string id and a screen showing no key can contribute none. Measured on the example suite, 23 of 62 steps showed no key. `named` photographs only the steps a `Shot` named, plus any step that failed — what the `shots` action runs with, since it keeps the named shots and deletes the rest, and at a device's own ratio an automatic step costs eleven times a 1× one to produce a file nobody opens. Orthogonal to `format`, which says how the pixels are encoded; `format: none` still means no pixels at all. |
 | `expand` | string | no | — | Pad every translation read — the max-length probe. The number is a rung in [1, 100]: that percentage of each value's own ceiling, which is larger the shorter the value is (a 6-character label is probed up to +300%, a sentence up to +100%). Which sightings clip says which keys have no room. Identity still resolves and targeting still lands: a scenario written against the catalog reads the padded value too. Usually paired with `format: none`. |
 | `device-choice` | choice | no | — | How a file with no named device picks from its folder profile. `narrowest` takes the tightest declared screen instead of the first — what a max-length probe measures on. Ignored when `device` names one. |
 
@@ -1615,7 +1615,7 @@ next: String   # The command that runs what was just written.
 The store/documentation lane: runs the scenarios and keeps only their **named** shots, at the pixel ratio each device really has, into `<output>/<language>/<device>/NN-name.png`. Everything a `run` leaves behind — the automatic steps, the widget trees — is dropped. A separate action because every default differs; `run` stays the debugging lane.
 
 ```sh
-fw run scenarios shots [--package=…] [--output=…] [--devices=…] [--languages=…] [--tag=…] [--file=…]
+fw run scenarios shots [--package=…] [--output=…] [--devices=…] [--languages=…] [--orientations=…] [--tag=…] [--file=…]
 ```
 
 Returns `ScenarioShotsResult`:
@@ -1639,6 +1639,7 @@ count: int   # How many images were written, over every package and assignment.
 | `output` | string | no | — | Where the tree is written, worktree-relative unless absolute; `build/flutterware/screenshots` under the package when omitted. Emptied first, so what is there afterwards is exactly this run. |
 | `devices` | string | no | — | A comma-separated list — one directory per device. Omitted runs each scenario on its folder profile's first device. |
 | `languages` | string | no | — | A comma-separated list — one directory per language, crossed with `devices` |
+| `orientations` | string | no | — | The third axis — `portrait,landscape`. Crossed with the other two. A turned device gets its own directory, `<language>/<device>-landscape/`, because the two ways up of one device are two sets of screenshots and sharing a directory would leave the second overwriting the first. Portrait writes no suffix, so a tree that never asked for landscape is the tree it was. A device that cannot turn contributes one point rather than two identical ones. |
 | `tag` | string | no | — | Keep only shots carrying this tag — `Shot('Home', tags: ['store'])`. Omitted keeps every named shot, which is what a project that tags nothing wants. |
 | `file` | string | no | — | Only this scenario file, package-relative — or a directory, for everything under it |
 
@@ -1849,6 +1850,67 @@ artifacts: List<SplashArtifactEntry>   # What exists afterwards — the point of
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; the first when omitted |
 | `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
+
+
+### `flutterware.store`
+
+The screenshots a store listing is uploaded from: the named shots of a package's scenarios, at the sizes each store publishes.
+
+#### `export` — Export
+
+Writes the screenshots every declared listing needs, at the size each store publishes, into a tree an upload tool reads. **Takes no arguments**: everything it needs is declared in `tool/flutterware.dart`. Runs the app, then composes — and leaves the raw captures in `.captures/` so `frame` can recompose without running it again.
+
+```sh
+fw run store export [--package=…] [--listing=…] [--locale=…] [--class=…] [--shot=…] [--output=…] [--open=…]
+```
+
+Returns `StoreExportResult`:
+
+```
+packages: List<StoreExportPackage>
+  path: String
+  output: String   # The root of the tree — the layout decides what sits beneath it.
+  sets: List<StoreExportSet>
+    store: String   # `app-store` or `play`.
+    deviceClass: String   # The display class — `iphone-6-9`, `phone`.
+    locale: String   # The **store's** locale tag, which is what the directory is named for.
+    directory: String   # Relative to [StoreExportPackage.output], so the whole tree can be moved or uploaded as it stands.
+    width: int   # The canvas, in physical pixels — what the store receives.
+    height: int
+    images: List<String>   # File names, in the order they were captured, which is the order they were numbered in and the order the store will show them.
+    failed: int   # Scenarios that failed while producing this set.
+  error: String?   # Set when the package could not be run at all.
+count: int   # How many images were written, over every package, listing and locale.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `listing` | choice | no | — | Only this store |
+| `locale` | string | no | — | Only this locale — the **app's** tag as the declaration spells it (`fr`), not the store slot it maps to (`fr-FR`) |
+| `class` | choice | no | — | Only this display class |
+| `shot` | string | no | — | Only this shot, by position (`02`) or by name (`order-placed`). Narrows what is **written**, not what is run: a scenario produces its shots together or not at all. |
+| `output` | string | no | — | Write the tree here instead of where the declaration says. The captures stay where they were, so a later `frame` still finds them. |
+| `open` | boolean | no | — | Open the tree in the file manager afterwards |
+
+#### `open` — Reveal
+
+Opens the exported tree in the desktop file manager. Refuses when nothing has been exported yet, rather than opening an empty directory that looks like a failed export.
+
+```sh
+fw run store open [--package=…] [--output=…]
+```
+
+Returns `StoreOpenResult`:
+
+```
+paths: List<String>   # One per package, absolute — the tree's root, not a file inside it.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `output` | string | no | — | Open this directory instead of the declared output |
 
 
 ### `flutterware.previews`

@@ -26,6 +26,20 @@ enum ScenarioPixels {
   /// step, never a picture.
   keyed,
 
+  /// Only the steps a `Shot` named — and any step that failed.
+  ///
+  /// The store lane's pass. `scenarios shots` keeps the named shots and
+  /// deletes everything else, at the device's own ratio, which is where this
+  /// costs the most: an automatic step on a 1320×2868 canvas is rasterized and
+  /// encoded at eleven times the pixels of a 1× run, written to disk, and then
+  /// thrown away unopened.
+  ///
+  /// The one mode whose decision is not a property of the *screen*. That
+  /// matters where a name adopts the capture before it — see
+  /// `_adoptablePending`, which refuses under this mode alone, because the
+  /// automatic capture a shot would land on is exactly the one this skipped.
+  named,
+
   /// None of them. A probe pass reads its answers off the walk
   /// (`didExceedMaxLines`, the keys artifact) and looks at no frame. The step
   /// still emits: tree, keys and texts are written as ever.

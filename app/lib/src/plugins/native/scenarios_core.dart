@@ -20,6 +20,7 @@ import '../../previews/devices.dart' show orientationParameterDoc;
 import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
+import '../../scenarios/opaque_png.dart';
 import '../../scenarios/run_dirs.dart';
 import '../../scenarios/runner.dart';
 import '../../scenarios/web_export.dart';
@@ -899,10 +900,19 @@ class ScenariosCore extends PluginCore {
                   'key, plus any step that failed — what a translation export '
                   'wants, since it files a shot against a string id and a '
                   'screen showing no key can contribute none. Measured on the '
-                  'example suite, 23 of 62 steps showed no key. Orthogonal to '
+                  'example suite, 23 of 62 steps showed no key. `named` '
+                  'photographs only the steps a `Shot` named, plus any step '
+                  'that failed — what the `shots` action runs with, since it '
+                  'keeps the named shots and deletes the rest, and at a '
+                  "device's own ratio an automatic step costs eleven times a "
+                  '1× one to produce a file nobody opens. Orthogonal to '
                   '`format`, which says how the pixels are encoded; '
                   '`format: none` still means no pixels at all.',
-              options: [ActionOption('all'), ActionOption('keyed')],
+              options: [
+                ActionOption('all'),
+                ActionOption('keyed'),
+                ActionOption('named'),
+              ],
             ),
             const ActionParameter(
               'expand',
@@ -1400,6 +1410,21 @@ class ScenariosCore extends PluginCore {
               description:
                   'A comma-separated list — one directory per language, '
                   'crossed with `devices`',
+            ),
+            const ActionParameter(
+              'orientations',
+              'Orientations',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'The third axis — `portrait,landscape`. Crossed with the '
+                  'other two. A turned device gets its own directory, '
+                  '`<language>/<device>-landscape/`, because the two ways up '
+                  'of one device are two sets of screenshots and sharing a '
+                  'directory would leave the second overwriting the first. '
+                  'Portrait writes no suffix, so a tree that never asked for '
+                  'landscape is the tree it was. A device that cannot turn '
+                  'contributes one point rather than two identical ones.',
             ),
             const ActionParameter(
               'tag',
@@ -2292,6 +2317,10 @@ class ScenariosCore extends PluginCore {
       // device comes from each scenario's own folder profile and a mixed
       // suite writes into more than one.
       var images = <String, List<String>>{};
+      // Collected and flattened off-isolate at the end of the package: the
+      // PNG codec is ~250ms an image, and doing it inline freezes the window
+      // for as long as the whole set takes. See `flattenPngFile`.
+      var flatten = <(String, String)>[];
       var failures = <String, int>{};
       var axesOf = <String, Map<String, String>>{};
       try {
@@ -2302,6 +2331,12 @@ class ScenariosCore extends PluginCore {
             axes: assignment,
             unspecifiedDevice: defaultScenarioDeviceId,
             captureNative: true,
+            // The whole economy of this lane. Everything below keeps named
+            // shots and drops the rest — and `captureNative` means the rest
+            // was being rasterized and encoded at the device's own ratio,
+            // eleven times the pixels of a 1× run, written out, and then
+            // deleted with the scratch directory.
+            pixels: ScenarioPixels.named,
           );
           var described = _describeRun(
             path,
@@ -2339,17 +2374,28 @@ class ScenariosCore extends PluginCore {
               // chose to show.
               if (step.name == null) continue;
               if (tag != null && !step.tags.contains(tag)) continue;
+              // A named step with no picture: the scenario emitted a document
+              // or a notification beat, which is a step in the flow and not a
+              // screenshot of anything.
+              if (step.image == null) continue;
               var number = (kept.length + 1).toString().padLeft(2, '0');
               var name = '$number-${_shotSlug(step.name!)}.png';
               // `step.image` is relative to the worktree, which is what keeps
               // a result portable; `step.root` is this machine's copy of it.
-              File(p.join(step.root, step.image))
-                  .copySync(p.join(into.path, name));
+              //
+              // Flattened rather than copied: a capture is RGBA whatever it
+              // holds, and neither store accepts a PNG with an alpha channel.
+              // See `flattenPng`.
+              flatten.add((
+                p.join(step.root, step.image!),
+                p.join(into.path, name),
+              ));
               kept.add(name);
               total++;
             }
           }
         }
+        await flattenPngFiles(flatten);
         results.add(
           ScenarioShotsPackage(
             path: path,
@@ -2678,8 +2724,15 @@ class ScenariosCore extends PluginCore {
       throw ArgumentError.value(format, 'format', 'accepted: png, raw, none');
     }
     var pixels = arguments['pixels'];
-    if (pixels != null && pixels != 'all' && pixels != 'keyed') {
-      throw ArgumentError.value(pixels, 'pixels', 'accepted: all, keyed');
+    if (pixels != null &&
+        pixels != 'all' &&
+        pixels != 'keyed' &&
+        pixels != 'named') {
+      throw ArgumentError.value(
+        pixels,
+        'pixels',
+        'accepted: all, keyed, named',
+      );
     }
     var expand = switch (arguments['expand']) {
       null => null,
@@ -2821,6 +2874,8 @@ class ScenariosCore extends PluginCore {
                 ? ScenarioPixels.none
                 : pixels == 'keyed'
                 ? ScenarioPixels.keyed
+                : pixels == 'named'
+                ? ScenarioPixels.named
                 : ScenarioPixels.all,
             expandTranslations: expand,
             narrowestDevice: deviceChoice == 'narrowest',

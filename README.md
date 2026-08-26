@@ -332,6 +332,37 @@ generator.
 ![The splash previewer, showing the same config rendered for Android, Android
 12+, iOS and web in both themes](doc/screenshots/splash.png)
 
+### Store screenshots
+
+The screenshots a store listing is uploaded from, taken from scenarios you
+already have. A listing declares which stores, which display classes and which
+locales; `fw run store export` runs the app once per set at the device's own
+pixel ratio, keeps every named shot, and writes the tree `fastlane deliver` and
+`supply` read. It takes no arguments — the declaration is the configuration.
+
+Apple's two required sizes come straight off the device table. Google Play's
+cannot: its rules cap the longer side at twice the shorter, and every shipping
+Android phone is taller than that, so a truthful full-screen Android screenshot
+is not a legal Play screenshot. That is why a **canvas is not a device** here —
+the app renders at a real phone, and the image the store receives is a
+composition the app renders *into*.
+
+That composition is an ordinary Flutter widget, which is the whole of the
+difference. It is built in a localized tree at the set's own locale, so RTL
+flips and the words are the set's; it is handed the shot's position in the set
+and every other image in it. So a listing can do things a tool that composites
+finished images cannot — devices tilted with their shadows, and one scene
+running behind the whole set:
+
+![Five store screenshots side by side: one continuous scene behind them, each
+with its own headline, tilted phones whose bodies cross from one screenshot
+into the next](doc/screenshots/store_listing.png)
+
+Every set is checked in the panel — the shots in order, a click to see one full
+size, and the whole set drawn as a listing so the first three can be judged the
+way a stranger meets them. What an export wrote is readable from a script
+through `package:flutterware/store_report.dart`.
+
 ### Server inspection
 
 A Dart server that imports `package:flutterware/server.dart` announces itself
