@@ -430,6 +430,11 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_gpu:
+    dependency: transitive
+    description: flutter
+    source: sdk
+    version: "0.0.0"
   flutter_lints:
     dependency: transitive
     description:
@@ -573,6 +578,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  hooks_runner:
+    dependency: transitive
+    description:
+      name: hooks_runner
+      sha256: e5af5628be2fbe3bbb195ded03e6c6f739b0c92db43d1e2a95620678fd844458
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.6.1"
   html:
     dependency: transitive
     description:

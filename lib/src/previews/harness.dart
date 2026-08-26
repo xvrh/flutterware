@@ -23,6 +23,7 @@ import 'package:test_api/src/backend/suite_platform.dart';
 import 'package:test_api/src/backend/test.dart' as backend;
 
 import '../canvases.dart';
+import '../flutter_gpu_diagnosis.dart';
 import '../devices.dart';
 import '../ui_catalog/fake_keyboard.dart';
 import '../inspect/error.dart';
@@ -312,6 +313,15 @@ Future<Map<String, Object?>> _audit(
 /// sleeps longer than the audit does from one whose timer never stops; the
 /// framework's spelling separates neither.
 String auditFailureMessage(String failure) {
+  // Before the timer rewrite, because a Flutter GPU failure is never a timer
+  // and the check is a substring test either way.
+  if (isFlutterGpuFailure(failure)) {
+    return withFlutterGpuDiagnosis(
+      failure,
+      executableArguments: Platform.executableArguments,
+      macOS: Platform.isMacOS,
+    );
+  }
   if (!failure.contains('A Timer is still pending')) return failure;
   return 'A Timer this entry started had not fired after ${auditBudget.inSeconds}s '
       'of the audit clock, so the harness disposed the tree with it '

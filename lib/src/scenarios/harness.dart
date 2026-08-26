@@ -18,6 +18,7 @@ import 'package:test_api/src/backend/suite_platform.dart';
 import 'package:test_api/src/backend/test.dart';
 
 import '../bytes.dart';
+import '../flutter_gpu_diagnosis.dart';
 import '../devices.dart';
 import '../inspect/guest_inspect.dart';
 import 'async_watchdog.dart';
@@ -1299,18 +1300,20 @@ Future<Map<String, Object?>> _runOne(
       for (var error in caught) {
         failures.add(
           ScenarioRunError(
-            error: error.description,
+            error: _diagnosed(error.description),
             stack: error.stack?.toString(),
           ),
         );
       }
       if (!_accountsFor(details, caught)) {
-        failures.add(ScenarioRunError(error: details.exceptionAsString()));
+        failures.add(
+          ScenarioRunError(error: _diagnosed(details.exceptionAsString())),
+        );
       }
     } else {
       failures.add(
         ScenarioRunError(
-          error: details.exceptionAsString(),
+          error: _diagnosed(details.exceptionAsString()),
           stack: details.stack?.toString(),
         ),
       );
@@ -1380,7 +1383,10 @@ Future<Map<String, Object?>> _runOne(
     if (timedOut) ScenarioRunError(error: _timedOutMessage(deadline!)),
     ...failures,
     for (var error in live.errors)
-      ScenarioRunError(error: '${error.error}', stack: '${error.stackTrace}'),
+      ScenarioRunError(
+        error: _diagnosed('${error.error}'),
+        stack: '${error.stackTrace}',
+      ),
   ];
   var passed = !timedOut && live.state.result.isPassing && errors.isEmpty;
   // Every key every catalog was asked for on the way through this
@@ -1471,3 +1477,16 @@ String scenarioFileSafe(String name, {int max = scenarioNameMax}) {
 /// is 64 bits against a suite of a few thousand steps.
 String _digest(List<int> bytes) =>
     digestBytes(bytes is Uint8List ? bytes : Uint8List.fromList(bytes));
+
+/// A failure with what this process knows about its own rasterizer appended.
+///
+/// The engine's Flutter GPU messages name the flag that is missing but not who
+/// was meant to pass it, and the one that bites most —
+/// `Failed to initialize ShaderLibrary:` — names nothing at all. A scenario
+/// runs inside the tester, so it can read the flags the tester was given and
+/// finish the sentence.
+String _diagnosed(String failure) => withFlutterGpuDiagnosis(
+  failure,
+  executableArguments: Platform.executableArguments,
+  macOS: Platform.isMacOS,
+);
