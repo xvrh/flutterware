@@ -94,6 +94,11 @@ class AssetBundleBuilder {
     // them into a directory its pubspec declares, and [AssetCatalog] lists that
     // directory's contents as it resolves. Run second and the catalog is a
     // faithful reading of an empty directory.
+    // The result is deliberately dropped: a hook is a program a *dependency*
+    // ships, so one that fails is closer to a compile error in that dependency
+    // than to a broken catalog, and every entry that did not need its output
+    // still builds. [BuildHooks] says so on stderr itself, because the logger
+    // is not listened to in the two processes that call this most.
     await BuildHooks(
       dartExecutable: cache.dart,
       packageConfigPath: packageConfigPath,

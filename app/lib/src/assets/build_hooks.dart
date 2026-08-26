@@ -127,9 +127,31 @@ class BuildHooks {
     }
     if (result.failure case var failure?) {
       unawaited(_runs.remove(key));
-      _log.severe(failure);
+      _announce(failure);
     }
     return result;
+  }
+
+  /// Says [failure] somewhere a human will actually see it.
+  ///
+  /// **Both channels, and the second is the one that works.** `Logger.root` is
+  /// listened to in `app/lib/main.dart` and nowhere else — not in
+  /// `app/bin/fw.dart`, not in the MCP server, not in the previews compiler
+  /// daemon, which are between them where most bundles are built. A hook
+  /// failure logged there is a hook failure nobody is told about, and what the
+  /// reader gets instead is the dependency's own bewildering sentence about
+  /// missing shaders.
+  ///
+  /// So stderr as well, which every one of those processes has and every one
+  /// of them forwards. Same escape, and the same reason, as
+  /// `announceFlutterGpuDiagnosis`: a failure that will never pass through a
+  /// structured report has to take the channel that exists.
+  ///
+  /// This is why [run]'s result may be discarded by a caller that has nothing
+  /// better to do with it.
+  void _announce(String failure) {
+    _log.severe(failure);
+    stderr.writeln('[flutterware] $failure');
   }
 
   /// Nothing to run, said in the shape a caller expects.
@@ -145,8 +167,19 @@ class BuildHooks {
 
     var runPackageName = _rootPackageName(packageConfig);
     if (runPackageName == null) {
-      // A root that the resolution does not name is not something to guess at.
-      return _nothing;
+      // Not `_nothing`. Which packages have hooks is read from the closure of
+      // *this* package, so a root the resolution cannot name means no hook is
+      // ever asked — and reported as silence that is indistinguishable from a
+      // project that genuinely has none. The whole feature would switch itself
+      // off and every test would stay green.
+      return (
+        packages: const <String>[],
+        failure:
+            'The resolution at $packageConfigPath does not name a package '
+            'rooted at $rootPackageRoot, so no build hook could be run for it. '
+            'Anything a dependency generates at build time will be missing '
+            'from the bundle.',
+      );
     }
 
     var runner = NativeAssetsBuildRunner(

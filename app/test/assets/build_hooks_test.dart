@@ -73,6 +73,23 @@ void main() {
     },
   );
 
+  test('a root the resolution cannot name is a failure, not silence', () async {
+    var temp = Directory.systemTemp.createTempSync('fw_hooks_root');
+    addTearDown(() => temp.deleteSync(recursive: true));
+
+    // A real resolution, and a root that is not in it. Nothing can be asked of
+    // a closure that cannot be found, and reporting that as "no hooks here"
+    // would switch the whole feature off silently.
+    var result = await BuildHooks(
+      dartExecutable: sdk.dart,
+      packageConfigPath: p.join(repoRoot, '.dart_tool', 'package_config.json'),
+      rootPackageRoot: temp.path,
+    ).run();
+
+    expect(result.packages, isEmpty);
+    expect(result.failure, contains('does not name a package'));
+  });
+
   test('a second ask is the same run, not a second one', () async {
     var hooks = BuildHooks(
       dartExecutable: sdk.dart,
