@@ -22,7 +22,7 @@ import '../ui/empty_state.dart';
 import '../ui/loading_state.dart';
 import '../ui/capture_button.dart';
 import '../ui/design/design.dart';
-import '../ui/tappable.dart';
+import '../ui/tree_row.dart';
 import 'app_chords.dart';
 import 'catalog_params.dart';
 import 'catalog_devices.dart';
@@ -2233,52 +2233,34 @@ class _BranchRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return InkWell(
+    // [FwTreeRow] rather than a row of its own. What is shared is the contract
+    // the two comments above state — the row selects, the chevron folds — and
+    // it is shared because the asset tree needed the same rule and got it
+    // wrong by writing it a second time. The metrics stay this rail's: a
+    // catalog holds hundreds of entries and is read by scanning.
+    return FwTreeRow(
+      depth: depth,
+      density: TreeRowDensity.dense,
+      open: open,
+      selected: showing,
       onTap: onTap,
-      child: Container(
-        color: showing ? colors.accentSoft : null,
-        padding: _rowPadding(depth),
-        child: SizedBox(
-          height: 26,
-          child: Row(
-            children: [
-              // Padded out to a real target, and stopping the tap here so the
-              // chevron never also selects.
-              Tappable(
-                onTap: onToggleFold,
-                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: FwSpacing.xxs,
-                    vertical: FwSpacing.xs,
-                  ),
-                  child: Icon(
-                    open ? Icons.expand_more : Icons.chevron_right,
-                    size: FwIconSize.sm,
-                    color: showing ? colors.accentDark : colors.mut,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: _Marked(
-                  text: branch.label,
-                  mark: highlight,
-                  style: context.type.caption.copyWith(
-                    color: showing ? colors.accentDark : colors.ink2,
-                  ),
-                ),
-              ),
-              if (!open) ...[
-                const Gap(FwSpacing.xs),
-                Text(
-                  '${branch.entries.length}',
-                  style: context.type.micro.copyWith(color: colors.mut2),
-                ),
-              ],
-            ],
-          ),
+      onToggleFold: onToggleFold,
+      label: _Marked(
+        text: branch.label,
+        mark: highlight,
+        style: context.type.caption.copyWith(
+          color: showing ? colors.accentDark : colors.ink2,
         ),
       ),
+      trailing: [
+        if (!open) ...[
+          const Gap(FwSpacing.xs),
+          Text(
+            '${branch.entries.length}',
+            style: context.type.micro.copyWith(color: colors.mut2),
+          ),
+        ],
+      ],
     );
   }
 }

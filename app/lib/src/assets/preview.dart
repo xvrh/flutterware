@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:lottie/lottie.dart';
 import 'package:path/path.dart' as p;
 
+import '../ui/code_block.dart';
+import '../ui/design/design.dart';
 import '../ui/theme.dart';
 import 'model/asset_scan.dart';
 
@@ -119,7 +122,7 @@ class AssetPreview extends StatelessWidget {
           bytes: bytes,
           frame: frame,
           onFrame: onFrame,
-          fallback: (context) => _NoPreview(kind: kind, name: name),
+          fallback: (context) => _JsonSource(bytes: bytes),
         );
       case AssetKind.media:
       case AssetKind.other:
@@ -534,6 +537,71 @@ class _LottiePreviewState extends State<LottiePreview>
               style: context.type.micro,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A `.json` that is not an animation, shown as what it is: its text.
+///
+/// The other preview in this file draws pixels; this one draws the document,
+/// because for configuration the document *is* the thing you opened the asset
+/// to check. "No preview for .json files" was never true — the bytes are right
+/// there and they are human-readable.
+///
+/// Re-encoded with an indent when it parses, because a bundled config is
+/// usually minified and one 4,000-character line is not a preview of anything.
+/// When it does **not** parse the raw text is shown instead, unindented and
+/// unaltered: a malformed JSON is precisely the file somebody is here to look
+/// at, and hiding it behind a parse error would take away the only view of it.
+class _JsonSource extends StatelessWidget {
+  const _JsonSource({required this.bytes});
+
+  final Uint8List bytes;
+
+  /// Enough to read, and short of what makes a `TextSpan` per token expensive.
+  /// A bundle can hold a megabyte of translations, and highlighting all of it
+  /// to show the first screenful is work nobody asked for.
+  static const _maxCharacters = 20000;
+
+  @override
+  Widget build(BuildContext context) {
+    String source;
+    try {
+      source = utf8.decode(bytes);
+    } catch (_) {
+      // Named `.json` and not text at all. Nothing to show, and the raw bytes
+      // would be worse than nothing.
+      return const _Unreadable(message: 'Not readable as UTF-8 text.');
+    }
+
+    try {
+      source = const JsonEncoder.withIndent('  ').convert(jsonDecode(source));
+    } catch (_) {
+      // Left as it is on disk — see above.
+    }
+
+    var truncated = source.length > _maxCharacters;
+    return Padding(
+      padding: const EdgeInsets.all(FwSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        spacing: FwSpacing.xs,
+        children: [
+          Flexible(
+            child: FwCodeBlock(
+              truncated ? source.substring(0, _maxCharacters) : source,
+              language: 'json',
+            ),
+          ),
+          if (truncated)
+            Text(
+              'First ${_maxCharacters ~/ 1000}k characters of '
+              '${source.length ~/ 1000}k.',
+              style: context.type.micro,
+            ),
         ],
       ),
     );

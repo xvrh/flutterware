@@ -231,10 +231,10 @@ font: FontFactsResult?   # Present for a file a `fonts:` entry named.
 
 #### `audit` — Audit
 
-Everything wrong with a bundle that can be found without running the app: declarations that resolve to nothing, files a directory declaration does not reach, rasters bigger than anything that will draw them, and weight
+Everything wrong with a bundle that can be found without running the app: declarations that resolve to nothing, files a directory declaration does not reach, and rasters bigger than anything that will draw them. Reports the bundle weight alongside them, without an opinion about it.
 
 ```sh
-fw run assets audit [--package=…] [--maxEdge=…] [--budget=…]
+fw run assets audit [--package=…] [--maxEdge=…]
 ```
 
 Returns `AssetAuditResult`:
@@ -243,7 +243,7 @@ Returns `AssetAuditResult`:
 checked: int   # How many keys were looked at — the denominator, so an empty findings list means "nothing wrong" rather than "nothing examined".
 bytes: int   # Every byte in the audited bundles.
 findings: List<AssetFinding>   # Only what is wrong.
-  kind: String   # A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `oversized`, `over-budget`.
+  kind: String   # A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `oversized`.
   summary: String   # One line, for a human reading a list.
   detail: String   # What was found, specifically — the sizes, the paths, the densities.
   package: String?   # The package whose bundle this is about.
@@ -260,7 +260,6 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 | `maxEdge` | integer | no | 2048 | Report a raster longer than this on either side. A phone never draws one that big; something was exported at print size. |
-| `budget` | integer | no | — | Bytes the bundle may weigh before it is a finding. Omitted, weight is reported and never complained about. |
 
 
 ### `flutterware.dependencies`

@@ -4,7 +4,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutterware_app/src/assets/detail.dart';
+import 'package:flutterware_app/src/assets/folder.dart';
 import 'package:flutterware_app/src/assets/list.dart';
+import 'package:flutterware_app/src/assets/model/asset_tree.dart';
+import 'package:flutterware_app/src/assets/popover.dart';
 import 'package:flutterware_app/src/assets/model/asset_catalog.dart';
 import 'package:flutterware_app/src/assets/model/asset_scan.dart';
 import 'package:flutterware_app/src/assets/preview.dart';
@@ -33,15 +36,21 @@ Widget assetInspectorPreviews() => const _Previews();
 @Preview(name: 'Detail', group: 'Asset inspector', wrapper: wrapInApp)
 Widget assetInspectorDetail() => const _Detail();
 
+@Preview(name: 'Folder', group: 'Asset inspector', wrapper: wrapInApp)
+Widget assetInspectorFolder() => const _Folder();
+
+@Preview(name: 'Peek', group: 'Asset inspector', wrapper: wrapInApp)
+Widget assetInspectorPeek() => const _Peek();
+
 /// Every state of the list at once, which is the point of stacking them: an
 /// empty state that collapses or a key that overflows shows up here without
 /// anyone selecting a variant to find it.
 ///
-/// Scrolls sideways, because three fixed-width cases are wider than some of
+/// Scrolls sideways, because four fixed-width cases are wider than some of
 /// the windows this is rendered in. Each case keeps a realistic width instead of
 /// being squeezed — the list's own ellipsis behaviour is one of the things being
 /// looked at, and it is a function of that width, so flexing the cases to fit
-/// would quietly change what the demo demonstrates. Below 888px you scroll; at
+/// would quietly change what the demo demonstrates. Below 1184px you scroll; at
 /// or above it, nothing looks different from before.
 class _Lists extends StatefulWidget {
   const _Lists();
@@ -64,6 +73,7 @@ class _ListsState extends State<_Lists> {
             _Case(
               'Filtered — matched characters lit',
               AssetListView(
+                peek: false,
                 initialQuery: 'log',
                 own: _own,
                 fromPackages: [
@@ -77,6 +87,7 @@ class _ListsState extends State<_Lists> {
             _Case(
               'With problems',
               AssetListView(
+                peek: false,
                 own: _own.take(2).toList(),
                 fromPackages: const [],
                 problems: _problems,
@@ -85,8 +96,22 @@ class _ListsState extends State<_Lists> {
               ),
             ),
             _Case(
+              'A bundle with a shape',
+              AssetListView(
+                peek: false,
+                own: _deep,
+                fromPackages: [
+                  AssetOwner(package: 'flutterware', assets: _dependencyAssets),
+                ],
+                problems: const [],
+                selected: _selected,
+                onSelect: (key) => setState(() => _selected = key),
+              ),
+            ),
+            _Case(
               'Nothing declared',
               AssetListView(
+                peek: false,
                 own: const [],
                 fromPackages: const [],
                 problems: const [],
@@ -96,6 +121,59 @@ class _ListsState extends State<_Lists> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The card a row shows when the pointer rests on it, drawn where it would be
+/// rather than summoned by a hover — a catalog entry cannot hold a pointer
+/// still, and this is the face worth looking at.
+class _Peek extends StatelessWidget {
+  const _Peek();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          for (var (index, asset) in [
+            _logo,
+            _asset('assets/icons/check.svg', length: 273),
+            _asset('assets/config.json', length: 36),
+          ].indexed)
+            AssetPopover(
+              asset: asset,
+              anchor: Rect.fromLTWH(0, 90 + index * 330, 180, 28),
+              bytes: switch (assetKindOf(asset.key)) {
+                AssetKind.image => _png,
+                AssetKind.vector => _svg,
+                AssetKind.data => _json,
+                _ => null,
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The contact sheet for a directory, with the pictures coming from bytes
+/// rather than from disk — which is the seam that keeps this widget in the
+/// catalog at all. In the app each tile reads its own file.
+class _Folder extends StatelessWidget {
+  const _Folder();
+
+  @override
+  Widget build(BuildContext context) {
+    var tree = AssetTree.of(_deep);
+    return Scaffold(
+      body: AssetFolderView(
+        node: tree.nodeAt('assets/images')!,
+        path: 'assets/images',
+        onSelect: (_) {},
+        bytesFor: (asset) =>
+            assetKindOf(asset.key) == AssetKind.image ? _png : null,
       ),
     );
   }
@@ -324,6 +402,32 @@ final _own = [
   ),
 ];
 
+/// A bundle deep enough to fold: a chain nobody branches in the middle of, a
+/// directory heavy enough that its total is the point, and a loose key at the
+/// top that has to sit beside the directories rather than inside one.
+final _deep = [
+  _logo,
+  _asset('assets/images/hero.png', length: 421888),
+  _asset('assets/images/wordmark.png', length: 22528),
+  _asset('assets/images/icons/star.png', length: 18432),
+  _asset(
+    'assets/images/illustrations/onboarding/step-one.png',
+    declaration: 'assets/images/illustrations/onboarding/',
+    length: 311296,
+  ),
+  _asset(
+    'assets/images/illustrations/onboarding/step-two.png',
+    declaration: 'assets/images/illustrations/onboarding/',
+    length: 297984,
+  ),
+  _asset('assets/icons/check.svg', length: 273),
+  _asset('assets/icons/heart.svg', length: 412),
+  _asset('assets/i18n/en.json', length: 3072),
+  _asset('assets/i18n/fr.json', length: 3180),
+  _asset('assets/fonts/Roboto-Regular.ttf', length: 171272),
+  _asset('assets/config.json', length: 1024),
+];
+
 final _dependencyAssets = [
   _asset(
     'packages/flutterware/assets/figma_logo.png',
@@ -334,10 +438,10 @@ final _dependencyAssets = [
 
 final _problems = [
   AssetProblem(
-    kind: AssetProblemKind.missingFile,
+    kind: AssetProblemKind.unreachablePackageFile,
     package: null,
     packageRoot: '/project',
-    declaration: 'assets/images/missing.png',
+    declaration: 'packages/brand/assets/missing.png',
   ),
   AssetProblem(
     kind: AssetProblemKind.missingFontFile,

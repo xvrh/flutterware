@@ -1,7 +1,6 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
+import '../ui/anchored_card.dart';
 import '../ui/design/design.dart';
 import '../ui/loading_state.dart';
 import 'catalog_entry.dart';
@@ -42,9 +41,6 @@ class PreviewPopover extends StatelessWidget {
   /// narrow enough to leave the canvas behind it recognisable.
   static const width = 340.0;
 
-  /// The gap the arrow lives in.
-  static const _gap = 10.0;
-
   /// Taller than this and a phone would fill the window; the picture gives up
   /// width to stay inside it.
   static const _maxPicture = 420.0;
@@ -65,89 +61,50 @@ class PreviewPopover extends StatelessWidget {
   static const _admitWaiting = Duration(milliseconds: 400);
 
   @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var left = math.min(
-      anchor.right + _gap,
-      MediaQuery.of(context).size.width - width - FwSpacing.md,
-    );
-    return Stack(
+  Widget build(BuildContext context) => FwAnchoredCard(
+    anchor: anchor,
+    width: width,
+    child: _body(context, context.colors),
+  );
+
+  Widget _body(BuildContext context, FwPalette colors) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        CustomSingleChildLayout(
-          // Only the height is unknown — the width is fixed and the left
-          // edge with it — so this exists to clamp the top against a window
-          // the popover might otherwise hang off the bottom of.
-          delegate: _PopoverLayout(left: left, centre: anchor.center.dy),
-          child: _body(context, colors),
-        ),
-        // The arrow is placed against the *row*, not against the body, so it
-        // goes on pointing at what it belongs to however far the body was
-        // clamped. The body is at least 200 tall and the clamp keeps it
-        // overlapping its own row, so the two always touch.
-        Positioned(
-          left: left - 7,
-          top: anchor.center.dy - 8,
-          child: IgnorePointer(
-            child: CustomPaint(
-              size: const Size(8, 16),
-              painter: _ArrowPainter(fill: colors.panel, edge: colors.line),
+        // The height changes when the picture lands — a 200-tall wait
+        // becoming a 252-tall panel shot — and changing it in one frame is
+        // the card snapping open under the pointer. Both halves animate:
+        // the box grows, and the contents cross-fade inside it.
+        AnimatedSize(
+          duration: _swap,
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: AnimatedSwitcher(
+            duration: _swap,
+            // Keyed on the entry as well as the state, so moving between
+            // two rows that both have a picture cross-fades rather than
+            // cutting.
+            child: KeyedSubtree(
+              key: ValueKey('${entry.id}/${_face(thumbnail)}'),
+              child: _picture(context, colors),
             ),
           ),
         ),
+        Divider(height: 1, color: colors.line),
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.md,
+            vertical: FwSpacing.sm,
+          ),
+          child: Text(
+            '${entry.path} · ${entry.symbol}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: context.type.micro.copyWith(color: colors.mut),
+          ),
+        ),
       ],
-    );
-  }
-
-  Widget _body(BuildContext context, FwPalette colors) {
-    return IgnorePointer(
-      child: Container(
-        width: width,
-        decoration: BoxDecoration(
-          color: colors.panel,
-          border: Border.all(color: colors.line),
-          borderRadius: BorderRadius.circular(context.radii.radius),
-          boxShadow: context.elevation.md,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // The height changes when the picture lands — a 200-tall wait
-            // becoming a 252-tall panel shot — and changing it in one frame is
-            // the card snapping open under the pointer. Both halves animate:
-            // the box grows, and the contents cross-fade inside it.
-            AnimatedSize(
-              duration: _swap,
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              child: AnimatedSwitcher(
-                duration: _swap,
-                // Keyed on the entry as well as the state, so moving between
-                // two rows that both have a picture cross-fades rather than
-                // cutting.
-                child: KeyedSubtree(
-                  key: ValueKey('${entry.id}/${_face(thumbnail)}'),
-                  child: _picture(context, colors),
-                ),
-              ),
-            ),
-            Divider(height: 1, color: colors.line),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: FwSpacing.md,
-                vertical: FwSpacing.sm,
-              ),
-              child: Text(
-                '${entry.path} · ${entry.symbol}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.type.micro.copyWith(color: colors.mut),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -258,70 +215,4 @@ class _DelayedFade extends StatelessWidget {
       child: child,
     );
   }
-}
-
-/// Puts the popover at a fixed [left], centred on [centre] where the window
-/// allows and pushed inside it where it does not.
-class _PopoverLayout extends SingleChildLayoutDelegate {
-  const _PopoverLayout({required this.left, required this.centre});
-
-  final double left;
-
-  /// Where the row it belongs to is, vertically.
-  final double centre;
-
-  static const _margin = FwSpacing.md;
-
-  @override
-  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
-      BoxConstraints(
-        maxWidth: PreviewPopover.width,
-        maxHeight: constraints.maxHeight - _margin * 2,
-      );
-
-  @override
-  Offset getPositionForChild(Size size, Size childSize) => Offset(
-    left,
-    (centre - childSize.height / 2).clamp(
-      _margin,
-      math.max(_margin, size.height - childSize.height - _margin),
-    ),
-  );
-
-  @override
-  bool shouldRelayout(_PopoverLayout old) =>
-      old.left != left || old.centre != centre;
-}
-
-/// The little triangle, tip to the left, sitting on the popover's edge.
-class _ArrowPainter extends CustomPainter {
-  _ArrowPainter({required this.fill, required this.edge});
-
-  final Color fill;
-  final Color edge;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    var path = Path()
-      ..moveTo(0, size.height / 2)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width, size.height)
-      ..close();
-    canvas.drawPath(path, Paint()..color = fill);
-    // Only the two sloped edges: the third is where the body is, and a line
-    // drawn there would show through as a seam.
-    canvas.drawPath(
-      Path()
-        ..moveTo(size.width, 0)
-        ..lineTo(0, size.height / 2)
-        ..lineTo(size.width, size.height),
-      Paint()
-        ..color = edge
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_ArrowPainter old) => old.fill != fill || old.edge != edge;
 }

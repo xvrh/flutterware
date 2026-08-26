@@ -101,7 +101,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'kind',
               'type': 'String',
-              'doc': 'A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `oversized`, `over-budget`.',
+              'doc': 'A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `oversized`.',
             },
             <String, Object?>{
               'name': 'summary',
@@ -332,7 +332,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'kind',
         'type': 'String',
-        'doc': 'A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `oversized`, `over-budget`.',
+        'doc': 'A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `oversized`.',
       },
       <String, Object?>{
         'name': 'summary',

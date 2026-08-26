@@ -1,14 +1,21 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/assets/detail.dart';
 import 'package:flutterware_app/src/assets/list.dart';
 import 'package:flutterware_app/src/assets/model/asset_catalog.dart';
 import 'package:flutterware_app/src/assets/model/asset_scan.dart';
+import 'package:flutterware_app/src/assets/folder.dart';
+import 'package:flutterware_app/src/assets/font_face.dart';
+import 'package:flutterware_app/src/assets/model/asset_tree.dart';
+import 'package:flutterware_app/src/assets/popover.dart';
 import 'package:flutterware_app/src/assets/preview.dart';
 import 'package:flutterware_app/src/ui/matched_text.dart';
+import 'package:flutterware_app/src/ui/tappable.dart';
+import 'package:flutterware_app/src/ui/tree_row.dart';
 
 /// The views, pumped with data that never came off a disk.
 ///
@@ -60,8 +67,20 @@ void main() {
       );
 
       expect(find.text('logo.png'), findsOneWidget);
-      expect(find.text('assets/images'), findsOneWidget);
-      expect(find.textContaining('2.4 kB'), findsOneWidget);
+      expect(
+        find.text('In this package · assets/images/'),
+        findsOneWidget,
+        reason:
+            'The directory every key shares is said once, in the header, '
+            'rather than under each filename.',
+      );
+      expect(
+        find.textContaining('2.4 kB'),
+        findsNWidgets(2),
+        reason:
+            "The row's own size, and the header's total — the same number "
+            'while the package has one asset in it.',
+      );
       expect(
         find.text('1 variant'),
         findsOneWidget,
@@ -170,6 +189,398 @@ void main() {
       );
     });
 
+    testWidgets('a typed query flattens the tree back to a ranked list', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        AssetListView(
+          own: [
+            asset('assets/images/logo.png'),
+            asset('assets/i18n/en.json'),
+            asset('assets/i18n/fr.json'),
+          ],
+          fromPackages: const [],
+          problems: const [],
+          selected: null,
+          onSelect: (_) {},
+        ),
+      );
+
+      expect(find.text('i18n'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'json');
+      await tester.pump();
+
+      expect(
+        find.text('i18n'),
+        findsNothing,
+        reason: 'A ranking behind collapsed directories is no ranking.',
+      );
+      expect(
+        find.text('assets/i18n'),
+        findsNWidgets(2),
+        reason: 'Flattened, each row carries its own directory again.',
+      );
+    });
+
+    testWidgets('the row picks the folder and the chevron folds it', (
+      tester,
+    ) async {
+      String? picked;
+      await pump(
+        tester,
+        AssetListView(
+          own: [
+            asset('assets/images/logo.png'),
+            asset('assets/images/deep/hero.png'),
+            asset('assets/i18n/en.json'),
+          ],
+          fromPackages: const [],
+          problems: const [],
+          selected: null,
+          onSelect: (path) => picked = path,
+        ),
+      );
+
+      Finder chevron(IconData icon) => find.descendant(
+        of: find
+            .ancestor(of: find.text('deep'), matching: find.byType(FwTreeRow))
+            .first,
+        matching: find.byIcon(icon),
+      );
+
+      expect(find.text('hero.png'), findsNothing);
+
+      await tester.tap(find.text('deep'));
+      await tester.pump();
+      expect(
+        picked,
+        'assets/images/deep',
+        reason: 'A folder is a place, and the row is how you go there.',
+      );
+      expect(
+        find.text('hero.png'),
+        findsNothing,
+        reason:
+            'One click, one result. The row that used to fold now only picks, '
+            'because doing both left no way to ask for either alone.',
+      );
+
+      picked = null;
+      await tester.tap(chevron(Icons.chevron_right));
+      await tester.pump();
+      expect(find.text('hero.png'), findsOneWidget);
+      expect(
+        picked,
+        isNull,
+        reason: 'The chevron is its own target inside the row it sits in.',
+      );
+
+      await tester.tap(chevron(Icons.expand_more));
+      await tester.pump();
+      expect(find.text('hero.png'), findsNothing);
+    });
+
+    testWidgets('arriving at a folder opens it', (tester) async {
+      var own = [
+        asset('assets/images/logo.png'),
+        asset('assets/images/deep/hero.png'),
+        asset('assets/i18n/en.json'),
+      ];
+      Widget list(String? selected) => AssetListView(
+        own: own,
+        fromPackages: const [],
+        problems: const [],
+        selected: selected,
+        onSelect: (_) {},
+      );
+
+      await pump(tester, list(null));
+      expect(find.text('hero.png'), findsNothing);
+
+      await pump(tester, list('assets/images/deep'));
+      await tester.pump();
+
+      expect(
+        find.text('hero.png'),
+        findsOneWidget,
+        reason:
+            'A pane showing a directory beside a tree that has it folded away '
+            'is two answers to one question.',
+      );
+    });
+
+    testWidgets('a directory carries what it holds', (tester) async {
+      await pump(
+        tester,
+        AssetListView(
+          own: [
+            asset('assets/logo.png'),
+            asset(
+              'assets/deep/one.png',
+              files: [file('assets/deep/one.png', length: 2048)],
+            ),
+            asset(
+              'assets/deep/two.png',
+              files: [file('assets/deep/two.png', length: 2048)],
+            ),
+          ],
+          fromPackages: const [],
+          problems: const [],
+          selected: null,
+          onSelect: (_) {},
+        ),
+      );
+
+      var row = find.ancestor(
+        of: find.text('deep'),
+        matching: find.byType(Row),
+      );
+      expect(find.descendant(of: row, matching: find.text('2')), findsWidgets);
+      expect(
+        find.descendant(of: row, matching: find.text('4.0 kB')),
+        findsWidgets,
+        reason: 'A closed directory still has to say what taking it costs.',
+      );
+    });
+
+    testWidgets('a selection from outside opens the directories above it', (
+      tester,
+    ) async {
+      var own = [
+        asset('assets/images/logo.png'),
+        asset('assets/images/deep/hero.png'),
+        asset('assets/i18n/en.json'),
+      ];
+      Widget list(String? selected) => AssetListView(
+        own: own,
+        fromPackages: const [],
+        problems: const [],
+        selected: selected,
+        onSelect: (_) {},
+      );
+
+      await pump(tester, list(null));
+      expect(find.text('hero.png'), findsNothing);
+
+      // What the address bar and the command palette do: name an asset the
+      // list never asked about.
+      await pump(tester, list('assets/images/deep/hero.png'));
+      await tester.pump();
+
+      expect(
+        find.text('hero.png'),
+        findsOneWidget,
+        reason: 'A list cannot report a row as selected and then hide it.',
+      );
+    });
+
+    testWidgets('an asset row answers the pointer, as a directory row does', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        AssetListView(
+          own: [asset('assets/images/logo.png'), asset('assets/i18n/en.json')],
+          fromPackages: const [],
+          problems: const [],
+          selected: null,
+          onSelect: (_) {},
+        ),
+      );
+
+      /// The wash [Tappable] paints over its child, or null when it paints
+      /// none. Read rather than eyeballed because the bug it guards was
+      /// invisible in a catalog demo: ink under an [InkWell] is only hidden
+      /// once something opaque — the panel's own fill — is drawn over it.
+      Color? washOver(String label) {
+        var scope = find
+            .ancestor(of: find.text(label), matching: find.byType(Tappable))
+            .first;
+        for (var box in tester.widgetList<DecoratedBox>(
+          find.descendant(of: scope, matching: find.byType(DecoratedBox)),
+        )) {
+          var color = (box.decoration as BoxDecoration).color;
+          if (color != null) return color;
+        }
+        return null;
+      }
+
+      expect(washOver('logo.png'), isNull);
+
+      var mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.text('logo.png')));
+      await tester.pump();
+
+      expect(
+        washOver('logo.png'),
+        isNotNull,
+        reason: 'The row under the pointer says so.',
+      );
+      expect(
+        washOver('images'),
+        isNull,
+        reason: 'And only that row — the directory above it is not hovered.',
+      );
+    });
+
+    testWidgets('resting on a row shows the asset beside it', (tester) async {
+      await pump(
+        tester,
+        AssetListView(
+          own: [
+            asset('assets/images/logo.png'),
+            asset('assets/images/hero.png'),
+          ],
+          fromPackages: const [],
+          problems: const [],
+          selected: null,
+          onSelect: (_) {},
+        ),
+      );
+
+      var mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+
+      await mouse.moveTo(tester.getCenter(find.text('logo.png')));
+      await tester.pump();
+      expect(
+        find.byType(AssetPopover),
+        findsNothing,
+        reason: 'A row passed over did not ask a question.',
+      );
+
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(AssetPopover), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AssetPopover),
+          matching: find.text('assets/images/logo.png'),
+        ),
+        findsOneWidget,
+        reason: 'The card says which asset it is showing.',
+      );
+
+      await mouse.moveTo(const Offset(5, 5));
+      await tester.pump();
+      expect(find.byType(AssetPopover), findsNothing);
+    });
+
+    testWidgets('the selected row is not peeked at', (tester) async {
+      await pump(
+        tester,
+        AssetListView(
+          own: [
+            asset('assets/images/logo.png'),
+            asset('assets/images/hero.png'),
+          ],
+          fromPackages: const [],
+          problems: const [],
+          selected: 'assets/images/logo.png',
+          onSelect: (_) {},
+        ),
+      );
+
+      var mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.text('logo.png')));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.byType(AssetPopover),
+        findsNothing,
+        reason:
+            'Its picture is in the pane beside, full size. A second copy of it '
+            'under the pointer says nothing and covers something.',
+      );
+    });
+
+    testWidgets('the header is the way back to all of them', (tester) async {
+      String? picked;
+      await pump(
+        tester,
+        AssetListView(
+          own: [asset('assets/images/logo.png'), asset('assets/i18n/en.json')],
+          fromPackages: const [],
+          problems: const [],
+          selected: 'assets/images/logo.png',
+          onSelect: (path) => picked = path,
+        ),
+      );
+
+      await tester.tap(find.textContaining('In this package'));
+      await tester.pump();
+
+      expect(
+        picked,
+        '',
+        reason:
+            'Empty is the package with no key after it — one address for "all "'
+            'of them, rather than a second one meaning the same thing.',
+      );
+    });
+
+    testWidgets('one button folds everything, then unfolds it', (tester) async {
+      await pump(
+        tester,
+        AssetListView(
+          own: [asset('assets/images/logo.png'), asset('assets/i18n/en.json')],
+          fromPackages: const [],
+          problems: const [],
+          selected: null,
+          onSelect: (_) {},
+        ),
+      );
+
+      expect(find.text('logo.png'), findsOneWidget);
+      expect(find.byTooltip('Collapse all'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Collapse all'));
+      await tester.pump();
+
+      expect(find.text('logo.png'), findsNothing);
+      expect(find.text('images'), findsOneWidget, reason: 'The folds remain.');
+      expect(
+        find.byTooltip('Expand all'),
+        findsOneWidget,
+        reason:
+            'With everything folded away the only useful thing the button can '
+            'do is the other direction.',
+      );
+
+      await tester.tap(find.byTooltip('Expand all'));
+      await tester.pump();
+
+      expect(find.text('logo.png'), findsOneWidget);
+    });
+
+    testWidgets('a typed query takes the fold button away', (tester) async {
+      await pump(
+        tester,
+        AssetListView(
+          own: [asset('assets/images/logo.png'), asset('assets/i18n/en.json')],
+          fromPackages: const [],
+          problems: const [],
+          selected: null,
+          onSelect: (_) {},
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField), 'logo');
+      await tester.pump();
+
+      expect(
+        find.byTooltip('Collapse all'),
+        findsNothing,
+        reason: 'A filtered list is flat; there is nothing there to fold.',
+      );
+    });
+
     testWidgets('says what an empty package means', (tester) async {
       await pump(
         tester,
@@ -193,10 +604,10 @@ void main() {
           fromPackages: const [],
           problems: [
             AssetProblem(
-              kind: AssetProblemKind.missingFile,
+              kind: AssetProblemKind.unreachablePackageFile,
               package: null,
               packageRoot: '/project',
-              declaration: 'assets/gone.png',
+              declaration: 'packages/brand/assets/gone.png',
             ),
           ],
           selected: null,
@@ -204,8 +615,11 @@ void main() {
         ),
       );
 
-      expect(find.text('assets/gone.png'), findsOneWidget);
-      expect(find.text('Declared, and not on disk.'), findsOneWidget);
+      expect(find.text('packages/brand/assets/gone.png'), findsOneWidget);
+      expect(
+        find.text('Declared through packages/…, and not found.'),
+        findsOneWidget,
+      );
     });
   });
 
@@ -354,7 +768,9 @@ void main() {
       expect(find.textContaining('No preview'), findsOneWidget);
     });
 
-    testWidgets('falls back when JSON is not an animation', (tester) async {
+    testWidgets('shows the document when JSON is not an animation', (
+      tester,
+    ) async {
       await pump(
         tester,
         AssetPreview(
@@ -366,8 +782,49 @@ void main() {
       await tester.pumpAndSettle();
 
       // Most `.json` files are not animations, so this is the ordinary path
-      // rather than an error.
-      expect(find.textContaining('No preview'), findsOneWidget);
+      // rather than an error — and for a config the document is the thing
+      // somebody opened the asset to read.
+      expect(find.textContaining('"not"'), findsOneWidget);
+      expect(find.textContaining('No preview'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a minified JSON is indented to be readable', (tester) async {
+      await pump(
+        tester,
+        AssetPreview(
+          bytes: Uint8List.fromList(utf8.encode('{"a":1,"b":{"c":2}}')),
+          kind: AssetKind.data,
+          name: 'assets/config.json',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('\n  "a": 1'),
+        findsOneWidget,
+        reason: 'A bundled config is usually one long line.',
+      );
+    });
+
+    testWidgets('malformed JSON is shown as it is on disk', (tester) async {
+      await pump(
+        tester,
+        AssetPreview(
+          bytes: Uint8List.fromList(utf8.encode('{"unclosed": ')),
+          kind: AssetKind.data,
+          name: 'assets/config.json',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('"unclosed"'),
+        findsOneWidget,
+        reason:
+            'The file that will not parse is exactly the one somebody came to '
+            'look at; a parse error would take away the only view of it.',
+      );
       expect(tester.takeException(), isNull);
     });
 
@@ -415,6 +872,99 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Not a usable font file'), findsOneWidget);
+    });
+  });
+
+  group('a font, and a document', () {
+    testWidgets('a font is drawn in its own face, not as a glyph', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        AssetPopover(
+          asset: asset('assets/fonts/Roboto-Regular.ttf'),
+          anchor: const Rect.fromLTWH(0, 0, 100, 20),
+          // A real TrueType signature over bytes that are not a font: enough
+          // to get past the gate, not enough to register. What is asserted is
+          // the wiring — that a font reaches the loader at all — since the app
+          // bundles no font bytes for a test to draw with.
+          bytes: Uint8List.fromList([0, 1, 0, 0, ...List.filled(64, 0)]),
+        ),
+      );
+
+      expect(
+        find.byType(AssetFontFace),
+        findsOneWidget,
+        reason:
+            'A card that answers "this is a font" has told you what the '
+            'extension already did.',
+      );
+    });
+
+    testWidgets('bytes that are not a font fall back rather than draw blank', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        AssetPopover(
+          asset: asset('assets/fonts/Broken.ttf'),
+          anchor: const Rect.fromLTWH(0, 0, 100, 20),
+          bytes: Uint8List.fromList(utf8.encode('this is not a font')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byIcon(Icons.text_fields),
+        findsOneWidget,
+        reason:
+            'FontLoader does not reliably refuse — it can register a family '
+            'with no glyphs, which draws as a blank panel that looks like a '
+            'working preview.',
+      );
+    });
+
+    testWidgets('a data asset shows its first lines', (tester) async {
+      await pump(
+        tester,
+        AssetPopover(
+          asset: asset('assets/i18n/en.json'),
+          anchor: const Rect.fromLTWH(0, 0, 100, 20),
+          bytes: Uint8List.fromList(
+            utf8.encode('{"greeting": "hello", "farewell": "bye"}'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('"greeting"'), findsOneWidget);
+    });
+
+    testWidgets('a folder sheet draws its fonts in their faces', (
+      tester,
+    ) async {
+      var own = [
+        asset('assets/fonts/Roboto-Regular.ttf'),
+        asset('assets/fonts/Roboto-Bold.ttf'),
+      ];
+      await pump(
+        tester,
+        AssetFolderView(
+          node: AssetTree.of(own).root,
+          path: 'assets/fonts',
+          onSelect: (_) {},
+          bytesFor: (_) =>
+              Uint8List.fromList([0, 1, 0, 0, ...List.filled(64, 0)]),
+        ),
+      );
+
+      expect(
+        find.byType(AssetFontFace),
+        findsNWidgets(2),
+        reason:
+            'A sheet of fonts that all draw the same glyph cannot be used for '
+            'the one thing a sheet of fonts is for.',
+      );
     });
   });
 }

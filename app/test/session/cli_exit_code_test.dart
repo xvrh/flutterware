@@ -100,9 +100,9 @@ void main() {
         bytes: 355519,
         findings: [
           AssetFinding(
-            kind: 'over-budget',
-            summary: 'The bundle is over its weight budget.',
-            detail: '347 kB against a budget of 200 kB.',
+            kind: 'oversized',
+            summary: 'A raster larger than anything that will draw it.',
+            detail: '4096 × 4096 at 347 kB, against a limit of 2048 px.',
           ),
         ],
       );
