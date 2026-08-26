@@ -1858,7 +1858,7 @@ The screenshots a store listing is uploaded from: the named shots of a package's
 
 #### `export` — Export
 
-Writes the screenshots every declared listing needs, at the size each store publishes, into a tree an upload tool reads. **Takes no arguments**: everything it needs is declared in `tool/flutterware.dart`. Runs the app, then composes — and leaves the raw captures in `.captures/` so `frame` can recompose without running it again.
+Writes the screenshots every declared listing needs, at the size each store publishes, into a tree an upload tool reads. **Takes no arguments**: everything it needs is declared in `tool/flutterware.dart`. Always runs the app — there is no way to reuse what is on disk, because an export is a release artifact. Where a frame composed a set, the app's own pixels are kept beside the listing under `unframed/`.
 
 ```sh
 fw run store export [--package=…] [--listing=…] [--locale=…] [--class=…] [--shot=…] [--output=…] [--open=…]
@@ -1890,7 +1890,7 @@ count: int   # How many images were written, over every package, listing and loc
 | `locale` | string | no | — | Only this locale — the **app's** tag as the declaration spells it (`fr`), not the store slot it maps to (`fr-FR`) |
 | `class` | choice | no | — | Only this display class |
 | `shot` | string | no | — | Only this shot, by position (`02`) or by name (`order-placed`). Narrows what is **written**, not what is run: a scenario produces its shots together or not at all. |
-| `output` | string | no | — | Write the tree here instead of where the declaration says. The captures stay where they were, so a later `frame` still finds them. |
+| `output` | string | no | — | Write the tree here instead of where the declaration says. Only the tree an uploader reads moves: `unframed/` and the manifest stay under the declared output, since a redirect may point at a directory of somebody else's metadata. |
 | `open` | boolean | no | — | Open the tree in the file manager afterwards |
 
 #### `open` — Reveal

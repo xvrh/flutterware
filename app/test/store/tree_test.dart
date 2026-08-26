@@ -61,9 +61,27 @@ void main() {
     );
   });
 
-  test('a slug sorts, survives a filesystem, and still reads', () {
-    expect(storeSlug('Cart · large'), 'cart-large');
-    expect(storeSlug('Order placed!'), 'order-placed');
+  group('a slug sorts, survives a filesystem, and still reads', () {
+    test('over ASCII', () {
+      expect(storeSlug('Cart · large'), 'cart-large');
+      expect(storeSlug('Order placed!'), 'order-placed');
+    });
+
+    // A listing localized into Japanese is exactly the listing this plugin is
+    // for. The ASCII class dropped the name entirely: `02-.png` on disk, `02-`
+    // as the viewer's title, and `--shot=メニュー` matching nothing.
+    test('and over every other script', () {
+      expect(storeSlug('メニュー'), 'メニュー');
+      expect(storeSlug('Корзина'), 'корзина');
+      expect(storeSlug('الطلب تم'), 'الطلب-تم');
+      expect(storeSlug('Café · Größe'), 'café-größe');
+    });
+
+    test('falling back only where there is no letter or digit at all', () {
+      expect(storeSlug('🎉'), 'shot');
+      expect(storeSlug('···'), 'shot');
+      expect(storeSlug('🎉 Done'), 'done');
+    });
   });
 
   for (var layout in StoreLayout.values) {

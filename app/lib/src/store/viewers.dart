@@ -175,6 +175,19 @@ class _ShotViewerState extends State<_ShotViewer> {
                 height: widget.height * scale,
                 filterQuality: FilterQuality.medium,
                 gaplessPlayback: true,
+                // The manifest and the images are read independently, so a
+                // `flutter clean` under an open panel leaves entries pointing
+                // at files that are gone. Every other image surface here
+                // degrades to nothing; without this one the dialog throws and
+                // paints Flutter's error box in the middle of itself.
+                errorBuilder: (context, _, _) => Center(
+                  child: Text(
+                    'This image is no longer on disk. Export again.',
+                    style: context.type.bodySmall.copyWith(
+                      color: context.colors.mut2,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

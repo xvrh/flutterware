@@ -178,9 +178,10 @@ class StoreCore extends PluginCore {
           'Writes the screenshots every declared listing needs, at the size '
           'each store publishes, into a tree an upload tool reads. **Takes no '
           'arguments**: everything it needs is declared in '
-          '`tool/flutterware.dart`. Runs the app, then composes — and leaves '
-          'the raw captures in `.captures/` so `frame` can recompose without '
-          'running it again.',
+          '`tool/flutterware.dart`. Always runs the app — there is no way to '
+          'reuse what is on disk, because an export is a release artifact. '
+          "Where a frame composed a set, the app's own pixels are kept "
+          'beside the listing under `unframed/`.',
       parameters: _narrowing,
     ),
     PluginAction(
@@ -272,8 +273,10 @@ class StoreCore extends PluginCore {
     kind: ActionParameterKind.string,
     required: false,
     description:
-        'Write the tree here instead of where the declaration says. The '
-        'captures stay where they were, so a later `frame` still finds them.',
+        'Write the tree here instead of where the declaration says. Only the '
+        'tree an uploader reads moves: `unframed/` and the manifest stay under '
+        'the declared output, since a redirect may point at a directory of '
+        "somebody else's metadata.",
   );
 
   ActionParameter get _package => ActionParameter(
@@ -369,6 +372,7 @@ class StoreCore extends PluginCore {
             StoreProgress(
               done: index,
               total: pending.length,
+              package: package.path,
               key: request.key,
               set: request.label,
               phase: 'Running',
@@ -384,6 +388,7 @@ class StoreCore extends PluginCore {
             StoreProgress(
               done: index,
               total: pending.length,
+              package: package.path,
               key: request.key,
               set: request.label,
               phase: 'Composing',
@@ -433,6 +438,7 @@ class StoreCore extends PluginCore {
             StoreProgress(
               done: index + 1,
               total: pending.length,
+              package: package.path,
               key: request.key,
               set: request.label,
               phase: 'Composing',
@@ -661,17 +667,39 @@ class StoreCore extends PluginCore {
       request.storeLocale,
     );
     var into = Directory(p.join(output, directory));
-    // The set's own scope, emptied — see the rule in `_run`. Only the images
-    // are swept: fastlane's iOS tree shares one directory between two classes,
-    // so deleting the directory would take the other class's set with it.
-    if (replace == _Replace.set && into.existsSync()) {
-      for (var file in into.listSync().whereType<File>()) {
-        if (storeOwnsFile(
-          package.layout,
+    var unframedInto = Directory(
+      p.join(
+        unframedRoot,
+        unframedDirectory,
+        storeDirectoryFor(
+          StoreLayout.plain,
           request.target,
-          p.basename(file.path),
-        )) {
-          file.deleteSync();
+          request.storeLocale,
+        ),
+      ),
+    );
+    // The set's own scope, emptied — see the rule in `_export`. **Both
+    // directories**: `unframed/` is an output of this set like the deliverable
+    // is, so a narrowed or redirected export that swept only the deliverable
+    // left a renamed shot's original there forever. That is the same defect
+    // this rule was written for, recurring in the newer directory.
+    //
+    // Only the images are swept, not the directory: fastlane's iOS tree shares
+    // one directory between two classes, so deleting it would take the other
+    // class's set with it.
+    if (replace == _Replace.set) {
+      for (var sweep in [into, unframedInto]) {
+        if (!sweep.existsSync()) continue;
+        for (var file in sweep.listSync().whereType<File>()) {
+          if (storeOwnsFile(
+            // `unframed/` is always the plain layout, whose directories belong
+            // to one set — so every PNG in it is this set's.
+            sweep == into ? package.layout : StoreLayout.plain,
+            request.target,
+            p.basename(file.path),
+          )) {
+            file.deleteSync();
+          }
         }
       }
     }
@@ -698,19 +726,7 @@ class StoreCore extends PluginCore {
         // The original, kept beside the listing. Named the readable way —
         // `unframed/play/phone/en-US/03-cart.png` — because a person is the
         // only reader it has.
-        flatten.add((
-          source,
-          p.join(
-            unframedRoot,
-            unframedDirectory,
-            storeDirectoryFor(
-              StoreLayout.plain,
-              request.target,
-              request.storeLocale,
-            ),
-            name,
-          ),
-        ));
+        flatten.add((source, p.join(unframedInto.path, name)));
         jobs.add({
           'image': source,
           // Every image of the set, so a frame can reach a neighbour — see
@@ -734,17 +750,7 @@ class StoreCore extends PluginCore {
       written.add(p.basename(out));
     }
     if (jobs.isNotEmpty) {
-      Directory(
-        p.join(
-          unframedRoot,
-          unframedDirectory,
-          storeDirectoryFor(
-            StoreLayout.plain,
-            request.target,
-            request.storeLocale,
-          ),
-        ),
-      ).createSync(recursive: true);
+      unframedInto.createSync(recursive: true);
       await _composerFor(
         package,
       ).compose(jobs, manifestPath: p.join(captured.directory, 'frames.json'));
@@ -863,6 +869,7 @@ class StoreProgress {
   const StoreProgress({
     required this.done,
     required this.total,
+    required this.package,
     required this.key,
     required this.set,
     required this.phase,
@@ -870,6 +877,14 @@ class StoreProgress {
 
   final int done;
   final int total;
+
+  /// Which declared package is being exported.
+  ///
+  /// Beside [key] rather than folded into it, because a key is the manifest's
+  /// and a manifest belongs to one package already. The panel draws every
+  /// package, so without this a second package declaring the same listing
+  /// shape spins its card whenever the first one exports.
+  final String package;
 
   /// Which set, as `store/class/appLocale` — the same key the manifest uses.
   ///

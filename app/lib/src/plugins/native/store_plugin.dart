@@ -134,8 +134,8 @@ class _StorePanelState extends State<_StorePanel> {
       );
 
   /// A thumbnail was clicked: show that image, as large as the window allows.
-  void _showShot(String key, int index) {
-    var found = _setFor(key);
+  void _showShot(String packagePath, String key, int index) {
+    var found = _setFor(packagePath, key);
     if (found == null) return;
     var (package, target, listing, set) = found;
     showStoreShot(
@@ -153,8 +153,8 @@ class _StorePanelState extends State<_StorePanel> {
   }
 
   /// The card's own action: the whole set, arranged as a listing.
-  void _showListing(String key) {
-    var found = _setFor(key);
+  void _showListing(String packagePath, String key) {
+    var found = _setFor(packagePath, key);
     if (found == null) return;
     var (package, target, listing, set) = found;
     showStoreListing(
@@ -167,15 +167,24 @@ class _StorePanelState extends State<_StorePanel> {
     );
   }
 
-  /// Everything a viewer needs, from a manifest key.
+  /// Everything a viewer needs, from the package that was clicked and the set
+  /// within it.
+  ///
+  /// **Both, not just the key.** A manifest key is `store/class/appLocale` and
+  /// carries no package, because a manifest belongs to one package already —
+  /// so searching every package for the first match opened the wrong app's
+  /// screenshots as soon as two declared packages shared a listing shape,
+  /// which two apps in one workspace routinely do.
   (StoreShotsPackage, StoreTarget, Listing, StoreShotsSet)? _setFor(
+    String packagePath,
     String key,
   ) {
     for (var package in _core.packages) {
+      if (package.path != packagePath) continue;
       var set = _core.manifestOf(package)[key];
-      if (set == null || set.images.isEmpty) continue;
+      if (set == null || set.images.isEmpty) return null;
       var target = _targetFor(package, key);
-      if (target == null) continue;
+      if (target == null) return null;
       return (package, target.$1, target.$2, set);
     }
     return null;
@@ -298,10 +307,13 @@ class _StorePanelState extends State<_StorePanel> {
               for (var package in packages)
                 for (var listing in package.listings)
                   _ListingBlock(
+                    packagePath: package.path,
                     listing: listing,
                     manifest: manifests[package.path]!,
                     locale: locale,
-                    working: progress?.key,
+                    working: progress?.package == package.path
+                        ? progress?.key
+                        : null,
                     onShot: _showShot,
                     onListing: _showListing,
                   ),
@@ -384,6 +396,7 @@ class _LocaleSwitch extends StatelessWidget {
 /// One store's half of the listing: a heading, then a card per display class.
 class _ListingBlock extends StatelessWidget {
   const _ListingBlock({
+    required this.packagePath,
     required this.listing,
     required this.manifest,
     required this.locale,
@@ -392,15 +405,19 @@ class _ListingBlock extends StatelessWidget {
     required this.onListing,
   });
 
+  /// Which declared package this block is drawing.
+  final String packagePath;
+
   final Listing listing;
   final StoreShotsReport manifest;
   final String? locale;
 
-  /// A shot was clicked — the set's key and its 0-based position.
-  final void Function(String key, int index) onShot;
+  /// A shot was clicked — the package, the set's key, and its 0-based
+  /// position.
+  final void Function(String packagePath, String key, int index) onShot;
 
-  /// The card's listing action — the set's key.
-  final ValueChanged<String> onListing;
+  /// The card's listing action — the package and the set's key.
+  final void Function(String packagePath, String key) onListing;
 
   /// The `store/class/appLocale` key of the set an export is on right now, so
   /// exactly that card can say so while the others stay as they were.
@@ -426,10 +443,15 @@ class _ListingBlock extends StatelessWidget {
                   : manifest['${target.store}/${target.id}/$locale'],
               storeLocale: locale == null ? null : listing.locales[locale],
               working: working == '${target.store}/${target.id}/$locale',
-              onShot: (index) =>
-                  onShot('${target.store}/${target.id}/$locale', index),
-              onListing: () =>
-                  onListing('${target.store}/${target.id}/$locale'),
+              onShot: (index) => onShot(
+                packagePath,
+                '${target.store}/${target.id}/$locale',
+                index,
+              ),
+              onListing: () => onListing(
+                packagePath,
+                '${target.store}/${target.id}/$locale',
+              ),
             ),
           ),
         const Gap(FwSpacing.lg),

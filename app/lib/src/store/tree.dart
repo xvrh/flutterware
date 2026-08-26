@@ -50,10 +50,25 @@ String storeFileNameFor(StoreLayout layout, StoreTarget target, String stem) =>
 
 /// `order-placed` from `Order placed` — a name that sorts, survives every
 /// filesystem, and still reads as what it shows.
-String storeSlug(String name) => name
-    .toLowerCase()
-    .replaceAll(RegExp('[^a-z0-9]+'), '-')
-    .replaceAll(RegExp(r'^-+|-+$'), '');
+///
+/// **Letters and digits in any script**, not `[a-z0-9]`. It was the ASCII
+/// class first, which meant a shot named `メニュー` — or in Cyrillic, Greek,
+/// Hebrew or Arabic — slugged to the empty string: the export wrote `02-.png`,
+/// the viewer's title read `02-`, and `--shot=メニュー` matched nothing. A
+/// listing localized into those languages is exactly the listing this plugin
+/// is for. Filenames are UTF-8 on every platform this runs on, and neither
+/// store reads the name — `deliver` infers a class from the image's own
+/// dimensions and `supply` from the directory.
+///
+/// [fallback] is what a name with no letters or digits at all becomes — an
+/// emoji, or punctuation. Rare, and better than a file called `02-.png`.
+String storeSlug(String name, {String fallback = 'shot'}) {
+  var slug = name
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+  return slug.isEmpty ? fallback : slug;
+}
 
 /// Whether [fileName], sitting in this target's directory, is one of **this
 /// set's** images.
