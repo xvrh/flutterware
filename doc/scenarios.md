@@ -317,6 +317,20 @@ reads, so this particular mismatch does not arise there.
 A scenario that hits this says so, in the failure, rather than leaving you with
 the engine's empty sentence.
 
+**The hook itself is run for you.** A package that generates part of itself at
+build time used to work in a preview only if something *else* on the machine had
+already built the app — a clean checkout rendered nothing, a machine that had
+run the app once rendered everything, and neither could tell which it was.
+Flutterware now runs those hooks before it assembles a bundle. The first run on
+a machine pays for it, once: measured 49.9s for a package that compiles a whole
+engine's worth of shaders, and 110–125ms every run after. A project with no such
+dependency pays 30ms, which is the cost of asking.
+
+That first run is also why `tool/flutterware.dart` may take a minute on a fresh
+checkout. `dart run` resolves the workspace and runs those same hooks before
+your config's own few milliseconds; if it is ever killed for taking too long,
+the message says which of the two it was likely doing.
+
 ### Load models outside `runAsync`
 
 ```dart

@@ -1,7 +1,8 @@
 # Running build hooks in the catalog's bundle
 
 **Date:** 2026-08-26
-**Status:** Design. Nothing built.
+**Status:** Piece 1 built. Pieces 2 and 3 stand as written, and the reason
+they wait is in each.
 **Follows:** the Flutter GPU research of the same day, which is where the gap
 surfaced and where every number below was measured.
 **Sibling:** `2026-08-17-asset-transformers-design.md`. That one runs a chain
@@ -60,8 +61,14 @@ No hook runs anywhere in the previews or scenarios path.
 | | |
 |---|---|
 | cold, with `.dart_tool/hooks_runner` wiped | **49.9 s** |
-| warm | **1.2 s** — the same as a run with no hooks at all |
+| warm | **110–125 ms** in-process |
 | cache on disk | 20 MB |
+| a workspace whose only hook builds native code | **40 ms** |
+| asking whether there is anything to run at all | **30 ms** |
+
+The warm number is two caches deep and neither is ours: `hooks_runner` decides
+whether to run the hook, and the hook decides whether to rewrite its own output.
+A first ask after wiping only the former cost 1.2 s and rewrote nothing.
 
 So it is affordable exactly once and never again, and the caching is not ours to
 write: `package:hooks_runner` owns it.
@@ -75,11 +82,28 @@ runner every time and let the runner answer in a millisecond.
 
 Three pieces. Only the first is load-bearing on today's pin.
 
-### 1. Run the hooks
+### 1. Run the hooks — built
 
-`package:hooks_runner` (1.6.3) is the backend `flutter_tools` itself drives, and
-an ordinary pub package. It is invoked once per build, before the manifests are
-written, with the target the tester runs as.
+`app/lib/src/assets/build_hooks.dart`, called from `AssetBundleBuilder.build`
+before `AssetCatalog.resolve` — a hook writes into a directory the catalog
+enumerates, so running second is a faithful reading of an empty directory.
+
+`package:hooks_runner` is the backend `flutter_tools` itself drives, and an
+ordinary pub package. **Pinned to the version the SDK in `.fvmrc` pins**, with a
+test that fails when they drift, for two reasons. A hook and the runner
+negotiate a protocol version, so the runner a project's own hooks were resolved
+against is the one that can speak to them. And the newest (1.6.3) requires
+`code_assets ^2.0.0`, which evicts `native_toolchain_c` and takes `sqlite3` back
+a major version under the Server panel; 1.6.1 adds one package and changes
+nothing else.
+
+**Asked with no protocol extensions**, which is the whole of why piece 2 can
+wait and is measured rather than assumed. A hook branches on what was asked for:
+given no data assets it writes into its own package tree, which the bundle
+already ships, and given no code assets it returns on its first line —
+`sqlite3`'s hook opens `if (!input.config.buildCodeAssets) return;`. So the
+ordinary project pays a process spawn, and native code is still not built for
+previews, exactly as it never was.
 
 This belongs beside `AssetTransformerRunner` and not inside it. Both produce
 files the bundle then owns, and the resemblance ends there: a transformer chain
@@ -143,16 +167,20 @@ from broken entries; a hook failure is the former.
 
 ## Open, to settle before building
 
-1. **Which target do we ask for?** `flutter test` builds for the tester target,
-   and a hook that branches on target platform will compile for it. But the
-   research turned up that a hook compiles shaders for the *host's real*
-   backend, and that the tester's default backend is a different one — which is
-   why `--impeller-backend=metal` is now passed on macOS. Whether asking for a
-   different target changes what the hook emits, and whether that is better or
-   worse than what CI already proved works, is unmeasured.
+1. **Which target do we ask for?** Settled for now by asking for no asset
+   types at all, which is the only shape that needs no target. It becomes live
+   again with piece 2: `flutter test` builds for the tester target, and a hook
+   that branches on target platform will compile for it — but a hook compiles
+   shaders for the *host's real* backend, and the tester's default backend is a
+   different one, which is why `--impeller-backend=metal` is now passed on
+   macOS. Whether asking for a different target changes what the hook emits is
+   still unmeasured.
 2. **Where the cache lives.** `.dart_tool/hooks_runner` is 20 MB for one
    package. `2026-08-23-flutterware-dir-growth-design.md` is the standing
    argument about what we are allowed to leave on a disk.
-3. **Whether a stale hook can be detected cheaply.** The runner answers in
-   1.2 s warm, which is probably cheap enough to just always ask. Worth
-   measuring against the sync path's own budget before assuming it.
+3. **Whether a stale hook can be detected cheaply.** ~~The runner answers in
+   1.2 s warm~~ — 110–125 ms, measured in-process. Cheap, but not free against a
+   reload, so the built version memoises on the resolution's content and asks
+   again whenever that moves. What that does not notice is a hook's own source
+   changing under a path dependency, which is a package author editing their own
+   hook and costs them a restart.

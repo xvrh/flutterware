@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 import 'package:standard_message_codec/standard_message_codec.dart';
 
+import '../assets/build_hooks.dart';
 import '../assets/model/asset_catalog.dart';
 import '../embedder/flutter_cache.dart';
 import '../utils/run_dir.dart';
@@ -89,6 +90,16 @@ class AssetBundleBuilder {
   final String packageConfigPath;
 
   Future<BundleSync> build(String output) async {
+    // Before the catalog, not after it: a hook that generates assets writes
+    // them into a directory its pubspec declares, and [AssetCatalog] lists that
+    // directory's contents as it resolves. Run second and the catalog is a
+    // faithful reading of an empty directory.
+    await BuildHooks(
+      dartExecutable: cache.dart,
+      packageConfigPath: packageConfigPath,
+      rootPackageRoot: rootPackageRoot,
+    ).run();
+
     var catalog = await AssetCatalog.resolve(
       rootPackageRoot: rootPackageRoot,
       packageConfigPath: packageConfigPath,

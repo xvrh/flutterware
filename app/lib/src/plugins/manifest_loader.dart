@@ -73,6 +73,26 @@ class ManifestLoader {
   /// merely doing something slow.
   final Duration timeout;
 
+  /// How long the `dart run` fallback gets, which is a different question.
+  ///
+  /// A constant rather than a knob: nothing has ever wanted to move it, and
+  /// the fakes several tests build over this class would each grow a member
+  /// for the privilege.
+  ///
+  /// That path is taken when there is no usable kernel — a fresh checkout, a
+  /// changed SDK — and `dart run` does two things before the config's own 50ms:
+  /// it resolves the workspace if pub has not, and it runs the build hooks of
+  /// every dependency that ships one. Measured on a project that loads a 3D
+  /// model, the hooks alone were **49.9s** the first time on a machine. Under
+  /// the 30s budget that is a config killed for doing exactly what it was
+  /// supposed to, with a message about infinite loops — and on CI, where the
+  /// pub cache is empty every run, it is killed every run.
+  ///
+  /// So: generous, and bounded anyway, because a config that hangs still has to
+  /// be reported rather than waited on forever. Five minutes is
+  /// `package:hooks_runner`'s own per-hook ceiling.
+  static const _firstRunTimeout = Duration(minutes: 5);
+
   final Future<ProcessResult> Function(
     String executable,
     List<String> arguments, {
@@ -84,13 +104,21 @@ class ManifestLoader {
     String executable,
     List<String> arguments, {
     String? workingDirectory,
+    Duration? deadline,
+    String? slowHint,
   }) =>
       _runProcess?.call(
         executable,
         arguments,
         workingDirectory: workingDirectory,
       ) ??
-      _spawn(executable, arguments, workingDirectory);
+      _spawn(
+        executable,
+        arguments,
+        workingDirectory,
+        deadline ?? timeout,
+        slowHint,
+      );
 
   /// `Process.run` with a deadline.
   ///
@@ -101,6 +129,8 @@ class ManifestLoader {
     String executable,
     List<String> arguments,
     String? workingDirectory,
+    Duration deadline,
+    String? slowHint,
   ) async {
     var process = await Process.start(
       executable,
@@ -111,7 +141,7 @@ class ManifestLoader {
     var stdout = process.stdout.transform(utf8.decoder).join();
     var stderr = process.stderr.transform(utf8.decoder).join();
     try {
-      var exitCode = await process.exitCode.timeout(timeout);
+      var exitCode = await process.exitCode.timeout(deadline);
       return ProcessResult(process.pid, exitCode, await stdout, await stderr);
     } on TimeoutException {
       process.kill(ProcessSignal.sigkill);
@@ -124,11 +154,12 @@ class ManifestLoader {
       unawaited(stdout.then((_) {}, onError: (_) {}));
       unawaited(stderr.then((_) {}, onError: (_) {}));
       throw ManifestLoadException(
-        '$configFilePath did not finish within ${timeout.inSeconds}s and was '
+        '$configFilePath did not finish within ${deadline.inSeconds}s and was '
         'killed.',
         details:
+            slowHint ??
             'A config is expected to print its manifest and exit. Check for a '
-            'loop, a read from stdin, or an await that never completes.',
+                'loop, a read from stdin, or an await that never completes.',
       );
     }
   }
@@ -183,10 +214,19 @@ class ManifestLoader {
       if (result.exitCode == 0) return result;
       _invalidate(worktreePath);
     }
-    return _run(dartExecutable, [
-      'run',
-      configFilePath,
-    ], workingDirectory: worktreePath);
+    return _run(
+      dartExecutable,
+      ['run', configFilePath],
+      workingDirectory: worktreePath,
+      deadline: _firstRunTimeout,
+      slowHint:
+          'This was the first run for this checkout, so `dart run` was also '
+          'resolving the workspace and running the build hooks of every '
+          'dependency that ships one — which for a package that generates '
+          'shaders is minutes rather than seconds, once per machine. If that '
+          'is not what it was doing, check the config for a loop, a read from '
+          'stdin, or an await that never completes.',
+    );
   }
 
   /// A path to an up-to-date kernel of the config file, or null to use
