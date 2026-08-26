@@ -15,8 +15,9 @@ import 'package:flutterware_app/src/ui/theme.dart';
 /// and put back the same day.
 ///
 /// The interesting half is how it coexists with the ranking rather than
-/// competing with it: pinned files stay in a band above, and inside the tree
-/// the order is **weight**, not the alphabet.
+/// competing with it: pinned files get their own tab, and inside the tree the
+/// order is the **alphabet** — this is the surface you navigate by name, and a
+/// weight order here sorted by a number the row does not print.
 void main() {
   FileChange at(
     String path, {
@@ -60,20 +61,22 @@ void main() {
       expect(tree.sortedChildren.single.totalFiles, 3);
     });
 
-    test('directories sort by weight, so the hammered module leads', () {
-      // **The one change from the version that was deleted.** Alphabetical is
-      // right for a file explorer, where you know the name you want. Here you
-      // do not, which is the whole reason the screen exists.
+    test('directories sort by name, not by how much they churned', () {
+      // It used to be weight, so that the hammered module led. The row prints
+      // its **file count**, so that order arrived on screen as 59, 60, 6, 3, 4,
+      // 5 and read as no order at all. "What first" is the Important tab's
+      // question; this one is "where is it".
       var tree = buildTree([
         at('alpha/small.dart', added: 2),
         at('zulu/huge.dart', added: 900),
       ]);
-      expect(tree.sortedChildren.map((c) => c.name), ['zulu', 'alpha']);
+      expect(tree.sortedChildren.map((c) => c.name), ['alpha', 'zulu']);
     });
 
-    test('files sort by weight too, with deletions promoted', () {
-      // Same rule the flat list had: `D −88` is the line most worth seeing, and
-      // a plain churn sort buries it under three larger edits.
+    test('files sort by name too, deletions among them', () {
+      // The old rule promoted `D −88` to the top of its folder. In a tree that
+      // buys a jump in the one column that had become scannable, and the status
+      // letter already says it at the row.
       var tree = buildTree([
         at('lib/big.dart', added: 400),
         at(
@@ -85,18 +88,30 @@ void main() {
         at('lib/small.dart', added: 3),
       ]);
       expect(tree.sortedChildren.single.sortedFiles.map((f) => f.path), [
-        'lib/gone.dart',
         'lib/big.dart',
+        'lib/gone.dart',
         'lib/small.dart',
       ]);
     });
 
-    test('equal weight falls back to the name, so the order is stable', () {
+    test('a capitalised name sits among its neighbours, not above them', () {
+      // A plain `compareTo` puts every uppercase letter before every lowercase
+      // one, which strands README.md at the top of a repository root.
       var tree = buildTree([
-        at('b/x.dart', added: 0),
-        at('a/y.dart', added: 0),
+        at('app/pubspec.yaml'),
+        at('app/README.md'),
+        at('app/analysis_options.yaml'),
       ]);
-      expect(tree.sortedChildren.map((c) => c.name), ['a', 'b']);
+      expect(tree.sortedChildren.single.sortedFiles.map((f) => f.path), [
+        'app/analysis_options.yaml',
+        'app/pubspec.yaml',
+        'app/README.md',
+      ]);
+    });
+
+    test('two spellings of one name keep a stable order', () {
+      var tree = buildTree([at('Foo/x.dart'), at('foo/y.dart')]);
+      expect(tree.sortedChildren.map((c) => c.name), ['Foo', 'foo']);
     });
   });
 

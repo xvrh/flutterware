@@ -62,8 +62,12 @@ void main() {
     uncommitted: uncommitted,
   );
 
+  // Two digits, so the index's alphabetical order and the loop's are the same
+  // one — `f9` after `f19` is correct and unreadable in a test about which row
+  // moved.
   List<FileChange> twenty() => [
-    for (var i = 0; i < 20; i++) file('lib/f$i.dart', added: 100 - i),
+    for (var i = 0; i < 20; i++)
+      file('lib/f${i.toString().padLeft(2, '0')}.dart', added: 100 - i),
   ];
 
   late ChangeSet current;
@@ -104,7 +108,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(inIndex('f9.dart'));
+    await tester.tap(inIndex('f09.dart'));
     await tester.pumpAndSettle();
     var before = tester.getTopLeft(find.textContaining('@@').first);
 
@@ -121,29 +125,29 @@ void main() {
     await pump(tester);
     await tester.drag(find.byKey(changesListKey), const Offset(0, -200));
     await tester.pumpAndSettle();
-    var before = tester.getTopLeft(inIndex('f9.dart'));
+    var before = tester.getTopLeft(inIndex('f09.dart'));
 
     // Nothing above it moved, so nothing below it should have either.
     await reprobe(tester, setOf(twenty()));
-    expect(tester.getTopLeft(inIndex('f9.dart')), before);
+    expect(tester.getTopLeft(inIndex('f09.dart')), before);
   });
 
   testWidgets('the file you are on survives, and its counts update', (
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(inIndex('f3.dart'));
+    await tester.tap(inIndex('f03.dart'));
     await tester.pumpAndSettle();
     expect(find.textContaining('@@'), findsOneWidget);
 
     var grown = [
       for (var f in twenty())
-        if (f.path == 'lib/f3.dart')
-          file('lib/f3.dart', added: 400, hunks: 3)
+        if (f.path == 'lib/f03.dart')
+          file('lib/f03.dart', added: 400, hunks: 3)
         else
           f,
     ];
-    await reprobe(tester, setOf(grown, uncommitted: {'lib/f3.dart'}));
+    await reprobe(tester, setOf(grown, uncommitted: {'lib/f03.dart'}));
 
     expect(find.textContaining('@@'), findsNWidgets(3));
     expect(
@@ -165,7 +169,7 @@ void main() {
     await pump(tester);
     await tester.enterText(find.byType(TextField), 'f1');
     await tester.pumpAndSettle();
-    expect(inIndex('f0.dart'), findsNothing);
+    expect(inIndex('f00.dart'), findsNothing);
 
     await reprobe(tester, setOf([file('lib/new.dart'), ...twenty()]));
 
@@ -174,7 +178,7 @@ void main() {
       'f1',
     );
     expect(
-      inIndex('f0.dart'),
+      inIndex('f00.dart'),
       findsNothing,
       reason: 'and it is still filtering, not merely still displaying',
     );
@@ -197,14 +201,14 @@ void main() {
     'a file that vanished under you says so, and the index moves on',
     (tester) async {
       await pump(tester);
-      await tester.tap(inIndex('f3.dart'));
+      await tester.tap(inIndex('f03.dart'));
       await tester.pumpAndSettle();
 
       await reprobe(
         tester,
         setOf([
           for (var f in twenty())
-            if (f.path != 'lib/f3.dart') f,
+            if (f.path != 'lib/f03.dart') f,
         ]),
       );
 
@@ -212,7 +216,7 @@ void main() {
         find.textContaining('no longer part of the delta'),
         findsOneWidget,
       );
-      expect(inIndex('f3.dart'), findsNothing);
+      expect(inIndex('f03.dart'), findsNothing);
     },
   );
 }

@@ -141,7 +141,7 @@ void main() {
     expect(find.text('no base'), findsOneWidget);
   });
 
-  testWidgets('lists files with their counts, deletions first', (tester) async {
+  testWidgets('lists files with their counts, in name order', (tester) async {
     await pump(
       tester,
       setOf(
@@ -165,10 +165,11 @@ void main() {
     expect(find.text('+140'), findsOneWidget);
     expect(find.text('-88'), findsOneWidget);
 
-    // Ranked: the deletion is the line most worth seeing.
+    // By name. The deletion used to be promoted to the top of its folder; the
+    // `D` at the row says it without moving the row.
     expect(
-      tester.getTopLeft(find.text('gone.dart')).dy,
-      lessThan(tester.getTopLeft(find.text('big.dart')).dy),
+      tester.getTopLeft(find.text('big.dart')).dy,
+      lessThan(tester.getTopLeft(find.text('gone.dart')).dy),
     );
   });
 
