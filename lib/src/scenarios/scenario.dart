@@ -13,6 +13,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../bytes.dart';
+import '../flutter_gpu_diagnosis.dart';
 import '../drive/resolve.dart';
 import '../translations/index.dart';
 import 'aim.dart';
@@ -248,18 +249,26 @@ Future<void> _runScenario(
   // test, and it asserts at the end that it got its handler back.
   var caught = scenarioCaughtErrors;
   var priorOnError = FlutterError.onError;
-  if (caught != null) {
-    FlutterError.onError = (details) {
-      caught.add(
-        ScenarioCaughtError(
-          details.exception,
-          details.exceptionAsString(),
-          details.stack,
-        ),
-      );
-      priorOnError?.call(details);
-    };
-  }
+  // Chained in **both** lanes, unlike the buffer it carries: `tester.runAsync`
+  // reports its callback's failure here and returns null rather than
+  // rethrowing it, so under `flutter test` this is the only place such a
+  // failure passes through at all — and `flutter test` is the lane the
+  // Flutter GPU diagnosis exists for.
+  FlutterError.onError = (details) {
+    announceFlutterGpuDiagnosis(
+      details.exceptionAsString(),
+      executableArguments: Platform.executableArguments,
+      macOS: Platform.isMacOS,
+    );
+    caught?.add(
+      ScenarioCaughtError(
+        details.exception,
+        details.exceptionAsString(),
+        details.stack,
+      ),
+    );
+    priorOnError?.call(details);
+  };
   try {
     // The split-replay loop: the body runs once per path through its
     // `split`s, depth-first — a body with none runs once. Every replay
@@ -310,13 +319,23 @@ Future<void> _runScenario(
         try {
           await s._captureFailure(error);
         } catch (_) {}
+        // A thrown failure never reaches `reportTestException`, so the
+        // structured report's diagnosis does not reach a console. Said here
+        // instead, once, the way the `runAsync` watchdog says its own.
+        announceFlutterGpuDiagnosis(
+          '$error',
+          executableArguments: Platform.executableArguments,
+          macOS: Platform.isMacOS,
+        );
         // Rethrown with the original stack, so the report still points at
         // the user's line; only the message gains its split branch.
         Error.throwWithStackTrace(inContext, stack);
       }
     } while (state.plan.advance());
   } finally {
-    if (caught != null) FlutterError.onError = priorOnError;
+    // Unconditional, because the chain above is: the binding asserts at the
+    // end that it got its own handler back.
+    FlutterError.onError = priorOnError;
     // Both before the body ends, not in a tearDown: the binding checks its
     // debug variables — and complains about a live semantics handle — at
     // the end of the body, before tearDowns run.

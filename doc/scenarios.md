@@ -287,6 +287,51 @@ an iOS-profile scenario measures its default text as Roboto — close, not SF.
 and measures the real thing; treat its captures as the authoritative ones,
 and bare `flutter test` as the assertion lane it is.
 
+## 3D and Flutter GPU: the lane decides which backend
+
+A scenario can render `package:flutter_gpu` — and a whole 3D engine on top of
+it, `flutter_scene` included. A glTF model loads, lights and captures like any
+other frame.
+
+Two things have to be true, and the second is the one that bites.
+
+**Impeller has to be on**, with Flutter GPU on beside it: the engine wants
+`--enable-impeller` *and* `--enable-flutter-gpu` and refuses if it has one
+without the other. Flutterware passes both in every lane it spawns.
+`FW_SOFTWARE_RENDERING=1` puts the old software rasterizer back, and Flutter
+GPU stops working when you do.
+
+**The backend has to match the shaders.** A package that ships shaders compiles
+them in a build hook, for the backend of the machine the hook ran on — Metal on
+macOS, SPIR-V and GLES on Linux and Windows. Handed `--enable-impeller` and
+nothing else, `flutter_tester` picks **Vulkan on every host**, so on macOS a
+shader bundle a hook has just produced cannot be read at all and you get
+`Failed to initialize ShaderLibrary:` with nothing after the colon.
+
+`fw run scenarios run` spawns the tester itself and names
+`--impeller-backend=metal` there. **`flutter test` has no such flag**, so on
+macOS it cannot render anything whose shaders came from a build hook. On Linux
+and Windows the default is already what the hook targeted and both lanes work.
+
+A scenario that hits this says so, in the failure, rather than leaving you with
+the engine's empty sentence.
+
+### Load models outside `runAsync`
+
+```dart
+// Yes — the load runs from initState, and the scenario's pump lands it.
+class _Model extends StatefulWidget { … }
+
+await s.pumpWidget(const _Model());
+await s.screen('The model');
+```
+
+Not inside `s.runAsync`. A model load reads several assets and waits on frames,
+and no pump can run while `runAsync` is open — so it waits for something only a
+pump could deliver, and the scenario sits there. The `runAsync` watchdog names
+this after eight real seconds rather than letting it look like slowness, but
+the shape above never gets there.
+
 ## Running them
 
 In the GUI, opening a scenario runs it and draws the flow. From the CLI or an
