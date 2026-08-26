@@ -55,13 +55,26 @@ void main() {
       expect(isFlutterGpuFailure(noShaders), isTrue);
     });
 
-    test('the fragment-shader stage mismatch too', () {
+    test('but not a FragmentProgram mismatch, which is a different API', () {
+      // `lib/ui/painting/fragment_program.cc`, not `lib/gpu/`. An ordinary
+      // `.frag` hits this; enabling Flutter GPU would not move it. And the
+      // engine already names the asset, the backend and the stages it did
+      // find, so there is nothing to add.
       expect(
         isFlutterGpuFailure(
           "Asset 'shaders/x.frag' does not contain appropriate runtime stage "
-          'data for current backend (Metal).',
+          'data for current backend (Metal).\nFound stages: SkSL OpenGLES',
         ),
-        isTrue,
+        isFalse,
+      );
+      expect(
+        withFlutterGpuDiagnosis(
+          "Asset 'shaders/x.frag' does not contain appropriate runtime stage "
+          'data for current backend (Metal).',
+          executableArguments: const ['--enable-impeller'],
+          macOS: true,
+        ),
+        isNot(contains('Flutter GPU')),
       );
     });
 

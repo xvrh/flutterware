@@ -33,13 +33,23 @@ RasterizerFlags readRasterizerFlags(List<String> executableArguments) => (
 /// about the app.
 ///
 /// Deliberately narrow. A sentence appended to an unrelated failure is worse
-/// than no sentence, because the reader spends their first minute on the
-/// wrong thing.
+/// than no sentence, because the reader spends their first minute on the wrong
+/// thing — so these are the three strings only `lib/gpu/` can produce, and a
+/// project that does not depend on `package:flutter_gpu` can never see one.
+///
+/// **`FragmentProgram` is not in this list, on purpose.** Its own backend
+/// mismatch — "does not contain appropriate runtime stage data for current
+/// backend (Metal). Found stages: …" — comes from
+/// `lib/ui/painting/fragment_program.cc` and is nothing to do with Flutter GPU:
+/// an ordinary `.frag` in a pubspec's `shaders:` hits it, and enabling Flutter
+/// GPU would not move it an inch. It also needs no help. That message already
+/// names the asset, the backend in use and the stages actually found, which is
+/// everything the reader needs and exactly what `Failed to initialize
+/// ShaderLibrary:` fails to give.
 bool isFlutterGpuFailure(String failure) =>
     failure.contains('Flutter GPU requires the Impeller rendering backend') ||
     failure.contains('Flutter GPU must be enabled') ||
-    failure.contains('Failed to initialize ShaderLibrary') ||
-    failure.contains('appropriate runtime stage data');
+    failure.contains('Failed to initialize ShaderLibrary');
 
 /// [failure] with what this process knows about it appended, or [failure]
 /// unchanged when it is not about Flutter GPU or nothing useful can be added.
