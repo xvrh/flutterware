@@ -311,7 +311,8 @@ shader bundle a hook has just produced cannot be read at all and you get
 `fw run scenarios run` spawns the tester itself and names
 `--impeller-backend=metal` there. **`flutter test` has no such flag**, so on
 macOS it cannot render anything whose shaders came from a build hook. On Linux
-and Windows the default is already what the hook targeted and both lanes work.
+and Windows a hook emits SPIR-V and GLES, which is what the tester's default
+reads, so this particular mismatch does not arise there.
 
 A scenario that hits this says so, in the failure, rather than leaving you with
 the engine's empty sentence.
