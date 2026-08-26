@@ -283,6 +283,7 @@ class AssetBundleBuilder {
       '--runtime-stage-gles',
       '--runtime-stage-gles3',
       '--runtime-stage-vulkan',
+      '--runtime-stage-metal',
       '--iplr',
       '--sl=$scratch',
       '--spirv=$scratch.spirv',

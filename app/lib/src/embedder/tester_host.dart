@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:path/path.dart' as p;
 
+import '../constants.dart';
 import '../previews/asset_bundle.dart';
 import '../previews/package_config_locator.dart';
 import 'flutter_cache.dart';
@@ -268,8 +269,10 @@ class TesterHost {
         '--icu-data-file-path=${_cache.testerIcuData}',
         '--enable-checked-mode',
         '--verify-entry-points',
-        '--enable-software-rendering',
-        '--skia-deterministic-rendering',
+        ...rasterizerArguments(
+          macOS: Platform.isMacOS,
+          environment: Platform.environment,
+        ),
         '--enable-dart-profiling',
         '--non-interactive',
         // The engine exits with `main` otherwise — S4's discovered flag.
@@ -527,4 +530,38 @@ class TesterCompileException implements Exception {
   @override
   String toString() =>
       'The $program harness does not compile:\n${output.join('\n')}';
+}
+
+/// Which rasterizer the harness draws with, and with which backend.
+///
+/// **Naming the backend is correctness, not speed.** A package's build hook
+/// compiles its shaders for the host's *real* backend — measured on
+/// `flutter_scene` across the three runners: Metal alone on macOS, SPIR-V and
+/// GLES elsewhere. `flutter_tester` handed `--enable-impeller` and nothing
+/// else falls through to its Vulkan branch on **every** host, so on macOS the
+/// shaders a hook has just produced are unloadable and the library throws
+/// before anything renders. Naming `metal` there is what makes them load;
+/// elsewhere the default already is what the hook targeted, so nothing is
+/// named and the engine's own choice stands.
+///
+/// This is also the line `flutter test` cannot cross: it offers
+/// `--enable-impeller` and `--enable-flutter-gpu` but no `--impeller-backend`,
+/// which is why a scenario that renders through Flutter GPU runs here and not
+/// there. Spawning the tester ourselves is what buys the third flag — the same
+/// reason we omit `--use-test-fonts`.
+List<String> rasterizerArguments({
+  required bool macOS,
+  required Map<String, String> environment,
+}) {
+  if (environment[softwareRenderingKey] == '1') {
+    return const [
+      '--enable-software-rendering',
+      '--skia-deterministic-rendering',
+    ];
+  }
+  return [
+    '--enable-impeller',
+    if (macOS) '--impeller-backend=metal',
+    '--enable-flutter-gpu',
+  ];
 }

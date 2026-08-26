@@ -131,10 +131,16 @@ jobs:
     # `darwin-x64`. Development happens on macOS, where that mistake is
     # invisible; this job is the only thing that would catch it coming back.
     #
-    # It can block because nothing here needs a GPU: the tester runs
-    # `--enable-software-rendering`, and the host `artifacts.zip` (tester,
+    # It can block because nothing here needs a GPU *device*: measured
+    # 2026-08-26, `flutter_tester --enable-impeller --enable-flutter-gpu`
+    # brings a context up on a bare `ubuntu-latest` with no driver installed
+    # and nothing added to the image. The host `artifacts.zip` (tester,
     # impellerc, ICU data, snapshots) is in the universal bucket any `flutter`
     # command downloads.
+    #
+    # Since `demo/gpu_smoke.dart` renders through Flutter GPU and is not
+    # allowed to catch its own failure, this job is also what says the
+    # rasterizer still carries it here.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -158,4 +164,38 @@ jobs:
       # job exists for. `fw` exits 1 when the audit reports `ok: false`, so a
       # broken example entry — or a tester that cannot come up — fails the job.
       - run: dart run flutterware_app:fw run previews audit
+        working-directory: examples/example
+
+  previews_audit_windows:
+    name: Previews audit on Windows
+    # The Linux job's twin, and it exists for a sharper reason than symmetry:
+    # until 2026-08-26 previews and scenarios did not run on Windows *at all*.
+    # Every compile died inside the front end on `StandardFileSystem only
+    # supports file:* and data:* URIs` — a bare `C:\...` handed to something
+    # that parses URIs reads as the scheme `c:` — and the audit reported the
+    # package unreachable with a bare `Bad state: No elements`. Nothing caught
+    # it because nothing ran previews on Windows.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Read the pinned Flutter version
+        id: pin
+        shell: bash
+        run: |
+          version="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc)"
+          if [ -z "$version" ]; then echo "::error::.fvmrc names no Flutter version"; exit 1; fi
+          case "$version" in *-*) channel=beta ;; *) channel=stable ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.pin.outputs.version }}
+          channel: ${{ steps.pin.outputs.channel }}
+      - run: flutter --version
+      - run: flutter pub get
+      - run: dart run flutterware_app:fw run previews audit
+        working-directory: examples/example
+      # Scenarios share the harness previews audit on, so a Windows break in
+      # either is usually a break in both — but only this one spawns a run.
+      - run: dart run flutterware_app:fw run scenarios run --steps=none
         working-directory: examples/example

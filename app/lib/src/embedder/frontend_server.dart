@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:async/async.dart';
+import 'package:path/path.dart' as p;
 
 /// One `frontend_server` process, driven over its line protocol.
 ///
@@ -83,8 +84,14 @@ class FrontendServer {
     File(outputDill).parent.createSync(recursive: true);
     var process = await Process.start(executable, [
       snapshot,
-      '--sdk-root', sdkRoot,
-      '--platform', platformDill,
+      // Both of these reach the front end as **URIs**, not paths. On Windows a
+      // bare `C:\...` parses as the scheme `c:`, which `StandardFileSystem`
+      // refuses — measured on a CI runner, where every compile died with
+      // "StandardFileSystem only supports file:* and data:* URIs" and the
+      // audit reported the package unreachable. `flutter_tools` does the same
+      // two conversions for the same reason.
+      '--sdk-root', _sdkRootArgument(sdkRoot),
+      '--platform', Uri.file(p.absolute(platformDill)).toString(),
       '--target=$target',
       '--output-dill', outputDill,
       '--packages', packageConfig,
@@ -250,4 +257,17 @@ class FrontendServerResult {
   final Duration elapsed;
 
   bool get ok => errorCount == 0 && dillOutput != null;
+}
+
+/// [directory] as the front end wants `--sdk-root`: an absolute path ending in
+/// a forward slash.
+///
+/// A *path*, not a URI — the front end percent-encodes what it is given here,
+/// so a `file:` URI comes back as `file%3A///...` and the directory is not
+/// found. The trailing slash is what makes it resolve the platform dill
+/// *inside* the directory rather than beside it, and `flutter_tools` notes at
+/// the same line that the forward slash is right even on Windows.
+String _sdkRootArgument(String directory) {
+  var root = p.absolute(directory).replaceAll(r'\', '/');
+  return root.endsWith('/') ? root : '$root/';
 }

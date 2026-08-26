@@ -222,6 +222,23 @@ int main(int argc, char** argv) {
   args.log_message_callback = OnLogMessage;
   args.log_tag = "embedder";
 
+  // Impeller, unless the escape hatch says otherwise. Two reasons it is not
+  // optional: Flutter GPU needs it and refuses without it, and the tester the
+  // audit runs on now draws with it — a guest still on Skia would mean a
+  // `screenshot` and an `audit` of one entry were rasterized differently.
+  //
+  // `Settings::enable_impeller` defaults to true only on Android and iOS, so
+  // every desktop embedder has to ask. The name below is
+  // `softwareRenderingKey` in `app/lib/src/constants.dart`; the two halves
+  // have to agree.
+  const char* engine_argv[] = {"flutterware_guest", "--enable-impeller",
+                               "--enable-flutter-gpu"};
+  const char* software = getenv("FW_SOFTWARE_RENDERING");
+  if (software == NULL || strcmp(software, "1") != 0) {
+    args.command_line_argc = 3;
+    args.command_line_argv = engine_argv;
+  }
+
   FlutterEngineResult result = FlutterEngineRun(
       FLUTTER_ENGINE_VERSION, &renderer, &args, NULL, &g_engine);
   if (result != kSuccess || g_engine == NULL) {

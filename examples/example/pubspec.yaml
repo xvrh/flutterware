@@ -36,6 +36,8 @@ dependencies:
   device_info_plus:
   flutter:
     sdk: flutter
+  flutter_gpu:
+    sdk: flutter
   flutter_localizations:
     sdk: flutter
   # **Pinned below 11, because 11 is ahead of the whole toolchain we pin.**
