@@ -48,6 +48,49 @@ class DaemonAddress {
       .toString()
       .substring(0, 16);
 
+  /// [key] minus what only decides *which process* answers.
+  ///
+  /// Hashing the whole config is right for an address and wrong for everything
+  /// the compiler *learns*. A daemon of another revision must not serve this
+  /// one's clients — it decides what goes into a hot-reload delta, and an older
+  /// one hands a guest a delta missing a library. But the warm kernel and the
+  /// quarantine are functions of the sources, the engine and the package
+  /// resolution, and none of those move when flutterware's own code does.
+  ///
+  /// Keyed on [key] they moved anyway, and every move cost a cold start:
+  /// measured on this repo, touching one file in the daemon's own closure took
+  /// the next start from **841ms to 10493ms** — a full compile, plus the blame
+  /// round for a broken demo the previous run already knew about, plus another
+  /// ~95MB kernel left behind. For a consumer the same happens on every
+  /// flutterware upgrade, because the unpack rewrites every mtime.
+  ///
+  /// The one field dropped is `daemonRevision`. Everything else still forks
+  /// both: a different SDK, package resolution or root set would produce a
+  /// different kernel, and the stamp beside the kernel catches what the config
+  /// cannot see (an engine upgraded in place under the same SDK root).
+  late final String kernelKey = sha1
+      .convert(
+        utf8.encode(
+          jsonEncode(_canonical(config.toJson()..remove('daemonRevision'))),
+        ),
+      )
+      .toString()
+      .substring(0, 16);
+
+  /// Where the compiler's learned state lives: the warm kernel and the
+  /// quarantine, which describe one compile and are discarded together.
+  ///
+  /// Under the *app install*, like the rest of `build/catalog`, and keyed on
+  /// [kernelKey] so a new daemon revision inherits it.
+  String get learnedDir =>
+      p.join(config.appPackageRoot, 'build', 'catalog', 'kernels', kernelKey);
+
+  /// The kernel a previous daemon left for the next one to start from.
+  String get warmDillPath => p.join(learnedDir, 'warm.dill');
+
+  /// What the previous daemon found would not compile.
+  String get quarantinePath => p.join(learnedDir, 'quarantine.json');
+
   /// A short, stable directory — see [flutterwareRunDir] for why it cannot live
   /// under the project's build directory.
   static String get runDir => flutterwareRunDir();

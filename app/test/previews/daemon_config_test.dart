@@ -149,6 +149,82 @@ void main() {
       });
     });
 
+    test('a new daemon revision keeps the kernel it can start from', () {
+      // `key` and `kernelKey` answer different questions. A daemon of another
+      // revision must not serve this one's clients — it decides what goes into
+      // a hot-reload delta. But the kernel and the quarantine describe the
+      // *sources*, which flutterware's own code moving says nothing about.
+      // Measured before they were keyed apart: 841ms became 10493ms.
+      var base = configFor();
+      var next = base.withDaemonRevision('a-later-build');
+      expect(
+        DaemonAddress(next).key,
+        isNot(DaemonAddress(base).key),
+        reason: 'a stale daemon must not answer for a newer one',
+      );
+      expect(
+        DaemonAddress(next).kernelKey,
+        DaemonAddress(base).kernelKey,
+        reason: 'but it starts from what the last one compiled',
+      );
+      expect(
+        DaemonAddress(next).warmDillPath,
+        DaemonAddress(base).warmDillPath,
+      );
+      expect(
+        DaemonAddress(next).quarantinePath,
+        DaemonAddress(base).quarantinePath,
+      );
+    });
+
+    test('everything else still forks the kernel too', () {
+      // `daemonRevision` is the *only* field the kernel is allowed to ignore.
+      // A field added without thinking about sharing must split both, or a
+      // daemon starts from a kernel compiled against something else.
+      var base = DaemonAddress(configFor()).kernelKey;
+      var variants = {
+        'roots': DaemonConfig.forPackage(
+          appToolDirectory: appTool,
+          packageRoot: package,
+          flutterSdkRoot: '/flutter',
+          roots: const ['tool/catalog'],
+        ),
+        'flutterSdkRoot': DaemonConfig.forPackage(
+          appToolDirectory: appTool,
+          packageRoot: package,
+          flutterSdkRoot: '/other-flutter',
+          roots: const ['demo'],
+        ),
+        'emitProbe': DaemonConfig.forPackage(
+          appToolDirectory: appTool,
+          packageRoot: package,
+          flutterSdkRoot: '/flutter',
+          roots: const ['demo'],
+          emitProbe: true,
+        ),
+      };
+      variants.forEach((field, config) {
+        expect(
+          DaemonAddress(config).kernelKey,
+          isNot(base),
+          reason: '$field changes what the compiler would produce',
+        );
+      });
+    });
+
+    test('reading the kernel key does not consume the config', () {
+      // It is computed by dropping a field from `toJson()`; dropping it from
+      // the *config* instead would make the address depend on who asked first.
+      var config = configFor().withDaemonRevision('rev-1');
+      var address = DaemonAddress(config);
+      expect(address.kernelKey, isNotEmpty);
+      expect(
+        address.key,
+        DaemonAddress(configFor().withDaemonRevision('rev-1')).key,
+      );
+      expect(config.daemonRevision, 'rev-1');
+    });
+
     test('the key does not depend on the order toJson emits fields', () {
       // The canonicalisation in `DaemonAddress`, exercised rather than trusted:
       // a hash over raw `jsonEncode` would move when a field was reordered in
