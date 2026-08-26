@@ -124,6 +124,62 @@ void main() {
     expect(opened, [3], reason: 'the branch tapped is the one opened');
   });
 
+  // A step is named by whatever named it, and an auto-derived name is as long
+  // as the verb and target it came from. Unbounded, the link grew to fit
+  // rather than the label shrinking: one ran the width of the page and pushed
+  // the other off the far side of it.
+  testWidgets('a long label shrinks the label, not the page', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var long =
+        'enterText widget with type "TextField" that are descendants of '
+        "widget with key [<'a-long-and-particular-key-name'>] "
+        '(ignoring all but first)';
+    var steps = [
+      step(1, name: long),
+      step(2, parent: 1, name: long),
+      step(3, parent: 2, name: long),
+    ];
+    await tester.pumpWidget(_harness(steps: steps, step: steps[1]));
+
+    var back = tester.getRect(find.textContaining('1 · enterText'));
+    var next = tester.getRect(find.textContaining('3 · enterText'));
+
+    // Each stays on its own side of the page, and inside it.
+    expect(back.left, greaterThanOrEqualTo(0));
+    expect(next.right, lessThanOrEqualTo(1200));
+    expect(
+      back.right,
+      lessThanOrEqualTo(next.left),
+      reason: 'a link may not run under the one facing it',
+    );
+    // Truncated rather than wrapped: a link is one line high.
+    expect(back.height, lessThan(40));
+  });
+
+  testWidgets('the whole label stays one hover away', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var steps = [step(1), step(2, parent: 1, name: 'Cart')];
+    await tester.pumpWidget(_harness(steps: steps, step: steps.first));
+
+    expect(
+      tester
+          .widget<Tooltip>(
+            find.ancestor(
+              of: find.text('2 · Cart'),
+              matching: find.byType(Tooltip),
+            ),
+          )
+          .message,
+      '2 · Cart',
+    );
+  });
+
   testWidgets('a lone next carries no branch label', (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;

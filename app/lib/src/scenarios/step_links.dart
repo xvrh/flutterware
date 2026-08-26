@@ -85,19 +85,45 @@ class _ScenarioStepLinksState extends State<ScenarioStepLinks> {
     });
   }
 
+  /// How wide one link may be.
+  ///
+  /// Measured off the surface the links are dropped over rather than a
+  /// `LayoutBuilder`: this fills a [Stack] whose size is the picture's, and
+  /// the number wanted is *that* width. Half of it each when both a back and
+  /// a next are on the line, and never the whole of it even alone — a link
+  /// that reached both edges would read as a bar rather than a button.
+  double _room(BuildContext context, {required bool hasBoth}) {
+    var width = (context.findRenderObject() as RenderBox?)?.size.width;
+    if (width == null || !width.isFinite || width <= 0) {
+      width = MediaQuery.sizeOf(context).width;
+    }
+    return hasBoth ? (width - FwSpacing.md) / 2 : width * 0.8;
+  }
+
   @override
   Widget build(BuildContext context) {
     var (previous, nexts) = scenarioNeighbours(widget.steps, widget.step);
+    // **A link is bounded or it is not a link.** `Positioned` anchored on one
+    // side hands its child unbounded width, and a step is named by whatever
+    // named it — a scenario's own sentence, or the verb and target derived
+    // from the source. Either can be long, and unbounded meant the button
+    // grew to fit rather than the label shrinking: one link ran the width of
+    // the page and pushed the other off it. Both sit on the same line, so
+    // neither may have more than its share of it.
+    var room = _room(context, hasBoth: previous != null && nexts.isNotEmpty);
     return Stack(
       children: [
         if (previous != null)
           Positioned(
             left: 0,
             bottom: 0,
-            child: _StepLink(
-              previous,
-              isNext: false,
-              onTap: () => widget.onOpenStep(previous),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: room),
+              child: _StepLink(
+                previous,
+                isNext: false,
+                onTap: () => widget.onOpenStep(previous),
+              ),
             ),
           ),
         // Stacked, because a `split` gives one step several nexts and offering
@@ -112,14 +138,17 @@ class _ScenarioStepLinksState extends State<ScenarioStepLinks> {
               children: [
                 for (var (position, next) in nexts.indexed) ...[
                   if (position > 0) const Gap(FwSpacing.xs),
-                  _StepLink(
-                    next,
-                    isNext: true,
-                    // What tells one branch of a split from another — their
-                    // steps are as likely as not to be named the same thing.
-                    showBranch: nexts.length > 1,
-                    onTap: () => widget.onOpenStep(next),
-                    onPreview: widget.onPreview,
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: room),
+                    child: _StepLink(
+                      next,
+                      isNext: true,
+                      // What tells one branch of a split from another — their
+                      // steps are as likely as not to be named the same thing.
+                      showBranch: nexts.length > 1,
+                      onTap: () => widget.onOpenStep(next),
+                      onPreview: widget.onPreview,
+                    ),
                   ),
                 ],
               ],
@@ -182,6 +211,7 @@ class _StepLink extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var branch = showBranch ? step.branch : null;
+    var label = '${step.index} · ${scenarioStepLabel(step)}';
     return Tappable(
       onTap: onTap,
       // The pointer arrives before the press, and decoding a recording takes
@@ -220,10 +250,21 @@ class _StepLink extends StatelessWidget {
               ),
               const Gap(FwSpacing.xs),
             ],
-            Text(
-              '${step.index} · ${scenarioStepLabel(step)}',
-              style: context.type.caption.copyWith(
-                color: scenarioStepTone(context, step),
+            // Flexible, single line, ellipsis — and the whole label one
+            // hover away, because truncating the only thing that says which
+            // step this is would trade one unusable link for another.
+            Flexible(
+              child: Tooltip(
+                message: label,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: context.type.caption.copyWith(
+                    color: scenarioStepTone(context, step),
+                  ),
+                ),
               ),
             ),
             if (isNext)
