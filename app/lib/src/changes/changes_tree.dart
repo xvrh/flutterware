@@ -6,12 +6,20 @@
 /// touched once. It was dropped in the master/detail rewrite and put back the
 /// same day, because that was the wrong thing to have taken away.
 ///
-/// Ordered by weight, not by name. This is the one change from the version
-/// that was deleted, and it is what lets the tree carry the ranking instead of
-/// fighting it: the directory an agent hammered sorts to the top, and inside it
-/// so does the file. Alphabetical is the right default for a file explorer,
-/// where you know the name you want; here you do not, which is the whole reason
-/// the screen exists.
+/// Ordered by name. It was ordered by weight, so that the directory an agent
+/// hammered sorted to the top and inside it so did the file, and the argument
+/// for that was that you do not know the name you want. In use the argument
+/// failed for a plainer reason: **the row sorts by a number it does not show**.
+/// A folder row prints its file count, so a real branch came out 59, 60, 6, 3,
+/// 4, 5 down the rail and read as no order at all — `lib` above `app` because
+/// it churned more, `docs` above `doc`. An order nobody can see is worse than
+/// one nobody needs, and the ranking already has a surface of its own: the
+/// *Important* tab, which is where "what first" is answered. *All* is where you
+/// navigate, and navigating is done by name.
+///
+/// Case-insensitively, with the case-sensitive comparison as the tiebreak, so
+/// `README.md` sits among its neighbours instead of above every lowercase path
+/// and two spellings never swap places between rebuilds.
 ///
 /// The model is pure Dart so the folding — the part with the off-by-one in
 /// it — is testable without pumping.
@@ -38,37 +46,31 @@ class TreeNode {
   int get totalFiles =>
       files.length + children.values.fold(0, (sum, c) => sum + c.totalFiles);
 
-  int get added =>
-      files.fold(0, (sum, f) => sum + f.added) +
-      children.values.fold(0, (sum, c) => sum + c.added);
+  /// By name, the way a file explorer lists a directory.
+  List<TreeNode> get sortedChildren =>
+      children.values.toList()..sort((a, b) => compareNames(a.name, b.name));
 
-  int get removed =>
-      files.fold(0, (sum, f) => sum + f.removed) +
-      children.values.fold(0, (sum, c) => sum + c.removed);
+  /// The same rule, on the basename — which is what the row draws. A file's
+  /// row shows `gone.dart`, never the directory it is already sitting under,
+  /// so ordering by the full path would order by something invisible, which is
+  /// the mistake this whole file just stopped making.
+  List<FileChange> get sortedFiles =>
+      [...files]
+        ..sort((a, b) => compareNames(_basename(a.path), _basename(b.path)));
 
-  int get lines => added + removed;
+  static String _basename(String path) =>
+      path.substring(path.lastIndexOf('/') + 1);
+}
 
-  /// Heaviest first, ties broken by name so the order is stable when two
-  /// directories have identical weight — which is common at zero.
-  List<TreeNode> get sortedChildren => children.values.toList()
-    ..sort((a, b) {
-      var byWeight = b.lines.compareTo(a.lines);
-      return byWeight != 0 ? byWeight : a.name.compareTo(b.name);
-    });
-
-  /// Same rule, plus the one the flat list already used: **deletions promoted**,
-  /// because `D −88` is the line most worth seeing and a plain churn sort
-  /// buries it under three larger edits.
-  List<FileChange> get sortedFiles => [...files]
-    ..sort((a, b) {
-      var byKind = _deletionRank(b.status).compareTo(_deletionRank(a.status));
-      if (byKind != 0) return byKind;
-      var byWeight = b.lines.compareTo(a.lines);
-      return byWeight != 0 ? byWeight : a.path.compareTo(b.path);
-    });
-
-  static int _deletionRank(ChangeStatus status) =>
-      status == ChangeStatus.deleted ? 1 : 0;
+/// Two names, in the order a reader scans them.
+///
+/// Case-insensitive first, so `README.md` sits among its neighbours rather
+/// than above every lowercase path; the case-sensitive comparison breaks the
+/// tie, so `Foo` and `foo` never swap places between two rebuilds of the same
+/// tree.
+int compareNames(String a, String b) {
+  var folded = a.toLowerCase().compareTo(b.toLowerCase());
+  return folded != 0 ? folded : a.compareTo(b);
 }
 
 /// Folds [files] into a directory tree.
