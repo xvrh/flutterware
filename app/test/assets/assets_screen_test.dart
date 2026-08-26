@@ -6,6 +6,7 @@ import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
+import 'package:flutterware_app/src/assets/list.dart';
 import 'package:flutterware_app/src/assets/screen.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/assets_plugin.dart';
@@ -77,6 +78,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 20));
     }
   }
+
+  /// [finder], but only where it is inside the list rather than in the pane
+  /// beside it.
+  Finder inList(Finder finder) =>
+      find.descendant(of: find.byType(AssetListView), matching: finder);
 
   Future<void> pump(WidgetTester tester, AssetsCore plugin) async {
     await tester.pumpWidget(
@@ -157,7 +163,10 @@ flutter:
     await tester.runAsync(plugin.computeAll);
     await pump(tester, plugin);
 
-    await tester.tap(find.text('logo.png'));
+    // Scoped to the list: with nothing selected the pane beside it is the
+    // whole bundle's contact sheet, so the name is legitimately on screen
+    // twice and only one of them is the row.
+    await tester.tap(inList(find.text('logo.png')));
     await settle(tester);
 
     expect(
@@ -189,6 +198,75 @@ flutter:
     // asserted in `asset_views_test.dart`, where the bytes are handed over
     // directly.
     expect(find.text('Where it comes from'), findsOneWidget);
+  });
+
+  testWidgets('with nothing selected the panel opens on the whole bundle', (
+    tester,
+  ) async {
+    var plugin = core();
+    await tester.runAsync(plugin.computeAll);
+
+    // The address the rail leaves you on: the package, and no key.
+    await pump(tester, plugin);
+
+    expect(
+      find.textContaining('assets ·'),
+      findsOneWidget,
+      reason:
+          'A contact sheet of what is there beats a pane telling you to go '
+          'and pick something.',
+    );
+  });
+
+  testWidgets('an address that names a directory opens the folder', (
+    tester,
+  ) async {
+    var plugin = core();
+    await tester.runAsync(plugin.computeAll);
+    address.value = Address(
+      worktree: 'test',
+      plugin: assetsPluginId,
+      segments: const ['.', 'assets'],
+    );
+
+    await pump(tester, plugin);
+
+    // The same grammar as an asset, one segment shorter — which is why the
+    // address needed nothing added to carry a folder.
+    expect(
+      find.text('assets'),
+      findsWidgets,
+      reason: 'The folder is the heading of the pane, not an empty state.',
+    );
+    expect(
+      find.textContaining('assets ·'),
+      findsOneWidget,
+      reason: 'What is in it, counted and weighed.',
+    );
+  });
+
+  testWidgets('a folder tile navigates, like every other selection', (
+    tester,
+  ) async {
+    var plugin = core();
+    await tester.runAsync(plugin.computeAll);
+    address.value = Address(
+      worktree: 'test',
+      plugin: assetsPluginId,
+      segments: const ['.', 'assets'],
+    );
+
+    await pump(tester, plugin);
+    await tester.tap(find.text('notes.txt').last);
+    await tester.pump();
+
+    expect(
+      written.last.segments,
+      ['.', 'assets', 'notes.txt'],
+      reason:
+          'A tile is a selection, so it writes an address like the list does '
+          'rather than setting a field only this pane can see.',
+    );
   });
 
   testWidgets('the backdrop is in the address, so a preview is citable', (
@@ -235,7 +313,7 @@ flutter:
     var plugin = core();
     await tester.runAsync(plugin.computeAll);
     await pumpPanel(tester, plugin);
-    expect(find.text('logo.png'), findsOneWidget);
+    expect(inList(find.text('logo.png')), findsOneWidget);
 
     // A designer drops a file in and declares it — outside this process, so
     // nothing tells the panel.
@@ -281,7 +359,7 @@ flutter:
     await settle(tester);
 
     expect(find.text('Could not read the assets'), findsNothing);
-    expect(find.text('logo.png'), findsOneWidget);
+    expect(inList(find.text('logo.png')), findsOneWidget);
   });
 }
 

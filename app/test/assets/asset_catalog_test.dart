@@ -273,13 +273,14 @@ flutter:
     );
   });
 
-  test('what is declared and missing is recorded, not skipped', () async {
+  test('what the analyzer already reports is left to the analyzer', () async {
     write('app/pubspec.yaml', '''
 name: app
 flutter:
   assets:
     - assets/missing.png
     - assets/nowhere/
+    - {}
     - assets/present.png
 ''');
     write('app/assets/present.png', 'png');
@@ -287,24 +288,82 @@ flutter:
     var catalog = await resolve();
 
     expect(catalog.byKey.keys, ['assets/present.png']);
-    expect(catalog.problems.map((e) => (e.kind, e.declaration)), [
-      (AssetProblemKind.missingFile, 'assets/missing.png'),
-      (AssetProblemKind.missingDirectory, 'assets/nowhere/'),
-    ]);
+    expect(
+      catalog.problems,
+      isEmpty,
+      reason:
+          'Measured 2026-08-26: `flutter analyze` reports all three against '
+          'the pubspec, with a line and a column this panel has never had — '
+          'asset_does_not_exist, asset_directory_does_not_exist and '
+          'asset_missing_path. Every problem recorded here also becomes a '
+          '`declared-missing` finding that exits `fw` 1, so echoing the '
+          'analyzer costs a failed job and teaches a reader to skim.',
+    );
   });
 
-  test('an unparseable pubspec is reported against its package', () async {
-    write('app/pubspec.yaml', '''
+  test(
+    'a declaration resolves on its variants when the 1x is absent',
+    () async {
+      write('app/pubspec.yaml', '''
+name: app
+flutter:
+  assets:
+    - assets/images/logo.png
+''');
+      write('app/assets/images/2.0x/logo.png', 'png');
+      write('app/assets/images/3.0x/logo.png', 'png');
+
+      var catalog = await resolve();
+
+      expect(
+        catalog.problems,
+        isEmpty,
+        reason:
+            'asset.dart:535 fails only on `!assetFile.existsSync() && '
+            'variants.isEmpty`, and `flutter analyze` stays silent here too. '
+            'This used to report a problem *and* drop the asset.',
+      );
+      var asset = catalog.byKey['assets/images/logo.png'];
+      expect(asset, isNotNull);
+      expect(asset!.files.map((f) => f.scale), [2.0, 3.0]);
+      expect(
+        asset.main.scale,
+        2.0,
+        reason: 'With no 1x on disk, the densest-but-lowest file stands in.',
+      );
+    },
+  );
+
+  test(
+    'an unparseable pubspec is reported for the root package only',
+    () async {
+      write('app/pubspec.yaml', '''
 name: app
 dependencies:
   dep:
 ''');
-    write('dep/pubspec.yaml', 'name: dep\n  : not yaml at all\n');
+      write('dep/pubspec.yaml', 'name: dep\n  : not yaml at all\n');
+
+      var catalog = await resolve();
+
+      expect(
+        catalog.problems,
+        isEmpty,
+        reason:
+            "A dependency's pubspec that pub resolved and we cannot parse is a "
+            'disagreement between two YAML readers about a file the reader of '
+            'this panel does not own.',
+      );
+    },
+  );
+
+  test('an unparseable root pubspec is reported', () async {
+    write('app/pubspec.yaml', 'name: app\n  : not yaml at all\n');
 
     var catalog = await resolve();
 
     expect(catalog.problems.single.kind, AssetProblemKind.unreadablePubspec);
-    expect(catalog.problems.single.package, 'dep');
+    expect(catalog.problems.single.package, isNull);
   });
 
   test('the root package keeps its keys unprefixed', () async {
@@ -463,7 +522,7 @@ flutter:
       contains('Reaches into package "dep"'),
     );
     expect(catalog.problems.map((e) => e.kind).toSet(), {
-      AssetProblemKind.missingFile,
+      AssetProblemKind.unreachablePackageFile,
     });
   });
 

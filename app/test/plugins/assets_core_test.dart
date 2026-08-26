@@ -165,7 +165,7 @@ name: app
 flutter:
   assets:
     - assets/logo.png
-    - assets/gone.png
+    - packages/ghost/gone.png
 ''');
       write('assets/logo.png', 'png');
 
@@ -179,8 +179,8 @@ flutter:
 
       var text = report.view.toText();
       expect(text, contains('Problems'));
-      expect(text, contains('assets/gone.png'));
-      expect(text, contains('Declared, and not on disk.'));
+      expect(text, contains('packages/ghost/gone.png'));
+      expect(text, contains('Declared through packages/…, and not found.'));
     },
   );
 
@@ -189,7 +189,7 @@ flutter:
 name: app
 flutter:
   assets:
-    - assets/gone.png
+    - packages/ghost/gone.png
 ''');
 
     var plugin = core();

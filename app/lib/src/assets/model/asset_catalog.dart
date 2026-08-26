@@ -334,12 +334,36 @@ class FontAsset {
   final String? style;
 }
 
+/// What a scan is willing to call a problem.
+///
+/// Three, where there were six. The three that went are the ones `flutter
+/// analyze` already reports against the pubspec, with a line and a column this
+/// panel has never had — a missing file (`asset_does_not_exist`), a missing
+/// directory (`asset_directory_does_not_exist`), an entry with no path
+/// (`asset_missing_path`) — plus a malformed font entry, which no flutter
+/// command will run past at all: it stops with "Please correct the
+/// pubspec.yaml file" before anything else happens.
+///
+/// Repeating them cost more than it looked. Every problem here becomes a
+/// `declared-missing` finding in `audit`, whose verdict makes `fw` exit 1, and
+/// puts an amber badge on the plugin's row — so a finding that only echoes the
+/// analyzer teaches a reader to skim past the two that nothing else says.
+/// Measured against `flutter analyze` on a real project (2026-08-26), the
+/// two below are exactly what it stays silent about.
 enum AssetProblemKind {
-  missingFile('Declared, and not on disk.'),
-  missingDirectory('Declared directory does not exist.'),
-  malformedDeclaration('Not a path.'),
+  /// A `packages/<name>/…` declaration that resolves to nothing — either no
+  /// package answers to the prefix, or the one that does has no such file.
+  /// The analyzer says nothing about either.
+  unreachablePackageFile('Declared through packages/…, and not found.'),
+
+  /// The analyzer does not look at `fonts:` at all, and a font's main file is
+  /// the one asset Flutter will not build without: `asset.dart` accepts an
+  /// absent 1× file when variants exist, and never for a font.
   missingFontFile('Font file declared, and not on disk.'),
-  malformedFontEntry('Font entry is unusable and was dropped.'),
+
+  /// Kept for the root package only. In a dependency it says our YAML parser
+  /// disagreed with the one pub resolved the package with, about a file the
+  /// reader does not own and cannot edit.
   unreadablePubspec('The pubspec could not be parsed.');
 
   const AssetProblemKind(this.summary);
@@ -444,15 +468,21 @@ class _Resolver {
   void readPubspec(String packageRoot, {required String? packageName}) {
     var pubspec = _pubspecAt(packageRoot);
     if (_unreadable[packageRoot] case var error?) {
-      problems.add(
-        AssetProblem(
-          kind: AssetProblemKind.unreadablePubspec,
-          package: packageName,
-          packageRoot: packageRoot,
-          declaration: 'pubspec.yaml',
-          detail: error,
-        ),
-      );
+      // The root package only. A dependency's pubspec that we cannot parse but
+      // pub could is a disagreement between two YAML readers about a file the
+      // reader of this panel does not own — reporting it badges their project
+      // for someone else's formatting, and offers nothing to do about it.
+      if (packageName == null) {
+        problems.add(
+          AssetProblem(
+            kind: AssetProblemKind.unreadablePubspec,
+            package: packageName,
+            packageRoot: packageRoot,
+            declaration: 'pubspec.yaml',
+            detail: error,
+          ),
+        );
+      }
       return;
     }
     if (pubspec == null) return;
@@ -474,16 +504,9 @@ class _Resolver {
             packageName,
             transformers: _transformersOf(entry['transformers']),
           );
-        } else {
-          problems.add(
-            AssetProblem(
-              kind: AssetProblemKind.malformedDeclaration,
-              package: packageName,
-              packageRoot: packageRoot,
-              declaration: '$entry',
-            ),
-          );
         }
+        // An entry that is neither is left alone: `flutter analyze` reports it
+        // as `asset_missing_path`, at the line it is on.
       }
     }
 
@@ -548,17 +571,9 @@ class _Resolver {
       // (asset.dart:1168 in 3.47.0-0.1.pre), so a reach here would put files
       // in this bundle that no build would carry.
       var directory = Directory(p.join(packageRoot, declaration));
-      if (!directory.existsSync()) {
-        problems.add(
-          AssetProblem(
-            kind: AssetProblemKind.missingDirectory,
-            package: packageName,
-            packageRoot: packageRoot,
-            declaration: declaration,
-          ),
-        );
-        return;
-      }
+      // Absent is not reported: `flutter analyze` says
+      // `asset_directory_does_not_exist` with the line it is declared on.
+      if (!directory.existsSync()) return;
       for (var entity in directory.listSync()) {
         if (entity is! File) continue;
         var relative = p
@@ -576,37 +591,41 @@ class _Resolver {
       }
     } else {
       var file = File(p.join(packageRoot, declaration));
-      if (file.existsSync()) {
-        _register(
-          key(declaration),
-          file.path,
-          packageRoot,
-          declaration,
-          packageName,
-          declaration,
-          transformers,
-        );
+      // Not `existsSync` first: a declaration whose 1× file is absent still
+      // resolves on the strength of its density variants, which is what
+      // `asset.dart:535` means by `!assetFile.existsSync() && variants.isEmpty`
+      // — and what `flutter analyze` is quietly right about when it stays
+      // silent on such a declaration. Registering on the variants is why the
+      // asset appears at all; checking existence here made it vanish *and*
+      // filed a problem against a bundle Flutter ships.
+      if (_register(
+        key(declaration),
+        file.path,
+        packageRoot,
+        declaration,
+        packageName,
+        declaration,
+        transformers,
+      )) {
         return;
       }
       if (_packageReach(declaration) case var reach?) {
-        var reached = File(p.join(reach.root, reach.relative));
-        if (reached.existsSync()) {
-          // The key is the declaration verbatim — already `packages/…`, and
-          // never re-prefixed with the declarer's name.
-          _register(
-            declaration,
-            reached.path,
-            reach.root,
-            reach.relative,
-            packageName,
-            declaration,
-            transformers,
-          );
+        // The key is the declaration verbatim — already `packages/…`, and
+        // never re-prefixed with the declarer's name.
+        if (_register(
+          declaration,
+          p.join(reach.root, reach.relative),
+          reach.root,
+          reach.relative,
+          packageName,
+          declaration,
+          transformers,
+        )) {
           return;
         }
         problems.add(
           AssetProblem(
-            kind: AssetProblemKind.missingFile,
+            kind: AssetProblemKind.unreachablePackageFile,
             package: packageName,
             packageRoot: packageRoot,
             declaration: declaration,
@@ -617,17 +636,21 @@ class _Resolver {
         );
         return;
       }
-      problems.add(
-        AssetProblem(
-          kind: AssetProblemKind.missingFile,
-          package: packageName,
-          packageRoot: packageRoot,
-          declaration: declaration,
-          detail: declaration.startsWith('packages/')
-              ? 'No package in the config answers to this prefix.'
-              : null,
-        ),
-      );
+      // A plain path that resolved to nothing is left to `flutter analyze`,
+      // which reports it as `asset_does_not_exist` with its line and column.
+      // Only the `packages/…` form is ours: nothing else in the toolchain
+      // looks at it.
+      if (declaration.startsWith('packages/')) {
+        problems.add(
+          AssetProblem(
+            kind: AssetProblemKind.unreachablePackageFile,
+            package: packageName,
+            packageRoot: packageRoot,
+            declaration: declaration,
+            detail: 'No package in the config answers to this prefix.',
+          ),
+        );
+      }
     }
   }
 
@@ -667,7 +690,12 @@ class _Resolver {
   /// [packageRoot] is the root [relative] sits under — the declarer's, or for
   /// a `packages/…` reach the package it reaches into, so a reader making the
   /// path relative gets `lib/images/logo.png` under a root a human knows.
-  void _register(
+  /// Whether the declaration resolved to anything.
+  ///
+  /// False for a key with no file behind it at any density, which is what lets
+  /// the caller try the next resolution — and, for a `packages/…` form, file
+  /// the one problem nothing else in the toolchain reports.
+  bool _register(
     String manifestKey,
     String absolute,
     String packageRoot,
@@ -678,9 +706,12 @@ class _Resolver {
   ) {
     // A variant directory is itself listed when a whole directory is declared;
     // it must not become an entry of its own.
-    if (AssetCatalog.parseScale(relative) != null) return;
+    if (AssetCatalog.parseScale(relative) != null) return false;
 
-    var paths = [absolute];
+    // The 1× file only if it is there. An image whose main entry is absent but
+    // whose `2.0x/` sibling is not is a bundle Flutter builds — the manifest
+    // carries the variants and the engine picks among them.
+    var paths = [if (File(absolute).existsSync()) absolute];
     var directory = p.dirname(p.join(packageRoot, relative));
     var name = p.basename(relative);
     var parent = Directory(directory);
@@ -693,6 +724,7 @@ class _Resolver {
         if (candidate.existsSync()) paths.add(candidate.path);
       }
     }
+    if (paths.isEmpty) return false;
     paths.sort();
 
     assets[manifestKey] = ResolvedAsset(
@@ -710,6 +742,7 @@ class _Resolver {
           ),
       ],
     );
+    return true;
   }
 
   void _addFonts(String packageRoot, YamlList declared, String? packageName) {
@@ -772,26 +805,14 @@ class _Resolver {
         );
 
         // `weight` and `style` are dropped rather than passed through when the
-        // pubspec gives them a type the manifest cannot carry. The old code
-        // forwarded whatever YAML held, which differs only for a pubspec
-        // `flutter_tools` itself rejects — and silently produced a font
-        // descriptor the engine cannot read.
+        // pubspec gives them a type the manifest cannot carry. Dropped and not
+        // reported: such a pubspec stops every flutter command before it
+        // starts — "Invalid value … for font -> weight", then "Please correct
+        // the pubspec.yaml file" — so nobody reaches this panel holding one.
+        // Flutter is stricter still, taking only 100–900 and only
+        // normal/italic, which is a second reason not to paraphrase it here.
         var weight = font['weight'];
         var style = font['style'];
-        if ((weight != null && weight is! int) ||
-            (style != null && style is! String)) {
-          problems.add(
-            AssetProblem(
-              kind: AssetProblemKind.malformedFontEntry,
-              package: packageName,
-              packageRoot: packageRoot,
-              declaration: asset,
-              detail:
-                  'Family "$name" declares weight=$weight style=$style; '
-                  'weight must be a number and style a string.',
-            ),
-          );
-        }
         entries.add(
           FontAsset(
             key: manifestKey,

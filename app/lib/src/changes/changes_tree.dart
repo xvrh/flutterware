@@ -25,7 +25,10 @@
 /// it — is testable without pumping.
 library;
 
+import '../utils/string/compare_names.dart';
 import 'patch_index.dart';
+
+export '../utils/string/compare_names.dart' show compareNames;
 
 /// A directory in the tree, with everything under it already counted.
 class TreeNode {
@@ -60,17 +63,6 @@ class TreeNode {
 
   static String _basename(String path) =>
       path.substring(path.lastIndexOf('/') + 1);
-}
-
-/// Two names, in the order a reader scans them.
-///
-/// Case-insensitive first, so `README.md` sits among its neighbours rather
-/// than above every lowercase path; the case-sensitive comparison breaks the
-/// tie, so `Foo` and `foo` never swap places between two rebuilds of the same
-/// tree.
-int compareNames(String a, String b) {
-  var folded = a.toLowerCase().compareTo(b.toLowerCase());
-  return folded != 0 ? folded : a.compareTo(b);
 }
 
 /// Folds [files] into a directory tree.

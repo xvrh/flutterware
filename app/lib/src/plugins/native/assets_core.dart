@@ -221,13 +221,21 @@ class AssetsCore extends PluginCore {
     // stay readable. `density-gap` judged a ladder a project may have chosen
     // not to fill. Both were right on the facts and wrong to conclude.
     //
+    // `over-budget` went for a different reason, and it is the one worth
+    // remembering: it broke no rule and nobody wanted it. It only spoke when
+    // you passed `budget`, so it was silent for every project that never
+    // thought about one — and a project that *has* a weight target measures it
+    // against a built artifact, not against this sum. A parameter whose whole
+    // job is to enable a finding nobody asks for is a parameter that costs
+    // more to explain than it ever returned. `bytes` is still on the result;
+    // the number was never the problem, the verdict was.
+    //
     // What survives says something nobody argues with: a declaration that
-    // resolves to nothing and a file no declaration reaches are broken;
+    // resolves to nothing and a file no declaration reaches are broken, and
     // `oversized` has `maxEdge` and found 1.4 MB of slides exported at print
-    // size on that same bundle; `over-budget` only speaks when you set a
-    // budget. A new finding belongs here only if it clears the same bar — or
-    // if suppression exists by then, which is a plugin-framework question and
-    // not an assets one.
+    // size on that same bundle. A new finding belongs here only if it clears
+    // the same bar — or if suppression exists by then, which is a
+    // plugin-framework question and not an assets one.
     PluginAction(
       'audit',
       'Audit',
@@ -235,8 +243,9 @@ class AssetsCore extends PluginCore {
       description:
           'Everything wrong with a bundle that can be found without running '
           'the app: declarations that resolve to nothing, files a directory '
-          'declaration does not reach, rasters bigger than anything that will '
-          'draw them, and weight',
+          'declaration does not reach, and rasters bigger than anything that '
+          'will draw them. Reports the bundle weight alongside them, without '
+          'an opinion about it.',
       parameters: [
         _packageParameter,
         const ActionParameter(
@@ -248,15 +257,6 @@ class AssetsCore extends PluginCore {
           description:
               'Report a raster longer than this on either side. A phone never '
               'draws one that big; something was exported at print size.',
-        ),
-        const ActionParameter(
-          'budget',
-          'Weight budget',
-          kind: ActionParameterKind.integer,
-          required: false,
-          description:
-              'Bytes the bundle may weigh before it is a finding. Omitted, '
-              'weight is reported and never complained about.',
         ),
       ],
     ),
@@ -613,7 +613,6 @@ class AssetsCore extends PluginCore {
   Future<AssetAuditResult> _audit(Map<String, Object?> arguments) async {
     var paths = await _requested(arguments);
     var maxEdge = _integer(arguments, 'maxEdge') ?? 2048;
-    var budget = _integer(arguments, 'budget');
 
     var findings = <AssetFinding>[];
     var checked = 0;
@@ -634,21 +633,6 @@ class AssetsCore extends PluginCore {
       findings.addAll(_declaredMissing(path, scan));
       findings.addAll(_unreachableFiles(path, scan));
       findings.addAll(await _oversized(path, scan, maxEdge));
-
-      if (budget != null && scan.totalBytes > budget) {
-        findings.add(
-          AssetFinding(
-            kind: 'over-budget',
-            package: path,
-            summary: 'The bundle is over its weight budget.',
-            detail:
-                '${formatBytes(scan.totalBytes)} against a budget of '
-                '${formatBytes(budget)}. '
-                '${formatBytes(scan.dependencyBytes)} of it comes from '
-                'dependencies.',
-          ),
-        );
-      }
     }
 
     return AssetAuditResult(

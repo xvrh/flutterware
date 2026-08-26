@@ -358,7 +358,7 @@ flutter:
       expect(finding.detail, contains('64 × 64'));
     });
 
-    test('complains about weight only when given a budget', () async {
+    test('reports weight without an opinion about it', () async {
       writeText('pubspec.yaml', '''
 name: app
 flutter:
@@ -367,13 +367,18 @@ flutter:
 ''');
       write('assets/logo.png', _png(8, 8));
 
+      var result = await audit();
       expect(
-        (await audit()).findings.where((f) => f.kind == 'over-budget'),
-        isEmpty,
+        result.bytes,
+        greaterThan(0),
+        reason: 'The number is the useful half, and it is still here.',
       );
       expect(
-        (await audit({'budget': 1})).findings.map((f) => f.kind),
-        contains('over-budget'),
+        result.findings,
+        isEmpty,
+        reason:
+            'There is no weight a bundle is wrong to be. A target is measured '
+            'against a built artifact, not against this sum.',
       );
     });
 
