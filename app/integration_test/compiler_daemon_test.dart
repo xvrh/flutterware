@@ -9,7 +9,10 @@ import 'package:collection/collection.dart';
 import 'package:flutterware_app/src/previews/catalog_entry.dart';
 import 'package:flutterware_app/src/previews/compiler_daemon_client.dart';
 import 'package:flutterware_app/src/previews/protocol.dart';
+import 'package:flutterware_app/src/embedder/resident_compiler.dart';
+import 'package:flutterware_app/src/embedder/seed_kernel.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
+import 'package:package_config/package_config.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -93,9 +96,7 @@ void main() {
     // and there is no whole-program rebuild — which is exactly what the
     // discovery test below asserts the presence of. Cleared here so that test
     // describes a first encounter rather than whatever the last run left.
-    var recorded = File(
-      p.join(appRoot, 'build', 'catalog', stale.address.key, 'quarantine.json'),
-    );
+    var recorded = File(stale.address.quarantinePath);
     if (recorded.existsSync()) recorded.deleteSync();
     await stale.stopDaemon();
 
@@ -857,6 +858,72 @@ Widget fixtureBroken() => const Placeholder();
       greaterThan(2000),
       reason: 'the cache was rebuilt rather than worked around',
     );
+  });
+
+  /// The seed is the one piece of daemon state that leaves the checkout, so
+  /// what it contains is a claim only a real compile can settle. The unit tests
+  /// in `test/embedder/seed_kernel_test.dart` cover the rules; this covers that
+  /// a daemon actually applies them to a program it really compiled.
+  group('the shared half', () {
+    late SeedKernel seed;
+
+    setUp(() async {
+      var resolution = await loadPackageConfigUri(
+        Uri.file(config.packageConfig),
+      );
+      var found = SeedStore(
+        engineRevision: FlutterCache.fromRunningSdk().engineRevision,
+        flavor: seedFlavor(
+          ResidentCompiler.argumentsFor(
+            trackWidgetCreation: config.trackWidgetCreation,
+          ),
+        ),
+      ).find(resolution);
+      expect(
+        found,
+        isNotNull,
+        reason:
+            'a daemon compiled this catalog above, so one is owed to every '
+            'checkout that has not',
+      );
+      seed = found!;
+    });
+
+    test('is left where a checkout that has never compiled will find it', () {
+      expect(File(seed.kernelPath).existsSync(), isTrue);
+      // Small is wrong for a seed — it is most of a program. The number is a
+      // floor rather than a measurement: this catalog's is ~82MB.
+      expect(File(seed.kernelPath).lengthSync(), greaterThan(1000000));
+    });
+
+    test('holds nothing any checkout owns', () {
+      // The safety claim, stated where it can fail: a package resolving inside
+      // the project is one somebody edits, and a seed holding it would hand
+      // every other checkout this one's source.
+      for (var directory in seed.packages.values) {
+        expect(
+          p.isWithin(config.projectRoot, directory),
+          isFalse,
+          reason: '$directory is in the checkout',
+        );
+      }
+      expect(seed.packages, contains('flutter'));
+    });
+
+    test('and the daemon gave its own program back', () async {
+      // `_writeSeed` takes the compiler away to another root and returns it —
+      // see `ResidentCompiler.asideAt`. If it did not, the kernel every guest
+      // loads would be a root with an empty `main` in it.
+      var kernel = File(p.join(ready.assetsDir, 'kernel_blob.bin'));
+      expect(kernel.existsSync(), isTrue);
+      expect(
+        kernel.lengthSync(),
+        greaterThan(File(seed.kernelPath).lengthSync()),
+        reason:
+            'the published kernel is the program, which is the seed plus '
+            'this checkout',
+      );
+    });
   });
 }
 

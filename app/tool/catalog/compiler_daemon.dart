@@ -12,8 +12,10 @@ import 'package:flutterware_app/src/previews/entrypoint_generator.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/resident_compiler.dart';
+import 'package:flutterware_app/src/embedder/seed_kernel.dart';
 import 'package:flutterware_app/src/embedder/source_invalidator.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
+import 'package:package_config/package_config.dart';
 import 'package:path/path.dart' as p;
 
 /// The catalog's build and compile half, as a plain Dart process shared by
@@ -92,21 +94,6 @@ Future<void> _main(List<String> args) async {
   await daemon.serve();
 }
 
-/// Where pub keeps its packages, so the invalidator can skip them. A dependency
-/// is immutable by construction — the way you change one is to resolve a
-/// different version, which rewrites the package config and recompiles anyway.
-List<String> get _pubCacheRoots {
-  var env = Platform.environment;
-  var home = env[Platform.isWindows ? 'LOCALAPPDATA' : 'HOME'];
-  return [
-    ?env['PUB_CACHE'],
-    if (home != null)
-      Platform.isWindows
-          ? p.join(home, 'Pub', 'Cache')
-          : p.join(home, '.pub-cache'),
-  ];
-}
-
 class _Daemon {
   _Daemon(this.config, this.address, this._server)
     // Keyed by address, so two daemons never share a working directory. They
@@ -159,13 +146,21 @@ class _Daemon {
   /// is for.
   late final _invalidator = SourceInvalidator(
     ignoredRoots: [
-      config.flutterSdkRoot,
-      ..._pubCacheRoots,
+      ..._immutableRoots,
       // Generated, and already invalidated by name when the generator rewrites
       // them. Statting them would only report what we just did ourselves.
       _generator.outputDir,
     ],
   );
+
+  /// The trees whose contents no checkout owns: the SDK and the pub cache.
+  ///
+  /// One list for two readers, because they are asking the same question. The
+  /// invalidator skips them because nobody edits them; the seed keeps only
+  /// them, because a library nobody edits is one every worktree can share. A
+  /// root added to one and not the other would be a file statted forever or a
+  /// seed that goes stale without saying so.
+  late final _immutableRoots = [config.flutterSdkRoot, ...pubCacheRoots()];
 
   /// Everything discovery found, in tree order. Fixed until a rescan.
   var _discovered = <CatalogEntry>[];
@@ -485,8 +480,17 @@ class _Daemon {
     // not — so leaving it to `_startCompiler` would delete the file after this
     // had already loaded it, and the daemon would hold entries back on evidence
     // it had just thrown away.
+    // Reported by whether the file is *there*, not by whether a path was
+    // derived: `_resolveWarmDill` answers with where this run will save one,
+    // which on a first start is a path nothing has written yet.
     var warm = _warmDill;
-    stderr.writeln('[catalog] warm kernel: ${warm ?? 'none'}');
+    var starting = warm != null && File(warm).existsSync();
+    stderr.writeln('[catalog] warm kernel: ${starting ? warm : 'none'}');
+
+    // Looked up even when a warm kernel makes it unnecessary *here*: the answer
+    // also decides whether this run has to leave one behind, and the worktree
+    // that benefits from a seed is never the one that built it.
+    await _resolveSeed();
 
     // Before the entrypoint is generated, so the first compile is already the
     // one that works. Rediscovering a broken demo costs three compiles — the
@@ -870,10 +874,19 @@ class _Daemon {
     // quarantine describe the same compile, and a quarantine recorded against a
     // kernel that was never saved would be read next to a stale one.
     _saveQuarantine();
+    // Last, because it takes the compiler on an excursion and gives it back:
+    // everything above wants the kernel at `_outputDill` to be this program's,
+    // and it is again by the time this returns.
+    if (_seed == null) {
+      await _timed('seed kernel', () => _writeSeed(compiler));
+    }
   }
 
   /// Where the last run's quarantine is kept, beside the kernel it produced.
-  String get _quarantinePath => p.join(_buildDir, 'quarantine.json');
+  ///
+  /// Not under [_buildDir]: both outlive this daemon's revision — see
+  /// [DaemonAddress.kernelKey].
+  String get _quarantinePath => address.quarantinePath;
 
   /// Restores what the previous daemon learned, for entries it still applies to.
   ///
@@ -961,7 +974,8 @@ class _Daemon {
         return;
       }
       file.parent.createSync(recursive: true);
-      file.writeAsStringSync(
+      _writeAtomically(
+        file,
         jsonEncode([
           for (var q in _quarantine.values)
             {
@@ -1025,8 +1039,81 @@ class _Daemon {
     // were only ever the same by whoever happened to spawn this daemon.
     workingDirectory: config.appPackageRoot,
     warmDill: _warmDill,
+    seedDill: _seed?.kernelPath,
     trackWidgetCreation: config.trackWidgetCreation,
   );
+
+  SeedStore? _seedStore;
+  PackageConfig? _resolution;
+
+  /// The shared half of the program, compiled by whichever checkout got here
+  /// first. Null when nothing on this machine has one for this resolution yet
+  /// — which is what [_writeSeed] then fixes, for the next one.
+  SeedKernel? _seed;
+
+  Future<void> _resolveSeed() async {
+    try {
+      _resolution = await loadPackageConfigUri(Uri.file(config.packageConfig));
+      var store = _seedStore = SeedStore(
+        engineRevision: _cache.engineRevision,
+        flavor: seedFlavor(
+          ResidentCompiler.argumentsFor(
+            trackWidgetCreation: config.trackWidgetCreation,
+          ),
+        ),
+      );
+      _seed = store.find(_resolution!);
+    } catch (e) {
+      // A resolution we cannot parse is not a reason to fail a start: the
+      // compiler reads the same file itself and will say so far better than a
+      // cache lookup can.
+      stderr.writeln('[catalog] no seed kernel: $e');
+      _seedStore = null;
+    }
+    stderr.writeln('[catalog] seed kernel: ${_seed?.kernelPath ?? 'none'}');
+  }
+
+  /// Leaves the shared half of this program behind for the next checkout.
+  ///
+  /// Runs only when the start did not find one, and costs the emit of a program
+  /// the compiler is already holding — see [ResidentCompiler.asideAt]. Measured
+  /// on this repo's catalog: **~300ms of compiler time plus the copy**, once
+  /// per resolution per machine, against the 4s it saves every worktree opened
+  /// afterwards.
+  Future<void> _writeSeed(ResidentCompiler compiler) async {
+    var store = _seedStore;
+    var resolution = _resolution;
+    if (store == null || resolution == null) return;
+    try {
+      await compiler.writeSeed(
+        store: store,
+        resolution: resolution,
+        immutableRoots: _immutableRoots,
+        log: (line) => stderr.writeln('[catalog] $line'),
+      );
+    } catch (e) {
+      // **A cache write may not fail a start.** Everything above this line has
+      // already succeeded — the catalog compiled, the warm kernel is saved, the
+      // clients are waiting — and this is a head start for some other checkout.
+      // Left unguarded, a compiler that dies while emitting the seed reaches
+      // `Future.wait` in `_prepare` and the whole daemon answers `DaemonFailed`
+      // over work nobody asked for.
+      stderr.writeln('[catalog] no seed written: $e');
+      // What is *not* optional is which program sits at the output dill:
+      // `_prepare` copies it into the asset bundle and every guest loads it. A
+      // failed excursion may have left the seed's own program there, or half of
+      // one, so this rebuilds rather than trusting it — and a rebuild that
+      // fails is fatal, because the alternative is publishing a kernel that is
+      // not the catalog.
+      var rebuilt = await _timed('rebuild after seeding', _fullCompile);
+      if (!rebuilt.ok) {
+        throw StateError(
+          'the catalog compiled, but rebuilding it after the seed did not:\n'
+          '${rebuilt.output.join('\n')}',
+        );
+      }
+    }
+  }
 
   late final String? _warmDill = _resolveWarmDill();
 
@@ -1037,8 +1124,22 @@ class _Daemon {
   /// recompiles what changed — but a kernel built against another engine or
   /// another package resolution is not a starting point, it is a wrong answer.
   String? _resolveWarmDill() {
-    var dill = p.join(_buildDir, 'warm.dill');
+    var dill = address.warmDillPath;
     var stamp = File('$dill.stamp');
+    // Where both used to live, before they were keyed apart from the daemon's
+    // revision. Left behind they are ~95MB per revision that nobody reads.
+    for (var stale in [
+      File(p.join(_buildDir, 'warm.dill')),
+      File(p.join(_buildDir, 'warm.dill.stamp')),
+    ]) {
+      if (stale.existsSync()) {
+        try {
+          stale.deleteSync();
+        } catch (_) {
+          // A build directory we cannot write is not this function's problem.
+        }
+      }
+    }
     var current = [
       _cache.engineRevision,
       config.packageConfig,
@@ -1056,8 +1157,30 @@ class _Daemon {
     // demo out of the catalog until somebody happened to edit it.
     if (File(_quarantinePath).existsSync()) File(_quarantinePath).deleteSync();
     stamp.parent.createSync(recursive: true);
-    stamp.writeAsStringSync(current);
+    _writeAtomically(stamp, current);
     return dill;
+  }
+
+  /// Writes [contents] beside [file] and renames it into place.
+  ///
+  /// Everything under [DaemonAddress.learnedDir] is shared by daemons of
+  /// different revisions now, so a reader can arrive mid-write. A rename is the
+  /// only write that has no middle.
+  static void _writeAtomically(File file, String contents) {
+    var staged = File('${file.path}.$pid.tmp');
+    try {
+      staged.writeAsStringSync(contents);
+      staged.renameSync(file.path);
+    } catch (_) {
+      if (staged.existsSync()) {
+        try {
+          staged.deleteSync();
+        } catch (_) {
+          // Nothing left to try; the next run overwrites it.
+        }
+      }
+      rethrow;
+    }
   }
 
   /// The asset directory the guest reads: manifests written here, payloads

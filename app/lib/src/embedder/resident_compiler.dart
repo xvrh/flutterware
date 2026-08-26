@@ -1,9 +1,10 @@
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
+import 'package:package_config/package_config.dart';
 
 import 'flutter_cache.dart';
 import 'frontend_server.dart';
+import 'seed_kernel.dart';
 
 /// The result of one [ResidentCompiler.compile] call.
 class CompileOutcome {
@@ -78,6 +79,17 @@ class ResidentCompiler {
     /// against the same package config. The daemon owns that decision.
     String? warmDill,
 
+    /// A kernel of the *shared* half of the program — the SDK, the framework
+    /// and the resolved dependencies — to start from when there is no
+    /// [warmDill] for this checkout yet.
+    ///
+    /// It holds none of the project's own sources, so unlike [warmDill] it is
+    /// worktree-independent and every checkout on one machine can start from
+    /// the same file. Measured on this repo's catalog in a freshly created
+    /// worktree: **5.5s cold against 1.5s seeded**. Ranked below [warmDill],
+    /// which is the whole program rather than its shared half.
+    String? seedDill,
+
     /// Stamp every widget with the source location that built it.
     ///
     /// See `DaemonConfig.trackWidgetCreation` for why this is on and what it
@@ -88,6 +100,8 @@ class ResidentCompiler {
     File(outputDill).parent.createSync(recursive: true);
     var warm = warmDill != null && File(warmDill).existsSync()
         ? warmDill
+        : seedDill != null && File(seedDill).existsSync()
+        ? seedDill
         : null;
     stderr.writeln(
       warm == null
@@ -104,21 +118,51 @@ class ResidentCompiler {
       platformDill: cache.platformDill,
       workingDirectory: workingDirectory,
       initializeFromDill: warm,
-      extraArguments: [if (trackWidgetCreation) '--track-widget-creation'],
+      extraArguments: argumentsFor(trackWidgetCreation: trackWidgetCreation),
     );
     return ResidentCompiler._(server, outputDill, warmDill);
   }
+
+  /// The compiler flags a [start] with these settings passes.
+  ///
+  /// Named here rather than spelled inline so that the flags and the
+  /// [seedFlavor] derived from them cannot drift apart: a seed compiled with
+  /// creation locations must never prime a compiler running without them, and
+  /// nothing but this list knows which of the two this is.
+  static List<String> argumentsFor({required bool trackWidgetCreation}) => [
+    if (trackWidgetCreation) '--track-widget-creation',
+  ];
+
+  /// Whether this compiler holds an accepted state to roll back *to*.
+  ///
+  /// The first compile of a process has none, and that is the difference
+  /// between a rollback and a rebuild: `reject` on nothing recompiles the whole
+  /// program's outlines to arrive back where it already was. Measured on this
+  /// repo's catalog, where one demo is a deliberately broken fixture: the
+  /// failing compile cost 6.1s and the reject after it another **5.5s**, of an
+  /// 11.6s cold start.
+  var _accepted = false;
 
   /// Compiles, invalidating [invalidated] first.
   ///
   /// A failed compile is **rejected and swallowed**: the caller keeps its guest
   /// and can compile again. A broken demo must not end the session — S3
   /// measured that the guest survives, and this is what preserves it.
-  Future<CompileOutcome> compile([List<Uri> invalidated = const []]) async {
-    var result = await _server.compile(invalidated);
+  ///
+  /// Rejected only once there is something to reject to — see [_accepted].
+  /// Nothing is given up by skipping it: a caller whose first compile failed
+  /// goes on to change the program (the catalog drops the entry it blamed) and
+  /// compile again, and until an `accept` the next compile is a whole program
+  /// either way.
+  Future<CompileOutcome> compile([List<Uri> invalidated = const []]) =>
+      _compile(_server.compile(invalidated));
+
+  Future<CompileOutcome> _compile(Future<FrontendServerResult> pending) async {
+    var result = await pending;
     if (result.ok) {
       _server.accept();
-    } else {
+      _accepted = true;
+    } else if (_accepted) {
       await _server.reject();
     }
     return CompileOutcome(
@@ -134,18 +178,46 @@ class ResidentCompiler {
   /// what a guest launched from scratch loads.
   void reset() => _server.reset();
 
+  /// Leaves the shared half of this program behind for the next checkout that
+  /// has never compiled it. See [writeSeedKernel].
+  Future<String?> writeSeed({
+    required SeedStore store,
+    required PackageConfig resolution,
+    required List<String> immutableRoots,
+    void Function(String)? log,
+  }) => writeSeedKernel(
+    compiler: _server,
+    outputDill: outputDill,
+    store: store,
+    resolution: resolution,
+    immutableRoots: immutableRoots,
+    log: log,
+  );
+
   /// Saves the full kernel at [outputDill] as the next session's warm start.
   ///
   /// Only meaningful right after a successful *full* compile — an incremental
   /// delta is not a program. Copied rather than pointed at, because the
   /// compiler rewrites [outputDill] and would otherwise be reading the file it
   /// is initialising from.
+  ///
+  /// Written beside itself and renamed into place, because this file now
+  /// outlives the process that wrote it *and* is shared by processes that are
+  /// not each other's: two daemons of different revisions serving one package
+  /// hold the same kernel. A reader must see a whole kernel or none; a copy
+  /// straight onto the path lets it see half of one.
   void saveWarmStart() {
     var warm = _warmDill;
-    if (warm == null || !File(outputDill).existsSync()) return;
-    Directory(p.dirname(warm)).createSync(recursive: true);
-    File(outputDill).copySync(warm);
+    if (warm != null) saveKernelTo(warm);
   }
+
+  /// Copies the kernel at [outputDill] to [destination], atomically.
+  ///
+  /// Best effort, and silent: everything written this way is a cache, and a
+  /// destination that cannot be written costs the next start its head start
+  /// rather than costing this one anything.
+  void saveKernelTo(String destination) =>
+      copyKernelAtomically(outputDill, destination);
 
   Future<void> shutdown() => _server.shutdown();
 }

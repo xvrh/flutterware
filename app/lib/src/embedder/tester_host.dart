@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
+import 'package:package_config/package_config.dart';
 import 'package:path/path.dart' as p;
 
 import '../constants.dart';
@@ -11,6 +12,7 @@ import '../previews/package_config_locator.dart';
 import 'flutter_cache.dart';
 import 'frontend_server.dart';
 import 'guest_vm_service.dart';
+import 'seed_kernel.dart';
 import 'source_invalidator.dart';
 
 /// What a [TesterHost] runs: the program it generates, and how to recognise the
@@ -209,14 +211,27 @@ class TesterHost {
     _assetsDir = p.join(_buildDir, '${program.name}_assets');
     await _syncAssetBundle();
 
+    var outputDill = p.join(_buildDir, '${program.name}.dill');
+    // Two questions, and they are not the same one. *Does a seed exist* decides
+    // whether this start owes the next checkout one; *should this start use it*
+    // is separately no, whenever this package already has a kernel of its own
+    // here — the compiler warm starts from its own output dill when nothing
+    // says otherwise, and that file is the whole program where a seed is only
+    // its shared half. Answered together, a checkout with a kernel and a
+    // machine without a seed would rebuild the seed on every start.
+    var existing = await _findSeed();
+    var seed = File(outputDill).existsSync() ? null : existing;
+    if (seed != null) onLog?.call('[${program.name}] starting from a seed');
+
     var compiler = _compiler = await FrontendServer.start(
       executable: _cache.dartAotRuntime,
       snapshot: _cache.frontendServerSnapshot,
       entrypoint: entrypoint,
-      outputDill: p.join(_buildDir, '${program.name}.dill'),
+      outputDill: outputDill,
       packageConfig: packageConfig,
       sdkRoot: _cache.flutterPatchedSdkDir,
       platformDill: _cache.platformDill,
+      initializeFromDill: seed?.kernelPath,
       // What [CompileBlame] resolves a diagnostic against, so it is what the
       // compiler has to be speaking relative to. Stated rather than inherited:
       // this host runs both inside the GUI, whose directory is the worktree,
@@ -233,15 +248,79 @@ class TesterHost {
     if (compiled.errorCount > 0) {
       throw TesterCompileException(program.name, compiled.output);
     }
+    // Said afterwards as well as before, because this is the step whose cost
+    // anyone asking about a slow start is asking about — and unlike the catalog
+    // daemon, which reports its cold compile on the wire, nothing here recorded
+    // it anywhere a reader could find.
+    onLog?.call(
+      '[${program.name}] compiled the harness in '
+      '${compiled.elapsed.inMilliseconds}ms',
+    );
     compiler.accept();
     // The baseline every later sweep is read against — taken now, so an edit
     // during the guest's startup still counts as an edit.
-    _invalidator = SourceInvalidator(ignoredRoots: [flutterSdkRoot])
+    _invalidator = SourceInvalidator(ignoredRoots: _immutableRoots)
       ..sweep(compiler.sources);
 
-    await _spawnGuest(
-      compiled.dillOutput ?? p.join(_buildDir, '${program.name}.dill'),
-    );
+    // Before the guest, because it hands the compiler back exactly as it found
+    // it and the guest is about to be handed the kernel — and after the
+    // baseline, because the excursion is not an edit anybody should hear about.
+    if (existing == null) await _writeSeed(compiler, outputDill);
+
+    await _spawnGuest(compiled.dillOutput ?? outputDill);
+  }
+
+  /// The trees whose contents no checkout owns: the SDK and the pub cache. See
+  /// [SeedStore] — and note that the invalidator reads the same list, because
+  /// "nobody edits it" and "everybody can share it" are the same claim.
+  late final _immutableRoots = [flutterSdkRoot, ...pubCacheRoots()];
+
+  late final SeedStore _seedStore = SeedStore(
+    engineRevision: _cache.engineRevision,
+    flavor: seedFlavor(program.compilerArguments),
+  );
+
+  /// The shared half of this program, compiled by whichever checkout — or
+  /// whichever *lane* — got here first.
+  ///
+  /// The catalog daemon compiles under the same flags against the same
+  /// resolution, so the two lanes reach the same file and whichever runs first
+  /// pays for both.
+  Future<SeedKernel?> _findSeed() async {
+    try {
+      return _seedStore.find(
+        await loadPackageConfigUri(Uri.file(_packageConfig!)),
+      );
+    } catch (e) {
+      onLog?.call('[${program.name}] no seed kernel: $e');
+      return null;
+    }
+  }
+
+  Future<void> _writeSeed(FrontendServer compiler, String outputDill) async {
+    try {
+      await writeSeedKernel(
+        compiler: compiler,
+        outputDill: outputDill,
+        store: _seedStore,
+        resolution: await loadPackageConfigUri(Uri.file(_packageConfig!)),
+        immutableRoots: _immutableRoots,
+        log: (line) => onLog?.call('[${program.name}] $line'),
+      );
+    } catch (e) {
+      // A cache nobody could write costs the next checkout its head start,
+      // which is what it would have cost anyway.
+      onLog?.call('[${program.name}] no seed written: $e');
+      // The kernel is not optional in the same way: the guest is spawned from
+      // the output dill, and a failed excursion may have left the seed's own
+      // program — an empty `main` — sitting there. Put this program back, and
+      // let a failure to do that end the start, because a harness that came up
+      // holding the wrong program answers every question wrongly.
+      compiler.reset();
+      var back = await compiler.compile();
+      if (!back.ok) throw TesterCompileException(program.name, back.output);
+      compiler.accept();
+    }
   }
 
   Future<void> _spawnGuest(String dill) async {
