@@ -34,7 +34,13 @@ class ShotKey {
   /// v5 — previews render under `flutter_tester` (the audit's lane) rather
   /// than the embedder guest: a different engine, different settle, and a
   /// clock parked at a fake instant instead of read off the wall.
-  static const revision = 'v5';
+  /// v6 — the framework's fragment shaders are bundled with a Metal stage. On
+  /// macOS every v5 picture was taken from a bundle whose `ink_sparkle.frag`
+  /// and `stretch_effect.frag` would not load, so an M3 ripple and a stretch
+  /// overscroll are drawn now where they were absent then. Neither shader is
+  /// in an entry's closure, and neither moves with the SDK, so nothing else
+  /// here would have noticed.
+  static const revision = 'v6';
 
   /// [closure] is a [SourceClosure.fingerprint]; [sdk] identifies the SDK both
   /// sides are rendered with; [axes] and [knobs] are whatever was applied.

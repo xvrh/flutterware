@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutterware_app/src/previews/asset_bundle.dart';
 import 'package:flutterware_app/src/previews/asset_transformer.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -240,5 +241,94 @@ void main(List<String> args) {
         );
       },
     );
+  });
+
+  group('the framework shaders', () {
+    late String? saved;
+
+    setUp(() {
+      saved = flutterwareDirOverride;
+      flutterwareDirOverride = p.join(root.path, 'flutterware');
+    });
+    tearDown(() => flutterwareDirOverride = saved);
+
+    /// The real SDK, because what is under test is what `impellerc` produces
+    /// and which of its outputs the cache hands back. A fixture cache has no
+    /// shader sources, and [AssetBundleBuilder] then compiles nothing at all.
+    var cache = FlutterCache(
+      p.join(Platform.environment['FLUTTER_ROOT']!, 'bin', 'cache'),
+    );
+
+    AssetBundleBuilder shaderBuilder() => AssetBundleBuilder(
+      cache: cache,
+      rootPackageRoot: projectRoot(),
+      packageConfigPath: p.join(
+        projectRoot(),
+        '.dart_tool',
+        'package_config.json',
+      ),
+    );
+
+    test('a shader an older flutterware compiled is not served', () async {
+      // What `~/.flutterware` looked like on every machine that had run
+      // previews before `--runtime-stage-metal` was added: a file at the key
+      // this used to cache under, holding four stages and no Metal. Serving it
+      // is the whole bug — `FragmentProgram.fromAsset` throws on the first M3
+      // ripple, and the fix is invisible until the developer deletes a
+      // directory nobody told them about.
+      var stale = File(
+        p.join(
+          flutterwareDirOverride!,
+          'shaders',
+          cache.engineRevision,
+          'ink_sparkle.frag',
+        ),
+      )..parent.createSync(recursive: true);
+      stale.writeAsStringSync('four stages and no Metal');
+
+      await shaderBuilder().build(output());
+
+      expect(
+        File(p.join(output(), 'shaders', 'ink_sparkle.frag')).readAsBytesSync(),
+        isNot(stale.readAsBytesSync()),
+      );
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('two builders compiling at once do not share a scratch', () async {
+      // The comparison runner lists both sides at once, and each side is a
+      // `TesterHost` with a bundle of its own — two builders, one process. A
+      // scratch named for the process alone is one path both impellerc
+      // invocations write, and the loser's rename finds nothing there. Cold
+      // caches are the only time either compiles, which used to mean a fresh
+      // machine and now means the first run after any change to the stage
+      // list.
+      var bundles = [
+        for (var n in ['a', 'b', 'c', 'd']) p.join(root.path, n),
+      ];
+
+      await Future.wait([
+        for (var bundle in bundles) shaderBuilder().build(bundle),
+      ]);
+
+      var shaders = [
+        for (var bundle in bundles)
+          File(p.join(bundle, 'shaders', 'ink_sparkle.frag')).readAsBytesSync(),
+      ];
+      for (var bytes in shaders.skip(1)) {
+        expect(bytes, shaders.first);
+      }
+      expect(
+        shaders.first.length,
+        greaterThan(1024),
+        reason: 'a compiled shader, not a truncated interleave of two',
+      );
+      expect(
+        Directory(p.join(flutterwareDirOverride!, 'shaders'))
+            .listSync(recursive: true)
+            .map((e) => p.basename(e.path)),
+        isNot(contains(matches(r'\.frag\.\d+'))),
+        reason: 'every scratch was renamed in, none abandoned',
+      );
+    }, timeout: const Timeout(Duration(minutes: 2)));
   });
 }
