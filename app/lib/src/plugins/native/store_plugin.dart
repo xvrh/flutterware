@@ -7,6 +7,7 @@ import 'package:flutterware/plugins.dart';
 
 import 'package:flutterware/store_report.dart';
 
+import '../../store/ui/set_card.dart';
 import '../../store/viewers.dart';
 import '../../store/tree.dart';
 import '../../ui/age.dart';
@@ -67,8 +68,8 @@ class _StorePanelState extends State<_StorePanel> {
   StoreCore get _core => widget.plugin.core;
 
   List<String> get _locales => {
-    for (var package in _core.packages)
-      for (var listing in package.listings) ...listing.locales.keys,
+    for (var app in _core.apps)
+      for (var listing in app.listings) ...listing.locales.keys,
   }.toList();
 
   Future<void> _run(
@@ -84,8 +85,8 @@ class _StorePanelState extends State<_StorePanel> {
       if (!mounted) return;
       setState(() {
         _outcome = switch (result) {
-          StoreExportResult(:var count, :var packages) =>
-            packages.map((p) => p.error).nonNulls.firstOrNull ??
+          StoreExportResult(:var count, :var apps) =>
+            apps.map((a) => a.error).nonNulls.firstOrNull ??
                 '$count ${count == 1 ? 'image' : 'images'} written',
           _ => null,
         };
@@ -134,16 +135,15 @@ class _StorePanelState extends State<_StorePanel> {
       );
 
   /// A thumbnail was clicked: show that image, as large as the window allows.
-  void _showShot(String packagePath, String key, int index) {
-    var found = _setFor(packagePath, key);
+  void _showShot(String appName, String key, int index) {
+    var found = _setFor(appName, key);
     if (found == null) return;
-    var (package, target, listing, set) = found;
+    var (app, target, listing, set) = found;
     showStoreShot(
       context,
       files: [for (var image in set.images) File(set.pathOf(image))],
       titles: [
-        for (var image in set.images)
-          storeTitleOf(package.layout, target, image),
+        for (var image in set.images) storeTitleOf(app.layout, target, image),
       ],
       index: index,
       setLabel: '${listing.storeLabel} · ${target.label} · ${set.storeLocale}',
@@ -153,16 +153,16 @@ class _StorePanelState extends State<_StorePanel> {
   }
 
   /// The card's own action: the whole set, arranged as a listing.
-  void _showListing(String packagePath, String key) {
-    var found = _setFor(packagePath, key);
+  void _showListing(String appName, String key) {
+    var found = _setFor(appName, key);
     if (found == null) return;
-    var (package, target, listing, set) = found;
+    var (app, target, listing, set) = found;
     showStoreListing(
       context,
       files: [for (var image in set.images) File(set.pathOf(image))],
       aspect: target.canvas.width / target.canvas.height,
-      appName: _core.identityOf(package).name,
-      subtitle: _core.identityOf(package).subtitle,
+      appName: _core.identityOf(app).name,
+      subtitle: _core.identityOf(app).subtitle,
       setLabel: '${listing.storeLabel} · ${target.label} · ${set.storeLocale}',
     );
   }
@@ -175,24 +175,24 @@ class _StorePanelState extends State<_StorePanel> {
   /// so searching every package for the first match opened the wrong app's
   /// screenshots as soon as two declared packages shared a listing shape,
   /// which two apps in one workspace routinely do.
-  (StoreShotsPackage, StoreTarget, Listing, StoreShotsSet)? _setFor(
-    String packagePath,
+  (StoreShotsApp, StoreTarget, Listing, StoreShotsSet)? _setFor(
+    String appName,
     String key,
   ) {
-    for (var package in _core.packages) {
-      if (package.path != packagePath) continue;
-      var set = _core.manifestOf(package)[key];
+    for (var app in _core.apps) {
+      if (_core.nameOf(app) != appName) continue;
+      var set = _core.manifestOf(app)[key];
       if (set == null || set.images.isEmpty) return null;
-      var target = _targetFor(package, key);
+      var target = _targetFor(app, key);
       if (target == null) return null;
-      return (package, target.$1, target.$2, set);
+      return (app, target.$1, target.$2, set);
     }
     return null;
   }
 
   /// The declared target and its listing, from a manifest key.
-  (StoreTarget, Listing)? _targetFor(StoreShotsPackage package, String key) {
-    for (var listing in package.listings) {
+  (StoreTarget, Listing)? _targetFor(StoreShotsApp app, String key) {
+    for (var listing in app.listings) {
       for (var target in listing.targets) {
         if (key.startsWith('${target.store}/${target.id}/')) {
           return (target, listing);
@@ -211,8 +211,8 @@ class _StorePanelState extends State<_StorePanel> {
 
   @override
   Widget build(BuildContext context) {
-    var packages = _core.packages;
-    if (packages.isEmpty) {
+    var apps = _core.apps;
+    if (apps.isEmpty) {
       return const NoPackagesConfigured(icon: Icons.storefront_outlined);
     }
     var locales = _locales;
@@ -224,18 +224,18 @@ class _StorePanelState extends State<_StorePanel> {
     // below it sat on the first line it had happened to build with.
     return ListenableBuilder(
       listenable: widget.plugin,
-      builder: (context, _) => _body(context, packages, locales, locale),
+      builder: (context, _) => _body(context, apps, locales, locale),
     );
   }
 
   Widget _body(
     BuildContext context,
-    List<StoreShotsPackage> packages,
+    List<StoreShotsApp> apps,
     List<String> locales,
     String? locale,
   ) {
     var manifests = {
-      for (var package in packages) package.path: _core.manifestOf(package),
+      for (var app in apps) _core.nameOf(app): _core.manifestOf(app),
     };
     var exported = manifests.values
         .map((m) => m.exportedAt)
@@ -255,8 +255,8 @@ class _StorePanelState extends State<_StorePanel> {
         FwPanelHeader(
           'Store',
           subtitle: [
-            for (var package in packages)
-              if (packages.length > 1) package.path,
+            for (var app in apps)
+              if (apps.length > 1) _core.nameOf(app),
             if (progress != null)
               progress.line
             else if (exported == null)
@@ -304,14 +304,14 @@ class _StorePanelState extends State<_StorePanel> {
               FwSpacing.xxxl,
             ),
             children: [
-              for (var package in packages)
-                for (var listing in package.listings)
+              for (var app in apps)
+                for (var listing in app.listings)
                   _ListingBlock(
-                    packagePath: package.path,
+                    appName: _core.nameOf(app),
                     listing: listing,
-                    manifest: manifests[package.path]!,
+                    manifest: manifests[_core.nameOf(app)]!,
                     locale: locale,
-                    working: progress?.package == package.path
+                    working: progress?.app == _core.nameOf(app)
                         ? progress?.key
                         : null,
                     onShot: _showShot,
@@ -396,7 +396,7 @@ class _LocaleSwitch extends StatelessWidget {
 /// One store's half of the listing: a heading, then a card per display class.
 class _ListingBlock extends StatelessWidget {
   const _ListingBlock({
-    required this.packagePath,
+    required this.appName,
     required this.listing,
     required this.manifest,
     required this.locale,
@@ -405,19 +405,18 @@ class _ListingBlock extends StatelessWidget {
     required this.onListing,
   });
 
-  /// Which declared package this block is drawing.
-  final String packagePath;
+  /// Which declared app this block is drawing.
+  final String appName;
 
   final Listing listing;
   final StoreShotsReport manifest;
   final String? locale;
 
-  /// A shot was clicked — the package, the set's key, and its 0-based
-  /// position.
-  final void Function(String packagePath, String key, int index) onShot;
+  /// A shot was clicked — the app, the set's key, and its 0-based position.
+  final void Function(String appName, String key, int index) onShot;
 
-  /// The card's listing action — the package and the set's key.
-  final void Function(String packagePath, String key) onListing;
+  /// The card's listing action — the app and the set's key.
+  final void Function(String appName, String key) onListing;
 
   /// The `store/class/appLocale` key of the set an export is on right now, so
   /// exactly that card can say so while the others stay as they were.
@@ -440,17 +439,17 @@ class _ListingBlock extends StatelessWidget {
               target: target,
               set: locale == null
                   ? null
-                  : manifest['${target.store}/${target.id}/$locale'],
+                  : manifest['$appName/${target.store}/${target.id}/$locale'],
               storeLocale: locale == null ? null : listing.locales[locale],
               working: working == '${target.store}/${target.id}/$locale',
               onShot: (index) => onShot(
-                packagePath,
-                '${target.store}/${target.id}/$locale',
+                appName,
+                '$appName/${target.store}/${target.id}/$locale',
                 index,
               ),
               onListing: () => onListing(
-                packagePath,
-                '${target.store}/${target.id}/$locale',
+                appName,
+                '$appName/${target.store}/${target.id}/$locale',
               ),
             ),
           ),
@@ -461,6 +460,10 @@ class _ListingBlock extends StatelessWidget {
 }
 
 /// One set — one listing, one display class, one locale.
+///
+/// An adapter now: the card and its parts live in `store/ui/set_card.dart`,
+/// where a demo can reach them. This maps the report onto them and owns the
+/// wording, which is the half that is about *this* panel.
 ///
 /// The corner is deliberately **neutral and unabbreviated**: canvas, locale,
 /// and how many shots there are. It first read `1320×2868 · 15 of 10 · en-US`
@@ -493,381 +496,100 @@ class _SetCard extends StatelessWidget {
   /// This set is the one being exported right now.
   final bool working;
 
-  /// How tall a thumbnail is. The strip is the card's whole point, so it gets
-  /// the room; the width follows from the canvas, which is why a 2:1 Play
-  /// phone and a 4:3 iPad read as visibly different shapes on one screen.
-  static const _thumbHeight = 168.0;
-
-  double get _thumbWidth =>
-      _thumbHeight * target.canvas.width / target.canvas.height;
-
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
     var images = set?.images ?? const <String>[];
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.panel,
-        borderRadius: BorderRadius.circular(context.radii.radius),
-        border: Border.all(color: colors.line),
-      ),
-      padding: const EdgeInsets.all(FwSpacing.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(target.label, style: context.type.bodyStrong),
-              if (images.isNotEmpty) ...[
-                const Gap(FwSpacing.lg),
-                // The set's own action, on the set's own card. A listing is a
-                // property of the set — which is why there is no such thing as
-                // previewing "the listing of shot 4", and why the page that
-                // tried to be one had a selection it could not justify.
-                _CardAction(
-                  label: 'Preview listing',
-                  icon: Icons.storefront_outlined,
-                  onTap: onListing,
-                ),
-              ],
-              if (working) ...[
-                const Gap(FwSpacing.md),
-                SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: colors.accent,
-                  ),
-                ),
-              ],
-              const Spacer(),
-              Text(
-                [
-                  '${target.canvas.width} × ${target.canvas.height} px',
-                  ?storeLocale,
-                  if (images.isNotEmpty)
-                    '${images.length} ${images.length == 1 ? 'shot' : 'shots'}',
-                ].join('  ·  '),
-                style: context.type.bodySmall.copyWith(color: colors.mut),
+    var shots = [
+      for (var image in images)
+        StoreShotImage(name: image, image: FileImage(File(set!.pathOf(image)))),
+    ];
+    return StoreCardShell(
+      children: [
+        StoreCardHeader(
+          label: target.label,
+          busy: working,
+          actions: [
+            // The set's own action, on the set's own card. A listing is a
+            // property of the set — which is why there is no such thing as
+            // previewing "the listing of shot 4", and why the page that tried
+            // to be one had a selection it could not justify.
+            if (shots.isNotEmpty)
+              StoreCardAction(
+                label: 'Preview listing',
+                icon: Icons.storefront_outlined,
+                onTap: onListing,
               ),
-            ],
-          ),
+          ],
+          facts: [
+            '${target.canvas.width} × ${target.canvas.height} px',
+            ?storeLocale,
+            if (shots.isNotEmpty)
+              '${shots.length} ${shots.length == 1 ? 'shot' : 'shots'}',
+          ],
+        ),
+        const Gap(FwSpacing.lg),
+        StoreShotStrip(
+          shots: shots,
+          aspect: target.canvas.width / target.canvas.height,
+          height: storeThumbHeight,
+          cap: listing.maxShots,
+          capLabel: listing.storeLabel,
+          onShot: onShot,
+        ),
+        if (shots.length > listing.maxShots) ...[
           const Gap(FwSpacing.lg),
-          SizedBox(
-            height: _thumbHeight,
-            child: images.isEmpty
-                ? _GhostStrip(width: _thumbWidth)
-                : ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: images.length,
-                    separatorBuilder: (_, _) => const Gap(FwSpacing.md),
-                    itemBuilder: (context, index) => _Thumb(
-                      file: File(set!.pathOf(images[index])),
-                      name: images[index],
-                      width: _thumbWidth,
-                      store: listing.storeLabel,
-                      cap: listing.maxShots,
-                      position: index + 1,
-                      onTap: () => onShot(index),
-                    ),
-                  ),
+          StoreNote(
+            tone: colors.amber,
+            icon: Icons.info_outline,
+            text:
+                'Only the first ${listing.maxShots} are published — '
+                "${listing.storeLabel}'s limit per display class.",
           ),
-          if (images.length > listing.maxShots) ...[
-            const Gap(FwSpacing.lg),
-            _Note(
-              tone: colors.amber,
-              icon: Icons.info_outline,
-              text:
-                  'Only the first ${listing.maxShots} are published — '
-                  "${listing.storeLabel}'s limit per display class.",
-            ),
-          ],
-          if (images.isEmpty) ...[
-            const Gap(FwSpacing.lg),
-            // Under the strip rather than beside it. Beside it, the sentence
-            // starts wherever three thumbnails happen to end — and a thumbnail
-            // is as wide as its canvas, so four cards on one screen put the
-            // same sentence at four different left edges.
-            Text(
-              target.needsComposition
-                  ? 'Not exported yet. Export runs the scenarios at '
-                        '${target.device.label}, then composes each named shot '
-                        'onto this canvas.'
-                  : 'Not exported yet. Export runs the scenarios at '
-                        '${target.device.label} and keeps every named shot.',
-              style: context.type.bodySmall.copyWith(color: colors.mut2),
-            ),
-          ],
-          if (set != null && set!.failed > 0) ...[
-            const Gap(FwSpacing.md),
-            _Note(
-              tone: colors.red,
-              icon: Icons.error_outline,
-              text:
-                  '${set!.failed} scenario${set!.failed == 1 ? '' : 's'} '
-                  'failed while producing this set — it may be short.',
-            ),
-          ],
-          // Its own note rather than a number added to the one above: the two
-          // fail at different passes and are fixed differently — a scenario
-          // that failed is the app's problem, a shot that would not compose is
-          // the capture's.
-          if (set != null && set!.framesFailed > 0) ...[
-            const Gap(FwSpacing.md),
-            _Note(
-              tone: colors.red,
-              icon: Icons.broken_image_outlined,
-              text:
-                  '${set!.framesFailed} shot'
-                  '${set!.framesFailed == 1 ? '' : 's'} could not be composed '
-                  'onto this canvas and ${set!.framesFailed == 1 ? 'was' : 'were'} '
-                  'not written — the capture would not decode. Export again.',
-            ),
-          ],
         ],
-      ),
-    );
-  }
-}
-
-/// A quiet text button on a card's title row.
-class _CardAction extends StatelessWidget {
-  const _CardAction({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: FwIconSize.sm, color: colors.accent),
-            const Gap(FwSpacing.xs),
-            Text(
-              label,
-              style: context.type.bodySmall.copyWith(color: colors.accent),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// A line of explanation under a card's strip.
-///
-/// Every marking on this panel that is not a screenshot has to say what it
-/// means where it means it. A colour alone is a riddle: amber on `15 of 10`
-/// told the reader something was wrong without telling them what, and dimmed
-/// thumbnails read as a rendering fault rather than as a store's limit.
-class _Note extends StatelessWidget {
-  const _Note({required this.tone, required this.icon, required this.text});
-
-  final Color tone;
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Icon(icon, size: FwIconSize.sm, color: tone),
-      const Gap(FwSpacing.sm),
-      Expanded(
-        child: Text(text, style: context.type.bodySmall.copyWith(color: tone)),
-      ),
-    ],
-  );
-}
-
-/// One exported screenshot, at 1×.
-///
-/// The export pays for the device's real pixel ratio; the panel does not — the
-/// same split `captureScale` already makes. A file that has gone missing under
-/// the panel draws as a gap rather than as an exception, because a deleted
-/// build directory is an ordinary thing and not an error to report.
-class _Thumb extends StatelessWidget {
-  const _Thumb({
-    required this.file,
-    required this.name,
-    required this.width,
-    required this.store,
-    required this.cap,
-    required this.position,
-    required this.onTap,
-  });
-
-  final File file;
-
-  /// The file's name, which is also the shot's — shown on hover, because at
-  /// this size the picture cannot say which shot it is.
-  final String name;
-
-  final double width;
-
-  /// Whose limit [cap] is, so the tooltip can name it.
-  final String store;
-  final int cap;
-
-  /// 1-based place in the set.
-  final int position;
-
-  final VoidCallback onTap;
-
-  /// Past the store's limit. Dimmed rather than hidden: the shots exist, and
-  /// which of them will not be published is the thing worth seeing. The card
-  /// says so in words underneath — a dimmed thumbnail on its own reads as a
-  /// bug.
-  bool get _overCap => position > cap;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Tooltip(
-      message: _overCap
-          ? "$name — past $store's limit of $cap, not published"
-          : name,
-      child: GestureDetector(
-        onTap: onTap,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: Opacity(
-            opacity: _overCap ? 0.35 : 1,
-            child: Container(
-              width: width,
-              decoration: BoxDecoration(
-                color: colors.panel2,
-                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-                border: Border.all(color: colors.line),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Image.file(
-                file,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.medium,
-                gaplessPlayback: true,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-            ),
+        if (shots.isEmpty) ...[
+          const Gap(FwSpacing.lg),
+          // Under the strip rather than beside it. Beside it, the sentence
+          // starts wherever three thumbnails happen to end — and a thumbnail
+          // is as wide as its canvas, so four cards on one screen put the same
+          // sentence at four different left edges.
+          Text(
+            target.needsComposition
+                ? 'Not exported yet. Export runs the scenarios at '
+                      '${target.device.label}, then composes each named shot '
+                      'onto this canvas.'
+                : 'Not exported yet. Export runs the scenarios at '
+                      '${target.device.label} and keeps every named shot.',
+            style: context.type.bodySmall.copyWith(color: colors.mut2),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The empty arm of a card, and the reason this panel has no separate empty
-/// screen.
-///
-/// Ghost canvases at the set's real aspect ratio, filling the strip — which
-/// says more than a sentence can: the shapes on screen are the shapes the
-/// store will receive, so a 2:1 Play phone sitting two cards above a 4:3 iPad
-/// shows what §1's canvas-is-not-a-device argument means without a word of it.
-///
-/// They fade rightwards because the count is unknown. A fixed number of solid
-/// placeholders would be a claim about how many shots this set has, and the
-/// panel has no idea — that is what the source scan decision 11 declined would
-/// have bought.
-class _GhostStrip extends StatelessWidget {
-  const _GhostStrip({required this.width});
-
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    var color = context.colors.mut3;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        var step = width + FwSpacing.md;
-        var count = (constraints.maxWidth / step).ceil().clamp(1, 12);
-        return ClipRect(
-          child: OverflowBox(
-            alignment: Alignment.centerLeft,
-            maxWidth: count * step,
-            child: Row(
-              children: [
-                for (var i = 0; i < count; i++) ...[
-                  Opacity(
-                    opacity: (1 - i / count).clamp(0.15, 1.0),
-                    child: DottedFrame(
-                      width: width,
-                      color: color,
-                      radius: context.radii.radiusSmall,
-                    ),
-                  ),
-                  const Gap(FwSpacing.md),
-                ],
-              ],
-            ),
+        ],
+        if (set != null && set!.failed > 0) ...[
+          const Gap(FwSpacing.md),
+          StoreNote(
+            tone: colors.red,
+            icon: Icons.error_outline,
+            text:
+                '${set!.failed} scenario${set!.failed == 1 ? '' : 's'} '
+                'failed while producing this set — it may be short.',
           ),
-        );
-      },
+        ],
+        // Its own note rather than a number added to the one above: the two
+        // fail at different passes and are fixed differently — a scenario
+        // that failed is the app's problem, a shot that would not compose is
+        // the capture's.
+        if (set != null && set!.framesFailed > 0) ...[
+          const Gap(FwSpacing.md),
+          StoreNote(
+            tone: colors.red,
+            icon: Icons.broken_image_outlined,
+            text:
+                '${set!.framesFailed} shot'
+                '${set!.framesFailed == 1 ? '' : 's'} could not be composed '
+                'onto this canvas and ${set!.framesFailed == 1 ? 'was' : 'were'} '
+                'not written — the capture would not decode. Export again.',
+          ),
+        ],
+      ],
     );
   }
-}
-
-/// A dashed outline of the canvas — the shape an export will fill.
-class DottedFrame extends StatelessWidget {
-  const DottedFrame({
-    super.key,
-    required this.width,
-    required this.color,
-    required this.radius,
-  });
-
-  final double width;
-  final Color color;
-  final double radius;
-
-  @override
-  Widget build(BuildContext context) => CustomPaint(
-    size: Size(width, double.infinity),
-    painter: _DashedBorder(color: color, radius: radius),
-    child: SizedBox(width: width, height: double.infinity),
-  );
-}
-
-class _DashedBorder extends CustomPainter {
-  const _DashedBorder({required this.color, required this.radius});
-
-  final Color color;
-  final double radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    var paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    var rect = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      Radius.circular(radius),
-    );
-    // Walked rather than stroked: Flutter has no dashed stroke, and a metric
-    // walk is the whole of what a dash pattern is.
-    for (var metric in (Path()..addRRect(rect)).computeMetrics()) {
-      for (var at = 0.0; at < metric.length; at += 8) {
-        canvas.drawPath(
-          metric.extractPath(at, (at + 4).clamp(0, metric.length)),
-          paint,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedBorder old) =>
-      old.color != color || old.radius != radius;
 }

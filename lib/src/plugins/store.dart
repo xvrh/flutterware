@@ -385,20 +385,28 @@ enum StoreLayout {
 /// and would collide in half the projects that import this library. It also
 /// continues the vocabulary a scenario already uses: `Shot`, `Shots`.
 class StoreShots extends Plugin {
-  StoreShots({this.packages = const [], String? label})
+  StoreShots({this.apps = const [], String? label})
     : super('flutterware.store', label: label ?? 'Store');
 
-  final List<StoreShotsPackage> packages;
+  /// **Apps, not packages.** A package is where the code is; an app is what
+  /// ships, and one package can ship several — a white-label product, or two
+  /// flavors with two store records. Each carries its own scenarios, its own
+  /// frame and its own listings, which is exactly the set of things that was
+  /// already per-package here: the unit was always an app, it merely happened
+  /// to be named after the package it was built from.
+  final List<StoreShotsApp> apps;
 
   @override
   Map<String, Object?> get config => {
-    'packages': [for (var p in packages) p.toJson()],
+    'apps': [for (var a in apps) a.toJson()],
   };
 }
 
-class StoreShotsPackage extends PluginPackage {
-  const StoreShotsPackage(
+/// One app: where its code is, what it is called, and where it ships to.
+class StoreShotsApp extends PluginPackage {
+  const StoreShotsApp(
     super.pkg, {
+    this.name,
     required this.listings,
     this.frame,
     this.file,
@@ -407,7 +415,16 @@ class StoreShotsPackage extends PluginPackage {
     this.layout = StoreLayout.fastlane,
   });
 
-  /// Which stores this package ships to.
+  /// What this app is called — in the rail, in the output tree, and in
+  /// `--app`.
+  ///
+  /// Null takes the package's own name from its pubspec, which is right for
+  /// the ordinary project that ships one app. Two apps on one package have to
+  /// say, and a name that collides with another is the project's own
+  /// arithmetic, exactly as two packages writing to one `output:` always was.
+  final String? name;
+
+  /// Which stores this app ships to.
   final List<Listing> listings;
 
   /// The composition, as a package-relative file exporting `storeFrame`.
@@ -461,21 +478,22 @@ class StoreShotsPackage extends PluginPackage {
     if (tag != null) 'tag': tag,
     if (output != null) 'output': output,
     if (layout != StoreLayout.fastlane) 'layout': layout.name,
+    if (name != null) 'name': name,
   };
 
-  static StoreShotsPackage fromJson(Map<String, Object?> json) =>
-      StoreShotsPackage(
-        Pkg(json['path']! as String),
-        listings: [
-          for (var l in json['listings'] as List? ?? [])
-            ?Listing.fromJson((l as Map).cast<String, Object?>()),
-        ],
-        frame: json['frame'] as String?,
-        file: json['file'] as String?,
-        tag: json['tag'] as String?,
-        output: json['output'] as String?,
-        layout: json['layout'] == StoreLayout.plain.name
-            ? StoreLayout.plain
-            : StoreLayout.fastlane,
-      );
+  static StoreShotsApp fromJson(Map<String, Object?> json) => StoreShotsApp(
+    Pkg(json['path']! as String),
+    name: json['name'] as String?,
+    listings: [
+      for (var l in json['listings'] as List? ?? [])
+        ?Listing.fromJson((l as Map).cast<String, Object?>()),
+    ],
+    frame: json['frame'] as String?,
+    file: json['file'] as String?,
+    tag: json['tag'] as String?,
+    output: json['output'] as String?,
+    layout: json['layout'] == StoreLayout.plain.name
+        ? StoreLayout.plain
+        : StoreLayout.fastlane,
+  );
 }

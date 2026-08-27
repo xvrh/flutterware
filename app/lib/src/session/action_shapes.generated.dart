@@ -6325,15 +6325,18 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
-  'StoreExportPackage': ResultShape.fromJson(<String, Object?>{
-    'type': 'StoreExportPackage',
+  'StoreExportApp': ResultShape.fromJson(<String, Object?>{
+    'type': 'StoreExportApp',
     'fields': <Object?>[
-      <String, Object?>{'name': 'path', 'type': 'String'},
+      <String, Object?>{
+        'name': 'app',
+        'type': 'String',
+        'doc': 'The declared app\'s name — what `--app` takes and what its tree is called.',
+      },
       <String, Object?>{
         'name': 'output',
         'type': 'String',
-        'doc':
-            'The root of the tree — the layout decides what sits beneath it.',
+        'doc': 'The root of **this app\'s** tree, the app\'s own segment included.',
       },
       <String, Object?>{
         'name': 'sets',
@@ -6359,7 +6362,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'directory',
               'type': 'String',
-              'doc': 'Relative to [StoreExportPackage.output], so the whole tree can be moved or uploaded as it stands.',
+              'doc': 'Relative to [StoreExportApp.output], so the whole tree can be moved or uploaded as it stands.',
             },
             <String, Object?>{
               'name': 'width',
@@ -6390,7 +6393,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'error',
         'type': 'String',
         'optional': true,
-        'doc': 'Set when the package could not be run at all.',
+        'doc': 'Set when the app could not be run at all.',
       },
     ],
   }),
@@ -6398,16 +6401,20 @@ final resultShapes = <String, ResultShape>{
     'type': 'StoreExportResult',
     'fields': <Object?>[
       <String, Object?>{
-        'name': 'packages',
-        'type': 'List<StoreExportPackage>',
+        'name': 'apps',
+        'type': 'List<StoreExportApp>',
         'shape': <String, Object?>{
-          'type': 'StoreExportPackage',
+          'type': 'StoreExportApp',
           'fields': <Object?>[
-            <String, Object?>{'name': 'path', 'type': 'String'},
+            <String, Object?>{
+              'name': 'app',
+              'type': 'String',
+              'doc': 'The declared app\'s name — what `--app` takes and what its tree is called.',
+            },
             <String, Object?>{
               'name': 'output',
               'type': 'String',
-              'doc': 'The root of the tree — the layout decides what sits beneath it.',
+              'doc': 'The root of **this app\'s** tree, the app\'s own segment included.',
             },
             <String, Object?>{
               'name': 'sets',
@@ -6433,7 +6440,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'directory',
                     'type': 'String',
-                    'doc': 'Relative to [StoreExportPackage.output], so the whole tree can be moved or uploaded as it stands.',
+                    'doc': 'Relative to [StoreExportApp.output], so the whole tree can be moved or uploaded as it stands.',
                   },
                   <String, Object?>{
                     'name': 'width',
@@ -6463,7 +6470,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'error',
               'type': 'String',
               'optional': true,
-              'doc': 'Set when the package could not be run at all.',
+              'doc': 'Set when the app could not be run at all.',
             },
           ],
         },
@@ -6471,7 +6478,8 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'count',
         'type': 'int',
-        'doc': 'How many images were written, over every package, listing and locale.',
+        'doc':
+            'How many images were written, over every app, listing and locale.',
       },
     ],
   }),
@@ -6496,7 +6504,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'directory',
         'type': 'String',
-        'doc': 'Relative to [StoreExportPackage.output], so the whole tree can be moved or uploaded as it stands.',
+        'doc': 'Relative to [StoreExportApp.output], so the whole tree can be moved or uploaded as it stands.',
       },
       <String, Object?>{
         'name': 'width',
@@ -6528,7 +6536,8 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'paths',
         'type': 'List<String>',
-        'doc': 'One per package, absolute — the tree\'s root, not a file inside it.',
+        'doc':
+            'One per app, absolute — the tree\'s root, not a file inside it.',
       },
     ],
   }),

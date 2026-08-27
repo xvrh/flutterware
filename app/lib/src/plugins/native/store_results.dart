@@ -10,11 +10,11 @@ part 'store_results.g.dart';
   createFactory: false,
 )
 class StoreExportResult implements PluginResult {
-  StoreExportResult({required this.packages, required this.count});
+  StoreExportResult({required this.apps, required this.count});
 
-  final List<StoreExportPackage> packages;
+  final List<StoreExportApp> apps;
 
-  /// How many images were written, over every package, listing and locale.
+  /// How many images were written, over every app, listing and locale.
   final int count;
 
   @override
@@ -26,25 +26,28 @@ class StoreExportResult implements PluginResult {
   includeIfNull: false,
   createFactory: false,
 )
-class StoreExportPackage {
-  StoreExportPackage({
-    required this.path,
+class StoreExportApp {
+  StoreExportApp({
+    required this.app,
     required this.output,
     this.sets = const [],
     this.error,
   });
 
-  final String path;
+  /// The declared app's name — what `--app` takes and what its tree is
+  /// called.
+  final String app;
 
-  /// The root of the tree — the layout decides what sits beneath it.
+  /// The root of **this app's** tree, the app's own segment included. The
+  /// layout decides what sits beneath it.
   final String output;
 
   final List<StoreExportSet> sets;
 
-  /// Set when the package could not be run at all.
+  /// Set when the app could not be run at all.
   final String? error;
 
-  Map<String, Object?> toJson() => _$StoreExportPackageToJson(this);
+  Map<String, Object?> toJson() => _$StoreExportAppToJson(this);
 }
 
 @JsonSerializable(
@@ -74,7 +77,7 @@ class StoreExportSet {
   /// The **store's** locale tag, which is what the directory is named for.
   final String locale;
 
-  /// Relative to [StoreExportPackage.output], so the whole tree can be moved
+  /// Relative to [StoreExportApp.output], so the whole tree can be moved
   /// or uploaded as it stands.
   final String directory;
 
@@ -108,7 +111,7 @@ class StoreExportSet {
 class StoreOpenResult implements PluginResult {
   StoreOpenResult({required this.paths});
 
-  /// One per package, absolute — the tree's root, not a file inside it.
+  /// One per app, absolute — the tree's root, not a file inside it.
   final List<String> paths;
 
   @override

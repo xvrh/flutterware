@@ -8,13 +8,13 @@ part of 'store_results.dart';
 
 Map<String, dynamic> _$StoreExportResultToJson(StoreExportResult instance) =>
     <String, dynamic>{
-      'packages': instance.packages.map((e) => e.toJson()).toList(),
+      'apps': instance.apps.map((e) => e.toJson()).toList(),
       'count': instance.count,
     };
 
-Map<String, dynamic> _$StoreExportPackageToJson(StoreExportPackage instance) =>
+Map<String, dynamic> _$StoreExportAppToJson(StoreExportApp instance) =>
     <String, dynamic>{
-      'path': instance.path,
+      'app': instance.app,
       'output': instance.output,
       'sets': instance.sets.map((e) => e.toJson()).toList(),
       'error': ?instance.error,

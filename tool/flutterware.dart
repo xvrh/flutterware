@@ -144,8 +144,8 @@ void main() => Flutterware.configure((fw) {
   // and then nobody can tell a real change from a re-run.
   fw.use(
     StoreShots(
-      packages: [
-        StoreShotsPackage(
+      apps: [
+        StoreShotsApp(
           example,
           file: 'test/scenarios/mobile/shop_test.dart',
           // The listing's own composition — a panorama with tilted devices
