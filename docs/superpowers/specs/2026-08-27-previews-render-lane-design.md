@@ -522,10 +522,23 @@ warm, so this is a reason to keep the flag rather than a reason not to move.
 **Deleting the guest.** The panel keeps `HeadlessCatalog`, `_GuestSession`,
 `FrameCapture`, the daemon, the C host. So this is a **second renderer for four
 commands**, not a consolidation, and it should not be argued for as one. What it
-buys is measured in §3 and is enough on its own: ~3.4× cold, ~200× warm,
-reproducible pixels, and one lane shared with the thumbnails, the audit and the
-comparison — so a picture in the popover and a picture from the CLI stop being
-two different pictures of the same entry.
+buys is measured and is enough on its own: reproducible pixels, one lane shared
+with the thumbnails, the audit and the comparison — so a picture in the popover
+and a picture from the CLI stop being two different pictures of the same entry —
+and this much clock, **A/B'd through one driver after the move**:
+
+| `previews screenshot`, one entry | harness | guest |
+|---|---|---|
+| cold, a fresh process each time | **2.9s** | 7.6s |
+| warm, the same process again | **1.7s** | 7.0s |
+
+Cold is the process cost with the driver's own 8.75s of `dart run` subtracted;
+warm is what a GUI session and a repeated agent loop get. **The earlier claim of
+"~200× warm" was wrong and is corrected here**: 63ms is what `capture(sync:
+false)` costs, which is the *thumbnail* path. A screenshot syncs — a sweep of
+every source and the asset bundle, 1.5–1.9s whether or not anything moved — and
+it must, because a picture of code the user has already edited is worse than a
+slow one. So the sync is most of the 1.7s, and it is not overhead to remove.
 
 **And what it costs is the other half of that same sentence.** Today
 `screenshot`, `inspect` and the panel are one engine, so what an agent

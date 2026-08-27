@@ -198,6 +198,9 @@ void main() {
         expect(p.url.isWithin(sessionBuildRoot, taken), isTrue);
         expect(Directory(p.join(root.path, taken)).existsSync(), isTrue);
       } finally {
+        // Ends it early so the claim it was guarding can be released; the
+        // tear-down registered in `_holdLock` is what makes that unnecessary
+        // rather than merely tidy.
         holder.kill();
         await holder.exitCode;
       }
@@ -235,6 +238,15 @@ void main(List<String> args) {
 }
 ''');
   var process = await Process.start(dart, ['run', script.path, path]);
+  // **Registered before the first await, not after the caller's.** A child
+  // that holds a lock and reads stdin holds it for ever, so anything between
+  // starting it and arranging its death is a window where a failure orphans a
+  // process — and the wait below is exactly such a failure. One did survive a
+  // timeout here and was still running hours later.
+  addTearDown(() async {
+    process.kill(ProcessSignal.sigkill);
+    await process.exitCode;
+  });
   // The lock is not taken until the child says so, and a race here would test
   // the unlocked path while calling itself the locked one.
   await process.stdout

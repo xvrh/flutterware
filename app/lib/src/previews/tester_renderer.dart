@@ -77,7 +77,10 @@ class TesterRenderer extends CatalogRenderer {
           : axisPayloadFor(declared.axes, request.axes),
       wantKnobs: request.wantKnobs,
       wantAxes: request.wantAxes,
-      // Only the second call syncs; the first has just done it.
+      // The *first* call syncs and the second must not: a sweep of every
+      // source between reading what an entry declares and turning it would be
+      // a second chance to pick up an edit, and the values would then be
+      // applied against declarations from before it.
       sync: declared == null && sync,
     );
 
@@ -108,6 +111,12 @@ class TesterRenderer extends CatalogRenderer {
     _Frame frame,
     InspectTree? tree,
   ) {
+    // Read and deleted here rather than inside the harness call, which is
+    // where the numbering below earns itself: `TesterHost.exclusive`
+    // serialises the *render*, and this runs after it returns. Two renders in
+    // flight would otherwise both write `frame/0.png`, and the first would
+    // decode the second's picture — a wrong picture that looks right, which
+    // is the failure this whole lane is built to make impossible.
     var bytes = File(frame.path).readAsBytesSync();
     var image = frame.format == 'png'
         ? img.decodePng(bytes)!
@@ -168,7 +177,7 @@ class TesterRenderer extends CatalogRenderer {
         // comparison keeps raw precisely because it diffs pixels and would
         // decode straight back out.
         if (request.screenshot != null) ...{
-          'output': p.join(_scratch, 'frame'),
+          'output': _scratch,
           'format': 'png',
         },
         if (request.needsTree) 'tree': true,
@@ -213,10 +222,19 @@ class TesterRenderer extends CatalogRenderer {
     );
   }
 
-  /// Where a frame lands on its way to being a picture. Under the runner's own
-  /// build directory rather than the system temp, so a crash leaves it where
-  /// the rest of the lane's scaffolding is swept from.
-  String get _scratch => p.join(runner.packageRoot, runner.buildDirectory);
+  /// Where the next frame lands on its way to being a picture.
+  ///
+  /// Under the runner's own build directory rather than the system temp, so a
+  /// crash leaves it where the rest of the lane's scaffolding is swept from —
+  /// and numbered, because the read and the delete happen outside the
+  /// harness's own lock. See [_file].
+  String get _scratch =>
+      p.join(runner.packageRoot, runner.buildDirectory, 'frame-${_frames++}');
+
+  /// Process-wide, not per instance: `PreviewsCore` builds a renderer per
+  /// call over the one shared runner, so a field here would start every
+  /// concurrent call at `frame-0` and defeat the numbering.
+  static var _frames = 0;
 }
 
 class _Frame {
