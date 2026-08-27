@@ -1789,6 +1789,21 @@ class ScenarioTester {
     if (pending == null) return null;
     // A name never overwrites a name.
     if (pending.name != null) return null;
+    // And a name never lands on a capture with no picture in it.
+    //
+    // [ScenarioPixels.named] is the only mode this can happen in, and it is
+    // structural rather than incidental: every other mode decides from the
+    // *screen*, and adoption only happens where the screen has not moved, so
+    // the held capture and the shot about to adopt it would decide alike. This
+    // one decides from the *step* — and the capture a name may land on is
+    // unnamed by the rule above, which is exactly the capture this mode
+    // skipped. Without the refusal a store run's every shot adopts an empty
+    // frame and the export writes nothing.
+    if (pending.format == 'none' &&
+        (scenarioRunArgs?.pixels ?? ScenarioPixels.all) ==
+            ScenarioPixels.named) {
+      return null;
+    }
     // A failure's own picture is nobody's to rename. (A failure is flushed
     // the moment it is captured, so today this states the rule more than it
     // guards a reachable branch.)
@@ -2112,14 +2127,17 @@ class ScenarioTester {
   /// A failure always is, whatever the mode: a red step's picture is the first
   /// thing anybody opens, and a pass that photographed every screen except the
   /// one that broke would be the wrong economy by a wide margin.
-  bool _wantsPixels(ScenarioScreenRead? screen, {String? failure}) =>
-      switch (scenarioRunArgs?.pixels ?? ScenarioPixels.all) {
-        ScenarioPixels.all => true,
-        ScenarioPixels.none => false,
-        ScenarioPixels.keyed =>
-          failure != null ||
-              (screen?.tree.translationKeys().isNotEmpty ?? false),
-      };
+  bool _wantsPixels(
+    ScenarioScreenRead? screen, {
+    Shot? shot,
+    String? failure,
+  }) => switch (scenarioRunArgs?.pixels ?? ScenarioPixels.all) {
+    ScenarioPixels.all => true,
+    ScenarioPixels.none => false,
+    ScenarioPixels.named => failure != null || shot?.name != null,
+    ScenarioPixels.keyed =>
+      failure != null || (screen?.tree.translationKeys().isNotEmpty ?? false),
+  };
 
   /// Renders the frame and holds it as the next [_pending] — or, when
   /// [adoptByPixels] is set and the render matches the held capture, puts
@@ -2201,7 +2219,8 @@ class ScenarioTester {
       String format;
       int width;
       int height;
-      if (listener != null && !_wantsPixels(screen, failure: failure)) {
+      if (listener != null &&
+          !_wantsPixels(screen, shot: shot, failure: failure)) {
         // Skipping the rasterization and the encode is what makes a probe
         // pass cheaper than the capture pass it rides beside. The dimensions
         // are still reported, because the survey computes screen share from

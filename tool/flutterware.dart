@@ -125,6 +125,40 @@ void main() => Flutterware.configure((fw) {
   // `example` again, and for the same reason: only a package that is an app
   // has launcher icons to look at.
   fw.use(LauncherIcon(packages: [.new(example)]));
+
+  // **The demo shop's store listing.** `examples/example` is the only member
+  // that is an app rather than a tool, so it is the only one that could have a
+  // listing at all.
+  //
+  // Both stores are declared even though Google Play's phone cannot be
+  // exported yet: its canvas is 1080×2160 and an `android-tall` renders
+  // 1082×2402, so that set is a *composition* and the frame that composes it
+  // is not built. It is declared rather than commented out because that gap is
+  // the thing to keep visible — the export names the set it deferred and why,
+  // where a missing declaration would look like a listing nobody wanted.
+  //
+  // The clock is pinned for the reason `StoreShotsPackage.clock` gives: a
+  // listing whose screenshots carry today's date changes every time anybody
+  // regenerates it, and then nobody can tell a real change from a re-run.
+  fw.use(
+    StoreShots(
+      packages: [
+        StoreShotsPackage(
+          example,
+          file: 'test/scenarios/mobile/shop_test.dart',
+          clock: '2026-01-01T09:00:00Z',
+          // The listing's own composition — a panorama with tilted devices
+          // that lean across the joins. See the file; it is the demo the
+          // store design's §10i argues for.
+          frame: 'lib/store_frame.dart',
+          listings: [
+            Listing.appStore(locales: {'en': 'en-US', 'fr': 'fr-FR'}),
+            Listing.play(locales: {'en': 'en-US', 'fr': 'fr-FR'}),
+          ],
+        ),
+      ],
+    ),
+  );
   fw.use(ServerInspection());
   // Repo-scoped, nothing to declare: the plugin discovers every
   // analysis_options.yaml itself, because "this rule is evaluated nowhere" is
@@ -319,6 +353,11 @@ void main() => Flutterware.configure((fw) {
           example,
           catalogs: [
             TranslationCatalog(name: 'shop', files: 'assets/i18n/*.json'),
+            // The listing's headlines. A second catalog rather than more keys
+            // in the first: marketing copy is not UI, and a translator sent
+            // the shop's strings should not find `Tap. Pay. Collect.` among
+            // them. Store design, decision 9.
+            TranslationCatalog(name: 'store', files: 'assets/store/*.json'),
           ],
         ),
       ],

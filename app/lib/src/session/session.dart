@@ -26,6 +26,7 @@ import '../plugins/native/motion_core.dart';
 import '../plugins/native/scenarios_core.dart';
 import '../plugins/native/icon_core.dart';
 import '../plugins/native/splash_core.dart';
+import '../plugins/native/store_core.dart';
 import '../plugins/native/previews_core.dart';
 import '../plugins/native/translations_core.dart';
 import '../plugins/plugin_core.dart';
@@ -599,6 +600,7 @@ PluginCoreRegistry defaultCoreRegistry() => PluginCoreRegistry({
   scenariosPluginId: scenariosCoreFactory,
   launcherIconPluginId: launcherIconCoreFactory,
   splashPluginId: splashCoreFactory,
+  storePluginId: storeCoreFactory,
   uiCatalogPluginId: uiCatalogCoreFactory,
   devStackPluginId: devStackCoreFactory,
   translationsPluginId: translationsCoreFactory,

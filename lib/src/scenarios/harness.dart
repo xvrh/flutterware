@@ -586,6 +586,7 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
     captureNative: args['captureNative'] == 'true',
     pixels: switch (args['pixels']) {
       'keyed' => ScenarioPixels.keyed,
+      'named' => ScenarioPixels.named,
       'none' => ScenarioPixels.none,
       _ => ScenarioPixels.all,
     },

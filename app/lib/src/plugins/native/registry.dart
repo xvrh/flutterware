@@ -12,6 +12,7 @@ import 'run_plugin.dart';
 import 'server_plugin.dart';
 import 'scenarios_plugin.dart';
 import 'splash_plugin.dart';
+import 'store_plugin.dart';
 import 'previews_plugin.dart';
 import 'translations_plugin.dart';
 
@@ -34,6 +35,7 @@ PluginRegistry buildNativeRegistry() => PluginRegistry({
   scenariosPluginId: panelFor<ScenariosCore>(ScenariosPlugin.new),
   launcherIconPluginId: panelFor<LauncherIconCore>(LauncherIconPlugin.new),
   splashPluginId: panelFor<SplashCore>(SplashPlugin.new),
+  storePluginId: panelFor<StoreCore>(StorePlugin.new),
   uiCatalogPluginId: panelFor<PreviewsCore>(PreviewsPlugin.new),
   devStackPluginId: panelFor<DevStackCore>(DevStackPlugin.new),
   translationsPluginId: panelFor<TranslationsCore>(TranslationsPlugin.new),

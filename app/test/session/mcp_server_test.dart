@@ -25,6 +25,7 @@ const _declaredPlugins = [
   'flutterware.motion',
   'flutterware.splash',
   'flutterware.launcher_icon',
+  'flutterware.store',
   'flutterware.server',
   'flutterware.lints',
   'flutterware.dev_stack',
