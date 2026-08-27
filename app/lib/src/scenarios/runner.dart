@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutterware/src/scenarios/pixels.dart';
 import 'package:meta/meta.dart';
 
+import '../embedder/build_directory.dart';
 import '../embedder/tester_host.dart';
 import 'axes.dart';
 import 'discovery.dart';
@@ -67,25 +68,28 @@ class ScenarioListing {
 /// A warm runner stays honest: [run] re-syncs with the sources on disk before
 /// every warm run, so the Run button never replays code that has since been
 /// edited. See [refresh] for the two lanes that takes.
+/// What this lane's dill, bundle and log are called.
+const scenariosProgramName = 'scenarios';
+
 /// The scenario half of a [TesterHost]: which files make up the program, and
 /// what the harness they generate calls itself.
 class _ScenarioProgram extends TesterProgram {
   _ScenarioProgram({
     required this.packageRoot,
     required this.directory,
-    required this.buildDirectory,
+    required this.lane,
   });
 
   final String packageRoot;
   final String directory;
 
-  /// Where the generated entrypoint goes — the host's own [buildDirectory],
-  /// so an isolated runner's harness sits beside its dill rather than on top
-  /// of the warm lane's.
-  final String buildDirectory;
+  /// Where the generated entrypoint goes — the host's own lane, so an isolated
+  /// runner's harness sits beside its dill rather than on top of the warm
+  /// one's.
+  final BuildLane lane;
 
   @override
-  String get name => 'scenarios';
+  String get name => scenariosProgramName;
 
   @override
   String get readyLine => 'scenarios harness ready';
@@ -114,7 +118,7 @@ class _ScenarioProgram extends TesterProgram {
 
   @override
   String writeEntrypoint(List<String> sources) =>
-      writeHarnessEntrypoint(packageRoot, sources, directory: buildDirectory);
+      writeHarnessEntrypoint(packageRoot, sources, directory: lane.path);
 }
 
 /// Runs a package's scenarios in a directly-spawned `flutter_tester` — see
@@ -128,22 +132,46 @@ class _ScenarioProgram extends TesterProgram {
 /// every warm run, so the Run button never replays code that has since been
 /// edited.
 class ScenarioRunner {
+  /// [buildDirectory] is what this runner would *rather* build in; where it
+  /// actually builds is [takeBuildLane]'s answer, because another process may
+  /// already hold it.
   ScenarioRunner({
+    required String packageRoot,
+    required String directory,
+    required String flutterSdkRoot,
+    String buildDirectory = TesterHost.defaultBuildDirectory,
+    DateTime? projectClock,
+    void Function(String line)? onLog,
+  }) : this._(
+         packageRoot: packageRoot,
+         directory: directory,
+         flutterSdkRoot: flutterSdkRoot,
+         lane: BuildLane(
+           packageRoot,
+           preferred: buildDirectory,
+           program: scenariosProgramName,
+         ),
+         projectClock: projectClock,
+         onLog: onLog,
+       );
+
+  ScenarioRunner._({
     required this.packageRoot,
     required this.directory,
     required String flutterSdkRoot,
-    this.buildDirectory = TesterHost.defaultBuildDirectory,
-    this.projectClock,
+    required BuildLane lane,
+    required this.projectClock,
     void Function(String line)? onLog,
-  }) : _host = TesterHost(
+  }) : _lane = lane,
+       _host = TesterHost(
          packageRoot: packageRoot,
          flutterSdkRoot: flutterSdkRoot,
          program: _ScenarioProgram(
            packageRoot: packageRoot,
            directory: directory,
-           buildDirectory: buildDirectory,
+           lane: lane,
          ),
-         buildDirectory: buildDirectory,
+         lane: lane,
          onLog: onLog,
        ) {
     _host.onEvent = (event) => onStep?.call(event);
@@ -154,12 +182,14 @@ class ScenarioRunner {
   /// Scenario directory relative to [packageRoot].
   final String directory;
 
+  final BuildLane _lane;
+
   /// Where this runner's artifacts live, relative to [packageRoot] — see
-  /// [TesterHost.buildDirectory]. The comparison hands each of its runners a
-  /// directory of its own because its head *is* the worktree the panel's warm
-  /// runner lives on, and its base is a checkout every comparison on the
-  /// machine shares.
-  final String buildDirectory;
+  /// [TesterHost.lane]. The comparison hands each of its runners a directory
+  /// of its own because its head *is* the worktree the panel's warm runner
+  /// lives on, and its base is a checkout every comparison on the machine
+  /// shares.
+  String get buildDirectory => _lane.path;
 
   /// What the project declared with `fw.clock(...)`, applied to every run
   /// this runner makes unless the run names its own.

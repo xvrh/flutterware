@@ -591,6 +591,12 @@ class _FakeRunner extends ScenarioRunner {
   _FakeRunner()
     : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
 
+  /// A fake spawns nothing, so it has no build lane — and reading the real
+  /// [logPath] would take one, which means creating a directory under the
+  /// `/none` this stands on.
+  @override
+  String get logPath => '/none/scenarios.log';
+
   var runs = 0;
   String? failure;
   final seenAxes = <ScenarioAxes>[];

@@ -186,6 +186,9 @@ class _Gated extends ScenarioRunner {
   _Gated()
     : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
 
+  @override
+  String get logPath => '/none/scenarios.log';
+
   final _gate = Completer<void>();
   String? _outDir;
   final _steps = <Map<String, Object?>>[];

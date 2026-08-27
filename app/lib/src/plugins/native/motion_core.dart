@@ -6,6 +6,7 @@ import 'package:collection/collection.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
+import '../../previews/catalog_render.dart';
 import '../../previews/catalog_entry.dart';
 import '../../previews/devices.dart';
 import '../../previews/headless_catalog.dart';
@@ -337,12 +338,14 @@ class MotionCore extends PluginCore {
       '${motion.values}-t${(t * 1000).round()}.png',
     );
     var captured = await catalog.capture(
-      entryId: entry.id,
-      output: output,
-      viewport: device == null
-          ? CaptureViewport.panel
-          : CaptureViewport.of(device),
-      motionT: t,
+      CatalogRender(
+        entryId: entry.id,
+        screenshot: output,
+        viewport: device == null
+            ? CaptureViewport.panel
+            : CaptureViewport.of(device),
+        motionT: t,
+      ),
     );
 
     return Artifact(

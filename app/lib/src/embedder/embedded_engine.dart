@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutterware/src/inspect/node.dart';
 
 import '../utils/run_dir.dart';
+import '../previews/catalog_picture.dart';
 import 'frame_capture.dart';
 import 'protocol.dart';
 
@@ -400,21 +401,20 @@ class EmbeddedEngine extends ChangeNotifier {
     List<InspectNode> annotate = const [],
     double pixelRatio = 1,
   }) async => img.encodePng(
-    await captureImage(crop: crop, annotate: annotate, pixelRatio: pixelRatio),
+    framePicture(
+      await captureImage(),
+      framing: PictureFraming(crop: crop, boxes: annotate),
+      pixelRatio: pixelRatio,
+    ),
   );
 
-  /// The same frame, undecoded.
+  /// The same frame, undecoded and unframed.
   ///
   /// For the one caller that is going to draw with it rather than write it out:
   /// a window capture pastes this into the hole the guest's texture leaves in
   /// the host's raster, and encoding a PNG just to decode it again would be the
   /// only step in that path that did nothing.
-  Future<img.Image> captureImage({
-    InspectLayout? crop,
-    List<InspectNode> annotate = const [],
-    double pixelRatio = 1,
-  }) =>
-      _capture.capture(crop: crop, annotate: annotate, pixelRatio: pixelRatio);
+  Future<img.Image> captureImage() => _capture.capture();
 
   @override
   void dispose() {

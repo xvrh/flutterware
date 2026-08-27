@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-// ignore: implementation_imports
-import 'package:flutterware/src/inspect/node.dart';
 import 'package:flutterware_app/src/embedder/frame_capture.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';
 import 'package:path/path.dart' as p;
@@ -90,29 +88,6 @@ void main() {
       expect(image.width, 4, reason: 'the stale 9x9 frame should be gone');
     },
   );
-
-  test('a crop cuts to a node box, in physical pixels', () async {
-    var image = await obliging(width: 10, height: 10).capture(
-      // Logical coordinates at ratio 2 — the space `InspectLayout` reports, so a
-      // node rect from the panel crops its own picture untransformed.
-      crop: const InspectLayout(x: 1, y: 1, width: 3, height: 2),
-      pixelRatio: 2,
-    );
-
-    expect(image.width, 6);
-    expect(image.height, 4);
-  });
-
-  test('a crop reaching past the frame is clamped, not refused', () async {
-    // What an overflow *is*, and the one case most worth being able to see.
-    var image = await obliging(
-      width: 10,
-      height: 10,
-    ).capture(crop: const InspectLayout(x: 8, y: 8, width: 40, height: 40));
-
-    expect(image.width, 2);
-    expect(image.height, 2);
-  });
 
   test('a guest that reports an error fails the capture with it', () async {
     late FrameCapture capture;

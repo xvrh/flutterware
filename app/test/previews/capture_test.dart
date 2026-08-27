@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware_app/src/comparison/build_directory.dart';
+import 'package:flutterware_app/src/embedder/build_directory.dart';
 import 'package:flutterware_app/src/previews/discovery.dart';
 import 'package:flutterware_app/src/previews/test_runner.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
@@ -56,7 +56,10 @@ void main() {
           }),
         );
 
-    var buildDirectory = claimComparisonBuildDirectory(packageRoot);
+    var buildDirectory = claimBuildDirectory(
+      packageRoot,
+      root: comparisonBuildRoot,
+    );
     var runner = PreviewTestRunner(
       packageRoot: packageRoot,
       flutterSdkRoot: flutterRoot!,
@@ -81,6 +84,24 @@ void main() {
         File(row.tree!).readAsStringSync(),
       ) as Map<String, dynamic>;
       expect(tree['root'], isNotNull);
+
+      // **A ratio, not a fraction.** `1` is the logical size — right for a
+      // diff and a thumbnail, and wrong for a picture somebody reads a 16pt
+      // glyph in, which is why the word had to stop being `scale`: at 2 the
+      // same entry comes back at twice the side and four times the bytes, and
+      // a caller staging a 3× phone asks for 3 rather than for a fraction it
+      // has to work out.
+      var doubled = <PreviewCaptureRow>[];
+      await runner.capture(
+        entryIds: [buttons.id],
+        outDir: p.join(outDir, 'doubled'),
+        pixelRatio: 2,
+        tree: false,
+        onRow: (found) async => doubled.add(found),
+      );
+      expect(doubled.single.width, row.width * 2);
+      expect(doubled.single.height, row.height * 2);
+      expect(File(doubled.single.image!).lengthSync(), image.lengthSync() * 4);
 
       // The lane's whole argument over the embedder: the same entry
       // photographed again is byte-identical, because the clock is fake and
@@ -125,7 +146,11 @@ void main() {
       );
     } finally {
       await runner.dispose();
-      releaseComparisonBuildDirectory(packageRoot, buildDirectory);
+      releaseBuildDirectory(
+        packageRoot,
+        buildDirectory,
+        root: comparisonBuildRoot,
+      );
       Directory(outDir).deleteSync(recursive: true);
     }
     expect(

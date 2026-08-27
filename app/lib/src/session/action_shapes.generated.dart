@@ -990,7 +990,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'readFrom',
         'type': 'String',
-        'doc': 'Where this reading came from: `live` when it was taken from a session somebody has open — the demo in whatever state they left it, including anything they reached by clicking — and `render` when this call built and drew its own copy.',
+        'doc': 'Where this reading came from: `live` when it was taken from a session somebody has open — the demo in whatever state they left it, including anything they reached by clicking — and, when this call built and drew its own copy, **which engine drew it**: `harness` for the `flutter_tester` lane, `guest` for the embedder.',
       },
       <String, Object?>{
         'name': 'ok',
