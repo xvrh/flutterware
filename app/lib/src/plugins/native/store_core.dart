@@ -655,6 +655,7 @@ class StoreCore extends PluginCore {
       // a runner hands back is already the shape `ScenarioRunOutcome.fromJson`
       // reads, so there is nothing to reimplement and nothing to keep in sync.
       var names = <String>[];
+      var overlay = <String, ({String? status, String? nav})>{};
       var failed = 0;
       for (var entry
           in (raw['scenarios']! as List).cast<Map<String, Object?>>()) {
@@ -672,6 +673,14 @@ class StoreCore extends PluginCore {
           File(p.join(host.worktree.path, step.image!))
               .copySync(p.join(into.path, name));
           names.add(name);
+          // Kept beside the name rather than folded into it: `images` is a
+          // list of file names in half a dozen places, and the frame is the
+          // only reader that wants what the app declared while it was on
+          // screen.
+          overlay[name] = (
+            status: step.statusBrightness,
+            nav: step.navBrightness,
+          );
         }
       }
       if (Directory(run).existsSync()) {
@@ -681,6 +690,7 @@ class StoreCore extends PluginCore {
         directory: into.path,
         request: request,
         images: names,
+        overlay: overlay,
         failed: failed,
       );
     }
@@ -754,6 +764,10 @@ class StoreCore extends PluginCore {
       }
     }
     into.createSync(recursive: true);
+    // Whether the deliverable is a *composition* — a ground and a device body
+    // — and so whether the app's own pixels are worth keeping beside it. Not
+    // whether the set is framed: every set is, because every set wants its
+    // status bar. See `defaultStoreFrame`.
     var compose = storeShouldCompose(
       hasFrame: app.frame != null,
       target: request.target,
@@ -770,13 +784,13 @@ class StoreCore extends PluginCore {
         storeFileNameFor(app.layout, request.target, stem),
       );
       var source = p.join(captured.directory, name);
-      if (!compose) {
-        flatten.add((source, out));
-      } else {
+      if (compose) {
         // The original, kept beside the listing. Named the readable way —
         // `unframed/play/phone/en-US/03-cart.png` — because a person is the
         // only reader it has.
         flatten.add((source, p.join(unframedInto.path, name)));
+      }
+      {
         jobs.add({
           'image': source,
           // Every image of the set, so a frame can reach a neighbour — see
@@ -795,13 +809,15 @@ class StoreCore extends PluginCore {
           'canvasWidth': request.target.canvas.width,
           'canvasHeight': request.target.canvas.height,
           'canvasRatio': request.target.canvas.pixelRatio,
+          'statusBrightness': ?captured.overlay[name]?.status,
+          'navBrightness': ?captured.overlay[name]?.nav,
         });
       }
       written.add(p.basename(out));
     }
     var uncomposed = <String>{};
     if (jobs.isNotEmpty) {
-      unframedInto.createSync(recursive: true);
+      if (compose) unframedInto.createSync(recursive: true);
       var composed = await _composerFor(
         app,
       ).compose(jobs, manifestPath: p.join(captured.directory, 'frames.json'));
@@ -864,9 +880,11 @@ class StoreCore extends PluginCore {
 
   /// The frame composer for a package, warm across calls.
   ///
-  /// A package that declares no frame still needs one where geometry forces a
-  /// composition, and it is *generated* rather than shipped as a file: the
-  /// harness entrypoint imports a source, so the default has to be one.
+  /// A package that declares no frame still needs one — every set is framed,
+  /// if only to wear its status bar — and it is *generated* rather than
+  /// shipped as a file: the harness entrypoint imports a source, so the
+  /// default has to be one. `defaultStoreFrame` is the function that decides
+  /// per shot whether that means a composition or a pane of glass.
   StoreFrameRunner _composerFor(StoreShotsApp app) =>
       _composers.putIfAbsent(nameOf(app), () {
         var root = _rootOf(app);
@@ -879,7 +897,7 @@ class StoreCore extends PluginCore {
               '// GENERATED — flutterware default store frame.\n'
               "import 'package:flutterware/store.dart';\n"
               '\n'
-              'final storeFrame = DefaultStoreFrame.new;\n';
+              'final storeFrame = defaultStoreFrame;\n';
           // Left alone when already right: a touched mtime reads as an edit and
           // recompiles for nothing.
           if (!file.existsSync() || file.readAsStringSync() != content) {
@@ -1043,11 +1061,18 @@ class _CapturedSet {
     required this.directory,
     required this.request,
     required this.images,
+    required this.overlay,
     required this.failed,
   });
 
   final String directory;
   final _SetRequest request;
   final List<String> images;
+
+  /// The `SystemUiOverlayStyle` each shot was captured under, by image name —
+  /// what tells the frame whether to draw the status bar's icons dark or
+  /// light. Null where the app declared no style.
+  final Map<String, ({String? status, String? nav})> overlay;
+
   final int failed;
 }

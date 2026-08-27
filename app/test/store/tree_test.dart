@@ -248,18 +248,22 @@ void main() {
   });
 
   group('what gets composed', () {
-    // The promise made when the frame was built: adding it must not change
-    // what a project with no frame already exports. Asserted rather than
-    // argued — "by construction" is exactly what would have been said about
-    // the filename collision the export before this one shipped.
+    // The promise made when the frame was built, since narrowed once: adding a
+    // frame must not put a ground and a device body around a set nobody asked
+    // to compose. It no longer says the pixels are untouched — every set wears
+    // a status bar now, which is `defaultStoreFrame`'s business rather than
+    // this rule's. Asserted rather than argued: "by construction" is exactly
+    // what would have been said about the filename collision the export before
+    // this one shipped.
     test('nothing of the App Store, for a project with no frame', () {
       for (var target in appStore.targets) {
         expect(
           storeShouldCompose(hasFrame: false, target: target),
           isFalse,
           reason:
-              '${target.id} would start being composed, and every image of '
-              'every existing listing would change',
+              '${target.id} would gain an invented ground and device body, '
+              'and every image of every existing listing would be a '
+              'composition instead of the app',
         );
       }
     });
