@@ -50,14 +50,24 @@ Widget _listing(StoreCanvas canvas, Device device, {int? only}) {
         canvas: canvas,
       ),
   ];
-  return FittedBox(
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var shot in shots)
-          if (only == null || only == shot.index)
-            StoreFrameStage(shot: shot, child: CoffeeStoreFrame(shot)),
-      ],
+  // **The `Row` needs its own `Directionality`.** `StoreFrameStage` supplies
+  // one *inside* each canvas — that is how a frame gets RTL from its locale —
+  // but the row laying the canvases side by side is above them, and these
+  // entries declare no wrapper of their own. Without it the flex asserts
+  // "Horizontal RenderFlex with multiple children has a null textDirection"
+  // and everything under it fails to lay out. `previews screenshot` drew a
+  // picture anyway; `previews audit` is what reported it.
+  return Directionality(
+    textDirection: TextDirection.ltr,
+    child: FittedBox(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var shot in shots)
+            if (only == null || only == shot.index)
+              StoreFrameStage(shot: shot, child: CoffeeStoreFrame(shot)),
+        ],
+      ),
     ),
   );
 }
