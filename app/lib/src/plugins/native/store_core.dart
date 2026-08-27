@@ -430,6 +430,7 @@ class StoreCore extends PluginCore {
                         into: set,
                       ),
                       failed: set.failed,
+                      framesFailed: set.framesFailed,
                       exportedAt: DateTime.now(),
                     ),
                   ]);
@@ -749,19 +750,35 @@ class StoreCore extends PluginCore {
       }
       written.add(p.basename(out));
     }
+    var uncomposed = <String>{};
     if (jobs.isNotEmpty) {
       unframedInto.createSync(recursive: true);
-      await _composerFor(
+      var composed = await _composerFor(
         package,
       ).compose(jobs, manifestPath: p.join(captured.directory, 'frames.json'));
+      // What the composer says it wrote, not what it was asked to write. A job
+      // whose capture would not decode composes to nothing — see the harness's
+      // precache — and this is the only place that learns it, because the
+      // reply was previously discarded and every asked-for file was reported
+      // as a screenshot.
+      var landed = {
+        for (var out in composed['written'] as List? ?? const []) '$out',
+      };
+      uncomposed = {
+        for (var job in jobs)
+          if (!landed.contains(job['out'])) p.basename(job['out']! as String),
+      };
       // The composer writes what the framework encoded, which is RGBA like
       // every other capture. The alpha comes off here, at the last step, for
       // the same reason it does on the unframed path — in place, so the source
       // and the destination are the same file.
       flatten.addAll([
-        for (var job in jobs) (job['out']! as String, job['out']! as String),
+        for (var job in jobs)
+          if (landed.contains(job['out']))
+            (job['out']! as String, job['out']! as String),
       ]);
     }
+    written.removeWhere(uncomposed.contains);
     await flattenPngFiles(flatten);
     return StoreExportSet(
       store: request.target.store,
@@ -772,6 +789,7 @@ class StoreCore extends PluginCore {
       height: request.target.canvas.height,
       images: written,
       failed: captured.failed,
+      framesFailed: uncomposed.length,
     );
   }
 
