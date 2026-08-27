@@ -452,6 +452,79 @@ class CatalogSession extends ChangeNotifier {
   /// Warnings the scan produced; the daemon refuses to start on errors.
   List<String> diagnostics = const [];
 
+  /// Called when the daemon's catalog stops being the one [scannedEntries]
+  /// describes — a preview written, deleted, renamed, or its annotation edited
+  /// while the panel was open.
+  ///
+  /// The daemon watches the files and this session simply believes it, so the
+  /// *listing* is right the moment the demo is saved. Nothing else in the tool
+  /// is watching: the plugin's own scan is what the previews harness generates
+  /// its program from, and it was read once, before this session existed. This
+  /// is how it hears that it is behind.
+  ///
+  /// A callback rather than a listener because it is not a rebuild: it costs a
+  /// scan, so it must fire when the catalog genuinely moved and not on every
+  /// notification.
+  void Function()? onEntriesChanged;
+
+  /// The catalog the last report agreed with, seeded from the scan the session
+  /// was built on — so a daemon whose first answer already differs from it is
+  /// change enough to say so.
+  late Map<String, String> _reported = _shapeOf(scannedEntries);
+
+  /// What has to still be true for a scan to describe the catalog, per entry.
+  ///
+  /// **Not the ids.** The generated wrapper is written from the annotation and
+  /// resolves the demo from the path, so an edit that changes either without
+  /// renaming the symbol leaves the ids identical and the wrapper wrong — and
+  /// the harness regenerates only when `PreviewProgram.sources()` moves, which
+  /// is a list of ids. The symptom is a thumbnail that goes on rendering under
+  /// the wrapper you have just replaced while the panel, which reads the
+  /// daemon, shows the new one.
+  ///
+  /// The same fields the daemon's own `_differs` names as *everything the
+  /// wrapper or the entrypoint reads* (`app/tool/catalog/compiler_daemon.dart`),
+  /// plus [CatalogEntry.path], which a declared `id:` otherwise hides.
+  ///
+  /// Joined on NUL rather than on punctuation: an annotation is source text and
+  /// a name is a string literal out of it, so every printable separator is one
+  /// an entry can contain and shift a field across. It stays in this map —
+  /// nothing writes it, and the only thing it is ever compared against is
+  /// another one built here.
+  static Map<String, String> _shapeOf(Iterable<CatalogEntry> entries) => {
+    for (var entry in entries)
+      entry.id: [
+        entry.path,
+        entry.symbol,
+        entry.annotation,
+        entry.name,
+        entry.group ?? '',
+      ].join('\u0000'),
+  };
+
+  /// The daemon's answer, taken whole.
+  ///
+  /// One door rather than the two setters called in sequence, because a report
+  /// is one fact: between the assignments the catalog is half this answer and
+  /// half the last one, and what reads it reads across both. The setters stay
+  /// public for a test staging a session by hand, which is stating a state
+  /// rather than hearing one.
+  ///
+  /// Both halves merged for the comparison: an entry moving from buildable to
+  /// quarantined stays in the catalog, and treating that as a change would
+  /// throw away every picture of a package because one demo has a typo in it.
+  void reportCatalog(
+    List<CatalogEntry> reported,
+    List<QuarantinedEntry> refused,
+  ) {
+    entries = reported;
+    quarantined = refused;
+    var shape = _shapeOf(allEntries);
+    if (mapEquals(_reported, shape)) return;
+    _reported = shape;
+    onEntriesChanged?.call();
+  }
+
   /// The `flutterware_app` package root, which owns `native/` and the build dir.
   final String appPackageRoot;
   final String flutterSdkRoot;
@@ -1485,8 +1558,10 @@ class CatalogSession extends ChangeNotifier {
       warmStart = ready.warmStart;
       reusedDaemon = ready.reused;
       coldCompile = ready.coldCompile;
-      entries = ready.entries;
-      quarantined = ready.quarantined;
+      // Already worth comparing: attaching to a daemon that has been up a while
+      // means the handshake itself can be the first news that a demo was
+      // written since the scan this session was built on.
+      reportCatalog(ready.entries, ready.quarantined);
       diagnostics = ready.diagnostics;
       _changes = daemon.catalogChanges.listen(_onCatalogChanged);
       _assetsChanges = daemon.assetsChanges.listen(_onAssetsChanged);
@@ -2131,8 +2206,7 @@ class CatalogSession extends ChangeNotifier {
   /// move without this session having asked for anything — a demo is edited and
   /// breaks, or is fixed and comes back.
   void _onCatalogChanged(CatalogChanged change) {
-    entries = change.entries;
-    quarantined = change.quarantined;
+    reportCatalog(change.entries, change.quarantined);
 
     // An entry that stopped *compiling* keeps its place and stays selected —
     // the panel says why it is not rendering, and moving the user somewhere
