@@ -131,16 +131,29 @@ void main() {
       expect(files.single.width, 1024);
     });
 
-    test('a flavor with no catalog of its own reports no iOS icons', () {
-      // Not the default's. This is the failure the whole change is about: it
-      // used to come back with production's marketing icon under a `dev` chip.
+    test('a flavor with no catalog of its own inherits the stock one', () {
+      // Both halves matter. Reporting the stock files as the flavor's own was
+      // the failure this file was written for — production's marketing icon
+      // under a `dev` chip. Reporting *nothing* was the overcorrection, and it
+      // said the flavor ships with no iOS icon when Xcode gives every
+      // configuration `AppIcon` unless a build setting says otherwise.
       writeIosCatalog(size: 1024);
       writePng('android/app/src/dev/res/mipmap-hdpi/ic_launcher.png', 72);
 
       var scanned = scan(flavor: 'dev');
-      expect(scanned.forRole(IconRole.iosApp)!.files, isEmpty);
-      expect(scanned.ios, IosCatalog.none);
+      var ios = scanned.forRole(IconRole.iosApp)!;
+      expect(ios.files, hasLength(1));
+      expect(ios.files.single.width, 1024);
+      expect(ios.allInherited, isTrue);
+      expect(scanned.ios, IosCatalog.appIconSet);
       expect(scanned.forRole(IconRole.androidLegacy)!.files, hasLength(1));
+    });
+
+    test('a flavor with its own catalog owns it', () {
+      writeIosCatalog(size: 1024);
+      writeIosCatalog(flavor: 'dev', size: 512);
+
+      expect(scan(flavor: 'dev').forRole(IconRole.iosApp)!.allInherited, false);
     });
 
     test('dark and tinted come out of the flavor’s own set', () {
@@ -189,6 +202,128 @@ void main() {
       var scanned = scan(flavor: 'dev');
       expect(scanned.forRole(IconRole.webIcon)!.files, isNotEmpty);
       expect(scanned.forRole(IconRole.macosApp)!.files, isNotEmpty);
+    });
+  });
+
+  /// Gradle overlays a flavor's `res` on top of main's rather than swapping
+  /// them, and reading the flavor's folder alone reported the opposite of what
+  /// ships. These are the shapes that go wrong when it does.
+  group('what a flavor inherits from main', () {
+    void writeMainSet() {
+      write('android/app/src/main/AndroidManifest.xml', '''
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:icon="@mipmap/ic_launcher"/>
+</manifest>
+''');
+      write(
+        'android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml',
+        '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">'
+            '<background android:drawable="@color/ic_launcher_background"/>'
+            '<foreground android:drawable="@drawable/ic_launcher_foreground"/>'
+            '</adaptive-icon>',
+      );
+      write(
+        'android/app/src/main/res/values/colors.xml',
+        '<resources><color name="ic_launcher_background">#112233</color>'
+            '</resources>',
+      );
+      writePng('android/app/src/main/res/mipmap-hdpi/ic_launcher.png', 72);
+      writePng('android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png', 192);
+      writePng(
+        'android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png',
+        432,
+      );
+    }
+
+    test('a density the flavor does not carry still ships', () {
+      writeMainSet();
+      writePng('android/app/src/dev/res/mipmap-xxxhdpi/ic_launcher.png', 192);
+
+      var legacy = scan(flavor: 'dev').forRole(IconRole.androidLegacy)!;
+      expect(legacy.files, hasLength(2), reason: 'hdpi comes from main');
+      expect(legacy.files.where((f) => f.inherited).map((f) => f.density), [
+        'hdpi',
+      ]);
+      expect(legacy.allInherited, isFalse);
+    });
+
+    test('the one the flavor does carry is the flavor’s, not both', () {
+      writeMainSet();
+      writePng('android/app/src/dev/res/mipmap-xxxhdpi/ic_launcher.png', 192);
+
+      var files = scan(flavor: 'dev').forRole(IconRole.androidLegacy)!.files;
+      var overridden = files.singleWhere((f) => f.density == 'xxxhdpi');
+      expect(overridden.inherited, isFalse);
+      expect(overridden.path, contains('src/dev/'));
+    });
+
+    test('the adaptive icon is main’s when the flavor declares none', () {
+      // The one that inverted the panel's headline answer: a flavor with one
+      // bitmap read as a project with no adaptive icon at all.
+      writeMainSet();
+      writePng('android/app/src/dev/res/mipmap-xxxhdpi/ic_launcher.png', 192);
+
+      var scanned = scan(flavor: 'dev');
+      expect(scanned.android!.launcher, isNotNull);
+      expect(scanned.android!.backgroundColor, '#112233');
+      expect(
+        scanned.forRole(IconRole.androidAdaptiveForeground)!.allInherited,
+        isTrue,
+      );
+    });
+
+    test('a colour the flavor does redeclare wins', () {
+      writeMainSet();
+      write(
+        'android/app/src/dev/res/values/colors.xml',
+        '<resources><color name="ic_launcher_background">#445566</color>'
+            '</resources>',
+      );
+
+      expect(scan(flavor: 'dev').android!.backgroundColor, '#445566');
+      expect(scan().android!.backgroundColor, '#112233');
+    });
+
+    test('an adaptive XML the flavor does carry replaces main’s whole', () {
+      // A file resource is overridden entire, so a flavor XML with no
+      // <monochrome> does not inherit main's.
+      writeMainSet();
+      write(
+        'android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml',
+        '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">'
+            '<foreground android:drawable="@drawable/ic_launcher_foreground"/>'
+            '<monochrome android:drawable="@drawable/ic_launcher_foreground"/>'
+            '</adaptive-icon>',
+      );
+      write(
+        'android/app/src/dev/res/mipmap-anydpi-v26/ic_launcher.xml',
+        '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">'
+            '<foreground android:drawable="@drawable/ic_launcher_foreground"/>'
+            '</adaptive-icon>',
+      );
+
+      expect(scan().android!.launcher!.hasMonochrome, isTrue);
+      expect(scan(flavor: 'dev').android!.launcher!.hasMonochrome, isFalse);
+    });
+
+    test('a flavor with no res folder is main, whole', () {
+      // It is a flavor because something else named it — a config, an
+      // appiconset — and on Android it builds with main's icons.
+      writeMainSet();
+      writeFlavorConfig('dev');
+
+      var scanned = scan(flavor: 'dev');
+      expect(scanned.android, isNotNull);
+      expect(scanned.forRole(IconRole.androidLegacy)!.allInherited, isTrue);
+    });
+
+    test('the unflavored scan owns everything it finds', () {
+      writeMainSet();
+      expect(scan().forRole(IconRole.androidLegacy)!.allInherited, isFalse);
+      expect(
+        scan().forRole(IconRole.androidLegacy)!.files.every((f) => f.inherited),
+        isFalse,
+      );
     });
   });
 }

@@ -1,0 +1,13 @@
+# Declared and never run, on purpose — this is the fixture for an icon set the
+# project has configured and not generated.
+#
+# It is also the whole reason a project with two audiences may not want flavor
+# configs at all: the moment any `flutter_launcher_icons-<flavor>.yaml` exists,
+# the generator processes only those and ignores the `flutter_launcher_icons:`
+# block in pubspec.yaml. See ../../README.md.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: 'assets/images/logo.png'
+  adaptive_icon_background: '#FF006064'
+  adaptive_icon_foreground: 'assets/images/logo.png'

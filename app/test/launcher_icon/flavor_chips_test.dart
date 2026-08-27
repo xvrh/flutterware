@@ -10,11 +10,16 @@ void main() {
     WidgetTester tester,
     List<IconFlavor> flavors, {
     String? selected,
+    ValueChanged<String?>? onSelect,
   }) => tester.pumpWidget(
     MaterialApp(
       theme: appTheme,
       home: Scaffold(
-        body: FlavorChips(flavors: flavors, selected: selected),
+        body: FlavorChips(
+          flavors: flavors,
+          selected: selected,
+          onSelect: onSelect,
+        ),
       ),
     ),
   );
@@ -32,8 +37,23 @@ void main() {
     var texts = tester
         .widgetList<Text>(find.byType(Text))
         .map((t) => t.textSpan?.toPlainText() ?? t.data)
+        .where((text) => text == 'main' || text == 'alpha')
         .toList();
     expect(texts.first, 'main');
+  });
+
+  testWidgets('the row does not call these the project’s flavors', (
+    tester,
+  ) async {
+    // The word was a claim the panel cannot back: these names come from files,
+    // and a project wiring its own Gradle source sets can share one set across
+    // several flavors — or have flavors with no set of their own at all.
+    await pump(tester, [
+      flavor('alpha', {IconFlavorSource.androidSourceSet}),
+    ]);
+
+    expect(find.text('Icon sets'), findsOneWidget);
+    expect(find.textContaining('Gradle and Xcode'), findsOneWidget);
   });
 
   testWidgets('a flavor with nothing generated says so on the chip', (
@@ -62,7 +82,11 @@ void main() {
     );
   });
 
-  testWidgets('only an incomplete flavor gets a tooltip', (tester) async {
+  testWidgets('every chip names the files it was discovered from', (
+    tester,
+  ) async {
+    // Evidence on all of them, unlike the caution below, which is still only
+    // on the chips that have something to caution about.
     await pump(tester, [
       flavor('whole', IconFlavorSource.values.toSet()),
       flavor('half', {
@@ -71,15 +95,64 @@ void main() {
       }),
     ]);
 
-    expect(find.byType(Tooltip), findsOneWidget);
+    var messages = tester
+        .widgetList<Tooltip>(find.byType(Tooltip))
+        .map((t) => t.message!)
+        .toList();
+    expect(messages, hasLength(3), reason: 'main, whole, half');
+    expect(messages.first, contains('android/app/src/main/res/'));
     expect(
-      tester.widget<Tooltip>(find.byType(Tooltip)).message,
-      contains('AppIcon-half.appiconset'),
+      messages[1],
+      allOf(
+        contains('android/app/src/whole/'),
+        contains('AppIcon-whole.appiconset'),
+        isNot(contains('falls back')),
+      ),
+    );
+    expect(
+      messages[2],
+      allOf(
+        contains('no AppIcon-half.appiconset'),
+        contains('falls back to the unflavored set'),
+      ),
     );
   });
 
+  testWidgets('every chip goes somewhere, the default one included', (
+    tester,
+  ) async {
+    // The row shipped as a report: it named the flavors and left the address
+    // bar as the only way to open one.
+    var picked = <String?>[];
+    await pump(
+      tester,
+      [
+        flavor('patient', {
+          IconFlavorSource.androidSourceSet,
+          IconFlavorSource.iosCatalog,
+        }),
+      ],
+      selected: 'patient',
+      onSelect: picked.add,
+    );
+
+    await tester.tap(find.textContaining('patient'));
+    await tester.tap(find.text('main'));
+    expect(picked, ['patient', null]);
+  });
+
+  testWidgets('an ungenerated flavor is still worth opening', (tester) async {
+    var picked = <String?>[];
+    await pump(tester, [
+      flavor('dev', {IconFlavorSource.config}),
+    ], onSelect: picked.add);
+
+    await tester.tap(find.textContaining('dev'));
+    expect(picked, ['dev']);
+  });
+
   group('the hint', () {
-    test('names the missing platform, one or the other', () {
+    test('names the missing platform, and what happens instead', () {
       expect(
         flavorHint(
           flavor('a', {
@@ -97,8 +170,10 @@ void main() {
       );
     });
 
-    test('is silent for a flavor that is entirely there', () {
-      expect(flavorHint(flavor('c', IconFlavorSource.values.toSet())), isNull);
+    test('says only what was found for a flavor that is entirely there', () {
+      var hint = flavorHint(flavor('c', IconFlavorSource.values.toSet()))!;
+      expect(hint, contains('flutter_launcher_icons-c.yaml'));
+      expect(hint, isNot(contains('only')));
     });
 
     test('sends an unbuilt flavor to the config it does have', () {

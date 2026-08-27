@@ -267,6 +267,26 @@ void main() => Flutterware.configure((fw) {
         ),
         .new(
           example,
+          // The sample declares Android product flavors — fixtures for the
+          // launcher-icon viewer, see `examples/example/README.md` — and
+          // `default-flavor: free` in its pubspec so `flutter run` needs no
+          // argument. Said here too, because the pubspec's field is one word
+          // for every platform and only Android has flavors at all: the empty
+          // lists are what drop `--flavor` on a desktop build, which would
+          // otherwise fail on an Xcode project that defines no custom schemes.
+          flavors: {
+            RunPlatform.android: [
+              'free',
+              'beta',
+              'kiosk',
+              'partner',
+              'proMonthly',
+              'proYearly',
+            ],
+            RunPlatform.desktop: [],
+            RunPlatform.ios: [],
+            RunPlatform.web: [],
+          },
           entrypoints: [
             Entrypoint(
               'lib/main.dart',

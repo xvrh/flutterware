@@ -290,7 +290,7 @@ class LauncherIconCore extends PluginCore {
           IosCatalog.none => 'none',
         }, tone: scan.ios == IosCatalog.both ? Tone.warn : Tone.neutral),
       if (scan.flavors.isNotEmpty)
-        ViewField('Flavors', scan.flavors.map(_flavorSummary).join(', ')),
+        ViewField('Icon sets', scan.flavors.map(_flavorSummary).join(', ')),
     ]),
   ];
 
@@ -313,9 +313,15 @@ class LauncherIconCore extends PluginCore {
     'Flavor',
     required: false,
     description:
-        'Which flavor — a flutter_launcher_icons-<flavor>.yaml, an '
+        'Which icon set — a flutter_launcher_icons-<flavor>.yaml, an '
         'android/app/src/<flavor>/ or an AppIcon-<flavor>.appiconset; the '
-        'default when omitted',
+        'unflavored one when omitted. These names come from the files, which '
+        "is the generator's convention rather than the project's flavor "
+        'list: a project that wires its own Gradle sourceSets and '
+        'ASSETCATALOG_COMPILER_APPICON_NAME can share one set across several '
+        'flavors, and then this name is not one `flutter run --flavor` takes. '
+        'Whatever a set does not override falls back to the unflavored one, '
+        'the way the build does.',
   );
 
   List<PluginAction> get _actions => [
@@ -371,12 +377,12 @@ class LauncherIconCore extends PluginCore {
     return packages.first;
   }
 
-  /// A flavor as one readable phrase — the name, and what is behind it when
+  /// An icon set as one readable phrase — the name, and what is behind it when
   /// that is not everything.
   ///
   /// The qualification is what matters. "dev (configured, not generated)" is a
   /// different instruction from "dev", and the bare name was the only thing
-  /// this could ever say back when a flavor was a directory listing.
+  /// this could ever say back when a set was a directory listing.
   static String _flavorSummary(IconFlavor flavor) {
     if (flavor.isUnbuilt) return '${flavor.name} (not generated)';
     var missing = [
@@ -393,7 +399,7 @@ class LauncherIconCore extends PluginCore {
 
     if (flavor != null && !scan.flavors.any((f) => f.name == flavor)) {
       throw StateError(
-        'No flavor "$flavor" in "$path" — nothing names it: no '
+        'No icon set "$flavor" in "$path" — nothing names it: no '
         'flutter_launcher_icons-$flavor.yaml, no android/app/src/$flavor/ and '
         'no AppIcon-$flavor.appiconset. '
         'Found: ${scan.flavors.isEmpty ? 'none' : scan.flavors.map((f) => f.name).join(', ')}',

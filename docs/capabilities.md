@@ -1714,7 +1714,7 @@ findings: List<IconFindingEntry>
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; the first when omitted |
-| `flavor` | string | no | — | Which flavor — a flutter_launcher_icons-<flavor>.yaml, an android/app/src/<flavor>/ or an AppIcon-<flavor>.appiconset; the default when omitted |
+| `flavor` | string | no | — | Which icon set — a flutter_launcher_icons-<flavor>.yaml, an android/app/src/<flavor>/ or an AppIcon-<flavor>.appiconset; the unflavored one when omitted. These names come from the files, which is the generator's convention rather than the project's flavor list: a project that wires its own Gradle sourceSets and ASSETCATALOG_COMPILER_APPICON_NAME can share one set across several flavors, and then this name is not one `flutter run --flavor` takes. Whatever a set does not override falls back to the unflavored one, the way the build does. |
 
 
 ### `flutterware.splash`

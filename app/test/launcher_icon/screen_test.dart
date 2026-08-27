@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
+import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/launcher_icon/screen.dart';
 import 'package:flutterware_app/src/launcher_icon/model/role.dart';
@@ -309,6 +310,117 @@ void main() {
 
     expect(c.scanFor('.')!.fileCount, 2);
     expect(find.text('2 files'), findsOneWidget);
+  });
+
+  testWidgets("an icon-set chip goes to that set's files", (tester) async {
+    tester.view.physicalSize = const Size(2400, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    writeManifest();
+    writePng('android/app/src/main/res/mipmap-hdpi/ic_launcher.png', 72);
+    writePng('android/app/src/patient/res/mipmap-hdpi/ic_launcher.png', 72);
+
+    var address = ValueNotifier(
+      Address(
+        worktree: 'test',
+        plugin: launcherIconPluginId,
+        segments: const ['.'],
+        axes: const {'role': 'android-legacy'},
+      ),
+    );
+    addTearDown(address.dispose);
+    var written = <Address>[];
+
+    var c = core();
+    await c.computeAll();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: AddressRoot(
+            address: address,
+            onChanged: (next) {
+              written.add(next);
+              address.value = next;
+            },
+            child: AddressScope(child: LauncherIconScreen(c, package: '.')),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.textContaining('patient'));
+    await tester.pumpAndSettle();
+
+    // The flavor is a segment: it names a different set of files, and the role
+    // it was opened on belongs to the set it came from.
+    expect(written.single.segments, ['.', 'patient']);
+    expect(written.single.axes.containsKey('role'), isFalse);
+  });
+
+  testWidgets('a flavor says which of its icons it does not override', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(2400, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    writeManifest();
+    writePng('android/app/src/main/res/mipmap-hdpi/ic_launcher.png', 72);
+    writePng('android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png', 192);
+    writePng('android/app/src/dev/res/mipmap-xxxhdpi/ic_launcher.png', 192);
+
+    var c = core();
+    await c.reload('.', flavor: 'dev');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: LauncherIconScreen(c, package: '.', flavor: 'dev'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The count is the merge Gradle would do; the qualifier is the half that
+    // keeps it from reading as art this flavor owns.
+    expect(find.textContaining('2 densities · 1 not overridden'), findsOne);
+
+    await tester.tap(find.text('Launcher icon').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Not overridden by dev'), findsNothing);
+  });
+
+  testWidgets('a flavor that overrides nothing says so on the role', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(2400, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    writeManifest();
+    writePng('android/app/src/main/res/mipmap-hdpi/ic_launcher.png', 72);
+    write('flutter_launcher_icons-dev.yaml', 'flutter_launcher_icons:\n');
+
+    var c = core();
+    await c.reload('.', flavor: 'dev');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: LauncherIconScreen(c, package: '.', flavor: 'dev'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('not overridden'), findsOne);
+
+    await tester.tap(find.text('Launcher icon').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Not overridden by dev'), findsOne);
   });
 
   testWidgets('an Icon Composer project is explained, not reported empty', (
