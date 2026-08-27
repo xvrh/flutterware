@@ -30,10 +30,16 @@ typedef DaemonConnector = Future<(CompilerDaemonClient, DaemonReady)> Function({
   required String dartExecutable,
   required DaemonConfig config,
   void Function(String)? onLog,
+  void Function(DaemonProgress)? onProgress,
 });
 
 class CompilerDaemonClient {
-  CompilerDaemonClient._(this._socket, this.address, this._onLog) {
+  CompilerDaemonClient._(
+    this._socket,
+    this.address,
+    this._onLog,
+    this._onProgress,
+  ) {
     _lines = _socket
         .cast<List<int>>()
         .transform(utf8.decoder)
@@ -44,6 +50,14 @@ class CompilerDaemonClient {
   final Socket _socket;
   final DaemonAddress address;
   final void Function(String)? _onLog;
+
+  /// Where a [DaemonProgress] goes.
+  ///
+  /// A callback taken at [connect] rather than a stream on the client, because
+  /// every message it carries arrives *before* [connect] returns: a caller that
+  /// waited for a client and then subscribed would have missed the whole start
+  /// it was trying to narrate.
+  final void Function(DaemonProgress)? _onProgress;
 
   late final StreamSubscription<String> _lines;
 
@@ -100,6 +114,7 @@ class CompilerDaemonClient {
     required String dartExecutable,
     required DaemonConfig config,
     void Function(String)? onLog,
+    void Function(DaemonProgress)? onProgress,
     Duration readyTimeout = const Duration(minutes: 5),
   }) async {
     // Compiled before the address is derived, not after: the daemon's own build
@@ -115,6 +130,7 @@ class CompilerDaemonClient {
         launch,
         config: config,
         onLog: onLog,
+        onProgress: onProgress,
         readyTimeout: readyTimeout,
       );
     } on _RejectedKernel catch (rejection) {
@@ -135,6 +151,7 @@ class CompilerDaemonClient {
           rebuilt,
           config: config,
           onLog: onLog,
+          onProgress: onProgress,
           readyTimeout: readyTimeout,
         );
       } on _RejectedKernel catch (again) {
@@ -153,6 +170,7 @@ class CompilerDaemonClient {
     required DaemonConfig config,
     required Duration readyTimeout,
     void Function(String)? onLog,
+    void Function(DaemonProgress)? onProgress,
   }) async {
     config = config.withDaemonRevision(launch.revision);
     var address = DaemonAddress(config);
@@ -167,6 +185,7 @@ class CompilerDaemonClient {
       ),
       address: address,
       onLog: onLog,
+      onProgress: onProgress,
       readyTimeout: readyTimeout,
     );
   }
@@ -179,6 +198,7 @@ class CompilerDaemonClient {
   static Future<(CompilerDaemonClient, DaemonReady)> attach({
     required DaemonAddress address,
     void Function(String)? onLog,
+    void Function(DaemonProgress)? onProgress,
     Duration readyTimeout = const Duration(minutes: 5),
   }) async {
     var socket = await _connect(address);
@@ -189,6 +209,7 @@ class CompilerDaemonClient {
       socket,
       address: address,
       onLog: onLog,
+      onProgress: onProgress,
       readyTimeout: readyTimeout,
     );
   }
@@ -206,8 +227,9 @@ class CompilerDaemonClient {
     required DaemonAddress address,
     required Duration readyTimeout,
     void Function(String)? onLog,
+    void Function(DaemonProgress)? onProgress,
   }) async {
-    var client = CompilerDaemonClient._(socket, address, onLog);
+    var client = CompilerDaemonClient._(socket, address, onLog, onProgress);
     var first = await client._handshake.future.timeout(
       readyTimeout,
       onTimeout: () => throw StateError(
@@ -225,6 +247,10 @@ class CompilerDaemonClient {
       case DaemonCompiled():
       case CatalogChanged():
       case AssetsChanged():
+      // Unreachable: progress does not complete the handshake. Listed because
+      // the switch is exhaustive over the sealed response, which is what makes
+      // a sixth message a compile error here rather than a silent drop.
+      case DaemonProgress():
         await client.close();
         throw StateError('the daemon spoke before it was ready: $first');
     }
@@ -268,6 +294,8 @@ class CompilerDaemonClient {
         if (!_changes.isClosed) _changes.add(response);
       case AssetsChanged():
         if (!_assetsChanges.isClosed) _assetsChanges.add(response);
+      case DaemonProgress():
+        _onProgress?.call(response);
     }
   }
 

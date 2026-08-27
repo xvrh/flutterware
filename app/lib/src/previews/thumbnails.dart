@@ -167,6 +167,44 @@ class PreviewThumbnails extends ChangeNotifier {
   var _rendering = false;
   var _disposed = false;
 
+  /// The entry being photographed at this instant, or null between renders.
+  ///
+  /// **Marking it is the single most reassuring thing a filling grid can do**:
+  /// the page visibly walks down itself, so the rendering order stops being a
+  /// claim in a doc comment and becomes something you can watch. It is also the
+  /// only signal that separates "this tile is next" from "this tile is one of a
+  /// hundred and forty-nine still queued".
+  String? get rendering => _renderingId;
+  String? _renderingId;
+
+  /// Whether anything is being rendered at all — what a progress surface
+  /// switches itself off on.
+  bool get busy => _rendering;
+
+  /// How much of the page's ask has an answer, and how big the ask is.
+  ///
+  /// **The ask, not the catalog.** The harness renders what [wantAll] named —
+  /// the tiles the page actually built — and stops there, so a denominator of
+  /// every entry in the package would climb to a fraction and stall for ever.
+  /// A scroll replaces the ask and the count restarts with it, which is right:
+  /// the work restarted too.
+  ///
+  /// **Counted, not validated.** [bytesOf] stats the entry's own file to decide
+  /// whether the picture it holds is still current, and a readout that asked
+  /// that of a whole page would be a stat per tile per frame while the page is
+  /// being scrolled. A count may be a moment out of date about a file edited
+  /// two seconds ago; a tile may not, and it still asks.
+  ({int done, int total}) get pass {
+    var done = 0;
+    for (var entry in _queue) {
+      if (_bytes.containsKey(entry.id) ||
+          _cache[entry.id]?.thumbnail is ThumbnailFailed) {
+        done++;
+      }
+    }
+    return (done: done, total: _queue.length);
+  }
+
   /// Whether the disk is known to have moved since the harness was last
   /// brought up to date.
   ///
@@ -493,13 +531,20 @@ class PreviewThumbnails extends ChangeNotifier {
     var stamp = _stampOf(entry);
     var out = p.join(_scratch.path, entry.id.hashCode.toString());
     PreviewCaptureRow? row;
+    _renderingId = entry.id;
+    if (!_disposed) notifyListeners();
     try {
       row = await render(entry.id, out, sync: syncing);
       _warm = true;
     } catch (e) {
+      // Cleared before the store, not in a `finally` after it: [_store]
+      // notifies, and a listener that ran while the mark still named this entry
+      // would draw the tile that just failed as the one being rendered.
+      _renderingId = null;
       _store(entry, ThumbnailFailed('$e'), stamp: stamp);
       return;
     }
+    _renderingId = null;
     if (_disposed) return;
     if (keepPicture) {
       await _land(entry, row, stamp, decode: decode, filing: filing);

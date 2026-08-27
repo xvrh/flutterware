@@ -83,7 +83,7 @@ Widget button() => const Placeholder();
     // first one's.
     var connected = <String>[];
     DaemonConnector connector(String owner) =>
-        ({required dartExecutable, required config, onLog}) {
+        ({required dartExecutable, required config, onLog, onProgress}) {
           connected.add(owner);
           // Never answers. A session left `starting` still mounts the view,
           // which is where the disposed one was used.

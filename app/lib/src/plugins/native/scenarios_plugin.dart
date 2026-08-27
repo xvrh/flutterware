@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
@@ -27,6 +28,7 @@ import '../../ui/empty_state.dart';
 import '../../ui/matched_text.dart';
 import '../../ui/menu.dart';
 import '../../ui/popover.dart';
+import '../../ui/startup_progress.dart';
 import '../../ui/popover_menu.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
@@ -1043,16 +1045,23 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     scenario: widget.scenario,
   );
 
-  /// How long the run on screen has been going, and whether it has been going
-  /// long enough to be worth a spinner. See [_startedWaiting].
-  final _runFor = Stopwatch();
-  Timer? _ticker;
-  bool get _waitIsWorthSaying => _runFor.elapsed >= _loaderAppearsAfter;
-
-  /// Longer than a warm run, shorter than a noticeable wait. A
-  /// warm harness answers in a couple of hundred milliseconds, and the panel
-  /// says nothing at all inside that.
-  static const _loaderAppearsAfter = Duration(milliseconds: 250);
+  /// What this run is doing, and for how long.
+  ///
+  /// **The same model the previews landing reads**, because it is the same
+  /// wait: a scenario and a catalog page both come up through one `TesterHost`
+  /// and both spend most of a cold start inside its compile. It owns the floor
+  /// under the surface, the clock the seconds come from, and the ticker that
+  /// advances them — three things this page used to keep for itself, in a
+  /// `Stopwatch` a widget test could not move.
+  ///
+  /// Per page rather than per package, unlike the previews one: what the
+  /// harness is doing is the package's, but *a run* is one scenario's.
+  final _startup = StartupProgress(
+    // Longer than a warm run, shorter than a noticeable wait. A warm harness
+    // answers in a couple of hundred milliseconds, and the panel says nothing
+    // at all inside that.
+    appearsAfter: const Duration(milliseconds: 250),
+  );
 
   void _start() {
     widget.core.startRun(
@@ -1061,28 +1070,29 @@ class _ScenarioPageState extends State<_ScenarioPage> {
       scenario: widget.scenario,
       axes: widget.axes,
     );
-    _startedWaiting();
   }
 
-  /// Restarts the clock the loader reads, and ticks it while the spinner is
-  /// the whole screen: the floor has to expire on its own, and past it a
-  /// count that is climbing is the only thing distinguishing slow from hung.
-  /// Stops itself the moment the first step lands — from there the flow
-  /// filling in is the progress.
-  void _startedWaiting() {
-    _runFor
-      ..reset()
-      ..start();
-    _ticker?.cancel();
-    _ticker = Timer.periodic(_loaderAppearsAfter, (timer) {
-      var run = _run;
-      if (!mounted || run == null || !run.running || run.steps.isNotEmpty) {
-        timer.cancel();
-        _ticker = null;
-        _runFor.stop();
-        return;
-      }
-      setState(() {});
+  /// Pulled from the run on every build rather than pushed from the events
+  /// that move it, because both halves of the answer already arrive that way:
+  /// the page rebuilds on every core change, and the runner's phase is a field
+  /// the core keeps. [StartupProgress.report] is idempotent, so a report that
+  /// says what the model already holds costs nothing and notifies nobody.
+  void _reportProgress() {
+    var run = _run;
+    var task = (run?.running ?? false)
+        // The runner's own phase while it has one — "Compiling the harness",
+        // "Rebuilding the asset bundle" — because rebuilding a bundle is a
+        // very different wait from a hung harness. It holds the last thing the
+        // runner said, including "Running the scenario", so one lane covers
+        // the whole run.
+        ? StartupTask(
+            widget.core.runnerPhaseFor(widget.package) ??
+                'Running the scenario',
+          )
+        : null;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _startup.report('run', task);
     });
   }
 
@@ -1094,11 +1104,11 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     var run = _run;
     if (run == null || (!run.running && run.axes != widget.axes)) {
       _start();
-    } else if (run.running && !_runFor.isRunning) {
-      // Already running when the page arrived — the Run button on another
-      // surface, or an agent. The wait is still this page's to narrate.
-      _startedWaiting();
     }
+    // A run already going when the page arrived — the Run button on another
+    // surface, or an agent — needs nothing said here: the wait is narrated
+    // from what the run *is*, on every build, rather than from having been the
+    // one to start it.
   }
 
   @override
@@ -1124,7 +1134,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
 
   @override
   void dispose() {
-    _ticker?.cancel();
+    _startup.dispose();
     _flowTransform.dispose();
     super.dispose();
   }
@@ -1189,6 +1199,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   @override
   Widget build(BuildContext context) {
     var run = _run;
+    _reportProgress();
     // Framed by what the run *did*, which for an unspecified device is what
     // its folder answered.
     var device = run?.device == null ? null : deviceById(run!.device!);
@@ -1262,6 +1273,26 @@ class _ScenarioPageState extends State<_ScenarioPage> {
           _ErrorBanner(
             'No device "$bad" — running as the folder says instead. '
             'Accepted: ${deviceIds.join(', ')}.',
+          ),
+        // **Above the flow, and this is the half that used to go unsaid.**
+        // The page narrated its wait only while the canvas was empty, and
+        // stopped the moment the first step landed — so a long scenario filled
+        // in step by step with nothing on screen saying more was coming, and
+        // the only difference between a run still going and one that had
+        // finished was whether anything new appeared. The strip retires itself
+        // when the run does.
+        //
+        // **Only once there is a flow to sit above.** With an empty canvas the
+        // centred loading state is the surface, and mounting both put the same
+        // sentence on screen twice — once as a band and once under a spinner
+        // four hundred pixels below it.
+        //
+        // Its own builder, so a second ticking past rebuilds the band and not
+        // the flow canvas under it.
+        if (steps.isNotEmpty)
+          ListenableBuilder(
+            listenable: _startup,
+            builder: (context, _) => StartupStrip(progress: _startup),
           ),
         Expanded(child: _body(context, run, device, statusFallback)),
       ],
@@ -1402,20 +1433,27 @@ class _ScenarioPageState extends State<_ScenarioPage> {
         return _RunFailure(error);
       }
       if (running || run == null) {
+        // **The centred state, not the strip**, because with nothing on the
+        // canvas there is nothing for a band to sit above — and a spinner over
+        // empty space is what an empty pane should be. The strip takes over
+        // the moment the first step lands and the flow becomes something to
+        // sit above.
+        //
         // Nothing at all under the floor: a warm run lands in a few hundred
         // milliseconds, and a spinner that appears and leaves inside one is a
         // flash rather than news — which is what made walking the list
         // unpleasant. Past the floor the wait is real and gets said properly.
-        if (!_waitIsWorthSaying) return const SizedBox.expand();
-        // The runner narrates its cold start — rebuilding the asset bundle is
-        // a very different wait from a hung harness — and the seconds are
-        // what separate slow from hung. Once the first step lands, the flow
-        // itself is the progress.
-        return LoadingState(
-          title:
-              widget.core.runnerPhaseFor(widget.package) ??
-              'Running the scenario',
-          message: '${_runFor.elapsed.inSeconds}s',
+        return ListenableBuilder(
+          listenable: _startup,
+          builder: (context, _) {
+            if (_startup.task case var task? when _startup.visible) {
+              return LoadingState(
+                title: task.label,
+                message: '${_startup.elapsed.inSeconds}s',
+              );
+            }
+            return const SizedBox.expand();
+          },
         );
       }
       return const EmptyState(

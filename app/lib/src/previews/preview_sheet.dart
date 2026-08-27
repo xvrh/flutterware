@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -7,6 +8,24 @@ import '../ui/design/design.dart';
 import '../ui/tappable.dart';
 import 'catalog_entry.dart';
 import 'catalog_tree.dart';
+
+/// What a tile with no picture is waiting for.
+///
+/// The three are not one state, and drawing them as one was the whole problem:
+/// a page of grey boxes says nothing about whether the first picture is two
+/// seconds away or forty.
+enum PreviewTileWait {
+  /// In the page's ask, and the harness will get to it. Seconds away, so it is
+  /// drawn as a plain reserved box and nothing more.
+  queued,
+
+  /// Nothing can be rendered yet: the harness is compiling the whole catalog,
+  /// which is tens of seconds. This is the one that shimmers.
+  compiling,
+
+  /// Being photographed at this instant.
+  rendering,
+}
 
 /// The catalog as pictures rather than as names.
 ///
@@ -42,7 +61,26 @@ class PreviewSheet extends StatefulWidget {
     this.selectedId,
     this.onTap,
     this.onUndecodable,
+    this.waitOf,
+    this.animate = false,
   });
+
+  /// What [entry] is waiting for, or null when it is not waiting.
+  ///
+  /// Only consulted for a tile with no picture — a tile that has one is not
+  /// waiting for anything, whatever a store that is midway through re-rendering
+  /// it happens to say.
+  final PreviewTileWait? Function(CatalogEntry entry)? waitOf;
+
+  /// Whether the shimmer runs.
+  ///
+  /// **One ticker for the whole sheet, and this is the switch on it.** A
+  /// hundred and fifty animated tiles is a hundred and fifty
+  /// `AnimationController`s, each waking the scheduler, on exactly the frames
+  /// where the thing being waited for is a compiler that wants every core. One
+  /// controller lives at the sheet, is read down the tree, and is stopped the
+  /// moment nothing is pending.
+  final bool animate;
 
   /// [entry]'s bytes would not decode.
   ///
@@ -121,11 +159,46 @@ class PreviewSheet extends StatefulWidget {
   State<PreviewSheet> createState() => _PreviewSheetState();
 }
 
-class _PreviewSheetState extends State<PreviewSheet> {
+class _PreviewSheetState extends State<PreviewSheet>
+    with SingleTickerProviderStateMixin {
   /// Collected as the grid builds and flushed once the frame is done — see
   /// [PreviewSheet.onVisible].
   final _built = <CatalogEntry>[];
   var _flushing = false;
+
+  /// The sheet's one ticker — see [PreviewSheet.animate].
+  ///
+  /// Held for the life of the sheet and merely stopped when there is nothing
+  /// pending, rather than created and destroyed: a page fills in bursts, and a
+  /// controller that came and went with each of them would be rebuilding the
+  /// inherited scope every time.
+  late final _shimmer = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.animate) _shimmer.repeat();
+  }
+
+  @override
+  void didUpdateWidget(PreviewSheet old) {
+    super.didUpdateWidget(old);
+    if (widget.animate == old.animate) return;
+    if (widget.animate) {
+      _shimmer.repeat();
+    } else {
+      _shimmer.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _shimmer.dispose();
+    super.dispose();
+  }
 
   void _note(CatalogEntry entry) {
     if (widget.onVisible == null) return;
@@ -184,11 +257,13 @@ class _PreviewSheetState extends State<PreviewSheet> {
               delegate: SliverChildBuilderDelegate((context, at) {
                 var entry = section.entries[at];
                 _note(entry);
+                var bytes = widget.bytesOf?.call(entry);
                 return _Tile(
                   entry: entry,
                   screen: widget.screenOf(entry),
-                  bytes: widget.bytesOf?.call(entry),
+                  bytes: bytes,
                   problem: widget.problemOf?.call(entry),
+                  wait: bytes != null ? null : widget.waitOf?.call(entry),
                   width: side,
                   height: picture,
                   selected: entry.id == widget.selectedId,
@@ -230,14 +305,17 @@ class _PreviewSheetState extends State<PreviewSheet> {
             slivers.add(grid);
           }
         }
-        return CustomScrollView(
-          // A screen of tiles built ahead in each direction: enough that a
-          // flung scroll is never looking at nothing, and short of the "build
-          // the whole catalog" that a large extent amounts to. In viewports
-          // rather than pixels because the pane this sits in is resizable, and
-          // the answer wanted is "a screenful" at any of its sizes.
-          scrollCacheExtent: const ScrollCacheExtent.viewport(1),
-          slivers: slivers,
+        return _ShimmerScope(
+          animation: _shimmer,
+          child: CustomScrollView(
+            // A screen of tiles built ahead in each direction: enough that a
+            // flung scroll is never looking at nothing, and short of the "build
+            // the whole catalog" that a large extent amounts to. In viewports
+            // rather than pixels because the pane this sits in is resizable,
+            // and the answer wanted is "a screenful" at any of its sizes.
+            scrollCacheExtent: const ScrollCacheExtent.viewport(1),
+            slivers: slivers,
+          ),
         );
       },
     );
@@ -398,6 +476,7 @@ class _Tile extends StatelessWidget {
     required this.screen,
     required this.bytes,
     required this.problem,
+    required this.wait,
     required this.width,
     required this.height,
     required this.selected,
@@ -413,6 +492,9 @@ class _Tile extends StatelessWidget {
 
   /// What the entry said instead of rendering, if it said anything.
   final String? problem;
+
+  /// What this tile is waiting for, or null when it is waiting for nothing.
+  final PreviewTileWait? wait;
 
   /// The cell's width, and the height its section gives a picture.
   final double width;
@@ -465,10 +547,39 @@ class _Tile extends StatelessWidget {
         },
       );
     }
-    if (problem == null) return null;
-    return Center(
-      child: Icon(Icons.error_outline, size: 16, color: context.colors.danger),
-    );
+    if (problem != null) {
+      return Center(
+        child: Icon(
+          Icons.error_outline,
+          size: 16,
+          color: context.colors.danger,
+        ),
+      );
+    }
+    // A shimmer is a *surface treatment*, not a control, and that is what makes
+    // it survive the no-spinner rule: a hundred and fifty of them read as one
+    // page loading, where a hundred and fifty spinners read as a hundred and
+    // fifty problems.
+    //
+    // Only the two waits that are worth a treatment. A queued tile is seconds
+    // away and stays the flat reserved box it already was — the whole point of
+    // telling the waits apart is that one of them is not news.
+    // Both bands are translucent rather than a second flat tone, which is what
+    // makes them read the same way in either theme: the tile's ground is a
+    // near-white in one and a slate in the other, and a fixed colour that
+    // showed against one would vanish into the other.
+    var colors = context.colors;
+    return switch (wait) {
+      PreviewTileWait.compiling => _Shimmer(
+        of: context,
+        highlight: colors.mut3.withValues(alpha: 0.45),
+      ),
+      PreviewTileWait.rendering => _Shimmer(
+        of: context,
+        highlight: colors.accent.withValues(alpha: 0.28),
+      ),
+      PreviewTileWait.queued || null => null,
+    };
   }
 
   @override
@@ -506,9 +617,13 @@ class _Tile extends StatelessWidget {
                       color: colors.line2,
                       borderRadius: radius,
                       border: Border.all(
+                        // The rendering mark is a hairline in the accent and
+                        // the selection is two pixels of it over a tinted
+                        // fill, so the two never read as each other — and a
+                        // tile can honestly be both.
                         color: problem != null
                             ? colors.danger
-                            : selected
+                            : selected || wait == PreviewTileWait.rendering
                             ? colors.accent
                             : colors.line,
                         width: selected ? 2 : 1,
@@ -539,4 +654,84 @@ class _Tile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Carries the sheet's one ticker down to the tiles that shimmer.
+///
+/// A plain inherited widget rather than an [InheritedNotifier]: a notifier
+/// rebuilds its *dependents* on every tick, which for this tree is a hundred
+/// and fifty tile rebuilds per frame — the exact cost the single controller
+/// exists to avoid. What is handed down is the animation itself, whose identity
+/// never changes, so nothing rebuilds after mount and the painting is driven
+/// through `repaint` instead.
+class _ShimmerScope extends InheritedWidget {
+  const _ShimmerScope({required this.animation, required super.child});
+
+  final Animation<double> animation;
+
+  static Animation<double>? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_ShimmerScope>()?.animation;
+
+  @override
+  bool updateShouldNotify(_ShimmerScope old) => old.animation != animation;
+}
+
+/// A highlight sweeping across the box a picture will fill.
+class _Shimmer extends StatelessWidget {
+  _Shimmer({required BuildContext of, required this.highlight})
+    : animation = _ShimmerScope.maybeOf(of);
+
+  final Animation<double>? animation;
+
+  /// The colour of the band that travels. The ground under it is the tile's
+  /// own, which is already painted.
+  final Color highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    var animation = this.animation;
+    // A sheet mounted outside the scope — a test, or a future caller — draws
+    // the plain reserved box rather than throwing. There is nothing to animate
+    // and that is a legible state.
+    if (animation == null) return const SizedBox.expand();
+    return CustomPaint(
+      painter: _ShimmerPainter(animation: animation, highlight: highlight),
+      size: Size.infinite,
+    );
+  }
+}
+
+/// **A painter and not a builder.** Repainting on `repaint` skips the build
+/// phase entirely, so a page of shimmering tiles costs one layout, no rebuilds,
+/// and a gradient per pending tile per frame — and each tile is already inside
+/// its own [RepaintBoundary].
+class _ShimmerPainter extends CustomPainter {
+  _ShimmerPainter({required this.animation, required this.highlight})
+    : super(repaint: animation);
+
+  final Animation<double> animation;
+  final Color highlight;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Starts and ends off the box, so the band enters from one edge and leaves
+    // by the other rather than appearing in the middle.
+    var x = size.width * (animation.value * 2.4 - 0.7);
+    var band = size.width * 0.55;
+    var paint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(x - band, 0),
+        Offset(x + band, size.height),
+        [
+          highlight.withValues(alpha: 0),
+          highlight,
+          highlight.withValues(alpha: 0),
+        ],
+        const [0.0, 0.5, 1.0],
+      );
+    canvas.drawRect(Offset.zero & size, paint);
+  }
+
+  @override
+  bool shouldRepaint(_ShimmerPainter old) => old.highlight != highlight;
 }

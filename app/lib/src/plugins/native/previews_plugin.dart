@@ -24,6 +24,8 @@ import '../../utils/run_dir.dart';
 import 'previews_core.dart';
 import '../../ui/design/design.dart';
 import '../../ui/loading_state.dart';
+import '../../ui/startup_progress.dart';
+import '../../embedder/tester_phase.dart';
 import 'no_packages.dart';
 
 export 'previews_core.dart' show PreviewsCore, uiCatalogPluginId;
@@ -47,7 +49,9 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   }) {
     core
       ..busyStatusFor = _busyStatusFor
-      ..onRescanned = (path) => _thumbnails[path]?.invalidate();
+      ..onRescanned = ((path) => _thumbnails[path]?.invalidate())
+      ..onRunnerPhase = ((path, reading) =>
+          startupFor(path).report('harness', _harnessTask(reading)));
   }
 
   /// How the sessions this builds reach a compiler — see
@@ -71,6 +75,18 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   /// picture is worth keeping past that, because the harness behind it costs a
   /// compile of the whole catalog to bring up.
   final _thumbnails = <String, PreviewThumbnails>{};
+
+  /// What each package's start is doing, merged across its two lanes.
+  ///
+  /// Here rather than on the session, and for the same reason the pictures are:
+  /// a session is rebuilt every time the panel is mounted, and one of the two
+  /// lanes reporting into this — the harness — is neither started nor stopped
+  /// by the panel being open.
+  final _startups = <String, StartupProgress>{};
+
+  /// [path]'s merged progress, created on first use.
+  StartupProgress startupFor(String path) =>
+      _startups.putIfAbsent(path, StartupProgress.new);
 
   /// [path]'s photographed previews, started on first use.
   ///
@@ -98,6 +114,28 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   );
 
   late final _shots = ShotCache(p.join(flutterwareDir(), 'shots'));
+
+  /// The harness lane, in the harness's own words.
+  ///
+  /// [TesterPhase.ready] is the one that answers null, and it is what takes the
+  /// lane back down: everything else here is a wait, and that one is the end of
+  /// all of them.
+  StartupTask? _harnessTask(TesterPhaseReading reading) =>
+      switch (reading.phase) {
+        TesterPhase.compiling => const StartupTask(
+          'Compiling the previews harness',
+        ),
+        TesterPhase.bundling => const StartupTask(
+          'Rebuilding the asset bundle',
+        ),
+        TesterPhase.starting => const StartupTask('Starting the harness'),
+        TesterPhase.restarting => const StartupTask('Restarting the harness'),
+        TesterPhase.reloading => StartupTask(
+          'Reloading ${reading.files} '
+          'edited file${reading.files == 1 ? '' : 's'}',
+        ),
+        TesterPhase.ready => null,
+      };
 
   /// A server per served directory, so a rebuild of the same page reuses the
   /// port a browser tab already has open — the tab reloads onto the new build
@@ -154,6 +192,7 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
       // without it the panel shows an empty list for the whole cold compile.
       scannedEntries: core.entriesFor(path),
       connectToDaemon: connectToDaemon,
+      startup: startupFor(path),
     )..addListener(core.notifyChanged);
     unawaited(session.start());
     return session;
@@ -254,6 +293,10 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
       thumbnails.dispose();
     }
     _thumbnails.clear();
+    for (var startup in _startups.values) {
+      startup.dispose();
+    }
+    _startups.clear();
     for (var server in _servers.values) {
       unawaited(server.close());
     }

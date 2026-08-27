@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../constants.dart';
 import '../previews/asset_bundle.dart';
 import '../previews/package_config_locator.dart';
+import '../utils/run_dir.dart';
 import 'flutter_cache.dart';
 import 'frontend_server.dart';
 import 'guest_vm_service.dart';
@@ -212,13 +213,14 @@ class TesterHost {
     await _syncAssetBundle();
 
     var outputDill = p.join(_buildDir, '${program.name}.dill');
-    // Two questions, and they are not the same one. *Does a seed exist* decides
-    // whether this start owes the next checkout one; *should this start use it*
-    // is separately no, whenever this package already has a kernel of its own
-    // here — the compiler warm starts from its own output dill when nothing
-    // says otherwise, and that file is the whole program where a seed is only
-    // its shared half. Answered together, a checkout with a kernel and a
-    // machine without a seed would rebuild the seed on every start.
+    // Two questions, and they are not the same one. *What seed is on this
+    // machine* is what the write below is judged against — whether this program
+    // would leave a better one behind. *Should this start use it* is separately
+    // no, whenever this package already has a kernel of its own here: the
+    // compiler warm starts from its own output dill when nothing says
+    // otherwise, and that file is the whole program where a seed is only its
+    // shared half. Answered together, a checkout with a kernel would read the
+    // machine as having no seed and rebuild one on every start.
     var existing = await _findSeed();
     var seed = File(outputDill).existsSync() ? null : existing;
     if (seed != null) onLog?.call('[${program.name}] starting from a seed');
@@ -265,7 +267,12 @@ class TesterHost {
     // Before the guest, because it hands the compiler back exactly as it found
     // it and the guest is about to be handed the kernel — and after the
     // baseline, because the excursion is not an edit anybody should hear about.
-    if (existing == null) await _writeSeed(compiler, outputDill);
+    // **Unconditional**, where this used to run only on a store with nothing in
+    // it. What is worth writing is `writeSeedKernel`'s question — a start that
+    // found a seed holding everything this program reaches is answered without
+    // a file being read — and the old condition is what let the first seed a
+    // machine happened to write be the one every project afterwards inherited.
+    await _writeSeed(compiler, outputDill, improving: existing);
 
     await _spawnGuest(compiled.dillOutput ?? outputDill);
   }
@@ -297,7 +304,11 @@ class TesterHost {
     }
   }
 
-  Future<void> _writeSeed(FrontendServer compiler, String outputDill) async {
+  Future<void> _writeSeed(
+    FrontendServer compiler,
+    String outputDill, {
+    SeedKernel? improving,
+  }) async {
     try {
       await writeSeedKernel(
         compiler: compiler,
@@ -305,6 +316,7 @@ class TesterHost {
         store: _seedStore,
         resolution: await loadPackageConfigUri(Uri.file(_packageConfig!)),
         immutableRoots: _immutableRoots,
+        improving: improving,
         log: (line) => onLog?.call('[${program.name}] $line'),
       );
     } catch (e) {
@@ -324,6 +336,14 @@ class TesterHost {
   }
 
   Future<void> _spawnGuest(String dill) async {
+    // Before this process adds one of its own, and once in the life of the
+    // isolate: whatever is out there was left by a process that is not coming
+    // back to kill it. See [sweepOrphanedGuests].
+    var swept = sweepOrphanedGuestsOnce(
+      log: (line) => onLog?.call('[fw] $line'),
+    );
+    if (swept > 0) onLog?.call('[fw] ended $swept orphaned harness processes');
+
     _guestAlive = true;
     _logFile?.closeSync();
     // Truncated per process, so the file is the current guest's life — and
@@ -378,6 +398,21 @@ class TesterHost {
       // wherever `fw` happened to be started from.
       workingDirectory: packageRoot,
     );
+    recordSpawnedGuest(pid: guest.pid, what: program.name);
+
+    // **The window this closes.** A cold start is tens of seconds long and
+    // every step of it is an await, so a `dispose` — a config reload swapping
+    // the plugin graph, a worktree closing — can land after [_teardown] has
+    // killed a guest that did not exist yet. The spawn then completes into a
+    // host nobody will tear down again, and the guest is orphaned with its
+    // owner still running. Checked here rather than at every await above,
+    // because this is the only step that leaves something behind.
+    if (_disposed) {
+      guest.kill();
+      forgetSpawnedGuest(guest.pid);
+      _guestAlive = false;
+      throw StateError('the harness was disposed while it was starting');
+    }
 
     guest.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen(
       (line) {
@@ -403,6 +438,12 @@ class TesterHost {
     );
     unawaited(
       guest.exitCode.then((code) {
+        // **Not** identity-checked, unlike the flag below: the handle is this
+        // pid's, whoever the host's current guest is by now. Here rather than
+        // beside each `kill` because every way a guest ends — teardown, a
+        // restart, `killGuest`, or the engine falling over on its own — passes
+        // through this one line.
+        forgetSpawnedGuest(guest.pid);
         // Identity-checked: a later guest's life is not this listener's to
         // end.
         if (identical(_guest, guest)) _guestAlive = false;

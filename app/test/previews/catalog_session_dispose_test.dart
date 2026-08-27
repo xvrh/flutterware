@@ -87,7 +87,12 @@ void main() {
         flutterSdkRoot: '/flutter',
         projectRoot: root.path,
         connectToDaemon:
-            ({required dartExecutable, required config, onLog}) async {
+            ({
+              required dartExecutable,
+              required config,
+              onLog,
+              onProgress,
+            }) async {
               await gate.future;
               return CompilerDaemonClient.attach(
                 address: address,

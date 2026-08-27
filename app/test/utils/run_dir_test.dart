@@ -415,6 +415,253 @@ void main() {
       expect(await sweepRunDirOnce(p.join(runDir.path, 'nothing', 'here')), 0);
     });
   });
+
+  /// A daemon's build directory is named by its address, and an address hashes
+  /// the whole config — so every change to what the daemon is given orphans one
+  /// whole, `out/` and `assets/` included. The Impeller flags did it to every
+  /// project on every machine at once; one worktree measured 3.6 GB across 30
+  /// directories, all but one dead.
+  group('abandoned catalog build directories', () {
+    late Directory catalog;
+
+    /// A build directory for [key], whose newest content is [age] old.
+    Directory built(String key, Duration age) {
+      var dir = Directory(p.join(catalog.path, key))
+        ..createSync(recursive: true);
+      var file = File(p.join(dir.path, 'kernel_blob.bin'))
+        ..writeAsStringSync('x');
+      file.setLastModifiedSync(DateTime.now().subtract(age));
+      return dir;
+    }
+
+    setUp(() => catalog = Directory.systemTemp.createTempSync('fw-catalog-'));
+    tearDown(() {
+      if (catalog.existsSync()) catalog.deleteSync(recursive: true);
+    });
+
+    int drop({String liveKey = 'live'}) => sweepCatalogBuildDirs(
+      catalogDir: catalog.path,
+      liveKey: liveKey,
+      keepFor: const Duration(days: 1),
+      runDir: runDir.path,
+    );
+
+    test('a key nothing serves, and everything under it', () async {
+      var dead = built('a' * 16, const Duration(days: 3));
+      expect(drop(), 1);
+      expect(dead.existsSync(), isFalse);
+    });
+
+    test("never this daemon's own, however old it looks", () async {
+      var mine = 'b' * 16;
+      built(mine, const Duration(days: 30));
+      expect(drop(liveKey: mine), 0);
+    });
+
+    test('never `kernels`, which is not a key', () async {
+      // The warm kernel and the quarantine live there and outlive every
+      // address — deleting it would turn a config change into a cold compile
+      // for every worktree that had one.
+      var kernels = Directory(p.join(catalog.path, 'kernels', 'deadbeef'))
+        ..createSync(recursive: true);
+      File(p.join(kernels.path, 'warm.dill')).writeAsStringSync('x');
+      Process.runSync('touch', [
+        '-m',
+        '-t',
+        '202001010000',
+        kernels.parent.path,
+      ]);
+
+      expect(drop(), 0);
+      expect(kernels.existsSync(), isTrue);
+    });
+
+    test('never one whose key still has a socket bound', () {
+      // **Existence, never a knock.** `_answers` gives up after a second, and a
+      // second is a duration a live daemon can miss under load — three
+      // integration files at once and 3.7 GB being deleted was enough to make
+      // it, and the daemon whose `out/` went with it died on its next write.
+      // A socket file that is really dead is unlinked by [sweepRunDir] first,
+      // so this only ever costs a directory one more start of patience.
+      var key = 'e' * 16;
+      built(key, const Duration(days: 30));
+      File(p.join(runDir.path, '$key.sock')).writeAsStringSync('');
+
+      expect(drop(), 0);
+      expect(Directory(p.join(catalog.path, key)).existsSync(), isTrue);
+    });
+
+    test('never one still being written into', () async {
+      built('c' * 16, const Duration(minutes: 5));
+      expect(drop(), 0);
+    });
+
+    test(
+      'the age is the newest thing inside, not the directory stamp',
+      () async {
+        // A directory's own mtime moves when an entry is added or removed, so a
+        // daemon up for a week — rewriting files already in place — has an
+        // ancient stamp and a very live directory.
+        var dir = built('d' * 16, const Duration(minutes: 1));
+        Process.runSync('touch', ['-m', '-t', '202001010000', dir.path]);
+        expect(drop(), 0, reason: 'its kernel was written a minute ago');
+        expect(dir.existsSync(), isTrue);
+      },
+    );
+  });
+
+  /// A `flutter_tester` guest is the one child flutterware spawns that outlives
+  /// its owner. Measured on one machine: 19 with `ppid` 1, the oldest up 1 day
+  /// 23 hours, against zero orphaned `frontend_server`s. `TesterHost.dispose`
+  /// kills its guest and always did; what it cannot cover is the owner dying
+  /// before it gets there, which no in-process hook can. So the rules below are
+  /// about deciding, from a file, whether somebody is still coming back for it.
+  group('orphaned guests', () {
+    late List<Process> spawned;
+
+    setUp(() {
+      spawned = [];
+      debugResetGuestSweep();
+    });
+
+    tearDown(() {
+      for (var process in spawned) {
+        process.kill(ProcessSignal.sigkill);
+      }
+      debugResetGuestSweep();
+    });
+
+    /// A process that will not exit on its own, so that "was it killed" is a
+    /// question with only one answer.
+    Future<Process> sleeper() async {
+      var process = await Process.start('sleep', const ['60']);
+      spawned.add(process);
+      return process;
+    }
+
+    /// A guest handle written by hand, so a test can name an owner this
+    /// process is not.
+    void guestHandle({
+      required int guestPid,
+      required int ownerPid,
+      DateTime? startedAt,
+      DateTime? ownerRecordedAt,
+    }) {
+      File(p.join(runDir.path, 'guest-$guestPid.json')).writeAsStringSync(
+        jsonEncode({
+          'pid': guestPid,
+          'startedAt': (startedAt ?? DateTime.now()).toIso8601String(),
+          'ownerPid': ownerPid,
+          'ownerRecordedAt': (ownerRecordedAt ?? DateTime.now())
+              .toIso8601String(),
+          'what': 'previews',
+        }),
+      );
+    }
+
+    int sweepGuests() => sweepOrphanedGuests(directory: runDir.path);
+
+    bool handlesLeft() =>
+        runDir.listSync().any((e) => p.basename(e.path).startsWith('guest-'));
+
+    test('one whose owner is gone is killed', () async {
+      var guest = await sleeper();
+      guestHandle(guestPid: guest.pid, ownerPid: await _deadPid());
+
+      expect(sweepGuests(), 1);
+      await guest.exitCode.timeout(const Duration(seconds: 10));
+      expect(handlesLeft(), isFalse, reason: 'the handle goes with it');
+    });
+
+    test('one whose owner is still there is left alone', () async {
+      var owner = await sleeper();
+      var guest = await sleeper();
+      guestHandle(guestPid: guest.pid, ownerPid: owner.pid);
+
+      expect(sweepGuests(), 0);
+      expect(handlesLeft(), isTrue);
+      expect(
+        isProcessAlive(guest.pid),
+        isTrue,
+        reason: 'somebody is still coming back for it',
+      );
+    });
+
+    test('one this process just spawned is left alone', () async {
+      // The guard on the hot-restart rule below. Without it a second host
+      // starting while the first sweeps has its brand-new guest read as
+      // abandoned, and killed.
+      var guest = await sleeper();
+      recordSpawnedGuest(
+        pid: guest.pid,
+        what: 'previews',
+        directory: runDir.path,
+      );
+      addTearDown(() => forgetSpawnedGuest(guest.pid, directory: runDir.path));
+
+      expect(sweepGuests(), 0);
+      expect(isProcessAlive(guest.pid), isTrue);
+    });
+
+    test(
+      'one this process left behind before it restarted is killed',
+      () async {
+        // A Flutter hot restart replaces the isolate and keeps the process, so
+        // `dispose` never runs and the new incarnation spawns beside the old
+        // guests. The handle names a live owner — us — and is an orphan anyway.
+        var guest = await sleeper();
+        guestHandle(guestPid: guest.pid, ownerPid: pid);
+
+        expect(sweepGuests(), 1);
+        await guest.exitCode.timeout(const Duration(seconds: 10));
+      },
+    );
+
+    test('a recycled owner pid does not shield it for ever', () async {
+      // The reason the owner is checked with [isProcessCurrent] and not with
+      // [isProcessAlive]: a handle can outlive a pid's recycling, and believing
+      // the new occupant would keep an orphan alive until the disk was cleared
+      // by hand.
+      var occupant = await sleeper();
+      var guest = await sleeper();
+      guestHandle(
+        guestPid: guest.pid,
+        ownerPid: occupant.pid,
+        ownerRecordedAt: DateTime.now().subtract(const Duration(hours: 1)),
+      );
+
+      expect(
+        sweepGuests(),
+        1,
+        reason: 'the owner it names started after the handle was written',
+      );
+      await guest.exitCode.timeout(const Duration(seconds: 10));
+    });
+
+    test('one that already exited leaves only its handle to remove', () async {
+      guestHandle(guestPid: await _deadPid(), ownerPid: await _deadPid());
+      expect(sweepGuests(), 0, reason: 'nothing was killed');
+      expect(handlesLeft(), isFalse, reason: 'but nothing is left to read');
+    });
+
+    test('a handle nothing can parse is litter', () {
+      File(p.join(runDir.path, 'guest-123.json')).writeAsStringSync('{oh no');
+      expect(sweepGuests(), 0);
+      expect(handlesLeft(), isFalse);
+    });
+
+    test('the first sweep runs and the second does not', () async {
+      var first = await sleeper();
+      guestHandle(guestPid: first.pid, ownerPid: await _deadPid());
+      expect(sweepOrphanedGuestsOnce(directory: runDir.path), 1);
+      await first.exitCode.timeout(const Duration(seconds: 10));
+
+      var second = await sleeper();
+      guestHandle(guestPid: second.pid, ownerPid: await _deadPid());
+      expect(sweepOrphanedGuestsOnce(directory: runDir.path), 0);
+      expect(isProcessAlive(second.pid), isTrue);
+    });
+  });
 }
 
 /// A pid that is certainly gone: a process started and waited for.

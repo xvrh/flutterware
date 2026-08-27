@@ -53,6 +53,10 @@ DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
           ?.map((e) => e as String)
           .toList() ??
       const [],
+  seed: json['seed'] == null
+      ? null
+      : SeedReport.fromJson(json['seed'] as Map<String, dynamic>),
+  warmStart: json['warmStart'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$DaemonReadyToJson(DaemonReady instance) =>
@@ -67,6 +71,30 @@ Map<String, dynamic> _$DaemonReadyToJson(DaemonReady instance) =>
       'entries': instance.entries.map((e) => e.toJson()).toList(),
       'quarantined': instance.quarantined.map((e) => e.toJson()).toList(),
       'diagnostics': instance.diagnostics,
+      'seed': instance.seed?.toJson(),
+      'warmStart': instance.warmStart,
+    };
+
+SeedReport _$SeedReportFromJson(Map<String, dynamic> json) => SeedReport(
+  packages: (json['packages'] as num).toInt(),
+  path: json['path'] as String,
+);
+
+Map<String, dynamic> _$SeedReportToJson(SeedReport instance) =>
+    <String, dynamic>{'packages': instance.packages, 'path': instance.path};
+
+DaemonProgress _$DaemonProgressFromJson(Map<String, dynamic> json) =>
+    DaemonProgress(
+      phase: json['phase'] as String,
+      done: json['done'] as bool,
+      elapsedMs: (json['elapsedMs'] as num?)?.toInt(),
+    );
+
+Map<String, dynamic> _$DaemonProgressToJson(DaemonProgress instance) =>
+    <String, dynamic>{
+      'phase': instance.phase,
+      'done': instance.done,
+      'elapsedMs': instance.elapsedMs,
     };
 
 QuarantinedEntry _$QuarantinedEntryFromJson(Map<String, dynamic> json) =>

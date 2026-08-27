@@ -179,11 +179,14 @@ class ResidentCompiler {
   void reset() => _server.reset();
 
   /// Leaves the shared half of this program behind for the next checkout that
-  /// has never compiled it. See [writeSeedKernel].
+  /// has never compiled it, or that would otherwise start from less of it than
+  /// this one could leave. See [writeSeedKernel], which owns that decision —
+  /// hand it [improving], the seed this start used, and it answers.
   Future<String?> writeSeed({
     required SeedStore store,
     required PackageConfig resolution,
     required List<String> immutableRoots,
+    SeedKernel? improving,
     void Function(String)? log,
   }) => writeSeedKernel(
     compiler: _server,
@@ -191,6 +194,7 @@ class ResidentCompiler {
     store: store,
     resolution: resolution,
     immutableRoots: immutableRoots,
+    improving: improving,
     log: log,
   );
 

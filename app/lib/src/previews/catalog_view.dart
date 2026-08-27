@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:device_frame/device_frame.dart' hide Devices;
 import 'package:flutterware/previews_guest.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../address/address_scope.dart';
@@ -22,6 +23,12 @@ import '../ui/empty_state.dart';
 import '../ui/loading_state.dart';
 import '../ui/capture_button.dart';
 import '../ui/design/design.dart';
+import '../ui/popover.dart' as ui;
+import '../ui/popover_menu.dart';
+import '../ui/startup_progress.dart';
+import '../ui/tappable.dart';
+import 'daemon_phase.dart';
+import 'protocol.dart';
 import '../ui/tree_row.dart';
 import 'app_chords.dart';
 import 'catalog_params.dart';
@@ -557,15 +564,27 @@ class _CatalogViewState extends State<CatalogView> {
         // The seconds are the message rather than the title: a cold start is
         // ~11s here, and a count that is climbing is the only thing on screen
         // that distinguishes "slow" from "hung".
+        //
+        // **The daemon's own phase when there is one**, which since it started
+        // reporting them there usually is. What this used to say was true and
+        // uninformative: every second of the wait reads "Compiling <demo>",
+        // where the demo is the last two percent of it and the engine
+        // framework, the host build and the whole-catalog compile are the rest.
+        // The entry is still named — it is what is being waited *for* — and the
+        // phase is what is being waited *on*.
         return LoadingState(
           title: 'Building the guest…',
           // Named, because it is reachable only with a selection — the guard
           // above takes every unselected session — and by then the demo being
           // waited for is a better word than "the first entry", which since the
           // list stopped picking one is not even true.
-          message:
-              'Compiling ${_session.selected!.name} — '
-              '${_session.busyFor.inSeconds}s',
+          message: [
+            if (_session.startup.task case var task?)
+              task.label
+            else
+              'Compiling ${_session.selected!.name}',
+            '${_session.busyFor.inSeconds}s',
+          ].join(' — '),
         );
       case CatalogSessionPhase.error:
         return Center(
@@ -2039,11 +2058,77 @@ void _goTo(BuildContext context, CatalogSession session, String? scope) {
 ///
 /// Which is also why the sheet has no filter of its own — it draws the same
 /// filtered tree the list beside it does, so typing in one place narrows both.
-class _Landing extends StatelessWidget {
+/// What the page's render pass is worth saying, or null for a pass not worth
+/// saying anything about.
+///
+/// Three conditions, and two of them were a wrong reading on screen first.
+///
+/// **Never for a single picture.** A hover renders one entry on a warm harness
+/// in well under a second, and a strip that appeared for it would be a band of
+/// chrome flickering in and out as the pointer crossed the page. A page filling
+/// is what this is for, and a page is more than one tile.
+///
+/// **And never before the harness is up.** The pass opens the instant the page
+/// asks for pictures, which on a cold harness is tens of seconds before any
+/// picture can be made — and the merged model gives the words to the lane that
+/// opened first, so this one took them and read "Rendering the previews ·
+/// 1 / 55" through a compile in which nothing rendered at all. What is
+/// happening then is the harness lane's to say, and it says it.
+@visibleForTesting
+StartupTask? renderPassTask({
+  required bool busy,
+  required bool warm,
+  required int done,
+  required int total,
+}) => !busy || !warm || total < 2
+    ? null
+    : StartupTask('Rendering the previews', done: done, total: total);
+
+/// The catalog page, and the strip that says what is still being built for it.
+///
+/// Stateful only for the reporting: the render pass is a fact about what this
+/// page asked for and how much of it has landed, and both halves are known here
+/// and nowhere else.
+class _Landing extends StatefulWidget {
   const _Landing({required this.session, required this.thumbnails});
 
   final CatalogSession session;
   final PreviewThumbnails thumbnails;
+
+  @override
+  State<_Landing> createState() => _LandingState();
+}
+
+class _LandingState extends State<_Landing> {
+  CatalogSession get session => widget.session;
+  PreviewThumbnails get thumbnails => widget.thumbnails;
+
+  @override
+  void dispose() {
+    // The page is the only thing that reports this lane, so leaving it up would
+    // leave it up for ever — the strip belongs to the plugin and outlives the
+    // panel by design.
+    widget.session.startup.report(_renderLane, null);
+    super.dispose();
+  }
+
+  static const _renderLane = 'render';
+
+  /// Reported after the frame that computed it, because it is computed *in* a
+  /// build and a notifier fired from one is a build during a build.
+  void _reportPass() {
+    var pass = thumbnails.pass;
+    var task = renderPassTask(
+      busy: thumbnails.busy,
+      warm: thumbnails.warm,
+      done: pass.done,
+      total: pass.total,
+    );
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      session.startup.report(_renderLane, task);
+    });
+  }
 
   /// The screen an entry opens on, which is what its tile reserves room for.
   ///
@@ -2079,35 +2164,67 @@ class _Landing extends StatelessWidget {
             filtering: browsing.filter.trim().isNotEmpty,
           );
         }
-        return PreviewSheet(
-          sections: sections,
-          screenOf: _screenOf,
-          bytesOf: thumbnails.bytesOf,
-          // Marked while a switch off the catalog is in flight, so the click
-          // is not silent for the frames the guest takes to catch up. A live
-          // selection, not a memory of one.
-          selectedId: session.selected?.id,
-          problemOf: (entry) => switch (thumbnails.of(entry)) {
-            ThumbnailFailed(:var reason) => reason,
-            _ => session.compileErrorFor(entry),
-          },
-          // The page renders itself in the order it is read: the grid builds
-          // the tiles near the viewport and this hands exactly those back, so
-          // scrolling changes what is being rendered rather than queueing
-          // behind a hundred and fifty entries nobody is looking at.
-          onVisible: thumbnails.wantAll,
-          onUndecodable: thumbnails.discard,
-          onTap: (entry) {
-            browsing.endHover();
-            if (session.phase == CatalogSessionPhase.ready) {
-              unawaited(session.switchTo(entry));
-            } else {
-              session.wantedEntryId = entry.id;
-            }
-          },
+        _reportPass();
+        return Column(
+          children: [
+            // **Above the sheet, never over it.** The sheet filling in is the
+            // thing being waited for, and covering it to report on itself is
+            // the one arrangement that makes the filling invisible.
+            StartupStrip(progress: session.startup),
+            Expanded(child: _sheet(sections)),
+          ],
         );
       },
     );
+  }
+
+  Widget _sheet(List<PreviewSheetSection> sections) {
+    var session = this.session;
+    return PreviewSheet(
+      sections: sections,
+      screenOf: _screenOf,
+      bytesOf: thumbnails.bytesOf,
+      // Marked while a switch off the catalog is in flight, so the click
+      // is not silent for the frames the guest takes to catch up. A live
+      // selection, not a memory of one.
+      selectedId: session.selected?.id,
+      problemOf: (entry) => switch (thumbnails.of(entry)) {
+        ThumbnailFailed(:var reason) => reason,
+        _ => session.compileErrorFor(entry),
+      },
+      // The page renders itself in the order it is read: the grid builds
+      // the tiles near the viewport and this hands exactly those back, so
+      // scrolling changes what is being rendered rather than queueing
+      // behind a hundred and fifty entries nobody is looking at.
+      onVisible: thumbnails.wantAll,
+      onUndecodable: thumbnails.discard,
+      // One ticker for the sheet, and it runs only while something is being
+      // rendered — see [PreviewSheet.animate].
+      animate: thumbnails.busy,
+      waitOf: _waitOf,
+      onTap: (entry) {
+        session.browsing.endHover();
+        if (session.phase == CatalogSessionPhase.ready) {
+          unawaited(session.switchTo(entry));
+        } else {
+          session.wantedEntryId = entry.id;
+        }
+      },
+    );
+  }
+
+  /// What a tile with no picture is waiting for.
+  ///
+  /// The store already tells the two waits apart, and they are not the same
+  /// wait: a cold harness compiles the whole catalog and takes tens of seconds,
+  /// where a warm one is a message and a frame.
+  PreviewTileWait? _waitOf(CatalogEntry entry) {
+    if (thumbnails.rendering == entry.id) return PreviewTileWait.rendering;
+    return switch (thumbnails.of(entry)) {
+      ThumbnailPending(:var compiling) =>
+        compiling ? PreviewTileWait.compiling : PreviewTileWait.queued,
+      _ => null,
+    };
   }
 }
 
@@ -2778,9 +2895,6 @@ class _StatusBar extends StatelessWidget {
     // whether it built.
     var photographed = CaptureMode.isCapturing(context);
     var parts = <String>[];
-    if (session.coldCompile case var cold?) {
-      if (!photographed) parts.add('cold ${_ms(cold)}');
-    }
     if (session.lastSwitch case var report?) {
       parts.add(switch ((report.ok, photographed, report.direct)) {
         (false, _, _) => '${report.entry.name}: did not compile',
@@ -2817,6 +2931,12 @@ class _StatusBar extends StatelessWidget {
       child: Row(
         spacing: FwSpacing.lg,
         children: [
+          // **The one number with a story behind it**, so it is the one thing
+          // in this bar you can open. Everything else here is a fact about the
+          // last click; this is a fact about a wait that may have been a
+          // minute, and "where did it go" is the question it raises.
+          if (session.coldCompile case var cold? when !photographed)
+            _ColdCompileReadout(session: session, label: 'cold ${_ms(cold)}'),
           Expanded(
             child: Text(
               parts.join('   '),
@@ -2837,6 +2957,161 @@ class _StatusBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The cold-compile number, and what it was made of.
+///
+/// **The surface whose absence produced the design this implements.** The
+/// daemon has reported its phases on the wire since it had any — the doc
+/// comment on the field says it is reported rather than logged precisely so a
+/// GUI can show it without scraping a log — and nothing read it. A start that
+/// took a minute and a start that took twelve seconds looked identical
+/// afterwards, so the only way to find out where the difference went was to
+/// open the daemon's log by hand.
+class _ColdCompileReadout extends StatelessWidget {
+  const _ColdCompileReadout({required this.session, required this.label});
+
+  final CatalogSession session;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var mono = context.type.caption.copyWith(fontFamily: 'monospace');
+    // Prefixed: this file already has a `Popover`, which is the *picker* in
+    // `staged_device.dart` — a list with a selection — where this one is the
+    // primitive it is built on.
+    return ui.Popover(
+      // Read-only, so the caller keeps its focus: this opens under a status
+      // bar, and taking focus off whatever was being typed to show a table of
+      // numbers is not a trade anybody would make.
+      autofocus: false,
+      side: ui.PopoverSide.top,
+      anchor: (context, controller) => Tappable(
+        onTap: controller.toggle,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xs),
+          child: Text(label, style: mono.copyWith(color: colors.mut)),
+        ),
+      ),
+      content: (context, controller) => PopoverMenuSurface(
+        width: 320,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(FwSpacing.lg),
+          child: _StartupBreakdown(session: session),
+        ),
+      ),
+    );
+  }
+}
+
+/// Where a start's time went, and what it began from.
+class _StartupBreakdown extends StatelessWidget {
+  const _StartupBreakdown({required this.session});
+
+  final CatalogSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var type = context.type;
+    // Longest first. A phase table in the daemon's own order buries the one
+    // that mattered among six that took a millisecond each.
+    var phases = session.timings.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Where the start went', style: type.bodyStrong),
+        const Gap(FwSpacing.xs),
+        Text(
+          session.reusedDaemon
+              // The honest answer for the common case, and the one a table of
+              // numbers would actively mislead about: these are somebody
+              // else's phases. This session attached to a compiler that was
+              // already up and paid for none of them.
+              ? 'This panel attached to a compiler that was already running. '
+                    'The phases below were paid by whoever started it.'
+              : session.warmStart
+              ? 'The compiler started from the kernel the last run left, so '
+                    'nothing below is a compile from scratch.'
+              : 'The compiler had no kernel to start from.',
+          style: type.bodyMuted,
+        ),
+        const Gap(FwSpacing.md),
+        _SeedLine(seed: session.seed),
+        if (phases.isNotEmpty) ...[
+          const Gap(FwSpacing.md),
+          Divider(height: 1, color: colors.line),
+          const Gap(FwSpacing.sm),
+          for (var phase in phases)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1),
+              child: Row(
+                spacing: FwSpacing.md,
+                children: [
+                  Expanded(
+                    child: Text(
+                      daemonPhaseLabel(phase.key),
+                      style: type.caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    '${phase.value}ms',
+                    style: type.caption.copyWith(
+                      color: colors.mut,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+/// **The one fact worth a line of its own.** Two starts that both paid a full
+/// cold compile look identical in the table above, and they are not the same
+/// thing: one found no shared half to begin from, and the other found one built
+/// for a program that reaches a fraction of what this one does. The package
+/// count is what separates them on sight.
+class _SeedLine extends StatelessWidget {
+  const _SeedLine({required this.seed});
+
+  final SeedReport? seed;
+
+  @override
+  Widget build(BuildContext context) {
+    var seed = this.seed;
+    return Row(
+      spacing: FwSpacing.xs,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          seed == null ? Icons.info_outline : Icons.bolt_outlined,
+          size: FwIconSize.sm,
+          color: context.colors.mut2,
+        ),
+        Expanded(
+          child: Text(
+            seed == null
+                ? 'No shared kernel to start from. One is written on the way '
+                      'out, so the next checkout of this resolution starts '
+                      'ahead.'
+                : 'Started from a shared kernel holding '
+                      '${seed.packages} package'
+                      '${seed.packages == 1 ? '' : 's'}.',
+            style: context.type.caption.copyWith(color: context.colors.mut),
+          ),
+        ),
+      ],
     );
   }
 }
