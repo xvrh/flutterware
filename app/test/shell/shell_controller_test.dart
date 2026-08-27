@@ -65,8 +65,27 @@ class _Fake extends NativePlugin<_FakeCore> {
   Widget buildPanel(BuildContext context) => const SizedBox();
 }
 
-PluginRegistry _panels(Iterable<String> ids) =>
-    PluginRegistry({for (var id in ids) id: panelFor<_FakeCore>(_Fake.new)});
+/// A plugin whose row names its own landing — the run cockpit's shape, where
+/// the children are runs rather than packages.
+class _Landing extends NativePlugin<_FakeCore> {
+  _Landing(super.core);
+
+  @override
+  Widget buildPanel(BuildContext context) => const SizedBox();
+
+  @override
+  List<String> get railLanding => const [];
+}
+
+PluginRegistry _panels(
+  Iterable<String> ids, {
+  Set<String> landing = const {},
+}) => PluginRegistry({
+  for (var id in ids)
+    id: landing.contains(id)
+        ? panelFor<_FakeCore>(_Landing.new)
+        : panelFor<_FakeCore>(_Fake.new),
+});
 
 /// Mutable so a test can change what git reports between calls.
 var _currentListing = _listing;
@@ -90,13 +109,14 @@ ShellController _controller({
   Map<String, PluginCoreFactory>? cores,
   WorktreeFactsStore? factsStore,
   WorktreeFactsController Function(String repoRoot)? facts,
+  Set<String> landingPlugins = const {},
 }) {
   cores ??= {'a.one': _FakeCore.new, 'a.two': _FakeCore.new};
   _loader = _StubLoader(manifest, manifestExit);
   return ShellController(
     appContext: AppContext(logger: LogClient.print()),
     flutterSdk: FlutterSdkPath('/tmp/flutter'),
-    registry: _panels(cores.keys),
+    registry: _panels(cores.keys, landing: landingPlugins),
     coreRegistry: PluginCoreRegistry(cores),
     manifestLoader: _loader,
     // The shell writes the changes config through the explorer's store, so a
@@ -321,6 +341,46 @@ void main() {
       shell.selectPlugin('a.one');
 
       expect(shell.selectedChildId, 'app');
+    });
+
+    test('and not at all to a plugin that names its own landing', () async {
+      // **The bug this is about, and the layer it lives at.** The run
+      // cockpit's children are its *runs*, so the fill-in above opened
+      // whichever app happened to be up — and the launch form, the device desk
+      // and the only emulator-boot control in the GUI had no row at all for as
+      // long as anything was running.
+      //
+      // It was believed fixed, and the test that closed it mounted the *panel*
+      // at the empty address and asserted the launch form. True, and about the
+      // wrong layer: the panel had always handled the empty address; the rail
+      // is what never handed it one.
+      var shell = _controller(
+        cores: coresWith(['app-03109c1723af', 'app-8017c61c93df']),
+        landingPlugins: {'a.one'},
+      );
+      await shell.start('/repo');
+
+      shell.selectPlugin('a.one');
+
+      expect(shell.selectedPluginId, 'a.one');
+      expect(shell.selectedChildId, isNull);
+      expect(shell.address.segments, isEmpty);
+    });
+
+    test('even after you have been inside one of its children', () async {
+      // The remembered id is the other half of the fill-in, and a run you
+      // visited is exactly what makes it fire.
+      var shell = _controller(
+        cores: coresWith(['app-03109c1723af', 'app-8017c61c93df']),
+        landingPlugins: {'a.one'},
+      );
+      await shell.start('/repo');
+
+      shell.selectChild('a.one', 'app-8017c61c93df');
+      shell.selectPlugin('a.two');
+      shell.selectPlugin('a.one');
+
+      expect(shell.address.segments, isEmpty);
     });
   });
 

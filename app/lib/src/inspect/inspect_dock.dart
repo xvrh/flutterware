@@ -13,6 +13,8 @@ class InspectDockTab {
     required this.id,
     required this.label,
     this.badge = 0,
+    this.enabled = true,
+    this.disabledReason,
     required this.body,
   });
 
@@ -22,6 +24,24 @@ class InspectDockTab {
   /// Zero draws nothing at all — a badge that is always there is a
   /// decoration.
   final int badge;
+
+  /// False for a tab that cannot be opened yet.
+  ///
+  /// Declared rather than enforced by the host swallowing the tap, which is
+  /// what the run cockpit did while a build was in flight: five of its six
+  /// tabs drew in the normal colour, took hover, and did nothing. A control
+  /// that looks alive and is not costs the reader a hypothesis about their own
+  /// machine — they click it twice and then start wondering about the window.
+  ///
+  /// Defaults to true, so a host that has no such state pays nothing.
+  final bool enabled;
+
+  /// Why it cannot be opened, as a tooltip on the dead tab. Null draws none.
+  ///
+  /// Worth having because the answer is never guessable from the label: *Screen*
+  /// greyed out is either "there is no app yet" or "this build cannot do that",
+  /// and those are a wait and a dead end.
+  final String? disabledReason;
 
   final WidgetBuilder body;
 }
@@ -232,6 +252,8 @@ class InspectTabStrip extends StatelessWidget {
                         label: tab.label,
                         selected: tab.id == current,
                         badge: tab.badge,
+                        enabled: tab.enabled,
+                        disabledReason: tab.disabledReason,
                         onTap: () => onSelect(tab.id),
                       ),
                   ],
@@ -307,6 +329,8 @@ class _Tab extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.badge = 0,
+    this.enabled = true,
+    this.disabledReason,
   });
 
   final String label;
@@ -315,6 +339,11 @@ class _Tab extends StatelessWidget {
 
   /// Zero draws nothing at all.
   final int badge;
+
+  /// See [InspectDockTab.enabled].
+  final bool enabled;
+
+  final String? disabledReason;
 
   /// [Tappable], not [InkWell], and the reason is that the [InkWell] painted
   /// nothing. A [Material]'s ink features are painted *below* its child, and
@@ -325,15 +354,21 @@ class _Tab extends StatelessWidget {
   /// wash inside its own subtree, where no ancestor can cover it.
   @override
   Widget build(BuildContext context) {
-    return Tappable(
-      onTap: onTap,
+    var tab = Tappable(
+      // Null is the disable, so the wash, the click cursor and keyboard
+      // traversal all go with it — [Tappable] already knows how to be off, and
+      // a second mechanism beside it would be one more thing to keep in step.
+      onTap: enabled ? onTap : null,
+      focusable: enabled,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: selected ? context.colors.accent : Colors.transparent,
+              color: selected && enabled
+                  ? context.colors.accent
+                  : Colors.transparent,
               width: 2,
             ),
           ),
@@ -344,7 +379,11 @@ class _Tab extends StatelessWidget {
             Text(
               label,
               style: context.type.caption.copyWith(
-                color: selected ? context.colors.ink : context.colors.mut,
+                color: !enabled
+                    ? context.colors.mut3
+                    : selected
+                    ? context.colors.ink
+                    : context.colors.mut,
               ),
             ),
             if (badge > 0) ...[
@@ -359,6 +398,8 @@ class _Tab extends StatelessWidget {
         ),
       ),
     );
+    if (enabled || disabledReason == null) return tab;
+    return Tooltip(message: disabledReason!, child: tab);
   }
 }
 

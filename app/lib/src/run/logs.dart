@@ -50,8 +50,10 @@ class RunLogLine {
   ///
   /// Not inferred from prose. A line containing the word "error" is extremely
   /// often a line about not having one, and no amount of it makes a line an
-  /// error report. A fixed prefix written by one emitter is a different thing
-  /// from prose, which is why [_engineSeverity] is allowed here.
+  /// error report. A fixed *shape* written by one emitter is a different thing
+  /// from prose, which is why [_saysFault]'s three are allowed here — an engine
+  /// severity prefix, a front-end diagnostic's `path:line:col: Error:`, and
+  /// xcodebuild's `** BUILD FAILED **`.
   final bool error;
 
   Map<String, Object?> toJson() => {
@@ -119,13 +121,9 @@ RunLogLine? decodeRunLogLine(String line) {
   if (object == null) {
     if (line.startsWith(_appPrefix)) {
       var text = line.substring(_appPrefix.length);
-      return made(
-        RunLogSource.app,
-        text,
-        error: _engineSeverity.hasMatch(text),
-      );
+      return made(RunLogSource.app, text, error: _saysFault(text));
     }
-    return made(RunLogSource.tool, line, error: _engineSeverity.hasMatch(line));
+    return made(RunLogSource.tool, line, error: _saysFault(line));
   }
   switch (DaemonProtocol.tryReadEvent(object)) {
     // Only ever a failed stop or restart, but it is about the app and the
@@ -166,6 +164,41 @@ RunLogLine? decodeRunLogLine(String line) {
 /// answering its VM service with nothing mounted. Without this, `errors: []`
 /// was the correct reading of a log that plainly contained the reason.
 final _engineSeverity = RegExp(r'^\[(ERROR|FATAL):[^\]]*\]');
+
+/// The Dart front end's diagnostic shape, as in
+/// `lib/main.dart:119:21: Error: Method not found: 'notAThing'.`
+///
+/// The same argument as [_engineSeverity], applied to the emitter that produces
+/// the fault a broken build actually has. `Errors` matched **nothing at all**
+/// on a real failed build until this existed: the launcher's structured error
+/// is `Error: Build process failed`, which is true of every build failure and
+/// names none, and the line that says which one — file, line, column, and the
+/// caret under the token — carries no severity marker this could see. Measured
+/// 2026-08-27 on a deliberately broken example app: 0 of 44 lines matched, on a
+/// log whose whole point was the one it could not find.
+///
+/// A format, not a word, which is the test [RunLogLine.error] applies. Path,
+/// colon, line, colon, column, colon, severity is a shape the front end writes
+/// and prose does not produce by accident; matching a bare `Error:` anywhere in
+/// a line would, and is exactly what that field refuses.
+///
+/// `Severe` is in here because the front end emits it too. Gradle's `e: ` and
+/// the Kotlin compiler's shapes are not, because no log measured here has
+/// carried one — add them when one does.
+final _compilerDiagnostic = RegExp(r'^\S+:\d+:\d+: (Error|Severe): ');
+
+/// `** BUILD FAILED **`, which xcodebuild writes and nothing else does.
+///
+/// A whole line, fixed, from one emitter. It is the last word of every failed
+/// Apple build and it is worth having under `Errors` on its own account: the
+/// diagnostic above says what is wrong, and this says the build is over.
+final _buildFailed = RegExp(r'^\*\* BUILD FAILED \*\*');
+
+/// Whether [line] carries one of the fixed fault shapes above.
+bool _saysFault(String line) =>
+    _engineSeverity.hasMatch(line) ||
+    _compilerDiagnostic.hasMatch(line) ||
+    _buildFailed.hasMatch(line);
 
 /// What `flutter run` puts in front of a line the app printed.
 ///

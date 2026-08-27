@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -23,6 +24,7 @@ import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/inspect.dart';
 import 'package:flutterware_app/src/run/inventory.dart';
 import 'package:flutterware_app/src/run/launch.dart';
+import 'package:flutterware_app/src/run/logs_tab.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/split_button.dart';
@@ -983,6 +985,279 @@ void main() {
     expect(find.text('Error: Build process failed'), findsNothing);
     expect(find.text('Hot reload'), findsOneWidget);
   });
+
+  testWidgets('a launch that never came up hands over its whole log', (
+    tester,
+  ) async {
+    // The last page still printing a *path* instead of the thing it names. A
+    // build failure is the one moment somebody wants to scroll the whole log,
+    // and it was the one page that would not let them — the reason block is
+    // capped at forty lines by design, and the cause of an Xcode signing
+    // failure is twenty lines above the summary.
+    var core = _homeCore(worktree);
+    addTearDown(core.dispose);
+    var logPath = p.join(runDir.path, 'app-failed.log');
+    File(logPath).writeAsStringSync(
+      [
+        'Launching lib/main.dart on Pixel in debug mode...',
+        'Note: some input files use unchecked or unsafe operations.',
+        // A structured event closes the plain block before it, so the reason
+        // this page extracts is only what follows — and the two lines above
+        // exist nowhere but the log.
+        jsonEncode([
+          {
+            'event': 'app.progress',
+            'params': {
+              'appId': 'a1',
+              'id': '0',
+              'progressId': null,
+              'message': 'Running Gradle task...',
+              'finished': false,
+            },
+          },
+        ]),
+        'Error: Build process failed',
+        'App failed to start',
+        '',
+      ].join('\n'),
+    );
+    // Recorded but never published: a launch that failed has its handle
+    // deleted, which is exactly why this page could not reuse the run's log
+    // pane and printed a path instead.
+    var handle = _unpublishedRun(worktree, logPath);
+    core.recordFailure(handle, LaunchLog.read(logPath));
+    await tester.runAsync(core.computeAll);
+
+    await _mountRun(tester, core, [handle.key]);
+    addTearDown(() => tester.pumpWidget(const SizedBox()));
+
+    expect(find.text('Dismiss'), findsOneWidget);
+    expect(find.byType(LogsTab), findsOneWidget);
+    // Three places, which is the page's anatomy: the headline picked out of
+    // the block, the block itself, and the line in the log it came from.
+    expect(find.textContaining('Build process failed'), findsNWidgets(3));
+    // And the lines the extract cannot reach are here too, which is the point.
+    expect(find.textContaining('unchecked or unsafe'), findsOneWidget);
+    // And the path is not printed as text any more — the log pane's own menu
+    // carries it, beside the lines it names.
+    expect(find.text(logPath), findsNothing);
+  });
+
+  testWidgets('and offers no platform log, having no session to ask about', (
+    tester,
+  ) async {
+    // The device log is read by asking a session about a window of time. A
+    // launch that never came up has none, so the pill is dropped rather than
+    // offered and refused.
+    var core = _homeCore(worktree);
+    addTearDown(core.dispose);
+    var logPath = p.join(runDir.path, 'app-failed.log');
+    File(logPath).writeAsStringSync('Error: Build process failed\n');
+    var handle = _unpublishedRun(worktree, logPath);
+    core.recordFailure(handle, LaunchLog.read(logPath));
+    await tester.runAsync(core.computeAll);
+
+    await _mountRun(tester, core, [handle.key]);
+    addTearDown(() => tester.pumpWidget(const SizedBox()));
+
+    expect(find.text('Build'), findsOneWidget, reason: 'the other pills stay');
+    expect(find.text('Platform'), findsNothing);
+  });
+
+  group('a run that has not come up yet', () {
+    /// A published run whose app does not answer, with a launcher log already
+    /// carrying [lines] — the state a cold build spends minutes in.
+    Future<(RunCore, RunHandle)> building(
+      WidgetTester tester,
+      List<String> lines, {
+      Duration age = Duration.zero,
+      String? package,
+      String device = 'phone',
+      bool probed = true,
+    }) async {
+      var core = _homeCore(worktree);
+      addTearDown(core.dispose);
+      var logPath = p.join(runDir.path, 'building.log');
+      File(logPath).writeAsStringSync([...lines, ''].join('\n'));
+      var key = _publishRun(
+        runDir,
+        worktree,
+        device: device,
+        logPath: logPath,
+        package: package,
+        startedAt: DateTime.now().subtract(age),
+      ).key;
+      await tester.runAsync(core.computeAll);
+      // The *scanned* handle, not the one that was published: a probe is keyed
+      // by the handle file's path, and the object `_publishRun` answers with
+      // has not got one.
+      var handle = core.handles.firstWhere((each) => each.key == key);
+      // The launcher is alive and the app is not: `canInspect` is false, which
+      // is the flag every pane on this page used to hang off.
+      if (probed) {
+        core.debugSetProbe(handle, const RunProbe(app: false, launcher: true));
+      }
+      return (core, handle);
+    }
+
+    testWidgets('the log is live before the app is', (tester) async {
+      // The complaint this is about: a consumer watched a cold build say one
+      // word for ninety seconds while the launcher wrote a page of narration
+      // into a file the panel would not open. The file has been there since
+      // before the process had a pid — `launchApp` redirects the launcher's
+      // whole stdio into it — and the Logs tab was gated on the app answering.
+      var (core, handle) = await building(tester, [
+        'Resolving dependencies...',
+        'Running Gradle task assembleDebug...',
+      ]);
+
+      await _mountRun(tester, core, [handle.key, 'logs']);
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+
+      expect(find.textContaining('Running Gradle task'), findsOneWidget);
+    });
+
+    testWidgets('the pane that cannot answer is the log', (tester) async {
+      // It used to be a spinner, one word, and the log's *path* printed as
+      // selectable text under a doc comment claiming the logs were being
+      // offered. A path is a string to carry to a terminal.
+      var (core, handle) = await building(tester, [
+        'Launching lib/main.dart on Pixel in debug mode...',
+        'Running Gradle task assembleDebug...',
+      ]);
+
+      await _mountRun(tester, core, [handle.key, 'screen']);
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+
+      // The stage, then the log itself — the same pane it gets once it is up,
+      // so `app.started` changes which tabs are open and nothing else.
+      expect(find.text('building'), findsOneWidget);
+      expect(find.byType(LogsTab), findsOneWidget);
+      expect(find.textContaining('Running Gradle task'), findsOneWidget);
+    });
+
+    testWidgets('a build that is late says so, and a young one does not', (
+      tester,
+    ) async {
+      // A cold build is allowed to be slow. What nobody can tell from a
+      // spinner is whether *this* one has stopped being slow and started being
+      // stuck — which is the state the consumer was in when they reported all
+      // of this.
+      var lines = ['Launching lib/main.dart on Pixel in debug mode...'];
+
+      var (young, itsHandle) = await building(tester, lines);
+      await _mountRun(tester, young, [itsHandle.key, 'screen']);
+      expect(find.textContaining('usually finishes within'), findsOneWidget);
+      expect(find.textContaining('longer than'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+
+      var (old, itsKey) = await building(
+        tester,
+        lines,
+        age: const Duration(minutes: 9),
+      );
+      await _mountRun(tester, old, [itsKey.key, 'screen']);
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+
+      expect(find.textContaining('longer than a cold'), findsOneWidget);
+      expect(find.textContaining('in the log below'), findsOneWidget);
+    });
+
+    testWidgets('an unprobed run is not accused of running late', (
+      tester,
+    ) async {
+      // Before anything has asked the run, a handle that has not answered is
+      // as likely to be an app that has been up for hours as a build in
+      // flight — the panel renders every announced run in that state for as
+      // long as the first probe takes. Measuring from `startedAt` there turns
+      // an unknown into `3h 12m in, longer than a cold build usually takes`,
+      // in amber, about a perfectly healthy app.
+      var (core, handle) = await building(
+        tester,
+        ['Launching lib/main.dart on Pixel in debug mode...'],
+        age: const Duration(hours: 3),
+        probed: false,
+      );
+
+      await _mountRun(tester, core, [handle.key, 'screen']);
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+
+      expect(find.textContaining('longer than'), findsNothing);
+      expect(find.textContaining('usually finishes within'), findsNothing);
+      // The stage still shows: that much is read off the log, not guessed.
+      expect(find.textContaining('in — '), findsNothing);
+      expect(find.byType(LogsTab), findsOneWidget);
+    });
+
+    testWidgets('a device this build cannot place is left unnamed', (
+      tester,
+    ) async {
+      // `platformLabelFor` falls back to the device *id* so a sentence always
+      // has a noun, which is right for prose and wrong here: an id is not a
+      // platform, and a simulator that has since been shut down is no longer
+      // in the device list. The pane read `a cold
+      // 575104B7-6AB9-42BA-82B6-351FC0DA2921 build usually finishes within`.
+      var (core, handle) = await building(tester, [
+        'Launching lib/main.dart in debug mode...',
+      ], device: '575104B7-6AB9-42BA-82B6-351FC0DA2921');
+
+      await _mountRun(tester, core, [handle.key, 'screen']);
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+
+      expect(find.textContaining('a cold build usually finishes'), findsOne);
+      // Scoped to the sentence: the *header* names the device, and naming the
+      // thing you launched on is exactly what it is for. What must not happen
+      // is an id standing where a platform goes.
+      expect(find.textContaining('cold 575104B7'), findsNothing);
+    });
+
+    testWidgets('Stop and edit stops it and opens the form holding its '
+        'settings', (tester) async {
+      // What somebody does when the log has just told them the flavor was
+      // wrong. Without it: stop, find the form — itself impossible until the
+      // rail landed on it again — and re-answer five fields from memory.
+      var (core, handle) = await building(tester, [
+        'Launching lib/main.dart on Pixel in debug mode...',
+      ], package: '.');
+      var stopped = <String>[];
+      core.debugControl = (action, _) async => stopped.add(action);
+
+      await _mountRun(tester, core, [handle.key, 'screen']);
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+
+      await tester.tap(find.text('Stop and edit'));
+      await tester.pumpAndSettle();
+
+      expect(stopped, ['stop']);
+      expect(find.text('New run'), findsOneWidget);
+      // Primed through the same door the form already reads on open.
+      expect(core.lastLaunch?.device, 'phone');
+      expect(core.lastLaunch?.entrypoint, 'lib/main.dart');
+    });
+
+    testWidgets('a tab that cannot be opened is drawn as one', (tester) async {
+      // The second complaint. Every tab drew in the normal colour and five of
+      // the six swallowed the tap, so the page read as a broken window rather
+      // than as a wait: you clicked Steps because it was the one that
+      // responded, and then could not get back.
+      var (core, handle) = await building(tester, ['Building the app…']);
+
+      await _mountRun(tester, core, [handle.key, 'logs']);
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+
+      await tester.tap(find.text('Screen'));
+      await tester.pumpAndSettle();
+
+      // Still on the log, and the refusal is said rather than swallowed: the
+      // four panes that need an app carry the reason, the two file-backed ones
+      // carry nothing because they work.
+      expect(find.textContaining('Building the app…'), findsOneWidget);
+      expect(
+        find.byTooltip('waiting for the app — the log is live'),
+        findsNWidgets(4),
+      );
+    });
+  });
 }
 
 /// A core over two machines and one entry point that runs on either — enough
@@ -1029,19 +1304,36 @@ RunCore _homeCore(Directory worktree) {
   );
 }
 
+/// A run that was never announced — what a launch that failed leaves behind,
+/// since [RunCore] deletes the handle and keeps only the reason.
+RunHandle _unpublishedRun(Directory worktree, String logPath) => RunHandle(
+  worktree: worktree.path,
+  worktreeName: Worktree(path: worktree.path).name,
+  device: 'phone',
+  entrypoint: 'lib/main.dart',
+  launcherPid: pid,
+  logPath: logPath,
+  startedAt: DateTime.now(),
+);
+
 RunHandle _publishRun(
   Directory runDir,
   Directory worktree, {
   required String device,
+  String? logPath,
+  String? package,
+  DateTime? startedAt,
 }) {
   var handle = RunHandle(
     worktree: worktree.path,
     worktreeName: Worktree(path: worktree.path).name,
     device: device,
     entrypoint: 'lib/main.dart',
+    package: package,
     // This process, so a probe reads it as alive.
     launcherPid: pid,
-    startedAt: DateTime.now(),
+    logPath: logPath,
+    startedAt: startedAt ?? DateTime.now(),
   );
   handle.publish(runDir.path);
   return handle;

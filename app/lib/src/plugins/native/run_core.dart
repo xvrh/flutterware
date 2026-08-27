@@ -341,6 +341,24 @@ class RunCore extends PluginCore {
     return target?.platformType ?? target?.category ?? device ?? 'this device';
   }
 
+  /// The platform [device] builds for, or null when this build cannot say.
+  ///
+  /// Distinct from [platformLabelFor], which falls back to the category and
+  /// then to the device id so that a *sentence* always has a noun. That is the
+  /// right answer for prose and the wrong one for a caller that is going to
+  /// **reason** about the platform — how long its builds take, say — because
+  /// an id is not a platform and `575104B7-6AB9-42BA-82B6-351FC0DA2921` is not
+  /// a word to put in front of the reader.
+  ///
+  /// Null is reachable and not rare: the list is the live daemon's when there
+  /// is one and the cache's otherwise, so a simulator that has since been shut
+  /// down, and every frame before [computeAll] has read the cache, answer
+  /// nothing here.
+  String? platformOf(String? device) => devices
+      .where((candidate) => candidate.id == device)
+      .map((candidate) => candidate.platformType)
+      .firstOrNull;
+
   /// True when [path]'s entry points came from `tool/flutterware.dart` rather
   /// than from scanning.
   bool isDeclared(String path) =>
@@ -451,13 +469,28 @@ class RunCore extends PluginCore {
   void track() {
     if (_tracking || isDisposed) return;
     _tracking = true;
-    unawaited(computeAll().then((_) => notifyChanged()));
+    unawaited(
+      computeAll().then((_) {
+        notifyChanged();
+        // **The first probe goes here, after the handles exist.** It used to
+        // sit in the block below, which runs while `computeAll` is still on
+        // its way — so it probed an empty `_handles` and answered nothing,
+        // and `_probes` then stayed empty until [_scheduleProbe]'s timer.
+        //
+        // That is five seconds, and the panel spends them rendering every
+        // announced run with a null probe: an app that has been up for hours
+        // draws as a launch in flight, complete with a spinner and — since
+        // the launching pane started measuring — an amber sentence about the
+        // build being overdue. Rebuilding *here*, one continuation after the
+        // handles land, is the whole fix.
+        if (debugLive && !isDisposed) unawaited(_probeAll());
+      }),
+    );
     if (debugLive) {
       // Same bargain as the daemon: the form is about to show what each define
       // will be, and it cannot show a computed one without asking for it.
       unawaited(resolveScriptSources().then((_) => notifyChanged()));
       unawaited(_startDaemon());
-      unawaited(_probeAll());
       _scheduleProbe();
     }
   }
@@ -1663,7 +1696,7 @@ class RunCore extends PluginCore {
     var probe = probeOf(handle);
     if (probe == null) return const Status.neutral('not probed');
     if (!probe.canInspect) {
-      return Status.neutral(logOf(handle)?.progress ?? 'building');
+      return Status.neutral(logOf(handle)?.stage ?? 'building');
     }
     if (!probe.launcher) return const Status.warn('no launcher');
     return const Status.good('live');
@@ -2343,6 +2376,51 @@ class RunCore extends PluginCore {
     _ => null,
   };
 
+  /// The knobs in [recorded] that somebody actually **chose**.
+  ///
+  /// A launch bakes in everything a `from:` can work out ([_resolveKnobs]), and
+  /// the handle records that merged set — so a handle's knobs are the values
+  /// the app was *built with*, not the values anybody typed. The two are
+  /// different things and only one of them is an instruction.
+  ///
+  /// This matters because the New run form reads [lastLaunch] on open, and its
+  /// contract is the second one: a field left empty means *whatever the default
+  /// is*, and a field with text in it is a deliberate override that gets sent.
+  /// Priming it from the resolved set turns every derived value into a typed
+  /// one — so a `Flutter SDK` knob that tracks whichever flutterware launched
+  /// you becomes a frozen path, and a port a script works out per worktree
+  /// becomes last worktree's port. That is the failure [_resolveKnobs] already
+  /// describes: an app built against the wrong port is indistinguishable from a
+  /// correct one until it is talking to another worktree's database.
+  ///
+  /// A recorded value that equals what the source computes now is dropped. The
+  /// comparison errs safe in both directions: somebody who typed the computed
+  /// value by hand loses nothing, because leaving the field alone re-derives
+  /// exactly it — and a source that cannot answer right now (an unresolved
+  /// script) keeps its value rather than silently discarding an override.
+  Map<String, String> chosenKnobs(
+    String package,
+    EntrypointRef entry,
+    Map<String, String> recorded,
+  ) {
+    var declaredByName = {
+      for (var (:read, :declared) in knobsFor(package, entry))
+        if (read != null && declared != null) declared.name: declared,
+    };
+    // A loop rather than a collection-if, and not for taste: the two-armed
+    // version of this reads `if (declared) if (differs) keep; else keep;` —
+    // where the `else` binds to the *inner* `if`, so every declared knob was
+    // kept and every undeclared one dropped. Exactly backwards, and it looks
+    // right.
+    var chosen = <String, String>{};
+    for (var knob in recorded.entries) {
+      var declared = declaredByName[knob.key];
+      if (declared != null && computedValueOf(declared) == knob.value) continue;
+      chosen[knob.key] = knob.value;
+    }
+    return chosen;
+  }
+
   /// Why a launch of [entry] with [values] cannot go ahead — the `required`
   /// knobs nothing has chosen a value for — or null when it can.
   ///
@@ -2544,7 +2622,7 @@ class RunCore extends PluginCore {
     return RunLaunchResult(
       status: status,
       waited: wait,
-      progress: log.progress,
+      progress: log.stage,
       error:
           failure ?? (status == 'failed' ? 'the app stopped starting' : null),
       headline: status == 'failed' ? log.failureHeadline : null,
@@ -4136,7 +4214,7 @@ class RunCore extends PluginCore {
       mine: mine,
       up: up,
       reloadable: (probe?.canReload ?? false) && mine,
-      progress: up ? null : log?.progress,
+      progress: up ? null : log?.stage,
       tree: tree?.root?.toJson(),
       nodes: tree?.length,
       summary: wantsTree ? !full : null,

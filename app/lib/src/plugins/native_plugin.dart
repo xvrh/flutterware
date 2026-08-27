@@ -116,6 +116,25 @@ abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier
   /// reason to design around it.
   List<PluginRowCommand> rowCommands() => const [];
 
+  /// Where the rail's row for this plugin lands, as address segments.
+  ///
+  /// Null means *the child you were last in, or the first one*, which is
+  /// `ShellController.selectPlugin`'s fill-in and is right for every plugin
+  /// whose children are **packages**: a stable set, where landing on one is
+  /// landing somewhere.
+  ///
+  /// It is wrong for a plugin whose children are **instances**. The run
+  /// cockpit's children are its runs, and its failures, and clicking `Run`
+  /// therefore opened whichever run sorted first — so the launch form, the
+  /// device desk and the only emulator-boot control in the GUI had no row at
+  /// all for as long as anything was running, and one undismissed failure did
+  /// the same. `_RunPanel` had always handled the empty address correctly; it
+  /// was simply never given it, and the test that closed the question asserted
+  /// against the *panel* rather than against the rail that decides.
+  ///
+  /// Answer with the plugin's own landing when "the first one" is not a place.
+  List<String>? get railLanding => null;
+
   /// Schedules a change notification, coalescing bursts into one.
   ///
   /// Prefer this over [notifyListeners]. A plugin's work starts when a widget

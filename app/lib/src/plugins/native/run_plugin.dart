@@ -24,6 +24,7 @@ import '../../run/network_tab.dart';
 import '../../run/panels_tab.dart';
 import '../../run/screen_picture.dart';
 import '../../run/launch.dart';
+import '../../run/launching_pane.dart';
 import '../../run/file_refresh.dart';
 import '../../run/logs_tab.dart';
 import '../../inspect/elements_view.dart';
@@ -95,6 +96,22 @@ class RunPlugin extends NativePlugin<RunCore> {
   // which is what a hover-only affordance is. `Run` now lands on the page that
   // starts one ([_RunPanel.build]), so the row itself is the door and a `+`
   // beside it would be a second one to the same place.
+
+  /// The launch desk, always — never a run.
+  ///
+  /// This is the other half of the sentence above, and for a release it was
+  /// missing. `_RunPanel` renders the launch form for the bare address and
+  /// always has; the rail is what never handed it one, because
+  /// `ShellController.selectPlugin` fills a plugin's row in with its first
+  /// child and this plugin's children are its runs. So `Run` opened whichever
+  /// app happened to be up, and with one launch in flight — or one failure
+  /// nobody had dismissed — there was no click anywhere in the GUI that
+  /// reached the form, the device desk, or the boot button for an emulator
+  /// that is not a device until it is booted.
+  ///
+  /// A run still has a row: its own. Two kinds of row, two destinations.
+  @override
+  List<String> get railLanding => const [];
 
   @override
   Widget buildPanel(BuildContext context) => _RunPanel(this);
@@ -195,6 +212,7 @@ class _RunPanelState extends State<_RunPanel> {
         // page became the plugin's landing: the rail is the list.
         return switch ((failed, shown)) {
           (var failure?, _) => _FailedRunPage(
+            core: _core,
             failure: failure,
             onDismiss: () {
               _core.dismissFailure(failure.key);
@@ -267,6 +285,65 @@ class _RunViewState extends State<_RunView> {
   /// again*, and on the Screen view the device is half of what is on screen.
   final _device = GlobalKey<_DeviceStripHostState>();
 
+  /// Stops this run and opens the launch form holding what it was launched
+  /// with.
+  ///
+  /// The move somebody makes when the build log has just told them the flavor
+  /// was wrong, or a knob was. Without it that is stop, find the form, and
+  /// re-answer five fields from memory — and until the rail landed on the form
+  /// again, *find the form* was itself impossible.
+  ///
+  /// The priming goes through [RunCore.lastLaunch] because that is what the
+  /// form already reads on open. A run with no package recorded — one launched
+  /// before the field existed — simply arrives at an unprimed form rather than
+  /// at a half-filled one.
+  void _stopAndEdit() {
+    var core = widget.core;
+    var handle = widget.handle;
+    if (handle.package case var package?) {
+      core.lastLaunch = (
+        device: handle.device,
+        package: package,
+        entrypoint: handle.entrypoint,
+        flavor: handle.flavor,
+        // **What was chosen, not what was resolved.** A handle records the
+        // knobs the app was *built with*, which includes everything a `from:`
+        // worked out for a field the user never touched. Handing that straight
+        // to the form types every derived value in as a deliberate override —
+        // the SDK path stops tracking whichever flutterware launched you, and
+        // a per-worktree port freezes to the one this run happened to get.
+        knobs: core.chosenKnobs(package, _entryOf(core, handle), handle.knobs),
+      );
+    }
+    widget.onControl('stop', handle);
+    // Immediately, rather than waiting for the ledger to lose the handle: the
+    // point of this button is to be somewhere else.
+    AddressScope.write(context).setSegments(const []);
+  }
+
+  /// The entry point [handle] names, as this config declares it.
+  ///
+  /// Needed because a knob is a fact about a `main()`'s signature, so deciding
+  /// which of a handle's recorded values were *chosen* means knowing which
+  /// parameters that entry point has. A path that the config no longer
+  /// declares — an entry point renamed since the launch — answers with a bare
+  /// reference, whose empty knob list makes [RunCore.chosenKnobs] keep
+  /// everything. That is the old behaviour, for the one case where there is
+  /// nothing better to go on.
+  EntrypointRef _entryOf(RunCore core, RunHandle handle) {
+    var package = handle.package;
+    if (package != null) {
+      for (var entry in core.entrypointsFor(package)) {
+        if (entry.path == handle.entrypoint) return entry;
+      }
+    }
+    return EntrypointRef(
+      path: handle.entrypoint,
+      name: handle.entrypoint,
+      declared: false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     var core = widget.core;
@@ -281,6 +358,16 @@ class _RunViewState extends State<_RunView> {
       mine: mine,
       handle: handle,
     );
+    // Which pane the switch below will pick, decided once: the header drops
+    // the capability pill when the pane underneath it is already saying the
+    // same words. Same rule the rail follows for a plugin whose status is a
+    // reduction over its children — a row does not repeat what the row under
+    // it is saying, and `Running Xcode build...` twice, an inch apart, was
+    // exactly that.
+    var launching =
+        !state.canInspect &&
+        view != RunViewKind.steps &&
+        view != RunViewKind.logs;
 
     // **Header first, then the tabs.** The design drew them the other way and
     // it read wrong once built: the run is the subject and the tabs are views
@@ -294,6 +381,7 @@ class _RunViewState extends State<_RunView> {
           handle: handle,
           state: state,
           mine: mine,
+          echoedBelow: launching,
           onControl: widget.onControl,
         ),
         _ViewTabs(
@@ -345,11 +433,27 @@ class _RunViewState extends State<_RunView> {
           ),
         Expanded(
           child: switch (view) {
-            // The journal is a file: it answers while the app builds and
-            // after it dies, which is exactly when a post-mortem review
-            // wants it.
+            // The journal and the launcher log are files: they answer while
+            // the app builds and after it dies, which is exactly when a
+            // post-mortem review wants them — and, for the log, the only
+            // window in which anybody is asking what the build is doing.
+            // Above the guard for that reason; see [_ViewTabs._fileBacked].
             RunViewKind.steps => _StepsTab(handle: handle),
-            _ when !state.canInspect => _NotYet(state: state, handle: handle),
+            RunViewKind.logs => LogsTab(core: core, handle: handle),
+            _ when !state.canInspect => LaunchingPane(
+              core: core,
+              handle: handle,
+              stage: state.label,
+              // Only once something has asked the run. With no probe, a handle
+              // that has not answered is as likely to be an app that has been
+              // up for hours as a build in flight, and the pane must not turn
+              // that into a claim about a build running late.
+              elapsed: probe == null
+                  ? null
+                  : DateTime.now().difference(handle.startedAt),
+              platform: core.platformOf(handle.device),
+              onStopAndEdit: mine ? _stopAndEdit : null,
+            ),
             RunViewKind.screen => _ScreenTab(
               key: _screen,
               core: core,
@@ -360,7 +464,6 @@ class _RunViewState extends State<_RunView> {
                 widget.onReading(_screen.currentState?.isReading ?? false);
               },
             ),
-            RunViewKind.logs => LogsTab(core: core, handle: handle),
             RunViewKind.network => NetworkTab(
               // Keyed by run, like the App tab: a different run behind the
               // same tab is a different app to attach to.
@@ -404,7 +507,11 @@ class _RunState {
   }) {
     if (probe == null) {
       return _RunState(
-        label: log?.summary ?? 'not probed yet',
+        // Never *not probed yet*, which is a fact about us. This is the
+        // headline of the launching pane, and the reader is asking about their
+        // app: with no log to go on, the honest answer about a handle that
+        // exists and has not answered is the same word an empty log gives.
+        label: log?.summary ?? 'starting',
         canInspect: false,
         canReload: false,
         tone: _Tone.quiet,
@@ -412,7 +519,7 @@ class _RunState {
     }
     if (!probe.canInspect) {
       return _RunState(
-        label: log?.progress ?? log?.summary ?? 'building',
+        label: log?.stage ?? log?.summary ?? 'building',
         canInspect: false,
         canReload: false,
         tone: _Tone.quiet,
@@ -458,12 +565,20 @@ class _RunHeader extends StatelessWidget {
     required this.state,
     required this.mine,
     required this.onControl,
+    this.echoedBelow = false,
   });
 
   final RunHandle handle;
   final _RunState state;
   final bool mine;
   final void Function(String action, RunHandle handle) onControl;
+
+  /// The open pane is already saying what the pill would say, so the pill goes.
+  ///
+  /// True for the launching pane, whose whole headline is the stage. It is
+  /// false on Steps and Logs, where the pane is a file and says nothing about
+  /// the run — which is precisely when the pill is the only thing that does.
+  final bool echoedBelow;
 
   @override
   Widget build(BuildContext context) {
@@ -503,7 +618,7 @@ class _RunHeader extends StatelessWidget {
                     // when it is news. "reloadable" is the normal state and
                     // the enabled buttons already say it; the pill appears
                     // when something is missing.
-                    if (state.tone != _Tone.good) ...[
+                    if (state.tone != _Tone.good && !echoedBelow) ...[
                       const Gap(FwSpacing.sm),
                       _CapabilityPill(state: state),
                     ],
@@ -642,9 +757,12 @@ class _ViewTabs extends StatelessWidget {
   /// The open pane's capture button, when it shows a picture worth exporting.
   final Widget? capture;
 
-  /// False while the app has nothing to read. The tabs stay visible and stop
-  /// responding — hiding them would move the page's furniture around every
-  /// time a build started.
+  /// False while the app has nothing to read. The tabs stay visible and go
+  /// grey — hiding them would move the page's furniture around every time a
+  /// build started, and drawing them normally is what made a building cockpit
+  /// read as a broken one.
+  ///
+  /// It does not reach [_fileBacked]. Those two panes are files.
   final bool enabled;
 
   /// A reading is in flight; the spinner stands where the button was.
@@ -654,22 +772,45 @@ class _ViewTabs extends StatelessWidget {
   /// to re-read — the log is read from the file on every build.
   final VoidCallback? onRefresh;
 
+  /// The panes that are a file on disk rather than a question put to the app.
+  ///
+  /// The journal and the launcher log are both written from before there is an
+  /// app and survive the one they describe, so neither has any reason to wait
+  /// for a VM service — and the log is the *only* thing that can say what a
+  /// cold build is doing or why it never finished. It spent a release behind
+  /// the same disable as the screenshot: the file grew from byte zero and the
+  /// page offered its path as text.
+  static const _fileBacked = {'steps', 'logs'};
+
+  static const _tabs = [
+    (id: 'screen', label: 'Screen'),
+    (id: 'steps', label: 'Steps'),
+    (id: 'logs', label: 'Logs'),
+    (id: 'network', label: 'Network'),
+    (id: 'panels', label: 'App'),
+    (id: 'knobs', label: 'Knobs'),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return InspectTabStrip(
-      tabs: const [
-        InspectDockTab(id: 'screen', label: 'Screen', body: _unused),
-        InspectDockTab(id: 'steps', label: 'Steps', body: _unused),
-        InspectDockTab(id: 'logs', label: 'Logs', body: _unused),
-        InspectDockTab(id: 'network', label: 'Network', body: _unused),
-        InspectDockTab(id: 'panels', label: 'App', body: _unused),
-        InspectDockTab(id: 'knobs', label: 'Knobs', body: _unused),
+      tabs: [
+        for (var tab in _tabs)
+          InspectDockTab(
+            id: tab.id,
+            label: tab.label,
+            enabled: enabled || _fileBacked.contains(tab.id),
+            // Said, because a grey *Screen* beside a live *Logs* is otherwise
+            // two guesses: a build in flight, or a run this build cannot read.
+            disabledReason: 'waiting for the app — the log is live',
+            body: _unused,
+          ),
       ],
       current: view.name,
+      // No guard here. The strip refuses a disabled tab itself, and a caller
+      // that swallowed the tap on top of a strip that drew it alive is how the
+      // page came to have five controls that did nothing.
       onSelect: (id) {
-        // Steps is a file, like the log — readable before the app answers
-        // and after it dies — so it never waits for the app.
-        if (!enabled && id != 'steps') return;
         AddressScope.write(context).setSegments(
           runSegments(runKey, view: RunViewKind.byName(id) ?? view),
         );
@@ -840,50 +981,6 @@ class _DeviceStripHostState extends State<_DeviceStripHost> {
     // the device answers either way, which is the whole reason this sits
     // outside the tab strip's disable.
     onSet: _settings.isEmpty ? null : _set,
-  );
-}
-
-/// Shown while a run has no app to ask — a build in flight, or one that failed.
-///
-/// The logs are offered rather than described, because this is the state where
-/// they are the only thing that can say what is happening.
-class _NotYet extends StatelessWidget {
-  const _NotYet({required this.state, required this.handle});
-
-  final _RunState state;
-  final RunHandle handle;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(FwSpacing.xl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: context.colors.mut2,
-            ),
-          ),
-          const Gap(FwSpacing.md),
-          Text(state.label, style: context.type.body),
-          const Gap(FwSpacing.xs),
-          Text(
-            'Nothing can be read until the app starts. A cold build can '
-            'take a few minutes.',
-            textAlign: TextAlign.center,
-            style: context.type.caption.copyWith(color: context.colors.mut2),
-          ),
-          if (handle.logPath case var path?) ...[
-            const Gap(FwSpacing.sm),
-            SelectableText(path, style: context.type.micro),
-          ],
-        ],
-      ),
-    ),
   );
 }
 
@@ -2560,11 +2657,35 @@ class _Field extends StatelessWidget {
 /// [_Failed] uses, because what goes here is a build failure: a fault, the file
 /// it is in, and often the numbered steps that fix it. Centring that turns
 /// instructions into a shrug.
+/// A launch that never came up: what went wrong, and the log it went wrong in.
+///
+/// The reason on top and the whole log underneath, which is the shape the
+/// building state already has — and for the same argument, applied to the state
+/// that needs it more. This page used to end at the reason: the extracted block
+/// of trailing lines, and then the log's *path*, printed as selectable text for
+/// somebody to carry to a terminal. A build failure is the one moment anybody
+/// wants to scroll the whole thing, and it was the one page that would not let
+/// them.
+///
+/// The block stays, capped, above the log rather than instead of it. It is the
+/// tool's own account of the fault — the head of the trailing block, not its
+/// tail, because a tool states the fault first and summarises last — and
+/// nothing in it is lost by the cap, since the same lines are in the pane
+/// below with an `Errors` filter over them.
 class _FailedRunPage extends StatelessWidget {
-  const _FailedRunPage({required this.failure, required this.onDismiss});
+  const _FailedRunPage({
+    required this.core,
+    required this.failure,
+    required this.onDismiss,
+  });
 
+  final RunCore core;
   final RunFailure failure;
   final VoidCallback onDismiss;
+
+  /// Enough for the fault and a couple of lines of context. Past that this is
+  /// a log, and there is one of those directly below.
+  static const _reasonHeight = 168.0;
 
   @override
   Widget build(BuildContext context) {
@@ -2604,7 +2725,8 @@ class _FailedRunPage extends StatelessWidget {
           ),
         ),
         const Divider(height: 1),
-        Expanded(
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: _reasonHeight),
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(FwSpacing.md),
             child: SelectableText(
@@ -2613,16 +2735,18 @@ class _FailedRunPage extends StatelessWidget {
             ),
           ),
         ),
-        if (failure.logPath case var path?) ...[
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(FwSpacing.sm),
-            child: SelectableText(
-              path,
-              style: context.type.micro.copyWith(color: colors.mut3),
-            ),
+        const Divider(height: 1),
+        // The path is no longer printed here. It is in the log pane's own menu,
+        // beside the lines it names — which is where somebody who wants to open
+        // it in a terminal is already looking.
+        Expanded(
+          child: LogsTab.ofFailure(
+            key: ValueKey(failure.key),
+            core: core,
+            logPath: failure.logPath,
+            subject: failure.key,
           ),
-        ],
+        ),
       ],
     );
   }
