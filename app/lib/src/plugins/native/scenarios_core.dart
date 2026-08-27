@@ -905,19 +905,30 @@ class ScenariosCore extends PluginCore {
               'Network',
               kind: ActionParameterKind.string,
               required: false,
-              options: [ActionOption('off'), ActionOption('live')],
+              options: [
+                ActionOption('off'),
+                ActionOption('replay'),
+                ActionOption('record'),
+                ActionOption('live'),
+              ],
               description:
                   "What this run's http requests reach. `off` — the default "
                   '— lets nothing leave the process: a request no scenario '
                   'stated an answer for fails at once, naming itself, rather '
                   'than hanging the way an https request does under a plain '
-                  '`flutter test`. `live` opens the real network, which is '
-                  'the honest reading and the unrepeatable one: the same '
-                  'suite run twice is two different runs, and a scenario '
-                  'empties the image cache by design, so a suite pays its '
-                  "round trips once per scenario. Beats what a folder's "
-                  '`runScenarios(network: ...)` said; a `scenario(network: '
-                  '...)` beats both. The report says which modes ran.',
+                  '`flutter test`. `replay` answers from the recording '
+                  'committed beside the scenarios, offline and byte for byte; '
+                  'a request the recording does not hold is refused, naming '
+                  'it. `record` goes out and writes what comes back, '
+                  'overwriting what it fetches and leaving the rest — run it '
+                  'once, read the diff, commit. `live` goes out and writes '
+                  'nothing, which is the honest reading and the unrepeatable '
+                  'one: the same suite run twice is two different runs, and a '
+                  'scenario empties the image cache by design, so a suite pays '
+                  "its round trips once per scenario. Beats what a folder's "
+                  "`runScenarios(network: ...)` and the project's "
+                  '`fw.network(...)` said; a `scenario(network: ...)` beats '
+                  'all three. The report says which modes ran.',
             ),
             const ActionParameter(
               'format',
@@ -2953,6 +2964,7 @@ class ScenariosCore extends PluginCore {
             narrowestDevice: deviceChoice == 'narrowest',
             clock: clock,
             network: network,
+            projectNetwork: host.projectNetwork,
           );
           // The harness's own answer, not this side's: the origin it applied
           // may have come from the default or from `FW_CLOCK`, neither of

@@ -1420,35 +1420,26 @@ class _ScenarioPageState extends State<_ScenarioPage> {
               ),
             ),
           ],
-          // Said only when something went out. `off` is the default and the
-          // quiet case — nothing left the process, which is what the picture
-          // already implies. `live` is the one worth a badge: the run talked
-          // to something, so the same run tomorrow may not produce the same
-          // pictures, and nothing on the screen says so.
-          if (run?.network.contains('live') ?? false) ...[
+          // Said when the run's requests went anywhere but nowhere. `off` is
+          // the default and the quiet case — nothing left the process, which
+          // is what the picture already implies. The other three are worth a
+          // badge for different reasons: `live` and `record` mean the run
+          // talked to something and may not repeat; `replay` means the
+          // pictures came off a recording, which is the good case and still
+          // not something the screen says.
+          if (_networkBadge(run)
+              case (var label, var icon, var tone, var why)?) ...[
             const Gap(FwSpacing.md),
             Tooltip(
-              message: run!.network.length > 1
-                  ? 'Some scenarios in this run reached the real network and '
-                        'some did not — it is a per-folder setting. What came '
-                        'back is what the network said at the time, so these '
-                        'pictures are not guaranteed to repeat.'
-                  : 'This run reached the real network. What came back is '
-                        'what the network said at the time, so these pictures '
-                        'are not guaranteed to repeat — and the run needs a '
-                        'connection to pass.',
+              message: why,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.cloud_outlined,
-                    size: FwIconSize.md,
-                    color: colors.amber,
-                  ),
+                  Icon(icon, size: FwIconSize.md, color: tone),
                   const Gap(FwSpacing.xs),
                   Text(
-                    run.network.length > 1 ? 'partly live' : 'live network',
-                    style: context.type.caption.copyWith(color: colors.amber),
+                    label,
+                    style: context.type.caption.copyWith(color: tone),
                   ),
                 ],
               ),
@@ -1482,6 +1473,50 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   /// about a screen the reader has already scrolled past.
   int _unsettled(ScenarioPanelRun? run) =>
       run?.steps.where((step) => !step.settled).length ?? 0;
+
+  /// What to say about where this run's requests went, or null for a run that
+  /// made none go anywhere.
+  ///
+  /// A run is mixed when its folders disagree, which is normal and not a
+  /// problem — so the badge names the loudest thing that happened rather than
+  /// listing them: reaching out beats replaying, and replaying beats off.
+  (String, IconData, Color, String)? _networkBadge(ScenarioPanelRun? run) {
+    var modes = run?.network ?? const <String>[];
+    var mixed = modes.length > 1;
+    var colors = context.colors;
+    if (modes.contains('record')) {
+      return (
+        mixed ? 'partly recording' : 'recording',
+        Icons.cloud_download_outlined,
+        colors.amber,
+        'This run reached the real network and wrote what came back into the '
+            'recording beside the scenarios. Read the diff before committing '
+            'it: a response body is whatever the endpoint answered with.',
+      );
+    }
+    if (modes.contains('live')) {
+      return (
+        mixed ? 'partly live' : 'live network',
+        Icons.cloud_outlined,
+        colors.amber,
+        'This run reached the real network and wrote nothing down. What came '
+            'back is what the network said at the time, so these pictures are '
+            'not guaranteed to repeat — and the run needs a connection to '
+            'pass.',
+      );
+    }
+    if (modes.contains('replay')) {
+      return (
+        mixed ? 'partly replayed' : 'replayed',
+        Icons.inventory_2_outlined,
+        colors.mut2,
+        'These requests were answered from the recording committed beside the '
+            'scenarios. Nothing left the process, and the same run reproduces '
+            'on a machine with no connection.',
+      );
+    }
+    return null;
+  }
 
   /// The clock origin as a human reads it off a screenshot — the date and the
   /// time of day, which is the whole of what a pinned clock shows. Seconds and

@@ -187,6 +187,14 @@ Future<void> _runHarness(
 
   developer.registerExtension('ext.flutterware.scenarios.run', (_, args) async {
     try {
+      // The project's own default, under everything: a folder, a run and a
+      // scenario each beat it. Read per request rather than once, because a
+      // warm guest outlives an edit to `tool/flutterware.dart`.
+      scenarioProjectNetwork = switch (args['networkDefault']) {
+        null => null,
+        var raw => parseScenarioNetwork(raw),
+      };
+      scenarioNetworkStorePath = args['networkStore'];
       var report = await _run(
         scenarioMains,
         inspector: inspector,

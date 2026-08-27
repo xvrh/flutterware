@@ -6,8 +6,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-// ignore: implementation_imports
-import 'package:flutterware/src/scenarios/network.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
@@ -1426,6 +1424,8 @@ class _FakeRunner extends ScenarioRunner {
     int recordMaxFrames = 90,
     DateTime? clock,
     ScenarioNetwork? network,
+    ScenarioNetwork? projectNetwork,
+    String? networkStore,
   }) async {
     runs++;
     seenAxes.add(axes);

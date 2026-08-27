@@ -1,10 +1,18 @@
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
+
+import '../scenarios/network_mode.dart';
 import 'address.dart';
 import 'changes_config.dart';
 import 'package.dart';
 import 'plugin.dart';
 import 'project_identity.dart';
+
+/// Re-exported because [FlutterwareConfig.network] takes one: a
+/// `tool/flutterware.dart` imports `package:flutterware/plugins.dart` and
+/// nothing else.
+export '../scenarios/network_mode.dart' show ScenarioNetwork;
 
 /// What `tool/flutterware.dart` prints: the project's plugin declarations.
 ///
@@ -46,6 +54,7 @@ class PluginManifest {
     this.changes,
     this.identity,
     this.clock,
+    this.network,
   });
 
   final int version;
@@ -88,6 +97,21 @@ class PluginManifest {
   /// same name.
   final DateTime? clock;
 
+  /// What this project's scenarios reach when nothing nearer says otherwise,
+  /// or null for [ScenarioNetwork.off].
+  ///
+  /// The **lowest** of the four altitudes, under a folder's
+  /// `runScenarios(network: ...)`, a run's `--network=` and a
+  /// `scenario(network: ...)`. A project declares what it *is* — a suite that
+  /// plays its requests back from a committed recording is a fact about the
+  /// project, and repeating it in every folder is how one of them ends up
+  /// disagreeing.
+  ///
+  /// `fw.network(ScenarioNetwork.replay)` is the one worth stating.
+  /// [ScenarioNetwork.off] is already the default, and no project should be a
+  /// [ScenarioNetwork.live] project.
+  final ScenarioNetwork? network;
+
   /// Every package any plugin names, in declaration order, deduplicated.
   ///
   /// Derived rather than declared. It used to be its own `fw.packages([...])`
@@ -120,6 +144,7 @@ class PluginManifest {
     'changes': ?changes?.toJson(),
     'identity': ?identity?.toJson(),
     'clock': ?clock?.toIso8601String(),
+    'network': ?network?.name,
   };
 
   static PluginManifest fromJson(Map<String, Object?> json) {
@@ -177,6 +202,12 @@ class PluginManifest {
         String it => DateTime.tryParse(it),
         _ => null,
       },
+      network: switch (json['network']) {
+        String it => ScenarioNetwork.values.firstWhereOrNull(
+          (mode) => mode.name == it,
+        ),
+        _ => null,
+      },
     );
   }
 
@@ -191,6 +222,7 @@ class FlutterwareConfig {
   ChangesConfig? _changes;
   ProjectIdentity? _identity;
   DateTime? _clock;
+  ScenarioNetwork? _network;
 
   /// Declares how this project's changes should be ranked. See [ChangesConfig].
   ///
@@ -241,6 +273,20 @@ class FlutterwareConfig {
     _clock = origin;
   }
 
+  /// Declares what this project's scenarios reach by default. See
+  /// [PluginManifest.network].
+  ///
+  /// Refused twice, like [clock] and for the same reason.
+  void network(ScenarioNetwork mode) {
+    if (_network != null) {
+      throw StateError(
+        'fw.network was called twice. A project has one answer to what its '
+        'scenarios reach — declare one.',
+      );
+    }
+    _network = mode;
+  }
+
   /// Registers a plugin. The same class may be used more than once as long as
   /// the instances have distinct ids.
   void use(Plugin plugin) {
@@ -273,6 +319,7 @@ class FlutterwareConfig {
     changes: _changes,
     identity: _identity,
     clock: _clock,
+    network: _network,
   );
 }
 

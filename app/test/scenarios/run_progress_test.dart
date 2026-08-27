@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-// ignore: implementation_imports
-import 'package:flutterware/src/scenarios/network.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
@@ -243,6 +241,8 @@ class _Gated extends ScenarioRunner {
     int recordMaxFrames = 90,
     DateTime? clock,
     ScenarioNetwork? network,
+    ScenarioNetwork? projectNetwork,
+    String? networkStore,
   }) async {
     _outDir = outDir;
     Directory(outDir).createSync(recursive: true);

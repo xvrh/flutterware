@@ -18,7 +18,11 @@ export 'src/scenarios/network.dart'
         ScenarioNetwork,
         ScenarioNetworkPolicy,
         ScenarioNetworkRefusal,
+        ScenarioNetworkStore,
+        ScenarioRecording,
         ScenarioRequest,
+        defaultScenarioNetworkStore,
+        scenarioNetworkStorePath,
         scenarioPlaceholderPng;
 export 'src/scenarios/notification.dart' show ScenarioNotification;
 export 'src/scenarios/profile.dart'

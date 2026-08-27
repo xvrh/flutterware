@@ -167,8 +167,7 @@ unlanded request should reach the step as an event and the panel as a badge.
 
 # The feature, as a developer meets it
 
-*Built 2026-08-27: `off`, `live`, stubs, and the events. `record` and `replay`
-are the next piece and are sketched at the end.*
+*Built 2026-08-27, all four modes.*
 
 A scenario's network has a **mode**, and it is said in the same places `shots`
 is. That is the whole of the design; the rest is spelling.
@@ -178,9 +177,9 @@ is. That is the whole of the design; the rest is spelling.
 | mode | what a request does | offline | deterministic | speed |
 |---|---|---|---|---|
 | `ScenarioNetwork.off` | fails at once, **named on the step** | yes | yes | instant |
-| `ScenarioNetwork.live` | goes out, and what comes back is today's | no | no | network |
-| `replay` *(next)* | is served from the recording on disk | yes | yes | ~0.1ms |
-| `record` *(next)* | goes out, and what came back is written | no | no | network |
+| `ScenarioNetwork.replay` | is answered from the recording on disk | yes | yes | ~0.1ms |
+| `ScenarioNetwork.record` | goes out, and what came back is written | no | no | network |
+| `ScenarioNetwork.live` | goes out, and nothing is written | no | no | network |
 
 `off` is the default and is what `flutter_test` already did, except that
 `flutter_test` answered an empty 400 silently and **hung** on https. Now the
@@ -190,51 +189,148 @@ the step.
 It does **not** fail the scenario. A decorative avatar is not a reason to throw
 away a flow's other twelve assertions, and the alternative would turn every
 existing suite with an `Image.network` on screen red on upgrade. The step says
-so instead — and that is a real change from "a blank box and nothing else".
+so instead — which is the whole change from "a blank box and nothing else".
 
 ## Where you say it
+
+**The project**, in `tool/flutterware.dart` — the slot `fw.clock` sits in:
+
+```dart
+fw.clock(DateTime(2026, 1, 1, 9, 41));
+fw.network(ScenarioNetwork.replay);
+```
 
 **A folder**, in its `flutter_test_config.dart`, beside `shots` and `profile`:
 
 ```dart
 Future<void> testExecutable(FutureOr<void> Function() testMain) =>
-    runScenarios(testMain, profile: phones, network: ScenarioNetwork.live);
+    runScenarios(testMain, profile: phones, network: ScenarioNetwork.replay);
 ```
 
 **One run**, from the panel, the CLI or the MCP:
 
 ```sh
-fw run scenarios run --scenario=checkout --network=live
+fw run scenarios run --scenario=checkout --network=record
 ```
 
 ```sh
 # the bare `flutter test` lane, which reads no request and no manifest
-FW_NETWORK=live flutter test
-flutter test --dart-define=fw.network=live
+FW_NETWORK=replay flutter test
+flutter test --dart-define=fw.network=replay
 ```
 
 **One scenario**, when it is the odd one out:
 
 ```dart
-scenario('the real payment sandbox', network: ScenarioNetwork.live, (s) async {
-  …
+scenario('nothing is recorded for this one', network: ScenarioNetwork.off,
+    (s) async { … });
+```
+
+Precedence: the scenario's own, then the run's, then the folder's, then the
+project's, then `off`. The run beats the folder deliberately — a
+`--network=record` on one run is somebody saying "not this time", which is the
+whole reason a run flag exists.
+
+Two things follow from the manifest being a Dart file that has to be
+*executed*: a bare `flutter test` reads no manifest, so a project that says
+`fw.network(...)` still needs `FW_NETWORK=` in that lane. Exactly the
+asymmetry `fw.clock`/`FW_CLOCK` already has, and the reason a folder is the
+better altitude for "these ones talk to an API" — a folder config is read by
+both lanes.
+
+The run report carries every mode that actually ran (`"network": ["off",
+"replay"]`), and the panel badges the run accordingly — **recording**,
+**live network**, **replayed**, or nothing at all for `off`. Same argument that
+puts the clock origin beside it: a picture taken with the network open, one
+taken off a recording, and one taken with it shut are three different kinds of
+evidence, and the picture does not say which.
+
+## Recording, once
+
+Write the scenario as though the network were simply there:
+
+```dart
+scenario('the profile', (s) async {
+  await s.pumpWidget(const Profile());
+  await s.screen('the profile');
 });
 ```
 
-Precedence: the scenario's own, then the run's, then the folder's, then `off`.
-The run beats the folder deliberately — a `--network=live` on one run is
-somebody saying "not this time", which is the whole reason a run flag exists.
+Run it once with `--network=record`. What came back lands beside the scenarios
+at `test/scenarios/network/`, two files per exchange:
 
-The run report carries every mode that actually ran (`"network": ["off",
-"live"]`), and the panel puts a **live network** badge on a run that reached
-out — the same argument that puts the clock origin beside it. A picture taken
-with the network open and one taken with it shut are not the same evidence, and
-the picture does not say which.
+```
+get-api-example-com-v1-profile-bfe5e75c.json          ← what it was
+get-api-example-com-v1-profile-bfe5e75c.body.json     ← what came back
+get-cdn-example-com-avatars-ada-png-5481188e.json
+get-cdn-example-com-avatars-ada-png-5481188e.body.png
+```
 
-There is deliberately no `fw.network(...)` project slot yet. It would be a
-project saying "we are an `off` project", which is the default, or "we are a
-`live` project", which nobody should be. It arrives with `replay`, which is the
-answer a project *would* want to state once.
+```json
+{
+  "version": 1,
+  "method": "GET",
+  "url": "https://api.example.com/v1/profile",
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "bytes": 106,
+  "body": "get-api-example-com-v1-profile-bfe5e75c.body.json",
+  "recorded": "2026-08-27T09:41:00.000Z"
+}
+```
+
+Commit it. Every run after that is offline, byte-identical and instant — and a
+fresh clone reproduces the screenshots with no network at all.
+
+Four decisions in that layout, each of them a failure designed out:
+
+- **The body is a sibling file with the right extension**, never a string
+  inside the metadata. A committed recording is read in a diff, and a 5KB JSON
+  response escaped onto one line is a recording nobody reviews.
+- **One file per exchange, and no index.** `flutter test` runs files
+  concurrently in separate processes; a single index would be a
+  read-modify-write race between them, and a recording that loses entries
+  depending on how the runner scheduled the suite is not a recording.
+- **The name is a slug plus a digest.** The slug is for the human reading
+  `git status`; the digest is what makes it an identity.
+- **Only the status, the content type and the body are kept.** No request
+  headers — they are not part of the key, so keeping them would write an
+  `Authorization` into a committed file for nothing — and no response headers
+  but the one the body cannot be decoded without. `Set-Cookie` is the header
+  that would leak a session, and the way it does not is that nothing in the
+  writer can write it. A response *body* is still yours to read before
+  committing.
+
+`record` always goes out and never partly reads the store: "refresh what I
+have" and "fill in what I am missing" would otherwise be the same command, and
+the one you wanted is whichever you did not get. What it fetches it overwrites,
+what it does not ask for it leaves — so one endpoint is refreshed by running
+one scenario. And the caller is handed the bytes that were *written*, not the
+ones off the wire, so a record run and every replay after it draw the same
+picture. That is a test, not a hope.
+
+## A miss is a refusal, not a blank frame
+
+```
+no recording for this request
+
+The recording holds nothing for GET https://api.example.com/v3/messages?page=1.
+
+It holds 2 requests for api.example.com:
+  GET https://api.example.com/v1/profile
+  GET https://api.example.com/v1/settings
+
+Record it:
+  fw run scenarios run --network=record
+
+Answer it here:
+  s.network.get('/v3/messages', json: {…});
+```
+
+The query string is part of the identity and nothing is normalised: a store
+that quietly answered `?page=1` with what it recorded for `?page=2` would be
+worse than no store at all, and a url carrying a nonce is better served by a
+stub that says so than by a matcher guessing which parts of a url matter.
 
 ## Stating an answer
 
@@ -242,43 +338,21 @@ A stub is a fact about *this* scenario — the empty inbox, the 503, the train �
 and no reading of a real server can be asked to produce one on demand.
 
 ```dart
-scenario('the inbox is empty', (s) async {
-  s.network.get('/api/messages', json: []);
-  await s.pumpWidget(const App());
-  await s.screen('the empty state');
-});
-
-scenario('the phone is on a train', (s) async {
-  s.network.any(throws: const SocketException('Network is unreachable'));
-  await s.pumpWidget(const App());
-  await s.screen('the offline banner');
-});
-```
-
-The full set — matching a path, a whole url or a `RegExp`:
-
-```dart
-s.network.get(url, json: …);              // encodes, sets the content type
-s.network.get(url, body: bytes, contentType: …);
-s.network.get(url, status: 503);
-s.network.get(url, throws: …);
-s.network.post(url, json: …);             // and put / patch / delete
-s.network.any(…);                         // everything no stub claimed
+s.network.get('/api/messages', json: []);
+s.network.get('/api/messages', status: 503);
+s.network.any(throws: const SocketException('Network is unreachable'));
 s.network.image(url, scenarioPlaceholderPng(width: 96, red: 0x4C));
+s.network.post('/api/orders', json: {'id': 7}, status: 201);
 ```
 
-Three rules, each of them a footgun that was designed out rather than
-documented:
+Three rules, each a footgun designed out rather than documented:
 
-- **A stub always beats the mode.** A scenario under `live` can pin the one
-  response it is about and let the other forty go out.
+- **A stub always beats the mode** — including `replay`, so one scenario can
+  pin the response it is about and let the rest come off the recording.
 - **A path never matches by substring.** `'/api/me'` does not answer
-  `/api/messages`. A stub that fires for a url nobody meant it to is exactly the
-  failure this surface exists to prevent; a `RegExp` is how anything looser is
-  said out loud.
+  `/api/messages`; a `RegExp` is how anything looser is said out loud.
 - **`any()` is a slot, not a stub at the end of the list.** A catch-all
-  competing on registration order would swallow every stub written after it,
-  and a rule you have to remember the order for is a rule that gets got wrong.
+  competing on registration order would swallow every stub written after it.
 
 Re-stating a url changes what it answers from there on, which is how "and now
 the list has the new item in it" is written. A `split` resets the stubs at the
@@ -288,19 +362,18 @@ top of every branch, because each path states its own answers.
 
 Every exchange is an `AppEvent.request`, so it rides the step with no extra
 call — the flow view's Events pane, `scenarios read`, and the same
-`AppChannel.network` colour the devbar already uses. Measured on the example
-suite:
+`AppChannel.network` colour the devbar already uses. Measured on the example:
 
 ```
-GET https://example.com/ada.png → off      (refused — the network is off …)
-GET https://example.com/ada.png → 200      (answered: stub)
-GET https://example.com/ada.png → stub     (SocketException: Network is …)
+GET https://api.example.com/v1/profile → 200    (answered: replay)
+GET https://api.example.com/v1/profile → 503    (answered: stub)
+GET https://api.example.com/v1/profile → SocketException: Network is …
+GET https://api.example.com/v1/profile → refused — the network is off …
 ```
 
 And in the body, when the request *is* the assertion:
 
 ```dart
-await s.tap('Place order');
 expect(s.network.requests.last.url.path, '/api/orders');
 expect(s.network.requests.last.status, 201);
 ```
@@ -312,7 +385,7 @@ harness-owned client:
 
 1. **Every door funnels through it** — `HttpClient()` in app code,
    `package:http`, `dio`, and `Image.network` via
-   `debugNetworkImageHttpClientProvider` (which is needed separately because
+   `debugNetworkImageHttpClientProvider` (needed separately because
    `NetworkImage`'s client is a process-lifetime `static final`).
 2. **`openUrl` runs in `Zone.root`.** This is the line that makes https work
    at all — see the findings above.
@@ -326,8 +399,15 @@ self-signed dev API, a user agent, a connection timeout — reaches the shared
 pool, last writer wins. That is the price of one pool and one thing to close,
 and everything an app actually sets here is pool-shaped anyway.
 
-Nothing new pumps: `landRealWork` already waits on `imageCache.pendingImageCount`,
-so a `live` image lands inside the step that mounts it.
+The shared client sets `autoUncompress = true`, unlike `NetworkImage`'s own,
+which turns it off so `Content-Length` counts the bytes that arrive. What is
+worth more here is that a body is always plain: a recording of gzipped bytes
+replayed without the `Content-Encoding` that explained them is a body nothing
+can decode.
+
+Nothing new pumps: `landRealWork` already waits on
+`imageCache.pendingImageCount`, so a `live` image lands inside the step that
+mounts it.
 
 ## Not covered
 
@@ -336,17 +416,7 @@ so a `live` image lands inside the step that mounts it.
 websockets, or gRPC. Said out loud so it is not rediscovered as another blank
 frame.
 
-## What `record` and `replay` still need deciding
-
-1. **Where does the store live, and is it committed?** Committed is what makes
-   a fresh clone reproducible — which puts a size discipline on it: dedupe by
-   content hash, and expect images to be the bulk.
-2. **Keyed per project or per scenario?** Per project dedupes the avatar forty
-   scenarios share; per scenario makes a scenario portable. The shots/report
-   split suggests a shared store with a per-scenario index.
-3. **What is the match key?** Method + url is the 90% case, and the stub
-   matcher above already has the vocabulary. A nonce in a query string needs a
-   normaliser; a POST needs the body in the key or explicitly out of it.
-4. **Secrets.** A recording holds response bodies and request headers.
-   `Authorization` and `Cookie` must never reach disk; the safe default is an
-   allow-list, not a deny-list.
+Nor is a request whose url changes per run — a nonce, a timestamp, a cache
+buster. `replay` refuses it every time, correctly and unhelpfully. A normaliser
+hook is the obvious next thing and is deliberately not guessed at yet: the
+shape it wants is a real consumer's real url, not an invented one.

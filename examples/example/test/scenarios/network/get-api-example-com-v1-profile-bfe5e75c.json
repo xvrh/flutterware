@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "method": "GET",
+  "url": "https://api.example.com/v1/profile",
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "bytes": 106,
+  "body": "get-api-example-com-v1-profile-bfe5e75c.body.json",
+  "recorded": "2026-08-27T09:41:00.000Z"
+}

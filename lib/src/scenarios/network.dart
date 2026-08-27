@@ -7,8 +7,24 @@ import 'package:flutter/painting.dart';
 
 import '../app_events/events.dart';
 import 'network_mode.dart';
+import 'network_store.dart';
 
 export 'network_mode.dart';
+export 'network_store.dart'
+    show
+        ScenarioNetworkStore,
+        ScenarioRecording,
+        defaultScenarioNetworkStore,
+        scenarioNetworkStorePath;
+
+/// What the project's `fw.network(...)` declared, or null when it declared
+/// nothing.
+///
+/// The **lowest** altitude: a folder, a run and a scenario all beat it. Set by
+/// the harness from the manifest the host read; null under a bare
+/// `flutter test`, which reads no manifest — that lane says it with
+/// `FW_NETWORK`, exactly as it says the clock with `FW_CLOCK`.
+ScenarioNetwork? scenarioProjectNetwork;
 
 /// Every mode a scenario in this run actually ran under.
 ///
@@ -36,10 +52,15 @@ final scenarioNetworkModesRun = <ScenarioNetwork>{};
 /// });
 /// ```
 class ScenarioNetworkPolicy {
-  ScenarioNetworkPolicy(this.mode);
+  ScenarioNetworkPolicy(this.mode, {ScenarioNetworkStore? store})
+    : store = store ?? ScenarioNetworkStore(resolvedScenarioNetworkStore());
 
   /// What answers a request no stub claimed.
   final ScenarioNetwork mode;
+
+  /// Where [ScenarioNetwork.replay] reads and [ScenarioNetwork.record]
+  /// writes. Untouched by the other two modes.
+  final ScenarioNetworkStore store;
 
   /// Every exchange this scenario has made, in order — the same list the
   /// step's Events pane is built from, for a body that wants to assert on it.
@@ -378,6 +399,17 @@ class _Stub {
   final Map<String, String> headers;
   final Object? throws;
 
+  /// A recording, as the thing that answers a request.
+  factory _Stub.of(ScenarioRecording recording) => _Stub(
+    method: recording.method,
+    url: null,
+    status: recording.status,
+    body: recording.body,
+    contentType: recording.contentType,
+    headers: const {},
+    throws: null,
+  );
+
   bool matches(String requestMethod, Uri requestUrl) {
     if (method != null && method != requestMethod) return false;
     return switch (url) {
@@ -438,9 +470,15 @@ HttpClient _newRealClient() {
   var saved = HttpOverrides.current;
   HttpOverrides.global = null;
   try {
-    // `autoUncompress` off for the same reason `NetworkImage` turns it off:
-    // it is what makes `Content-Length` mean the number of bytes that arrive.
-    return Zone.root.run(() => HttpClient()..autoUncompress = false);
+    // `autoUncompress` **on**, unlike `NetworkImage`'s own client, which
+    // turns it off so `Content-Length` counts the bytes that arrive. What is
+    // worth more here is that a body is always plain: a recording of gzipped
+    // bytes replayed without the `Content-Encoding` that explained them is a
+    // body nothing can decode, and the alternative — keeping that header, and
+    // only that one — is a second thing the store has to be right about.
+    // `consolidateHttpClientResponseBytes` reads `compressionState` and skips
+    // its length check accordingly, so nothing downstream is worse off.
+    return Zone.root.run(() => HttpClient()..autoUncompress = true);
   } finally {
     HttpOverrides.global = saved;
   }
@@ -475,21 +513,19 @@ class _FunnelClient implements HttpClient {
     }
     switch (policy.mode) {
       case ScenarioNetwork.off:
-        return _StubRequest(
-          policy,
-          verb,
-          url,
-          _Stub(
-            method: verb,
-            url: null,
-            status: 0,
-            body: null,
-            contentType: null,
-            headers: const {},
-            throws: ScenarioNetworkRefusal(verb, url),
-          ),
-        );
+        return _refusal(verb, url, ScenarioNetworkRefusal.off(verb, url));
+      case ScenarioNetwork.replay:
+        var recorded = policy.store.read(verb, url);
+        if (recorded == null) {
+          return _refusal(
+            verb,
+            url,
+            ScenarioNetworkRefusal.notRecorded(verb, url, policy.store),
+          );
+        }
+        return _StubRequest(policy, verb, url, _Stub.of(recorded), 'replay');
       case ScenarioNetwork.live:
+      case ScenarioNetwork.record:
         // Root zone, and the whole reason this file exists — see
         // [_newRealClient]. The sink is the caller's to close, which is what
         // `close_sinks` cannot see from here.
@@ -500,6 +536,23 @@ class _FunnelClient implements HttpClient {
         return _LiveRequest(policy, verb, url, request);
     }
   }
+
+  _StubRequest _refusal(String method, Uri url, ScenarioNetworkRefusal why) =>
+      _StubRequest(
+        policy,
+        method,
+        url,
+        _Stub(
+          method: method,
+          url: null,
+          status: 0,
+          body: null,
+          contentType: null,
+          headers: const {},
+          throws: why,
+        ),
+        why.outcome,
+      );
 
   @override
   Future<HttpClientRequest> getUrl(Uri url) => openUrl('GET', url);
@@ -635,37 +688,124 @@ class _FunnelClient implements HttpClient {
 /// fake time, forever. And named rather than silent: a blank avatar with no
 /// explanation is the state this whole feature exists to end.
 class ScenarioNetworkRefusal implements Exception {
-  ScenarioNetworkRefusal(this.method, this.url);
+  ScenarioNetworkRefusal._({
+    required this.method,
+    required this.url,
+    required this.outcome,
+    required this.short,
+    required this.rest,
+  });
+
+  /// Nothing stated an answer and the network is [ScenarioNetwork.off].
+  factory ScenarioNetworkRefusal.off(String method, Uri url) =>
+      ScenarioNetworkRefusal._(
+        method: method,
+        url: url,
+        outcome: 'off',
+        short: 'refused — the network is off for this scenario',
+        rest:
+            '$method $url was not made.\n'
+            '\n'
+            '${_answerIt(url)}'
+            '\n'
+            'Or record it once and commit what comes back:\n'
+            '  fw run scenarios run --network=record\n'
+            '\n'
+            'Or let this scenario reach the network every time:\n'
+            '  scenario(…, network: ScenarioNetwork.live, (s) async { … });',
+      );
+
+  /// [ScenarioNetwork.replay], and the store has nothing for this exchange.
+  ///
+  /// The most-read sentence in this file: it is what a suite meets the first
+  /// time an endpoint moves. So it says what the store *does* hold for that
+  /// host, and when it was written — because "the url changed" and "the
+  /// recording is a year old" are the two things it is, and the store knows
+  /// both.
+  factory ScenarioNetworkRefusal.notRecorded(
+    String method,
+    Uri url,
+    ScenarioNetworkStore store,
+  ) {
+    var keys = store.keys();
+    var sameHost = [
+      for (var key in keys)
+        if (key.contains('://${url.host}')) key,
+    ];
+    return ScenarioNetworkRefusal._(
+      method: method,
+      url: url,
+      outcome: 'not-recorded',
+      short: 'no recording for this request',
+      rest:
+          'The recording holds nothing for $method $url.\n'
+          '\n'
+          '${_whatItHolds(keys, sameHost, url)}'
+          '\n'
+          'Record it:\n'
+          '  fw run scenarios run --network=record\n'
+          '\n'
+          '${_answerIt(url)}',
+    );
+  }
 
   final String method;
   final Uri url;
 
+  /// The machine-readable word for what happened, as the step reports it.
+  final String outcome;
+
   /// The column-width version, for an events list. See
   /// [ScenarioRequest.summary].
-  static const short = 'refused — the network is off for this scenario';
+  final String short;
+
+  /// Everything under the first line.
+  final String rest;
 
   @override
-  String toString() =>
-      '$short\n'
-      '\n'
-      '$method $url was not made.\n'
-      '\n'
+  String toString() => '$short\n\n$rest';
+
+  static String _answerIt(Uri url) =>
       'Answer it here:\n'
-      "  s.network.get('${url.path}', json: {…});\n"
-      '\n'
-      'Or let this scenario reach the real network:\n'
-      '  scenario(…, network: ScenarioNetwork.live, (s) async { … });\n'
-      '\n'
-      'Or the whole folder, in its flutter_test_config.dart:\n'
-      '  runScenarios(testMain, network: ScenarioNetwork.live);';
+      "  s.network.get('${url.path}', json: {…});\n";
+
+  static String _whatItHolds(
+    List<String> keys,
+    List<String> sameHost,
+    Uri url,
+  ) {
+    if (keys.isEmpty) {
+      return 'Nothing has been recorded yet — the store at '
+          '`$defaultScenarioNetworkStore` is empty.\n';
+    }
+    if (sameHost.isEmpty) {
+      return 'It holds ${_count(keys.length)}, none of them for '
+          '${url.host}.\n';
+    }
+    var listed = sameHost.take(8);
+    return 'It holds ${_count(sameHost.length)} for ${url.host}:\n'
+        '${listed.map((key) => '  $key\n').join()}'
+        '${sameHost.length > listed.length ? '  … and ${sameHost.length - listed.length} more\n' : ''}';
+  }
+
+  static String _count(int n) => n == 1 ? '1 request' : '$n requests';
 }
 
 /// A request whose answer was decided before it was opened.
 class _StubRequest implements HttpClientRequest {
-  _StubRequest(this._policy, this.method, this.uri, this._stub);
+  _StubRequest(
+    this._policy,
+    this.method,
+    this.uri,
+    this._stub, [
+    this._outcome = 'stub',
+  ]);
 
   final ScenarioNetworkPolicy _policy;
   final _Stub _stub;
+
+  /// What answered it — `stub`, `replay`, `off`, or `not-recorded`.
+  final String _outcome;
   final _sent = BytesBuilder();
 
   @override
@@ -686,7 +826,7 @@ class _StubRequest implements HttpClientRequest {
         ScenarioRequest(
           method: method,
           url: uri,
-          outcome: _refused ? 'off' : 'stub',
+          outcome: _outcome,
           refusal: '$error',
         ),
       );
@@ -696,16 +836,12 @@ class _StubRequest implements HttpClientRequest {
       ScenarioRequest(
         method: method,
         url: uri,
-        outcome: 'stub',
+        outcome: _outcome,
         status: _stub.status,
       ),
     );
     return _StubResponse(_stub);
   }
-
-  /// Whether this is the mode answering rather than the scenario — see
-  /// [_FunnelClient.openUrl], which spells a refusal as a stub that throws.
-  bool get _refused => _stub.throws is ScenarioNetworkRefusal;
 
   @override
   Future<HttpClientResponse> close() => _answer;
@@ -843,26 +979,61 @@ class _LiveRequest implements HttpClientRequest {
   Future<HttpClientResponse> close() async {
     try {
       var response = await Zone.root.run(_inner.close);
+      if (_policy.mode != ScenarioNetwork.record) {
+        _policy._record(
+          ScenarioRequest(
+            method: method,
+            url: uri,
+            outcome: 'live',
+            status: response.statusCode,
+          ),
+        );
+        return response;
+      }
+      // Drained here rather than by the caller, because a body cannot be
+      // written down and also handed over as a stream — and in the root zone,
+      // for the reason every other socket read here is.
+      var recording = ScenarioRecording(
+        method: method,
+        url: uri,
+        status: response.statusCode,
+        contentType: response.headers.contentType?.toString(),
+        body: await Zone.root.run(() => _drain(response)),
+      );
+      // Whatever came back, error status included: a 500 a scenario is *about*
+      // is worth recording. A transient one is not, and the way that is caught
+      // is that the recording is a file in a diff.
+      _policy.store.write(recording);
       _policy._record(
         ScenarioRequest(
           method: method,
           url: uri,
-          outcome: 'live',
+          outcome: 'record',
           status: response.statusCode,
         ),
       );
-      return response;
+      // The bytes that were written, not the ones off the wire — so a record
+      // run and every replay after it draw the same picture.
+      return _StubResponse(_Stub.of(recording));
     } on Object catch (error) {
       _policy._record(
         ScenarioRequest(
           method: method,
           url: uri,
-          outcome: 'live',
+          outcome: _policy.mode.name,
           refusal: '$error',
         ),
       );
       rethrow;
     }
+  }
+
+  static Future<Uint8List> _drain(HttpClientResponse response) async {
+    var bytes = BytesBuilder(copy: false);
+    await for (var chunk in response) {
+      bytes.add(chunk);
+    }
+    return bytes.takeBytes();
   }
 
   @override

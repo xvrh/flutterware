@@ -109,6 +109,7 @@ void scenario(
       network ??
       resolvedScenarioNetwork ??
       scenarioAmbientNetwork ??
+      scenarioProjectNetwork ??
       ScenarioNetwork.off;
   var name =
       scenarioAmbientIsMatrix && assignment != null && !assignment.isEmpty

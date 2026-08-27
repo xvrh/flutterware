@@ -274,6 +274,14 @@ class ScenarioRunner {
     /// folder's `runScenarios(network: ...)` and each scenario's own.
     ScenarioNetwork? network,
 
+    /// What the project declared with `fw.network(...)` — the lowest of the
+    /// four altitudes, under a folder, this run and a scenario.
+    ScenarioNetwork? projectNetwork,
+
+    /// Where a recording is read and written, or null for the package's
+    /// `test/scenarios/network`.
+    String? networkStore,
+
     /// Which steps are worth a picture. A probe pass reads the walk and not
     /// the frames; a translation pass wants only the screens showing a key.
     ScenarioPixels pixels = ScenarioPixels.all,
@@ -317,6 +325,8 @@ class ScenarioRunner {
         if (clock ?? projectClock case var origin?)
           'clock': origin.toIso8601String(),
         if (network case var reach?) 'network': reach.name,
+        if (projectNetwork case var reach?) 'networkDefault': reach.name,
+        'networkStore': ?networkStore,
         ...axes.harnessArgs(unspecifiedDevice: unspecifiedDevice),
       },
     );

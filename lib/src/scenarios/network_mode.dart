@@ -38,6 +38,34 @@ enum ScenarioNetwork {
   /// scenario by design, so a suite pays its round trips once *per scenario*
   /// rather than once.
   live,
+
+  /// Requests are answered from the recording committed beside the scenarios,
+  /// and nothing leaves the process.
+  ///
+  /// What [record] wrote, played back — offline, in microseconds, and
+  /// byte-identically. This is the mode a suite lives in: the author writes
+  /// the scenario as though the network were simply there, records once, and
+  /// commits what came back, and every run after that reproduces it with no
+  /// connection at all.
+  ///
+  /// A request the recording does not hold is **refused**, naming the url and
+  /// the command that would record it. Answering it with a 404, or with
+  /// silence, would put the store's gaps into the pictures instead of into the
+  /// output.
+  replay,
+
+  /// Requests go out, and what comes back is written to the recording.
+  ///
+  /// Always out, never partly from the store: "refresh what I have" and "fill
+  /// in what I am missing" are the same command otherwise, and the one you
+  /// wanted is whichever you did not get. What it fetches it overwrites; what
+  /// it does not ask for it leaves, so one endpoint can be refreshed by
+  /// running one scenario.
+  ///
+  /// The caller is handed the bytes that were written, not the bytes off the
+  /// wire, so a `record` run and the `replay` runs after it draw the same
+  /// pictures.
+  record,
 }
 
 /// [raw] as a mode, or a refusal listing the ones there are.
@@ -55,4 +83,4 @@ ScenarioNetwork parseScenarioNetwork(String raw) =>
     );
 
 /// Every mode's name, in the order they are worth offering in.
-const scenarioNetworkNames = ['off', 'live'];
+const scenarioNetworkNames = ['off', 'replay', 'record', 'live'];
