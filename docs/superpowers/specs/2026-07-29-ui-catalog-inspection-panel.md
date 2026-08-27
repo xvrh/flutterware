@@ -444,6 +444,9 @@ Three constraints:
 - **Provenance is in the result.** Running `tree` twice and getting different
   answers because someone clicked in between is the point — but only if the
   result says so. Every affected result carries `readFrom`: `live` or `render`,
+  <!-- Corrected 2026-08-27: `render` split into `harness` and `guest` when
+  `screenshot` and `inspect` moved to the flutter_tester lane. See
+  2026-08-27-previews-render-lane-design.md. -->
   always present rather than only on the interesting case, because a caller
   that gets two answers to one invocation has to be able to see why and an
   absent field is not an answer. Silent nondeterminism would be the worst

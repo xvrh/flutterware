@@ -2,7 +2,7 @@ import 'package:path/path.dart' as p;
 
 import '../scenarios/runner.dart';
 import 'artifact.dart';
-import 'build_directory.dart';
+import '../embedder/build_directory.dart';
 import 'cancel.dart';
 import 'channels.dart';
 import 'closure.dart';
@@ -81,9 +81,10 @@ class LiveScenarioSource implements ScenarioSource {
     // The runners built in claimed directories — `runnerFor` says why — and
     // the claim ends with the runner that held it.
     for (var runner in [_head, _base]) {
-      releaseComparisonBuildDirectory(
+      releaseBuildDirectory(
         runner.packageRoot,
         runner.buildDirectory,
+        root: comparisonBuildRoot,
       );
     }
   }

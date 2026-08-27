@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutterware/src/inspect/node.dart';
 
 import '../scenarios/runner.dart';
-import 'build_directory.dart';
+import '../embedder/build_directory.dart';
 import 'frame_ref.dart';
 import 'scenario_alignment.dart';
 import 'scenario_comparison.dart';
@@ -87,7 +87,10 @@ class ScenariosSide {
       packageRoot: packageRoot,
       directory: directory,
       flutterSdkRoot: flutterSdkRoot,
-      buildDirectory: claimComparisonBuildDirectory(packageRoot),
+      buildDirectory: claimBuildDirectory(
+        packageRoot,
+        root: comparisonBuildRoot,
+      ),
       projectClock: projectClock,
     );
   }

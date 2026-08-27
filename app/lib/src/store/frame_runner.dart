@@ -6,6 +6,7 @@ import 'package:flutterware/src/store/frame_entrypoint.dart'
     show generateStoreFrameEntrypoint;
 import 'package:path/path.dart' as p;
 
+import '../embedder/build_directory.dart';
 import '../embedder/tester_host.dart';
 
 /// The second pass, kept warm: the project's frame compiled once and asked to
@@ -17,10 +18,30 @@ import '../embedder/tester_host.dart';
 /// different entrypoint, different dill. Keeping it separate is also what makes
 /// a recompose cheap, since it never touches the scenario harness at all.
 class StoreFrameRunner {
+  /// [buildDirectory] is where it would rather build; another process may
+  /// hold it, and then [takeBuildLane] answers with a claim of its own.
   StoreFrameRunner({
+    required String packageRoot,
+    required String flutterSdkRoot,
+    required String frameFile,
+    void Function(String line)? onLog,
+  }) : this._(
+         packageRoot: packageRoot,
+         flutterSdkRoot: flutterSdkRoot,
+         frameFile: frameFile,
+         lane: BuildLane(
+           packageRoot,
+           preferred: buildDirectory,
+           program: storeFramesProgramName,
+         ),
+         onLog: onLog,
+       );
+
+  StoreFrameRunner._({
     required this.packageRoot,
     required String flutterSdkRoot,
     required String frameFile,
+    required BuildLane lane,
     void Function(String line)? onLog,
   }) : _host = TesterHost(
          packageRoot: packageRoot,
@@ -28,14 +49,20 @@ class StoreFrameRunner {
          program: _StoreFrameProgram(
            packageRoot: packageRoot,
            frameFile: frameFile,
+           lane: lane,
          ),
-         buildDirectory: buildDirectory,
+         lane: lane,
          onLog: onLog,
        );
 
-  /// Where this runner's dill, bundle and generated entrypoint live, relative
-  /// to [packageRoot].
+  /// Where this runner's dill, bundle and generated entrypoint live by
+  /// default, relative to [packageRoot] — and where the generated default
+  /// frame is written, which is a *source* and stays put wherever the lane
+  /// lands.
   static const buildDirectory = 'build/flutterware/store_frames';
+
+  /// What this lane's dill, bundle and log are called.
+  static const storeFramesProgramName = 'store_frames';
 
   final String packageRoot;
   final TesterHost _host;
@@ -71,15 +98,23 @@ class StoreFrameRunner {
 }
 
 class _StoreFrameProgram extends TesterProgram {
-  _StoreFrameProgram({required this.packageRoot, required this.frameFile});
+  _StoreFrameProgram({
+    required this.packageRoot,
+    required this.frameFile,
+    required this.lane,
+  });
 
   final String packageRoot;
 
   /// The declared frame, package-relative.
   final String frameFile;
 
+  /// The host's own lane, so the generated entrypoint sits beside the dill it
+  /// compiles to rather than on top of another process's.
+  final BuildLane lane;
+
   @override
-  String get name => 'store_frames';
+  String get name => StoreFrameRunner.storeFramesProgramName;
 
   @override
   String get readyLine => 'flutterware store frames harness ready';
@@ -92,7 +127,7 @@ class _StoreFrameProgram extends TesterProgram {
 
   @override
   String writeEntrypoint(List<String> sources) {
-    var path = p.join(packageRoot, storeFrameEntrypointPath);
+    var path = p.join(packageRoot, lane.path, 'store_frames.dart');
     var content = generateStoreFrameEntrypoint(frameFile: sources.single);
     var file = File(path)..parent.createSync(recursive: true);
     // Left alone when it is already right: a touched mtime is what the source
@@ -103,7 +138,3 @@ class _StoreFrameProgram extends TesterProgram {
     return path;
   }
 }
-
-/// Where the generated entrypoint goes, relative to the package.
-const storeFrameEntrypointPath =
-    '${StoreFrameRunner.buildDirectory}/store_frames.dart';

@@ -1393,6 +1393,9 @@ class _FakeRunner extends ScenarioRunner {
   _FakeRunner()
     : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
 
+  @override
+  String get logPath => '/none/scenarios.log';
+
   var runs = 0;
   final seenAxes = <ScenarioAxes>[];
   final seenUnspecified = <String?>[];

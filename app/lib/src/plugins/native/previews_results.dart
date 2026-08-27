@@ -536,16 +536,22 @@ class CatalogInspectResult implements PluginResult, ProducesArtifacts {
 
   /// Where this reading came from: `live` when it was taken from a session
   /// somebody has open — the demo in whatever state they left it, including
-  /// anything they reached by clicking — and `render` when this call built and
-  /// drew its own copy.
+  /// anything they reached by clicking — and, when this call built and drew
+  /// its own copy, **which engine drew it**: `harness` for the
+  /// `flutter_tester` lane, `guest` for the embedder.
   ///
   /// Always present, not only on the interesting case. A caller that gets
   /// two different answers to the same invocation has to be able to see why,
   /// and an absent field is not an answer.
   ///
-  /// It reads `render` unless `live: true` was asked for and a session happened
-  /// to be open on this entry. Attaching is opt-in precisely because it makes
-  /// the same command answer differently depending on what window is open.
+  /// It never reads `live` unless `live: true` was asked for *and* a session
+  /// happened to be open on this entry; attaching is opt-in precisely because
+  /// it makes the same command answer differently depending on what window is
+  /// open. Between the other two it reads `harness` unless something sent the
+  /// call to the guest — `engine=guest`, or `logs`, which only the guest can
+  /// collect. The two agree about the layout and that is pinned by a test;
+  /// where they differ is the clock, so a `guest` picture is of whatever real
+  /// instant the render landed on and a `harness` one is reproducible.
   ///
   /// It matters most for the errors and the logs: `live` means these are what
   /// the demo has reported **since somebody opened it**, so a throw reached by

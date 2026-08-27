@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:path/path.dart' as p;
 
+import '../embedder/build_directory.dart';
 import '../embedder/tester_host.dart';
 import 'catalog_entry.dart';
 import 'compile_blame.dart';
@@ -19,19 +20,24 @@ typedef PreviewCatalog = ({
   List<PreviewCanvas> canvases,
 });
 
+/// What this lane's dill, bundle and log are called.
+const previewsProgramName = 'previews';
+
 /// The previews half of a [TesterHost].
 class PreviewProgram extends TesterProgram {
   PreviewProgram({
     required this.packageRoot,
     required this.read,
-    this.buildDirectory = TesterHost.defaultBuildDirectory,
+    required this.lane,
   });
 
   final String packageRoot;
 
-  /// Where the generated harness goes — the host's own directory, so an
-  /// isolated runner never renumbers or prunes the warm lane's wrappers.
-  final String buildDirectory;
+  /// Where the generated harness goes — the host's own lane, so an isolated
+  /// runner never renumbers or prunes the warm one's wrappers.
+  final BuildLane lane;
+
+  String get buildDirectory => lane.path;
 
   /// Re-read on every sync, so a preview written while the harness is warm
   /// restarts it rather than staying invisible until the panel is reopened.
@@ -52,7 +58,7 @@ class PreviewProgram extends TesterProgram {
   List<CatalogEntry> get scanned => _last?.entries ?? const [];
 
   @override
-  String get name => 'previews';
+  String get name => previewsProgramName;
 
   @override
   String get readyLine => 'flutterware previews harness ready';
@@ -187,28 +193,53 @@ class PreviewCaptureRow {
 /// through the same [GuestErrors] buffer, so the two backends' rows are
 /// comparable.
 class PreviewTestRunner {
+  /// [buildDirectory] is what this runner would *rather* build in; where it
+  /// actually builds is [takeBuildLane]'s answer, because another process may
+  /// already hold it.
   PreviewTestRunner({
     required String packageRoot,
     required String flutterSdkRoot,
     required PreviewCatalog Function() read,
     String buildDirectory = TesterHost.defaultBuildDirectory,
     void Function(String line)? onLog,
+  }) : this._(
+         packageRoot: packageRoot,
+         flutterSdkRoot: flutterSdkRoot,
+         read: read,
+         lane: BuildLane(
+           packageRoot,
+           preferred: buildDirectory,
+           program: previewsProgramName,
+         ),
+         onLog: onLog,
+       );
+
+  PreviewTestRunner._({
+    required String packageRoot,
+    required String flutterSdkRoot,
+    required PreviewCatalog Function() read,
+    required BuildLane lane,
+    void Function(String line)? onLog,
   }) : _program = PreviewProgram(
          packageRoot: packageRoot,
          read: read,
-         buildDirectory: buildDirectory,
+         lane: lane,
        ) {
     _host = TesterHost(
       packageRoot: packageRoot,
       flutterSdkRoot: flutterSdkRoot,
       program: _program,
-      buildDirectory: buildDirectory,
+      lane: lane,
       onLog: onLog,
     );
   }
 
   final PreviewProgram _program;
   late final TesterHost _host;
+
+  /// Where this runner's artifacts live, relative to [packageRoot] — the lane
+  /// it took, which is not always the one it asked for.
+  String get buildDirectory => _program.buildDirectory;
 
   /// The package these previews belong to — where an entry's `path` is
   /// relative to.
@@ -276,14 +307,18 @@ class PreviewTestRunner {
   ///
   /// | | per entry | whole catalog |
   /// |---|---|---|
-  /// | raw, full scale | 0.11ms | 368MB |
+  /// | raw, 1x | 0.11ms | 368MB |
   /// | raw, quarter | 0.11ms | 23MB |
   /// | png, 700px side | 7.77ms | 4.2MB |
   /// | png, quarter | 1.07ms | 0.6MB |
   /// | `tree.json` beside it | 9.07ms | — |
   ///
-  /// [scale] renders the frame smaller: barely a millisecond either way, and
-  /// 16× the bytes.
+  /// [pixelRatio] is physical pixels per logical pixel — the resolution, not a
+  /// fraction of the screen, and the same word the guest's `FrameCapture`
+  /// takes. `1` renders a 3× phone at its logical 440×956, which is what a
+  /// comparison and a thumbnail want; a picture somebody will read a 16pt
+  /// glyph in passes the staged device's own ratio. Barely a millisecond
+  /// either way, and the bytes as its square.
   ///
   /// [format] is `raw` or `png`, the same vocabulary `ShotRecord` files under.
   /// PNG costs about 8ms of encode and takes the store from hundreds of
@@ -310,7 +345,7 @@ class PreviewTestRunner {
     required String outDir,
     required Future<void> Function(PreviewCaptureRow row) onRow,
     bool sync = true,
-    double scale = 1,
+    double pixelRatio = 1,
     bool tree = true,
     bool timings = false,
     String format = 'raw',
@@ -331,7 +366,7 @@ class PreviewTestRunner {
         args: {
           'entries': id,
           'output': p.join(outDir, '$index'),
-          if (scale != 1) 'scale': '$scale',
+          if (pixelRatio != 1) 'pixelRatio': '$pixelRatio',
           if (!tree) 'tree': 'false',
           if (timings) 'timings': 'true',
           if (format != 'raw') 'format': format,
@@ -383,6 +418,49 @@ class PreviewTestRunner {
         );
       }
     }
+  });
+
+  /// One entry, rendered and asked about — the single-entry counterpart of
+  /// [audit].
+  ///
+  /// Refuses rather than approximates, in four different ways and each with
+  /// its own words: a harness too old to know the extension, a harness that
+  /// knows it and will not answer this request, an entry the compiler
+  /// quarantined, and an entry that did not render.
+  ///
+  /// [sync] as [capture] means it: right for a caller answering a question
+  /// about the code as it is now, wrong for one rendering behind a pointer.
+  Future<Map<String, Object?>> render({
+    required String entryId,
+    required Map<String, Object?> request,
+    bool sync = true,
+  }) => _host.exclusive(() async {
+    if (sync) _program.quarantined.clear();
+    await _bringUp(sync: sync);
+    if (_program.quarantined[entryId] case var error?) {
+      throw StateError('$entryId did not compile:\n$error');
+    }
+    var response = await _host.vm.callExtension(
+      'ext.flutterware.previews.render',
+      args: {'request': jsonEncode(request)},
+    );
+    if (response == null) {
+      throw StateError(
+        "this checkout's package:flutterware predates single-entry render: "
+        'the harness came up but registers no '
+        '`ext.flutterware.previews.render`.',
+      );
+    }
+    if (response['error'] case String error) throw StateError(error);
+    var entries = (response['entries'] as Map?)?.cast<String, Object?>();
+    if (entries?[entryId] case Map row) {
+      var reported = row.cast<String, Object?>();
+      if (reported['failure'] case String failure) {
+        throw StateError('$entryId did not render:\n$failure');
+      }
+      return reported;
+    }
+    throw StateError('the harness returned nothing for $entryId');
   });
 
   /// A live harness, dropping whatever will not compile until one exists.

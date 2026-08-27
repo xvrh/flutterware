@@ -190,6 +190,28 @@ class CaptureViewport {
   /// The same viewport at a different size, for a caller that asked for one
   /// explicitly. The ratio and the insets stay: asking for a taller iPhone is
   /// asking for a taller iPhone, not for a slab of glass with no notch.
+  /// This screen, as the `flutter_tester` harness is told about it.
+  ///
+  /// The one place the host's viewport becomes the wire's, so the two
+  /// backends are staged from one set of numbers: the guest gets them over its
+  /// resize message and the harness gets them here.
+  StagedViewport get staged => StagedViewport(
+    width: width.toDouble(),
+    height: height.toDouble(),
+    pixelRatio: pixelRatio,
+    insetTop: insetTop,
+    insetRight: insetRight,
+    insetBottom: insetBottom,
+    insetLeft: insetLeft,
+    platform: platform,
+    // The variant is the *field's* business, not the stage's, and this lane
+    // renders one cold frame with nothing focused — so what travels is the
+    // height of the letters keyboard, which is what `KeyboardMode.up` means
+    // everywhere else.
+    keyboard: keyboard,
+    keyboardUp: keyboardMode == KeyboardMode.up,
+  );
+
   CaptureViewport resized({int? width, int? height}) => CaptureViewport(
     width: width ?? this.width,
     height: height ?? this.height,

@@ -816,3 +816,98 @@ KeyboardMode? keyboardModeById(String id) =>
 
 /// Whether [id] is a keyboard mode this build accepts.
 bool isKeyboardModeId(String id) => keyboardModeById(id) != null;
+
+/// A screen to render a preview on, as it travels from the host to a harness.
+///
+/// **The wire form of the host's `CaptureViewport`, and the same class at both
+/// ends** — the host builds one and encodes it, the harness decodes one and
+/// stages it. Two classes with a JSON contract between them would be two
+/// descriptions of one screen, and this repository has paid for that shape
+/// more than once; one class cannot drift from itself.
+///
+/// It carries numbers rather than a device id on purpose. A viewport is not
+/// always a device: `--width`/`--height` override one into a size no phone
+/// has, and the panel's own rectangle is no device at all. The embedder guest
+/// is told the same numbers over its resize message, so what the two backends
+/// are staged with is one vocabulary.
+class StagedViewport {
+  const StagedViewport({
+    required this.width,
+    required this.height,
+    this.pixelRatio = 1,
+    this.insetTop = 0,
+    this.insetRight = 0,
+    this.insetBottom = 0,
+    this.insetLeft = 0,
+    this.platform,
+    this.keyboard = 0,
+    this.keyboardUp = false,
+  });
+
+  factory StagedViewport.fromJson(Map<String, Object?> json) => StagedViewport(
+    width: (json['width']! as num).toDouble(),
+    height: (json['height']! as num).toDouble(),
+    pixelRatio: (json['pixelRatio'] as num?)?.toDouble() ?? 1,
+    insetTop: (json['insetTop'] as num?)?.toDouble() ?? 0,
+    insetRight: (json['insetRight'] as num?)?.toDouble() ?? 0,
+    insetBottom: (json['insetBottom'] as num?)?.toDouble() ?? 0,
+    insetLeft: (json['insetLeft'] as num?)?.toDouble() ?? 0,
+    platform: switch (json['platform']) {
+      String name => DevicePlatform.values.firstWhere(
+        (platform) => platform.name == name,
+      ),
+      _ => null,
+    },
+    keyboard: (json['keyboard'] as num?)?.toDouble() ?? 0,
+    keyboardUp: json['keyboardUp'] == true,
+  );
+
+  /// **Physical** pixels — the size of the image that comes out, which is what
+  /// the host's `CaptureViewport` records and what an address names.
+  final double width;
+  final double height;
+
+  final double pixelRatio;
+
+  /// The notch, the island, the gesture bar, in **logical** pixels — the space
+  /// `EdgeInsets` and `MediaQuery.padding` are written in.
+  final double insetTop;
+  final double insetRight;
+  final double insetBottom;
+  final double insetLeft;
+
+  /// What the preview is staged *as*. Null is a rectangle rather than a
+  /// device, which is the panel's own surface and what an entry that named no
+  /// device gets: no platform override, so `defaultTargetPlatform` stays
+  /// whatever the harness is really running on.
+  final DevicePlatform? platform;
+
+  /// How tall this screen's software keyboard is once it is up, logical.
+  final double keyboard;
+
+  /// Whether to hold one up with nothing focused — `KeyboardMode.up`. `auto`
+  /// and `down` both arrive as false: a preview that focuses a field raises
+  /// its own, and that is the framework's business rather than the stage's.
+  final bool keyboardUp;
+
+  /// The screen in **logical** pixels — what the layout is written against.
+  ///
+  /// Divided here rather than carried, so the two numbers cannot disagree
+  /// about a screen: the physical size is what an address names and what a
+  /// picture comes out at, and this is the same fact read the other way.
+  double get logicalWidth => width / pixelRatio;
+  double get logicalHeight => height / pixelRatio;
+
+  Map<String, Object?> toJson() => {
+    'width': width,
+    'height': height,
+    if (pixelRatio != 1) 'pixelRatio': pixelRatio,
+    if (insetTop != 0) 'insetTop': insetTop,
+    if (insetRight != 0) 'insetRight': insetRight,
+    if (insetBottom != 0) 'insetBottom': insetBottom,
+    if (insetLeft != 0) 'insetLeft': insetLeft,
+    if (platform != null) 'platform': platform!.name,
+    if (keyboard != 0) 'keyboard': keyboard,
+    if (keyboardUp) 'keyboardUp': true,
+  };
+}
