@@ -87,7 +87,7 @@ Widget _padded(Widget child) =>
 Widget _bare(Widget child) => Align(alignment: Alignment.topLeft, child: child);
 
 List<ImageProvider> _shots(int count, double aspect) => [
-  for (var i = 0; i < count; i++) _StandInShot(index: i, aspect: aspect),
+  for (var i = 0; i < count; i++) StandInShot(index: i, aspect: aspect),
 ];
 
 /// A painted stand-in for an exported screenshot.
@@ -95,8 +95,8 @@ List<ImageProvider> _shots(int count, double aspect) => [
 /// Obviously not a real app, and different enough per index that a row of them
 /// reads as several screenshots rather than one repeated — which is what the
 /// carousel is being judged on.
-class _StandInShot extends ImageProvider<_StandInShot> {
-  const _StandInShot({required this.index, required this.aspect});
+class StandInShot extends ImageProvider<StandInShot> {
+  const StandInShot({required this.index, required this.aspect});
 
   final int index;
   final double aspect;
@@ -109,11 +109,11 @@ class _StandInShot extends ImageProvider<_StandInShot> {
   ];
 
   @override
-  Future<_StandInShot> obtainKey(ImageConfiguration configuration) =>
+  Future<StandInShot> obtainKey(ImageConfiguration configuration) =>
       SynchronousFuture(this);
 
   @override
-  ImageStreamCompleter loadImage(_StandInShot key, ImageDecoderCallback _) =>
+  ImageStreamCompleter loadImage(StandInShot key, ImageDecoderCallback _) =>
       OneFrameImageStreamCompleter(_paint());
 
   Future<ImageInfo> _paint() async {
@@ -159,7 +159,7 @@ class _StandInShot extends ImageProvider<_StandInShot> {
 
   @override
   bool operator ==(Object other) =>
-      other is _StandInShot && other.index == index && other.aspect == aspect;
+      other is StandInShot && other.index == index && other.aspect == aspect;
 
   @override
   int get hashCode => Object.hash(index, aspect);
