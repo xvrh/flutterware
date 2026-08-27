@@ -150,13 +150,17 @@ All commands run from the repo root unless noted. Always via `fvm` — see the t
 # Static analysis (workspace-wide; CI runs the same pinned SDK)
 fvm flutter analyze
 
+# Tests for the root package
+fvm flutter test
+# Run a single test file
+fvm flutter test test/router_outlet/path_test.dart
+
 # Tests for the GUI app
 cd app && fvm flutter test
-# Run a single test file
 cd app && fvm flutter test test/dependencies_test.dart
 
-# Pure-Dart tests for the root package
-fvm dart test test/router_outlet/path_test.dart
+# The GUI app's integration tests — `dart test`, and only with the path
+cd app && fvm dart test integration_test --exclude-tags gpu
 
 # Format the whole workspace (this is what CI checks)
 fvm dart tool/prepare_submit.dart
