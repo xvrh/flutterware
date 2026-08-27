@@ -950,6 +950,57 @@ void _discard(Iterable<File> files) {
   }
 }
 
+/// Removes a staging directory and whatever the compiler left in it.
+void _discardStaging(Directory staging) {
+  try {
+    staging.deleteSync(recursive: true);
+  } on FileSystemException {
+    // The same bargain as [_discard]: reclaiming disk is not worth failing a
+    // compile over.
+  }
+}
+
+/// How long a staging directory has to sit before [_discardAbandonedStaging]
+/// reads it as abandoned.
+///
+/// The compile it covers is 3.2s, so this is three orders of magnitude of slack
+/// — and slack is the whole point, because the cost of being early is deleting
+/// a directory another process is that moment compiling into, which is the race
+/// staging exists to avoid.
+const _stagingIsAbandonedAfter = Duration(hours: 1);
+
+/// Removes staging directories no process is still using.
+///
+/// [_discardStaging] covers the three ways [_ensureCompiled] returns; it cannot
+/// cover the fourth, which is the process dying outright — a Ctrl-C on
+/// `dart test`, or quitting the GUI, inside the compile. The name that
+/// preceded these directories was `<snapshot>.$pid.tmp` and reclaimed itself:
+/// the next process holding that pid wrote over it. An OS-unique name never
+/// comes round again, so without this each interrupted compile would leave a
+/// ~32MB kernel in a directory nothing would ever look at.
+///
+/// A directory's mtime moves with every file written inside it, so one being
+/// compiled into is fresh however long the compile takes.
+void _discardAbandonedStaging(Directory parent) {
+  var cutoff = DateTime.now().subtract(_stagingIsAbandonedAfter);
+  List<FileSystemEntity> entries;
+  try {
+    entries = parent.listSync();
+  } on FileSystemException {
+    return;
+  }
+  for (var entity in entries) {
+    if (entity is! Directory) continue;
+    if (!p.basename(entity.path).startsWith('staging.')) continue;
+    try {
+      if (entity.statSync().modified.isAfter(cutoff)) continue;
+    } on FileSystemException {
+      continue;
+    }
+    _discardStaging(entity);
+  }
+}
+
 DartSdkIdentity? _snapshotSdk(File snapshot) {
   var recorded = _readTrimmed(_snapshotSdkFile(snapshot).path);
   if (recorded == null) return null;
@@ -1089,20 +1140,31 @@ Future<_DaemonLaunch> _ensureCompiled({
 
   snapshot.parent.createSync(recursive: true);
   _discardUnkeyedSnapshot(appPackageRoot);
+  _discardAbandonedStaging(snapshot.parent);
   var watch = Stopwatch()..start();
-  // Compiled to this process's own paths and moved into place at the end,
-  // because nothing serialises two clients arriving here at once — the spawn
-  // lock is taken further down, inside `_spawnAndConnect`, and by then the
-  // damage would be written. `dart compile kernel` writes its output in place
-  // and not atomically, so two overlapping compiles interleave into one file
-  // that neither of them would recognise.
+  // Compiled somewhere of its own and moved into place at the end, because
+  // nothing serialises two clients arriving here at once — the spawn lock is
+  // taken further down, inside `_spawnAndConnect`, and by then the damage would
+  // be written. `dart compile kernel` writes its output in place and not
+  // atomically, so two overlapping compiles interleave into one file that
+  // neither of them would recognise.
   //
   // Overlapping is not the exotic case either, now that a refused snapshot is
   // recompiled: the projects that share an install hit the same bad file and
   // all rebuild it at once, which is exactly the situation this whole change is
   // about. A rename is atomic, so the loser wastes 3.2s and nobody reads a
   // half-written kernel.
-  var staged = File('${snapshot.path}.$pid.tmp');
+  //
+  // The name is the OS's rather than ours. It was `<snapshot>.$pid.tmp`, on the
+  // reading that a process compiles this once — and `dart test` disproves it,
+  // because suites are isolates of the *runner's* process. Two of them
+  // connecting at once staged to the same path, the first rename pulled the
+  // file out from under the second, and the loser failed its connect with
+  // `PathNotFoundException` on `daemon.dill.<pid>.tmp.d`. A counter would not
+  // have helped: separate isolates get separate copies of it, both starting at
+  // zero. `createTempSync` is the only name here nothing else can be handed.
+  var staging = snapshot.parent.createTempSync('staging.');
+  var staged = File(p.join(staging.path, p.basename(snapshot.path)));
   var stagedDepfile = File('${staged.path}.d');
   ProcessResult result;
   try {
@@ -1117,12 +1179,12 @@ Future<_DaemonLaunch> _ensureCompiled({
       stagedDepfile.path,
     ], workingDirectory: appPackageRoot);
   } on Object {
-    _discard([staged, stagedDepfile]);
+    _discardStaging(staging);
     rethrow;
   }
   if (result.exitCode != 0) {
     // Not fatal: the daemon still runs from source, just slower.
-    _discard([staged, stagedDepfile]);
+    _discardStaging(staging);
     onLog?.call('could not snapshot the daemon: ${result.stderr}');
     return _DaemonLaunch(
       dartExecutable,
@@ -1151,6 +1213,7 @@ Future<_DaemonLaunch> _ensureCompiled({
     // The refusal message says "(unrecorded)" instead. See [_RejectedKernel].
   }
   staged.renameSync(snapshot.path);
+  _discardStaging(staging);
   onLog?.call('snapshotted the daemon in ${watch.elapsedMilliseconds}ms');
   // Read again, against the depfile this compile just wrote. The reading above
   // may have been the guessed list, which is what a new import is missing from —
