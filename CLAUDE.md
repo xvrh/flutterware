@@ -10,6 +10,27 @@ Work with a real consumer is where most of the good findings come from, and thos
 
 This applies to everything that leaves the machine, including a PR opened on your behalf — check before pushing, not after.
 
+## PR and commit titles: say what changed
+
+**A title names what changed and where, in plain words.** One line, no trailing
+period. If a reader who was not in the session cannot tell which part of the repo
+moved, the title has failed.
+
+```
+Previews: render the guest at display resolution
+Fix scenario steps that never settle losing their last frame
+```
+
+Not `A canvas is not a device, and a composition is a widget` — that names nothing.
+
+**Do not take the style from `git log`.** Much of the history is riddles, each
+written by imitating the one before it. Read the log for what was done, never for
+how to phrase it. The aphoristic register belongs in doc comments and spec prose,
+where the code sits beside it and every clause is anchored.
+
+A title needing three comma-joined clauses is a PR asking to be split. When it
+genuinely cannot be, name the largest change and leave the rest to the body.
+
 ## Repository layout
 
 This is a pub workspace (`workspace:` in root `pubspec.yaml`) with two member packages:
