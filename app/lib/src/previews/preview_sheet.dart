@@ -476,6 +476,16 @@ class _PinnedHeading extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_PinnedHeading old) => old.label != label;
 }
 
+/// How much of a problem a tile's tooltip carries. The popover's own cap.
+const _problemLines = 6;
+
+/// [text]'s first [lines] lines, marked as cut when there were more.
+String _cap(String text, int lines) {
+  var kept = text.trimRight().split('\n');
+  if (kept.length <= lines) return kept.join('\n');
+  return '${kept.take(lines).join('\n')}\n…';
+}
+
 /// One entry: the box its picture will fill, and its name under it.
 class _Tile extends StatelessWidget {
   const _Tile({
@@ -589,6 +599,22 @@ class _Tile extends StatelessWidget {
     };
   }
 
+  /// [box] under a tooltip, when there is something to say about why it is red.
+  ///
+  /// **The whole box, not the mark inside it.** The tile drew the mark and the
+  /// red border and said nothing else, so the words the store already had —
+  /// *the harness returned nothing for this entry*, a compiler diagnostic —
+  /// were reachable only by hovering the row in the tree beside it, which is
+  /// not where anybody looking at a red tile is pointing.
+  ///
+  /// Capped at [_problemLines], the way the popover caps it: a diagnostic runs
+  /// to dozens of lines and a tooltip is a glance. Opening the entry is where
+  /// the whole of it is.
+  Widget _explained(Widget box) => switch (problem) {
+    var reason? => Tooltip(message: _cap(reason, _problemLines), child: box),
+    null => box,
+  };
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
@@ -616,27 +642,29 @@ class _Tile extends StatelessWidget {
               SizedBox(
                 height: height,
                 child: Center(
-                  child: Container(
-                    width: pictureWidth,
-                    height: pictureHeight,
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      color: colors.line2,
-                      borderRadius: radius,
-                      border: Border.all(
-                        // The rendering mark is a hairline in the accent and
-                        // the selection is two pixels of it over a tinted
-                        // fill, so the two never read as each other — and a
-                        // tile can honestly be both.
-                        color: problem != null
-                            ? colors.danger
-                            : selected || wait == PreviewTileWait.rendering
-                            ? colors.accent
-                            : colors.line,
-                        width: selected ? 2 : 1,
+                  child: _explained(
+                    Container(
+                      width: pictureWidth,
+                      height: pictureHeight,
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: colors.line2,
+                        borderRadius: radius,
+                        border: Border.all(
+                          // The rendering mark is a hairline in the accent and
+                          // the selection is two pixels of it over a tinted
+                          // fill, so the two never read as each other — and a
+                          // tile can honestly be both.
+                          color: problem != null
+                              ? colors.danger
+                              : selected || wait == PreviewTileWait.rendering
+                              ? colors.accent
+                              : colors.line,
+                          width: selected ? 2 : 1,
+                        ),
                       ),
+                      child: _art(context),
                     ),
-                    child: _art(context),
                   ),
                 ),
               ),

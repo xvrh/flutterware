@@ -195,6 +195,12 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
       connectToDaemon: connectToDaemon,
       startup: startupFor(path),
     )..addListener(core.notifyChanged);
+    // The daemon is the only thing here watching the files, so its word is how
+    // the core's scan learns it has been overtaken — and the harness behind
+    // every thumbnail is generated from that scan. See [PreviewsCore.rescan]
+    // for what a preview written or renamed while the panel was open did
+    // before this line.
+    session.onEntriesChanged = () => unawaited(core.rescan(path));
     unawaited(session.start());
     return session;
   });

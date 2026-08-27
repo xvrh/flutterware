@@ -227,6 +227,14 @@ class PreviewsCore extends PluginCore {
   final _failures = <String, String>{};
   final _scanning = <String>{};
 
+  /// How many looks a package has had, so an overlapping pair can be ordered —
+  /// see [_scan].
+  final _scanTokens = <String, int>{};
+
+  /// The look in flight per package, for a look that gets overtaken to wait on
+  /// rather than answer over — see [_scan].
+  final _scanRuns = <String, Future<void>>{};
+
   /// The tester the audit renders in, kept per package and kept **warm**.
   ///
   /// That warmth is why it is held here rather than built once per call: the
@@ -382,6 +390,23 @@ class PreviewsCore extends PluginCore {
   /// not what has to be discarded.
   void untrack(String path) {}
 
+  /// Reads [path] again, for a caller that has learned the files moved.
+  ///
+  /// **The panel's list and the harness's list are not the same list.** What
+  /// the tree draws comes from the compiler daemon, which watches the files and
+  /// reports entries as they appear; what the `flutter_tester` harness behind
+  /// every thumbnail generates its program from is the scan kept here, and
+  /// until this existed that scan was taken once — when [track] first looked —
+  /// and never again for the life of the process.
+  ///
+  /// A preview written while the panel was open was therefore listed and could
+  /// not be photographed: its id was in no generated table, and the row came
+  /// back *the harness returned nothing for this entry*. A **renamed** one was
+  /// worse. The wrapper is generated from this scan, so it went on naming a
+  /// symbol that no longer existed, the harness stopped compiling, and nothing
+  /// short of reopening the studio brought it back.
+  Future<void> rescan(String path) => _scan(path);
+
   /// Scans every declared package and waits — what `fw` does for the duration
   /// of one request, where there is no panel to subscribe on its behalf.
   @override
@@ -393,10 +418,42 @@ class PreviewsCore extends PluginCore {
     ]);
   }
 
-  Future<void> _scan(String path) async {
+  /// Reads [path] and records what it found, resolving once the answer a
+  /// caller may act on is in.
+  ///
+  /// **Awaiting this means an answer is in the maps** — for the awaiter's
+  /// purposes, the freshest one. Two looks can be in flight at once: an action
+  /// scans unconditionally, and [rescan] fires whenever the daemon says the
+  /// catalog moved. They read the disk at different moments, so the one that
+  /// *started* last is the one whose answer is about now, and the other's is
+  /// dropped rather than written — otherwise the slower of the two lands last
+  /// and puts the entry list back to before the edit that asked for the
+  /// rescan, which is the staleness this is all for.
+  ///
+  /// A dropped look still owes its caller a fresh read, so it waits for the
+  /// one that overtook it rather than returning with nothing written. Without
+  /// that, `_entries` — which documents that it always re-scans rather than
+  /// answering from the cache — could hand back the catalog from before the
+  /// edit that started the overtaking look.
+  Future<void> _scan(String path) {
+    var token = _scanTokens[path] = (_scanTokens[path] ?? 0) + 1;
+    // Registered after the run is created and cleared only by the run that is
+    // still the registered one, so a look that finished long ago cannot sweep
+    // its successor's entry — the trap `ScanCache` documents at `load`.
+    late Future<void> run;
+    run = _look(path, token).whenComplete(() {
+      if (identical(_scanRuns[path], run)) _scanRuns.remove(path);
+    });
+    return _scanRuns[path] = run;
+  }
+
+  Future<void> _look(String path, int token) async {
     var root = p.join(host.worktree.path, path);
     var entryRoot = rootFor(path);
     var annotations = previewAnnotationsFor(path);
+    // The look that overtook this one, when one did — awaited at the end, so
+    // that a caller of a dropped look still comes back to an answer.
+    Future<void>? overtaking;
     _scanning.add(path);
     try {
       // Off the calling isolate: a large catalog is tens of milliseconds of
@@ -409,26 +466,42 @@ class PreviewsCore extends PluginCore {
           previewAnnotations: annotations,
         ).scan(),
       );
-      var previous = _scans[path];
-      _scans[path] = result;
-      // Anything holding a picture of the previous scan is holding one of code
-      // that may have moved. An entry whose own file changed is caught by that
-      // side's stamp; one whose *neighbour* changed is not, and a rescan is
-      // exactly the moment we learn something did.
-      if (previous != null) onRescanned?.call(path);
-      // A scan that worked supersedes one that did not. Without this the
-      // failure outlives its cause for the life of the process: the sidebar
-      // keeps the error badge after the demo is fixed, `track` keeps declining
-      // to look again because it treats a recorded failure as "already
-      // scanned", and `build-web` keeps refusing with the stale message while
-      // holding a perfectly good entry list.
-      _failures.remove(path);
+      if (_scanTokens[path] != token) {
+        overtaking = _scanRuns[path];
+      } else {
+        var previous = _scans[path];
+        _scans[path] = result;
+        // Anything holding a picture of the previous scan is holding one of
+        // code that may have moved. An entry whose own file changed is caught
+        // by that side's stamp; one whose *neighbour* changed is not, and a
+        // rescan is exactly the moment we learn something did.
+        if (previous != null) onRescanned?.call(path);
+        // A scan that worked supersedes one that did not. Without this the
+        // failure outlives its cause for the life of the process: the sidebar
+        // keeps the error badge after the demo is fixed, `track` keeps
+        // declining to look again because it treats a recorded failure as
+        // "already scanned", and `build-web` keeps refusing with the stale
+        // message while holding a perfectly good entry list.
+        _failures.remove(path);
+      }
     } catch (e) {
-      _failures[path] = '$e';
+      if (_scanTokens[path] != token) {
+        overtaking = _scanRuns[path];
+      } else {
+        _failures[path] = '$e';
+      }
     } finally {
-      _scanning.remove(path);
+      // Only the newest look clears the mark: a superseded one finishing first
+      // would report the package settled while the look everybody is waiting
+      // for is still reading.
+      if (_scanTokens[path] == token) _scanning.remove(path);
       notifyChanged();
     }
+    // Outside the `finally`, so what is awaited is the successor's whole run
+    // rather than a value the return statement raced. Null when it had already
+    // finished — in which case the answer this look was overtaken by is
+    // already in the maps.
+    await overtaking;
   }
 
   /// What the package is scanned for: `directory` when declared, else the whole
