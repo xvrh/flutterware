@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:device_frame/device_frame.dart' hide Devices;
 import 'package:flutterware/previews_guest.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../address/address_scope.dart';
@@ -403,14 +402,27 @@ class _CatalogViewState extends State<CatalogView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _TopBar(
-                      session: _session,
-                      captureButton: _captureButton,
-                      highlight: _highlight,
-                      zoom: _zoom,
-                      onResetZoom: _resetZoom,
-                    ),
-                    const Divider(height: 1),
+                    // The bar belongs to the stage, and comes down with it —
+                    // the same rule as the inspection dock below.
+                    //
+                    // Every control on it acts on the guest: the device it is
+                    // staged as, the axes the *entry on screen* declared while
+                    // it built, the stage's zoom, and a button that photographs
+                    // the live frame. On the catalog there is no entry on
+                    // screen, so all four were the last demo's — a flavor
+                    // switch that changed nothing visible, a zoom for a page
+                    // that does not zoom, and a copy button that quietly
+                    // handed you a picture of a demo you had left.
+                    if (_session.selected != null) ...[
+                      _TopBar(
+                        session: _session,
+                        captureButton: _captureButton,
+                        highlight: _highlight,
+                        zoom: _zoom,
+                        onResetZoom: _resetZoom,
+                      ),
+                      const Divider(height: 1),
+                    ],
                     // Wrapped so the panel can be told how much room there is,
                     // and wrapped *here* rather than higher so the number is
                     // the canvas and the panel and nothing else — a reserve
@@ -482,21 +494,35 @@ class _CatalogViewState extends State<CatalogView> {
                                       dismissKeyboard,
                                     ),
                                   ),
-                                  // Always mounted, unlike the knob drawer it
-                                  // replaced: that one was absent rather than
-                                  // empty when an entry declared no knobs, so
-                                  // anybody who had not happened to open a demo
-                                  // with knobs never learned the feature
-                                  // existed. The tab is there now and says so.
-                                  InspectPanel(
-                                    session: _session,
-                                    available: constraints.maxHeight,
-                                    highlight: _highlight,
-                                    semanticsHighlight: _semanticsHighlight,
-                                    picking: _picking,
-                                    controls: (context) =>
-                                        _KnobPanel(session: _session),
-                                  ),
+                                  // Mounted for as long as there is a demo to
+                                  // inspect, and only for that long.
+                                  //
+                                  // Within a demo it is always there, unlike
+                                  // the knob drawer it replaced: that one was
+                                  // absent rather than empty when an entry
+                                  // declared no knobs, so anybody who had not
+                                  // happened to open a demo with knobs never
+                                  // learned the feature existed. The tab is
+                                  // there now and says so.
+                                  //
+                                  // On the catalog there is no demo, and the
+                                  // panel reads the *live guest* — so it went
+                                  // on showing the tree, the knobs and the
+                                  // console of whichever demo was visited last,
+                                  // an inspector attached to something that is
+                                  // not on the screen. Nothing it could say
+                                  // there is true, and the page of pictures
+                                  // wants the room.
+                                  if (_session.selected != null)
+                                    InspectPanel(
+                                      session: _session,
+                                      available: constraints.maxHeight,
+                                      highlight: _highlight,
+                                      semanticsHighlight: _semanticsHighlight,
+                                      picking: _picking,
+                                      controls: (context) =>
+                                          _KnobPanel(session: _session),
+                                    ),
                                 ],
                               ),
                             ),
@@ -2058,77 +2084,19 @@ void _goTo(BuildContext context, CatalogSession session, String? scope) {
 ///
 /// Which is also why the sheet has no filter of its own — it draws the same
 /// filtered tree the list beside it does, so typing in one place narrows both.
-/// What the page's render pass is worth saying, or null for a pass not worth
-/// saying anything about.
 ///
-/// Three conditions, and two of them were a wrong reading on screen first.
-///
-/// **Never for a single picture.** A hover renders one entry on a warm harness
-/// in well under a second, and a strip that appeared for it would be a band of
-/// chrome flickering in and out as the pointer crossed the page. A page filling
-/// is what this is for, and a page is more than one tile.
-///
-/// **And never before the harness is up.** The pass opens the instant the page
-/// asks for pictures, which on a cold harness is tens of seconds before any
-/// picture can be made — and the merged model gives the words to the lane that
-/// opened first, so this one took them and read "Rendering the previews ·
-/// 1 / 55" through a compile in which nothing rendered at all. What is
-/// happening then is the harness lane's to say, and it says it.
-@visibleForTesting
-StartupTask? renderPassTask({
-  required bool busy,
-  required bool warm,
-  required int done,
-  required int total,
-}) => !busy || !warm || total < 2
-    ? null
-    : StartupTask('Rendering the previews', done: done, total: total);
-
-/// The catalog page, and the strip that says what is still being built for it.
-///
-/// Stateful only for the reporting: the render pass is a fact about what this
-/// page asked for and how much of it has landed, and both halves are known here
-/// and nowhere else.
-class _Landing extends StatefulWidget {
+/// **A page filling in says so with its own tiles, and with nothing else.** The
+/// strip above the sheet is for the work that has to happen before a picture
+/// can exist at all — the harness compile, which is tens of seconds of a blank
+/// page. Rendering is not that: every tile that is waiting already shimmers,
+/// and a counted "Rendering the previews · 1 / 55" over the top of a hundred
+/// and fifty of them says the same thing a second time, in chrome that appears
+/// and disappears on every hover.
+class _Landing extends StatelessWidget {
   const _Landing({required this.session, required this.thumbnails});
 
   final CatalogSession session;
   final PreviewThumbnails thumbnails;
-
-  @override
-  State<_Landing> createState() => _LandingState();
-}
-
-class _LandingState extends State<_Landing> {
-  CatalogSession get session => widget.session;
-  PreviewThumbnails get thumbnails => widget.thumbnails;
-
-  @override
-  void dispose() {
-    // The page is the only thing that reports this lane, so leaving it up would
-    // leave it up for ever — the strip belongs to the plugin and outlives the
-    // panel by design.
-    widget.session.startup.report(_renderLane, null);
-    super.dispose();
-  }
-
-  static const _renderLane = 'render';
-
-  /// Reported after the frame that computed it, because it is computed *in* a
-  /// build and a notifier fired from one is a build during a build.
-  void _reportPass() {
-    var pass = thumbnails.pass;
-    var task = renderPassTask(
-      busy: thumbnails.busy,
-      warm: thumbnails.warm,
-      done: pass.done,
-      total: pass.total,
-    );
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      session.startup.report(_renderLane, task);
-    });
-  }
 
   /// The screen an entry opens on, which is what its tile reserves room for.
   ///
@@ -2157,14 +2125,17 @@ class _LandingState extends State<_Landing> {
           ]),
           browsing.filter,
         );
-        var sections = previewSheetSections(tree, screenOf: _screenOf);
+        var sections = previewSheetSections(
+          tree,
+          screenOf: _screenOf,
+          rootLabel: scopeHeading(scope),
+        );
         if (sections.isEmpty) {
           return _nothingToList(
             session,
             filtering: browsing.filter.trim().isNotEmpty,
           );
         }
-        _reportPass();
         return Column(
           children: [
             // **Above the sheet, never over it.** The sheet filling in is the
@@ -2179,7 +2150,6 @@ class _LandingState extends State<_Landing> {
   }
 
   Widget _sheet(List<PreviewSheetSection> sections) {
-    var session = this.session;
     return PreviewSheet(
       sections: sections,
       screenOf: _screenOf,

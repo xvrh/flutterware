@@ -330,7 +330,8 @@ class PreviewSheetSection {
     required this.pictureRatio,
   });
 
-  /// The folder or group these sit in, or null for the ones at the root.
+  /// The folder or group these sit in, or null for the entries the index shows
+  /// under no folder at all — see [previewSheetSections]'s `rootLabel`.
   final String? label;
 
   final List<CatalogEntry> entries;
@@ -350,11 +351,17 @@ class PreviewSheetSection {
 /// under it — `Home page / Default` rather than an indented `Default` inside a
 /// `Home page` — because a grid has no indentation to nest *with*, and a
 /// heading that repeated one word per level would say less than the joined path
-/// does. Root leaves come last under no heading, which is where the tree puts
-/// them too.
+/// does. Root leaves come last, which is where the tree puts them too.
+///
+/// [rootLabel] names those root leaves, and is what a narrowed sheet has that
+/// the index does not: inside a folder they are the folder's own entries and it
+/// is the folder's name they want — see `scopeHeading`. At the index they are
+/// the entries that sit under no folder at all, there is no name to give them,
+/// and a rule stands in for one.
 List<PreviewSheetSection> previewSheetSections(
   List<CatalogNode> tree, {
   required Size? Function(CatalogEntry entry) screenOf,
+  String? rootLabel,
 }) {
   var sections = <PreviewSheetSection>[];
   var loose = <CatalogEntry>[];
@@ -402,7 +409,7 @@ List<PreviewSheetSection> previewSheetSections(
   if (loose.isNotEmpty) {
     sections.add(
       PreviewSheetSection(
-        label: null,
+        label: rootLabel,
         entries: loose,
         pictureRatio: ratioOf(loose),
       ),

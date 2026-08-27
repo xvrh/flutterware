@@ -136,6 +136,26 @@ bool addressMoved({
   required String? place,
 }) => !hasFollowed || sessionChanged || place != followed;
 
+/// Whether an address naming no entry is somebody asking to **see the
+/// catalog**, rather than merely arriving somewhere that happens not to name
+/// one.
+///
+/// The two are the same address and opposite intentions, and only the panel
+/// knows which it is looking at. A breadcrumb click or the All demos row is
+/// somebody leaving the demo they were on — without this there would be no way
+/// back to the sheet at all. A remount — the rail link, a plugin switch, a
+/// config reload — has followed nothing yet, and the bare package is simply all
+/// that link knows how to say; it must leave both the selection and the folder
+/// alone, which is what takes you back to where you were.
+///
+/// [namesEntry] rather than the id, because the id is not what decides:
+/// whether the address names *an* entry is.
+bool wentUpToCatalog({
+  required bool hasFollowed,
+  required bool sessionChanged,
+  required bool namesEntry,
+}) => hasFollowed && !sessionChanged && !namesEntry;
+
 /// Whether [entryPath] is inside [scope] — null being the whole package.
 ///
 /// The rule the sheet narrows by, and the same one [CatalogPlace.covers]

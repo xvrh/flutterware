@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/previews/catalog_entry.dart';
-import 'package:flutterware_app/src/previews/catalog_view.dart';
-import 'package:flutterware_app/src/ui/startup_progress.dart';
 import 'package:flutterware_app/src/previews/preview_sheet.dart';
 
 /// A page of empty frames says nothing about whether the first picture is two
 /// seconds away or forty, and the store has always known which — a cold harness
 /// compiles the whole catalog and takes tens of seconds, where a warm one is a
-/// message and a frame. These are the rules that put that on screen.
+/// message and a frame. These are the rules that put that on screen, and the
+/// tiles are the whole of it: a counted strip over the top of them said the
+/// same thing a second time, and went.
 ///
 /// The no-spinner rule survives all of it. A shimmer is a surface treatment
 /// rather than a control, so a hundred and fifty of them read as one page
@@ -16,39 +16,6 @@ import 'package:flutterware_app/src/previews/preview_sheet.dart';
 /// problems — and the queued tile, which is seconds away, gets no treatment at
 /// all.
 void main() {
-  group('what the page says about its own pass', () {
-    test('nothing while the harness is still being compiled', () {
-      // The pass opens the instant the page asks for pictures, which on a cold
-      // harness is tens of seconds before any picture can be made. Left to
-      // speak, it read "Rendering the previews · 1 / 55" through a compile in
-      // which nothing rendered at all.
-      expect(
-        renderPassTask(busy: true, warm: false, done: 1, total: 55),
-        isNull,
-      );
-    });
-
-    test('the count once the harness is up', () {
-      expect(
-        renderPassTask(busy: true, warm: true, done: 1, total: 55),
-        const StartupTask('Rendering the previews', done: 1, total: 55),
-      );
-    });
-
-    test('nothing for a single picture', () {
-      // A hover on a warm harness, which is well under a second.
-      expect(renderPassTask(busy: true, warm: true, done: 0, total: 1), isNull);
-    });
-
-    test('nothing when nothing is being rendered', () {
-      expect(
-        renderPassTask(busy: false, warm: true, done: 9, total: 9),
-        isNull,
-        reason: 'a progress surface that outlives its progress is chrome',
-      );
-    });
-  });
-
   CatalogEntry entry(String symbol) => CatalogEntry(
     path: 'demo/a.dart',
     symbol: symbol,

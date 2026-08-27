@@ -423,14 +423,25 @@ class _CatalogPanelState extends State<_CatalogPanel> {
       // demo you were on. A breadcrumb click inside a panel that *was* on an
       // entry is somebody asking to go back to the sheet, and without this
       // there is no way to.
-      var wentUp = _hasFollowed && !sessionChanged && place?.entryId == null;
+      var wentUp = wentUpToCatalog(
+        hasFollowed: _hasFollowed,
+        sessionChanged: sessionChanged,
+        namesEntry: place?.entryId != null,
+      );
       _hasFollowed = true;
       _followed = place?.path;
       // **What the sheet is showing, when the address says.** A directory sets
-      // it; the bare package clears it, which is the All demos row; an entry
-      // leaves it alone, so that leaving a demo returns to the folder it was
-      // picked from. See [CatalogBrowsing.scope].
-      if (_session case var session? when place?.entryId == null) {
+      // it; going up to the bare package clears it, which is the All demos row;
+      // an entry leaves it alone, so that leaving a demo returns to the folder
+      // it was picked from. See [CatalogBrowsing.scope].
+      //
+      // The same distinction the selection makes, for the same reason: a
+      // remount at the bare package is the rail link naming the only thing it
+      // knows, not somebody asking to see everything. Clearing the scope there
+      // sent you back to All demos every time you left the plugin and came
+      // back, whatever folder you had been standing in.
+      if (_session case var session?
+          when place?.entryId == null && (wentUp || place?.directory != null)) {
         session.browsing.scope = place?.directory;
       }
       if (wentUp) {

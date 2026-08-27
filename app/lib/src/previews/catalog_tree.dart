@@ -92,6 +92,24 @@ List<CatalogNode> buildCatalogTree(List<CatalogEntry> entries) {
   return root.build();
 }
 
+/// What the tree calls [scope] — the heading a narrowed sheet needs, or null
+/// for the whole index.
+///
+/// [buildCatalogTree] drops the directories every entry shares, which for a
+/// narrowed catalog is the folder you are standing in: scope a sheet to
+/// `demo/team` and the tree it is built from is the *contents* of `team`, with
+/// nothing left in it that says so. The page then opened on a row of tiles
+/// under no heading and hard against the top of the pane — and only sometimes,
+/// because a folder whose entries carry a `group:` keeps that branch and got
+/// its heading from it. One folder named, the next one not.
+///
+/// The name is the scope's last segment, which is exactly what the branch row
+/// you clicked is labelled with: a directory branch is named for its directory,
+/// and a group branch's own leaves never reach the heading this feeds — every
+/// entry in a file that holds more than one has a group, derived if not
+/// declared, so they sit under that group's branch rather than loose.
+String? scopeHeading(String? scope) => scope?.split('/').last;
+
 /// The branches you would have to open to see [entryId].
 ///
 /// A selection is not always made in the tree — the daemon can move you off an
