@@ -23,6 +23,7 @@ void main() {
     required String dartExecutable,
     required DaemonConfig config,
     void Function(String)? onLog,
+    void Function(DaemonProgress)? onProgress,
   }) => Completer<(CompilerDaemonClient, DaemonReady)>().future;
 
   testWidgets('a surface is not told until the work has lasted', (

@@ -178,6 +178,7 @@ sealed class DaemonResponse implements ProtocolMessage {
   static DaemonResponse decode(Map<String, dynamic> json) =>
       switch (json['type']) {
         DaemonReady.wireName => DaemonReady.fromJson(json),
+        DaemonProgress.wireName => DaemonProgress.fromJson(json),
         DaemonCompiled.wireName => DaemonCompiled.fromJson(json),
         CatalogChanged.wireName => CatalogChanged.fromJson(json),
         AssetsChanged.wireName => AssetsChanged.fromJson(json),
@@ -200,6 +201,8 @@ class DaemonReady extends DaemonResponse {
     this.reused = false,
     this.timings = const {},
     this.diagnostics = const [],
+    this.seed,
+    this.warmStart = false,
   });
 
   factory DaemonReady.fromJson(Map<String, dynamic> json) =>
@@ -244,11 +247,87 @@ class DaemonReady extends DaemonResponse {
   /// daemon refuses to start on those.
   final List<String> diagnostics;
 
+  /// The seed kernel this start began from, or null when it found none.
+  ///
+  /// Reported for the same reason as [timings], and it is the one fact that
+  /// separates two identical-looking slow starts: a start with no seed and a
+  /// start whose seed held a fraction of what the program reaches both pay a
+  /// cold compile, and only this says which happened.
+  final SeedReport? seed;
+
+  /// Whether the compiler started from the kernel a previous daemon left.
+  ///
+  /// The other half of the same question. A warm start skips the cold compile
+  /// entirely, so a run that was slow *with* one was slow somewhere else.
+  final bool warmStart;
+
   @override
   String get type => wireName;
 
   @override
   Map<String, dynamic> toJson() => _$DaemonReadyToJson(this);
+}
+
+/// The shared half a start began from: where it was and how much it held.
+///
+/// The package count travels with the path because the two questions a slow
+/// start raises are *was there a seed* and *was it this project's*, and a seed
+/// holding twenty packages for a program that reaches sixty answers the second
+/// on sight.
+@JsonSerializable()
+class SeedReport {
+  const SeedReport({required this.packages, required this.path});
+
+  factory SeedReport.fromJson(Map<String, dynamic> json) =>
+      _$SeedReportFromJson(json);
+
+  final int packages;
+  final String path;
+
+  Map<String, dynamic> toJson() => _$SeedReportToJson(this);
+}
+
+/// One phase of the one-time work started, or finished.
+///
+/// Sent only to clients already connected while [DaemonReady] is still being
+/// worked towards — a client that attaches to a daemon that is up gets
+/// `reused: true` and no phases, which is correct, because it paid for none of
+/// them.
+///
+/// **A fact, not a log line.** The daemon already wraps every phase in a timed
+/// call, so this is that call site saying out loud what it already writes
+/// down. Tailing the daemon's log would also work and is rejected: a phase is
+/// something the daemon knows, and a log line is a sentence somebody has to
+/// parse back into one.
+@JsonSerializable()
+class DaemonProgress extends DaemonResponse {
+  const DaemonProgress({
+    required this.phase,
+    required this.done,
+    this.elapsedMs,
+  });
+
+  factory DaemonProgress.fromJson(Map<String, dynamic> json) =>
+      _$DaemonProgressFromJson(json);
+
+  static const wireName = 'progress';
+
+  /// The daemon's own name for it — the key it files the phase under in
+  /// [DaemonReady.timings]. Rendering it as a sentence is the reader's job,
+  /// and an unknown one has to survive that trip unchanged.
+  final String phase;
+
+  /// False when it started, true when it ended.
+  final bool done;
+
+  /// What it cost, once [done]. Null while it is still running.
+  final int? elapsedMs;
+
+  @override
+  String get type => wireName;
+
+  @override
+  Map<String, dynamic> toJson() => _$DaemonProgressToJson(this);
 }
 
 /// An entry the daemon is not serving because it does not compile.

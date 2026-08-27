@@ -136,15 +136,7 @@ class SeedStore {
   /// seed write the same bytes to the same path, and the kernels they produce
   /// are identical.
   SeedDraft draft(SeedPlan plan) {
-    var manifest = jsonEncode({
-      'engine': engineRevision,
-      'flavor': flavor,
-      'packages': {
-        for (var name in plan.packages.keys.toList()..sort())
-          name: plan.packages[name],
-      },
-    });
-    var name = sha1.convert(utf8.encode(manifest)).toString().substring(0, 16);
+    var (manifest, name) = _identify(plan);
     Directory(directory).createSync(recursive: true);
     var entrypoint = p.join(directory, '$name.dart');
     // **Atomically, and only when it would change anything.** Naming the root
@@ -155,6 +147,37 @@ class SeedStore {
     writeFileAtomically(File(entrypoint), plan.source);
     return SeedDraft._(this, name, manifest, entrypoint);
   }
+
+  /// The manifest [plan] is recorded under, and the name that hashes to.
+  ///
+  /// Split out of [draft] because deciding whether a seed is worth writing has
+  /// to be able to ask whether this exact one is already here, and [draft]
+  /// writes a file on its way to answering.
+  (String, String) _identify(SeedPlan plan) {
+    var manifest = jsonEncode({
+      'engine': engineRevision,
+      'flavor': flavor,
+      'packages': {
+        for (var name in plan.packages.keys.toList()..sort())
+          name: plan.packages[name],
+      },
+    });
+    return (
+      manifest,
+      sha1.convert(utf8.encode(manifest)).toString().substring(0, 16),
+    );
+  }
+
+  /// Whether this store already holds the seed [plan] would produce.
+  ///
+  /// Exact rather than approximate — a name is the hash of the manifest, so
+  /// this answers about the artifact itself and not about anything resembling
+  /// it. That is what makes [writeSeedKernel] safe to *decide* from the cheaper
+  /// estimate in [reachedPackages]: an estimate that came out a package too
+  /// high stops here, once, instead of compiling the same seed again on every
+  /// start for ever.
+  bool holds(SeedPlan plan) =>
+      File(p.join(directory, '${_identify(plan).$2}.dill')).existsSync();
 
   List<File> _manifests() {
     try {
@@ -353,19 +376,9 @@ SeedPlan? planSeed({
   required PackageConfig resolution,
   required List<String> immutableRoots,
 }) {
-  var roots = [
-    for (var root in immutableRoots)
-      if (root.isNotEmpty) p.normalize(root),
+  var candidates = [
+    for (var (uri, _) in _shared(sources, resolution, immutableRoots)) uri,
   ];
-  var candidates = <Uri>[];
-  for (var uri in sources) {
-    if (uri.scheme != 'file') continue;
-    if (!uri.path.endsWith('.dart')) continue;
-    var path = uri.toFilePath();
-    if (!roots.any((root) => p.isWithin(root, path))) continue;
-    if (resolution.toPackageUri(uri) == null) continue;
-    candidates.add(uri);
-  }
   if (candidates.isEmpty) return null;
 
   // A part cannot be imported, and one that slips in fails the whole seed
@@ -405,6 +418,79 @@ SeedPlan? planSeed({
   return SeedPlan(imports: imports, packages: packages);
 }
 
+/// The libraries under an immutable root that [sources] reached, each with the
+/// `package:` uri it answers to.
+///
+/// The one walk both [planSeed] and [reachedPackages] read, so the exact
+/// question and the cheap one cannot come to disagree about what a seed would
+/// contain.
+Iterable<(Uri, Uri)> _shared(
+  Iterable<Uri> sources,
+  PackageConfig resolution,
+  List<String> immutableRoots,
+) sync* {
+  var roots = [
+    for (var root in immutableRoots)
+      if (root.isNotEmpty) p.normalize(root),
+  ];
+  for (var uri in sources) {
+    if (uri.scheme != 'file') continue;
+    if (!uri.path.endsWith('.dart')) continue;
+    if (!roots.any((root) => p.isWithin(root, uri.toFilePath()))) continue;
+    var packageUri = resolution.toPackageUri(uri);
+    if (packageUri == null) continue;
+    yield (uri, packageUri);
+  }
+}
+
+/// Which packages a seed for [sources] would hold, without reading one of them.
+///
+/// [planSeed] answers the same question exactly, and to do it reads every
+/// candidate file to find the parts — thousands of small reads. That is worth
+/// paying to *write* a seed and not worth paying on a start that is only asking
+/// whether writing one would gain anything, which is every start.
+///
+/// The two agree wherever it matters. The only file the exact answer drops that
+/// this one keeps is a part, and a part lives in the package of the library
+/// declaring it — which is imported, and so contributes the same name. A start
+/// that estimates one package too many writes nothing anyway: [SeedStore.holds]
+/// recognises the seed it would have produced.
+Set<String> reachedPackages({
+  required Iterable<Uri> sources,
+  required PackageConfig resolution,
+  required List<String> immutableRoots,
+}) => {
+  for (var (_, packageUri) in _shared(sources, resolution, immutableRoots))
+    if (resolution[packageUri.pathSegments.first] case var package?)
+      package.name,
+};
+
+/// Whether a program reaching [reached] would leave behind a better seed than
+/// [improving], which is the one it started from.
+///
+/// **The same preference [SeedStore.find] reads by**, deliberately: the store
+/// hands a program the largest seed its resolution validates, so the question
+/// of whether to write one has to be asked in the same currency. A write rule
+/// stricter than the read rule leaves seeds nothing will ever produce.
+///
+/// A strict superset was tried here first and is wrong, which only a
+/// measurement showed: this repo's catalog reaches **62** packages against the
+/// 20 in the seed a sample project had left — and **3 of those 20 the catalog
+/// does not reach**, because a sample app uses localisations and an http client
+/// that a widget gallery does not. Nested resolutions are the exception; two
+/// programs sharing one workspace normally overlap and neither contains the
+/// other. Under a superset rule the seed stays stunted for ever, which is the
+/// bug this exists to fix.
+///
+/// Nothing is displaced by saying yes — a seed is written under its own
+/// manifest hash and lands *beside* the one it grew from, so the project that
+/// wrote the smaller one still finds it while its resolution validates it.
+/// Growth is also monotone, so two projects cannot take turns: whoever reaches
+/// more writes, and the one reaching less is then handed the bigger seed and
+/// has nothing to write.
+bool seedWouldGrow(SeedKernel improving, Set<String> reached) =>
+    reached.length > improving.packages.length;
+
 /// A `part of` directive, which is what makes a file unimportable. Anchored to
 /// a line so the word in prose above it does not count.
 final _partOf = RegExp(r'^\s*part\s+of[\s;]', multiLine: true);
@@ -441,12 +527,23 @@ class SeedPlan {
 }
 
 /// Compiles the shared half of whatever [compiler] is holding, and records it
-/// as a seed for the next checkout that has none.
+/// as a seed for the next checkout that has none — **or a better one than the
+/// next checkout would otherwise get**.
 ///
-/// Runs only when [SeedStore.find] came back empty, and costs the emit of a
-/// program the compiler already has — see [FrontendServer.asideAt]. Measured on
-/// this repo's catalog: **~800ms including the 82MB copy**, once per resolution
-/// per machine, against the 4.4s it takes off every checkout opened afterwards.
+/// Costs the emit of a program the compiler already has — see
+/// [FrontendServer.asideAt]. Measured on this repo's catalog: **~800ms
+/// including the 82MB copy**, once per resolution per machine, against the 4.4s
+/// it takes off every checkout opened afterwards.
+///
+/// **A seed that exists is not therefore the seed to have.** [SeedStore.find]
+/// already prefers the largest match and the store already keeps three, so a
+/// machine is built to hold and pick the biggest seed it has — but for as long
+/// as this ran only on an empty store, nothing ever wrote a second one. First
+/// writer won, permanently: measured, a 20-package seed left by a sample
+/// project served this repo's catalog — which reaches 62 packages — at 3877ms
+/// against 1671ms for one of its own, and no start was ever going to replace
+/// it. So [improving] asks the other half of the question, and
+/// [seedWouldGrow] answers it in the same currency [SeedStore.find] chooses by.
 ///
 /// Returns where the seed landed, or null when there was nothing to write or
 /// nothing could be written. Nothing here is worth failing a start over: the
@@ -457,14 +554,42 @@ Future<String?> writeSeedKernel({
   required SeedStore store,
   required PackageConfig resolution,
   required List<String> immutableRoots,
+
+  /// The seed this start actually used, when it found one. Null asks for the
+  /// first seed this resolution has ever had.
+  SeedKernel? improving,
   void Function(String)? log,
 }) async {
+  if (improving != null) {
+    var reached = reachedPackages(
+      sources: compiler.sources,
+      resolution: resolution,
+      immutableRoots: immutableRoots,
+    );
+    // Said either way, and in one line, because this is the fact a slow start
+    // raises and nothing else records: a seed holding a fraction of what the
+    // program reaches is a seed that saved a fraction of the compile.
+    var missing = reached.difference(improving.packages.keys.toSet());
+    log?.call(
+      'the seed this start used holds ${improving.packages.length} packages; '
+      'this program reaches ${reached.length}, '
+      'of which ${missing.length} are not in it',
+    );
+    // Answered before [planSeed] reads a file, because this is the branch every
+    // ordinary start takes: the seed on disk is this project's own, the counts
+    // agree, and there is nothing here to do.
+    if (!seedWouldGrow(improving, reached)) return null;
+  }
   var plan = planSeed(
     sources: compiler.sources,
     resolution: resolution,
     immutableRoots: immutableRoots,
   );
   if (plan == null) return null;
+  // The exact form of the question the estimate above answered approximately.
+  // An estimate one package high would otherwise send every start of this
+  // project on the same excursion to write a seed that is already here.
+  if (store.holds(plan)) return null;
   SeedDraft draft;
   try {
     draft = store.draft(plan);
@@ -485,8 +610,8 @@ Future<String?> writeSeedKernel({
     var at = draft.commit((to) => copyKernelAtomically(outputDill, to));
     if (at != null) {
       log?.call(
-        'seeded ${plan.imports.length} shared libraries from '
-        '${plan.packages.length} packages at $at',
+        '${improving == null ? 'seeded' : 'reseeded'} ${plan.imports.length} '
+        'shared libraries from ${plan.packages.length} packages at $at',
       );
     }
     return at;

@@ -252,6 +252,16 @@ class PreviewsCore extends PluginCore {
   /// code that may no longer be there.
   void Function(String path)? onRescanned;
 
+  /// Called whenever a package's harness says what it is doing.
+  ///
+  /// A hook for the same reason as the two above — the phase is read here, and
+  /// what wants it is a progress surface that cannot be named from a core with
+  /// no Flutter in it. The *whole* vocabulary, not just the lines that make a
+  /// status: [previewsRunnerStatus] drops [TesterPhase.ready] because a rail
+  /// row shows nothing when nothing is happening, and a surface that has to
+  /// take itself down needs to be told the wait ended.
+  void Function(String path, TesterPhaseReading reading)? onRunnerPhase;
+
   /// Runs the `compare` action.
   ///
   /// A hook for the same reason as [busyStatusFor], though the wall is a
@@ -289,6 +299,7 @@ class PreviewsCore extends PluginCore {
   void _noteRunnerLine(String path, String line) {
     if (readTesterPhase(line) case var reading?) {
       _setBusy(path, previewsRunnerStatus(reading));
+      onRunnerPhase?.call(path, reading);
     }
   }
 

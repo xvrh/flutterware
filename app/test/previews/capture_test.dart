@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/comparison/build_directory.dart';
 import 'package:flutterware_app/src/previews/discovery.dart';
 import 'package:flutterware_app/src/previews/test_runner.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:path/path.dart' as p;
 
 /// End-to-end: the real `examples/example` package, a real `flutter_tester`,
@@ -36,6 +37,25 @@ void main() {
     // the worktree the panel's warm runner lives on, so the production lane
     // is never the default `build/flutterware` — and the depth is what the
     // generated imports have to climb out of.
+    // **An orphan, planted before anything spawns.** Bringing a harness up is
+    // where the sweep runs, and that link is the one thing neither the rules'
+    // unit tests nor the handle assertions below can reach: a host that records
+    // and forgets perfectly but never sweeps passes both and leaves every
+    // previous crash's guest running.
+    var orphan = await Process.start('sleep', const ['60']);
+    addTearDown(() => orphan.kill(ProcessSignal.sigkill));
+    File(p.join(flutterwareRunDir(), 'guest-${orphan.pid}.json'))
+        .writeAsStringSync(
+          jsonEncode({
+            'pid': orphan.pid,
+            'startedAt': DateTime.now().toIso8601String(),
+            // A pid that has certainly been reaped, so the owner reads as gone.
+            'ownerPid': await _deadPid(),
+            'ownerRecordedAt': DateTime.now().toIso8601String(),
+            'what': 'a crash left this',
+          }),
+        );
+
     var buildDirectory = claimComparisonBuildDirectory(packageRoot);
     var runner = PreviewTestRunner(
       packageRoot: packageRoot,
@@ -86,6 +106,23 @@ void main() {
           'previews.log',
         ]),
       );
+
+      // **The guest is registered while it lives.** A `flutter_tester` is the
+      // one child that survives its owner — measured, 19 of them orphaned to
+      // `ppid` 1 on one machine — and the handle is what lets the next process
+      // finish a kill this one never reached. Asserted here because the rules
+      // are unit-tested and the *wiring* is not: a host that records nothing
+      // passes every one of those and leaks exactly as before.
+      expect(
+        _guestHandles(),
+        isNotEmpty,
+        reason: 'the running harness announced itself to the sweeper',
+      );
+      await orphan.exitCode.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () =>
+            fail('bringing a harness up left a previous crash running'),
+      );
     } finally {
       await runner.dispose();
       releaseComparisonBuildDirectory(packageRoot, buildDirectory);
@@ -95,5 +132,34 @@ void main() {
       Directory(p.join(packageRoot, buildDirectory)).existsSync(),
       isFalse,
     );
+    // And withdrawn when it dies, so a later sweep has nothing to read about a
+    // guest that is already gone.
+    expect(_guestHandles(), isEmpty);
   });
+}
+
+/// A pid that is certainly gone: a process started and waited for.
+Future<int> _deadPid() async {
+  var process = await Process.start('true', const []);
+  await process.exitCode;
+  return process.pid;
+}
+
+/// The handles this test process is currently answering for.
+///
+/// Scoped to this pid so a developer's own running Studio, which writes into
+/// the same directory, neither fails this test nor is disturbed by it.
+List<File> _guestHandles() {
+  var owned = <File>[];
+  for (var entity in Directory(flutterwareRunDir()).listSync()) {
+    if (entity is! File) continue;
+    if (!p.basename(entity.path).startsWith('guest-')) continue;
+    try {
+      var json = jsonDecode(entity.readAsStringSync());
+      if (json is Map && json['ownerPid'] == pid) owned.add(entity);
+    } on Object {
+      // Somebody else's litter.
+    }
+  }
+  return owned;
 }

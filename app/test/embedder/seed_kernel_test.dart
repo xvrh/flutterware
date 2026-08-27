@@ -486,4 +486,195 @@ part of 'other.dart';
       expect(Directory(other.directory).existsSync(), isTrue);
     });
   });
+
+  /// A seed that exists is not therefore the seed to have.
+  ///
+  /// [SeedStore.find] has always preferred the largest match and the store has
+  /// always kept three, so a machine was already built to hold and pick the
+  /// biggest seed it had — but while a seed was written only into an empty
+  /// store, nothing ever wrote a second one. First writer won permanently:
+  /// measured, a 20-package seed left by a sample project served this repo's
+  /// 57-package catalog at 3877ms against 1671ms for one of its own, and no
+  /// start was ever going to replace it.
+  group('growing a seed somebody else left', () {
+    late SeedStore store;
+    late String small;
+    late String big;
+
+    /// A resolution holding both packages, so a seed of either matches it.
+    PackageConfig resolution() => PackageConfig([
+      package('small', small, ['small.dart']),
+      package('big', big, ['big.dart']),
+    ]);
+
+    SeedKernel commit(List<String> roots) {
+      var plan = planSeed(
+        sources: [
+          for (var root in roots) source(root, '${p.basename(root)}.dart'),
+        ],
+        resolution: resolution(),
+        immutableRoots: [cache],
+      )!;
+      var draft = store.draft(plan);
+      expect(
+        draft.commit((to) => File(to).writeAsStringSync('kernel')),
+        isNotNull,
+      );
+      return store.find(resolution())!;
+    }
+
+    Set<String> reaching(List<String> roots) => reachedPackages(
+      sources: [
+        for (var root in roots) source(root, '${p.basename(root)}.dart'),
+      ],
+      resolution: resolution(),
+      immutableRoots: [cache],
+    );
+
+    setUp(() {
+      small = p.join(cache, 'small');
+      big = p.join(cache, 'big');
+      store = SeedStore(
+        engineRevision: 'engine-1',
+        flavor: '--track-widget-creation',
+        root: p.join(temp.path, 'kernels'),
+      );
+    });
+
+    test('a program reaching more than the seed holds asks to grow it', () {
+      var seed = commit([small]);
+      expect(seedWouldGrow(seed, reaching([small, big])), isTrue);
+    });
+
+    test('a program reaching exactly what the seed holds does not', () {
+      var seed = commit([small]);
+      expect(seedWouldGrow(seed, reaching([small])), isFalse);
+    });
+
+    test('a program reaching less than the seed holds does not', () {
+      var seed = commit([small, big]);
+      expect(seedWouldGrow(seed, reaching([small])), isFalse);
+    });
+
+    test('an overlap reaching more still grows it', () {
+      // **The case a strict-superset rule got wrong, and the reason this test
+      // is here rather than its opposite.** Measured: this repo's catalog
+      // reaches 62 packages against the 20 in the seed a sample project had
+      // left, and 3 of those 20 the catalog never reaches — a sample app uses
+      // localisations and an http client that a widget gallery does not. Two
+      // programs in one workspace normally overlap without either containing
+      // the other, so a superset rule leaves the seed stunted for ever.
+      //
+      // Saying yes displaces nothing: the grown seed lands beside the one it
+      // grew from, under its own name.
+      var seed = commit([small, big]);
+      var sideways = p.join(cache, 'sideways');
+      var third = p.join(cache, 'third');
+      var wider = PackageConfig([
+        package('small', small, ['small.dart']),
+        package('big', big, ['big.dart']),
+        package('sideways', sideways, ['sideways.dart']),
+        package('third', third, ['third.dart']),
+      ]);
+      expect(
+        seedWouldGrow(
+          seed,
+          reachedPackages(
+            sources: [
+              source(small, 'small.dart'),
+              source(sideways, 'sideways.dart'),
+              source(third, 'third.dart'),
+            ],
+            resolution: wider,
+            immutableRoots: [cache],
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('and the one reaching less then has nothing to write', () {
+      // Why growth cannot go round in circles: whoever reaches more writes, and
+      // the store hands the bigger seed back to the one reaching less, which
+      // stops there.
+      var seed = commit([small, big]);
+      expect(seedWouldGrow(seed, reaching([small])), isFalse);
+    });
+
+    test('the grown seed is what the next start is handed', () {
+      commit([small]);
+      var grown = commit([small, big]);
+      expect(grown.packages.keys, containsAll(['small', 'big']));
+      // Both are still here — the small one is another project's and matches
+      // resolutions the big one does not.
+      expect(
+        Directory(store.directory)
+            .listSync()
+            .where((e) => e.path.endsWith('.dill')),
+        hasLength(2),
+      );
+    });
+
+    test('a seed already written is recognised before it is written twice', () {
+      // The estimate that decides is cheaper than the plan that writes, so it
+      // can come out a package high. This is what stops that costing an
+      // excursion on every start for ever.
+      var plan = planSeed(
+        sources: [source(small, 'small.dart')],
+        resolution: resolution(),
+        immutableRoots: [cache],
+      )!;
+      expect(store.holds(plan), isFalse);
+      commit([small]);
+      expect(store.holds(plan), isTrue);
+    });
+  });
+
+  group('which packages a program reaches', () {
+    test('counts the shared ones and no others', () {
+      var lib = p.join(cache, 'lib-1.0.0');
+      var own = p.join(project, 'my_app');
+      var resolution = PackageConfig([
+        package('lib', lib, ['lib.dart']),
+        package('my_app', own, ['app.dart']),
+      ]);
+
+      expect(
+        reachedPackages(
+          sources: [source(lib, 'lib.dart'), source(own, 'app.dart')],
+          resolution: resolution,
+          immutableRoots: [cache],
+        ),
+        {'lib'},
+      );
+    });
+
+    test('agrees with the plan it is an estimate of', () {
+      // The claim [reachedPackages] makes about itself, and the reason it is
+      // allowed to skip reading every file: a part lives in the package of the
+      // library declaring it, so dropping the parts drops no package.
+      var lib = p.join(cache, 'lib-1.0.0');
+      File(p.join(lib, 'lib', 'lib.dart'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync("part 'part.dart';");
+      File(p.join(lib, 'lib', 'part.dart')).writeAsStringSync('part of lib;');
+      var resolution = PackageConfig([package('lib', lib, [])]);
+      var sources = [source(lib, 'lib.dart'), source(lib, 'part.dart')];
+
+      var plan = planSeed(
+        sources: sources,
+        resolution: resolution,
+        immutableRoots: [cache],
+      )!;
+      expect(plan.imports, hasLength(1));
+      expect(
+        reachedPackages(
+          sources: sources,
+          resolution: resolution,
+          immutableRoots: [cache],
+        ),
+        plan.packages.keys.toSet(),
+      );
+    });
+  });
 }

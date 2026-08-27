@@ -71,17 +71,71 @@ Widget sheetLongNames() => _Sheet(sections: _sections(_longNames));
 @Preview(name: 'Dark', group: 'Previews sheet', wrapper: wrapInDarkTheme)
 Widget sheetDark() => _Sheet(sections: _sections(_wholeCatalog));
 
+/// The page mid-fill, which is what it looks like for most of a first open.
+///
+/// All three waits at once, because telling them apart is the whole claim: the
+/// tiles a cold harness has not reached shimmer, the one being photographed
+/// carries a hairline in the accent, and the ones seconds away are the plain
+/// reserved boxes they were before any of this. A page of a hundred and fifty
+/// spinners reads as a hundred and fifty problems; this reads as one page
+/// loading.
+@Preview(
+  name: 'While it fills',
+  group: 'Previews sheet',
+  wrapper: wrapInAppTheme,
+)
+Widget sheetFilling() => _filling();
+
+/// And in dark, where the bands sweep the other way.
+///
+/// Both are translucent rather than a second flat tone, which is what makes
+/// them read at all in either: the tile's ground is a near-white in one theme
+/// and a slate in the other, and a fixed colour that showed against one would
+/// vanish into the other.
+@Preview(
+  name: 'While it fills (dark)',
+  group: 'Previews sheet',
+  wrapper: wrapInDarkTheme,
+)
+Widget sheetFillingDark() => _filling();
+
+Widget _filling() {
+  var entries = _smallCatalog;
+  var rendering = entries[2].id;
+  return _Sheet(
+    sections: _sections(entries),
+    animate: true,
+    waitOf: (entry) {
+      if (entry.id == rendering) return PreviewTileWait.rendering;
+      // The first two are done and the rest have not been reached, which is
+      // where the pass is for most of its length.
+      return entries.indexOf(entry) < 2
+          ? PreviewTileWait.queued
+          : PreviewTileWait.compiling;
+    },
+  );
+}
+
 class _Sheet extends StatelessWidget {
-  const _Sheet({required this.sections, this.selectedId});
+  const _Sheet({
+    required this.sections,
+    this.selectedId,
+    this.waitOf,
+    this.animate = false,
+  });
 
   final List<PreviewSheetSection> sections;
   final String? selectedId;
+  final PreviewTileWait? Function(CatalogEntry entry)? waitOf;
+  final bool animate;
 
   @override
   Widget build(BuildContext context) => PreviewSheet(
     sections: sections,
     selectedId: selectedId,
     screenOf: _screenOf,
+    waitOf: waitOf,
+    animate: animate,
     onTap: (_) {},
   );
 }

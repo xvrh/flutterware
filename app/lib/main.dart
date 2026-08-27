@@ -46,7 +46,6 @@ void main() async {
   Logger.root
     ..level = Level.ALL
     ..onRecord.listen(appContext.logger.printLogRecord);
-  await appContext.resourceCleaner.initialize();
 
   var shell = ShellController(
     appContext: appContext,

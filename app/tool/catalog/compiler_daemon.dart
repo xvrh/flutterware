@@ -87,6 +87,18 @@ Future<void> _main(List<String> args) async {
   var swept = await sweepRunDir();
   if (swept > 0) stderr.writeln('[catalog] swept $swept stale run files');
 
+  // The same argument, applied to the far larger mess: a build directory is
+  // named by the address, so every change to the config orphans one whole —
+  // measured at 3.6 GB across 30 of them on one worktree. See
+  // [sweepCatalogBuildDirs] for what it spares.
+  var dropped = sweepCatalogBuildDirs(
+    catalogDir: p.join(config.appPackageRoot, 'build', 'catalog'),
+    liveKey: address.key,
+  );
+  if (dropped > 0) {
+    stderr.writeln('[catalog] dropped $dropped abandoned build directories');
+  }
+
   var daemon = _Daemon(config, address, server);
   for (var signal in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
     signal.watch().listen((_) => daemon.stop());
@@ -189,10 +201,22 @@ class _Daemon {
 
   final _sessions = <_Session>[];
   final _timings = <String, int>{};
+
+  /// Phases started and not yet finished, in the order they started.
+  ///
+  /// Kept so a client that connects *during* the start is caught up: the
+  /// phases already running are the ones it is about to wait for, and a strip
+  /// that stayed blank until the next one began would say nothing for as long
+  /// as the longest one takes — which on a cold start is the whole wait.
+  final _running = <String>[];
   var _sessionCounter = 0;
   Duration _coldCompile = Duration.zero;
   List<String> _diagnostics = const [];
   String? _hostPath;
+
+  /// Whether this start began from a previous daemon's kernel — see
+  /// [DaemonReady.warmStart].
+  var _startedWarm = false;
 
   /// Completes when [prepare] has run — successfully or not. Sessions that
   /// connect while it is pending wait on it rather than being turned away.
@@ -379,7 +403,14 @@ class _Daemon {
     _sessions.add(session);
     try {
       session.start();
-      if (_prepared.isCompleted) unawaited(session.sendReady());
+      if (_prepared.isCompleted) {
+        unawaited(session.sendReady());
+      } else {
+        // What it has walked into. See [_running].
+        for (var what in _running) {
+          session.send(DaemonProgress(phase: what, done: false));
+        }
+      }
     } catch (e, s) {
       // One client that cannot be served is not a reason to drop the others.
       stderr.writeln('[catalog] could not serve ${session.id}: $e\n$s');
@@ -421,9 +452,20 @@ class _Daemon {
   /// first compile, and the C host. Paid once per daemon, not once per client.
   Future<void> _prepare() async {
     var phase = Stopwatch()..start();
+    // Announced on the way *out* only. These are the phases measured as "time
+    // since the last mark", so there is no moment at which one is known to have
+    // begun — and a start that had to be guessed at would be a claim rather
+    // than the fact the wire carries.
     void mark(String what) {
       _timings[what] = phase.elapsedMilliseconds;
       stderr.writeln('[catalog] $what ${phase.elapsedMilliseconds}ms');
+      _announce(
+        DaemonProgress(
+          phase: what,
+          done: true,
+          elapsedMs: phase.elapsedMilliseconds,
+        ),
+      );
       phase.reset();
     }
 
@@ -484,7 +526,7 @@ class _Daemon {
     // derived: `_resolveWarmDill` answers with where this run will save one,
     // which on a first start is a path nothing has written yet.
     var warm = _warmDill;
-    var starting = warm != null && File(warm).existsSync();
+    var starting = _startedWarm = warm != null && File(warm).existsSync();
     stderr.writeln('[catalog] warm kernel: ${starting ? warm : 'none'}');
 
     // Looked up even when a warm kernel makes it unnecessary *here*: the answer
@@ -556,6 +598,10 @@ class _Daemon {
     reused: session.arrivedAfterPrepare,
     timings: _timings,
     diagnostics: _diagnostics,
+    seed: _seed == null
+        ? null
+        : SeedReport(packages: _seed!.packages.length, path: _seed!.kernelPath),
+    warmStart: _startedWarm,
   );
 
   /// Looks for entries or assets that appeared or disappeared. Compiles
@@ -800,10 +846,36 @@ class _Daemon {
   /// the gap between two unrelated events rather than the cost of either.
   Future<T> _timed<T>(String what, Future<T> Function() body) async {
     var watch = Stopwatch()..start();
-    var result = await body();
-    _timings[what] = watch.elapsedMilliseconds;
-    stderr.writeln('[catalog] $what ${watch.elapsedMilliseconds}ms');
-    return result;
+    _began(what);
+    try {
+      var result = await body();
+      _timings[what] = watch.elapsedMilliseconds;
+      stderr.writeln('[catalog] $what ${watch.elapsedMilliseconds}ms');
+      return result;
+    } finally {
+      _ended(what, watch.elapsedMilliseconds);
+    }
+  }
+
+  /// Tells every connected client that [what] has started.
+  ///
+  /// In a `finally`'s partner rather than beside the success path: a phase that
+  /// threw is a phase that stopped, and a strip still counting the seconds of
+  /// something that failed is the one reading worse than saying nothing.
+  void _began(String what) {
+    _running.add(what);
+    _announce(DaemonProgress(phase: what, done: false));
+  }
+
+  void _ended(String what, int elapsedMs) {
+    _running.remove(what);
+    _announce(DaemonProgress(phase: what, done: true, elapsedMs: elapsedMs));
+  }
+
+  void _announce(DaemonProgress progress) {
+    for (var session in [..._sessions]) {
+      session.send(progress);
+    }
   }
 
   /// The embedder framework, then the C host that links against it.
@@ -877,9 +949,13 @@ class _Daemon {
     // Last, because it takes the compiler on an excursion and gives it back:
     // everything above wants the kernel at `_outputDill` to be this program's,
     // and it is again by the time this returns.
-    if (_seed == null) {
-      await _timed('seed kernel', () => _writeSeed(compiler));
-    }
+    //
+    // **Unconditional**, where this used to run only on `_seed == null`.
+    // Whether there is anything to write is `writeSeedKernel`'s question and it
+    // answers a start that found a big enough seed without reading a file — and
+    // asking it every time is what stops the first seed a machine ever wrote
+    // from being the one every project afterwards is stuck with.
+    await _timed('seed kernel', () => _writeSeed(compiler));
   }
 
   /// Where the last run's quarantine is kept, beside the kernel it produced.
@@ -1070,7 +1146,17 @@ class _Daemon {
       stderr.writeln('[catalog] no seed kernel: $e');
       _seedStore = null;
     }
-    stderr.writeln('[catalog] seed kernel: ${_seed?.kernelPath ?? 'none'}');
+    // The package count with the path, because the two questions a slow start
+    // raises are *was there a seed* and *was it this project's* — and a seed
+    // holding a fraction of what the program reaches answers the second on
+    // sight. Without it the difference between a good seed and a useless one is
+    // an identical line.
+    stderr.writeln(
+      _seed == null
+          ? '[catalog] seed kernel: none'
+          : '[catalog] seed kernel: ${_seed!.kernelPath} '
+                '(${_seed!.packages.length} packages)',
+    );
   }
 
   /// Leaves the shared half of this program behind for the next checkout.
@@ -1089,6 +1175,7 @@ class _Daemon {
         store: store,
         resolution: resolution,
         immutableRoots: _immutableRoots,
+        improving: _seed,
         log: (line) => stderr.writeln('[catalog] $line'),
       );
     } catch (e) {

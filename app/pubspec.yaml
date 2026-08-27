@@ -34,6 +34,8 @@ dependencies:
   async:
   auto_size_text:
   built_collection:
+  # The one clock a widget test can move. See lib/src/ui/startup_progress.dart.
+  clock:
   collection:
   crypto:
   dart_mcp: ^0.5.2

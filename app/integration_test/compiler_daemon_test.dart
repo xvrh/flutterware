@@ -50,6 +50,14 @@ void main() {
   late CompilerDaemonClient daemon;
   late DaemonReady ready;
 
+  /// Every phase this start was told about *as it happened*.
+  ///
+  /// Collected here because there is nowhere else it can be: every one of these
+  /// arrives before `connect` returns, so a caller that waited for a client and
+  /// then subscribed would have missed the whole start it was trying to
+  /// narrate.
+  final progress = <DaemonProgress>[];
+
   /// Two entries known to compile, named rather than taken off the front of the
   /// list: entries sort by id, so `entries.first` moves whenever a demo is added
   /// — and a check that quietly starts asserting about a different demo than it
@@ -104,6 +112,7 @@ void main() {
       dartExecutable: dartExecutable,
       config: config,
       onLog: (line) => print('  [daemon] $line'),
+      onProgress: progress.add,
     );
   });
 
@@ -180,6 +189,57 @@ void main() {
   }
 
   group('starting up', () {
+    test('narrates its phases to a client that is waiting for it', () {
+      // **The whole point of the message.** A client learns what a start is
+      // doing only while it is doing it — every one of these arrives before
+      // the handshake — so a channel that worked in a unit test and not
+      // against a real daemon would look exactly like a panel that stayed
+      // blank for forty seconds, which is what it did before this existed.
+      expect(ready.reused, isFalse, reason: 'this client started the daemon');
+      expect(progress, isNotEmpty);
+      expect(
+        progress.map((p) => p.phase),
+        contains('cold compile'),
+        reason: 'the long pole says so while it is the long pole',
+      );
+      var compiling = progress.where((p) => p.phase == 'cold compile');
+      expect(compiling.map((p) => p.done), containsAllInOrder([false, true]));
+      expect(
+        compiling.last.elapsedMs,
+        isNotNull,
+        reason: 'a finished phase reports what it cost',
+      );
+      expect(
+        compiling.first.elapsedMs,
+        isNull,
+        reason: 'and one still running has nothing to report',
+      );
+    });
+
+    test('every phase it narrated is a phase it files a timing for', () {
+      // The two are the same call site saying the same thing, live and
+      // afterwards. If they can drift, the popover and the strip disagree
+      // about the same start.
+      expect(
+        progress.where((p) => p.done).map((p) => p.phase).toSet(),
+        everyElement(isIn(ready.timings.keys)),
+      );
+    });
+
+    test(
+      'reports what it began from, so two slow starts can be told apart',
+      () {
+        // A start with no seed and a start whose seed held a fraction of what
+        // this program reaches both pay a cold compile and look identical
+        // afterwards. Only this separates them.
+        expect(ready.warmStart, isA<bool>());
+        if (ready.seed case var seed?) {
+          expect(seed.packages, greaterThan(0));
+          expect(File(seed.path).existsSync(), isTrue);
+        }
+      },
+    );
+
     test('builds the guest host', () {
       expect(File(ready.hostPath).existsSync(), isTrue);
     });
@@ -908,6 +968,42 @@ Widget fixtureBroken() => const Placeholder();
         );
       }
       expect(seed.packages, contains('flutter'));
+    });
+
+    test('and a start that already has a big enough one writes no other', () async {
+      // The risk in asking *every* start whether a seed is worth writing,
+      // rather than only a start that found none: a start that keeps answering
+      // yes pays an excursion and a copy of most of a program, every time.
+      //
+      // The sample project is the case to prove it on. It resolves through the
+      // same workspace `package_config.json` as this catalog, so it finds this
+      // catalog's seed and reaches a strict subset of it — which is exactly the
+      // shape that must cost nothing, and exactly the shape that was measured
+      // going wrong in the other direction: a machine whose only seed came from
+      // this sample served it to the catalog for ever.
+      var directory = Directory(p.dirname(seed.kernelPath));
+      List<String> seeds() => [
+        for (var file in directory.listSync())
+          if (file.path.endsWith('.dill')) p.basename(file.path),
+      ]..sort();
+
+      var before = seeds();
+      var (client, _) = await CompilerDaemonClient.connect(
+        dartExecutable: dartExecutable,
+        config: DaemonConfig.forPackage(
+          appToolDirectory: appRoot,
+          packageRoot: p.join(p.dirname(appRoot), 'examples', 'example'),
+          flutterSdkRoot: flutterRoot,
+          roots: const ['demo'],
+        ),
+      );
+      await client.stopDaemon();
+
+      expect(
+        seeds(),
+        before,
+        reason: 'a subset of a seed it found is nothing to write',
+      );
     });
 
     test('and the daemon gave its own program back', () async {

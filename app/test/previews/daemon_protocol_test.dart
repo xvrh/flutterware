@@ -1,3 +1,4 @@
+import 'package:flutterware_app/src/previews/daemon_phase.dart';
 import 'package:flutterware_app/src/previews/protocol.dart';
 import 'package:test/test.dart';
 
@@ -92,6 +93,107 @@ void main() {
       expect(decoded.requestId, 42);
       expect(decoded.compile, const Duration(milliseconds: 1500));
       expect(decoded.ok, isFalse, reason: 'no dill, so nothing to load');
+    });
+
+    test('a phase survives the wire, started and finished', () {
+      // The message a panel narrates a cold start from. It arrives *before*
+      // the handshake, so a client that could not read it would show nothing
+      // for the whole of the wait it describes.
+      for (var progress in [
+        const DaemonProgress(phase: 'cold compile', done: false),
+        const DaemonProgress(
+          phase: 'cold compile',
+          done: true,
+          elapsedMs: 14830,
+        ),
+      ]) {
+        var decoded = DaemonResponse.decode(
+          tryDecodeLine(encodeLine(progress))!,
+        ) as DaemonProgress;
+        expect(decoded.phase, 'cold compile');
+        expect(decoded.done, progress.done);
+        expect(decoded.elapsedMs, progress.elapsedMs);
+      }
+    });
+
+    test('what a start began from survives the wire', () {
+      // The two facts that separate two identical-looking slow starts: one
+      // found no shared kernel, and one found a kernel built for a program
+      // reaching a fraction of what this one does.
+      var line = encodeLine(
+        const DaemonReady(
+          sessionId: 's',
+          hostPath: 'host',
+          assetsDir: 'assets',
+          icuData: 'icu',
+          coldCompile: Duration(seconds: 15),
+          entries: [],
+          timings: {'cold compile': 14830},
+          seed: SeedReport(packages: 20, path: '/seeds/abc.dill'),
+          warmStart: true,
+        ),
+      );
+      var decoded = DaemonResponse.decode(tryDecodeLine(line)!) as DaemonReady;
+      expect(decoded.seed?.packages, 20);
+      expect(decoded.seed?.path, '/seeds/abc.dill');
+      expect(decoded.warmStart, isTrue);
+      expect(decoded.timings['cold compile'], 14830);
+    });
+
+    test('a start with no seed says so rather than omitting the fact', () {
+      var decoded = DaemonResponse.decode(
+        tryDecodeLine(
+          encodeLine(
+            const DaemonReady(
+              sessionId: 's',
+              hostPath: 'host',
+              assetsDir: 'assets',
+              icuData: 'icu',
+              coldCompile: Duration.zero,
+              entries: [],
+            ),
+          ),
+        )!,
+      ) as DaemonReady;
+      expect(decoded.seed, isNull);
+      expect(decoded.warmStart, isFalse);
+    });
+  });
+
+  group('reading a phase back into words', () {
+    test('the ones the daemon actually reports', () {
+      expect(daemonPhaseLabel('cold compile'), 'Compiling the catalog');
+      expect(daemonPhaseLabel('asset bundle'), 'Building the asset bundle');
+      expect(
+        daemonPhaseLabel('rebuild after quarantine'),
+        daemonPhaseLabel('rebuild after seeding'),
+        reason: 'what sent it back is not a distinction anybody waiting uses',
+      );
+    });
+
+    test('the one whose key carries a number keeps the number', () {
+      // `source baseline (649 files)` is the only phase the daemon files under
+      // a key it computes, and the count is the interesting half of it.
+      expect(
+        daemonPhaseLabel('source baseline (649 files)'),
+        'Recording 649 source files to watch',
+      );
+      expect(
+        daemonPhaseLabel('source baseline'),
+        'Recording the source files to watch',
+      );
+    });
+
+    test('a phase from a newer daemon survives the trip', () {
+      // A daemon newer than the client is the ordinary case here — one is a
+      // spawned process and the other is the GUI that spawned it. Its own word
+      // for what it is doing is a worse sentence than the ones above and a much
+      // better one than silence.
+      expect(
+        daemonPhaseLabel('linking the widget graph'),
+        'Linking the widget graph',
+      );
+      expect(daemonPhaseLabel(''), '');
     });
   });
 }

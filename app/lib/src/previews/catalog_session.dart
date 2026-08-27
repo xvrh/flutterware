@@ -14,7 +14,9 @@ import 'authoring.dart';
 import 'catalog_params.dart';
 import 'devices.dart';
 import 'catalog_entry.dart';
+import '../ui/startup_progress.dart';
 import 'compiler_daemon_client.dart';
+import 'daemon_phase.dart';
 import 'inspect_client.dart';
 import 'live_session.dart';
 import 'protocol.dart';
@@ -359,7 +361,8 @@ class CatalogSession extends ChangeNotifier {
     this.canvases = const [],
     this.scannedEntries = const [],
     this.connectToDaemon = CompilerDaemonClient.connect,
-  }) {
+    StartupProgress? startup,
+  }) : startup = startup ?? StartupProgress() {
     // Forwarded, so a renderer has one thing to listen to.
     browsing.addListener(notifyListeners);
     staging.addListener(notifyListeners);
@@ -376,6 +379,16 @@ class CatalogSession extends ChangeNotifier {
 
   /// What the guest is rendered as: a device, or the panel.
   final staging = CatalogStaging();
+
+  /// What this start is doing, merged with whatever else is working on the same
+  /// wait — see [StartupProgress].
+  ///
+  /// Injected rather than owned, because the session is not the only lane. The
+  /// panel's other one is the `flutter_tester` harness photographing the
+  /// catalog page, which comes up beside this one, knows nothing about it, and
+  /// is waited for by the same person. The plugin holds one of these per
+  /// package and hands it to both.
+  final StartupProgress startup;
 
   /// Everything discovery found, populated when the daemon reports ready.
   ///
@@ -591,6 +604,21 @@ class CatalogSession extends ChangeNotifier {
 
   SwitchReport? lastSwitch;
   Duration? coldCompile;
+
+  /// What the daemon's one-time work cost, by phase, and what it began from.
+  ///
+  /// The post-mortem the strip is the live half of. It answers the question a
+  /// slow start actually raises — *where did it go* — which neither a total nor
+  /// a bar can: the same forty seconds is a fetched engine framework, a
+  /// compile with no head start, or a compile whose head start held a fraction
+  /// of what this program reaches, and only these tell those apart.
+  Map<String, int> timings = const {};
+  SeedReport? seed;
+  var warmStart = false;
+
+  /// Whether this session attached to a daemon that was already up, and so paid
+  /// for none of the above.
+  var reusedDaemon = false;
 
   /// The controls the entry on screen declared while it built, or an empty
   /// report for one that declares none.
@@ -1434,6 +1462,7 @@ class CatalogSession extends ChangeNotifier {
           previewAnnotations: previewAnnotations,
         ),
         onLog: (line) => debugPrint('[catalog] $line'),
+        onProgress: _onDaemonProgress,
       );
       if (_disposed) {
         // Disposed while connecting — which spans the cold compile, i.e.
@@ -1444,6 +1473,11 @@ class CatalogSession extends ChangeNotifier {
         return;
       }
       _daemon = daemon;
+      _clearDaemonLanes();
+      timings = ready.timings;
+      seed = ready.seed;
+      warmStart = ready.warmStart;
+      reusedDaemon = ready.reused;
       coldCompile = ready.coldCompile;
       entries = ready.entries;
       quarantined = ready.quarantined;
@@ -1603,8 +1637,41 @@ class CatalogSession extends ChangeNotifier {
         unawaited(switchTo(entry));
       }
     } catch (e) {
+      // Before the failure is recorded, because a strip still counting the
+      // seconds of a start that died is the one reading worse than saying
+      // nothing at all. The panel has the error and the error is the state.
+      _clearDaemonLanes();
       _fail('$e');
     }
+  }
+
+  /// One lane per daemon phase, so the model's own rule — the longest-running
+  /// lane is the one that speaks — resolves the daemon's three concurrent
+  /// chains without this having to pick between them.
+  void _onDaemonProgress(DaemonProgress progress) {
+    if (_disposed) return;
+    var lane = 'catalog:${progress.phase}';
+    if (progress.done) {
+      _daemonLanes.remove(lane);
+      startup.report(lane, null);
+      return;
+    }
+    _daemonLanes.add(lane);
+    startup.report(lane, StartupTask(daemonPhaseLabel(progress.phase)));
+  }
+
+  /// The lanes this session opened, so they can be closed together.
+  ///
+  /// A phase that was announced started and never announced finished is what a
+  /// connection dying mid-compile leaves behind, and nothing else would ever
+  /// take it down.
+  final _daemonLanes = <String>{};
+
+  void _clearDaemonLanes() {
+    for (var lane in _daemonLanes) {
+      startup.report(lane, null);
+    }
+    _daemonLanes.clear();
   }
 
   /// Switches the guest to [entry] by hot reload.
