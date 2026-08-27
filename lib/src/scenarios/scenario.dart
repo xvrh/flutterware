@@ -247,6 +247,20 @@ Future<void> _runScenario(
   // still in flight would have this one waiting out its whole allowance on
   // work that is not its own.
   resetAnnouncedWork();
+  // The iOS caret blinks through an `AnimationController`, not a timer, so on
+  // an iOS-staged device every screen with a focused field is asking for a
+  // frame forever, and no settle policy can tell that from a spinner.
+  // [Settle.upTo] gets away with it — the controller runs a one-second
+  // simulation and restarts on a `Timer.zero`, so the loop finds its quiet
+  // frame at the blink boundary. The two policies that do not stop there do
+  // not: [Settle.elapse], which is what a boot-time pump spends, and
+  // [Settle.none] land wherever the blink happens to be, and the step reports
+  // `settled: false` on the phase of an animation nobody is waiting for. The
+  // pixels move with it too — enough for a `screen` to refuse to adopt its
+  // verb's frame and emit a second step instead. Determinism here is this
+  // harness's, the same as the fonts and the clock.
+  var priorCursor = EditableText.debugDeterministicCursor;
+  EditableText.debugDeterministicCursor = true;
   var assets = ScenarioAssetBundle();
   _countFrames(tester);
   var state = _ReplayState();
@@ -349,6 +363,7 @@ Future<void> _runScenario(
     // debug variables — and complains about a live semantics handle — at
     // the end of the body, before tearDowns run.
     state.disposeSemantics();
+    EditableText.debugDeterministicCursor = priorCursor;
     restore?.call();
     restoreErrors?.call();
   }
