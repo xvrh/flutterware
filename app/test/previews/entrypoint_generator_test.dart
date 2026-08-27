@@ -59,7 +59,7 @@ Widget avatarTileEmpty() => const Placeholder();
     expect(
       source,
       contains(
-        'void main() => withClock(Clock.fixed(DateTime(2026, 1, 1, 9, 41)), '
+        "void main() => withClock(Clock.fixed(DateTime.parse('2026-01-01T09:41:00.000')), "
         '() => GuestLogs.instance',
       ),
     );

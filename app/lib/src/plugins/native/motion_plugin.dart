@@ -458,6 +458,7 @@ class _MotionStageState extends State<_MotionStage> {
       projectRoot: p.join(core.host.worktree.path, package),
       worktreeRoot: core.host.worktree.path,
       roots: [core.directoryFor(package)],
+      clock: core.host.projectClock,
       connectToDaemon: CompilerDaemonClient.connect,
     )..addListener(_onSession);
     _session = session;

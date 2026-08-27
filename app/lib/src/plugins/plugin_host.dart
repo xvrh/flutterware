@@ -13,6 +13,7 @@ class PluginHost {
     required this.worktree,
     required this.workspace,
     this.config = const {},
+    this.projectClock,
   });
 
   /// The declared id — also the registry key its implementation was found by.
@@ -25,6 +26,13 @@ class PluginHost {
 
   /// The worktree's packages, and the services for each — built on demand.
   final Workspace workspace;
+
+  /// What the project declared with `fw.clock(...)`, or null for
+  /// flutterware's own pin.
+  ///
+  /// The one project-level fact a plugin is handed rather than a shell screen,
+  /// because four plugins render a date and they have to render the same one.
+  final DateTime? projectClock;
 
   /// Whatever `tool/flutterware.dart` passed for this instance. Already decoded
   /// from the manifest; plugins are responsible for validating their own keys.

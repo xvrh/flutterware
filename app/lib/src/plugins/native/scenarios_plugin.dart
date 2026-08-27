@@ -1390,6 +1390,36 @@ class _ScenarioPageState extends State<_ScenarioPage> {
               ),
             ),
           ],
+          // The date the run rendered at. Quiet, because it is the same on
+          // every run and that is the point — and said at all, because it is
+          // *not* today: a screen with a trial expiry or a seasonal theme sits
+          // in a state whose reason is nowhere else on the page.
+          if (run?.clock case var clock?) ...[
+            const Gap(FwSpacing.md),
+            Tooltip(
+              message:
+                  'Every scenario in this run read ${_clockStamp(clock)} as '
+                  'now. Scenarios are pinned to a date so two runs of a suite '
+                  'produce the same pictures; the project sets it with '
+                  'fw.clock(...), and one run can override it with --clock '
+                  '(or --clock now for the wall clock).',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.schedule_outlined,
+                    size: FwIconSize.md,
+                    color: colors.mut2,
+                  ),
+                  const Gap(FwSpacing.xs),
+                  Text(
+                    _clockStamp(clock),
+                    style: context.type.caption.copyWith(color: colors.mut2),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const Gap(FwSpacing.lg),
           _RunSplitButton(
             enabled: !running,
@@ -1418,6 +1448,16 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   /// about a screen the reader has already scrolled past.
   int _unsettled(ScenarioPanelRun? run) =>
       run?.steps.where((step) => !step.settled).length ?? 0;
+
+  /// The clock origin as a human reads it off a screenshot — the date and the
+  /// time of day, which is the whole of what a pinned clock shows. Seconds and
+  /// the offset are in the tooltip's sentence, not in a chip four words long.
+  static String _clockStamp(DateTime clock) {
+    var local = clock.isUtc ? clock.toLocal() : clock;
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(local.day)}/${two(local.month)}/${local.year} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
 
   Widget _body(
     BuildContext context,

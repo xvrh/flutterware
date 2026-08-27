@@ -4,9 +4,9 @@ import 'dart:io';
 // daemon's import closure, and the daemon must never reach Flutter — going
 // through the barrel took `package:flutter` with it and made the daemon
 // unloadable in a plain VM, which `entry_point_purity_test.dart` exists to
-// catch and duly did. `clock.dart` imports `package:clock` and nothing else.
+// catch and duly did. `src/clock.dart` imports nothing at all.
 // ignore: implementation_imports
-import 'package:flutterware/src/ui_catalog/clock.dart' show previewClockOrigin;
+import 'package:flutterware/src/clock.dart' show pinnedClockOrigin;
 import 'package:path/path.dart' as p;
 
 import '../utils/source_code/escape_dart_string.dart';
@@ -29,6 +29,7 @@ class EntrypointGenerator {
     required this.outputDir,
     required this.projectRoot,
     this.emitProbe = false,
+    this.clock,
   });
 
   /// Where generated sources are written. Must not be a directory anything
@@ -42,6 +43,11 @@ class EntrypointGenerator {
   /// rendering, so a headless harness can assert what the guest actually shows
   /// rather than only that a reload reported success.
   final bool emitProbe;
+
+  /// What `clock.now()` reads inside the guest, or null for
+  /// [pinnedClockOrigin] — the project's own `fw.clock(...)`, so a preview and
+  /// a scenario of the same project show the same date.
+  final DateTime? clock;
 
   /// The wrapper files themselves, written the same way the web build writes
   /// them — see [CatalogWrapperWriter] for why that sharing is structural.
@@ -155,10 +161,11 @@ class EntrypointGenerator {
       );
       ids.writeln('  ${escapeDartString(entry.id)},');
     }
-    var origin = previewClockOrigin;
+    // Round-tripped through ISO rather than spelled out as constructor
+    // arguments: a project's own pin may carry seconds, or be UTC, and a
+    // `DateTime(y, m, d, h, min)` literal silently drops both.
     var clockLiteral =
-        'DateTime(${origin.year}, ${origin.month}, ${origin.day}, '
-        '${origin.hour}, ${origin.minute})';
+        'DateTime.parse(${escapeDartString((clock ?? pinnedClockOrigin).toIso8601String())})';
 
     return '''
 // GENERATED — do not edit.

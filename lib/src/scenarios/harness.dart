@@ -654,6 +654,9 @@ Future<Map<String, Object?>> _run(
   var root = declared.root;
 
   var outcomes = <Map<String, Object?>>[];
+  // What the first scenario's clock started at — the whole run's, since the
+  // origin is resolved from the request and the request is one.
+  DateTime? clockOrigin;
   var watch = Stopwatch()..start();
 
   // What each file runs as, worked out once per file. A request that named a
@@ -802,6 +805,13 @@ Future<Map<String, Object?>> _run(
           // zone of the design. Set per scenario rather than per request,
           // because the framing is per folder.
           scenarioRunArgs = framedArgs;
+          // The clock the run actually ran under, read where the args are
+          // live. A pinned date is only safe while it is *stated* — an app
+          // with a trial expiry or a seasonal theme sits in a different state
+          // under one, and a report that does not say so leaves whoever is
+          // debugging it with a screen that disagrees with today for no
+          // visible reason. Same reasoning as the axes.
+          clockOrigin ??= resolvedScenarioClockOrigin;
           var outcome = await _runOne(
             entry.load(suite, groups: scope),
             file: groupFile ?? '',
@@ -863,6 +873,7 @@ Future<Map<String, Object?>> _run(
   return {
     'ms': watch.elapsedMilliseconds,
     'scenarios': outcomes,
+    if (clockOrigin != null) 'clock': clockOrigin!.toIso8601String(),
     // Says the list is short because the run stopped, not because that was
     // everything — and tells the host its guest is spent.
     if (abandoned) 'abandoned': true,

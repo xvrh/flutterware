@@ -183,6 +183,7 @@ DaemonConfig _$DaemonConfigFromJson(Map<String, dynamic> json) => DaemonConfig(
       const ['Preview'],
   emitProbe: json['emitProbe'] as bool? ?? false,
   trackWidgetCreation: json['trackWidgetCreation'] as bool? ?? true,
+  clock: json['clock'] == null ? null : DateTime.parse(json['clock'] as String),
   daemonRevision: json['daemonRevision'] as String? ?? '',
 );
 
@@ -196,5 +197,6 @@ Map<String, dynamic> _$DaemonConfigToJson(DaemonConfig instance) =>
       'previewAnnotations': instance.previewAnnotations,
       'emitProbe': instance.emitProbe,
       'trackWidgetCreation': instance.trackWidgetCreation,
+      'clock': instance.clock?.toIso8601String(),
       'daemonRevision': instance.daemonRevision,
     };

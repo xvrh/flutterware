@@ -385,6 +385,7 @@ Future<ScenarioResults?> _compareScenarios({
       from: top,
     ),
     directory: core.scanRootFor(package),
+    projectClock: core.host.projectClock,
   );
   var source = LiveScenarioSource(
     side: side,

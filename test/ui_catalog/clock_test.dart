@@ -8,15 +8,15 @@ import 'package:flutterware/src/ui_catalog/clock.dart';
 /// differ only when somebody changed something.
 void main() {
   test('the origin is a round, obviously-fixed instant', () {
-    expect(previewClockOrigin.hour, 9);
-    expect(previewClockOrigin.minute, 41);
-    expect(previewClockOrigin.isUtc, isFalse);
+    expect(pinnedClockOrigin.hour, 9);
+    expect(pinnedClockOrigin.minute, 41);
+    expect(pinnedClockOrigin.isUtc, isFalse);
   });
 
   test('the pin covers whatever runs inside it', () {
     var inside = withPreviewClock(() => clock.now());
 
-    expect(inside, previewClockOrigin);
+    expect(inside, pinnedClockOrigin);
     expect(withPreviewClock(() => clock.now()), inside);
   });
 
@@ -35,7 +35,7 @@ void main() {
       ),
     );
 
-    expect(read, previewClockOrigin);
+    expect(read, pinnedClockOrigin);
   });
 
   // The whole reason the pin exists: two runs of one entry, separated by real

@@ -5227,6 +5227,12 @@ final resultShapes = <String, ResultShape>{
         'doc': 'The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.',
       },
       <String, Object?>{
+        'name': 'clock',
+        'type': 'String',
+        'optional': true,
+        'doc': 'What `clock.now()` read at the start of every scenario in the run.',
+      },
+      <String, Object?>{
         'name': 'packages',
         'type': 'List<ScenarioRunPackage>',
         'shape': <String, Object?>{

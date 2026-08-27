@@ -502,6 +502,7 @@ class DaemonConfig {
     this.previewAnnotations = const ['Preview'],
     this.emitProbe = false,
     this.trackWidgetCreation = true,
+    this.clock,
     this.daemonRevision = '',
   });
 
@@ -536,6 +537,7 @@ class DaemonConfig {
     required List<String> roots,
     List<String> previewAnnotations = defaultPreviewAnnotations,
     bool emitProbe = false,
+    DateTime? clock,
   }) => DaemonConfig(
     previewAnnotations: previewAnnotations,
     appPackageRoot: appToolDirectory,
@@ -546,6 +548,7 @@ class DaemonConfig {
     flutterSdkRoot: flutterSdkRoot,
     roots: roots,
     emitProbe: emitProbe,
+    clock: clock,
   );
 
   /// flutterware's own `app/` directory — **not** the package being
@@ -600,6 +603,17 @@ class DaemonConfig {
   /// kernel compiled one way must never prime a compiler running the other.
   final bool trackWidgetCreation;
 
+  /// What `clock.now()` reads in every preview this daemon renders, or null
+  /// for `pinnedClockOrigin`.
+  ///
+  /// The project's own `fw.clock(...)`, so a preview and a scenario of the
+  /// same project show the same date. It is baked into the generated
+  /// entrypoint, which means it is baked into the kernel — and because the
+  /// address hashes the whole config, two projects that pin different dates
+  /// get their own daemon rather than one silently serving the other's
+  /// pictures.
+  final DateTime? clock;
+
   /// Identifies the daemon *build*. Set by the client, never by a caller.
   ///
   /// A daemon outlives the session that started it, and nothing restarts one
@@ -625,6 +639,7 @@ class DaemonConfig {
     previewAnnotations: previewAnnotations,
     emitProbe: emitProbe,
     trackWidgetCreation: trackWidgetCreation,
+    clock: clock,
     daemonRevision: revision,
   );
 

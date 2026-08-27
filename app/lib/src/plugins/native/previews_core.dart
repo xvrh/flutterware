@@ -1756,6 +1756,7 @@ class PreviewsCore extends PluginCore {
       // The package rather than the plugin: a page says what it is a catalog
       // *of*, and "Previews" on a repo with three of them says nothing.
       title: packagePath == '.' ? host.worktree.name : packagePath,
+      clock: host.projectClock,
     );
     WebCatalogBuild built;
     try {
@@ -2669,6 +2670,7 @@ class PreviewsCore extends PluginCore {
       flutterSdkRoot: host.workspace.flutterSdk.root,
       roots: [rootFor(packagePath)],
       previewAnnotations: previewAnnotationsFor(packagePath),
+      clock: host.projectClock,
     ),
   );
 

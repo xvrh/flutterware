@@ -60,6 +60,7 @@ class StoreCore extends PluginCore {
       directory: p.dirname(package.file ?? 'test'),
       flutterSdkRoot: host.workspace.flutterSdk.root,
       buildDirectory: _buildDirectory,
+      projectClock: host.projectClock,
     ),
   );
 
@@ -598,7 +599,6 @@ class StoreCore extends PluginCore {
         // exact pixel size rather than a picture that has to be resampled.
         captureNative: true,
         pixels: ScenarioPixels.named,
-        clock: package.clock == null ? null : DateTime.parse(package.clock!),
       );
       // Decoded with the *published* outcome types rather than the scenarios
       // core's private walk. That walk adds artifact addresses and writes a

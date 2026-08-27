@@ -1,5 +1,44 @@
 ## Unreleased
 
+- **A scenario runs at a date, not at whenever it ran.** `clock.now()` inside a
+  scenario used to start at the wall time of the run and advance from there
+  under FakeAsync — so every screen showing a date differed run to run, and no
+  two runs of a suite were comparable. That is the one thing scenarios exist to
+  make possible, and three consumers had already noticed and pinned it by hand:
+  previews at `DateTime(2026, 1, 1, 9, 41)`, the comparison at the same instant
+  written separately, and the store plugin at a third, through a field a project
+  had to remember to fill in.
+
+  So the default is the pin. `pinnedClockOrigin` — `2026-01-01 09:41`, the hour
+  a screenshot has been taken at since the first iPhone keynote — is now what a
+  scenario, a preview, a comparison and a store shot all read, from one
+  constant. It is constructed **local**, so every machine reads 9:41 off the
+  picture; two zones pin different instants, which is the right trade for
+  captures that are only ever compared against others from the same machine.
+
+  A pin is only safe while it is stated — an app with a trial expiry or a
+  seasonal theme sits in a different state under one, with nothing on the screen
+  to say why. So a run now **reports the clock it ran at**: in `run.json` and in
+  every action result (`ScenarioRunResult.clock`), and on the scenario panel's
+  header beside the duration.
+
+  Three ways to say otherwise, in the order they lose:
+
+  - `fw.clock(DateTime(...))` in `tool/flutterware.dart` — project-wide, read by
+    scenarios, previews, comparison and store alike, so all four render the same
+    date. A `DateTime`, not a timestamp string.
+  - `--clock <iso>` on `scenarios run` and `scenarios export`, for one run.
+  - `--clock now` (or `FW_CLOCK=now`) for the wall clock, resolved to an instant
+    before it reaches the guest — so the report still names a date you could
+    write down and re-run with.
+
+  **Breaking, quietly:** an existing scenario that renders a date produces
+  different pictures once, and an assertion derived from the wall clock changes.
+  Both are the point. `StoreShotsPackage.clock` is **deleted** rather than
+  retyped — the store has no clock opinion of its own, and the field only ever
+  existed to compensate for the old default. `previewClockOrigin` is now
+  `pinnedClockOrigin` (still exported from `previews_guest.dart`).
+
 - **The catalog is a page of pictures, and it is rendered once.**
   Opening Previews used to be a list of names beside an empty stage. The
   question at that moment is *which* demo, and a name answers it only for

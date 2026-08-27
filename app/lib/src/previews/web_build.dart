@@ -23,6 +23,7 @@ class WebCatalogBuilder {
     required this.flutterExecutable,
     required this.packageRoot,
     required this.title,
+    this.clock,
   });
 
   final String flutterExecutable;
@@ -31,6 +32,10 @@ class WebCatalogBuilder {
   final String packageRoot;
 
   final String title;
+
+  /// What `clock.now()` reads on the built page, or null for
+  /// `pinnedClockOrigin` — the project's own `fw.clock(...)`.
+  final DateTime? clock;
 
   /// Where the generated app is written. Under `build/`, because it is build
   /// output: regenerated every time and never worth committing.
@@ -66,6 +71,7 @@ class WebCatalogBuilder {
       outputDir: sourceDir,
       projectRoot: packageRoot,
       title: title,
+      clock: clock,
     ).generate(entries);
 
     var outputDir = output == null

@@ -27,10 +27,14 @@ void main() {
     var packageRoot = p.join(repoRoot, 'examples', 'example');
     var outDir = Directory.systemTemp.createTempSync('scenario_run').path;
 
+    // A project clock, so the run below proves `fw.clock(...)` reaches the
+    // guest rather than only compiling. Deliberately not the default pin.
+    var projectClock = DateTime(2031, 3, 4, 5, 6, 7);
     var runner = ScenarioRunner(
       packageRoot: packageRoot,
       directory: 'test/scenarios',
       flutterSdkRoot: flutterRoot!,
+      projectClock: projectClock,
     );
     try {
       var listed = await runner.list();
@@ -48,6 +52,10 @@ void main() {
         file: 'test/scenarios/counter_test.dart',
         scenario: 'Counter',
       );
+      // What the run says it ran at — stated because a pinned date is only
+      // safe while it is said out loud, and here it is the project's, which
+      // nobody passed to this call.
+      expect(report['clock'], projectClock.toIso8601String());
       var scenarios = (report['scenarios']! as List)
           .cast<Map<String, dynamic>>();
       expect(scenarios, hasLength(1));
@@ -105,6 +113,20 @@ void main() {
       expect(streamed.first['scenario'], 'Counter');
       expect((streamed.first['step']! as Map)['index'], 1);
       runner.onStep = null;
+
+      // A run that names its own clock beats the project's, and the report
+      // follows. After `onStep` is dropped: these steps are not the four the
+      // streaming half is counted on.
+      var overridden = await runner.run(
+        outDir: outDir,
+        file: 'test/scenarios/counter_test.dart',
+        scenario: 'Counter',
+        clock: DateTime.utc(2029, 12, 25, 8),
+      );
+      expect(
+        overridden['clock'],
+        DateTime.utc(2029, 12, 25, 8).toIso8601String(),
+      );
 
       // A run that did not ask records nothing — the CLI lane, and what keeps
       // it costing what it always cost.

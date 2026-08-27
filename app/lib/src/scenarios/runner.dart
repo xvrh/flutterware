@@ -133,6 +133,7 @@ class ScenarioRunner {
     required this.directory,
     required String flutterSdkRoot,
     this.buildDirectory = TesterHost.defaultBuildDirectory,
+    this.projectClock,
     void Function(String line)? onLog,
   }) : _host = TesterHost(
          packageRoot: packageRoot,
@@ -159,6 +160,16 @@ class ScenarioRunner {
   /// runner lives on, and its base is a checkout every comparison on the
   /// machine shares.
   final String buildDirectory;
+
+  /// What the project declared with `fw.clock(...)`, applied to every run
+  /// this runner makes unless the run names its own.
+  ///
+  /// Held here rather than passed per call because every caller of [run] would
+  /// otherwise have to remember it, and the one that forgets renders a
+  /// different date from the rest — which is the failure a single project-wide
+  /// setting exists to prevent. Null leaves the guest on its own default,
+  /// which is `pinnedClockOrigin`, never the wall clock.
+  final DateTime? projectClock;
 
   final TesterHost _host;
 
@@ -267,7 +278,8 @@ class ScenarioRunner {
           if (recordScale != null) 'recordScale': '$recordScale',
           'recordMaxFrames': '$recordMaxFrames',
         },
-        if (clock != null) 'clock': clock.toIso8601String(),
+        if (clock ?? projectClock case var origin?)
+          'clock': origin.toIso8601String(),
         ...axes.harnessArgs(unspecifiedDevice: unspecifiedDevice),
       },
     );

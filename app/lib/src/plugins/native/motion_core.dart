@@ -470,6 +470,7 @@ class MotionCore extends PluginCore {
       packageRoot: host.workspace.packageFor(packagePath).directory.path,
       flutterSdkRoot: host.workspace.flutterSdk.root,
       roots: [directoryFor(packagePath)],
+      clock: host.projectClock,
     ),
   );
 

@@ -129,12 +129,10 @@ void main() {
           Listing.appStore(locales: {'en': 'en-US'}),
         ],
         file: 'test/store/listing_test.dart',
-        clock: '2026-01-01T09:00:00Z',
       );
       var read = StoreShotsPackage.fromJson(package.toJson());
       expect(read.path, 'examples/example');
       expect(read.file, 'test/store/listing_test.dart');
-      expect(read.clock, '2026-01-01T09:00:00Z');
       expect(read.layout, StoreLayout.fastlane);
       expect(read.listings.single.store, 'app-store');
     });
