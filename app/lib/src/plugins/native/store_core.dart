@@ -35,13 +35,45 @@ const _pluginDescription =
 class StoreCore extends PluginCore {
   StoreCore(super.host);
 
-  /// Declared packages, filtered to those the workspace knows about, so a typo
-  /// cannot make the plugin run in a directory that is not there.
-  late final List<StoreShotsPackage> packages = [
-    for (var entry in host.config['packages'] as List? ?? const [])
-      if (entry is Map)
-        StoreShotsPackage.fromJson(entry.cast<String, Object?>()),
-  ].where((package) => host.workspace.exists(package.path)).toList();
+  /// Declared apps, filtered to those whose package the workspace knows
+  /// about, so a typo cannot make the plugin run in a directory that is not
+  /// there.
+  late final List<StoreShotsApp> apps = [
+    for (var entry in host.config['apps'] as List? ?? const [])
+      if (entry is Map) StoreShotsApp.fromJson(entry.cast<String, Object?>()),
+  ].where((app) => host.workspace.exists(app.path)).toList();
+
+  /// What an app is called — in the rail, in `--app`, and as the directory its
+  /// tree lands in.
+  ///
+  /// The declaration when it says, and otherwise the package's own pubspec
+  /// name, which is right for the ordinary project shipping one app and is a
+  /// real name rather than an invented one. `Pkg.name` is the last resort: for
+  /// a single-package project it is `.`, which is not a directory anybody
+  /// wants to see.
+  String nameOf(StoreShotsApp app) =>
+      app.name ??
+      _names.putIfAbsent(app.path, () {
+        var raw = _pubspecOf(app)?['name'];
+        var name = raw == null ? '' : '$raw';
+        return name.isEmpty ? _fallbackName(app) : name;
+      });
+
+  static String _fallbackName(StoreShotsApp app) =>
+      app.pkg.name == '.' ? 'app' : app.pkg.name;
+
+  final _names = <String, String>{};
+
+  Map? _pubspecOf(StoreShotsApp app) {
+    var file = File(p.join(_rootOf(app), 'pubspec.yaml'));
+    if (!file.existsSync()) return null;
+    try {
+      var yaml = loadYaml(file.readAsStringSync());
+      return yaml is Map ? yaml : null;
+    } on YamlException {
+      return null;
+    }
+  }
 
   /// One runner per package, and **on a build directory of its own**.
   ///
@@ -53,26 +85,43 @@ class StoreCore extends PluginCore {
 
   static const _buildDirectory = 'build/flutterware/store_harness';
 
-  ScenarioRunner _runnerFor(StoreShotsPackage package) => _runners.putIfAbsent(
-    package.path,
+  /// One runner per **app**, and a build directory each.
+  ///
+  /// Two apps on one package are two scenario files and therefore two dills,
+  /// so sharing a directory between them is the tear the comparison lane
+  /// already paid for once. They are cached and long-lived, so it would not
+  /// even take two exports at once.
+  ScenarioRunner _runnerFor(StoreShotsApp app) => _runners.putIfAbsent(
+    nameOf(app),
     () => ScenarioRunner(
-      packageRoot: _rootOf(package),
-      directory: p.dirname(package.file ?? 'test'),
+      packageRoot: _rootOf(app),
+      directory: p.dirname(app.file ?? 'test'),
       flutterSdkRoot: host.workspace.flutterSdk.root,
-      buildDirectory: _buildDirectory,
+      buildDirectory: p.join(_buildDirectory, nameOf(app)),
       projectClock: host.projectClock,
     ),
   );
 
-  String _rootOf(StoreShotsPackage package) =>
-      host.workspace.packageFor(package.path).directory.path;
+  String _rootOf(StoreShotsApp app) =>
+      host.workspace.packageFor(app.path).directory.path;
 
-  /// Where a package's tree goes. Package-relative unless the declaration made
-  /// it absolute.
-  String outputOf(StoreShotsPackage package) => switch (package.output) {
+  /// Where an app's tree goes. Package-relative unless the declaration made it
+  /// absolute.
+  ///
+  /// **The app's name is always the last segment**, including for a project
+  /// that declares one app. A tree whose depth depends on how many things are
+  /// in it is a tree every consumer has to branch on, and the replace rule
+  /// would need two spellings of itself. It is why `--output` is a *root* and
+  /// not a destination: two apps redirected to one directory would otherwise
+  /// overwrite each other, which two packages already could.
+  String outputOf(StoreShotsApp app) => p.join(rootOf(app), nameOf(app));
+
+  /// The root an app's tree sits under — what `output:` names, and what
+  /// `--output` replaces.
+  String rootOf(StoreShotsApp app) => switch (app.output) {
     var given? when given.isNotEmpty =>
-      p.isAbsolute(given) ? given : p.join(_rootOf(package), given),
-    _ => p.join(_rootOf(package), 'build', 'flutterware', 'store'),
+      p.isAbsolute(given) ? given : p.join(_rootOf(app), given),
+    _ => p.join(_rootOf(app), 'build', 'flutterware', 'store'),
   };
 
   /// What the last export left, per package — the panel's whole data source.
@@ -84,13 +133,13 @@ class StoreCore extends PluginCore {
   /// listing with no way to tell. A `stat` per rebuild is microseconds; a
   /// silently stale panel is the bug class this repo has paid for more than
   /// once.
-  StoreShotsReport manifestOf(StoreShotsPackage package) {
-    var file = _manifestFile(package);
+  StoreShotsReport manifestOf(StoreShotsApp app) {
+    var file = _manifestFile(app);
     var stamp = file.existsSync() ? file.lastModifiedSync() : null;
-    var cached = _manifests[package.path];
+    var cached = _manifests[nameOf(app)];
     if (cached != null && cached.stamp == stamp) return cached.manifest;
     var manifest = StoreShotsReport.readFile(file) ?? const StoreShotsReport();
-    _manifests[package.path] = (stamp: stamp, manifest: manifest);
+    _manifests[nameOf(app)] = (stamp: stamp, manifest: manifest);
     return manifest;
   }
 
@@ -106,23 +155,17 @@ class StoreCore extends PluginCore {
   /// Read here rather than in the panel because a `build` may not touch the
   /// filesystem, and cached because a name does not change under a running
   /// studio in any way worth a read per frame.
-  ({String name, String subtitle}) identityOf(StoreShotsPackage package) =>
-      _identities.putIfAbsent(package.path, () {
-        var file = File(p.join(_rootOf(package), 'pubspec.yaml'));
-        if (!file.existsSync()) return (name: package.path, subtitle: '');
-        try {
-          var yaml = loadYaml(file.readAsStringSync());
-          if (yaml is! Map) return (name: package.path, subtitle: '');
-          var raw = '${yaml['name'] ?? package.path}'.replaceAll('_', ' ');
-          return (
-            name: raw.isEmpty
-                ? package.path
-                : raw[0].toUpperCase() + raw.substring(1),
-            subtitle: '${yaml['description'] ?? ''}',
-          );
-        } on YamlException {
-          return (name: package.path, subtitle: '');
-        }
+  ({String name, String subtitle}) identityOf(StoreShotsApp app) =>
+      _identities.putIfAbsent(nameOf(app), () {
+        var yaml = _pubspecOf(app);
+        if (yaml == null) return (name: nameOf(app), subtitle: '');
+        var raw = '${yaml['name'] ?? nameOf(app)}'.replaceAll('_', ' ');
+        return (
+          name: raw.isEmpty
+              ? nameOf(app)
+              : raw[0].toUpperCase() + raw.substring(1),
+          subtitle: '${yaml['description'] ?? ''}',
+        );
       });
 
   final _identities = <String, ({String name, String subtitle})>{};
@@ -140,9 +183,8 @@ class StoreCore extends PluginCore {
     notifyChanged();
   }
 
-  File _manifestFile(StoreShotsPackage package) => File(
-    p.join(outputOf(package), internalDirectory, StoreShotsReport.fileName),
-  );
+  File _manifestFile(StoreShotsApp app) =>
+      File(p.join(outputOf(app), internalDirectory, StoreShotsReport.fileName));
 
   @override
   PluginReport get report => PluginReport(
@@ -152,9 +194,9 @@ class StoreCore extends PluginCore {
     actions: _actions,
     status: _progress == null ? Status.none : Status.info(_progress!.line),
     view: PluginView([
-      for (var package in packages)
-        ViewSection(package.path, [
-          for (var listing in package.listings)
+      for (var app in apps)
+        ViewSection(nameOf(app), [
+          for (var listing in app.listings)
             ViewItems([
               for (var target in listing.targets)
                 for (var locale in listing.locales.values)
@@ -194,7 +236,7 @@ class StoreCore extends PluginCore {
           'nothing has been exported yet, rather than opening an empty '
           'directory that looks like a failed export.',
       parameters: [
-        _package,
+        _app,
         const ActionParameter(
           'output',
           'Output',
@@ -214,7 +256,7 @@ class StoreCore extends PluginCore {
   /// [_output] is the exception that proves it: it redirects the deliverable
   /// without changing a single thing about what the deliverable *is*.
   List<ActionParameter> get _narrowing => [
-    _package,
+    _app,
     const ActionParameter(
       'listing',
       'Listing',
@@ -263,8 +305,8 @@ class StoreCore extends PluginCore {
   /// Every display class any declaration mentions, so the choice offers what
   /// this project actually has rather than the whole of both stores.
   List<String> get _declaredClasses => {
-    for (var package in packages)
-      for (var listing in package.listings)
+    for (var app in apps)
+      for (var listing in app.listings)
         for (var target in listing.targets) target.id,
   }.toList()..sort();
 
@@ -280,13 +322,13 @@ class StoreCore extends PluginCore {
         "somebody else's metadata.",
   );
 
-  ActionParameter get _package => ActionParameter(
-    'package',
-    'Package',
+  ActionParameter get _app => ActionParameter(
+    'app',
+    'App',
     kind: ActionParameterKind.choice,
     required: false,
-    description: 'Which declared package; all of them when omitted',
-    options: [for (var package in packages) ActionOption(package.path)],
+    description: 'Which declared app; all of them when omitted',
+    options: [for (var app in apps) ActionOption(nameOf(app))],
   );
 
   @override
@@ -314,7 +356,7 @@ class StoreCore extends PluginCore {
     var onlyClass = arguments['class'] as String?;
     var onlyShot = arguments['shot'] as String?;
     var redirect = _outputArgument(arguments);
-    var chosen = _packagesFor(arguments);
+    var chosen = _appsFor(arguments);
 
     // **An export replaces exactly what it produces**, and the scope of the
     // invocation is the scope of the deletion. Un-narrowed, the whole tree is
@@ -334,11 +376,14 @@ class StoreCore extends PluginCore {
       _ => redirect == null ? _Replace.tree : _Replace.set,
     };
 
-    var results = <StoreExportPackage>[];
+    var results = <StoreExportApp>[];
     var total = 0;
-    for (var package in chosen) {
-      var declared = outputOf(package);
-      var output = redirect ?? declared;
+    for (var app in chosen) {
+      var declared = outputOf(app);
+      // A redirect names a **root**, exactly as `output:` does, so the app's
+      // own segment is still under it. Two apps sent to one directory would
+      // otherwise write over each other — which two packages always could.
+      var output = redirect == null ? declared : p.join(redirect, nameOf(app));
       // Both stay under the **declared** output even when the deliverable is
       // redirected: `--output` sends the tree an uploader reads somewhere
       // else, and that somewhere else can be a directory of somebody's
@@ -363,7 +408,7 @@ class StoreCore extends PluginCore {
         // starts, which is also what makes an interrupted export leave a
         // truthful manifest rather than a stale one.
         var pending = _requestsFor(
-          package,
+          app,
           listing: onlyListing,
           locale: onlyLocale,
           deviceClass: onlyClass,
@@ -373,14 +418,14 @@ class StoreCore extends PluginCore {
             StoreProgress(
               done: index,
               total: pending.length,
-              package: package.path,
+              app: nameOf(app),
               key: request.key,
               set: request.label,
               phase: 'Running',
             ),
           );
           var captured = await _captureSet(
-            package,
+            app,
             request,
             scratch: p.join(scratch, request.slug),
           );
@@ -389,14 +434,14 @@ class StoreCore extends PluginCore {
             StoreProgress(
               done: index,
               total: pending.length,
-              package: package.path,
+              app: nameOf(app),
               key: request.key,
               set: request.label,
               phase: 'Composing',
             ),
           );
           var set = await _render(
-            package,
+            app,
             captured,
             output: output,
             unframedRoot: declared,
@@ -418,6 +463,7 @@ class StoreCore extends PluginCore {
                       const StoreShotsReport())
                   .merge([
                     StoreShotsSet(
+                      app: nameOf(app),
                       store: set.store,
                       deviceClass: set.deviceClass,
                       appLocale: request.appLocale,
@@ -425,7 +471,7 @@ class StoreCore extends PluginCore {
                       output: output,
                       directory: set.directory,
                       images: _imagesOn(
-                        package,
+                        app,
                         request.target,
                         root: output,
                         into: set,
@@ -440,7 +486,7 @@ class StoreCore extends PluginCore {
             StoreProgress(
               done: index + 1,
               total: pending.length,
-              package: package.path,
+              app: nameOf(app),
               key: request.key,
               set: request.label,
               phase: 'Composing',
@@ -459,12 +505,12 @@ class StoreCore extends PluginCore {
           );
         }
         results.add(
-          StoreExportPackage(path: package.path, output: output, sets: sets),
+          StoreExportApp(app: nameOf(app), output: output, sets: sets),
         );
       } catch (error) {
         results.add(
-          StoreExportPackage(
-            path: package.path,
+          StoreExportApp(
+            app: nameOf(app),
             output: output,
             sets: sets,
             error: '$error',
@@ -488,15 +534,17 @@ class StoreCore extends PluginCore {
         if (result.error == null) await _reveal(result.output);
       }
     }
-    return StoreExportResult(packages: results, count: total);
+    return StoreExportResult(apps: results, count: total);
   }
 
   /// `open` — the tree, in the desktop's own file manager.
   Future<StoreOpenResult> _open(Map<String, Object?> arguments) async {
     var redirect = _outputArgument(arguments);
     var opened = <String>[];
-    for (var package in _packagesFor(arguments)) {
-      var output = redirect ?? outputOf(package);
+    for (var app in _appsFor(arguments)) {
+      var output = redirect == null
+          ? outputOf(app)
+          : p.join(redirect, nameOf(app));
       if (!Directory(output).existsSync()) {
         throw StateError(
           'nothing exported to "$output" yet. Run `store export` first — '
@@ -525,17 +573,17 @@ class StoreCore extends PluginCore {
     await Process.run(executable, arguments);
   }
 
-  List<StoreShotsPackage> _packagesFor(Map<String, Object?> arguments) {
-    var requested = arguments['package'] as String?;
+  List<StoreShotsApp> _appsFor(Map<String, Object?> arguments) {
+    var requested = arguments['app'] as String?;
     var chosen = [
-      for (var package in packages)
-        if (requested == null || package.path == requested) package,
+      for (var app in apps)
+        if (requested == null || nameOf(app) == requested) app,
     ];
     if (requested != null && chosen.isEmpty) {
       throw ArgumentError.value(
         requested,
-        'package',
-        'not declared. Declared: ${packages.map((p) => p.path).join(', ')}',
+        'app',
+        'not declared. Declared: ${apps.map(nameOf).join(', ')}',
       );
     }
     return chosen;
@@ -552,12 +600,12 @@ class StoreCore extends PluginCore {
 
   /// Every (target, locale) the declaration asks for, narrowed by arguments.
   List<_SetRequest> _requestsFor(
-    StoreShotsPackage package, {
+    StoreShotsApp app, {
     String? listing,
     String? locale,
     String? deviceClass,
   }) => [
-    for (var declared in package.listings)
+    for (var declared in app.listings)
       if (listing == null || declared.store == listing)
         for (var target in declared.targets)
           if (deviceClass == null || target.id == deviceClass)
@@ -580,16 +628,16 @@ class StoreCore extends PluginCore {
   /// them back with any more, so nothing writes a manifest of them: the set
   /// this returns goes straight into the render that follows it.
   Future<_CapturedSet?> _captureSet(
-    StoreShotsPackage package,
+    StoreShotsApp app,
     _SetRequest request, {
     required String scratch,
   }) async {
     var into = Directory(scratch)..createSync(recursive: true);
     var run = p.join(into.path, '.run');
     {
-      var raw = await _runnerFor(package).run(
+      var raw = await _runnerFor(app).run(
         outDir: run,
-        file: package.file,
+        file: app.file,
         axes: ScenarioAxes(
           device: request.target.device.id,
           language: request.appLocale,
@@ -615,7 +663,7 @@ class StoreCore extends PluginCore {
           // A named step with no picture: a document or a notification beat,
           // which is a step in the flow and not a screenshot of anything.
           if (step.name == null || step.image == null) continue;
-          if (package.tag != null && !step.tags.contains(package.tag)) continue;
+          if (app.tag != null && !step.tags.contains(app.tag)) continue;
           var number = (names.length + 1).toString().padLeft(2, '0');
           var name = '$number-${storeSlug(step.name!)}.png';
           // `step.image` is recorded relative to the worktree, which is what
@@ -640,7 +688,7 @@ class StoreCore extends PluginCore {
   /// The deliverable, and — where a frame applied — the originals beside it.
   ///
   /// Composed where a frame applies, flattened straight through where none
-  /// does; see `StoreShotsPackage.frame` for which is which. Both ends produce
+  /// does; see `StoreShotsApp.frame` for which is which. Both ends produce
   /// an opaque PNG, because neither store accepts an alpha channel.
   ///
   /// **A composed set also writes its unframed originals**, under
@@ -654,7 +702,7 @@ class StoreCore extends PluginCore {
   /// `deliver` and `supply` read `ios/` and `android/` and would happily
   /// upload anything they found there.
   Future<StoreExportSet> _render(
-    StoreShotsPackage package,
+    StoreShotsApp app,
     _CapturedSet captured, {
     required String output,
     required String unframedRoot,
@@ -663,7 +711,7 @@ class StoreCore extends PluginCore {
   }) async {
     var request = captured.request;
     var directory = storeDirectoryFor(
-      package.layout,
+      app.layout,
       request.target,
       request.storeLocale,
     );
@@ -695,7 +743,7 @@ class StoreCore extends PluginCore {
           if (storeOwnsFile(
             // `unframed/` is always the plain layout, whose directories belong
             // to one set — so every PNG in it is this set's.
-            sweep == into ? package.layout : StoreLayout.plain,
+            sweep == into ? app.layout : StoreLayout.plain,
             request.target,
             p.basename(file.path),
           )) {
@@ -706,7 +754,7 @@ class StoreCore extends PluginCore {
     }
     into.createSync(recursive: true);
     var compose = storeShouldCompose(
-      hasFrame: package.frame != null,
+      hasFrame: app.frame != null,
       target: request.target,
     );
 
@@ -718,7 +766,7 @@ class StoreCore extends PluginCore {
       if (shot != null && !storeShotMatches(stem, shot)) continue;
       var out = p.join(
         into.path,
-        storeFileNameFor(package.layout, request.target, stem),
+        storeFileNameFor(app.layout, request.target, stem),
       );
       var source = p.join(captured.directory, name);
       if (!compose) {
@@ -754,7 +802,7 @@ class StoreCore extends PluginCore {
     if (jobs.isNotEmpty) {
       unframedInto.createSync(recursive: true);
       var composed = await _composerFor(
-        package,
+        app,
       ).compose(jobs, manifestPath: p.join(captured.directory, 'frames.json'));
       // What the composer says it wrote, not what it was asked to write. A job
       // whose capture would not decode composes to nothing — see the harness's
@@ -799,7 +847,7 @@ class StoreCore extends PluginCore {
   /// matters: `--shot` rewrites one file of fifteen, and the set is still a set
   /// of fifteen. Sorted by name, which is the numbering, which is the order.
   List<String> _imagesOn(
-    StoreShotsPackage package,
+    StoreShotsApp app,
     StoreTarget target, {
     required String root,
     required StoreExportSet into,
@@ -808,7 +856,7 @@ class StoreCore extends PluginCore {
     if (!directory.existsSync()) return into.images;
     return [
       for (var file in directory.listSync().whereType<File>())
-        if (storeOwnsFile(package.layout, target, p.basename(file.path)))
+        if (storeOwnsFile(app.layout, target, p.basename(file.path)))
           p.basename(file.path),
     ]..sort();
   }
@@ -818,10 +866,10 @@ class StoreCore extends PluginCore {
   /// A package that declares no frame still needs one where geometry forces a
   /// composition, and it is *generated* rather than shipped as a file: the
   /// harness entrypoint imports a source, so the default has to be one.
-  StoreFrameRunner _composerFor(StoreShotsPackage package) =>
-      _composers.putIfAbsent(package.path, () {
-        var root = _rootOf(package);
-        var frame = package.frame;
+  StoreFrameRunner _composerFor(StoreShotsApp app) =>
+      _composers.putIfAbsent(nameOf(app), () {
+        var root = _rootOf(app);
+        var frame = app.frame;
         if (frame == null) {
           frame = p.join(StoreFrameRunner.buildDirectory, 'default_frame.dart');
           var file = File(p.join(root, frame))
@@ -887,7 +935,7 @@ class StoreProgress {
   const StoreProgress({
     required this.done,
     required this.total,
-    required this.package,
+    required this.app,
     required this.key,
     required this.set,
     required this.phase,
@@ -896,13 +944,13 @@ class StoreProgress {
   final int done;
   final int total;
 
-  /// Which declared package is being exported.
+  /// Which declared app is being exported.
   ///
   /// Beside [key] rather than folded into it, because a key is the manifest's
-  /// and a manifest belongs to one package already. The panel draws every
-  /// package, so without this a second package declaring the same listing
-  /// shape spins its card whenever the first one exports.
-  final String package;
+  /// and a manifest belongs to one app already. The panel draws every app, so
+  /// without this a second app declaring the same listing shape spins its card
+  /// whenever the first one exports.
+  final String app;
 
   /// Which set, as `store/class/appLocale` — the same key the manifest uses.
   ///

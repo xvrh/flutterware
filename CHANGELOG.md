@@ -34,7 +34,7 @@
 
   **Breaking, quietly:** an existing scenario that renders a date produces
   different pictures once, and an assertion derived from the wall clock changes.
-  Both are the point. `StoreShotsPackage.clock` is **deleted** rather than
+  Both are the point. The store plugin's own `clock:` is **deleted** rather than
   retyped — the store has no clock opinion of its own, and the field only ever
   existed to compensate for the old default. `previewClockOrigin` is now
   `pinnedClockOrigin` (still exported from `previews_guest.dart`).

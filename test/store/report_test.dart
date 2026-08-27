@@ -13,9 +13,11 @@ void main() {
     String store,
     String deviceClass,
     String appLocale, {
+    String app = 'shop',
     List<String> images = const ['01-welcome.png'],
     DateTime? at,
   }) => StoreShotsSet(
+    app: app,
     store: store,
     deviceClass: deviceClass,
     appLocale: appLocale,
@@ -42,16 +44,16 @@ void main() {
         set('play', 'phone', 'en', images: ['01-welcome.png', '02-menu.png']),
       ]);
       expect(after.sets, hasLength(2));
-      expect(after['app-store/iphone-6-9/en']!.images, hasLength(1));
-      expect(after['play/phone/en']!.images, hasLength(2));
+      expect(after['shop/app-store/iphone-6-9/en']!.images, hasLength(1));
+      expect(after['shop/play/phone/en']!.images, hasLength(2));
     });
 
     test('a set new to the file is added', () {
       var after = StoreShotsReport(sets: [set('play', 'phone', 'en')])
           .merge([set('play', 'tablet-10', 'en')]);
       expect(after.sets.map((s) => s.key), [
-        'play/phone/en',
-        'play/tablet-10/en',
+        'shop/play/phone/en',
+        'shop/play/tablet-10/en',
       ]);
     });
 
@@ -88,10 +90,10 @@ void main() {
       var read = StoreShotsReport.readFile(file())!;
       expect(read.sets, hasLength(1));
       expect(
-        read['play/phone/en']!.pathOf('01-welcome.png'),
+        read['shop/play/phone/en']!.pathOf('01-welcome.png'),
         '/out/play/phone/01-welcome.png',
       );
-      expect(read['play/phone/en']!.storeLocale, 'en-UP');
+      expect(read['shop/play/phone/en']!.storeLocale, 'en-UP');
     });
 
     // Three ways of having nothing, and a panel treats them alike: it draws

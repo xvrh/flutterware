@@ -1862,32 +1862,32 @@ The screenshots a store listing is uploaded from: the named shots of a package's
 Writes the screenshots every declared listing needs, at the size each store publishes, into a tree an upload tool reads. **Takes no arguments**: everything it needs is declared in `tool/flutterware.dart`. Always runs the app — there is no way to reuse what is on disk, because an export is a release artifact. Where a frame composed a set, the app's own pixels are kept beside the listing under `unframed/`.
 
 ```sh
-fw run store export [--package=…] [--listing=…] [--locale=…] [--class=…] [--shot=…] [--output=…] [--open=…]
+fw run store export [--app=…] [--listing=…] [--locale=…] [--class=…] [--shot=…] [--output=…] [--open=…]
 ```
 
 Returns `StoreExportResult`:
 
 ```
-packages: List<StoreExportPackage>
-  path: String
-  output: String   # The root of the tree — the layout decides what sits beneath it.
+apps: List<StoreExportApp>
+  app: String   # The declared app's name — what `--app` takes and what its tree is called.
+  output: String   # The root of **this app's** tree, the app's own segment included.
   sets: List<StoreExportSet>
     store: String   # `app-store` or `play`.
     deviceClass: String   # The display class — `iphone-6-9`, `phone`.
     locale: String   # The **store's** locale tag, which is what the directory is named for.
-    directory: String   # Relative to [StoreExportPackage.output], so the whole tree can be moved or uploaded as it stands.
+    directory: String   # Relative to [StoreExportApp.output], so the whole tree can be moved or uploaded as it stands.
     width: int   # The canvas, in physical pixels — what the store receives.
     height: int
     images: List<String>   # File names, in the order they were captured, which is the order they were numbered in and the order the store will show them.
     failed: int   # Scenarios that failed while producing this set.
     framesFailed: int   # Shots whose frame could not be composed, and so were not written.
-  error: String?   # Set when the package could not be run at all.
-count: int   # How many images were written, over every package, listing and locale.
+  error: String?   # Set when the app could not be run at all.
+count: int   # How many images were written, over every app, listing and locale.
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
-| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `app` | choice | no | — | Which declared app; all of them when omitted |
 | `listing` | choice | no | — | Only this store |
 | `locale` | string | no | — | Only this locale — the **app's** tag as the declaration spells it (`fr`), not the store slot it maps to (`fr-FR`) |
 | `class` | choice | no | — | Only this display class |
@@ -1900,18 +1900,18 @@ count: int   # How many images were written, over every package, listing and loc
 Opens the exported tree in the desktop file manager. Refuses when nothing has been exported yet, rather than opening an empty directory that looks like a failed export.
 
 ```sh
-fw run store open [--package=…] [--output=…]
+fw run store open [--app=…] [--output=…]
 ```
 
 Returns `StoreOpenResult`:
 
 ```
-paths: List<String>   # One per package, absolute — the tree's root, not a file inside it.
+paths: List<String>   # One per app, absolute — the tree's root, not a file inside it.
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
-| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `app` | choice | no | — | Which declared app; all of them when omitted |
 | `output` | string | no | — | Open this directory instead of the declared output |
 
 

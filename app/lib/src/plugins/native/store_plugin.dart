@@ -68,8 +68,8 @@ class _StorePanelState extends State<_StorePanel> {
   StoreCore get _core => widget.plugin.core;
 
   List<String> get _locales => {
-    for (var package in _core.packages)
-      for (var listing in package.listings) ...listing.locales.keys,
+    for (var app in _core.apps)
+      for (var listing in app.listings) ...listing.locales.keys,
   }.toList();
 
   Future<void> _run(
@@ -85,8 +85,8 @@ class _StorePanelState extends State<_StorePanel> {
       if (!mounted) return;
       setState(() {
         _outcome = switch (result) {
-          StoreExportResult(:var count, :var packages) =>
-            packages.map((p) => p.error).nonNulls.firstOrNull ??
+          StoreExportResult(:var count, :var apps) =>
+            apps.map((a) => a.error).nonNulls.firstOrNull ??
                 '$count ${count == 1 ? 'image' : 'images'} written',
           _ => null,
         };
@@ -135,16 +135,15 @@ class _StorePanelState extends State<_StorePanel> {
       );
 
   /// A thumbnail was clicked: show that image, as large as the window allows.
-  void _showShot(String packagePath, String key, int index) {
-    var found = _setFor(packagePath, key);
+  void _showShot(String appName, String key, int index) {
+    var found = _setFor(appName, key);
     if (found == null) return;
-    var (package, target, listing, set) = found;
+    var (app, target, listing, set) = found;
     showStoreShot(
       context,
       files: [for (var image in set.images) File(set.pathOf(image))],
       titles: [
-        for (var image in set.images)
-          storeTitleOf(package.layout, target, image),
+        for (var image in set.images) storeTitleOf(app.layout, target, image),
       ],
       index: index,
       setLabel: '${listing.storeLabel} · ${target.label} · ${set.storeLocale}',
@@ -154,16 +153,16 @@ class _StorePanelState extends State<_StorePanel> {
   }
 
   /// The card's own action: the whole set, arranged as a listing.
-  void _showListing(String packagePath, String key) {
-    var found = _setFor(packagePath, key);
+  void _showListing(String appName, String key) {
+    var found = _setFor(appName, key);
     if (found == null) return;
-    var (package, target, listing, set) = found;
+    var (app, target, listing, set) = found;
     showStoreListing(
       context,
       files: [for (var image in set.images) File(set.pathOf(image))],
       aspect: target.canvas.width / target.canvas.height,
-      appName: _core.identityOf(package).name,
-      subtitle: _core.identityOf(package).subtitle,
+      appName: _core.identityOf(app).name,
+      subtitle: _core.identityOf(app).subtitle,
       setLabel: '${listing.storeLabel} · ${target.label} · ${set.storeLocale}',
     );
   }
@@ -176,24 +175,24 @@ class _StorePanelState extends State<_StorePanel> {
   /// so searching every package for the first match opened the wrong app's
   /// screenshots as soon as two declared packages shared a listing shape,
   /// which two apps in one workspace routinely do.
-  (StoreShotsPackage, StoreTarget, Listing, StoreShotsSet)? _setFor(
-    String packagePath,
+  (StoreShotsApp, StoreTarget, Listing, StoreShotsSet)? _setFor(
+    String appName,
     String key,
   ) {
-    for (var package in _core.packages) {
-      if (package.path != packagePath) continue;
-      var set = _core.manifestOf(package)[key];
+    for (var app in _core.apps) {
+      if (_core.nameOf(app) != appName) continue;
+      var set = _core.manifestOf(app)[key];
       if (set == null || set.images.isEmpty) return null;
-      var target = _targetFor(package, key);
+      var target = _targetFor(app, key);
       if (target == null) return null;
-      return (package, target.$1, target.$2, set);
+      return (app, target.$1, target.$2, set);
     }
     return null;
   }
 
   /// The declared target and its listing, from a manifest key.
-  (StoreTarget, Listing)? _targetFor(StoreShotsPackage package, String key) {
-    for (var listing in package.listings) {
+  (StoreTarget, Listing)? _targetFor(StoreShotsApp app, String key) {
+    for (var listing in app.listings) {
       for (var target in listing.targets) {
         if (key.startsWith('${target.store}/${target.id}/')) {
           return (target, listing);
@@ -212,8 +211,8 @@ class _StorePanelState extends State<_StorePanel> {
 
   @override
   Widget build(BuildContext context) {
-    var packages = _core.packages;
-    if (packages.isEmpty) {
+    var apps = _core.apps;
+    if (apps.isEmpty) {
       return const NoPackagesConfigured(icon: Icons.storefront_outlined);
     }
     var locales = _locales;
@@ -225,18 +224,18 @@ class _StorePanelState extends State<_StorePanel> {
     // below it sat on the first line it had happened to build with.
     return ListenableBuilder(
       listenable: widget.plugin,
-      builder: (context, _) => _body(context, packages, locales, locale),
+      builder: (context, _) => _body(context, apps, locales, locale),
     );
   }
 
   Widget _body(
     BuildContext context,
-    List<StoreShotsPackage> packages,
+    List<StoreShotsApp> apps,
     List<String> locales,
     String? locale,
   ) {
     var manifests = {
-      for (var package in packages) package.path: _core.manifestOf(package),
+      for (var app in apps) _core.nameOf(app): _core.manifestOf(app),
     };
     var exported = manifests.values
         .map((m) => m.exportedAt)
@@ -256,8 +255,8 @@ class _StorePanelState extends State<_StorePanel> {
         FwPanelHeader(
           'Store',
           subtitle: [
-            for (var package in packages)
-              if (packages.length > 1) package.path,
+            for (var app in apps)
+              if (apps.length > 1) _core.nameOf(app),
             if (progress != null)
               progress.line
             else if (exported == null)
@@ -305,14 +304,14 @@ class _StorePanelState extends State<_StorePanel> {
               FwSpacing.xxxl,
             ),
             children: [
-              for (var package in packages)
-                for (var listing in package.listings)
+              for (var app in apps)
+                for (var listing in app.listings)
                   _ListingBlock(
-                    packagePath: package.path,
+                    appName: _core.nameOf(app),
                     listing: listing,
-                    manifest: manifests[package.path]!,
+                    manifest: manifests[_core.nameOf(app)]!,
                     locale: locale,
-                    working: progress?.package == package.path
+                    working: progress?.app == _core.nameOf(app)
                         ? progress?.key
                         : null,
                     onShot: _showShot,
@@ -397,7 +396,7 @@ class _LocaleSwitch extends StatelessWidget {
 /// One store's half of the listing: a heading, then a card per display class.
 class _ListingBlock extends StatelessWidget {
   const _ListingBlock({
-    required this.packagePath,
+    required this.appName,
     required this.listing,
     required this.manifest,
     required this.locale,
@@ -406,19 +405,18 @@ class _ListingBlock extends StatelessWidget {
     required this.onListing,
   });
 
-  /// Which declared package this block is drawing.
-  final String packagePath;
+  /// Which declared app this block is drawing.
+  final String appName;
 
   final Listing listing;
   final StoreShotsReport manifest;
   final String? locale;
 
-  /// A shot was clicked — the package, the set's key, and its 0-based
-  /// position.
-  final void Function(String packagePath, String key, int index) onShot;
+  /// A shot was clicked — the app, the set's key, and its 0-based position.
+  final void Function(String appName, String key, int index) onShot;
 
-  /// The card's listing action — the package and the set's key.
-  final void Function(String packagePath, String key) onListing;
+  /// The card's listing action — the app and the set's key.
+  final void Function(String appName, String key) onListing;
 
   /// The `store/class/appLocale` key of the set an export is on right now, so
   /// exactly that card can say so while the others stay as they were.
@@ -441,17 +439,17 @@ class _ListingBlock extends StatelessWidget {
               target: target,
               set: locale == null
                   ? null
-                  : manifest['${target.store}/${target.id}/$locale'],
+                  : manifest['$appName/${target.store}/${target.id}/$locale'],
               storeLocale: locale == null ? null : listing.locales[locale],
               working: working == '${target.store}/${target.id}/$locale',
               onShot: (index) => onShot(
-                packagePath,
-                '${target.store}/${target.id}/$locale',
+                appName,
+                '$appName/${target.store}/${target.id}/$locale',
                 index,
               ),
               onListing: () => onListing(
-                packagePath,
-                '${target.store}/${target.id}/$locale',
+                appName,
+                '$appName/${target.store}/${target.id}/$locale',
               ),
             ),
           ),

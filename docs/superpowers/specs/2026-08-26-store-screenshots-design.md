@@ -457,14 +457,15 @@ fastlane is the only machine-readable consumer, so it is the default — and the
 
 ```
 build/flutterware/store/
-  ios/
-    en-US/iphone-6-9-01-whole-menu.png   # deliver infers the class from size,
-    en-US/ipad-13-01-whole-menu.png      # so both classes share this directory
-    fr-FR/...
-  android/
-    en-US/images/phoneScreenshots/01-store-whole-menu.png
-    en-US/images/tenInchScreenshots/01-store-whole-menu.png
-    fr-FR/...
+  <app>/                                 # 2026-08-27: always, even for one app
+    ios/
+      en-US/iphone-6-9-01-whole-menu.png # deliver infers the class from size,
+      en-US/ipad-13-01-whole-menu.png    # so both classes share this directory
+      fr-FR/...
+    android/
+      en-US/images/phoneScreenshots/01-store-whole-menu.png
+      en-US/images/tenInchScreenshots/01-store-whole-menu.png
+      fr-FR/...
 ```
 
 `layout: StoreLayout.plain` writes `<listing>/<class>/<locale>/NN-slug.png`
@@ -495,6 +496,7 @@ invocation is the scope of the deletion — one rule with three consequences:
 
 | invocation | statement | emptied |
 | --- | --- | --- |
+| `--app` | one app's whole tree | that app's tree |
 | un-narrowed | the whole tree | the whole tree |
 | `--listing` / `--locale` / `--class` | one set | that set's images |
 | `--shot` | one file | nothing |

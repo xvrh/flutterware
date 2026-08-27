@@ -8,7 +8,7 @@
 /// written once per project.
 ///
 /// ```dart
-/// var report = StoreShotsReport.read('build/flutterware/store');
+/// var report = StoreShotsReport.read('build/flutterware/store/shop');
 /// for (var set in report!.sets) {
 ///   print('\${set.store} \${set.deviceClass} \${set.storeLocale}: '
 ///       '\${set.images.length}');
@@ -42,6 +42,7 @@ import 'package:path/path.dart' as p;
 /// One set — one listing, one display class, one locale — as it was written.
 class StoreShotsSet {
   const StoreShotsSet({
+    required this.app,
     required this.store,
     required this.deviceClass,
     required this.appLocale,
@@ -53,6 +54,15 @@ class StoreShotsSet {
     this.failed = 0,
     this.framesFailed = 0,
   });
+
+  /// Which declared app this set belongs to.
+  ///
+  /// A manifest holds one app — it sits under that app's own output root — so
+  /// this is not what separates two sets on disk. It is here because a script
+  /// that reads several exports and puts them in one list would otherwise have
+  /// nothing to tell them apart by, and because [key] should stay true if it
+  /// ever does.
+  final String app;
 
   final String store;
   final String deviceClass;
@@ -88,12 +98,13 @@ class StoreShotsSet {
 
   /// What makes two entries the same set. Deliberately not the store's locale:
   /// two app locales may map to one store slot, and they are two sets.
-  String get key => '$store/$deviceClass/$appLocale';
+  String get key => '$app/$store/$deviceClass/$appLocale';
 
   /// Where an image of this set is, absolute.
   String pathOf(String image) => '$output/$directory/$image';
 
   Map<String, Object?> toJson() => {
+    'app': app,
     'store': store,
     'class': deviceClass,
     'appLocale': appLocale,
@@ -110,6 +121,7 @@ class StoreShotsSet {
     var at = DateTime.tryParse('${json['exportedAt']}');
     if (at == null) return null;
     return StoreShotsSet(
+      app: '${json['app']}',
       store: '${json['store']}',
       deviceClass: '${json['class']}',
       appLocale: '${json['appLocale']}',
@@ -129,7 +141,12 @@ class StoreShotsSet {
 /// A version a reader does not know reads as **nothing exported**, rather than
 /// as a half-decoded object: the remedy is one export, and a wrong picture of a
 /// listing is worse than no picture of one.
-const storeShotsReportVersion = 1;
+///
+/// 2 — sets carry the app they belong to, and the tree gained a level for it.
+/// A v1 file predates any release of this library, so the bump costs nobody a
+/// migration; what it buys is that yesterday's local export reads as *nothing
+/// exported* instead of as a listing belonging to an app called `null`.
+const storeShotsReportVersion = 2;
 
 /// A listing's manifest, read and written.
 class StoreShotsReport {

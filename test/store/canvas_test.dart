@@ -122,16 +122,18 @@ void main() {
       );
     });
 
-    test('carries the package through the manifest whole', () {
-      var package = const StoreShotsPackage(
+    test('carries the app through the config whole', () {
+      var app = const StoreShotsApp(
         Pkg('examples/example'),
+        name: 'shop',
         listings: [
           Listing.appStore(locales: {'en': 'en-US'}),
         ],
         file: 'test/store/listing_test.dart',
       );
-      var read = StoreShotsPackage.fromJson(package.toJson());
+      var read = StoreShotsApp.fromJson(app.toJson());
       expect(read.path, 'examples/example');
+      expect(read.name, 'shop');
       expect(read.file, 'test/store/listing_test.dart');
       expect(read.layout, StoreLayout.fastlane);
       expect(read.listings.single.store, 'app-store');

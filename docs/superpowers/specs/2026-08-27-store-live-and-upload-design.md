@@ -191,12 +191,36 @@ narrows with `--app` and gets the shape `deliver` expects underneath.
 
 `StoreShotsSet` gains `app` and `storeShotsReportVersion` goes to 2. The gate
 does its job: a reader built before this says *nothing exported* rather than
-decoding half a listing. That is why it was version-gated.
+decoding half a listing. Nothing has shipped, so it costs nobody a migration —
+what it buys is that yesterday's local export reads as *nothing exported*
+rather than as a listing belonging to an app called `null`.
 
-**One thing to check before building:** `PluginPackage`'s doc calls `path`
-*"the join key for validating declarations"*, and two apps now share one. No
-duplicate check was found, but the framework's validation join wants confirming
-rather than assuming.
+### Three things building it changed (2026-08-27)
+
+**The manifest stays per app, not one file over all of them.** This document
+had one manifest at the root with `app` on each set. It cannot be: an app's
+`output:` is its own, so two apps can sit under two unrelated roots and there
+is no shared directory to put a joint file in. Per-app is also what the plugin
+already did per package, and `StoreShotsReport.read` already takes a directory.
+`app` stays on the set — a script that reads two exports and puts them in one
+list would otherwise have nothing to tell them apart by — and so does the app
+in `key`, so that list behaves if anyone builds it.
+
+**`--output` names a root, and the app's segment is still under it.** The draft
+implied a narrowed `--app --output` would land the tree bare, which is the
+conditional shape §1 argues against everywhere else. It is one rule instead:
+the app is always the last segment, of the default, of a declared `output:`,
+and of a redirect. It also fixes something that predates this — two *packages*
+redirected to one `--output` used to write over each other.
+
+**Two apps on one package need two build directories.** They are two scenario
+files and therefore two dills, and the runners are cached and long-lived, so a
+shared `build/flutterware/store_harness` is the tear the comparison lane
+already paid for once. It would not even have taken two exports at the same
+time. Now `store_harness/<name>`.
+
+Also settled, having looked: nothing validates `PluginPackage.path` for
+duplicates, so two apps sharing a package pass the framework's join untouched.
 
 ## 2. Identity, and the lookup behind it
 
@@ -215,6 +239,10 @@ the wire:
 
 Two strings per app per store, both public. Everything else is already
 declared, derived from an enum, discovered on disk, or asked of the store.
+
+Both are optional and both are `null` until a project says otherwise —
+`Listing.identity` reads whichever of the two its store asks for, and
+`identityLabel` names it for a refusal. An export needs neither.
 
 ## 3. Credentials
 
