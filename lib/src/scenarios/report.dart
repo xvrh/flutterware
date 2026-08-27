@@ -65,6 +65,7 @@ class ScenarioRunResult
     this.version = scenarioRunReportVersion,
     required this.packages,
     this.axes,
+    this.clock,
   });
 
   /// Decodes a `run.json`.
@@ -85,6 +86,10 @@ class ScenarioRunResult
       version: version,
       packages: _listOf(json['packages'], ScenarioRunPackage.fromJson),
       axes: _stringsOrNull(json['axes']),
+      clock: switch (json['clock']) {
+        String it => DateTime.tryParse(it),
+        _ => null,
+      },
     );
   }
 
@@ -97,6 +102,17 @@ class ScenarioRunResult
   /// Recorded because a screenshot is under-specified without it; the same
   /// values ride every step's address as query parameters.
   final Map<String, String>? axes;
+
+  /// What `clock.now()` read at the start of every scenario in the run.
+  ///
+  /// Recorded for the reason [axes] is: a capture is under-specified without
+  /// it. Scenarios are pinned to a date by default — see `pinnedClockOrigin`
+  /// — and a pin is only safe while it is stated, because an app with a trial
+  /// expiry, a seasonal theme or a "new since" badge sits in a different state
+  /// under one and nothing on the screen says why.
+  ///
+  /// Null only in a report written before runs recorded it.
+  final DateTime? clock;
 
   /// False when any package failed to run at all, or any scenario it ran came
   /// back red — what makes `fw run scenarios run` exit 1.
@@ -149,6 +165,7 @@ class ScenarioRunResult
     // greps a report for, and what the action's exit code is read against.
     'ok': ok,
     if (axes != null) 'axes': axes,
+    if (clock != null) 'clock': clock!.toIso8601String(),
     'packages': packages,
   };
 }

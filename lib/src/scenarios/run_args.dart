@@ -143,13 +143,17 @@ class ScenarioRunArgs {
   final double? captureScale;
 
   /// What `clock.now()` reads at the start of the scenario, or null for the
-  /// wall clock it starts at today.
+  /// project's own pin — which is `pinnedClockOrigin` unless
+  /// `tool/flutterware.dart` declared another date.
   ///
-  /// Under `FakeAsync` a scenario's clock already *advances* deterministically
-  /// — `s.wait(1 day)` moves it a day — but it still **starts** at whatever
-  /// time the run happened, so any screen showing a date differs run to run.
-  /// Pinning the origin is what makes two runs of the same suite comparable,
-  /// which is the groundwork for diffing against a baseline.
+  /// **Null is not the wall clock.** Under `FakeAsync` a scenario's clock
+  /// advances deterministically — `s.wait(1 day)` moves it a day — but left
+  /// to itself it *starts* at whatever time the run happened, so any screen
+  /// showing a date differs run to run and no two runs of a suite are
+  /// comparable. Every consumer that noticed pinned it by hand; the default is
+  /// the pin so that nobody has to. A run that wants the wall clock back asks
+  /// for it out loud — `--clock now`, which resolves to an instant before it
+  /// reaches here, so the report still names a date somebody could re-run.
   ///
   /// Reaches only code that reads `package:clock` — the Flutter ecosystem's
   /// convention, and what `flutter_test` itself uses. A direct

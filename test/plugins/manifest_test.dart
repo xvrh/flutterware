@@ -154,6 +154,63 @@ void main() {
     });
   });
 
+  group('the project clock rides the manifest', () {
+    PluginManifest emitted(void Function(FlutterwareConfig fw) build) {
+      late String line;
+      Flutterware.configure(build, emit: (it) => line = it);
+      return PluginManifest.parse(line);
+    }
+
+    test('survives being printed and parsed back, seconds and all', () {
+      // Seconds and a non-round minute, because the previews entrypoint used
+      // to spell the pin out as `DateTime(y, m, d, h, min)` and would have
+      // dropped both without a word.
+      var manifest = emitted((fw) => fw.clock(DateTime(2031, 3, 4, 5, 6, 7)));
+      expect(manifest.clock, DateTime(2031, 3, 4, 5, 6, 7));
+      expect(manifest.clock!.isUtc, isFalse);
+    });
+
+    test('a UTC declaration stays UTC', () {
+      var manifest = emitted((fw) => fw.clock(DateTime.utc(2031, 3, 4, 5)));
+      expect(manifest.clock, DateTime.utc(2031, 3, 4, 5));
+      expect(manifest.clock!.isUtc, isTrue);
+    });
+
+    test('a config that declares none reports none — the default applies', () {
+      expect(emitted((fw) {}).clock, isNull);
+    });
+
+    test('declaring it twice is refused rather than silently merged', () {
+      expect(
+        () => Flutterware.configure((fw) {
+          fw
+            ..clock(DateTime(2031))
+            ..clock(DateTime(2032));
+        }, emit: (_) {}),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('a manifest written by an older flutterware still parses', () {
+      expect(PluginManifest.parse('{"version":1,"plugins":[]}').clock, isNull);
+    });
+
+    test('a wrong shape is no clock, never a throw', () {
+      // Same reasoning as the identity below: a project whose config cannot be
+      // read is a project that cannot be opened, over one optional field.
+      expect(
+        PluginManifest.parse('{"version":1,"plugins":[],"clock":42}').clock,
+        isNull,
+      );
+      expect(
+        PluginManifest.parse(
+          '{"version":1,"plugins":[],"clock":"half past ten"}',
+        ).clock,
+        isNull,
+      );
+    });
+  });
+
   group('the project identity rides the manifest', () {
     PluginManifest emitted(void Function(FlutterwareConfig fw) build) {
       late String line;

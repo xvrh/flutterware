@@ -405,7 +405,6 @@ class StoreShotsPackage extends PluginPackage {
     this.tag,
     this.output,
     this.layout = StoreLayout.fastlane,
-    this.clock,
   });
 
   /// Which stores this package ships to.
@@ -453,14 +452,6 @@ class StoreShotsPackage extends PluginPackage {
 
   final StoreLayout layout;
 
-  /// An ISO-8601 timestamp the scenario clock starts at.
-  ///
-  /// Worth declaring for a store run in a way it is not for a debugging one: a
-  /// listing whose screenshots show today's date is a listing whose files
-  /// change every time anybody regenerates them, and then nobody can tell a
-  /// real change from a re-run.
-  final String? clock;
-
   @override
   Map<String, Object?> toJson() => {
     ...super.toJson(),
@@ -470,7 +461,6 @@ class StoreShotsPackage extends PluginPackage {
     if (tag != null) 'tag': tag,
     if (output != null) 'output': output,
     if (layout != StoreLayout.fastlane) 'layout': layout.name,
-    if (clock != null) 'clock': clock,
   };
 
   static StoreShotsPackage fromJson(Map<String, Object?> json) =>
@@ -487,6 +477,5 @@ class StoreShotsPackage extends PluginPackage {
         layout: json['layout'] == StoreLayout.plain.name
             ? StoreLayout.plain
             : StoreLayout.fastlane,
-        clock: json['clock'] as String?,
       );
 }

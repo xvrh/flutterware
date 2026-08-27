@@ -56,6 +56,7 @@ class ScenarioPanelRun {
     this.outcome,
     this.error,
     this.output,
+    this.clock,
   });
 
   final bool running;
@@ -89,6 +90,15 @@ class ScenarioPanelRun {
 
   /// The directory the artifacts live in.
   final String? output;
+
+  /// What `clock.now()` read inside the run, or null while it is running.
+  ///
+  /// Said on the page for the same reason it is written into `run.json`: a
+  /// scenario is pinned to a date by default, and an app with a trial expiry,
+  /// a seasonal theme or a "new since" badge sits in a different state under
+  /// one — with nothing on the screen to say why. A pin that is stated is a
+  /// fact; a pin that is not is a bug nobody can find.
+  final DateTime? clock;
 }
 
 /// The panel's word for what a runner log line means, or null for a line that
@@ -474,6 +484,10 @@ class ScenariosCore extends PluginCore {
         steps: outcome.steps,
         outcome: outcome,
         output: outDir,
+        clock: switch (report['clock']) {
+          String raw => DateTime.tryParse(raw),
+          _ => null,
+        },
       );
       // Only once the page is pointed at this run — and every *other* live
       // panel run is named too. A session runs one scenario after another and
@@ -860,12 +874,14 @@ class ScenariosCore extends PluginCore {
               required: false,
               description:
                   'An ISO-8601 timestamp `clock.now()` starts at — '
-                  '`2026-01-01T09:00:00Z`. A scenario clock already '
-                  'advances deterministically under FakeAsync, but it starts '
-                  'at the wall time of the run, so any screen showing a date '
-                  'differs run to run. Pinning it is what makes two runs '
-                  'comparable. Reaches code that reads `package:clock`; a '
-                  'direct `DateTime.now()` cannot be intercepted by anything.',
+                  '`2026-01-01T09:00:00Z` — or `now` for the wall clock. '
+                  'Omitted, a scenario runs at the date the project pins, '
+                  'which is what makes two runs of a suite comparable: a '
+                  'clock left to itself starts at the moment the run happened, '
+                  'so any screen showing a date differs run to run. Whichever '
+                  'applies, the report says which. Reaches code that reads '
+                  '`package:clock`; a direct `DateTime.now()` cannot be '
+                  'intercepted by anything.',
             ),
             const ActionParameter(
               'format',
@@ -1309,8 +1325,9 @@ class ScenariosCore extends PluginCore {
               kind: ActionParameterKind.string,
               required: false,
               description:
-                  'An ISO-8601 timestamp `clock.now()` starts at. Pin it and '
-                  'two exported pages of the same suite are comparable.',
+                  'An ISO-8601 timestamp `clock.now()` starts at, or `now` '
+                  "for the wall clock. Omitted, the project's pin applies "
+                  'and two exported pages of the same suite are comparable.',
             ),
           ],
         ),
@@ -2758,12 +2775,20 @@ class ScenariosCore extends PluginCore {
     }
     DateTime? clock;
     if (arguments['clock'] case var raw?) {
-      clock = raw is String ? DateTime.tryParse(raw) : null;
+      // `now` resolves to an instant here rather than travelling as a word,
+      // so what the run reports is a date somebody could write down and
+      // re-run with — which is the whole point of reporting it.
+      clock = switch (raw) {
+        'now' => DateTime.now(),
+        String it => DateTime.tryParse(it),
+        _ => null,
+      };
       if (clock == null) {
         throw ArgumentError.value(
           raw,
           'clock',
-          'not an ISO-8601 timestamp — expected e.g. `2026-01-01T09:00:00Z`',
+          'not an ISO-8601 timestamp — expected e.g. `2026-01-01T09:00:00Z`, '
+              'or `now` for the wall clock',
         );
       }
     }
@@ -2777,6 +2802,10 @@ class ScenariosCore extends PluginCore {
     // Keyed by output directory, which is one per point of the matrix and so
     // the one thing that separates two entries of the same package.
     var drifts = <String, ScenarioRunDrift>{};
+    // The clock every scenario of this request started at, as the harness
+    // reports it. One request, one origin — the first package to come back
+    // settles it.
+    DateTime? ranAtClock;
     var assignmentsFor = <String, List<ScenarioAxes>>{};
     for (var path in paths) {
       if (matrix == null) {
@@ -2881,6 +2910,14 @@ class ScenariosCore extends PluginCore {
             narrowestDevice: deviceChoice == 'narrowest',
             clock: clock,
           );
+          // The harness's own answer, not this side's: the origin it applied
+          // may have come from the default or from `FW_CLOCK`, neither of
+          // which this side can see. Stated because a pinned date is only safe
+          // while it is said out loud — an app with a trial expiry or a
+          // seasonal theme sits in a different state under one.
+          if (report['clock'] case String raw) {
+            ranAtClock ??= DateTime.tryParse(raw);
+          }
           var described = _describeRun(
             path,
             outDir,
@@ -2942,9 +2979,11 @@ class ScenariosCore extends PluginCore {
     }
     var whole = ScenarioRunResult(
       packages: [
-        for (var run in results) _withReportOnDisk(run, drifts[run.output]),
+        for (var run in results)
+          _withReportOnDisk(run, drifts[run.output], clock: ranAtClock),
       ],
       axes: anyFannedOut || axes.isEmpty ? null : axes.toParams(),
+      clock: ranAtClock,
     );
     // After the reports are on disk, so a sweep can never race the thing it is
     // meant to keep. The directories this request wrote are named explicitly
@@ -2982,8 +3021,9 @@ class ScenariosCore extends PluginCore {
   /// read-only between writing them and writing this.
   ScenarioRunPackage _withReportOnDisk(
     ScenarioRunPackage run,
-    ScenarioRunDrift? drift,
-  ) {
+    ScenarioRunDrift? drift, {
+    DateTime? clock,
+  }) {
     ScenarioRunPackage carrying(String? file) => ScenarioRunPackage(
       path: run.path,
       output: run.output,
@@ -3004,7 +3044,7 @@ class ScenariosCore extends PluginCore {
       // caller's knowledge, not the report's.
       File(file).writeAsStringSync(
         const JsonEncoder.withIndent('  ')
-            .convert(ScenarioRunResult(packages: [run]).toJson()),
+            .convert(ScenarioRunResult(packages: [run], clock: clock).toJson()),
       );
     } catch (_) {
       return carrying(run.report);
@@ -3019,6 +3059,10 @@ class ScenariosCore extends PluginCore {
     var keepFailing = mode == 'failing';
     return ScenarioRunResult(
       axes: whole.axes,
+      // Trimming the steps must not trim the facts that describe them: an
+      // answer that says which clock it ran at only in the file is an answer
+      // that says it to the reader who already has one.
+      clock: whole.clock,
       packages: [
         for (var run in whole.packages)
           ScenarioRunPackage(
@@ -3328,6 +3372,7 @@ class ScenariosCore extends PluginCore {
         packageRoot: host.workspace.packageFor(path).directory.path,
         directory: scanRootFor(path),
         flutterSdkRoot: host.workspace.flutterSdk.root,
+        projectClock: host.projectClock,
         onLog: (line) {
           // Lines the panel has no word for are the guest's own console —
           // an app's `print` during boot. Real log material, and nothing the

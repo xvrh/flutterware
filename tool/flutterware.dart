@@ -137,16 +137,17 @@ void main() => Flutterware.configure((fw) {
   // the thing to keep visible — the export names the set it deferred and why,
   // where a missing declaration would look like a listing nobody wanted.
   //
-  // The clock is pinned for the reason `StoreShotsPackage.clock` gives: a
-  // listing whose screenshots carry today's date changes every time anybody
-  // regenerates it, and then nobody can tell a real change from a re-run.
+  // Nothing here pins a clock. A store run renders at the date every scenario
+  // renders at — `pinnedClockOrigin` unless `fw.clock(...)` says otherwise —
+  // which is what a listing needs and what a debugging run needs equally: a
+  // capture carrying today's date changes every time anybody regenerates it,
+  // and then nobody can tell a real change from a re-run.
   fw.use(
     StoreShots(
       packages: [
         StoreShotsPackage(
           example,
           file: 'test/scenarios/mobile/shop_test.dart',
-          clock: '2026-01-01T09:00:00Z',
           // The listing's own composition — a panorama with tilted devices
           // that lean across the joins. See the file; it is the demo the
           // store design's §10i argues for.

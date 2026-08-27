@@ -45,6 +45,7 @@ class PluginManifest {
     this.version = manifestVersion,
     this.changes,
     this.identity,
+    this.clock,
   });
 
   final int version;
@@ -64,6 +65,28 @@ class PluginManifest {
   /// project rather than something mounted in it, and the window that needs it
   /// has to be identifiable before any plugin has resolved.
   final ProjectIdentity? identity;
+
+  /// What `clock.now()` reads in everything this project renders — previews,
+  /// scenario steps, store shots — or null for flutterware's own
+  /// `pinnedClockOrigin`.
+  ///
+  /// Not a plugin, for the same reason [changes] and [identity] are not: four
+  /// plugins render a screen that can show a date, and a date that differs
+  /// between them is a project with four answers. It is one setting because
+  /// the thing it buys — two renders of the same code producing the same
+  /// picture — is only true if everything renders at the same instant.
+  ///
+  /// There is deliberately no "the wall clock, always" here. That is the
+  /// default this replaced: it makes every capture differ from itself daily,
+  /// and previews and store shots have no per-run override to climb back out
+  /// with. A single scenario run that wants today's date says `--clock now`.
+  ///
+  /// It reaches whatever flutterware itself starts. A bare `flutter test` reads
+  /// no manifest, so a suite run that way stays on `pinnedClockOrigin` unless
+  /// the host says otherwise — `FW_CLOCK`, or the `fw.clock` dart-define,
+  /// which is that lane's spelling of this same setting and deliberately the
+  /// same name.
+  final DateTime? clock;
 
   /// Every package any plugin names, in declaration order, deduplicated.
   ///
@@ -96,6 +119,7 @@ class PluginManifest {
     'plugins': [for (var p in plugins) p.toJson()],
     'changes': ?changes?.toJson(),
     'identity': ?identity?.toJson(),
+    'clock': ?clock?.toIso8601String(),
   };
 
   static PluginManifest fromJson(Map<String, Object?> json) {
@@ -149,6 +173,10 @@ class PluginManifest {
         ),
         _ => null,
       },
+      clock: switch (json['clock']) {
+        String it => DateTime.tryParse(it),
+        _ => null,
+      },
     );
   }
 
@@ -162,6 +190,7 @@ class FlutterwareConfig {
 
   ChangesConfig? _changes;
   ProjectIdentity? _identity;
+  DateTime? _clock;
 
   /// Declares how this project's changes should be ranked. See [ChangesConfig].
   ///
@@ -191,6 +220,25 @@ class FlutterwareConfig {
       );
     }
     _identity = config;
+  }
+
+  /// Declares the instant everything this project renders reads as *now*.
+  /// See [PluginManifest.clock].
+  ///
+  /// A `DateTime`, not a timestamp string. A string buys a `const` call and
+  /// costs a `FormatException` thrown a pass later, in a process that is not
+  /// this one — and the whole of this file exists to make a rejected config
+  /// unwritable rather than reported.
+  ///
+  /// Refused twice, like [changes] and [identity] and for the same reason.
+  void clock(DateTime origin) {
+    if (_clock != null) {
+      throw StateError(
+        'fw.clock was called twice. A project renders at one instant — '
+        'declare one.',
+      );
+    }
+    _clock = origin;
   }
 
   /// Registers a plugin. The same class may be used more than once as long as
@@ -224,6 +272,7 @@ class FlutterwareConfig {
     ],
     changes: _changes,
     identity: _identity,
+    clock: _clock,
   );
 }
 

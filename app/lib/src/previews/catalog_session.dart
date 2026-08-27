@@ -360,6 +360,7 @@ class CatalogSession extends ChangeNotifier {
     this.previewAnnotations = defaultPreviewAnnotations,
     this.canvases = const [],
     this.scannedEntries = const [],
+    this.clock,
     this.connectToDaemon = CompilerDaemonClient.connect,
     StartupProgress? startup,
   }) : startup = startup ?? StartupProgress() {
@@ -376,6 +377,10 @@ class CatalogSession extends ChangeNotifier {
   /// tree you had arranged and a filter you had typed is the same courtesy as
   /// returning to the entry you had selected.
   final browsing = CatalogBrowsing();
+
+  /// What `clock.now()` reads in every preview, or null for
+  /// `pinnedClockOrigin` — the project's own `fw.clock(...)`.
+  final DateTime? clock;
 
   /// What the guest is rendered as: a device, or the panel.
   final staging = CatalogStaging();
@@ -1460,6 +1465,7 @@ class CatalogSession extends ChangeNotifier {
           flutterSdkRoot: flutterSdkRoot,
           roots: roots,
           previewAnnotations: previewAnnotations,
+          clock: clock,
         ),
         onLog: (line) => debugPrint('[catalog] $line'),
         onProgress: _onDaemonProgress,

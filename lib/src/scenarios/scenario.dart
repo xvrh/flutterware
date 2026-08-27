@@ -13,6 +13,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../bytes.dart';
+import '../clock.dart';
 import '../flutter_gpu_diagnosis.dart';
 import '../drive/resolve.dart';
 import '../translations/index.dart';
@@ -117,19 +118,13 @@ void scenario(
     timeout: timeout ?? scenarioDefaultTimeout,
     tags: tags,
     (tester) async {
-      var origin = scenarioRunArgs?.clockOrigin ?? _scenarioClockOrigin;
-      if (origin == null) {
-        return _runScenario(
-          tester,
-          description,
-          body,
-          policy,
-          settle,
-          assignment,
-          source,
-          keyboard,
-        );
-      }
+      // Always pinned to something, and to [pinnedClockOrigin] unless somebody
+      // said otherwise — a run whose date is "whenever it happened" cannot be
+      // compared with the next one, which is what every surface reading these
+      // captures is for. `--clock now` and `FW_CLOCK=now` are how a run asks
+      // for the wall clock back; both resolve to an instant before they get
+      // here, so what ran is always a date somebody could write down.
+      var origin = resolvedScenarioClockOrigin;
       // Pinned, but still ticking with FakeAsync: the offset from where this
       // scenario's fake clock started is what `s.wait` moves, so a flow that
       // waits a day still reads a day later — from a date that is the same on
@@ -186,14 +181,28 @@ String? scenarioDeclaringFile(StackTrace stack) {
 /// spellings a Dart trace uses.
 final _frameLocation = RegExp(r'\((.+?\.dart):\d+(?::\d+)?\)\s*$');
 
-/// What `clock.now()` reads at the start of every scenario, from the host —
+/// What `clock.now()` reads at the start of every scenario: what the runner
+/// asked for, else what the host said, else [pinnedClockOrigin].
+///
+/// Never null — see [pinnedClockOrigin] for why the default is a date rather
+/// than the wall clock. Read by the harness too, so a run can *report* the
+/// clock it ran under: a pinned date is only safe while it is stated, since an
+/// app with a trial expiry or a seasonal theme sits in a different state under
+/// one and nothing on the screen says why.
+DateTime get resolvedScenarioClockOrigin =>
+    scenarioRunArgs?.clockOrigin ?? _scenarioClockOrigin ?? pinnedClockOrigin;
+
+/// What the host said the clock should be, or null when it said nothing —
 /// a dart-define first, then the environment, the same pair
 /// `screenshots-destination` uses.
+///
+/// `now` is the wall clock, spelled out loud: it resolves to an instant here,
+/// so the run still reports a date somebody could write down and re-run with.
 DateTime? get _scenarioClockOrigin {
   const define = String.fromEnvironment('fw.clock');
   var raw = define.isNotEmpty ? define : Platform.environment['FW_CLOCK'];
   if (raw == null || raw.isEmpty) return null;
-  return DateTime.parse(raw);
+  return raw == 'now' ? DateTime.now() : DateTime.parse(raw);
 }
 
 Future<void> _runScenario(

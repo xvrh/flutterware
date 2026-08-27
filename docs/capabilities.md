@@ -1391,6 +1391,7 @@ Returns `ScenarioRunResult`:
 version: int
 ok: bool
 axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
+clock: String?   # What `clock.now()` read at the start of every scenario in the run.
 packages: List<ScenarioRunPackage>
   path: String
   output: String   # Where this run's artifacts were written.
@@ -1486,7 +1487,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `high-contrast` | choice | no | — | The high-contrast accessibility switch |
 | `invert-colors` | choice | no | — | The invert-colors accessibility switch |
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. Omitted means the package's configured captureScale (tool/flutterware.dart), or 1. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
-| `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at — `2026-01-01T09:00:00Z`. A scenario clock already advances deterministically under FakeAsync, but it starts at the wall time of the run, so any screen showing a date differs run to run. Pinning it is what makes two runs comparable. Reaches code that reads `package:clock`; a direct `DateTime.now()` cannot be intercepted by anything. |
+| `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at — `2026-01-01T09:00:00Z` — or `now` for the wall clock. Omitted, a scenario runs at the date the project pins, which is what makes two runs of a suite comparable: a clock left to itself starts at the moment the run happened, so any screen showing a date differs run to run. Whichever applies, the report says which. Reaches code that reads `package:clock`; a direct `DateTime.now()` cannot be intercepted by anything. |
 | `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips the encoder, which costs ~7.5ms a picture, and hands a pipeline pixels with nothing to decode. Worth it where the pictures are many or the reader has no codec: measured, 4.3× on a run recording motion and 31% on one that is not, for 80× to 160× the bytes. `none` skips pixels entirely — trees, keys and texts are still written; for probe passes that read the walk rather than the frames. |
 | `pixels` | choice | no | — | `all` (the default) photographs every step. `keyed` photographs only the steps whose read found a translation key, plus any step that failed — what a translation export wants, since it files a shot against a string id and a screen showing no key can contribute none. Measured on the example suite, 23 of 62 steps showed no key. `named` photographs only the steps a `Shot` named, plus any step that failed — what the `shots` action runs with, since it keeps the named shots and deletes the rest, and at a device's own ratio an automatic step costs eleven times a 1× one to produce a file nobody opens. Orthogonal to `format`, which says how the pixels are encoded; `format: none` still means no pixels at all. |
 | `expand` | string | no | — | Pad every translation read — the max-length probe. The number is a rung in [1, 100]: that percentage of each value's own ceiling, which is larger the shorter the value is (a 6-character label is probed up to +300%, a sentence up to +100%). Which sightings clip says which keys have no room. Identity still resolves and targeting still lands: a scenario written against the catalog reads the padded value too. Usually paired with `format: none`. |
@@ -1585,7 +1586,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `languages` | string | no | — | The other half of the matrix — `en,fr,de` |
 | `brightness` | choice | no | — | The platform brightness the app sees |
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. A page is read on a retina screen, so 2 is worth the bytes where 1 is right for a panel. |
-| `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at. Pin it and two exported pages of the same suite are comparable. |
+| `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at, or `now` for the wall clock. Omitted, the project's pin applies and two exported pages of the same suite are comparable. |
 
 #### `new` — New scenario
 

@@ -1,5 +1,7 @@
 import 'dart:io';
 
+// ignore: implementation_imports
+import 'package:flutterware/src/clock.dart' show pinnedClockOrigin;
 import 'package:path/path.dart' as p;
 
 import '../utils/source_code/escape_dart_string.dart';
@@ -36,6 +38,7 @@ class WebAppGenerator {
     required this.outputDir,
     required this.projectRoot,
     required this.title,
+    this.clock,
   });
 
   /// Where the generated sources go. Cleared on each run, so it must not be a
@@ -47,6 +50,11 @@ class WebAppGenerator {
 
   /// What the page calls itself, in the menu's header.
   final String title;
+
+  /// What `clock.now()` reads on the page, or null for `pinnedClockOrigin` —
+  /// the project's own `fw.clock(...)`. It has to be the same instant the
+  /// guest is given, which is why it travels rather than being read here.
+  final DateTime? clock;
 
   late final _wrappers = CatalogWrapperWriter(
     outputDir: outputDir,
@@ -88,19 +96,24 @@ class WebAppGenerator {
     // in the same place on the page as it does in the GUI. Building a second
     // arrangement here would be two answers to "where is this demo".
     var tree = buildCatalogTree(entries);
+    // Round-tripped through ISO for the reason the guest's entrypoint does it:
+    // a `DateTime(y, m, d, h, min)` literal silently drops seconds and UTC.
+    var clockLiteral =
+        'DateTime.parse(${_literal((clock ?? pinnedClockOrigin).toIso8601String())})';
 
     return '''
 // GENERATED — do not edit.
 import 'package:flutter/widgets.dart';
 import 'package:flutter/widget_previews.dart';
-import 'package:flutterware/previews_guest.dart' show withPreviewClock;
+import 'package:clock/clock.dart';
 import 'package:flutterware/ui_catalog.dart';
 
 $imports
 // Pinned here for the reason the guest pins it, and pinned *identically*: a
 // page and a panel that disagree about what time it is are two pictures of
-// the same entry that do not match.
-void main() => withPreviewClock(() {
+// the same entry that do not match. Which is why it is the instant the host
+// worked out and passed down, not a constant read twice.
+void main() => withClock(Clock.fixed($clockLiteral), () {
   runApp(
     UICatalog(
       title: ${_literal(title)},

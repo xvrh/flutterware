@@ -1,6 +1,7 @@
 import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
+import 'package:flutterware/src/clock.dart';
 import 'package:flutterware/src/scenarios/run_args.dart';
 import 'package:flutterware/src/scenarios/run_listener.dart';
 
@@ -69,6 +70,23 @@ void main() {
       // And it is not the wall clock, which no amount of FakeAsync moves.
       expect(DateTime.now().difference(clock.now()).abs().inDays, isNot(0));
     });
+  });
+
+  // The default, which is the whole of the policy: nobody asked for a clock
+  // here, and the scenario still runs at a date rather than at whenever the
+  // suite happened to run. A wall-clock default meant no two runs of a suite
+  // were comparable, and every consumer that noticed pinned it again by hand.
+  scenario('with nobody asking, the clock is the shared pin', (s) async {
+    expect(clock.now(), pinnedClockOrigin);
+
+    await s.pumpWidget(const _StillApp());
+    await s.wait(const Duration(days: 1), settle: Settle.none);
+    // Pinned is not frozen: FakeAsync still moves it, from a date that is the
+    // same on every run.
+    expect(
+      clock.now().difference(pinnedClockOrigin),
+      greaterThanOrEqualTo(const Duration(days: 1)),
+    );
   });
 
   scenario('a still screen settles', (s) async {

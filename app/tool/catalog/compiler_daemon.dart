@@ -546,6 +546,7 @@ class _Daemon {
       outputDir: p.join(_buildDir, 'entrypoint'),
       projectRoot: config.projectRoot,
       emitProbe: config.emitProbe,
+      clock: config.clock,
     );
     _generator.registerAll(_entries);
     _makeActive(_entries.first);

@@ -285,6 +285,7 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
       flutterSdkRoot: flutterSdk.root,
       packagePath: _relative(package),
       directory: core.scanRootFor(package),
+      projectClock: core.host.projectClock,
     );
   }
 

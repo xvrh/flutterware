@@ -23,6 +23,7 @@ class ScenariosSide {
     required this.flutterSdkRoot,
     required this.packagePath,
     required this.directory,
+    this.projectClock,
   });
 
   final String flutterSdkRoot;
@@ -38,13 +39,16 @@ class ScenariosSide {
   /// re-added.
   final String directory;
 
-  /// What `clock.now()` reads inside every scenario of both runs.
+  /// What `clock.now()` reads inside every scenario of both runs, or null for
+  /// flutterware's own `pinnedClockOrigin`.
   ///
-  /// The same pin previews got, for the same reason and through the harness's
-  /// own `clock` argument: a scenario that shows a date differs from itself
-  /// every day otherwise. `ScenarioRunArgs.clockOrigin`'s doc comment named
-  /// this feature as its purpose before the feature existed.
-  static final clock = DateTime(2026, 1, 1, 9, 41);
+  /// Nothing is pinned *here* any more. This used to hold a private copy of
+  /// the instant, written separately from the two others that already existed
+  /// — which is the argument for the default being the pin rather than
+  /// something each consumer remembers. All this carries now is the project's
+  /// own `fw.clock(...)`, so both checkouts render at the date the rest of the
+  /// project renders at.
+  final DateTime? projectClock;
 
   /// An id is `<file>#<scenario>` — the same grammar a preview entry uses, and
   /// the same reason: the file alone does not name one, since a file holds
@@ -84,6 +88,7 @@ class ScenariosSide {
       directory: directory,
       flutterSdkRoot: flutterSdkRoot,
       buildDirectory: claimComparisonBuildDirectory(packageRoot),
+      projectClock: projectClock,
     );
   }
 
@@ -95,7 +100,9 @@ class ScenariosSide {
   /// fall to `package:image` in pure Dart, on every frame of both sides, to
   /// undo an encode this had just paid for. See `ScenarioRunArgs.captureRaw`.
   ///
-  /// The clock is pinned so two runs a day apart produce the same pictures.
+  /// The clock is pinned so two runs a day apart produce the same pictures —
+  /// by the runner now, from [projectClock] or the default, so there is
+  /// nothing to pass here.
   Future<List<ScenarioStepShot>> run(
     ScenarioRunner runner,
     String id, {
@@ -107,7 +114,6 @@ class ScenariosSide {
       file: hash < 0 ? id : id.substring(0, hash),
       scenario: hash < 0 ? null : id.substring(hash + 1),
       captureRaw: true,
-      clock: clock,
     );
     var scenarios = (response['scenarios'] as List?) ?? const [];
     var outcome = scenarios.firstOrNull;
