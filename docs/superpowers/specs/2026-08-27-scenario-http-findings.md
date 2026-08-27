@@ -163,6 +163,11 @@ unlanded request should reach the step as an event and the panel as a badge.
    through `HttpOverrides` and are out for v1. Say so out loud rather than
    letting a consumer discover it as another blank frame.
 
+*All five are answered below, and the fourth is answered the other way round:
+request headers are not written at all, and response headers are kept by
+deny-list — because what an allow-list drops, it drops silently. See
+**Recording, once**.*
+
 ---
 
 # The feature, as a developer meets it
@@ -190,6 +195,15 @@ It does **not** fail the scenario. A decorative avatar is not a reason to throw
 away a flow's other twelve assertions, and the alternative would turn every
 existing suite with an `Image.network` on screen red on upgrade. The step says
 so instead — which is the whole change from "a blank box and nothing else".
+
+That takes a filter rather than good luck. An `Image.network` with no
+`errorBuilder` has no error listener of its own, so the throw reaches
+`FlutterError.reportError`, and in a test binding that is what turns a test
+red; `_runScenario` drops a `ScenarioNetworkRefusal` at the top of its error
+chain, which also keeps it out of the runner's caught-errors buffer. A stub's
+own `throws:` is **not** filtered — an author who wrote
+`throws: SocketException(...)` is injecting an error on purpose and wants it to
+behave like one.
 
 ## Where you say it
 
@@ -293,13 +307,21 @@ Four decisions in that layout, each of them a failure designed out:
   depending on how the runner scheduled the suite is not a recording.
 - **The name is a slug plus a digest.** The slug is for the human reading
   `git status`; the digest is what makes it an identity.
-- **Only the status, the content type and the body are kept.** No request
-  headers — they are not part of the key, so keeping them would write an
-  `Authorization` into a committed file for nothing — and no response headers
-  but the one the body cannot be decoded without. `Set-Cookie` is the header
-  that would leak a session, and the way it does not is that nothing in the
-  writer can write it. A response *body* is still yours to read before
-  committing.
+- **No request headers, and response headers by deny-list.** A request's
+  headers are not part of the key, so keeping them would write an
+  `Authorization` into a committed file for nothing. A *response's* are kept
+  except two groups: credentials (`Set-Cookie` and its neighbours) and the
+  transfer's own description (`Content-Encoding`, `Content-Length`,
+  `Transfer-Encoding`, the connection pair), which would describe bytes the
+  store does not hold — what is written is the body after decoding.
+
+  A deny-list, deliberately, and not the allow-list that sounds safer. What an
+  allow-list drops it drops *silently*, and the first thing it drops is `Link`:
+  a screen that paginates works under `live`, gets recorded, and quietly renders
+  one page forever after, with the recording looking correct in the diff. A
+  deny-list can only be wrong about a header nobody thought of, and it is wrong
+  about it in a file somebody reads before committing — which is also the answer
+  for a response *body* that carries a token.
 
 `record` always goes out and never partly reads the store: "refresh what I
 have" and "fill in what I am missing" would otherwise be the same command, and

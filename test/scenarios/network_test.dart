@@ -16,6 +16,7 @@ void main() {
   late HttpServer server;
   late String base;
   var hits = <String>[];
+  var agents = <String>[];
   var captures = <ScenarioStepCapture>[];
 
   setUpAll(() async {
@@ -23,6 +24,7 @@ void main() {
     base = 'http://127.0.0.1:${server.port}';
     server.listen((request) async {
       hits.add('${request.method} ${request.uri.path}');
+      agents.add(request.headers.value('user-agent') ?? '');
       request.response
         ..statusCode = 200
         ..headers.contentType = ContentType('image', 'png')
@@ -32,9 +34,16 @@ void main() {
   });
   tearDownAll(() => server.close(force: true));
 
+  late Directory store;
+
   setUp(() {
     hits = [];
+    agents = [];
     captures = [];
+    // A recording written by a test belongs in a temporary directory, never in
+    // the package's own committed store.
+    store = Directory.systemTemp.createTempSync('fw_network_test');
+    scenarioNetworkStorePath = store.path;
     scenarioRunListener = captures.add;
     // The harness's, in a real run. Here the test is the harness.
     appEventBuffer = AppEventBuffer();
@@ -42,6 +51,8 @@ void main() {
   tearDown(() {
     scenarioRunListener = null;
     appEventBuffer = null;
+    scenarioNetworkStorePath = null;
+    store.deleteSync(recursive: true);
   });
 
   group('off — the default', () {
@@ -276,6 +287,36 @@ void main() {
     });
   });
 
+  group('a refusal is reported, not fatal', () {
+    // An `Image.network` with no `errorBuilder` has no error listener of its
+    // own, so the throw reaches `FlutterError.reportError` — which in a test
+    // binding is what turns a test red. Left alone, `off` would fail every
+    // scenario with an unguarded network image on it, including the https
+    // ones that used to hang and pass.
+    scenario('an image with no errorBuilder still passes', (s) async {
+      await s.pumpWidget(
+        const _BareImage(url: 'https://example.invalid/a.png'),
+      );
+      await s.screen('the broken avatar');
+      // Nothing pending: the binding never saw it, so nothing is going to fail
+      // this scenario when the body returns.
+      expect(s.tester.takeException(), isNull);
+      expect(s.network.requests.single.outcome, 'off');
+    });
+
+    // And only a refusal: an author who wrote `throws:` is injecting an error
+    // on purpose and wants it to behave like one, so it reaches the binding
+    // and `takeException` is what has to clear it.
+    scenario("a stub's own throws: is an error like any other", (s) async {
+      s.network.any(throws: const FormatException('boom'));
+      await s.pumpWidget(
+        const _BareImage(url: 'https://example.invalid/b.png'),
+      );
+      await s.screen('the broken avatar');
+      expect(s.tester.takeException(), isA<FormatException>());
+    });
+  });
+
   group('the shape of the funnel', () {
     scenario('an app that builds its own client goes through it too', (
       s,
@@ -295,6 +336,42 @@ void main() {
       expect(status, 200);
     });
 
+    // `record` reaches the network as surely as `live` does, so a setting an
+    // app makes on "its" client has to reach the pool in both — an app pointed
+    // at a self-signed staging API would otherwise record fine under one and
+    // fail to record at all under the other.
+    for (var mode in [ScenarioNetwork.live, ScenarioNetwork.record]) {
+      scenario(
+        'a client setting reaches the pool under ${mode.name}',
+        network: mode,
+        (s) async {
+          var client = HttpClient()..userAgent = 'fw-probe/1';
+          await s.pumpWidget(_Blank());
+          var seen = await s.runAsync(() async {
+            var response = await (await client.getUrl(
+              Uri.parse('$base/api/agent'),
+            )).close();
+            await response.drain<void>();
+            return agents.last;
+          });
+          client.close();
+          expect(seen, 'fw-probe/1');
+        },
+      );
+    }
+
+    // The one setting that is deliberately *not* forwarded — forwarding it
+    // would let a recording hold gzipped bytes with no header left to explain
+    // them. The getter says so rather than echoing what it was handed.
+    scenario('autoUncompress reports what is true, not what it was told', (
+      s,
+    ) async {
+      var client = HttpClient()..autoUncompress = false;
+      expect(client.autoUncompress, isTrue);
+      await s.pumpWidget(_Blank());
+      client.close();
+    });
+
     scenario('the requests log is what the body can assert on', (s) async {
       s.network.post('/api/orders', json: {'id': 7}, status: 201);
       await s.pumpWidget(_Blank());
@@ -311,6 +388,19 @@ Future<List<int>> _statuses(ScenarioTester s, String base) async {
     () async => (await http.get(Uri.parse('$base/api/items'))).statusCode,
   );
   return [for (var request in s.network.requests) request.status ?? 0];
+}
+
+class _BareImage extends StatelessWidget {
+  const _BareImage({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: Scaffold(
+      body: Center(child: Image(image: NetworkImage(url), width: 32)),
+    ),
+  );
 }
 
 class _Blank extends StatelessWidget {

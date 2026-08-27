@@ -100,17 +100,14 @@ void scenario(
   // the folder said otherwise — see [scenarioAmbientKeyboard] for what off
   // restores.
   var keyboard = scenarioAmbientKeyboard ?? true;
-  // What this scenario's http requests reach. The run's answer beats the
-  // folder's — an explicit `--network=live` on one run is somebody saying "not
-  // this time", which is the whole reason a run flag exists — and this
-  // scenario's own beats both, because it is the only one of the three written
-  // beside the flow it is about.
-  var reach =
-      network ??
-      resolvedScenarioNetwork ??
-      scenarioAmbientNetwork ??
-      scenarioProjectNetwork ??
-      ScenarioNetwork.off;
+  // The folder's network policy, captured here for the reason the two above
+  // are — and *only* the folder's. The rest of the ladder is resolved when the
+  // body runs, in [_reachOf]: under the runner, `scenarioRunArgs` is armed per
+  // scenario inside the walk, long after this function has run for every file,
+  // so a `--network=` read here would always be null and the flag would be a
+  // silent no-op. Two altitudes, two times, and each read where its answer
+  // exists.
+  var folderReach = scenarioAmbientNetwork;
   var name =
       scenarioAmbientIsMatrix && assignment != null && !assignment.isEmpty
       ? '$description [${assignment.label}]'
@@ -154,7 +151,7 @@ void scenario(
           assignment,
           source,
           keyboard,
-          reach,
+          _reachOf(network, folderReach),
         ),
       );
     },
@@ -227,6 +224,21 @@ DateTime? get _scenarioClockOrigin {
 /// request and no manifest, is told at all.
 ScenarioNetwork? get resolvedScenarioNetwork =>
     scenarioRunArgs?.network ?? _scenarioNetworkFromHost;
+
+/// What one scenario's http requests reach, resolved as it runs.
+///
+/// Nearest wins, except that a run beats a folder: an explicit `--network=` on
+/// one run is somebody saying "not this time", which is the whole reason a run
+/// flag exists. [own] is the `scenario(network: ...)` and [folder] the
+/// `runScenarios(network: ...)`, both captured at declaration; the middle two
+/// are read here because they are not armed until the walk reaches this
+/// scenario.
+ScenarioNetwork _reachOf(ScenarioNetwork? own, ScenarioNetwork? folder) =>
+    own ??
+    resolvedScenarioNetwork ??
+    folder ??
+    scenarioProjectNetwork ??
+    ScenarioNetwork.off;
 
 ScenarioNetwork? get _scenarioNetworkFromHost {
   const define = String.fromEnvironment('fw.network');
@@ -315,6 +327,26 @@ Future<void> _runScenario(
   // failure passes through at all — and `flutter test` is the lane the
   // Flutter GPU diagnosis exists for.
   FlutterError.onError = (details) {
+    // A refusal is already *on* the step, as a network event carrying the
+    // whole message — so it is reported, and reporting it twice would be the
+    // second report failing the scenario.
+    //
+    // Which it would: an `Image.network` with no `errorBuilder` has no error
+    // listener of its own, so `MultiFrameImageStreamCompleter` hands the throw
+    // to `FlutterError.reportError`, and in a test binding that is what turns a
+    // test red. Left alone, `off` would fail every scenario with an
+    // unguarded network image on screen — including the https ones that
+    // silently drew a blank frame and passed before any of this existed, which
+    // is precisely the upgrade nobody asked for.
+    //
+    // Only a refusal, and never a stub's own `throws:`: an author who wrote
+    // `throws: SocketException(...)` is injecting an error on purpose and
+    // wants it to behave like one.
+    //
+    // Outermost of the three handlers chained here, so it also keeps the
+    // refusal out of the runner's caught-errors buffer — a scenario that did
+    // not fail must not be reported with an error against it.
+    if (details.exception is ScenarioNetworkRefusal) return;
     announceFlutterGpuDiagnosis(
       details.exceptionAsString(),
       executableArguments: Platform.executableArguments,

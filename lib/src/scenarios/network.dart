@@ -100,10 +100,15 @@ class ScenarioNetworkPolicy {
   /// and one thing to close, and it is the right price: everything an app
   /// actually sets here — a proxy, a bad-certificate callback for a
   /// self-signed dev API, a user agent, a connection timeout — is pool-shaped
-  /// anyway. Under [ScenarioNetwork.off] it is dropped rather than remembered,
-  /// because dropping it changes nothing: no connection is going to be made.
+  /// anyway. Under the two modes that open no socket it is dropped rather
+  /// than remembered, because dropping it changes nothing — and it is dropped
+  /// under **exactly** those two: `record` reaches the network as surely as
+  /// `live` does, and an app pointed at a self-signed staging API would
+  /// otherwise record fine and fail to record at all.
   void _configure(void Function(HttpClient client) apply) {
-    if (mode == ScenarioNetwork.live) apply(_client);
+    if (mode == ScenarioNetwork.live || mode == ScenarioNetwork.record) {
+      apply(_client);
+    }
   }
 
   /// Answers `GET [url]`. See [stub] for the parameters.
@@ -235,7 +240,9 @@ class ScenarioNetworkPolicy {
     status: status,
     body: _bodyOf(json, body),
     contentType: contentType ?? (json == null ? null : 'application/json'),
-    headers: headers,
+    headers: {
+      for (var e in headers.entries) e.key: [e.value],
+    },
     throws: throws,
   );
 
@@ -274,7 +281,9 @@ class ScenarioNetworkPolicy {
         status: status,
         body: _bodyOf(json, body),
         contentType: contentType ?? (json == null ? null : 'application/json'),
-        headers: headers,
+        headers: {
+          for (var e in headers.entries) e.key: [e.value],
+        },
         throws: throws,
       ),
     );
@@ -396,7 +405,7 @@ class _Stub {
   final int status;
   final Uint8List? body;
   final String? contentType;
-  final Map<String, String> headers;
+  final Map<String, List<String>> headers;
   final Object? throws;
 
   /// A recording, as the thing that answers a request.
@@ -406,7 +415,7 @@ class _Stub {
     status: recording.status,
     body: recording.body,
     contentType: recording.contentType,
-    headers: const {},
+    headers: recording.headers,
     throws: null,
   );
 
@@ -603,8 +612,23 @@ class _FunnelClient implements HttpClient {
   // Everything below is the app configuring "its" client. It reaches the
   // shared one — see [ScenarioNetworkPolicy._configure] for why that is one
   // pool's worth of setting rather than one client's.
+
+  /// Always true, and a setter that says so by not moving.
+  ///
+  /// The one setting here that is **not** forwarded, because forwarding it
+  /// would break the two modes that write bodies down: a recording of gzipped
+  /// bytes is a body nothing can replay, since the `Content-Encoding` that
+  /// explained them describes a transfer this store does not keep. So the
+  /// shared client uncompresses, always — see [_newRealClient].
+  ///
+  /// The getter reports what is true rather than what it was handed, which is
+  /// the difference between a setting that is documented as fixed and one that
+  /// is silently ignored. Code that sets it false and then trusts
+  /// `contentLength` to size a buffer reads `true` back and can say so.
   @override
-  bool autoUncompress = true;
+  bool get autoUncompress => true;
+  @override
+  set autoUncompress(bool value) {}
   @override
   Duration? get connectionTimeout => _connectionTimeout;
   @override
@@ -998,6 +1022,7 @@ class _LiveRequest implements HttpClientRequest {
         url: uri,
         status: response.statusCode,
         contentType: response.headers.contentType?.toString(),
+        headers: _keptHeadersOf(response),
         body: await Zone.root.run(() => _drain(response)),
       );
       // Whatever came back, error status included: a 500 a scenario is *about*
@@ -1026,6 +1051,23 @@ class _LiveRequest implements HttpClientRequest {
       );
       rethrow;
     }
+  }
+
+  /// The response's headers, minus the ones a committed file may not hold and
+  /// the ones that describe a transfer whose bytes are not what is stored —
+  /// see [ScenarioNetworkStore.keptHeader].
+  ///
+  /// Kept at all because an app reads them: `Link` is how a list paginates,
+  /// and a screen that worked under `live` and lost its second page the moment
+  /// somebody recorded it is the failure this exists to avoid.
+  static Map<String, List<String>> _keptHeadersOf(HttpClientResponse response) {
+    var kept = <String, List<String>>{};
+    response.headers.forEach((name, values) {
+      if (ScenarioNetworkStore.keptHeader(name)) {
+        kept[name.toLowerCase()] = List.of(values);
+      }
+    });
+    return kept;
   }
 
   static Future<Uint8List> _drain(HttpClientResponse response) async {
@@ -1173,8 +1215,15 @@ class _StubHeaders implements HttpHeaders {
 _StubHeaders _headersOf(_Stub stub) {
   var headers = _StubHeaders();
   if (stub.contentType case var type?) headers.set('content-type', type);
-  stub.headers.forEach(headers.set);
-  if (stub.body case var body?) headers.set('content-length', body.length);
+  for (var MapEntry(:key, :value) in stub.headers.entries) {
+    for (var entry in value) {
+      headers.add(key, entry);
+    }
+  }
+  // Last, and set rather than added: what is handed back is the whole body, so
+  // a recorded length that described a compressed transfer would be a lie the
+  // caller could act on.
+  headers.set('content-length', stub.body?.length ?? 0);
   return headers;
 }
 

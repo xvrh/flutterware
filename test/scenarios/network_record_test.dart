@@ -33,6 +33,15 @@ void main() {
           ..add(scenarioPlaceholderPng(width: 8, height: 8, red: 0xC0));
       } else if (request.uri.path == '/api/gone') {
         request.response.statusCode = 404;
+      } else if (request.uri.path == '/api/page') {
+        request.response
+          ..statusCode = 200
+          ..headers.contentType = ContentType('application', 'json')
+          ..headers.set('link', '<$base/api/page?p=2>; rel="next"')
+          ..headers.set('etag', 'W/"abc"')
+          ..headers.set('set-cookie', 'session=secret; HttpOnly')
+          ..headers.set('authorization', 'Bearer nope')
+          ..write('[]');
       } else {
         request.response
           ..statusCode = 200
@@ -93,8 +102,9 @@ void main() {
         expect(meta['status'], 200);
         expect(meta['contentType'], startsWith('application/json'));
         expect(meta['bytes'], body.length);
-        // Nothing that could carry a session out of the process.
-        expect(meta.keys, isNot(contains('headers')));
+        // The request's own headers are never part of a recording — they are
+        // not part of the key, so keeping them would write an `Authorization`
+        // into a committed file for nothing.
         expect(meta.keys, isNot(contains('requestHeaders')));
 
         // The body is the exact bytes, in a file an editor opens as JSON.
@@ -126,6 +136,64 @@ void main() {
         await s.screen('the avatar');
       },
     );
+  });
+
+  group('headers', () {
+    // A screen that paginates off `Link` works under `live` and would render
+    // one page forever after being recorded, if a recording kept only the
+    // content type.
+    scenario(
+      'a recording keeps what an app reads',
+      network: ScenarioNetwork.record,
+      (s) async {
+        await s.pumpWidget(_Blank());
+        var link = await s.runAsync(
+          () async =>
+              (await http.get(Uri.parse('$base/api/page'))).headers['link'],
+        );
+        expect(link, contains('rel="next"'));
+
+        var meta = jsonDecode(
+          File(
+            p.join(
+              store.path,
+              storeFiles().singleWhere((n) => !n.contains('.body.')),
+            ),
+          ).readAsStringSync(),
+        ) as Map<String, Object?>;
+        var headers = meta['headers']! as Map<String, Object?>;
+        expect(headers['link'], isNotNull);
+        expect(headers['etag'], ['W/"abc"']);
+        // Credentials never reach a committed file.
+        expect(headers.keys, isNot(contains('set-cookie')));
+        expect(headers.keys, isNot(contains('authorization')));
+        // Nor does anything describing a transfer whose bytes are not stored.
+        expect(headers.keys, isNot(contains('content-encoding')));
+        expect(headers.keys, isNot(contains('content-length')));
+        expect(headers.keys, isNot(contains('content-type')));
+      },
+    );
+
+    scenario('and replay hands them back', (s) async {
+      s.network.store.write(
+        ScenarioRecording(
+          method: 'GET',
+          url: Uri.parse('$base/api/page'),
+          status: 200,
+          contentType: 'application/json',
+          headers: const {
+            'link': ['<https://api.example.com/page?p=2>; rel="next"'],
+          },
+          body: utf8.encode('[]'),
+        ),
+      );
+      await s.pumpWidget(_Blank());
+      var link = await s.runAsync(
+        () async =>
+            (await http.get(Uri.parse('$base/api/page'))).headers['link'],
+      );
+      expect(link, contains('rel="next"'));
+    }, network: ScenarioNetwork.replay);
   });
 
   group('replay', () {

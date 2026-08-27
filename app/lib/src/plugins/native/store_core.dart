@@ -99,6 +99,7 @@ class StoreCore extends PluginCore {
       flutterSdkRoot: host.workspace.flutterSdk.root,
       buildDirectory: p.join(_buildDirectory, nameOf(app)),
       projectClock: host.projectClock,
+      projectNetwork: host.projectNetwork,
     ),
   );
 

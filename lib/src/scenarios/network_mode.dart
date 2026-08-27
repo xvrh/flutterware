@@ -20,9 +20,17 @@ enum ScenarioNetwork {
   ///
   /// A request nothing stubbed fails **immediately**, with a message naming
   /// the url and how to answer it, and lands on the step as a network event.
-  /// It does not fail the scenario: a decorative avatar is not a reason to
+  ///
+  /// It does not fail the scenario. A decorative avatar is not a reason to
   /// throw away a flow's other twelve assertions, and a scenario that wants
-  /// the picture says so with a stub or with [live].
+  /// the picture says so with a stub, with [replay] or with [live]. That takes
+  /// a filter to hold: an `Image.network` with no `errorBuilder` has no error
+  /// listener of its own, so the throw reaches `FlutterError.reportError`,
+  /// which in a test binding is what turns a test red — see the
+  /// `ScenarioNetworkRefusal` clause in `_runScenario`. Without it, adopting
+  /// this version would turn red every suite with an unguarded network image
+  /// on screen, including the https ones that drew a blank frame and passed
+  /// before any of this existed.
   ///
   /// The default, and an improvement on what it replaces even for a suite that
   /// never configures anything: `flutter_test`'s own answer hangs rather than

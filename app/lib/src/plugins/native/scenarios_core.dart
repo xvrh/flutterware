@@ -2964,7 +2964,6 @@ class ScenariosCore extends PluginCore {
             narrowestDevice: deviceChoice == 'narrowest',
             clock: clock,
             network: network,
-            projectNetwork: host.projectNetwork,
           );
           // The harness's own answer, not this side's: the origin it applied
           // may have come from the default or from `FW_CLOCK`, neither of
@@ -3429,6 +3428,7 @@ class ScenariosCore extends PluginCore {
         directory: scanRootFor(path),
         flutterSdkRoot: host.workspace.flutterSdk.root,
         projectClock: host.projectClock,
+        projectNetwork: host.projectNetwork,
         onLog: (line) {
           // Lines the panel has no word for are the guest's own console —
           // an app's `print` during boot. Real log material, and nothing the
