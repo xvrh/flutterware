@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A values resource merges by name, so this overrides main's colour and
+     nothing else. `kiosk` deliberately declares none and takes main's. -->
+<resources>
+    <color name="ic_launcher_background">#FF1B5E20</color>
+</resources>

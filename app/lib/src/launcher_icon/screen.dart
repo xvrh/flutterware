@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
 import '../address/address_scope.dart';
+import '../plugins/native/icon_address.dart';
 import '../plugins/native/icon_core.dart';
 import '../ui/design/design.dart';
 import '../ui/empty_state.dart';
@@ -91,6 +92,19 @@ class _LauncherIconScreenState extends State<LauncherIconScreen> {
     AddressScope.maybeWrite(context)?.setParam('role', role?.id);
   }
 
+  /// A flavor is a **different set of files**, so it is a segment rather than a
+  /// local choice: the package and the flavor together decide what the core
+  /// scans, and only the address reaches that far. The role goes with it —
+  /// `androidMonochrome` under `main` names nothing under a flavor that never
+  /// generated one, and a detail pane left pointing at it would say the flavor
+  /// was empty when the panel simply arrived asking for the wrong file.
+  void _selectFlavor(String? flavor) {
+    AddressScope.maybeWrite(context)?.update(
+      segments: iconSegments(widget.package, flavor),
+      params: {'role': null},
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     var core = widget.core;
@@ -129,6 +143,7 @@ class _LauncherIconScreenState extends State<LauncherIconScreen> {
             onReload: _reload,
             scanning: core.isScanning(widget.package, flavor: widget.flavor),
             flavor: widget.flavor,
+            onFlavor: _selectFlavor,
           ),
         ),
         const VerticalDivider(width: 1),
@@ -188,19 +203,39 @@ class _LauncherIconScreenState extends State<LauncherIconScreen> {
 
   /// The one line of project context that changes what a role means.
   String? _contextLine(IconScan scan, IconRole role) {
+    var inherited = _inheritedLine(scan.forRole(role));
     var android = scan.android;
-    if (android == null || role.platform != IconPlatform.android) return null;
+    if (android == null || role.platform != IconPlatform.android) {
+      return inherited;
+    }
     var minApi = role.minAndroidApi;
-    if (minApi == null) return null;
+    if (minApi == null) return inherited;
+
+    String? with_(String line) => inherited == null ? line : '$inherited $line';
 
     if (android.minSdk == null) {
-      return 'minSdk could not be read, so how much of your install base sees '
-          'this is unknown.';
+      return with_(
+        'minSdk could not be read, so how much of your install base sees '
+        'this is unknown.',
+      );
     }
-    return android.minSdk! >= minApi
-        ? 'minSdk is ${android.minSdk}, so every device you ship to sees this.'
-        : 'minSdk is ${android.minSdk}, below API $minApi — devices under that '
-              'fall back to the bitmap launcher icon.';
+    return with_(
+      android.minSdk! >= minApi
+          ? 'minSdk is ${android.minSdk}, so every device you ship to sees this.'
+          : 'minSdk is ${android.minSdk}, below API $minApi — devices under '
+                'that fall back to the bitmap launcher icon.',
+    );
+  }
+
+  /// Said out loud when the flavor overrides none of this role's files: what
+  /// ships under it is the unflavored art, and a pane that drew it without
+  /// saying so would credit the flavor with a picture it does not own.
+  String? _inheritedLine(IconRoleScan? role) {
+    if (widget.flavor == null || role == null || !role.allInherited) {
+      return null;
+    }
+    return 'Not overridden by ${widget.flavor} — this is the unflavored art, '
+        'which is what a build of that flavor ships.';
   }
 
   List<({Tone tone, String message})> _findingsFor(
@@ -229,6 +264,7 @@ class _Plates extends StatelessWidget {
     required this.onSelect,
     required this.onReload,
     required this.scanning,
+    required this.onFlavor,
     this.selected,
     this.flavor,
   });
@@ -240,6 +276,7 @@ class _Plates extends StatelessWidget {
   final VoidCallback onReload;
   final bool scanning;
   final String? flavor;
+  final ValueChanged<String?> onFlavor;
 
   @override
   Widget build(BuildContext context) {
@@ -251,6 +288,7 @@ class _Plates extends StatelessWidget {
           selected: flavor,
           scanning: scanning,
           onReload: onReload,
+          onFlavor: onFlavor,
         ),
         const Gap(FwSpacing.xxl),
         for (var platform in scan.platforms) ...[
@@ -307,11 +345,32 @@ class _Plates extends StatelessWidget {
       return '${largest.icoFrames.length} frames · '
           '${largest.icoFrames.first} → ${largest.icoFrames.last}px';
     }
-    if (largest.width == null) return '${role.files.length} files';
+    if (largest.width == null) {
+      return '${role.files.length} files${_from(role)}';
+    }
     var size = '${largest.width}×${largest.height}';
-    return role.files.length == 1
-        ? size
-        : '$size · ${role.files.length} ${role.role.platform == IconPlatform.android ? 'densities' : 'sizes'}';
+    return (role.files.length == 1
+            ? size
+            : '$size · ${role.files.length} ${role.role.platform == IconPlatform.android ? 'densities' : 'sizes'}') +
+        _from(role);
+  }
+
+  /// Which of these files the flavor does not actually replace.
+  ///
+  /// Said in the platform-neutral word because the set being inherited from is
+  /// `android/app/src/main/res/` on one side and `AppIcon.appiconset` on the
+  /// other; the pane beside the list names the one that applies.
+  ///
+  /// On the plate rather than only in the pane beside it, because the question
+  /// a flavor is opened with is *which of these did we actually fork* — and
+  /// that is a comparison across the list, which only the list can answer.
+  String _from(IconRoleScan role) {
+    if (flavor == null) return '';
+    var inherited = role.files.where((file) => file.inherited).length;
+    if (inherited == 0) return '';
+    return inherited == role.files.length
+        ? ' · not overridden'
+        : ' · $inherited not overridden';
   }
 }
 
@@ -319,6 +378,7 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.scan,
     required this.onReload,
+    required this.onFlavor,
     this.selected,
     this.scanning = false,
   });
@@ -327,6 +387,7 @@ class _Header extends StatelessWidget {
   final VoidCallback onReload;
   final String? selected;
   final bool scanning;
+  final ValueChanged<String?> onFlavor;
 
   @override
   Widget build(BuildContext context) {
@@ -400,7 +461,11 @@ class _Header extends StatelessWidget {
         ],
         if (scan.flavors.isNotEmpty) ...[
           const Gap(FwSpacing.lg),
-          FlavorChips(flavors: scan.flavors, selected: selected),
+          FlavorChips(
+            flavors: scan.flavors,
+            selected: selected,
+            onSelect: onFlavor,
+          ),
         ],
       ],
     );

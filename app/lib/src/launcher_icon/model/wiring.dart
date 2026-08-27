@@ -144,13 +144,27 @@ int? parseResourceColor(String? value) {
   return expanded.length == 6 ? 0xFF000000 | parsed : parsed;
 }
 
-/// Reads the wiring for one Android source set.
+/// Reads the wiring for one Android variant.
 ///
-/// [resFolder] and [manifestPath] are absolute; paths in the result are made
+/// [resFolders] are the source sets Gradle would merge, **base first**: a
+/// flavored build is `[main/res, <flavor>/res]`, an unflavored one is
+/// `[main/res]` alone. Merged rather than replaced because that is what the
+/// build does — a flavor overriding one bitmap still gets main's adaptive XML
+/// and main's background colour, and reading the flavor's folder alone reports
+/// a project that has neither.
+///
+/// The two kinds of resource merge differently and are read that way. A
+/// *file* resource is overridden whole, so the last folder that has
+/// `mipmap-anydpi-v26/ic_launcher.xml` wins outright; a *values* resource
+/// merges by name, so `ic_launcher_background` is taken from the last folder
+/// that declares that colour, whatever else its `colors.xml` does or does not
+/// say.
+///
+/// [resFolders] and [manifestPath] are absolute; paths in the result are made
 /// relative to [packageRoot].
 AndroidWiring readAndroidWiring({
   required String packageRoot,
-  required String resFolder,
+  required List<String> resFolders,
   required String manifestPath,
 }) {
   var (minSdk, minSdkSource) = readMinSdk(packageRoot);
@@ -162,13 +176,13 @@ AndroidWiring readAndroidWiring({
     minSdkSource: minSdkSource,
     manifestIcon: application?.getAttribute('android:icon'),
     manifestRoundIcon: application?.getAttribute('android:roundIcon'),
-    launcher: _readAdaptive(packageRoot, resFolder, 'ic_launcher.xml'),
+    launcher: _readAdaptive(packageRoot, resFolders, 'ic_launcher.xml'),
     launcherRound: _readAdaptive(
       packageRoot,
-      resFolder,
+      resFolders,
       'ic_launcher_round.xml',
     ),
-    backgroundColor: _readBackgroundColor(resFolder),
+    backgroundColor: _readBackgroundColor(resFolders),
   );
 }
 
@@ -223,12 +237,20 @@ String _stripLineComment(String line) {
 
 AdaptiveXml? _readAdaptive(
   String packageRoot,
-  String resFolder,
+  List<String> resFolders,
   String fileName,
 ) {
-  var file = File(p.join(resFolder, 'mipmap-anydpi-v26', fileName));
-  var document = _parse(file);
-  if (document == null) return null;
+  File? found;
+  XmlDocument? document;
+  for (var resFolder in resFolders) {
+    var file = File(p.join(resFolder, 'mipmap-anydpi-v26', fileName));
+    var parsed = _parse(file);
+    if (parsed == null) continue;
+    found = file;
+    document = parsed;
+  }
+  if (found == null || document == null) return null;
+  var file = found;
 
   return AdaptiveXml(
     path: p.relative(file.path, from: packageRoot),
@@ -257,16 +279,18 @@ String? _layerDrawable(XmlElement root, String layer) {
   return null;
 }
 
-String? _readBackgroundColor(String resFolder) {
-  var document = _parse(File(p.join(resFolder, 'values', 'colors.xml')));
-  if (document == null) return null;
-
-  for (var color in document.rootElement.findElements('color')) {
-    if (color.getAttribute('name') == 'ic_launcher_background') {
-      return color.innerText.trim();
+String? _readBackgroundColor(List<String> resFolders) {
+  String? found;
+  for (var resFolder in resFolders) {
+    var document = _parse(File(p.join(resFolder, 'values', 'colors.xml')));
+    if (document == null) continue;
+    for (var color in document.rootElement.findElements('color')) {
+      if (color.getAttribute('name') == 'ic_launcher_background') {
+        found = color.innerText.trim();
+      }
     }
   }
-  return null;
+  return found;
 }
 
 /// Parses [file], or null when it is absent, unreadable or malformed.

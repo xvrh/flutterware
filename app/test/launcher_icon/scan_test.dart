@@ -576,6 +576,14 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
   });
 
   group('the sample project', () {
+    /// The sample's root, or null when it is not checked out beside us.
+    String? sampleRoot() {
+      var example = p.normalize(
+        p.join(Directory.current.path, '..', 'examples', 'example'),
+      );
+      return Directory(example).existsSync() ? example : null;
+    }
+
     test('reads its real icon tree', () {
       // Ground truth: a project nobody wrote fixtures for. Loose assertions on
       // purpose — this guards discovery against a real tree, and should not
@@ -606,6 +614,97 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
       expect(result.forRole(IconRole.androidLegacy)!.files, isNotEmpty);
       expect(result.forRole(IconRole.iosApp)!.files, isNotEmpty);
       expect(result.forRole(IconRole.webMaskable)!.files, isNotEmpty);
+    });
+
+    /// Tight, unlike the read above, because these *are* fixtures: the sample
+    /// carries one icon set per shape this scan has to get right, and
+    /// `examples/example/README.md` says which is which. A change here is a
+    /// change to the sample, and the two are meant to be edited together.
+    group('its icon sets', () {
+      IconScan? sample({String? flavor}) {
+        var root = sampleRoot();
+        if (root == null) return null;
+        return scanIcons(
+          packageRoot: root,
+          packagePath: 'examples/example',
+          flavor: flavor,
+        );
+      }
+
+      test('are discovered from all three kinds of evidence', () {
+        var scanned = sample();
+        if (scanned == null) return markTestSkipped('sample not present');
+
+        expect(
+          {for (var set in scanned.flavors) set.name: set.sources},
+          {
+            'beta': {IconFlavorSource.config},
+            'kiosk': {IconFlavorSource.androidSourceSet},
+            'partner': {IconFlavorSource.iosCatalog},
+            'pro': {
+              IconFlavorSource.androidSourceSet,
+              IconFlavorSource.iosCatalog,
+            },
+          },
+          reason: 'the product flavors free/proMonthly/proYearly are not sets',
+        );
+        expect(
+          scanned.flavors.singleWhere((f) => f.name == 'beta').isUnbuilt,
+          isTrue,
+        );
+      });
+
+      test('beta has nothing of its own, and shows main’s', () {
+        var scanned = sample(flavor: 'beta');
+        if (scanned == null) return markTestSkipped('sample not present');
+
+        expect(scanned.forRole(IconRole.androidLegacy)!.allInherited, isTrue);
+        expect(scanned.forRole(IconRole.iosApp)!.allInherited, isTrue);
+      });
+
+      test('kiosk overrides one density and inherits the rest', () {
+        var scanned = sample(flavor: 'kiosk');
+        if (scanned == null) return markTestSkipped('sample not present');
+
+        var legacy = scanned.forRole(IconRole.androidLegacy)!;
+        expect(legacy.files.where((f) => !f.inherited).map((f) => f.density), [
+          'xxxhdpi',
+        ]);
+        expect(legacy.files.length, greaterThan(1));
+        // Both come from main, because kiosk declares neither.
+        expect(scanned.android!.launcher!.path, contains('src/main/'));
+        expect(scanned.android!.backgroundColor, '#FFFFFFFF');
+      });
+
+      test('partner is iOS only, and Android is main’s whole', () {
+        var scanned = sample(flavor: 'partner');
+        if (scanned == null) return markTestSkipped('sample not present');
+
+        expect(scanned.forRole(IconRole.iosApp)!.allInherited, isFalse);
+        expect(
+          scanned.forRole(IconRole.iosApp)!.largest!.path,
+          contains('AppIcon-partner.appiconset'),
+        );
+        expect(scanned.forRole(IconRole.androidLegacy)!.allInherited, isTrue);
+      });
+
+      test('pro forks both platforms, and drops the themed layer doing it', () {
+        var scanned = sample(flavor: 'pro');
+        if (scanned == null) return markTestSkipped('sample not present');
+
+        expect(scanned.forRole(IconRole.androidLegacy)!.allInherited, isFalse);
+        expect(scanned.forRole(IconRole.iosApp)!.allInherited, isFalse);
+        expect(scanned.android!.backgroundColor, '#FF1B5E20');
+
+        // main's monochrome PNGs are still merged in — and pro's own adaptive
+        // XML no longer points at them, which is the whole fixture.
+        expect(scanned.forRole(IconRole.androidMonochrome)!.allInherited, true);
+        expect(scanned.android!.launcher!.hasMonochrome, isFalse);
+        expect(
+          scanned.findings.map((f) => f.message),
+          contains(allOf(contains('<monochrome>'), contains('src/pro/'))),
+        );
+      });
     });
   });
 }

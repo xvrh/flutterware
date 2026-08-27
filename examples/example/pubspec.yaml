@@ -82,6 +82,11 @@ dev_dependencies:
 # The following section is specific to Flutter.
 flutter:
 
+  # The Android side declares product flavors (see android/app/build.gradle.kts),
+  # which would otherwise make `flutter run` demand a --flavor. This is Flutter's
+  # own field, and it is the one the run cockpit reads.
+  default-flavor: free
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

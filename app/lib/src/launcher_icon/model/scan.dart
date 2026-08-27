@@ -40,6 +40,7 @@ class IconFile {
     this.resourceType,
     this.icoFrames = const [],
     this.declaredSize,
+    this.inherited = false,
   });
 
   /// Package-relative, so it reads the same on another machine.
@@ -82,6 +83,16 @@ class IconFile {
   /// no opinion about how they were made.
   final int? declaredSize;
 
+  /// Under a flavor, whether this file came from the unflavored set because
+  /// the flavor overrides nothing here.
+  ///
+  /// Carried rather than hidden because both ways of hiding it are a lie the
+  /// panel has already told. Showing only the flavor's own folder says a
+  /// flavor with one bitmap has no adaptive icon; showing the merge without
+  /// saying so credits the flavor with art it does not own — which is the bug
+  /// the flavored iOS read had before it was given the flavor at all.
+  final bool inherited;
+
   String get name => p.basenameWithoutExtension(path);
 
   bool get sizeMismatch =>
@@ -114,6 +125,12 @@ class IconRoleScan {
 
   /// The largest file, which is the one worth drawing.
   IconFile? get largest => files.isEmpty ? null : files.last;
+
+  /// Under a flavor, whether every file here came from the unflavored set —
+  /// the flavor overrides nothing for this role, and what a build ships is
+  /// main's art.
+  bool get allInherited =>
+      files.isNotEmpty && files.every((file) => file.inherited);
 }
 
 /// Which shape the iOS asset situation is in.
@@ -427,32 +444,36 @@ AndroidWiring? _scanAndroid(
   Map<IconRole, IconRoleScan> roles,
   List<_Resource> resources,
 ) {
-  var sourceSet = p.join(
-    packageRoot,
-    'android',
-    'app',
-    'src',
-    flavor ?? 'main',
-  );
-  var resFolder = p.join(sourceSet, 'res');
-  if (!Directory(resFolder).existsSync()) return null;
+  String sourceSet(String name) =>
+      p.join(packageRoot, 'android', 'app', 'src', name);
+
+  // What Gradle would merge, base first. A flavor source set does not replace
+  // `main`, it overlays it: a flavor carrying one bitmap ships with all of
+  // main's other densities, main's adaptive XML and main's background colour.
+  // Reading the flavor's folder alone reported a project that had none of
+  // them — silently, and inverted, since "has an adaptive icon" is most of
+  // what this panel is for.
+  var layers = [
+    (dir: sourceSet('main'), own: flavor == null),
+    if (flavor != null) (dir: sourceSet(flavor), own: true),
+  ];
+  var resFolders = [
+    for (var layer in layers)
+      if (Directory(p.join(layer.dir, 'res')).existsSync())
+        p.join(layer.dir, 'res'),
+  ];
+  if (resFolders.isEmpty) return null;
 
   // A flavour source set may carry its own manifest; the icon attributes
   // usually stay in main, so that is the fallback rather than the only look.
-  var manifest = File(p.join(sourceSet, 'AndroidManifest.xml')).existsSync()
-      ? p.join(sourceSet, 'AndroidManifest.xml')
-      : p.join(
-          packageRoot,
-          'android',
-          'app',
-          'src',
-          'main',
-          'AndroidManifest.xml',
-        );
+  var manifest =
+      File(p.join(layers.last.dir, 'AndroidManifest.xml')).existsSync()
+      ? p.join(layers.last.dir, 'AndroidManifest.xml')
+      : p.join(sourceSet('main'), 'AndroidManifest.xml');
 
   var wiring = readAndroidWiring(
     packageRoot: packageRoot,
-    resFolder: resFolder,
+    resFolders: resFolders,
     manifestPath: manifest,
   );
 
@@ -465,8 +486,28 @@ AndroidWiring? _scanAndroid(
   // disagree, and they did.
   var wired = <IconRole>{};
 
-  for (var dir in Directory(resFolder).listSync().whereType<Directory>()) {
-    var dirName = p.basename(dir.path);
+  // A file resource is overridden whole, and the qualified directory is half
+  // its identity: `mipmap-xxxhdpi/ic_launcher.png` in a flavor replaces main's
+  // `mipmap-xxxhdpi/ic_launcher.png` and leaves `mipmap-hdpi/` alone. Keyed by
+  // exactly that pair, so the overlay lands where Gradle lands it.
+  var byPath = <String, ({File file, bool own})>{};
+
+  for (var layer in layers) {
+    var resFolder = Directory(p.join(layer.dir, 'res'));
+    if (!resFolder.existsSync()) continue;
+    for (var dir in resFolder.listSync().whereType<Directory>()) {
+      var dirName = p.basename(dir.path);
+      for (var file in dir.listSync().whereType<File>()) {
+        byPath['$dirName/${p.basename(file.path)}'] = (
+          file: file,
+          own: layer.own,
+        );
+      }
+    }
+  }
+
+  for (var entry in byPath.entries) {
+    var dirName = entry.key.substring(0, entry.key.indexOf('/'));
     var isMipmap = dirName.startsWith('mipmap-') || dirName == 'mipmap';
     var isDrawable = dirName.startsWith('drawable-') || dirName == 'drawable';
     if (!isMipmap && !isDrawable) continue;
@@ -479,33 +520,40 @@ AndroidWiring? _scanAndroid(
         ? dirName.substring(dirName.indexOf('-') + 1)
         : null;
 
-    for (var file in dir.listSync().whereType<File>()) {
-      var name = p.basenameWithoutExtension(file.path);
-      resources.add((
-        type: type,
-        name: name,
-        path: p.relative(file.path, from: packageRoot),
-      ));
+    var file = entry.value.file;
+    var name = p.basenameWithoutExtension(file.path);
+    resources.add((
+      type: type,
+      name: name,
+      path: p.relative(file.path, from: packageRoot),
+    ));
 
-      if (!classifies) continue;
-      if (p.extension(file.path).toLowerCase() != '.png') continue;
-      var classified = _classify(type, name, wiring);
-      if (classified == null) continue;
-      var (role, pointedAt) = classified;
-      if (pointedAt) wired.add(role);
-      byRole
-          .putIfAbsent(role, () => [])
-          .add(
-            _pngFile(packageRoot, file, density: density, resourceType: type),
-          );
-    }
+    if (!classifies) continue;
+    if (p.extension(file.path).toLowerCase() != '.png') continue;
+    var classified = _classify(type, name, wiring);
+    if (classified == null) continue;
+    var (role, pointedAt) = classified;
+    if (pointedAt) wired.add(role);
+    byRole
+        .putIfAbsent(role, () => [])
+        .add(
+          _pngFile(
+            packageRoot,
+            file,
+            density: density,
+            resourceType: type,
+            inherited: !entry.value.own,
+          ),
+        );
   }
 
-  var playStore = File(p.join(sourceSet, 'ic_launcher-playstore.png'));
-  if (playStore.existsSync()) {
+  for (var layer in layers.reversed) {
+    var playStore = File(p.join(layer.dir, 'ic_launcher-playstore.png'));
+    if (!playStore.existsSync()) continue;
     byRole
         .putIfAbsent(IconRole.androidPlayStore, () => [])
-        .add(_pngFile(packageRoot, playStore));
+        .add(_pngFile(packageRoot, playStore, inherited: !layer.own));
+    break;
   }
 
   // Only meaningful once something was actually read: with an unreadable
@@ -694,6 +742,12 @@ List<String> _iconBundles(String packageRoot) {
 /// which already excludes a flavored set: `AppIcon-dev.appiconset` does not end
 /// in `AppIcon.appiconset`. That accident is why the default was right while
 /// every flavor silently reported the default's files.
+///
+/// **A flavor with no set of its own falls back to the default**, marked
+/// [IconFile.inherited], because that is what Xcode does: the icon is chosen by
+/// `ASSETCATALOG_COMPILER_APPICON_NAME`, which defaults to `AppIcon` for every
+/// configuration nobody changed. Reporting no iOS icons for such a flavor said
+/// the app ships without one.
 void _scanAssetCatalog(
   String packageRoot,
   String catalogPath,
@@ -717,10 +771,13 @@ void _scanAssetCatalog(
   var wanted = flavor == null || flavor.isEmpty
       ? null
       : 'AppIcon-$flavor.appiconset';
+  var sets = catalog.listSync().whereType<Directory>().toList();
+  var inherited =
+      wanted != null && !sets.any((set) => p.basename(set.path) == wanted);
 
-  for (var set in catalog.listSync().whereType<Directory>()) {
+  for (var set in sets) {
     var name = p.basename(set.path);
-    if (wanted == null
+    if (wanted == null || inherited
         ? !name.endsWith('AppIcon.appiconset')
         : name != wanted) {
       continue;
@@ -763,6 +820,7 @@ void _scanAssetCatalog(
               file,
               density: scale.isEmpty ? null : scale,
               declaredSize: _declaredSize(entry),
+              inherited: inherited,
             ),
           );
     }
@@ -1037,6 +1095,7 @@ IconFile _pngFile(
   String? density,
   String? resourceType,
   int? declaredSize,
+  bool inherited = false,
 }) {
   Uint8List bytes;
   try {
@@ -1049,6 +1108,7 @@ IconFile _pngFile(
       density: density,
       resourceType: resourceType,
       declaredSize: declaredSize,
+      inherited: inherited,
     );
   }
 
@@ -1063,6 +1123,7 @@ IconFile _pngFile(
     density: density,
     resourceType: resourceType,
     declaredSize: declaredSize,
+    inherited: inherited,
   );
 }
 

@@ -315,11 +315,13 @@ class _Flavors extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Page(
-      title: 'Flavors — and what is behind each one',
+      title: 'Icon sets — and what is behind each one',
       subtitle:
-          'A flavor is whatever named it: a config, an Android source set, an '
+          'A set is whatever named it: a config, an Android source set, an '
           'iOS catalog, or all three. The chip has to show which, because '
-          '"configured" and "generated" send you to different places.',
+          '"configured" and "generated" send you to different places — and '
+          "because the name is a directory's, not necessarily a flavor the "
+          'project can build.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: FwSpacing.xxl,
