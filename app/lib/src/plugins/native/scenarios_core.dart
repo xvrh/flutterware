@@ -9,6 +9,9 @@ import 'package:flutterware/app_events.dart' show AppChannel, AppEvent;
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 // ignore: implementation_imports
+// ignore: implementation_imports
+import 'package:flutterware/src/scenarios/network_mode.dart';
+// ignore: implementation_imports
 import 'package:flutterware/src/scenarios/selector.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
@@ -57,6 +60,7 @@ class ScenarioPanelRun {
     this.error,
     this.output,
     this.clock,
+    this.network = const [],
   });
 
   final bool running;
@@ -99,6 +103,15 @@ class ScenarioPanelRun {
   /// one — with nothing on the screen to say why. A pin that is stated is a
   /// fact; a pin that is not is a bug nobody can find.
   final DateTime? clock;
+
+  /// The network modes the run's scenarios actually ran under, in the enum's
+  /// order — empty while it is running.
+  ///
+  /// Said on the page for the reason [clock] is. A screen photographed with
+  /// the network open and the same screen photographed with it shut are not
+  /// the same evidence, and the picture does not say which. More than one
+  /// entry is a mixed run, which is normal: it is a per-folder setting.
+  final List<String> network;
 }
 
 /// The panel's word for what a runner log line means, or null for a line that
@@ -487,6 +500,10 @@ class ScenariosCore extends PluginCore {
         clock: switch (report['clock']) {
           String raw => DateTime.tryParse(raw),
           _ => null,
+        },
+        network: switch (report['network']) {
+          List<Object?> raw => [for (var mode in raw) '$mode'],
+          _ => const <String>[],
         },
       );
       // Only once the page is pointed at this run — and every *other* live
@@ -882,6 +899,25 @@ class ScenariosCore extends PluginCore {
                   'applies, the report says which. Reaches code that reads '
                   '`package:clock`; a direct `DateTime.now()` cannot be '
                   'intercepted by anything.',
+            ),
+            const ActionParameter(
+              'network',
+              'Network',
+              kind: ActionParameterKind.string,
+              required: false,
+              options: [ActionOption('off'), ActionOption('live')],
+              description:
+                  "What this run's http requests reach. `off` — the default "
+                  '— lets nothing leave the process: a request no scenario '
+                  'stated an answer for fails at once, naming itself, rather '
+                  'than hanging the way an https request does under a plain '
+                  '`flutter test`. `live` opens the real network, which is '
+                  'the honest reading and the unrepeatable one: the same '
+                  'suite run twice is two different runs, and a scenario '
+                  'empties the image cache by design, so a suite pays its '
+                  "round trips once per scenario. Beats what a folder's "
+                  '`runScenarios(network: ...)` said; a `scenario(network: '
+                  '...)` beats both. The report says which modes ran.',
             ),
             const ActionParameter(
               'format',
@@ -2793,6 +2829,13 @@ class ScenariosCore extends PluginCore {
       }
     }
 
+    ScenarioNetwork? network;
+    if (arguments['network'] case String raw) {
+      // The harness's own parser, so the action and the test process cannot
+      // disagree about what a mode is called.
+      network = parseScenarioNetwork(raw);
+    }
+
     var steps = arguments['steps'] as String? ?? 'failing';
     if (!const ['failing', 'all', 'none'].contains(steps)) {
       throw ArgumentError.value(steps, 'steps', 'accepted: failing, all, none');
@@ -2909,6 +2952,7 @@ class ScenariosCore extends PluginCore {
             expandTranslations: expand,
             narrowestDevice: deviceChoice == 'narrowest',
             clock: clock,
+            network: network,
           );
           // The harness's own answer, not this side's: the origin it applied
           // may have come from the default or from `FW_CLOCK`, neither of

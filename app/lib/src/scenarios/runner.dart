@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 // ignore: implementation_imports
+import 'package:flutterware/src/scenarios/network_mode.dart';
+// ignore: implementation_imports
 import 'package:flutterware/src/scenarios/pixels.dart';
 import 'package:meta/meta.dart';
 
@@ -268,6 +270,10 @@ class ScenarioRunner {
     int recordMaxFrames = 90,
     DateTime? clock,
 
+    /// What this run's http requests reach, or null to leave it to each
+    /// folder's `runScenarios(network: ...)` and each scenario's own.
+    ScenarioNetwork? network,
+
     /// Which steps are worth a picture. A probe pass reads the walk and not
     /// the frames; a translation pass wants only the screens showing a key.
     ScenarioPixels pixels = ScenarioPixels.all,
@@ -310,6 +316,7 @@ class ScenarioRunner {
         },
         if (clock ?? projectClock case var origin?)
           'clock': origin.toIso8601String(),
+        if (network case var reach?) 'network': reach.name,
         ...axes.harnessArgs(unspecifiedDevice: unspecifiedDevice),
       },
     );

@@ -1420,6 +1420,40 @@ class _ScenarioPageState extends State<_ScenarioPage> {
               ),
             ),
           ],
+          // Said only when something went out. `off` is the default and the
+          // quiet case — nothing left the process, which is what the picture
+          // already implies. `live` is the one worth a badge: the run talked
+          // to something, so the same run tomorrow may not produce the same
+          // pictures, and nothing on the screen says so.
+          if (run?.network.contains('live') ?? false) ...[
+            const Gap(FwSpacing.md),
+            Tooltip(
+              message: run!.network.length > 1
+                  ? 'Some scenarios in this run reached the real network and '
+                        'some did not — it is a per-folder setting. What came '
+                        'back is what the network said at the time, so these '
+                        'pictures are not guaranteed to repeat.'
+                  : 'This run reached the real network. What came back is '
+                        'what the network said at the time, so these pictures '
+                        'are not guaranteed to repeat — and the run needs a '
+                        'connection to pass.',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.cloud_outlined,
+                    size: FwIconSize.md,
+                    color: colors.amber,
+                  ),
+                  const Gap(FwSpacing.xs),
+                  Text(
+                    run.network.length > 1 ? 'partly live' : 'live network',
+                    style: context.type.caption.copyWith(color: colors.amber),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const Gap(FwSpacing.lg),
           _RunSplitButton(
             enabled: !running,

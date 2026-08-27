@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/scenarios/network.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
@@ -596,6 +598,7 @@ class _FakeRunner extends ScenarioRunner {
     double? recordScale,
     int recordMaxFrames = 90,
     DateTime? clock,
+    ScenarioNetwork? network,
   }) async {
     axesSeen.add(axes);
     outDirsSeen.add(outDir);

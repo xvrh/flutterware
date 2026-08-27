@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../devices.dart';
 import 'motion.dart';
+import 'network.dart';
 import 'pixels.dart';
 
 /// The type of [ScenarioRunArgs.pixels], which callers naming the field need.
@@ -31,6 +32,7 @@ class ScenarioRunArgs {
     this.clockOrigin,
     this.assignment,
     this.expandTranslations,
+    this.network,
   });
 
   /// The assignment a `flutter_test_config.dart` set, as the binding's test
@@ -89,6 +91,7 @@ class ScenarioRunArgs {
       pixels: pixels,
       record: record,
       clockOrigin: clockOrigin,
+      network: network,
       // The scenario reads its axes off the assignment, so the device the
       // folder's profile just chose has to land there too — otherwise a body
       // adapting to `s.assignment?.device` sees the one axis the request did
@@ -159,6 +162,15 @@ class ScenarioRunArgs {
   /// convention, and what `flutter_test` itself uses. A direct
   /// `DateTime.now()` cannot be intercepted by anything, in any test.
   final DateTime? clockOrigin;
+
+  /// What this run's http requests reach, or null when the request named
+  /// nothing and the folder's own answer stands.
+  ///
+  /// A run-level override rather than an axis: it changes what the app can
+  /// talk to, never how the screen is framed, and two runs that differ only
+  /// here are the same picture taken twice — which is exactly the claim it is
+  /// worth being able to check.
+  final ScenarioNetwork? network;
 
   /// Capture at the device's own pixel ratio — a true screenshot, whatever
   /// the device turned out to be.
