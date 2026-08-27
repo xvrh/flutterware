@@ -89,8 +89,11 @@ document.
     stores' APIs are plain REST, have been written in Dart before, and a
     project pushing a listing from flutterware rather than from a Ruby
     toolchain it otherwise has no use for is the consolidation on offer.
-    `.itmsp` comes with it. Out of v1 for sequencing: the images have to be
-    right first, and credentials are their own design.
+    ~~`.itmsp` comes with it.~~ **The `.itmsp` half is reversed** by
+    `2026-08-27-store-live-and-upload-design.md` decision 1: Apple no longer
+    supports it for app content, so it is not a format anything here may
+    target. Out of v1 for sequencing: the images have to be right first, and
+    credentials are their own design.
 
 ### Taken looking at the panel (2026-08-26)
 
@@ -254,6 +257,12 @@ a project ships `fr-CA` to a listing that only has `fr`. The declaration maps
 one onto the other explicitly and neither is derived from the other.
 
 ## 2. The declaration
+
+**Superseded in one respect, 2026-08-27.** `packages:` becomes `apps:` and a
+package may carry several, so that a project shipping two products from one
+codebase can say so — and so that each can name the store record it belongs
+to. Everything below still holds; the entry is renamed and gains a `name` and
+an identity per listing. See `2026-08-27-store-live-and-upload-design.md` §1.
 
 Split by rate of change. The listing set — which stores, which locales, which
 classes — moves about once a year, so it lives in `tool/flutterware.dart` with
@@ -1369,8 +1378,10 @@ first thing to prove it.
 
   Neither store has a publishing CLI worth targeting. Apple has **Transporter**
   (`iTMSTransporter`, shipped inside Xcode), which eats an `.itmsp` package —
-  a `metadata.xml` plus assets, and the closest thing either store has to a
-  listing *format* — and the **App Store Connect API**, whose screenshot path
+  ~~the closest thing either store has to a listing *format*~~, and which
+  Apple's own guide now says is deprecated for delivering apps and
+  **unsupported for updating app content**, leaving it to books, music and
+  video — and the **App Store Connect API**, whose screenshot path
   is a reservation dance: create an `appScreenshotSet` for a
   `screenshotDisplayType` under an `appStoreVersionLocalization`, reserve an
   `appScreenshot`, `PUT` the bytes to the upload operations it returns, commit
@@ -1399,9 +1410,14 @@ first thing to prove it.
   a project doing this from flutterware and not from a Ruby toolchain it
   otherwise has no use for is the actual consolidation on offer; and that the
   entry points are the ones every other plugin already has, CLI and GUI.
-  `.itmsp` is in scope with it — it is the one listing *format* either store
+
+  ~~`.itmsp` is in scope with it — it is the one listing *format* either store
   has, and writing it is a sibling of writing the tree rather than a new kind
-  of work.
+  of work.~~ **Wrong, and struck 2026-08-27.** There is no listing format on
+  either side; the fastlane tree above is the whole of what can be targeted.
+  The read-first lane that replaces this paragraph's sequencing, the identity
+  it needs and the credential design are
+  `2026-08-27-store-live-and-upload-design.md`.
 
   It stays out of v1 for sequencing only: the images have to be right before
   pushing them anywhere is interesting, and a credential store is its own
