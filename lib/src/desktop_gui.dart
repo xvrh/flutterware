@@ -85,9 +85,11 @@ class DesktopGui {
     p.join('build', 'windows', 'runner', 'Release'),
     'Flutterware.exe',
   ),
+  // BINARY_NAME, set in linux/CMakeLists.txt. Lowercase where the other two
+  // are capitalised, because that is what a Linux executable looks like.
   'linux' => (
     p.join('build', 'linux', linuxArch(), 'release', 'bundle'),
-    'app',
+    'flutterware',
   ),
   // Both spellings are PRODUCT_NAME, set in macos/Runner/Configs/AppInfo.xcconfig.
   _ => (

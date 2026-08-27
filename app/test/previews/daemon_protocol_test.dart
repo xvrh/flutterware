@@ -123,7 +123,6 @@ void main() {
       var line = encodeLine(
         const DaemonReady(
           sessionId: 's',
-          hostPath: 'host',
           assetsDir: 'assets',
           icuData: 'icu',
           coldCompile: Duration(seconds: 15),
@@ -146,7 +145,6 @@ void main() {
           encodeLine(
             const DaemonReady(
               sessionId: 's',
-              hostPath: 'host',
               assetsDir: 'assets',
               icuData: 'icu',
               coldCompile: Duration.zero,

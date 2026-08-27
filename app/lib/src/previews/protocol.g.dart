@@ -28,9 +28,14 @@ ShownRequest _$ShownRequestFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$ShownRequestToJson(ShownRequest instance) =>
     <String, dynamic>{'id': instance.id};
 
+HostRequest _$HostRequestFromJson(Map<String, dynamic> json) =>
+    HostRequest((json['requestId'] as num).toInt());
+
+Map<String, dynamic> _$HostRequestToJson(HostRequest instance) =>
+    <String, dynamic>{'requestId': instance.requestId};
+
 DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
   sessionId: json['sessionId'] as String,
-  hostPath: json['hostPath'] as String,
   assetsDir: json['assetsDir'] as String,
   icuData: json['icuData'] as String,
   coldCompile: _millis.fromJson((json['coldCompile'] as num).toInt()),
@@ -62,7 +67,6 @@ DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
 Map<String, dynamic> _$DaemonReadyToJson(DaemonReady instance) =>
     <String, dynamic>{
       'sessionId': instance.sessionId,
-      'hostPath': instance.hostPath,
       'assetsDir': instance.assetsDir,
       'icuData': instance.icuData,
       'coldCompile': _millis.toJson(instance.coldCompile),
@@ -156,6 +160,18 @@ Map<String, dynamic> _$DaemonCompiledToJson(DaemonCompiled instance) =>
       'error': instance.error,
       'unchanged': instance.unchanged,
     };
+
+HostReady _$HostReadyFromJson(Map<String, dynamic> json) => HostReady(
+  requestId: (json['requestId'] as num).toInt(),
+  hostPath: json['hostPath'] as String?,
+  error: json['error'] as String?,
+);
+
+Map<String, dynamic> _$HostReadyToJson(HostReady instance) => <String, dynamic>{
+  'requestId': instance.requestId,
+  'hostPath': instance.hostPath,
+  'error': instance.error,
+};
 
 DaemonFailed _$DaemonFailedFromJson(Map<String, dynamic> json) => DaemonFailed(
   message: json['message'] as String,

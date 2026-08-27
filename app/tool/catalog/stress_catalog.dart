@@ -60,7 +60,7 @@ Future<void> main(List<String> args) async {
     InternetAddress(socketPath, type: InternetAddressType.unix),
     0,
   );
-  var guest = await Process.start(ready.hostPath, [
+  var guest = await Process.start(await daemon.hostPath(), [
     ready.assetsDir,
     ready.icuData,
     socketPath,
@@ -139,7 +139,11 @@ Future<void> main(List<String> args) async {
       roots: const ['tool/catalog'],
     ),
   );
-  var reopened = await _launchGuest(secondReady, 'reopen');
+  var reopened = await _launchGuest(
+    await second.hostPath(),
+    secondReady,
+    'reopen',
+  );
   for (var entry in secondReady.entries) {
     var compiled = await second.select(entry.id);
     if (!compiled.ok) continue;
@@ -174,7 +178,11 @@ typedef _Guest = ({Process guest, GuestVmService vm, List<String> log});
 
 /// A guest launched exactly the way the GUI launches one: from the session's
 /// own asset directory, whose kernel is whatever the daemon prepared.
-Future<_Guest> _launchGuest(DaemonReady ready, String name) async {
+Future<_Guest> _launchGuest(
+  String hostPath,
+  DaemonReady ready,
+  String name,
+) async {
   var socketPath = p.join(
     Directory.systemTemp.createTempSync('fw_$name').path,
     's.sock',
@@ -183,7 +191,7 @@ Future<_Guest> _launchGuest(DaemonReady ready, String name) async {
     InternetAddress(socketPath, type: InternetAddressType.unix),
     0,
   );
-  var guest = await Process.start(ready.hostPath, [
+  var guest = await Process.start(hostPath, [
     ready.assetsDir,
     ready.icuData,
     socketPath,

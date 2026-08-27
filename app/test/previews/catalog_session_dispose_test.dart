@@ -60,7 +60,6 @@ void main() {
           encodeLine(
             const DaemonReady(
               sessionId: 'session-0',
-              hostPath: '/host',
               assetsDir: '/assets',
               icuData: '/icu',
               coldCompile: Duration.zero,

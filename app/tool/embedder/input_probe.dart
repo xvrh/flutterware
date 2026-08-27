@@ -151,7 +151,7 @@ Future<void> _withGuest(
     throw StateError('$entry did not compile: ${compiled.error}');
   }
 
-  var guest = await _Guest.start(ready);
+  var guest = await _Guest.start(await daemon.hostPath(), ready);
   try {
     await body(guest);
   } finally {
@@ -169,7 +169,7 @@ class _Guest {
   final ServerSocket _server;
   final GuestVmService _vm;
 
-  static Future<_Guest> start(DaemonReady ready) async {
+  static Future<_Guest> start(String hostPath, DaemonReady ready) async {
     var socketPath = checkSocketPath(
       p.join(flutterwareRunDir(), 'probe-${ready.sessionId}.sock'),
     );
@@ -180,7 +180,7 @@ class _Guest {
       0,
     );
 
-    var process = await Process.start(ready.hostPath, [
+    var process = await Process.start(hostPath, [
       ready.assetsDir,
       ready.icuData,
       socketPath,

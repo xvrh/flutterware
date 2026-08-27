@@ -16,8 +16,9 @@ import 'protocol.dart';
 /// second consumer must not repeat the first one's work.
 ///
 /// So [connect] connects before it considers spawning. The first caller pays
-/// for the scan, the bundle, the host and the cold compile; every one after
-/// gets a compiler that already holds the whole catalog in memory.
+/// for the scan, the bundle and the cold compile; every one after gets a
+/// compiler that already holds the whole catalog in memory. The embedder host
+/// is not in that list — see [hostPath].
 ///
 /// (It was once also a containment measure: `package:frontend_server_client`
 /// spawns the compiler through `Platform.resolvedExecutable`, which inside a
@@ -45,6 +46,16 @@ class CompilerDaemonClient {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen(_onLine, onError: _onGone, onDone: _onGone);
+    // **The death arrives twice, and the second copy has no owner.** A daemon
+    // that dies with a request still unread in its receive buffer resets the
+    // connection instead of closing it — Linux does, macOS does not — and the
+    // reset is delivered both to the stream above and to the sink's [done],
+    // which nothing awaits. An unowned error there is an unhandled error in
+    // whatever zone the client was built in: the GUI's, or a test's, where it
+    // fails a test that the stream half had already handled correctly.
+    // [_onGone] is idempotent, so whichever copy arrives first is the one that
+    // tells everybody and the other is dropped.
+    unawaited(_socket.done.then((_) {}, onError: _onGone));
   }
 
   final Socket _socket;
@@ -73,6 +84,14 @@ class CompilerDaemonClient {
   /// could not: somewhere to put a timeout, and somewhere to deliver "the daemon
   /// died" to every caller waiting on it.
   final _pending = <int, Completer<DaemonCompiled>>{};
+
+  /// The same, for the one [hostPath] a client ever sends. Its own map because
+  /// the two replies are different types, and a `Completer<DaemonResponse>`
+  /// shared between them would put the cast back at every call site.
+  final _hostPending = <int, Completer<HostReady>>{};
+
+  /// The answer to [hostPath], kept so a second caller does not ask twice.
+  Future<String>? _hostPath;
 
   /// The daemon's first word, which is either [DaemonReady] or [DaemonFailed].
   final _handshake = Completer<DaemonResponse>();
@@ -247,9 +266,10 @@ class CompilerDaemonClient {
       case DaemonCompiled():
       case CatalogChanged():
       case AssetsChanged():
+      case HostReady():
       // Unreachable: progress does not complete the handshake. Listed because
       // the switch is exhaustive over the sealed response, which is what makes
-      // a sixth message a compile error here rather than a silent drop.
+      // another message a compile error here rather than a silent drop.
       case DaemonProgress():
         await client.close();
         throw StateError('the daemon spoke before it was ready: $first');
@@ -289,6 +309,8 @@ class CompilerDaemonClient {
         // Matched on the id, not on "the next compiled message". Absent means a
         // reply that arrived after its caller gave up — dropped, not an error.
         _pending.remove(requestId)?.complete(response);
+      case HostReady(:var requestId):
+        _hostPending.remove(requestId)?.complete(response);
       case CatalogChanged():
         _lastChange = response;
         if (!_changes.isClosed) _changes.add(response);
@@ -311,6 +333,10 @@ class CompilerDaemonClient {
       if (!completer.isCompleted) completer.completeError(reason);
     }
     _pending.clear();
+    for (var completer in _hostPending.values.toList()) {
+      if (!completer.isCompleted) completer.completeError(reason);
+    }
+    _hostPending.clear();
     if (!_changes.isClosed) _changes.close();
     if (!_assetsChanges.isClosed) _assetsChanges.close();
   }
@@ -380,6 +406,71 @@ class CompilerDaemonClient {
         );
       },
     );
+  }
+
+  /// Where the embedder host is, building it if this is the first time anyone
+  /// asked.
+  ///
+  /// **Not in the handshake, deliberately.** The host is a framework download
+  /// and a `cmake` build, and only a caller that launches a guest — a panel, a
+  /// screenshot — needs one at all; a compile, a catalog listing or an `audit`
+  /// never does. It used to be built before the daemon would answer anybody,
+  /// which made every client wait for it and, where the guest does not build,
+  /// made every client fail with it.
+  ///
+  /// Memoised per client so a panel and its screenshot ask once. The daemon
+  /// memoises it too, across clients, which is the one that actually prevents a
+  /// second build.
+  ///
+  /// [timeout] covers a cold framework download as well as the build.
+  Future<String> hostPath({Duration timeout = const Duration(minutes: 5)}) =>
+      _hostPath ??= _hostOnce(timeout);
+
+  Future<String> _hostOnce(Duration timeout) async {
+    try {
+      return await _requestHost(timeout);
+    } on Object {
+      // Not cached as a failure: a build that failed for a reason the caller
+      // can fix — a missing toolchain — should be askable again on the same
+      // client, rather than answering from a memo of the bad news forever.
+      _hostPath = null;
+      rethrow;
+    }
+  }
+
+  Future<String> _requestHost(Duration timeout) {
+    if (_gone case var reason?) return Future.error(StateError(reason));
+
+    var requestId = _nextRequestId++;
+    var completer = Completer<HostReady>();
+    // Registered before the write, for the reason [_pending] is.
+    _hostPending[requestId] = completer;
+    try {
+      _socket.writeln(encodeLine(HostRequest(requestId)));
+    } on Object catch (e) {
+      _hostPending.remove(requestId);
+      return Future.error(
+        StateError('could not reach the compiler daemon: $e'),
+      );
+    }
+
+    return completer.future
+        .timeout(
+          timeout,
+          onTimeout: () {
+            _hostPending.remove(requestId);
+            throw StateError(
+              'the compiler daemon did not build the embedder host within '
+              '${timeout.inSeconds}s. See ${address.logPath}',
+            );
+          },
+        )
+        .then((reply) {
+          if (reply.hostPath case var path?) return path;
+          throw StateError(
+            'the embedder host could not be built: ${reply.error}',
+          );
+        });
   }
 
   /// Asks the daemon to look for entries that appeared or disappeared.

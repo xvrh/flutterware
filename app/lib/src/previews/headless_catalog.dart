@@ -180,7 +180,7 @@ class HeadlessCatalog {
         throw StateError('$entryId did not compile:\n${compiled.error}');
       }
       guest = await _GuestSession.start(
-        hostPath: ready.hostPath,
+        hostPath: await daemon.hostPath(),
         assetsDir: ready.assetsDir,
         icuData: ready.icuData,
         name: ready.sessionId,

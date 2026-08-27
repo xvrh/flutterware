@@ -65,18 +65,21 @@ void main() {
     );
   });
 
-  test('Linux keeps the bundle, which carries lib/ and data/ beside app', () {
-    var linux = on('linux', arch: () => 'arm64');
+  test(
+    'Linux keeps the bundle, which carries lib/ and data/ beside the binary',
+    () {
+      var linux = on('linux', arch: () => 'arm64');
 
-    expect(
-      linux.product,
-      p.join('build', 'linux', 'arm64', 'release', 'bundle'),
-    );
-    expect(
-      linux.binary,
-      p.join('build', 'linux', 'arm64', 'release', 'bundle', 'app'),
-    );
-  });
+      expect(
+        linux.product,
+        p.join('build', 'linux', 'arm64', 'release', 'bundle'),
+      );
+      expect(
+        linux.binary,
+        p.join('build', 'linux', 'arm64', 'release', 'bundle', 'flutterware'),
+      );
+    },
+  );
 
   test('only Linux pays for uname', () {
     var asked = 0;

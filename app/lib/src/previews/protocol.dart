@@ -51,6 +51,7 @@ sealed class DaemonRequest implements ProtocolMessage {
         SelectRequest.wireName => SelectRequest.fromJson(json),
         ShownRequest.wireName => ShownRequest.fromJson(json),
         RefreshRequest.wireName => const RefreshRequest(),
+        HostRequest.wireName => HostRequest.fromJson(json),
         StopDaemonRequest.wireName => const StopDaemonRequest(),
         var unknown => throw FormatException('unknown request "$unknown"'),
       };
@@ -154,6 +155,37 @@ class RefreshRequest extends DaemonRequest {
   Map<String, dynamic> toJson() => const {};
 }
 
+/// Build the embedder host, and answer with where it landed.
+///
+/// **Its own request because the host is the one thing a client may never
+/// need.** A panel and a screenshot launch a guest and cannot start without
+/// it; a compile, a catalog listing and an `audit` never touch one. Building
+/// it during the handshake made every client pay — and, where the guest does
+/// not build at all, made every client *fail*: on Linux the daemon died in
+/// `cmake` before it had compiled a line, so a caller that only wanted a
+/// kernel got a stack trace about Objective-C.
+///
+/// The build is memoised, so several clients asking at once produce one build
+/// and one answer each.
+@JsonSerializable()
+class HostRequest extends DaemonRequest {
+  const HostRequest(this.requestId);
+
+  factory HostRequest.fromJson(Map<String, dynamic> json) =>
+      _$HostRequestFromJson(json);
+
+  static const wireName = 'host';
+
+  /// Echoed on [HostReady], the way [SelectRequest.requestId] is.
+  final int requestId;
+
+  @override
+  String get type => wireName;
+
+  @override
+  Map<String, dynamic> toJson() => _$HostRequestToJson(this);
+}
+
 /// Stop the daemon itself, disconnecting everyone.
 ///
 /// Closing the socket is how a client *leaves*; this is for tooling that wants
@@ -182,6 +214,7 @@ sealed class DaemonResponse implements ProtocolMessage {
         DaemonCompiled.wireName => DaemonCompiled.fromJson(json),
         CatalogChanged.wireName => CatalogChanged.fromJson(json),
         AssetsChanged.wireName => AssetsChanged.fromJson(json),
+        HostReady.wireName => HostReady.fromJson(json),
         DaemonFailed.wireName => DaemonFailed.fromJson(json),
         var unknown => throw FormatException('unknown response "$unknown"'),
       };
@@ -192,7 +225,6 @@ sealed class DaemonResponse implements ProtocolMessage {
 class DaemonReady extends DaemonResponse {
   const DaemonReady({
     required this.sessionId,
-    required this.hostPath,
     required this.assetsDir,
     required this.icuData,
     required this.coldCompile,
@@ -212,8 +244,6 @@ class DaemonReady extends DaemonResponse {
 
   /// Identifies this connection's session for the life of the daemon.
   final String sessionId;
-
-  final String hostPath;
 
   /// This session's asset directory: the shared bundle by symlink, plus a
   /// `kernel_blob.bin` only this client's guest reads. Sessions do not share it
@@ -464,6 +494,35 @@ class DaemonCompiled extends DaemonResponse {
 
   @override
   Map<String, dynamic> toJson() => _$DaemonCompiledToJson(this);
+}
+
+/// Where the embedder host was built, answering one [HostRequest].
+///
+/// [error] rather than a [DaemonFailed]: a host that will not build is the end
+/// of *this* client's guest, not of the daemon — the compiler behind it is
+/// still serving everybody, including the client that just asked. Clients read
+/// [DaemonFailed] as terminal, which is exactly what this is not.
+@JsonSerializable()
+class HostReady extends DaemonResponse {
+  const HostReady({required this.requestId, this.hostPath, this.error});
+
+  factory HostReady.fromJson(Map<String, dynamic> json) =>
+      _$HostReadyFromJson(json);
+
+  static const wireName = 'host-ready';
+
+  final int requestId;
+
+  /// Where the host binary is, or null when [error] says why there is none.
+  final String? hostPath;
+
+  final String? error;
+
+  @override
+  String get type => wireName;
+
+  @override
+  Map<String, dynamic> toJson() => _$HostReadyToJson(this);
 }
 
 /// The daemon could not start. Terminal: it exits after sending this.

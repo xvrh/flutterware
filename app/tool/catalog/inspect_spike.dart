@@ -93,7 +93,7 @@ Future<void> main(List<String> args) async {
       exit(1);
     }
     guest = await _Guest.start(
-      hostPath: ready.hostPath,
+      hostPath: await daemon.hostPath(),
       assetsDir: ready.assetsDir,
       icuData: ready.icuData,
       workDir: p.join(appPackageRoot, 'build', 'catalog'),
