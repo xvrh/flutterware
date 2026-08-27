@@ -1171,8 +1171,17 @@ class ShellController extends ChangeNotifier {
   void selectPlugin(String id) {
     var name = address.worktree;
     if (name == null) return;
-    var children =
-        selectedSession?.pluginById(id)?.core.report.children ?? const [];
+    var plugin = selectedSession?.pluginById(id);
+    // **The plugin's own landing beats the fill-in.** A plugin whose children
+    // are instances rather than packages says where its row goes, because
+    // "whichever one sorts first" is not a place — see
+    // [NativePlugin.railLanding], which exists because `Run` opened a running
+    // app instead of the page that starts one.
+    if (plugin?.railLanding case var landing?) {
+      go(Address(worktree: name, plugin: id, segments: landing));
+      return;
+    }
+    var children = plugin?.core.report.children ?? const [];
     var remembered = _lastChild[(selected?.path ?? '', id)];
     var child = children.any((c) => c.id == remembered)
         ? remembered

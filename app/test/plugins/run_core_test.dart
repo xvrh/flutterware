@@ -1629,6 +1629,31 @@ void main({
 
       expect(handle.knobs, {'flutterSdkRoot': '/opt/other'});
     });
+
+    test('but the form is not primed with it, because nobody chose it', () async {
+      // A handle records what the app was *built with*, which includes every
+      // knob a `from:` worked out for a field nobody touched. The New run form
+      // reads the other thing — what somebody typed — so priming it from the
+      // resolved set freezes this SDK path into the field, and the next launch
+      // builds against it instead of against whichever flutterware started us.
+      await core.computeAll();
+      var entry = core.entrypointsFor('app').single;
+
+      expect(
+        core.chosenKnobs('app', entry, {
+          'flutterSdkRoot': '/tmp/pinned-flutter',
+        }),
+        isEmpty,
+        reason: 'the source computed exactly this',
+      );
+      // An override *is* an instruction and survives.
+      expect(core.chosenKnobs('app', entry, {'flutterSdkRoot': '/opt/other'}), {
+        'flutterSdkRoot': '/opt/other',
+      });
+      // And a name this entry point does not declare is kept rather than
+      // guessed about — there is no source to have computed it.
+      expect(core.chosenKnobs('app', entry, {'marker': 'x'}), {'marker': 'x'});
+    });
   });
 
   group('a knob value the signature cannot take', () {
@@ -2386,6 +2411,120 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
         log.failure(launcherAlive: true),
         'Gradle task assembleDebug failed',
       );
+    });
+
+    group('the stage', () {
+      String progressEvent(
+        String id, {
+        String? message,
+        bool finished = false,
+      }) => _event('app.progress', {
+        'appId': 'a1',
+        'id': id,
+        'progressId': null,
+        'message': message,
+        'finished': finished,
+      });
+
+      test('a finished span stops being what the launcher is doing', () {
+        // The measured bug: `app.progress` closes a span with `finished: true`
+        // and a null message, so a reader that only assigned on the way in
+        // held the last *started* message until the next one opened. On a
+        // macOS launch that is the thirty-five seconds of Xcode build after
+        // `Running pod install...`, narrated as pod install — and a stuck
+        // build looked exactly the same as a build between spans.
+        var path = p.join(runDir.path, 'app-spans.log');
+        File(path).writeAsStringSync(
+          [
+            'Launching lib/main.dart on macOS in debug mode...',
+            progressEvent('0', message: 'Running pod install...'),
+            progressEvent('0', finished: true),
+            '',
+          ].join('\n'),
+        );
+
+        var log = LaunchLog.read(path);
+
+        expect(log.progress, isNull, reason: 'nothing is open');
+        expect(log.stage, 'building');
+      });
+
+      test('an open span is the stage, because it is the tool speaking', () {
+        var path = p.join(runDir.path, 'app-open.log');
+        File(path).writeAsStringSync(
+          [
+            'Launching lib/main.dart on macOS in debug mode...',
+            progressEvent('0', message: 'Running pod install...'),
+            progressEvent('0', finished: true),
+            progressEvent('1', message: 'Building macOS application...'),
+            '',
+          ].join('\n'),
+        );
+
+        expect(LaunchLog.read(path).stage, 'Building macOS application...');
+      });
+
+      test('pub resolution is narrated, though nothing structured has been '
+          'said yet', () {
+        // Measured at 15s warm and minutes on a cold cache, and it happens
+        // entirely before the daemon handshake — so `app.progress` covers none
+        // of it and the panel said the literal word `starting` throughout.
+        var path = p.join(runDir.path, 'app-pub.log');
+        File(path).writeAsStringSync(
+          'Resolving dependencies in `/repo`...\nDownloading packages...\n',
+        );
+
+        expect(LaunchLog.read(path).stage, 'resolving dependencies');
+      });
+
+      test('the artifact exists, so what is left is getting it onto the '
+          'device', () {
+        var path = p.join(runDir.path, 'app-built.log');
+        File(path).writeAsStringSync(
+          [
+            'Launching lib/main.dart on macOS in debug mode...',
+            '\u2713 Built build/macos/Build/Products/Debug/Example.app',
+            '',
+          ].join('\n'),
+        );
+
+        expect(LaunchLog.read(path).stage, 'installing on the device');
+      });
+
+      test('the ladder only climbs', () {
+        // A log is read from the top on every poll. A rule that answered with
+        // the *last* line to match would drop back to `resolving dependencies`
+        // the moment a build printed a line about a package, and a phrase that
+        // goes backwards reads as the build restarting.
+        var path = p.join(runDir.path, 'app-ladder.log');
+        File(path).writeAsStringSync(
+          [
+            'Launching lib/main.dart on macOS in debug mode...',
+            'Resolving dependencies for a plugin...',
+            '',
+          ].join('\n'),
+        );
+
+        expect(LaunchLog.read(path).stage, 'building');
+      });
+
+      test('a run that is not launching any more has no stage at all', () {
+        // `building` said about a dead run is the same lie in a new place. The
+        // question there is *what happened*, which is `summary` and `failure`.
+        var path = p.join(runDir.path, 'app-done.log');
+        File(path).writeAsStringSync(
+          [
+            'Launching lib/main.dart on macOS in debug mode...',
+            _event('app.started', {'appId': 'a1'}),
+            '',
+          ].join('\n'),
+        );
+
+        var log = LaunchLog.read(path);
+
+        expect(log.stage, isNull);
+        expect(log.summary, 'running');
+      });
     });
 
     test('two flavors of one entry point are two runs', () {

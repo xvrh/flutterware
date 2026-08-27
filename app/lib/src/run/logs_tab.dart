@@ -29,10 +29,45 @@ import 'native/native_logs.dart';
 /// `Errors` is why the launch failed, `App` + `Errors` is what the app threw,
 /// and a single five-way pill row could say neither.
 class LogsTab extends StatefulWidget {
-  const LogsTab({super.key, required this.core, required this.handle});
+  /// A run's log — building, live, or dead but still announced.
+  LogsTab({super.key, required this.core, required RunHandle this.handle})
+    : logPath = handle.logPath,
+      subject = handle.key;
+
+  /// The log of a launch that never came up.
+  ///
+  /// A failed launch has its handle deleted on purpose — a launcher that is not
+  /// there must not go on telling the next person a phone is busy — so the one
+  /// state where the log matters most is the one state with no run to point at.
+  /// What survives is a [RunFailure]: a path, a key, and nothing that can be
+  /// asked a question. For want of this constructor the failure page printed
+  /// the path as selectable text, which is the same *a path is not an offer*
+  /// the building state was just cured of.
+  const LogsTab.ofFailure({
+    super.key,
+    required this.core,
+    required this.logPath,
+    required this.subject,
+  }) : handle = null;
 
   final RunCore core;
-  final RunHandle handle;
+
+  /// The run, when there is one.
+  ///
+  /// Null for a failure, and that null is the `Platform` pill's gate: the
+  /// device log is read by asking a session about a window of time, which needs
+  /// the run this pane no longer has.
+  final RunHandle? handle;
+
+  /// The file this pane follows.
+  final String? logPath;
+
+  /// Which run this is about, for telling a rebuild from a different subject.
+  ///
+  /// Watched alongside [logPath] rather than instead of it: a run's key is a
+  /// hash of the worktree, the device and the entry point and survives a
+  /// relaunch on purpose, while the file it writes does not.
+  final String subject;
 
   @override
   State<LogsTab> createState() => _LogsTabState();
@@ -104,9 +139,9 @@ class _LogsTabState extends State<LogsTab> {
   @override
   void initState() {
     super.initState();
-    _log = RunLogTail(widget.handle.logPath);
+    _log = RunLogTail(widget.logPath);
     _reread();
-    _refresh = FileRefresh(widget.handle.logPath, _reread);
+    _refresh = FileRefresh(widget.logPath, _reread);
     _scroll.addListener(_watchScroll);
   }
 
@@ -120,11 +155,10 @@ class _LogsTabState extends State<LogsTab> {
     // `<key>-<pid>-<n>.log`, so a relaunch is the one case where everything
     // this tab reads changes and the key does not. Watching the key alone left
     // it tailing the dead run's file for as long as it stayed open.
-    if (old.handle.key != widget.handle.key ||
-        old.handle.logPath != widget.handle.logPath) {
+    if (old.subject != widget.subject || old.logPath != widget.logPath) {
       _refresh?.dispose();
-      _log = RunLogTail(widget.handle.logPath);
-      _refresh = FileRefresh(widget.handle.logPath, _reread);
+      _log = RunLogTail(widget.logPath);
+      _refresh = FileRefresh(widget.logPath, _reread);
       _native = null;
       _following = true;
       _reread();
@@ -185,7 +219,9 @@ class _LogsTabState extends State<LogsTab> {
   Future<void> _rereadNative() async {
     setState(() => _readingNative = true);
     var read = await widget.core.readNativeLogs(
-      widget.handle,
+      // Only reachable while the pill is offered, and the pill is offered only
+      // for a run that exists.
+      widget.handle!,
       tail: _nativeTail,
     );
     if (!mounted) return;
@@ -248,11 +284,15 @@ class _LogsTabState extends State<LogsTab> {
       children: [
         FwFilterBar(
           pills: [
-            for (var (label, value) in const [
-              ('All', null),
-              ('App', RunLogSource.app),
-              ('Build', RunLogSource.tool),
-              ('Platform', RunLogSource.native),
+            for (var (label, value) in [
+              const ('All', null),
+              const ('App', RunLogSource.app),
+              const ('Build', RunLogSource.tool),
+              // Dropped rather than offered-and-refused for a failure: it is
+              // read by asking a device about a session, and a launch that
+              // never came up has no session to ask about.
+              if (widget.handle != null)
+                const ('Platform', RunLogSource.native),
             ])
               (label, _only == value, () => _select(value)),
           ],
@@ -276,7 +316,7 @@ class _LogsTabState extends State<LogsTab> {
               : '$_available lines',
           trailing: _LogMenu(
             lines: shown,
-            path: widget.handle.logPath,
+            path: widget.logPath,
             filtered: filtered,
           ),
         ),
@@ -302,7 +342,7 @@ class _LogsTabState extends State<LogsTab> {
                             if (index == 0) {
                               return _EarlierLines(
                                 dropped: dropped,
-                                path: widget.handle.logPath,
+                                path: widget.logPath,
                               );
                             }
                             index -= 1;

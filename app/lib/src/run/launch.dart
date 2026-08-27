@@ -207,6 +207,53 @@ Future<RunHandle> launchApp({
   return published;
 }
 
+/// How far a launch has got, as a ladder of milestones the log has passed.
+///
+/// Coarse on purpose. This is not a second opinion about what the tool is
+/// doing — while a progress span is open, the tool's own words are better than
+/// anything inferred here, and [LaunchLog.stage] prefers them. This exists for
+/// the gaps: before the tool has said anything structured at all (pub
+/// resolution, measured at 15s warm and minutes on a cold cache), and between
+/// one span closing and the next opening.
+///
+/// Every value is implied by a line the log has actually passed, and none of
+/// them is a finished span's message. That distinction is the whole point: the
+/// panel used to hold the last *started* span until the next one began, so
+/// `Running pod install...` sat on the header for the thirty-five seconds of
+/// Xcode build that followed it. A stuck build and a build between spans looked
+/// identical, and the one word on offer named the wrong stage of the one you
+/// had.
+///
+/// Ordered, and only ever climbed — a log is read from the top on every poll,
+/// and a phrase that went backwards would read as the build restarting.
+enum LaunchPhase {
+  /// Nothing has been said yet.
+  starting('starting'),
+
+  /// `pub get` is running, before there is a daemon to ask.
+  resolving('resolving dependencies'),
+
+  /// Dependencies are in and the tool is up, but the build has not begun.
+  preparing('preparing the build'),
+
+  /// `Launching … in debug mode` has been printed.
+  building('building'),
+
+  /// The artifact exists; what remains is getting it onto the device.
+  installing('installing on the device'),
+
+  /// The VM service is up and we are connecting to it.
+  attaching('attaching'),
+
+  /// `app.started`.
+  running('running');
+
+  const LaunchPhase(this.label);
+
+  /// The phrase, in the voice a status line wants.
+  final String label;
+}
+
 /// What a launcher's log says so far.
 ///
 /// The log is the source of truth about a run and the handle is a cache of it,
@@ -218,6 +265,7 @@ class LaunchLog {
     this.appId,
     this.vmService,
     this.progress,
+    this.phase = LaunchPhase.starting,
     this.error,
     this.output,
     this.trailing = const [],
@@ -230,9 +278,21 @@ class LaunchLog {
   /// The app's VM service as a `ws://` URI, once `app.debugPort` has arrived.
   final String? vmService;
 
-  /// The most recent thing the tool said it was doing — `Installing and
-  /// launching…`. The only narration a ninety-second cold build has.
+  /// The most recent thing the tool said it was doing and **has not finished**
+  /// — `Installing and launching…`.
+  ///
+  /// Open spans only. `app.progress` closes a span with `finished: true` and a
+  /// null message, so a reader that only assigned on the way in kept the last
+  /// started message for as long as the tool was between spans — which on a
+  /// macOS launch is the thirty-five seconds of Xcode build following
+  /// `Running pod install...`, narrated as pod install.
+  ///
+  /// Null between spans, which is honest and is why [stage] exists.
   final String? progress;
+
+  /// How far the launch has got, when nothing is narrating it. See
+  /// [LaunchPhase].
+  final LaunchPhase phase;
 
   /// The most recent error the launcher *reported* — a `daemon.logMessage` at
   /// error level, an errored `app.log`, or the exception `app.stop` carried.
@@ -285,10 +345,18 @@ class LaunchLog {
     } on FileSystemException {
       return const LaunchLog();
     }
-    String? appId, vmService, progress, error, plain;
+    String? appId, vmService, error, plain;
     var started = false;
     var stopped = false;
     var trailing = <String>[];
+    // Spans by id, in the order they opened. `progress` is the innermost still
+    // open; a span that finishes leaves rather than lingering.
+    var open = <String, String>{};
+    var phase = LaunchPhase.starting;
+    void reach(LaunchPhase next) {
+      if (next.index > phase.index) phase = next;
+    }
+
     for (var line in lines) {
       Map<String, dynamic>? object;
       try {
@@ -306,6 +374,7 @@ class LaunchLog {
         if (line.trim().isNotEmpty) {
           plain = line.trim();
           trailing.add(line.trimRight());
+          if (_phaseOf(plain) case var reached?) reach(reached);
         }
         continue;
       }
@@ -318,19 +387,28 @@ class LaunchLog {
       switch (DaemonProtocol.tryReadEvent(object)) {
         case AppStartEvent(appId: var id):
           appId = id;
+          // The tool is up and talking. It has not begun building — that is
+          // `Launching … in debug mode`, a plain line further down.
+          reach(LaunchPhase.preparing);
         case AppDebugPortEvent(:var wsUri, appId: var id):
           vmService = wsUri.toString();
+          reach(LaunchPhase.attaching);
           // Also from here, not only from `app.start`. The two carry the same
           // id, and this one has fewer required fields — so a tool that adds
           // or renames something on `app.start` costs the id nothing.
           appId ??= id;
         case AppStartedEvent():
           started = true;
+          reach(LaunchPhase.running);
         case AppStopEvent(error: var why):
           stopped = true;
           if (why != null) error = why;
-        case AppProgressEvent(:var message, :var finished):
-          if (message != null && !finished) progress = message;
+        case AppProgressEvent(:var id, :var message, :var finished):
+          if (finished) {
+            open.remove(id);
+          } else if (message != null) {
+            open[id] = message;
+          }
         case DaemonLogMessageEvent(level: MessageLevel.error, :var message):
           error = message;
         case DaemonLogEvent(:var log, error: true):
@@ -342,13 +420,37 @@ class LaunchLog {
     return LaunchLog(
       appId: appId,
       vmService: vmService,
-      progress: progress,
+      progress: open.values.lastOrNull,
+      phase: phase,
       error: error,
       output: plain,
       trailing: trailing,
       started: started,
       stopped: stopped,
     );
+  }
+
+  /// The milestone a plain line marks, or null for the overwhelming majority
+  /// of lines, which mark none.
+  ///
+  /// Prefixes rather than substrings, and each one is a fixed string a single
+  /// emitter writes at a known moment. `Resolving dependencies` is pub's;
+  /// `Launching … in debug mode` and `✓ Built …` are the tool's; `Xcode build
+  /// done` is the iOS/macOS build's. A rule that matched loose prose would
+  /// climb this ladder on a line of somebody's log output.
+  static LaunchPhase? _phaseOf(String line) {
+    if (line.startsWith('Resolving dependencies') ||
+        line.startsWith('Downloading packages')) {
+      return LaunchPhase.resolving;
+    }
+    if (line.startsWith('Got dependencies')) return LaunchPhase.preparing;
+    if (line.startsWith('Launching ')) return LaunchPhase.building;
+    if (line.startsWith('Xcode build done') ||
+        line.startsWith('✓ Built ') ||
+        line.startsWith('Built build/')) {
+      return LaunchPhase.installing;
+    }
+    return null;
   }
 
   /// Why this run is not going to work, or null.
@@ -399,13 +501,28 @@ class LaunchLog {
     ];
   }
 
+  /// Where the launch is right now, or null once it is not launching any more.
+  ///
+  /// The tool's own words while it is narrating, and the milestone it has
+  /// passed when it is not — never a finished span's message, which is the
+  /// whole of what this replaced.
+  ///
+  /// Null for a run that started, stopped or failed, because for those the
+  /// question is not *where is it* but *what happened*, which is [summary] and
+  /// [failure]. A stage answering `building` about a dead run would be the same
+  /// lie in a new place.
+  String? get stage {
+    if (started || stopped || error != null) return null;
+    return progress ?? phase.label;
+  }
+
   /// The launcher's own last word, for a row that has to say something.
   String get summary {
     if (error != null) return error!;
     if (stopped) return 'stopped';
     if (started) return 'running';
     if (vmService != null) return 'started';
-    return progress ?? 'starting';
+    return stage ?? 'starting';
   }
 }
 
@@ -631,11 +748,15 @@ Future<(RunHandle, LaunchLog)> awaitLaunch(
   while (true) {
     current = refreshFromLog(current);
     var log = LaunchLog.read(current.logPath ?? '');
-    // The log is read here every quarter second either way, and its progress
-    // line is the only narration a cold build has. Handing each new one to the
-    // caller costs a comparison and is the difference between a ninety-second
-    // silence and a build saying where it is.
-    if (log.progress case var line? when line != said) {
+    // The log is read here every quarter second either way, and its stage is
+    // the only narration a cold build has. Handing each new one to the caller
+    // costs a comparison and is the difference between a ninety-second silence
+    // and a build saying where it is.
+    //
+    // The stage rather than the raw progress line, so the minutes before the
+    // tool says anything structured are narrated too — `fw` and an agent used
+    // to watch a blank space through the whole of pub resolution.
+    if (log.stage case var line? when line != said) {
       said = line;
       onProgress?.call(line);
     }

@@ -131,6 +131,54 @@ void main() {
     expect(find.textContaining('the app threw'), findsNothing);
   });
 
+  testWidgets('a build failure has errors to find', (tester) async {
+    // Measured on a real broken build: `Errors` matched **0 of 44** on a log
+    // whose whole point was the fault it could not find. The launcher's own
+    // structured error is `Error: Build process failed`, which is true of
+    // every build failure and names none; the line that says which one is the
+    // front end's `path:line:col: Error:`, and nothing was looking for it.
+    log.writeAsStringSync(
+      [
+        'Launching lib/main.dart on macOS in debug mode...',
+        'Removing CocoaPods integration will improve build time.',
+        "lib/main.dart:119:21: Error: Method not found: 'notAThing'.",
+        'final int _broken = notAThing();',
+        '** BUILD FAILED **',
+        '',
+      ].join('\n'),
+    );
+    await pumpTab(tester);
+
+    await tester.tap(find.text('Errors'));
+    await tester.pump();
+
+    // The diagnostic and the verdict; not the advice about CocoaPods, and not
+    // the source line under the caret.
+    expect(find.text('2 of 5'), findsOneWidget);
+    expect(find.textContaining('Method not found'), findsOneWidget);
+    expect(find.textContaining('BUILD FAILED'), findsOneWidget);
+    expect(find.textContaining('CocoaPods'), findsNothing);
+  });
+
+  testWidgets('and still refuses to read a fault out of prose', (tester) async {
+    // The rule this sits inside: a line containing the word "error" is very
+    // often a line about not having one. Only fixed shapes from known emitters
+    // count.
+    log.writeAsStringSync(
+      [
+        'flutter: Recovered from the error, carrying on',
+        'No errors found in 42 files.',
+        '',
+      ].join('\n'),
+    );
+    await pumpTab(tester);
+
+    await tester.tap(find.text('Errors'));
+    await tester.pump();
+
+    expect(find.text('0 of 2'), findsOneWidget);
+  });
+
   testWidgets('the search box narrows and says by how much', (tester) async {
     log.writeAsStringSync(
       [
