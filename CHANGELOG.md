@@ -1,5 +1,30 @@
 ## Unreleased
 
+- **A caret that blinks is an animation, and a scenario is not waiting for it.**
+  On iOS a `TextField` animates its caret through an `AnimationController`
+  rather than a `Timer.periodic` — which means that on an iOS-staged device,
+  every screen with a focused field is asking for a frame forever. Nothing in a
+  settle policy can tell that from a spinner.
+
+  `Settle.upTo` got away with it by accident: the controller runs a one-second
+  simulation and restarts itself on a `Timer.zero`, so a loop that stops at the
+  first quiet frame finds one at the blink boundary. The two policies that do
+  not stop there had no such luck. `Settle.elapse` — what a boot-time pump
+  spends — and `Settle.none` land wherever the blink happens to be, so the step
+  reported `settled: false`, and the report told the reader a screen was still
+  animating and to go looking for the spinner. There was none.
+
+  It cost pictures too. Whether the caret is painted, and at what opacity, is
+  part of the bytes, so the same frame rendered twice was not the same frame:
+  `screen` refused to adopt its verb's capture and emitted a second step,
+  flagged `unchanged`. Measured on a real suite, 13 steps existed for that
+  reason and no other.
+
+  So a run now holds the caret still — `EditableText.debugDeterministicCursor`
+  for the length of the body, restored on the way out. It is the same kind of
+  repair as the fonts and the clock: what a capture shows may not depend on
+  which millisecond took it.
+
 - **A scenario runs at a date, not at whenever it ran.** `clock.now()` inside a
   scenario used to start at the wall time of the run and advance from there
   under FakeAsync — so every screen showing a date differed run to run, and no
