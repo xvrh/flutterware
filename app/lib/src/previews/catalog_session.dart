@@ -1628,8 +1628,11 @@ class CatalogSession extends ChangeNotifier {
         // Keyed by session, so a second panel — or an agent taking a
         // screenshot — does not bind over this guest's socket.
         name: ready.sessionId,
+        // Asked for here rather than read off the handshake: the build happens
+        // on the first panel that opens, and this closure is exactly that
+        // moment. A project that never opens one never builds a host.
         buildGuest: () async => (
-          hostPath: ready.hostPath,
+          hostPath: await daemon.hostPath(),
           assetsDir: ready.assetsDir,
           icuData: ready.icuData,
         ),

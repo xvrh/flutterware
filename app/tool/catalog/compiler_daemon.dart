@@ -212,7 +212,13 @@ class _Daemon {
   var _sessionCounter = 0;
   Duration _coldCompile = Duration.zero;
   List<String> _diagnostics = const [];
-  String? _hostPath;
+
+  /// The embedder host, built at most once and only when somebody asks.
+  ///
+  /// A `Future` rather than a path because it is the memo *and* the lock: two
+  /// clients opening a panel at the same moment await one build instead of
+  /// racing two into the same `cmake` output directory.
+  Future<String>? _host;
 
   /// Whether this start began from a previous daemon's kernel — see
   /// [DaemonReady.warmStart].
@@ -551,24 +557,28 @@ class _Daemon {
     _generator.registerAll(_entries);
     _makeActive(_entries.first);
 
-    // **Three lanes, not one queue.** The remaining work divides into three
-    // chains that need nothing from each other: the embedder framework and the
-    // C host that links against it; the asset bundle; and the compiler. Run in
-    // sequence the start costs their sum, which on a first-ever run is
-    // dominated by two independent things waiting for each other — a ~93MB
-    // framework download (~4.3s) and a cold compile (up to ~8s). Overlapped,
-    // the start costs the longest chain instead.
+    // **Two lanes, not one queue.** What is left divides into two chains that
+    // need nothing from each other: the asset bundle, and the compiler. Run in
+    // sequence the start costs their sum; overlapped, it costs the longer one.
     //
     // The only ordering that survives is the one that is real: the kernel is
     // published into the asset bundle, so that copy waits for both.
     //
-    // `Future.wait` rather than three bare awaits, because the lanes are
-    // started before any of them is awaited: a lane that fails while another is
+    // **The embedder host used to be a third lane here, and is now [_ensureHost]
+    // instead.** Being a lane made it a condition of starting at all: it is a
+    // ~93MB framework download and a `cmake` build, and a client that only
+    // wanted a kernel waited for both — then, where the guest does not build,
+    // got a `DaemonFailed` about Objective-C instead of the compiler it asked
+    // for. What that lane bought was overlap on a first-ever run, and the
+    // download is cached per engine revision, so what moved is one wait, once
+    // per machine, onto the first client that actually launches a guest.
+    //
+    // `Future.wait` rather than two bare awaits, because the lanes are
+    // started before either is awaited: a lane that fails while the other is
     // still running would otherwise become an unhandled async error. `wait`
-    // observes every one of them and rethrows the first, which `serve` turns
-    // into the `DaemonFailed` a client is waiting for.
+    // observes both and rethrows the first, which `serve` turns into the
+    // `DaemonFailed` a client is waiting for.
     await Future.wait([
-      _hostLane(),
       _timed('asset bundle', _ensureAssetBundle),
       _compileLane(),
     ]);
@@ -587,7 +597,6 @@ class _Daemon {
 
   DaemonReady readyFor(_Session session) => DaemonReady(
     sessionId: session.id,
-    hostPath: _hostPath!,
     assetsDir: session.assetsDir,
     icuData: _cache.icuData,
     coldCompile: _coldCompile,
@@ -879,27 +888,39 @@ class _Daemon {
     }
   }
 
-  /// The embedder framework, then the C host that links against it.
+  /// The embedder framework, then the C host that links against it — built on
+  /// the first [HostRequest] and never again.
   ///
-  /// One lane because the second genuinely needs the first — and neither needs
-  /// the compiler, which is the whole reason they can run beside it.
-  Future<void> _hostLane() async {
-    var engineDir = await _timed('engine framework', () async {
-      var dir = await ensureEmbedderFramework(_cache);
-      // Only once the shared copy is known good, so a failed download never
-      // leaves an install with neither.
-      removeLegacyEngineDir(config.appPackageRoot);
-      return dir;
-    });
-    _hostPath = await _timed(
-      'host build',
-      () => buildHost(
-        nativeSourceDir: p.join(config.appPackageRoot, 'native'),
-        nativeBuildDir: p.join(_buildDir, 'native'),
-        engineDir: engineDir,
-      ),
-    );
-  }
+  /// One chain because the second genuinely needs the first. Memoised on
+  /// [_host] rather than guarded by a flag, so the second caller awaits the
+  /// first caller's build instead of starting its own into the same directory.
+  ///
+  /// A failure is **not** cached as a failure the daemon then repeats forever:
+  /// [_host] is cleared on the way out, so a client that fixes whatever the
+  /// build was missing — an SDK, a compiler — can ask again without restarting
+  /// a daemon that is otherwise healthy.
+  Future<String> _ensureHost() => _host ??= () async {
+    try {
+      var engineDir = await _timed('engine framework', () async {
+        var dir = await ensureEmbedderFramework(_cache);
+        // Only once the shared copy is known good, so a failed download never
+        // leaves an install with neither.
+        removeLegacyEngineDir(config.appPackageRoot);
+        return dir;
+      });
+      return await _timed(
+        'host build',
+        () => buildHost(
+          nativeSourceDir: p.join(config.appPackageRoot, 'native'),
+          nativeBuildDir: p.join(_buildDir, 'native'),
+          engineDir: engineDir,
+        ),
+      );
+    } on Object {
+      _host = null;
+      rethrow;
+    }
+  }();
 
   /// Everything the compiler owns: start, compile what works, and record what
   /// the next daemon can start from.
@@ -1554,6 +1575,24 @@ class _Session {
           await _daemon.refresh();
         } catch (e, s) {
           stderr.writeln('[catalog] refresh for $id failed: $e\n$s');
+        }
+      case HostRequest(:var requestId):
+        // Answered off the queue: the build shells out to `cmake` and touches
+        // nothing the compiler owns, so making a panel's host build wait behind
+        // another client's cold compile would buy nothing.
+        //
+        // The failure is reported to the client that asked and to nobody else.
+        // It is not a `DaemonFailed`: the compiler is still up and still
+        // serving, and this client can go on compiling without a guest.
+        try {
+          send(
+            HostReady(
+              requestId: requestId,
+              hostPath: await _daemon._ensureHost(),
+            ),
+          );
+        } catch (e, s) {
+          send(HostReady(requestId: requestId, error: '$e\n$s'));
         }
       case StopDaemonRequest():
         await _daemon.stop();

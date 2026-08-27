@@ -240,9 +240,18 @@ void main() {
       },
     );
 
-    test('builds the guest host', () {
-      expect(File(ready.hostPath).existsSync(), isTrue);
+    test('is ready without having built a guest host', () {
+      // The contract the lazy host bought: a daemon answers the handshake with
+      // a compiler, and nothing about an embedder. A client that only wants a
+      // kernel — `check`, an `audit`, this test — is served on a machine where
+      // the guest does not build at all.
+      expect(ready.timings.keys, isNot(contains('host build')));
+      expect(ready.timings.keys, isNot(contains('engine framework')));
     });
+
+    test('builds the guest host when asked, and only then', () async {
+      expect(File(await daemon.hostPath()).existsSync(), isTrue);
+    }, skip: Platform.isMacOS ? null : 'the embedder guest is macOS-only');
 
     test('discovers the demos, and groups a file that declares several', () {
       expect(ready.entries.length, greaterThanOrEqualTo(5));

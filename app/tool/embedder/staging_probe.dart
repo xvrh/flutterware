@@ -62,7 +62,7 @@ Future<void> main(List<String> args) async {
     if (!compiled.ok) {
       throw StateError('$entry did not compile: ${compiled.error}');
     }
-    guest = await _Guest.start(ready);
+    guest = await _Guest.start(await daemon.hostPath(), ready);
 
     // **Each half is a delta, not a literal.** Staging the guest does *not*
     // remount the demo — `platformOverride` reassembles, which rebuilds while
@@ -144,7 +144,7 @@ class _Guest {
   final ServerSocket _server;
   final GuestVmService _vm;
 
-  static Future<_Guest> start(DaemonReady ready) async {
+  static Future<_Guest> start(String hostPath, DaemonReady ready) async {
     var socketPath = checkSocketPath(
       p.join(flutterwareRunDir(), 'staging-${ready.sessionId}.sock'),
     );
@@ -154,7 +154,7 @@ class _Guest {
       InternetAddress(socketPath, type: InternetAddressType.unix),
       0,
     );
-    var process = await Process.start(ready.hostPath, [
+    var process = await Process.start(hostPath, [
       ready.assetsDir,
       ready.icuData,
       socketPath,

@@ -55,7 +55,7 @@ Future<void> main(List<String> args) async {
   );
   stdout.writeln('[spike] ${ready.entries.length} entries');
 
-  var guest = await _Guest.launch(ready);
+  var guest = await _Guest.launch(await daemon.hostPath(), ready);
   try {
     // Every entry that renders, so the walk cost is reported against a range of
     // tree sizes rather than against whichever one happened to be first. The
@@ -218,7 +218,7 @@ class _Guest {
   final File _socketFile;
   final GuestVmService vmService;
 
-  static Future<_Guest> launch(DaemonReady ready) async {
+  static Future<_Guest> launch(String hostPath, DaemonReady ready) async {
     var socketPath = checkSocketPath(
       p.join(flutterwareRunDir(), 'watch_spike.sock'),
     );
@@ -228,7 +228,7 @@ class _Guest {
       InternetAddress(socketPath, type: InternetAddressType.unix),
       0,
     );
-    var process = await Process.start(ready.hostPath, [
+    var process = await Process.start(hostPath, [
       ready.assetsDir,
       ready.icuData,
       socketPath,
