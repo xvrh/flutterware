@@ -277,6 +277,11 @@ class EmbeddedEngine extends ChangeNotifier {
   /// The guest's last few lines, kept for the message above.
   final _guestLog = <String>[];
 
+  /// What the guest has printed lately, for a caller diagnosing one that came
+  /// up wrong. The same lines [_onSocketClosed] quotes, and for the same
+  /// reason: the guest is the only thing that knows why it is not working.
+  String get guestOutput => _guestLog.join('\n');
+
   void _rememberGuestOutput(String line) {
     _guestLog.add(line);
     if (_guestLog.length > 20) _guestLog.removeAt(0);

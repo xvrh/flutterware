@@ -712,16 +712,29 @@ class _GuestSession {
         '${viewport.height}',
       ]);
       var vmServiceUri = Completer<String>();
+      // The guest's last few lines, kept rather than drained: an engine that
+      // cannot run its kernel says so here and nowhere else, and the connect
+      // below is what asks for them.
+      var printed = <String>[];
+      void remember(String line) {
+        printed.add(line);
+        if (printed.length > 20) printed.removeAt(0);
+      }
+
       guest.stdout
           .transform(const SystemEncoding().decoder)
           .transform(const LineSplitter())
           .listen((line) {
+            remember(line);
             var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
             if (match != null && !vmServiceUri.isCompleted) {
               vmServiceUri.complete(match.group(1));
             }
           });
-      unawaited(guest.stderr.drain<void>());
+      guest.stderr
+          .transform(const SystemEncoding().decoder)
+          .transform(const LineSplitter())
+          .listen(remember);
 
       var connected = await Future.any<Object?>([server.first, guest.exitCode]);
       if (connected is! Socket) {
@@ -744,7 +757,10 @@ class _GuestSession {
         connected,
         server,
         FrameReader(),
-        await GuestVmService.connect(announced),
+        await GuestVmService.connect(
+          announced,
+          describeGuest: () => printed.join('\n'),
+        ),
         workDir,
       );
       connected.listen(session._onData);

@@ -74,21 +74,73 @@ class GuestVmService {
   static const _registrationPoll = Duration(milliseconds: 25);
 
   /// Connects to the `http://` URI the guest prints on stdout at startup.
-  static Future<GuestVmService> connect(String httpUri) async {
+  ///
+  /// [describeGuest] is what the guest has printed so far, asked for only when
+  /// this fails — see [mainIsolate], which is the one failure here that is not
+  /// about the socket and the one the guest's own output answers.
+  static Future<GuestVmService> connect(
+    String httpUri, {
+    String Function()? describeGuest,
+  }) async {
     var ws = httpUri.replaceFirst('http://', 'ws://');
     var service = await vmServiceConnectUri('${ws}ws');
     try {
-      var vm = await service.getVM();
-      var isolates = vm.isolates;
-      if (isolates == null || isolates.isEmpty) {
-        throw StateError('the guest reported no isolates');
-      }
-      return GuestVmService._(service, isolates.first.id!);
+      return GuestVmService._(
+        service,
+        await mainIsolate(service, describeGuest: describeGuest),
+      );
     } catch (_) {
       await service.dispose();
       rethrow;
     }
   }
+
+  /// The guest's main isolate, or a failure that says why there is none.
+  ///
+  /// **A service with no isolates is an engine that could not run its program**,
+  /// not one that is slow to start it. Measured against this repo's guest: a
+  /// healthy one has its isolate registered before the service prints the URI
+  /// this connects to, and one whose `kernel_blob.bin` the engine refuses —
+  /// truncated for the measurement — prints *"Could not create root isolate"*
+  /// and then goes on printing the same URI, listening, holding nothing.
+  ///
+  /// So the empty list was reported as `the guest reported no isolates`, which
+  /// names the messenger: the engine has already said on stderr which kernel it
+  /// could not load, and that line is what a consumer needs. It arrives through
+  /// `debugPrint`, which throttles, so a busy start can float it past the
+  /// failure — hence [describeGuest] rather than "look above".
+  ///
+  /// [window] is insurance against an engine that orders the two the other way
+  /// round, on a platform where nothing here has measured it. It costs a
+  /// healthy start nothing, and is only ever paid by a guest that is broken.
+  @visibleForTesting
+  static Future<String> mainIsolate(
+    VmService service, {
+    String Function()? describeGuest,
+    Duration window = _isolateWindow,
+  }) async {
+    var waited = Stopwatch()..start();
+    while (true) {
+      var isolates = (await service.getVM()).isolates;
+      if (isolates != null && isolates.isNotEmpty) return isolates.first.id!;
+      if (waited.elapsed >= window) {
+        var printed = describeGuest?.call() ?? '';
+        var reason = printed.isEmpty
+            ? 'The engine says which kernel on its stderr.'
+            : 'It printed:\n$printed';
+        throw StateError(
+          'the guest is listening on its VM service and holds no isolate, '
+          'which is what an engine that could not run its kernel leaves '
+          'behind. $reason',
+        );
+      }
+      await Future<void>.delayed(_registrationPoll);
+    }
+  }
+
+  /// How long [mainIsolate] waits for an isolate that a healthy guest has
+  /// already registered.
+  static const _isolateWindow = Duration(seconds: 2);
 
   /// Loads [dillPath] into the live isolate and asks the framework to rebuild.
   ///

@@ -332,7 +332,13 @@ class TesterHost {
     // still be holding them.
     var log = File(logPath)..parent.createSync(recursive: true);
     var logSink = _logFile = log.openSync(mode: FileMode.write);
+    // The tail the log already holds, in hand: a connect that finds a service
+    // with no isolate asks for it, and pointing that failure at a file it
+    // would have to be told to open is one step more than it needs.
+    var printed = <String>[];
     void tee(String line) {
+      printed.add(line);
+      if (printed.length > 20) printed.removeAt(0);
       try {
         logSink.writeStringSync('$line\n');
       } on FileSystemException {
@@ -416,7 +422,10 @@ class TesterHost {
         'the ${program.name} harness never became ready',
       ),
     );
-    var vm = _vm = await GuestVmService.connect(await vmServiceUri.future);
+    var vm = _vm = await GuestVmService.connect(
+      await vmServiceUri.future,
+      describeGuest: () => printed.join('\n'),
+    );
     if (program.eventStream case var stream?) {
       _events = vm
           .extensionEvents(stream)

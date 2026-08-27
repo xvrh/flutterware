@@ -80,6 +80,64 @@ class _FakeGuest {
   Future<void> close() => _toClient.close();
 }
 
+/// A VM service that answers `getVM` and nothing else, with an isolate list the
+/// test decides when to fill.
+class _FakeVm {
+  _FakeVm({this.isolateAfter = 0}) {
+    service = VmService(_toClient.stream, _onRequest);
+  }
+
+  /// How many `getVM` calls answer an empty list before an isolate appears.
+  /// Null never fills it — the engine that could not run its kernel, whose
+  /// service listens all the same.
+  final int? isolateAfter;
+
+  late final VmService service;
+  final _toClient = StreamController<String>();
+
+  /// Every `getVM` the client made.
+  var calls = 0;
+
+  void _onRequest(String message) {
+    var request = jsonDecode(message) as Map<String, Object?>;
+    if (request['method'] != 'getVM') return;
+    calls++;
+    var registered = isolateAfter != null && calls > isolateAfter!;
+    _toClient.add(
+      jsonEncode({
+        'jsonrpc': '2.0',
+        'id': request['id'],
+        'result': {
+          'type': 'VM',
+          'name': 'vm',
+          'architectureBits': 64,
+          'hostCPU': 'test',
+          'operatingSystem': 'test',
+          'targetCPU': 'test',
+          'version': 'test',
+          'pid': 1,
+          'startTime': 0,
+          'isolates': [
+            if (registered)
+              {
+                'type': '@Isolate',
+                'id': 'isolates/1',
+                'number': '1',
+                'name': 'main',
+                'isSystemIsolate': false,
+              },
+          ],
+          'isolateGroups': <Object?>[],
+          'systemIsolates': <Object?>[],
+          'systemIsolateGroups': <Object?>[],
+        },
+      }),
+    );
+  }
+
+  Future<void> close() => _toClient.close();
+}
+
 void main() {
   group('requireExtension', () {
     test('waits out a guest that has not registered yet', () async {
@@ -204,6 +262,87 @@ void main() {
             (e) => e.message,
             'message',
             contains('the guest is gone'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('mainIsolate', () {
+    test('takes the isolate a healthy guest already holds', () async {
+      // Measured against the real guest: the root isolate is registered before
+      // the service prints the URI the host connects to, so the first ask
+      // answers and nothing waits.
+      var vm = _FakeVm();
+      addTearDown(vm.close);
+
+      expect(await GuestVmService.mainIsolate(vm.service), 'isolates/1');
+      expect(vm.calls, 1, reason: 'a healthy guest is asked once');
+    });
+
+    test('waits out a guest that registers one late', () async {
+      // Insurance rather than a measurement: no engine here orders the two
+      // this way, and one that did would otherwise fail on a start that was
+      // about to work.
+      var vm = _FakeVm(isolateAfter: 3);
+      addTearDown(vm.close);
+
+      expect(
+        await GuestVmService.mainIsolate(
+          vm.service,
+          window: const Duration(seconds: 2),
+        ),
+        'isolates/1',
+      );
+      expect(vm.calls, 4);
+    });
+
+    test('reports the engine, not the empty list', () async {
+      // The bug this exists for. `the guest reported no isolates` named the
+      // messenger, and the engine had already said which kernel it could not
+      // load — on a stderr that `debugPrint` throttles, so the line a consumer
+      // needed routinely arrived after the failure that swallowed it.
+      var vm = _FakeVm(isolateAfter: null);
+      addTearDown(vm.close);
+
+      await expectLater(
+        GuestVmService.mainIsolate(
+          vm.service,
+          window: const Duration(milliseconds: 100),
+          describeGuest: () =>
+              '[ERROR:flutter/runtime/runtime_controller.cc(576)] '
+              'Could not create root isolate.',
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('holds no isolate'),
+              contains('could not run its kernel'),
+              contains('Could not create root isolate'),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('points at stderr when it has nothing the guest printed', () async {
+      // `LiveSession` attaches to a guest somebody else spawned and holds none
+      // of its output. The diagnosis still has to name where the reason is.
+      var vm = _FakeVm(isolateAfter: null);
+      addTearDown(vm.close);
+
+      await expectLater(
+        GuestVmService.mainIsolate(
+          vm.service,
+          window: const Duration(milliseconds: 50),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('on its stderr'),
           ),
         ),
       );
