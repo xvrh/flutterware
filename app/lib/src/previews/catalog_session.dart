@@ -1524,7 +1524,10 @@ class CatalogSession extends ChangeNotifier {
       if (_disposed) return;
 
       var uri = await engine.vmServiceUri;
-      var vmService = await GuestVmService.connect(uri);
+      var vmService = await GuestVmService.connect(
+        uri,
+        describeGuest: () => engine.guestOutput,
+      );
       if (_disposed) {
         // Same shape as the connect above: [dispose] closed a null, so the
         // connection this await produced is ours to close.
