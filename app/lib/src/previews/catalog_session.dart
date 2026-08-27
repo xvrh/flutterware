@@ -1866,8 +1866,15 @@ class CatalogSession extends ChangeNotifier {
   ///
   /// Explicit rather than automatic on save: nothing watches the project yet,
   /// and a catalog that reloads itself mid-refactor is its own annoyance.
+  ///
+  /// **[selected], never [active].** The two differ exactly when the stage is
+  /// showing the catalog rather than a demo: the guest goes on holding the last
+  /// entry it loaded, because letting go of it would make the next click cost a
+  /// cold start again. Reloading *that* re-selects it — so a page of pictures
+  /// turned into a demo nobody had asked for. There is nothing on the stage for
+  /// this to rebuild, and doing nothing is the honest answer.
   Future<void> reload() async {
-    var entry = selected ?? active;
+    var entry = selected;
     if (entry == null) return;
     // Forgotten first, because the guest only resets its own record when the
     // *entry* changes — a reload of the one already on screen would otherwise
@@ -1892,7 +1899,7 @@ class CatalogSession extends ChangeNotifier {
   /// guest is not reassembled and the demo keeps whatever state it was holding;
   /// alt-tabbing must not be a way to lose your place.
   Future<void> reloadIfChanged() {
-    var entry = selected ?? active;
+    var entry = selected;
     if (entry == null || phase != CatalogSessionPhase.ready) {
       return Future.value();
     }

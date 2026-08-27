@@ -642,29 +642,6 @@ void main() {
   });
 
   group('what a page is told while it fills', () {
-    test('the pass counts the ask, not the package', () async {
-      // The harness renders what the page named and stops there, so a
-      // denominator of every entry would climb to a fraction and stall for
-      // ever.
-      var (store, _) = storeOf();
-      expect(store.pass, (done: 0, total: 0), reason: 'nothing asked for yet');
-      store.wantAll([alpha, beta]);
-      expect(store.pass.total, 2);
-      await until(() => store.pass.done == 2);
-      expect(store.busy, isFalse, reason: 'and the surface can retire');
-    });
-
-    test('a scroll replaces the ask, and the count with it', () async {
-      var (store, _) = storeOf();
-      store.wantAll([alpha, beta]);
-      await until(() => store.pass.done == 2);
-      store.wantAll([gamma]);
-      expect(store.pass, (
-        done: 0,
-        total: 1,
-      ), reason: 'the work restarted, so the count restarted');
-    });
-
     test('the entry being photographed is named while it is', () async {
       var marked = <String?>[];
       var store = PreviewThumbnails(
@@ -690,7 +667,7 @@ void main() {
       var seen = <String?>[];
       store.addListener(() => seen.add(store.rendering));
       store.wantAll([alpha, beta]);
-      await until(() => store.pass.done == 2);
+      await until(() => !store.busy && marked.length == 2);
       expect(marked, [alpha.id, beta.id]);
       expect(
         seen,

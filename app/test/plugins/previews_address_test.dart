@@ -115,6 +115,59 @@ void main() {
 }
 
 void _addressMovedTests() {
+  group('an address with no entry in it', () {
+    test('is a request for the catalog when it came from a demo', () {
+      // The breadcrumb, and the All demos row. Without this there is no way
+      // back to the sheet at all.
+      expect(
+        wentUpToCatalog(
+          hasFollowed: true,
+          sessionChanged: false,
+          namesEntry: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('and is nothing of the kind on a remount', () {
+      // The rail link and a plugin switch name the package because that is all
+      // they know. Read as a request, they threw away the demo you were on and
+      // the folder you were standing in, every time you left and came back.
+      expect(
+        wentUpToCatalog(
+          hasFollowed: false,
+          sessionChanged: true,
+          namesEntry: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('nor on a session swapped under a mounted panel', () {
+      // A config reload builds a fresh session where the panel stayed put.
+      // Saving `tool/flutterware.dart` is not a navigation.
+      expect(
+        wentUpToCatalog(
+          hasFollowed: true,
+          sessionChanged: true,
+          namesEntry: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('and an address that does name one is never either', () {
+      expect(
+        wentUpToCatalog(
+          hasFollowed: true,
+          sessionChanged: false,
+          namesEntry: true,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('addressMoved', () {
     test('a first call always hands over, including a null', () {
       expect(

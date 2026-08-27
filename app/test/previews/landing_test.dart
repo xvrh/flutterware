@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
@@ -6,6 +8,7 @@ import 'package:flutterware_app/src/previews/catalog_entry.dart';
 import 'package:flutterware_app/src/previews/catalog_session.dart';
 import 'package:flutterware_app/src/previews/catalog_view.dart';
 import 'package:flutterware_app/src/previews/protocol.dart';
+import 'package:flutterware_app/src/previews/staged_device.dart';
 import 'package:flutterware_app/src/ui/aside.dart';
 
 /// What the panel looks like before a demo has been picked.
@@ -140,6 +143,50 @@ void main() {
     expect(find.text('Beta'), findsOneWidget);
   });
 
+  group('a warm guest is not a selection', () {
+    // The guest goes on holding the last entry it loaded after you leave it:
+    // letting go would make the next click a cold start again. Anything that
+    // treats that as "what is on screen" turns the catalog into a demo.
+    CatalogSession warm() => session()
+      ..entries = const [alpha, beta]
+      ..phase = CatalogSessionPhase.ready
+      ..active = beta;
+
+    test('so a check for edits on a catalog page selects nothing', () {
+      // Fired from the panel's own mount and from the window regaining focus —
+      // so leaving the plugin and coming back, or merely alt-tabbing, landed
+      // you on the demo you had just left.
+      var s = warm();
+
+      unawaited(s.reloadIfChanged());
+
+      expect(s.selected, isNull);
+      s.dispose();
+    });
+
+    test('and neither does a reload', () {
+      var s = warm();
+
+      unawaited(s.reload());
+
+      expect(
+        s.selected,
+        isNull,
+        reason: 'there is nothing on the stage for a reload to rebuild',
+      );
+      s.dispose();
+    });
+
+    test('while a demo on the stage still reloads', () {
+      var s = warm()..selected = beta;
+
+      unawaited(s.reloadIfChanged());
+
+      expect(s.selected, beta);
+      s.dispose();
+    });
+  });
+
   group('a click that beats the guest', () {
     test('still counts as the ask, so the row lights', () {
       // The list is live seconds before the guest now, off the scan. A row you
@@ -169,6 +216,44 @@ void main() {
       expect(find.text('Pick a demo'), findsNothing);
       expect(find.textContaining('Compiling Beta'), findsOneWidget);
     });
+  });
+
+  testWidgets('and nothing is offered to inspect until there is a demo', (
+    tester,
+  ) async {
+    // The dock reads the *live guest*, so on the catalog it went on showing the
+    // tree, the knobs and the console of whichever demo was visited last — an
+    // inspector attached to something that is not on the screen.
+    var s = session(scanned: const [alpha, beta]);
+    addTearDown(s.dispose);
+    await pump(tester, s);
+
+    expect(find.text('Elements'), findsNothing);
+    expect(find.text('Semantics'), findsNothing);
+
+    s.wantedEntryId = beta.id;
+    await tester.pump();
+
+    expect(find.text('Elements'), findsOneWidget);
+  });
+
+  testWidgets('and the bar over the stage comes and goes with it', (
+    tester,
+  ) async {
+    // Same rule, other end of the pane: a device picker, the axes the entry on
+    // screen declared, a zoom for the stage and a button that photographs the
+    // live frame are all about a demo, and on the catalog they were all the
+    // last one's.
+    var s = session(scanned: const [alpha, beta]);
+    addTearDown(s.dispose);
+    await pump(tester, s);
+
+    expect(find.byType(StagedDevice), findsNothing);
+
+    s.wantedEntryId = beta.id;
+    await tester.pump();
+
+    expect(find.byType(StagedDevice), findsOneWidget);
   });
 
   testWidgets('and no folder is opened for a selection nobody made', (

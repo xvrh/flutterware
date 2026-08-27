@@ -75,14 +75,17 @@ void main() {
           entry('demo/file$g.dart', 'e${g}_$i', group: 'Group $g'),
     ];
 
-    List<PreviewSheetSection> sectionsFor(String? scope) =>
-        previewSheetSections(
-          buildCatalogTree([
-            for (var e in catalog())
-              if (scopeCovers(scope, e.path)) e,
-          ]),
-          screenOf: (_) => const Size(400, 300),
-        );
+    List<PreviewSheetSection> sectionsFor(
+      String? scope, {
+      List<CatalogEntry>? of,
+    }) => previewSheetSections(
+      buildCatalogTree([
+        for (var e in of ?? catalog())
+          if (scopeCovers(scope, e.path)) e,
+      ]),
+      screenOf: (_) => const Size(400, 300),
+      rootLabel: scopeHeading(scope),
+    );
 
     test('holds one folder and nothing beside it', () {
       var sections = sectionsFor('demo/file2.dart');
@@ -94,6 +97,48 @@ void main() {
 
     test('and All demos holds every one of them', () {
       expect(sectionsFor(null).length, 6);
+    });
+
+    test('says which folder it is, even when the tree has dropped it', () {
+      // [buildCatalogTree] drops the directories every entry shares, and for a
+      // narrowed sheet that is the folder you are standing in — so a directory
+      // of plain files came out as a row of tiles under no heading, hard
+      // against the top of the pane. The folder next to it, whose entries had a
+      // group, kept its branch and was named. One folder titled, the next not.
+      var entries = [
+        entry('demo/team/avatar.dart', 'a'),
+        entry('demo/team/roster.dart', 'b'),
+        entry('demo/loose.dart', 'c'),
+      ];
+      var sections = sectionsFor('demo/team', of: entries);
+
+      expect(sections.single.label, 'team');
+      expect(sections.single.entries.map((e) => e.name), ['a', 'b']);
+    });
+
+    test('and its subfolders come first, as they do in the tree', () {
+      var entries = [
+        entry('demo/team/avatar.dart', 'a'),
+        entry('demo/team/roles/lead.dart', 'b'),
+      ];
+
+      expect(sectionsFor('demo/team', of: entries).map((s) => s.label), [
+        'roles',
+        'team',
+      ]);
+    });
+
+    test('while All demos leaves its loose entries unnamed', () {
+      // There is no folder to name them after — a rule stands in for the
+      // heading, and inventing one would be inventing a group the catalog does
+      // not have.
+      var entries = [
+        entry('demo/file0.dart', 'a', group: 'Group 0'),
+        entry('demo/file0.dart', 'b', group: 'Group 0'),
+        entry('demo/loose.dart', 'c'),
+      ];
+
+      expect(sectionsFor(null, of: entries).last.label, isNull);
     });
   });
 
