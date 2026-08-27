@@ -12,19 +12,31 @@ import 'package:flutterware_app/src/utils/image_clipboard.dart';
 /// renamed argument key compiles on both sides and fails only under a pointer.
 /// That is what these pin.
 void main() {
+  // Up here rather than inside `answerWith`, which is where it used to happen:
+  // off macOS every test that calls it is skipped, and then `tearDown` reached
+  // for a binding nothing had built.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   const channel = MethodChannel('flutterware/clipboard');
   var png = Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10]);
 
   late List<MethodCall> calls;
 
   void answerWith(Object? Function(MethodCall call) handler) {
-    TestWidgetsFlutterBinding.ensureInitialized();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
           calls.add(call);
           return handler(call);
         });
   }
+
+  // **Three of the four only have something to pin on macOS.** `setPng`
+  // refuses before it reaches the channel anywhere else, so off macOS they
+  // would be asserting the refusal rather than the contract. The last test is
+  // the one that runs everywhere, and it is the one that says so.
+  var noChannel = ImageClipboard.isSupported
+      ? null
+      : 'the clipboard channel is implemented in the macOS runner only';
 
   setUp(() => calls = []);
 
@@ -44,14 +56,14 @@ void main() {
     // declines — and declines at run time, in the one path no test covers.
     var argument = (calls.single.arguments as Map)['png'] as Uint8List;
     expect(argument, png);
-  });
+  }, skip: noChannel);
 
   test('a platform that says it did not write is a failure, not a shrug', () async {
     answerWith((_) => false);
     // The alternative is a copy that reports success and puts nothing on the
     // clipboard, which is discovered at the paste — by then nowhere near here.
     await expectLater(ImageClipboard.setPng(png), throwsA(isA<StateError>()));
-  });
+  }, skip: noChannel);
 
   test('an error from the platform is not swallowed', () async {
     answerWith((_) => throw PlatformException(code: 'decode_failed'));
@@ -59,7 +71,7 @@ void main() {
       ImageClipboard.setPng(png),
       throwsA(isA<PlatformException>()),
     );
-  });
+  }, skip: noChannel);
 
   test('support tracks where the preview can actually exist', () {
     // The picture being copied is composited by the embedder host, which is

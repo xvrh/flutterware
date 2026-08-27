@@ -3,10 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/ui/capture_button.dart';
+import 'package:flutterware_app/src/utils/image_clipboard.dart';
 
-// These run where CI runs, on macOS, where the clipboard channel is
-// supported — the branch the button actually ships on.
+// **All four drive the copy branch, which exists only where the clipboard
+// channel does.** Off macOS the button ships its other half — save as the
+// primary action — so there is no `content_copy` to tap and no "Copy …" row to
+// read, and every assertion below would be describing a widget that is
+// correctly absent. Skipped rather than rewritten: what they pin is the branch
+// that ships, and it ships where the runner implementing the channel is built.
 void main() {
+  // `testWidgets` takes a bool here, so the reason is the comment above.
+  var noChannel = !ImageClipboard.isSupported;
   var clipboard = <Uint8List>[];
 
   Future<void> pump(
@@ -64,7 +71,7 @@ void main() {
     expect(find.byIcon(Icons.check), findsOneWidget);
     await tester.pump(const Duration(seconds: 2));
     expect(find.byIcon(Icons.content_copy), findsOneWidget);
-  });
+  }, skip: noChannel);
 
   testWidgets('the menu names every target, primary first', (tester) async {
     await pump(
@@ -88,7 +95,7 @@ void main() {
     expect(clipboard, [
       [2],
     ]);
-  });
+  }, skip: noChannel);
 
   testWidgets('dismissing the menu un-hovers a previewing target', (
     tester,
@@ -116,7 +123,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(hovers.last, false);
-  });
+  }, skip: noChannel);
 
   testWidgets('a null capture is a quiet refusal', (tester) async {
     await pump(
@@ -134,5 +141,5 @@ void main() {
     expect(clipboard, isEmpty);
     expect(find.byIcon(Icons.check), findsNothing);
     expect(find.byType(SnackBar), findsNothing);
-  });
+  }, skip: noChannel);
 }
