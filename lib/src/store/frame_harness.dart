@@ -17,6 +17,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -61,7 +62,9 @@ Future<void> _serve(StoreFrame Function(StoreShot shot) build) async {
   developer.registerExtension('ext.flutterware.store.compose', (_, args) async {
     try {
       return developer.ServiceExtensionResponse.result(
-        jsonEncode(await _compose(build, manifest: args['manifest']!)),
+        jsonEncode(
+          await composeStoreFrames(build, manifest: args['manifest']!),
+        ),
       );
     } catch (error, stack) {
       return developer.ServiceExtensionResponse.result(
@@ -110,7 +113,15 @@ class _Job {
   final double canvasRatio;
 }
 
-Future<Map<String, Object?>> _compose(
+/// Every job in [manifest], composed and captured.
+///
+/// Answers `{'written': [paths], 'failures': {slug: why}}` — the two halves a
+/// host needs, and a job is in exactly one of them. Visible so a test can put a
+/// job in front of it directly: the alternative is reaching the harness through
+/// a spawned `flutter_tester` and a service extension, which tests the
+/// transport rather than the rule.
+@visibleForTesting
+Future<Map<String, Object?>> composeStoreFrames(
   StoreFrame Function(StoreShot shot) build, {
   required String manifest,
 }) async {
@@ -154,16 +165,9 @@ Future<Map<String, Object?>> _compose(
           ),
         );
         try {
-          // Read once and shared, so a frame that paints its own shot and a
-          // neighbour does not read the same file twice.
-          var loaded = <String, MemoryImage>{};
-          MemoryImage load(String path) => loaded.putIfAbsent(
-            path,
-            () => MemoryImage(File(path).readAsBytesSync()),
-          );
           var shot = StoreShot(
-            image: load(job.image),
-            set: [for (var path in job.set) load(path)],
+            image: _ShotImage(job.image),
+            set: [for (var path in job.set) _ShotImage(path)],
             imageSize: Size(device.width, device.height),
             slug: job.slug,
             index: job.index,
@@ -175,10 +179,10 @@ Future<Map<String, Object?>> _compose(
           await tester.pumpWidget(
             StoreFrameStage(shot: shot, child: build(shot)),
           );
-          // A `MemoryImage` decodes off the real event loop, which fake time
-          // never runs — so without this turn the frame is captured with the
-          // app's own pixels still missing from it, and the picture is a
-          // composition around a hole.
+          // A decode happens on the real event loop, which fake time never
+          // runs — so without this turn the frame is captured with the app's
+          // own pixels still missing from it, and the picture is a composition
+          // around a hole.
           //
           // **Every `Image` the frame placed**, not just the shot's own. It
           // was `precacheImage(shot.image, …find.byType(Image))` — singular,
@@ -187,11 +191,37 @@ Future<Map<String, Object?>> _compose(
           // that hole. Asked of the tree rather than of the job, so what gets
           // decoded is what was actually placed: a frame that ignores
           // [StoreShot.set] pays nothing.
+          //
+          // The `onError` is what makes this a check rather than only a wait.
+          // [precacheImage] completes its future either way — a decode that
+          // failed is indistinguishable from one that worked, from the
+          // `await` — so without a handler the job walked on and captured the
+          // hole the precache exists to prevent, and the export reported it as
+          // a screenshot. Handled here, the failure is also kept off
+          // `FlutterError`, whose only account of two of these is "Multiple
+          // exceptions (2) were detected", naming neither file.
+          var unreadable = <String, Object>{};
           await tester.runAsync(() async {
             for (var element in find.byType(Image).evaluate()) {
-              await precacheImage((element.widget as Image).image, element);
+              var provider = (element.widget as Image).image;
+              await precacheImage(
+                provider,
+                element,
+                onError: (error, _) => unreadable['$provider'] ??= error,
+              );
             }
           });
+          if (unreadable.isNotEmpty) {
+            // Reported and **not written**: a store screenshot with a hole in
+            // it is worse than a set that is visibly one short, because only
+            // one of the two is noticed before upload.
+            failures[job.slug] = [
+              for (var MapEntry(key: provider, value: error)
+                  in unreadable.entries)
+                'unreadable capture $provider: $error',
+            ].join('\n');
+            return;
+          }
           await tester.pump();
           await _capture(tester, job.out);
           written.add(job.out);
@@ -216,6 +246,99 @@ Future<Map<String, Object?>> _compose(
   }
 
   return {'written': written, if (failures.isNotEmpty) 'failures': failures};
+}
+
+/// A capture on disk, read when something resolves it and not before.
+///
+/// The laziness is the point: [StoreShot.set] is the whole set, so an eager
+/// provider makes every job read every file — 225 reads for a fifteen-shot set,
+/// nearly all of them for pictures no frame paints.
+///
+/// **Why this is not a `FileImage`.** `FileImage` is lazy already and hangs
+/// here, for a reason that is about the test binding rather than about files.
+/// An `Image` in the pumped tree resolves its own provider during
+/// `pumpWidget`, so the load starts inside `FakeAsync`'s zone — where
+/// `scheduleMicrotask` is overridden to a queue that only `flushMicrotasks`
+/// drains, and only `pump` calls that. `FileImage`'s load awaits
+/// `File.length()`, whose completion arrives on the real event loop but whose
+/// continuation is scheduled as one of those queued microtasks. `runAsync`
+/// runs the real loop and never drains that queue, so the load parks mid-read
+/// and the [precacheImage] below — which finds the very same parked completer
+/// in the image cache — waits on it forever. Measured: the future advances one
+/// step per alternating `pump`/`runAsync` pair, five pairs to finish one PNG.
+///
+/// Reading with `readAsBytesSync` removes every `dart:io` await, leaving only
+/// the engine's own decode — which completes through a synchronous completer,
+/// resuming in place rather than through the queue. That is the shape
+/// `MemoryImage` has, and the reason it worked.
+///
+/// Keyed by path **and by what was at it**, so two jobs painting the same
+/// neighbour share one decode through the image cache — where the eager
+/// `MemoryImage`s, compared by byte identity, could only ever share within a
+/// job — and a rerun over a rewritten capture does not.
+///
+/// The second half of that key is not optional, and the reason is the guest.
+/// `StoreFrameRunner` keeps it warm on purpose, `flutter_test` never clears
+/// `PaintingBinding.imageCache`, and the capture path an export composes from
+/// is fully deterministic — same output, same store, same class, same locale,
+/// same numbered name, run after run. A key of path alone therefore *hits* on
+/// the previous export's decode: the app changes, the capture on disk changes,
+/// and the composition ships the pixels from last time. Measured before this
+/// stamp existed, driving two composes over one path whose bytes were replaced
+/// in between: byte-identical output. The same key also cached the *failure* of
+/// an unreadable capture, so fixing one and exporting again kept reporting it
+/// broken until the studio was restarted.
+///
+/// A stat rather than a hash of the bytes, because the bytes are what this
+/// exists not to read. Resolution is the filesystem's — measured here at
+/// microseconds, and an export is tens of seconds of running an app, so two
+/// captures at one path never share a stamp. A missing file stats to
+/// `notFound`, size -1 and epoch, which is a stable key that fails at read time
+/// like any other unreadable capture rather than throwing here.
+///
+/// Two tests hold this in place: `test/store/shot_image_test.dart` for the
+/// load's shape, and `test/store/compose_freshness_test.dart` for the stamp —
+/// which composes twice over one path and fails if the second one is the
+/// first one again.
+class _ShotImage extends ImageProvider<_ShotImage> {
+  _ShotImage(this.path) : _stamp = _stampOf(path);
+
+  final String path;
+
+  /// What was at [path] when the job was built — mtime and length.
+  final String _stamp;
+
+  static String _stampOf(String path) {
+    var stat = File(path).statSync();
+    return '${stat.modified.microsecondsSinceEpoch}:${stat.size}';
+  }
+
+  @override
+  Future<_ShotImage> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture<_ShotImage>(this);
+
+  @override
+  ImageStreamCompleter loadImage(_ShotImage key, ImageDecoderCallback decode) =>
+      MultiFrameImageStreamCompleter(
+        codec: _load(decode),
+        scale: 1,
+        debugLabel: path,
+        informationCollector: () => [ErrorDescription('Path: $path')],
+      );
+
+  Future<ui.Codec> _load(ImageDecoderCallback decode) async => decode(
+    await ui.ImmutableBuffer.fromUint8List(File(path).readAsBytesSync()),
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is _ShotImage && other.path == path && other._stamp == _stamp;
+
+  @override
+  int get hashCode => Object.hash(path, _stamp);
+
+  @override
+  String toString() => 'StoreShotImage("$path")';
 }
 
 /// `fr-CA` into a `Locale`, because that is the spelling a declaration uses and

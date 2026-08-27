@@ -6372,6 +6372,11 @@ final resultShapes = <String, ResultShape>{
               'type': 'int',
               'doc': 'Scenarios that failed while producing this set.',
             },
+            <String, Object?>{
+              'name': 'framesFailed',
+              'type': 'int',
+              'doc': 'Shots whose frame could not be composed, and so were not written.',
+            },
           ],
         },
       },
@@ -6440,6 +6445,11 @@ final resultShapes = <String, ResultShape>{
                     'type': 'int',
                     'doc': 'Scenarios that failed while producing this set.',
                   },
+                  <String, Object?>{
+                    'name': 'framesFailed',
+                    'type': 'int',
+                    'doc': 'Shots whose frame could not be composed, and so were not written.',
+                  },
                 ],
               },
             },
@@ -6497,6 +6507,12 @@ final resultShapes = <String, ResultShape>{
         'name': 'failed',
         'type': 'int',
         'doc': 'Scenarios that failed while producing this set.',
+      },
+      <String, Object?>{
+        'name': 'framesFailed',
+        'type': 'int',
+        'doc':
+            'Shots whose frame could not be composed, and so were not written.',
       },
     ],
   }),

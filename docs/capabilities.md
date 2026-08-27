@@ -1879,6 +1879,7 @@ packages: List<StoreExportPackage>
     height: int
     images: List<String>   # File names, in the order they were captured, which is the order they were numbered in and the order the store will show them.
     failed: int   # Scenarios that failed while producing this set.
+    framesFailed: int   # Shots whose frame could not be composed, and so were not written.
   error: String?   # Set when the package could not be run at all.
 count: int   # How many images were written, over every package, listing and locale.
 ```

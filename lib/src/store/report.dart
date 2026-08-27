@@ -51,6 +51,7 @@ class StoreShotsSet {
     required this.images,
     required this.exportedAt,
     this.failed = 0,
+    this.framesFailed = 0,
   });
 
   final String store;
@@ -70,7 +71,19 @@ class StoreShotsSet {
   final String directory;
 
   final List<String> images;
+
+  /// Scenarios that failed while producing this set — it is short by whatever
+  /// they would have captured.
   final int failed;
+
+  /// Shots whose frame could not be composed, and so are not in [images].
+  ///
+  /// Apart from [failed] because the passes are: one never produced a capture,
+  /// the other produced one the frame pass could not read. Added after
+  /// [storeShotsReportVersion] 1 and absent from files written before it, which
+  /// is why it reads as zero rather than refusing the file.
+  final int framesFailed;
+
   final DateTime exportedAt;
 
   /// What makes two entries the same set. Deliberately not the store's locale:
@@ -89,6 +102,7 @@ class StoreShotsSet {
     'directory': directory,
     'images': images,
     if (failed > 0) 'failed': failed,
+    if (framesFailed > 0) 'framesFailed': framesFailed,
     'exportedAt': exportedAt.toIso8601String(),
   };
 
@@ -104,6 +118,7 @@ class StoreShotsSet {
       directory: '${json['directory']}',
       images: [for (var image in json['images'] as List? ?? []) '$image'],
       failed: json['failed'] as int? ?? 0,
+      framesFailed: json['framesFailed'] as int? ?? 0,
       exportedAt: at,
     );
   }

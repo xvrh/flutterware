@@ -609,6 +609,22 @@ class _SetCard extends StatelessWidget {
                   'failed while producing this set — it may be short.',
             ),
           ],
+          // Its own note rather than a number added to the one above: the two
+          // fail at different passes and are fixed differently — a scenario
+          // that failed is the app's problem, a shot that would not compose is
+          // the capture's.
+          if (set != null && set!.framesFailed > 0) ...[
+            const Gap(FwSpacing.md),
+            _Note(
+              tone: colors.red,
+              icon: Icons.broken_image_outlined,
+              text:
+                  '${set!.framesFailed} shot'
+                  '${set!.framesFailed == 1 ? '' : 's'} could not be composed '
+                  'onto this canvas and ${set!.framesFailed == 1 ? 'was' : 'were'} '
+                  'not written — the capture would not decode. Export again.',
+            ),
+          ],
         ],
       ),
     );

@@ -30,6 +30,7 @@ Map<String, dynamic> _$StoreExportSetToJson(StoreExportSet instance) =>
       'height': instance.height,
       'images': instance.images,
       'failed': instance.failed,
+      'framesFailed': instance.framesFailed,
     };
 
 Map<String, dynamic> _$StoreOpenResultToJson(StoreOpenResult instance) =>

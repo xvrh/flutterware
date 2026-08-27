@@ -62,6 +62,7 @@ class StoreExportSet {
     required this.height,
     required this.images,
     this.failed = 0,
+    this.framesFailed = 0,
   });
 
   /// `app-store` or `play`.
@@ -87,6 +88,13 @@ class StoreExportSet {
 
   /// Scenarios that failed while producing this set.
   final int failed;
+
+  /// Shots whose frame could not be composed, and so were not written.
+  ///
+  /// Counted apart from [failed] because the two go wrong at different passes
+  /// and a reader can act on only one of them: a scenario that failed produced
+  /// no capture, while this had a capture the frame pass could not read.
+  final int framesFailed;
 
   Map<String, Object?> toJson() => _$StoreExportSetToJson(this);
 }
