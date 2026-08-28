@@ -80,26 +80,42 @@ class _MotionPanelState extends State<_MotionPanel> {
 
   @override
   Widget build(BuildContext context) {
-    var place = _resolve();
-    if (place == null) {
-      return const NoPackagesConfigured(icon: Icons.movie_outlined);
-    }
+    // Rebuilds when a scan lands: the core notifies, the plugin forwards.
+    //
+    // Every other native panel does this and this one did not, so it read the
+    // core once and went cold — the scan finished, `notifyChanged` fired, and
+    // nothing here was listening. It looked fine for as long as the scan beat
+    // the first build; it stopped looking fine when the demo directory grew
+    // enough for the panel to win that race, and then "Scanning for motions…"
+    // stayed on screen until the panel was remounted by hand.
+    //
+    // Every read of the core belongs *inside* the builder, or the part left
+    // outside is the part that stays stale.
+    return AnimatedBuilder(
+      animation: widget.plugin,
+      builder: (context, _) {
+        var place = _resolve();
+        if (place == null) {
+          return const NoPackagesConfigured(icon: Icons.movie_outlined);
+        }
 
-    var result = _core.resultFor(place.package);
-    var selected = _selectedMotion(result, place);
+        var result = _core.resultFor(place.package);
+        var selected = _selectedMotion(result, place);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _MotionBand(
-          core: _core,
-          place: place,
-          result: result,
-          selected: selected,
-        ),
-        Divider(height: 1, color: context.colors.line),
-        Expanded(child: _body(context, place, result, selected)),
-      ],
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _MotionBand(
+              core: _core,
+              place: place,
+              result: result,
+              selected: selected,
+            ),
+            Divider(height: 1, color: context.colors.line),
+            Expanded(child: _body(context, place, result, selected)),
+          ],
+        );
+      },
     );
   }
 
