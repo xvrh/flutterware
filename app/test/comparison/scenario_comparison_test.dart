@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
-import 'package:flutterware_app/src/comparison/channels.dart';
+import 'package:flutterware/comparison_report.dart';
+import 'package:flutterware_app/src/comparison/scenario_diff.dart';
 import 'package:flutterware_app/src/comparison/scenario_alignment.dart';
-import 'package:flutterware_app/src/comparison/scenario_comparison.dart';
 import 'package:test/test.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
@@ -54,7 +54,7 @@ void main() {
   ScenarioComparison compare(
     List<ScenarioStepShot> base,
     List<ScenarioStepShot> head,
-  ) => ScenarioComparison.of(
+  ) => compareScenarioSteps(
     scenario: 'test/checkout.dart#Checkout',
     base: base,
     head: head,

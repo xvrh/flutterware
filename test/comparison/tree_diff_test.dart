@@ -1,6 +1,5 @@
-// ignore: implementation_imports
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutterware/src/inspect/node.dart';
-import 'package:flutterware_app/src/comparison/tree_diff.dart';
 import 'package:test/test.dart';
 
 /// Why the pixels differ, in words — the channel that turns a heatmap into a

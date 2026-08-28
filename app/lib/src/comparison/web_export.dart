@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
-import 'frame_ref.dart';
 import 'shot_cache.dart';
 import 'shot_png.dart';
 
@@ -92,6 +92,11 @@ class ComparisonWebExporter {
     onOutput?.call('[export] encoding the frames');
     index['against'] = against;
     var frames = _collect(index, cache: cache, output: output);
+    // Every reference has just been rewritten to a PNG beside this file, so
+    // the dialect the artifact declared is no longer true of the copy being
+    // written. Stamped after `_collect` rather than before, because a reader
+    // is entitled to take this as a promise the frames are there.
+    index['frames'] = ComparisonFrames.relative.name;
 
     File(p.join(output, 'index.json'))
         .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(index));

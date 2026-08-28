@@ -266,6 +266,26 @@ void main() {
       expect(decision.changed, ['assets/logo.png']);
     });
 
+    // The number beside `n rendered` is only actionable as a sentence naming
+    // a path, and one cause is one sentence however many entries carry it —
+    // which is the shape of the failure worth naming: a skip rule that
+    // answers nothing answers nothing for every entry at once.
+    test('one shared cause folds into one line', () {
+      expect(
+        foldReasons([
+          'pubspec.lock differs',
+          'pubspec.lock differs',
+          'lib/theme.dart differs',
+          'pubspec.lock differs',
+        ]),
+        {'pubspec.lock differs': 3, 'lib/theme.dart differs': 1},
+      );
+    });
+
+    test('nothing rendered is nothing to explain', () {
+      expect(foldReasons(const []), isEmpty);
+    });
+
     test('an entry nothing has compiled is never skipped', () {
       var decision = SkipDecision.of(
         entryId: 'demo/new.dart#fresh',

@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutterware_app/src/comparison/cancel.dart';
-import 'package:flutterware_app/src/comparison/channels.dart';
 import 'package:flutterware_app/src/comparison/runner.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
 import 'package:path/path.dart' as p;
@@ -104,6 +104,65 @@ void main() {
         'demo/new.dart#fresh:added',
         'demo/gone.dart#gone:removed',
       ]);
+    });
+
+    // The other half of `n rendered`. A branch that touched no widget and
+    // rendered the whole catalog anyway is not a slow comparison — it is one
+    // path the two checkouts disagree about, and until the plan carried the
+    // reason out, nothing downstream could name it.
+    test(
+      'it says why each entry it could not answer has to be rendered',
+      () async {
+        side.declared['*'] = ['demo/card.dart#card', 'demo/list.dart#list'];
+
+        // The consumer's case exactly: no source moved, and one file both
+        // checkouts disagree about — a lockfile the base's own `pub get`
+        // rewrote. It is a pixel input, so it is in every closure, so every
+        // entry renders and the diff explains none of it.
+        var plan = await runnerFor(
+          base: checkout('base', {
+            'demo/card.dart': 'same',
+            'demo/list.dart': 'same',
+            'pubspec.lock': 'one',
+          }),
+          head: checkout('head', {
+            'demo/card.dart': 'same',
+            'demo/list.dart': 'same',
+            'pubspec.lock': 'two',
+          }),
+        ).plan();
+
+        expect(plan.toRender, hasLength(2));
+        // Folded: one cause is one line, however many entries carry it.
+        expect(plan.because, {'pubspec.lock differs': 2});
+      },
+    );
+
+    test('a reason survives into the half a reader gets', () async {
+      side.declared['*'] = ['demo/card.dart#card'];
+
+      var result = await compare(
+        base: checkout('base', {'demo/card.dart': '1'}),
+        head: checkout('head', {'demo/card.dart': '2'}),
+      );
+
+      expect(result.because, {'demo/card.dart differs': 1});
+      expect(result.toJson()['because'], {'demo/card.dart differs': 1});
+    });
+
+    // Nothing to explain is nothing in the file: a reader that finds the key
+    // knows the skip rule gave up on something.
+    test('a comparison that skipped everything explains nothing', () async {
+      var files = {'demo/card.dart': '1'};
+      side.declared['*'] = ['demo/card.dart#card'];
+
+      var result = await compare(
+        base: checkout('base', files),
+        head: checkout('head', files),
+      );
+
+      expect(result.because, isEmpty);
+      expect(result.toJson().containsKey('because'), isFalse);
     });
 
     test('a plan already made is not made again', () async {

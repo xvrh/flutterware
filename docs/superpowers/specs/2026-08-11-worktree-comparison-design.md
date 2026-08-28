@@ -476,6 +476,69 @@ and found no reason to run it. Same reason a harness that would not build
 records a `note`: an empty list is also what a project with no scenarios leaves
 behind, and a reader who cannot tell those apart reads silence as a clean bill.
 
+### 8b. The artifact is API (2026-08-28)
+
+The first consumer to host one asked for a typed reader, which is the moment a
+file stops being an internal format. `package:flutterware/comparison_report.dart`
+is it, and the shape of the answer is the one `scenarios_report.dart` already
+argued: **the model moves, it is not copied.** A second reader written beside
+the writer is two hand-kept copies that drift one field apart; the model these
+classes describe already had three careers — `fw compare` builds it, the
+studio's panel renders it, the exported page parses it in a browser — and a
+consumer's script is the fourth, not a new format.
+
+**What is published is the file's vocabulary.** The rule that decided every
+case: *a type is published iff it appears in `index.json`, or produces
+something that does, from inputs that are themselves public.* So `PixelDiff`
+and `TreeDiff` are published including their `of` — they **are** the serialized
+channel payloads, and you cannot export a class while hiding a static. So are
+`ComparedItem`, the four channels, `ScenarioComparison`, `BranchDelta`,
+`FrameRef`. What fails the last clause stays in `app/`: `ScenarioStepShot`
+holds live rgba and a live tree straight out of the runner, `AlignableStep` and
+the aligner compute step identity and never reach the file. That split is why
+`scenario_comparison.dart` came apart — it was doing two jobs — and why
+`compareScenarioSteps` is a function in `app/` rather than a static on the
+model.
+
+**Versioned, and the gate is refuse-don't-guess.** `comparisonReportVersion`
+goes in the file; a reader handed a higher major throws rather than decoding
+half of it. Added fields never bump it — an older reader ignoring a new key is
+what makes adding one cheap, and every field the widened `ComparisonIndex`
+carries was added to a file that shipped without it.
+
+**Two dialects, and the file says which.** There are two `index.json`s and the
+verdict in them is identical; only the frames differ.
+
+| | previews `shots` | scenario step `frames` |
+|---|---|---|
+| cache — `~/.flutterware/comparisons/<id>/` | `ShotCache` keys | absolute paths to headerless `.raw` |
+| export — `<out>/web/` | `shots/<key>.png` | `frames/s<i>/<name>.png` |
+
+Only the export is portable, and it cannot be otherwise: a cache key is
+computed from a closure fingerprint nothing outside the runner reproduces, and
+a raw frame needs an encoder the consumer does not have. So the reader parses
+**both** — refusing the cache dialect would break `fw compare --json | parse`,
+the cheapest CI hook there is, for a reason that has nothing to do with the
+verdict — and only frame *resolution* is dialect-specific:
+`ComparisonReport.frame` refuses on a local report and names `--report=` as the
+fix. The dialect is written down (`"frames": "local" | "relative"`, absent
+meaning local) rather than sniffed from whether a path looks absolute, because
+a reader that guesses wrong hands back paths that do not exist. It is stamped
+*after* the export rewrites every reference, so it is a promise the frames are
+there.
+
+**One ranking, not one per surface.** `rankComparedFindings` is published and
+`runCompareAction` calls it, because the CLI, the MCP action and a consumer's
+script reading the same file may not have different ideas of which rows are
+worth attention or in what order.
+
+The one thing nothing asserted before and does now: the model is parsed **in a
+browser**, so `test/comparison/purity_test.dart` fails the build if anything
+under `lib/src/comparison/` reaches `package:flutter`, `dart:ui` or `dart:io`.
+`report_io.dart` is the single seam that may, exported alongside the model and
+imported by none of it. Without the guard that breaks at `flutter build web`
+time in `app/`, a long way from the import that caused it.
+
 ### Revisions
 
 Latest is enough, **except while a re-run is in flight**: the previous revision
@@ -626,12 +689,33 @@ against master fails to compile the base entirely, because `withPreviewClock`
 does not exist there.
 
 It is not self-hosting-specific: any project whose base commit pins an older
-flutterware can meet the same skew. It is also **a result rather than a
-crash** — a side that cannot start reports every entry as "this side could not
-render it" and lands on the severity ladder. Rendering each side with its own
-tooling would mean running two versions of the tool, which is a much larger
-call than this feature; the honest position for now is that a base too old to
-build with today's generator reports as broken, loudly, per entry.
+flutterware can meet the same skew, and a branch that *moves the pin* meets it
+by definition — which is the branch where seeing what moved in the pictures is
+worth the most. Rendering each side with its own tooling would mean running
+two versions of the tool, which is a much larger call than this feature; the
+honest position for now is that a base too old to build with today's generator
+cannot be compared, and says so.
+
+**Corrected in the building (2026-08-28): one refusal, not a row per entry.**
+This section used to promise a per-entry result — every entry reported as
+"this side could not render it", landing on the severity ladder rather than
+ending the comparison. Measured against a base whose catalog did not compile,
+that produced twenty-four identical rows each saying one sentence, burying
+everything else the run found. It is the argument the split branches already
+settled: one decision in the source is one row, however many things hang off
+it. So the previews half throws `SideDidNotCompile` → `ComparisonRefused`, and
+`fw compare` prints the compiler's whole output — head *and* diagnostics,
+because a refusal naming neither the file nor the symbol is barely better than
+the twenty-four rows — and **exits 64**. Reproduced 2026-08-28 by comparing
+this repo against `acfd5fcd`, a commit before `runPreviewHarness` existed.
+
+The scenario half absorbs the same skew differently, and deliberately: it is
+not the whole comparison, so it records a `note` on its half and lets the
+previews verdict stand. That note is the *only* thing separating "the harness
+would not build" from "this project has no scenarios" — both leave an empty
+list and both print `0 scenarios, 0 run, 0 skipped` — so it is written into
+`index.json` and printed above that summary line. It was neither, for a while,
+and a consumer read the silence as a pass.
 
 **SDK mismatch hard-fails**, for now. If base and head pin different Flutter
 versions, every pixel differs for reasons that are not yours. Detect it by

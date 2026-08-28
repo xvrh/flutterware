@@ -1,7 +1,10 @@
+import 'scenario_diff.dart';
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:path/path.dart' as p;
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
@@ -10,9 +13,7 @@ import 'package:flutterware/src/scenarios/network_mode.dart';
 
 import '../scenarios/runner.dart';
 import '../embedder/build_directory.dart';
-import 'frame_ref.dart';
 import 'scenario_alignment.dart';
-import 'scenario_comparison.dart';
 
 /// Running one checkout's scenarios and reading back what they captured.
 ///

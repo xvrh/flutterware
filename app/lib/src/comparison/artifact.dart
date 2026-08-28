@@ -1,13 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../shell/worktree.dart';
-import 'channels.dart';
 import 'runner.dart';
-import 'scenario_comparison.dart';
 
 /// One worktree's corner of the shared comparisons cache: `index.json` and
 /// the `scenarios/` frames it references, together.
@@ -39,6 +38,7 @@ class ScenarioResults {
     required this.skipped,
     required this.elapsed,
     this.note,
+    this.because = const {},
   });
 
   /// Every scenario, worst first — the ones that ran, and the ones that exist
@@ -59,6 +59,10 @@ class ScenarioResults {
   /// one.
   final String? note;
 
+  /// Why the skip rule could not answer the scenarios it could not answer,
+  /// folded — see [foldReasons]. The twin of [ComparisonResult.because].
+  final Map<String, int> because;
+
   int countOf(ComparedState state) =>
       items.where((item) => item.state == state).length;
 
@@ -70,6 +74,7 @@ class ScenarioResults {
     required int skipped,
     required Duration elapsed,
     String? note,
+    Map<String, int> because = const {},
   }) => ScenarioResults(
     items: [...items]
       ..sort((a, b) {
@@ -80,11 +85,13 @@ class ScenarioResults {
     skipped: skipped,
     elapsed: elapsed,
     note: note,
+    because: because,
   );
 
   Map<String, Object?> toJson() => {
     'ran': ran,
     'skipped': skipped,
+    'because': ?(because.isEmpty ? null : because),
     'ms': elapsed.inMilliseconds,
     'note': ?note,
     'counts': {
@@ -135,6 +142,7 @@ class ComparisonArtifact {
   );
 
   Map<String, Object?> toJson() => {
+    'version': comparisonReportVersion,
     'base': previews.baseSha,
     'head': previews.headRoot,
     'ms':
@@ -147,6 +155,11 @@ class ComparisonArtifact {
     // Named halves rather than one flat list: `items` at the top of a file
     // holding both would mean previews to whoever wrote it and everything to
     // whoever reads it.
+    // Where the frames are, said rather than left to be guessed at from
+    // whether a path looks absolute. This file names `ShotCache` keys and
+    // paths under `~/.flutterware`; the export rewrites both and overwrites
+    // this. See [ComparisonFrames].
+    'frames': ComparisonFrames.local.name,
     'previews': previews.toJson(),
     'scenarios': ?scenarios?.toJson(),
   };

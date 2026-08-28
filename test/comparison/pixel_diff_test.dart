@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:flutterware_app/src/comparison/pixel_diff.dart';
+import 'package:flutterware/comparison_report.dart';
 import 'package:test/test.dart';
 
 /// Two frames compared as pixels: the percentage for the row, the clusters for

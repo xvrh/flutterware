@@ -1,6 +1,7 @@
+import 'package:flutterware/comparison_report.dart';
+
 import 'dart:io';
 
-import 'frame_ref.dart';
 import 'shot_cache.dart';
 import 'shot_store.dart';
 

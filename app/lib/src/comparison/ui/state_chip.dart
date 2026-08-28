@@ -1,7 +1,7 @@
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 
 import '../../ui/theme.dart';
-import '../channels.dart';
 
 /// What a verdict looks like, in one place.
 ///

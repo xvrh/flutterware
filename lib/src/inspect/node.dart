@@ -1143,6 +1143,19 @@ final _quotedValue = RegExp(r'^".*"$', dotAll: true);
 /// hash: `ValueKey('build#a1b2c')` is the author's own value, and the only
 /// thing telling two of those apart, so it keeps every character.
 ///
+/// **Unless the bracket already opened with a type.** `GlobalObjectKey` and
+/// `ObjectKey` spell themselves as their own type, a space, and
+/// `describeIdentity` of the object they identify — so the token before the
+/// `#` is the *value's* runtime type and may be anything at all, lower-case
+/// included: `[GlobalObjectKey int#8cc0b]`. That one slipped through
+/// the rule above and cost a consumer every scenario of a `go_router` app
+/// reported as changed, forever: `_CustomNavigator` keys itself with a
+/// `GlobalObjectKey` over an `int`, so it is in the tree of every routed
+/// screen and in none of the previews, which mount a widget directly. The
+/// first alternative below admits a lower-case type token, and only where a
+/// type-shaped one has already opened the bracket — which is what keeps
+/// `ValueKey`'s `[<'build#a1b2c'>]` out of it.
+///
 /// Both the fields that carry a rendered object go through here — a widget's
 /// [InspectNode.properties] and its resolved [InspectNode.textStyle] — which
 /// is the point of doing it beside [shortenPropertyValue] rather than at each
@@ -1151,7 +1164,9 @@ String withoutIdentityHash(String value) =>
     value.replaceAllMapped(_identityHash, (match) => '${match[1]}#');
 
 final _identityHash = RegExp(
-  r'(\[|[_A-Z][A-Za-z0-9_]*(?:<[^#]*>)?)#[0-9a-f]{5}(?![0-9a-f])',
+  r'(\[[_A-Z][A-Za-z0-9_]*(?:<[^#\]]*>)? [^#\]]*'
+  r'|\['
+  r'|[_A-Z][A-Za-z0-9_]*(?:<[^#]*>)?)#[0-9a-f]{5}(?![0-9a-f])',
 );
 
 const _maxPropertyLength = 96;
