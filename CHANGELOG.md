@@ -185,6 +185,28 @@
   existed to compensate for the old default. `previewClockOrigin` is now
   `pinnedClockOrigin` (still exported from `previews_guest.dart`).
 
+- **A fragment shader loads under Impeller on macOS.**
+  `FragmentProgram.fromAsset` threw *"does not contain appropriate runtime stage
+  data for current backend (Metal)"* on any preview or scenario that reaches one
+  — an M3 ripple is one — because the shaders bundled for the catalog were
+  compiled without a Metal stage. They now carry it.
+
+  What makes it worth a line of its own is the half that is not the compiler
+  invocation. The compiled form is cached under `~/.flutterware/shaders/` per
+  engine revision, so correcting the invocation fixed nothing on any machine
+  that had already rendered a preview once: the old four-stage file sat at the
+  key the new code read, and the crash was word for word the one before it. The
+  stage list is part of that key now, so changing what is compiled is the whole
+  of invalidating what was.
+
+  Two consequences. A picture is filed under everything that decides its pixels,
+  and a shader that would not load is one of them, so `ShotKey.revision` moves
+  to v6 and every stored preview thumbnail is taken again once — the entries
+  that were drawing without their ripple are the ones that change. And the
+  compile scratch file is named per compile rather than per process: two
+  builders overlap inside one process whenever the comparison runner lists both
+  sides at once, and a cold cache is the only time either of them compiles.
+
 - **The catalog is a page of pictures, and it is rendered once.**
   Opening Previews used to be a list of names beside an empty stage. The
   question at that moment is *which* demo, and a name answers it only for

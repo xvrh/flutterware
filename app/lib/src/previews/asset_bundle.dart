@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:standard_message_codec/standard_message_codec.dart';
 
@@ -18,6 +19,101 @@ import 'asset_transformer.dart';
 /// the engine registers `FontManifest.json` when it starts, so a changed one
 /// reaches a *running* guest only through heavier means than a repaint.
 typedef BundleSync = ({bool changed, bool fontsChanged});
+
+/// The backends `impellerc` writes runtime stage data for: the **union** of
+/// every stage list flutter_tools has, in its order.
+///
+/// A union rather than one of them because one artifact serves two lanes and
+/// they do not agree. `flutter build bundle` compiles for a single target and
+/// ships stages only that target can use — `ShaderCompiler` in flutter_tools
+/// gives desktop-GL hosts `sksl/gles/gles3/vulkan` and macOS `sksl/metal` —
+/// where the file cached here is loaded by a `flutter_tester` on the host's own
+/// backend *and* by the embedder guest, which on macOS is Metal and nowhere
+/// else is. Compiling per target would mean a cache entry per lane; compiling
+/// every stage once costs ~250ms more and loads everywhere.
+///
+/// A list of its own because it is half of the cache key: the compiled bytes
+/// are decided by the engine revision *and* by this, and a stage added here
+/// has to invalidate what an earlier flutterware left on the machine. Once, it
+/// did not. `--runtime-stage-metal` was added to fix an entry dying on *"does
+/// not contain appropriate runtime stage data for current backend (Metal)"*,
+/// and every machine that had already compiled these shaders for its engine
+/// revision — which is every machine that had run previews once — kept serving
+/// the four-stage file and kept dying in exactly the same words.
+const shaderStages = [
+  '--sksl',
+  '--runtime-stage-gles',
+  '--runtime-stage-gles3',
+  '--runtime-stage-vulkan',
+  '--runtime-stage-metal',
+];
+
+/// [shaderStages] as a directory-name fragment, so editing that list is the
+/// whole of invalidating the cache.
+final _stagesKey = sha1
+    .convert(utf8.encode(shaderStages.join(' ')))
+    .toString()
+    .substring(0, 8);
+
+/// Distinguishes one in-process shader compile from another, so two that
+/// overlap do not write one scratch file. See `_compiledShader`.
+var _scratchSerial = 0;
+
+/// The framework's own fragment shaders in [cache]'s checkout — the M3
+/// ink-sparkle ripple and the stretch-overscroll effect — as they exist.
+///
+/// Empty for a cache directory that is not a Flutter checkout, which is what
+/// lets a test build a bundle against a fixture.
+List<String> frameworkShaderSources(FlutterCache cache) {
+  var src = p.join(cache.flutterRoot, 'packages', 'flutter', 'lib', 'src');
+  return [
+    for (var source in [
+      p.join(src, 'material', 'shaders', 'ink_sparkle.frag'),
+      p.join(src, 'widgets', 'shaders', 'stretch_effect.frag'),
+    ])
+      if (File(source).existsSync()) source,
+  ];
+}
+
+/// Runs `impellerc` over the GLSL at [source], writing the compiled form —
+/// what `FragmentProgram.fromAsset` parses — to [destination].
+///
+/// The invocation is flutter_tools' `ShaderCompiler`, down to the include paths
+/// and the `.spirv` by-product it produces and deletes; [stages] is the one
+/// thing a caller chooses, because the tool picks a set per target platform and
+/// [shaderStages] is the union of them.
+///
+/// Written to a scratch name and renamed in, so a reader of [destination] sees
+/// whole bytes or none. The scratch carries a serial as well as the pid: two
+/// builders race *inside* one process as readily as across two — the comparison
+/// runner lists both sides at once, a `TesterHost` and its bundle each — and a
+/// scratch named for the process alone is one path two invocations write at the
+/// same time. A cold cache is the only time either compiles, which used to mean
+/// a fresh machine and now means the first run after any change to [stages].
+Future<void> compileShader({
+  required FlutterCache cache,
+  required String source,
+  required String destination,
+  required List<String> stages,
+}) async {
+  var scratch = '$destination.$pid.${_scratchSerial++}';
+  var result = await Process.run(cache.impellerc, [
+    ...stages,
+    '--iplr',
+    '--sl=$scratch',
+    '--spirv=$scratch.spirv',
+    '--input=$source',
+    '--input-type=frag',
+    '--include=${p.dirname(source)}',
+    '--include=${cache.shaderLib}',
+  ]);
+  if (result.exitCode != 0) {
+    throw StateError('impellerc failed on $source:\n${result.stderr}');
+  }
+  // A by-product nothing reads; the tool deletes it too.
+  File('$scratch.spirv').deleteSync();
+  File(scratch).renameSync(destination);
+}
 
 /// Assembles the asset directory the embedder guest reads, without invoking
 /// `flutter build bundle`.
@@ -49,9 +145,13 @@ typedef BundleSync = ({bool changed, bool fontsChanged});
 /// fragment shaders: the tool *compiles* those with `impellerc`, and
 /// `FragmentProgram.fromAsset` parses the compiled bundle — handed the GLSL
 /// source instead, it throws, which surfaces as a crash on the first tap of a
-/// Material 3 button (the ink-sparkle ripple). They are compiled here with the
-/// tool's exact invocation and cached per engine revision, so only the first
-/// build after an SDK update pays the ~250ms per shader.
+/// Material 3 button (the ink-sparkle ripple). They are compiled here by
+/// [compileShader] and cached per engine revision and stage list, so only the
+/// first build after an SDK update pays the ~250ms per shader. The invocation
+/// is flutter_tools' `ShaderCompiler`, but for [shaderStages] rather than for
+/// one target platform's — so the bytes are deliberately *not* the tool's, and
+/// `tool/catalog/bundle_probe.dart` says so in those terms rather than
+/// demanding they match.
 ///
 /// In place, and never delete-and-recreate. The engine opens every asset
 /// relative to a file descriptor of this directory, so replacing the
@@ -259,18 +359,15 @@ class AssetBundleBuilder {
   /// (unconditionally: whether they load is decided by the app's code, not its
   /// manifest).
   Future<void> _linkCompiledShaders(String output, _Sync sync) async {
-    var src = p.join(cache.flutterRoot, 'packages', 'flutter', 'lib', 'src');
-    var sources = [
-      for (var source in [
-        p.join(src, 'material', 'shaders', 'ink_sparkle.frag'),
-        p.join(src, 'widgets', 'shaders', 'stretch_effect.frag'),
-      ])
-        if (File(source).existsSync()) source,
-    ];
+    var sources = frameworkShaderSources(cache);
     // Nothing to compile means no engine revision to read — which is also
     // what lets a test run this against a cache directory that is not an SDK.
     if (sources.isEmpty) return;
-    var cacheDir = p.join(flutterwareDir(), 'shaders', cache.engineRevision);
+    var cacheDir = p.join(
+      flutterwareDir(),
+      'shaders',
+      '${cache.engineRevision}-$_stagesKey',
+    );
     await Future.wait([
       for (var source in sources)
         _compiledShader(source, cacheDir).then(
@@ -280,40 +377,17 @@ class AssetBundleBuilder {
     ]);
   }
 
-  /// The compiled form of [source], produced on first use per engine revision.
-  ///
-  /// The invocation is flutter_tools' `ShaderCompiler` verbatim, for the
-  /// target platform `flutter build bundle` defaults to — which is what makes
-  /// the output byte-identical to the tool's, and it includes the SkSL variant
-  /// the guest's Skia engine actually consumes.
+  /// The compiled form of [source], produced on first use per cache key.
   Future<String> _compiledShader(String source, String cacheDir) async {
     var compiled = p.join(cacheDir, p.basename(source));
     if (File(compiled).existsSync()) return compiled;
     Directory(cacheDir).createSync(recursive: true);
-    // Compiled under a scratch name and renamed in: two builders racing on a
-    // fresh cache each write their own scratch, and the renames — of identical
-    // bytes — land whole either way.
-    var scratch = '$compiled.$pid';
-    var result = await Process.run(cache.impellerc, [
-      '--sksl',
-      '--runtime-stage-gles',
-      '--runtime-stage-gles3',
-      '--runtime-stage-vulkan',
-      '--runtime-stage-metal',
-      '--iplr',
-      '--sl=$scratch',
-      '--spirv=$scratch.spirv',
-      '--input=$source',
-      '--input-type=frag',
-      '--include=${p.dirname(source)}',
-      '--include=${cache.shaderLib}',
-    ]);
-    if (result.exitCode != 0) {
-      throw StateError('impellerc failed on $source:\n${result.stderr}');
-    }
-    // A by-product nothing reads; the tool deletes it too.
-    File('$scratch.spirv').deleteSync();
-    File(scratch).renameSync(compiled);
+    await compileShader(
+      cache: cache,
+      source: source,
+      destination: compiled,
+      stages: shaderStages,
+    );
     return compiled;
   }
 

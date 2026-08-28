@@ -19,7 +19,8 @@ String flutterwareRunDir() {
 }
 
 /// The `~/.flutterware` directory: per-user state that outlives any one run
-/// or checkout, such as compiled-shader caches keyed by engine revision.
+/// or checkout, such as compiled-shader caches keyed by engine revision and
+/// the stages they were compiled for.
 String flutterwareDir() {
   if (flutterwareDirOverride case var it?) return it;
   var home =
