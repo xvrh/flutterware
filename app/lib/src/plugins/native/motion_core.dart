@@ -44,6 +44,10 @@ class MotionCore extends PluginCore {
   MotionCore(super.host);
 
   final _scans = <String, Future<void>>{};
+
+  /// Which generation of a scan is the current one, so a late isolate from an
+  /// older generation cannot overwrite a newer answer. See [rescan].
+  final _epochs = <String, int>{};
   final _results = <String, MotionScanResult>{};
   final _errors = <String, Object>{};
 
@@ -138,17 +142,38 @@ class MotionCore extends PluginCore {
       packageRoot: host.workspace.packageFor(path).directory.path,
       directory: directoryFor(path),
     );
+    var epoch = (_epochs[path] ?? 0) + 1;
+    _epochs[path] = epoch;
     // Parsing runs off-isolate, as the catalog's and scenarios' scans do.
     _scans[path] = Isolate.run(scanner.scan)
         .then<void>((result) {
+          // A scan that lost to a [rescan] must not land. Without this, an
+          // isolate started before a motion was written finishes after the one
+          // started to see it, and the fresh answer is overwritten by the
+          // stale one — which is `ScanCache`'s epoch guard, owed here because
+          // this core still keeps its own maps.
+          if (_epochs[path] != epoch) return;
           _results[path] = result;
           // A success outlives any earlier failure — a save caught mid-write
           // must not brand the package "scan failed" forever.
           _errors.remove(path);
         })
-        .catchError((Object error) => _errors[path] = error)
+        .catchError((Object error) {
+          if (_epochs[path] == epoch) _errors[path] = error;
+        })
         .whenComplete(notifyChanged);
     notifyChanged();
+  }
+
+  /// Drops [path]'s scan so the next [track] recomputes it.
+  ///
+  /// The scan is one-shot per session, so a file this plugin has just written
+  /// is invisible to it — `add-element` on a motion `new` had made came back
+  /// "no motion named that". Bumping the epoch is what makes dropping it safe
+  /// while one is still in flight.
+  void rescan(String path) {
+    _epochs[path] = (_epochs[path] ?? 0) + 1;
+    _scans.remove(path)?.ignore();
   }
 
   @override
@@ -615,10 +640,7 @@ class MotionCore extends PluginCore {
       written.add(p.relative(file.path, from: host.worktree.path));
     }
 
-    // The scan is one-shot per session, so a motion written now is invisible
-    // to it. Drop the stale one and take the fresh one, or `add-element` on
-    // what was just written comes back "no motion named that".
-    _scans.remove(packagePath)?.ignore();
+    rescan(packagePath);
     track(packagePath);
     await _scans[packagePath];
 

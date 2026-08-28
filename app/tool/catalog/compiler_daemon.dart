@@ -249,6 +249,18 @@ class _Daemon {
   /// still launch a guest against a kernel no later compile can move under it.
   String get _sharedAssetsDir => p.join(_buildDir, 'assets');
 
+  /// The shared bundle's directory, made if it is not there.
+  ///
+  /// Both readers below list it, and a `flutter clean` — or anyone deleting
+  /// `build/` under a running daemon — takes it away without the daemon
+  /// noticing. Listing it blind then throws a `PathNotFoundException` out of
+  /// `sendReady`, and every session that attaches afterwards fails with "the
+  /// guest could not start" until the daemon is restarted. An empty bundle is
+  /// a valid state, since the next compile refills it, so creating beats
+  /// throwing.
+  Directory get _sharedAssets =>
+      Directory(_sharedAssetsDir)..createSync(recursive: true);
+
   String get _outputDill => p.join(_buildDir, 'out', 'kernel_blob.bin');
 
   /// Re-runs discovery when the files under the roots have moved, so an entry
@@ -1334,8 +1346,7 @@ class _Daemon {
   /// session's own, whether still the shared link or a compiled file.
   void _refreshSessionMirrors() {
     var shared = <String>{
-      for (var entity in Directory(_sharedAssetsDir).listSync())
-        p.basename(entity.path),
+      for (var entity in _sharedAssets.listSync()) p.basename(entity.path),
     };
     for (var session in [..._sessions]) {
       var dir = Directory(session.assetsDir);
@@ -1429,7 +1440,7 @@ class _Session {
     var target = Directory(assetsDir);
     if (target.existsSync()) target.deleteSync(recursive: true);
     target.createSync(recursive: true);
-    for (var entity in Directory(_daemon._sharedAssetsDir).listSync()) {
+    for (var entity in _daemon._sharedAssets.listSync()) {
       Link(p.join(assetsDir, p.basename(entity.path))).createSync(entity.path);
     }
   }
