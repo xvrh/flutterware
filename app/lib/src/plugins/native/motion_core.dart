@@ -12,6 +12,7 @@ import '../../previews/headless_catalog.dart';
 import '../../previews/protocol.dart';
 import '../../motion/discovery.dart';
 import '../../motion/filmstrip.dart';
+import '../../motion/stage_file.dart';
 import '../../motion/values_file.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
@@ -270,6 +271,141 @@ class MotionCore extends PluginCore {
         ],
       ),
       PluginAction(
+        'new',
+        'New motion',
+        returns: Artifact,
+        description:
+            'Starts a motion from nothing: a stage, a values file and a '
+            'preview entry, with one element already in them so the first '
+            'render is not a blank screen. This is the cold start — by hand it '
+            'is roughly a hundred lines across two files that have to agree on '
+            'a string.',
+        parameters: [
+          const ActionParameter(
+            'name',
+            'Name',
+            required: true,
+            description:
+                'Lower snake case, and the basename of all three files — '
+                '`checkout` gives `checkout.dart`, `checkout.motion.dart` and '
+                '`checkout.stage.dart`.',
+          ),
+          const ActionParameter(
+            'width',
+            'Stage width',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description: 'Logical pixels. 360 when omitted.',
+          ),
+          const ActionParameter(
+            'height',
+            'Stage height',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description: 'Logical pixels. 640 when omitted.',
+          ),
+          ActionParameter(
+            'package',
+            'Package',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'Which declared package; the only one when omitted',
+            options: [
+              for (var path in packages)
+                ActionOption(path, label: path == '.' ? 'root' : path),
+            ],
+          ),
+        ],
+      ),
+      PluginAction(
+        'add-element',
+        'Add element',
+        returns: Artifact,
+        description:
+            "Adds one placeholder to a motion's draft stage. The stage is the "
+            'only place the tool may create a target: the other place a target '
+            'is named is your build method, which it does not touch. Refuses '
+            'rather than approximates — a stage file outside the grammar comes '
+            'back with the offset that broke it and nothing is written.',
+        parameters: [
+          const ActionParameter(
+            'motion',
+            'Motion',
+            required: true,
+            description:
+                'The `motion:` identifier, as `list` reports it. Its stage is '
+                'the `.stage.dart` beside it.',
+          ),
+          const ActionParameter(
+            'target',
+            'Target',
+            required: true,
+            description:
+                'The name the lane and the read site will both use. Must not '
+                'already be on the stage.',
+          ),
+          const ActionParameter(
+            'kind',
+            'Kind',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'box when omitted',
+            options: [
+              ActionOption('box'),
+              ActionOption('text'),
+              ActionOption('circle'),
+            ],
+          ),
+          const ActionParameter(
+            'x',
+            'X',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description: 'Left, in stage pixels. 24 when omitted.',
+          ),
+          const ActionParameter(
+            'y',
+            'Y',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description:
+                'Top, in stage pixels. Below the lowest element when omitted, '
+                'so a bare call stacks rather than overlaps.',
+          ),
+          const ActionParameter(
+            'width',
+            'Width',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description: '280 when omitted.',
+          ),
+          const ActionParameter(
+            'height',
+            'Height',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description: '48 when omitted.',
+          ),
+          const ActionParameter(
+            'label',
+            'Label',
+            required: false,
+            description: 'Shown inside a `text` placeholder.',
+          ),
+          ActionParameter(
+            'package',
+            'Package',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'Which declared package; the only one when omitted',
+            options: [
+              for (var path in packages)
+                ActionOption(path, label: path == '.' ? 'root' : path),
+            ],
+          ),
+        ],
+      ),
+      PluginAction(
         'list',
         'List',
         returns: MotionListResult,
@@ -302,6 +438,8 @@ class MotionCore extends PluginCore {
   }) async {
     if (actionId == 'capture') return _capture(arguments);
     if (actionId == 'filmstrip') return _filmstrip(arguments);
+    if (actionId == 'new') return _new(arguments);
+    if (actionId == 'add-element') return _addElement(arguments);
     if (actionId != 'list') return super.invoke(actionId, arguments: arguments);
     var wanted = _requestedPackages(arguments['package']);
     for (var path in wanted) {
@@ -409,6 +547,332 @@ class MotionCore extends PluginCore {
         'device': ?device?.id,
       },
     );
+  }
+
+  /// The cold start, in one call.
+  ///
+  /// Writes three files, because a motion that renders needs all three: the
+  /// stage says what there is, the values file says how it moves, and the
+  /// preview entry mounts them. One element is already in them — a "New
+  /// motion" that opens on a blank screen has not started anything.
+  Future<Artifact> _new(Map<String, Object?> arguments) async {
+    var name = _identifier(arguments['name']);
+    if (name == null) {
+      throw ArgumentError(
+        '`name` must be lower snake case — `checkout`, not '
+        '`${arguments['name']}`',
+      );
+    }
+    var packagePath = _requestedPackages(arguments['package']).first;
+    var directory = Directory(
+      p.join(
+        host.workspace.packageFor(packagePath).directory.path,
+        directoryFor(packagePath),
+      ),
+    );
+    var width = _int(arguments['width']) ?? 360;
+    var height = _int(arguments['height']) ?? 640;
+    var camel = _camel(name);
+
+    var files = {
+      '$name.stage.dart': emitStageFile(
+        StageFile(
+          name: '${camel}Stage',
+          width: width.toDouble(),
+          height: height.toDouble(),
+          background: null,
+          elements: [
+            StageElementModel(
+              target: 'first',
+              x: 24,
+              y: 80,
+              width: (width - 48).toDouble(),
+              height: 48,
+            ),
+          ],
+        ),
+        header:
+            'The draft scene, owned by the Motion editor.\n\n'
+            'Grow it with `fw run motion add-element`. Bind an element to a '
+            'real widget when there is one to bind it to; until then the '
+            'placeholder is the thing being animated.',
+      ),
+      '$name.motion.dart': _newValuesFile(camel),
+      '$name.dart': _newEntryFile(name, camel),
+    };
+
+    var written = <String>[];
+    for (var entry in files.entries) {
+      var file = File(p.join(directory.path, entry.key));
+      if (file.existsSync()) {
+        throw StateError(
+          '${p.relative(file.path, from: host.worktree.path)} already exists — '
+          'pick another name, or delete it first',
+        );
+      }
+      file.parent.createSync(recursive: true);
+      file.writeAsStringSync(entry.value);
+      written.add(p.relative(file.path, from: host.worktree.path));
+    }
+
+    // The scan is one-shot per session, so a motion written now is invisible
+    // to it. Drop the stale one and take the fresh one, or `add-element` on
+    // what was just written comes back "no motion named that".
+    _scans.remove(packagePath)?.ignore();
+    track(packagePath);
+    await _scans[packagePath];
+
+    return Artifact(
+      kind: Artifact.plainText,
+      address: addressFor(
+        packagePath,
+        file: '$name.dart',
+        motion: '${camel}Motion',
+      ),
+      text:
+          'Wrote ${written.join(', ')}.\n'
+          'One element, `first`. Look at it with '
+          '`motion filmstrip --motion=${camel}Motion`, and grow it with '
+          '`motion add-element --motion=${camel}Motion --target=…`.',
+      meta: {'motion': '${camel}Motion', 'files': written},
+    );
+  }
+
+  /// One placeholder onto a motion's draft stage.
+  ///
+  /// The stage is the only place the tool may create a target. The other place
+  /// a target is named is your build method, and it does not touch that.
+  Future<Artifact> _addElement(Map<String, Object?> arguments) async {
+    var packagePath = _requestedPackages(arguments['package']).first;
+    track(packagePath);
+    await _scans[packagePath];
+
+    var wanted = arguments['motion'] as String?;
+    var motions = _listPackage(packagePath).motions;
+    var motion = motions.firstWhereOrNull((each) => each.values == wanted);
+    if (motion == null) {
+      var known = motions.map((each) => each.values).nonNulls.join(', ');
+      throw ArgumentError(
+        'no motion named `$wanted` in $packagePath. '
+        'Known: ${known.isEmpty ? '(none)' : known}',
+      );
+    }
+
+    var target = _identifier(arguments['target']);
+    if (target == null) {
+      throw ArgumentError(
+        '`target` must be a plain identifier — `cta`, not '
+        '`${arguments['target']}`',
+      );
+    }
+
+    var stagePath = p.join(
+      host.workspace.packageFor(packagePath).directory.path,
+      motion.file.replaceFirst(RegExp(r'\.dart$'), '.stage.dart'),
+    );
+    var stageFile = File(stagePath);
+    var relative = p.relative(stagePath, from: host.worktree.path);
+    if (!stageFile.existsSync()) {
+      throw StateError(
+        '`$wanted` has no draft stage: $relative does not exist. A motion '
+        'whose targets only live in a build method has nothing for the tool '
+        'to add to.',
+      );
+    }
+
+    var parsed = parseStageFile(stageFile.readAsStringSync());
+    switch (parsed) {
+      case StageParseFailure failure:
+        // Refuses rather than approximates. Nothing is written.
+        throw StateError('$relative cannot be read: $failure');
+      case StageFile stage:
+        if (stage.hasTarget(target)) {
+          throw ArgumentError(
+            '`$target` is already on ${stage.name}. A target is named once.',
+          );
+        }
+        var width = _int(arguments['width']) ?? 280;
+        var height = _int(arguments['height']) ?? 48;
+        // Stack below what is there when no `y` is given, so a bare call adds
+        // something you can see rather than something under the last one.
+        var bottom = stage.elements.fold<double>(
+          40,
+          (lowest, each) =>
+              each.y + each.height > lowest ? each.y + each.height : lowest,
+        );
+        var element = StageElementModel(
+          target: target,
+          kind: switch (arguments['kind']) {
+            'text' => 'text',
+            'circle' => 'circle',
+            _ => 'box',
+          },
+          x: (_int(arguments['x']) ?? 24).toDouble(),
+          y: (_int(arguments['y']) ?? (bottom + 16)).toDouble(),
+          width: width.toDouble(),
+          height: height.toDouble(),
+          label: arguments['label'] as String?,
+        );
+        var grown = stage.withElement(element);
+        stageFile.writeAsStringSync(emitStageFile(grown));
+
+        return Artifact(
+          kind: Artifact.plainText,
+          address: addressFor(
+            packagePath,
+            file: motion.file,
+            motion: motion.values,
+          ),
+          text:
+              'Added `$target` to ${stage.name} at '
+              '${element.x.toInt()},${element.y.toInt()} '
+              '(${element.width.toInt()} by ${element.height.toInt()}). '
+              '${grown.elements.length} elements now. It has no lanes yet, so '
+              'nothing about it moves until a property is tuned.',
+          meta: {
+            'motion': motion.values,
+            'stage': relative,
+            'target': target,
+            'elements': grown.elements.length,
+          },
+        );
+    }
+  }
+
+  String _newValuesFile(String camel) =>
+      """
+import 'package:flutter/animation.dart' show Curves;
+import 'package:flutterware/motion.dart';
+
+/// Tuned by the Motion editor. A source of truth, not a derivative — do not
+/// regenerate, do not delete.
+const ${camel}Motion = MotionValues(
+  duration: Duration(milliseconds: 600),
+  targets: {
+    'first': {
+      'opacity': [
+        Seg<double>(
+          start: Duration.zero,
+          end: Duration(milliseconds: 320),
+          from: 0,
+          to: 1,
+          curve: Curves.easeOut,
+        ),
+      ],
+      'translateY': [
+        Seg<double>(
+          start: Duration.zero,
+          end: Duration(milliseconds: 420),
+          from: 16,
+          to: 0,
+          curve: Curves.easeOutCubic,
+        ),
+      ],
+    },
+  },
+);
+""";
+
+  String _newEntryFile(String name, String camel) {
+    var pascal = camel[0].toUpperCase() + camel.substring(1);
+    return """
+import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
+import 'package:flutterware/motion.dart';
+import 'package:flutterware/previews.dart';
+
+import '$name.motion.dart';
+import '$name.stage.dart';
+
+/// Written by `fw run motion new`. Yours from here.
+///
+/// It opens on the draft stage, because there is nothing real to bind to yet.
+/// When there is, put the real screen in `_real` and the `host` knob switches
+/// between them — the same motion drives both.
+@Preview(name: '$camel', group: 'Motion')
+Widget $camel() => const _$pascal();
+
+class _$pascal extends StatefulWidget {
+  const _$pascal();
+
+  @override
+  State<_$pascal> createState() => _${pascal}State();
+}
+
+class _${pascal}State extends State<_$pascal> {
+  final _controller = MotionController(autoplay: false);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _controller.progress = context.knobs.double('t', 1, min: 0, max: 1);
+
+    var host = context.knobs.picker('host', {
+      'Draft': 'draft',
+      'Real': 'real',
+    }, 'draft');
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _controller.play(restart: true),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFE9ECF0),
+        // One scope, two bodies. The switch keeps the playhead, because `t`
+        // lives on the scope rather than on either host.
+        body: MotionScope(
+          motion: ${camel}Motion,
+          controller: _controller,
+          builder: (m) => switch (host) {
+            'real' => _real(m),
+            _ => MotionStageView(
+              stage: ${camel}Stage,
+              motion: m,
+              showNames: context.knobs.bool('names', true),
+            ),
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Your screen goes here. Read the same targets the stage stands in for —
+  /// `m.target('first')` — and the draft becomes a rehearsal of the real thing
+  /// rather than a separate drawing of it.
+  Widget _real(Motion m) => const Center(
+    child: Text('Nothing bound yet. Flip `host` back to Draft.'),
+  );
+}
+""";
+  }
+
+  static int? _int(Object? value) => switch (value) {
+    int number => number,
+    num number => number.round(),
+    String text => int.tryParse(text),
+    _ => null,
+  };
+
+  /// A plain lower-snake identifier, or null.
+  ///
+  /// Refuses rather than sanitising: a name the tool quietly changed is a name
+  /// you cannot find again.
+  static String? _identifier(Object? value) =>
+      value is String && RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(value)
+      ? value
+      : null;
+
+  static String _camel(String snake) {
+    var parts = snake.split('_');
+    return parts.first +
+        parts
+            .skip(1)
+            .map((part) => part[0].toUpperCase() + part.substring(1))
+            .join();
   }
 
   Device? _deviceOf(Map<String, Object?> arguments) =>

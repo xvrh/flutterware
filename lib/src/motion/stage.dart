@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/motion.dart';
 
-/// **Prototype.** The draft scene — what the editor draws before anything is
-/// bound to a real widget.
-///
-/// Deliberately not in `lib/`: this is a shape to look at, not published API.
+import 'motion_box.dart';
+import 'target.dart';
+
+/// The draft scene — what the editor draws before anything is bound to a real
+/// widget.
 ///
 /// A stage is the second file a motion owns. `<name>.motion.dart` says how
 /// things move; `<name>.stage.dart` says what there is to move, and both are
-/// written by the tool. It exists so that "New motion" and "add an element"
-/// have somewhere to write — a target cannot be created by the editor today,
-/// because the only place a target is named is a build method the tool may not
-/// touch.
+/// written by the tool. It exists so that `motion new` and `motion add-element`
+/// have somewhere to write: without it a target can only be named in a build
+/// method, and the tool may not touch one.
 ///
 /// Everything here is const constructor calls, literals and enum values, which
 /// is the grammar a parse-and-emit editor can read back.
@@ -61,10 +60,18 @@ class StageElement {
   final double radius;
 }
 
-/// Renders a stage under a motion.
+/// Renders a stage into a motion that is already running.
 ///
-/// The same `MotionValues` that drives a real screen drives this, which is the
-/// claim worth checking by eye: a motion does not know what it is animating.
+/// Takes the `Motion` a [MotionScope] builder hands you rather than making a
+/// scope of its own, and that is load-bearing three times over:
+///
+/// - the same `MotionValues` drives a placeholder stage and a real screen, so
+///   a **host switch is choosing a body inside one scope** rather than tearing
+///   one down and building another;
+/// - the syntactic scan looks for `MotionScope`, so a stage-hosted motion is
+///   discovered like any other — a view that owned its own scope was invisible
+///   to `motion list`, and cost one red action to find;
+/// - one playhead drives both halves, so flipping hosts mid-scrub keeps `t`.
 ///
 /// **A placeholder can be animated more ways than a real widget can**, and that
 /// is the trap rather than a feature. `color` and `borderRadius` land here
@@ -77,13 +84,13 @@ class MotionStageView extends StatelessWidget {
     super.key,
     required this.stage,
     required this.motion,
-    this.controller,
     this.showNames = true,
   });
 
   final MotionStage stage;
-  final MotionValues motion;
-  final MotionController? controller;
+
+  /// The scope's motion — what a `MotionScope` builder is handed.
+  final Motion motion;
 
   /// Draft affordance: every placeholder wears its target name, so the thing
   /// you are tuning and the lane you are dragging carry the same word.
@@ -91,37 +98,33 @@ class MotionStageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MotionScope(
-      motion: motion,
-      controller: controller,
-      builder: (m) => Center(
-        child: SizedBox(
-          width: stage.width,
-          height: stage.height,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: stage.background,
-              border: Border.all(color: const Color(0xFFDBE0E6)),
-            ),
-            child: Stack(
-              children: [
-                for (var element in stage.elements)
-                  Positioned(
-                    left: element.x,
-                    top: element.y,
-                    width: element.width,
-                    height: element.height,
-                    child: MotionBox(
-                      m.target(element.target),
-                      child: _Placeholder(
-                        element: element,
-                        target: m.target(element.target),
-                        showName: showNames,
-                      ),
+    return Center(
+      child: SizedBox(
+        width: stage.width,
+        height: stage.height,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: stage.background,
+            border: Border.all(color: const Color(0xFFDBE0E6)),
+          ),
+          child: Stack(
+            children: [
+              for (var element in stage.elements)
+                Positioned(
+                  left: element.x,
+                  top: element.y,
+                  width: element.width,
+                  height: element.height,
+                  child: MotionBox(
+                    motion.target(element.target),
+                    child: _Placeholder(
+                      element: element,
+                      target: motion.target(element.target),
+                      showName: showNames,
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
       ),

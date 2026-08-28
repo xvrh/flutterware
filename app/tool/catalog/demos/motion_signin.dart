@@ -4,6 +4,7 @@ import 'package:flutterware/motion.dart';
 import 'package:flutterware/previews.dart';
 
 import 'motion_signin.motion.dart';
+import 'motion_signin.stage.dart';
 import 'shell.dart';
 
 /// A motion over widgets that actually work — the fields take focus and text
@@ -21,6 +22,15 @@ import 'shell.dart';
 ///
 /// `password.color` is animated and **not** read, on purpose. It is a live lane
 /// that changes nothing, invisible to any amount of staring at the file.
+///
+/// The `host` knob switches between this real screen and the draft stage, and
+/// both sit **inside one `MotionScope`** — so the flip is a choice of body
+/// rather than a teardown, one playhead drives both, and the two halves cannot
+/// drift because there is only one motion.
+///
+/// Flip it at `t = 0.75` and watch the password field: grey here, pink on the
+/// draft. That is `password.color` imposed on a box the tool owns and merely
+/// offered to a widget that never reads it.
 ///
 /// Drag `t` to scrub, tap the background to replay.
 @Preview(name: 'Sign in (real fields)', group: 'Motion', wrapper: wrapInApp)
@@ -50,11 +60,32 @@ class _SignInState extends State<_SignIn> {
   @override
   Widget build(BuildContext context) {
     _controller.progress = context.knobs.double('t', 1, min: 0, max: 1);
+    var host = context.knobs.picker('host', {
+      'Real screen': 'real',
+      'Draft stage': 'draft',
+    }, 'real');
 
     return MotionScope(
       motion: signInMotion,
       controller: _controller,
       builder: (m) {
+        // The switch is a choice of body *inside* the scope, so one playhead
+        // drives both hosts and `t` survives the flip.
+        if (host == 'draft') {
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _controller.play(restart: true),
+            child: Scaffold(
+              backgroundColor: const Color(0xFFE9ECF0),
+              body: MotionStageView(
+                stage: signInStage,
+                motion: m,
+                showNames: context.knobs.bool('names', true),
+              ),
+            ),
+          );
+        }
+
         var title = m.target('title');
         var email = m.target('email');
         var password = m.target('password');

@@ -1,6 +1,5 @@
-import 'dart:ui' show Color;
-
-import 'motion_stage.dart';
+import 'package:flutter/material.dart' show Color;
+import 'package:flutterware/motion.dart';
 
 /// **Prototype.** What the editor would have written for `signInMotion` if the
 /// motion had been started from a "New motion" button instead of by hand.
