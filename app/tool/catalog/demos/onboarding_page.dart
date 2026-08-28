@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/motion.dart';
+import 'package:flutterware/previews.dart';
 
 import 'fuse_label.dart';
 import 'onboarding_page.motion.dart';
@@ -20,6 +22,61 @@ import 'onboarding_wave.dart';
 /// - Animation only through `onboarding_page.motion.dart`. No
 ///   `AnimationController`, no `Tween`, no `Interval` computed by hand.
 /// - Every varying value is either a target property or a prop.
+/// The page on its own, which is how a component wants to be worked on: its
+/// own playhead, its own entry, nothing composing it to explain a mistake away.
+///
+/// It is also what makes it renderable at all — `motion video` reaches a motion
+/// through an entry in the same file, so a component whose file has no entry
+/// can be used everywhere and photographed nowhere.
+///
+/// The content is knobs, because that is what the content *is*: a page is a
+/// presentation and the words are handed in. Turning them here is the same
+/// injection a renderer does, spelled for a person.
+@Preview(name: 'Onboarding page', group: 'Motion', wrapper: onDark)
+Widget onboardingPagePreview() => Builder(
+  builder: (context) => OnboardingPage(
+    // The page owns its own playhead when nothing else does, so `progress`
+    // stays where a seek puts it and the scrubber drives the entrance.
+    progress: context.knobs.double('progress', 1, min: 0, max: 1),
+    travel: context.knobs.double('travel', 0, min: -1, max: 1),
+    accent: const Color(0xFFFF8A4C),
+    image: const AuroraImage(seed: 0, accent: Color(0xFFFF8A4C)),
+    titleLeft: context.knobs.string('titleLeft', 'Find your'),
+    titleRight: context.knobs.string('titleRight', 'morning'),
+    subtitle: context.knobs.string(
+      'subtitle',
+      'Beans, roasters and brew guides, gathered in one quiet place.',
+    ),
+    action: const _SampleAction(),
+  ),
+);
+
+Widget onDark(Widget child) => MaterialApp(
+  debugShowCheckedModeBanner: false,
+  theme: ThemeData.dark(useMaterial3: true),
+  home: Scaffold(backgroundColor: const Color(0xFF0C0913), body: child),
+);
+
+/// A stand-in for the control the use site hands in — enough to animate, and
+/// deliberately not a real form: the real one lives in `onboarding.dart`,
+/// which is the file about what a developer supplies.
+class _SampleAction extends StatelessWidget {
+  const _SampleAction();
+
+  @override
+  Widget build(BuildContext context) => FilledButton(
+    onPressed: () {},
+    style: FilledButton.styleFrom(
+      backgroundColor: Colors.white,
+      foregroundColor: const Color(0xFF0C0913),
+      minimumSize: const Size.fromHeight(52),
+      shape: const StadiumBorder(),
+      textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+    ),
+    child: const Text('Continue'),
+  );
+}
+
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({
     super.key,
@@ -69,6 +126,15 @@ class OnboardingPage extends StatefulWidget {
 class _OnboardingPageState extends State<OnboardingPage> {
   final _controller = MotionController(autoplay: false);
 
+  /// The last [OnboardingPage.progress] that was written to the playhead.
+  ///
+  /// The write is guarded on a *change* rather than made every build, and that
+  /// is what keeps this page seekable. Writing unconditionally means the next
+  /// frame undoes any seek — the scrubber, a `?t=`, a video renderer all move
+  /// the playhead and all get stomped one frame later. The page still follows
+  /// its prop, because a prop that did not change had nothing to say.
+  double? _written;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -77,7 +143,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   @override
   Widget build(BuildContext context) {
-    _controller.progress = widget.progress.clamp(0.0, 1.0);
+    var wanted = widget.progress.clamp(0.0, 1.0);
+    if (wanted != _written) {
+      _written = wanted;
+      _controller.progress = wanted;
+    }
 
     return MotionScope(
       motion: onboardingPageMotion,

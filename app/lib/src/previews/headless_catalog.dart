@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
@@ -80,6 +81,9 @@ class HeadlessCatalog {
 
     /// Where to park the entry's motion, 0..1.
     double? motionT,
+
+    /// Which mounted playhead [motionT] refers to.
+    String? motionScope,
   }) async {
     var observed = await observe(
       entryId: entryId,
@@ -92,6 +96,7 @@ class HeadlessCatalog {
       cropNode: node,
       wantKnobs: true,
       motionT: motionT,
+      motionScope: motionScope,
     );
     return CatalogCapture(
       // `observe` was asked for a screenshot, so it took one or threw.
@@ -114,6 +119,7 @@ class HeadlessCatalog {
     Map<String, String> knobs = const {},
     Map<String, String> axes = const {},
     int cellWidth = 320,
+    String? scope,
   }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
     if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
     if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
@@ -124,13 +130,13 @@ class HeadlessCatalog {
     try {
       var durationMs = 0;
       for (var (index, t) in stops.indexed) {
-        var landed = await guest.seekMotion(t);
-        durationMs = landed.$2;
+        var landed = await guest.seekMotion(t, scope: scope);
+        durationMs = landed.durationMs;
         var file = await guest.capture(
           p.join(scratch.path, 'frame-$index.png'),
           pixelRatio: viewport.pixelRatio,
         );
-        frames.add(FilmstripFrame(file: file, t: t, ms: landed.$1));
+        frames.add(FilmstripFrame(file: file, t: t, ms: landed.ms));
       }
       return CatalogFilmstrip(
         file: composeFilmstrip(frames, output: output, cellWidth: cellWidth),
@@ -163,13 +169,15 @@ class HeadlessCatalog {
     CaptureViewport viewport = CaptureViewport.panel,
     Map<String, String> knobs = const {},
     Map<String, String> axes = const {},
+    String? scope,
   }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
     if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
     if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
 
     // The duration is the motion's, and only the guest knows it — so the
     // first seek is what tells us how many frames there are to render.
-    var (_, durationMs) = await guest.seekMotion(0);
+    var opening = await guest.seekMotion(0, scope: scope);
+    var durationMs = opening.durationMs;
     if (durationMs <= 0) {
       throw StateError(
         "this entry's motion reports no duration, so there is nothing to "
@@ -189,7 +197,7 @@ class HeadlessCatalog {
     try {
       encoder.add(first);
       for (var t in stops.skip(1)) {
-        await guest.seekMotion(t);
+        await guest.seekMotion(t, scope: opening.scope);
         var (frame, _) = await guest.captureImage(
           pixelRatio: viewport.pixelRatio,
         );
@@ -212,6 +220,8 @@ class HeadlessCatalog {
       durationMs: durationMs,
       renderTime: render.elapsed,
       encodeTime: flush.elapsed,
+      scope: opening.scope,
+      mountedScopes: opening.mounted,
     );
   });
 
@@ -360,6 +370,10 @@ class HeadlessCatalog {
 
     /// Where to park the entry's motion, 0..1. See [_GuestSession.seekMotion].
     double? motionT,
+
+    /// Which mounted playhead [motionT] refers to. Omitted, the outermost —
+    /// a composed screen mounts one per component as well as its own.
+    String? motionScope,
   }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
     if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
     if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
@@ -367,7 +381,7 @@ class HeadlessCatalog {
     // After the knobs and the axes, because both rebuild the demo and a
     // rebuilt scope would start wherever its controller says rather than where
     // this was asked to put it.
-    if (motionT != null) await guest.seekMotion(motionT);
+    if (motionT != null) await guest.seekMotion(motionT, scope: motionScope);
 
     // Read whenever anything needs it, which is more often than the caller asked
     // for it: a hit resolves ids against a tree, a crop needs a node's rect, and
@@ -624,6 +638,34 @@ class CatalogFilmstrip {
   final int durationMs;
 }
 
+/// Where a seek landed, and which scope took it.
+///
+/// [scope] and [mounted] ride along because a composed screen mounts several
+/// playheads — a flow and the components inside it — and which one a render
+/// walked is not something the caller can infer from the picture. A video of
+/// the wrong timeline looks like a video.
+class MotionSeek {
+  MotionSeek({
+    required this.ms,
+    required this.durationMs,
+    required this.scope,
+    required this.mounted,
+  });
+
+  /// Where the playhead landed, in the motion's own milliseconds.
+  final int ms;
+
+  /// That motion's whole duration.
+  final int durationMs;
+
+  /// The scope that was seeked.
+  final String scope;
+
+  /// Every scope mounted at the time, in mount order — which is tree order,
+  /// so the first encloses the rest.
+  final List<String> mounted;
+}
+
 /// A rendered motion, and what it cost to render.
 class CatalogVideo {
   CatalogVideo({
@@ -633,11 +675,20 @@ class CatalogVideo {
     required this.durationMs,
     required this.renderTime,
     required this.encodeTime,
+    required this.scope,
+    required this.mountedScopes,
   });
 
   final File file;
   final int frames;
   final int fps;
+
+  /// The scope whose playhead was walked.
+  final String scope;
+
+  /// Every playhead that was mounted, so a render of the wrong one is visible
+  /// rather than merely wrong.
+  final List<String> mountedScopes;
 
   /// The motion's own duration, which is what set the frame count.
   final int durationMs;
@@ -1096,7 +1147,7 @@ class _GuestSession {
   /// settling of its own.
   var _motionReady = false;
 
-  Future<(int, int)> seekMotion(double t) async {
+  Future<MotionSeek> seekMotion(double t, {String? scope}) async {
     // Only the first one pays for it. Once the scope has mounted the extension
     // stays registered, and a filmstrip that rendered a throwaway frame before
     // every seek would double the cost of the thing it exists to make cheap.
@@ -1104,15 +1155,39 @@ class _GuestSession {
       await _renderScratchFrame();
       _motionReady = true;
     }
-    // List first, and seek the scope the duration is read from: the guest
-    // resolves a nameless seek only while exactly one scope is mounted, so a
-    // demo with two would refuse — and the refusal surfaced here as the
-    // misleading "no mounted MotionScope".
+    // List first, and seek by id: the guest resolves a nameless seek only
+    // while exactly one scope is mounted, so a composed screen would refuse —
+    // and the refusal surfaced here as the misleading "no mounted
+    // MotionScope".
     var listed = await _vmService.callExtension('ext.flutterware.motion.list');
-    var scope = ((listed?['scopes'] as List?) ?? const []).firstOrNull as Map?;
+    var scopes = <Map<String, Object?>>[
+      for (var entry in (listed?['scopes'] as List?) ?? const [])
+        if (entry is Map) entry.cast<String, Object?>(),
+    ];
+    if (scopes.isEmpty) {
+      throw ArgumentError.value(
+        t,
+        't',
+        'this entry has no mounted MotionScope to seek',
+      );
+    }
+
+    var chosen = scope == null
+        ? scopes.first
+        : scopes.firstWhereOrNull((one) => one['id'] == scope);
+    if (chosen == null) {
+      throw ArgumentError.value(
+        scope,
+        'scope',
+        'no scope by that name is mounted. Mounted: '
+            '${scopes.map(_describeMountedScope).join('; ')}',
+      );
+    }
+
+    var id = chosen['id'] as String?;
     var reply = await _vmService.callExtension(
       'ext.flutterware.motion.seek',
-      args: {if (scope?['id'] case String id) 'scope': id, 't': '$t'},
+      args: {'scope': ?id, 't': '$t'},
     );
     if (reply == null) {
       throw ArgumentError.value(
@@ -1121,10 +1196,26 @@ class _GuestSession {
         'this entry has no mounted MotionScope to seek',
       );
     }
-    return (
-      (reply['ms'] as num?)?.toInt() ?? 0,
-      (scope?['durationMs'] as num?)?.toInt() ?? 0,
+    return MotionSeek(
+      ms: (reply['ms'] as num?)?.toInt() ?? 0,
+      durationMs: (chosen['durationMs'] as num?)?.toInt() ?? 0,
+      scope: id ?? '',
+      // Mount order is tree order, so the first is the outermost — the
+      // composition's own timeline rather than one of the components inside
+      // it. Reported rather than assumed: a caller that got the wrong one
+      // should be able to see that it did, and name the other.
+      mounted: [for (var one in scopes) one['id'] as String? ?? ''],
     );
+  }
+
+  /// One mounted scope, for a refusal that teaches which to name.
+  static String _describeMountedScope(Map<String, Object?> scope) {
+    var targets = [
+      for (var target in (scope['targets'] as List?) ?? const [])
+        if (target is Map && target['name'] is String) target['name'] as String,
+    ];
+    return '${scope['id']} (${scope['durationMs']}ms'
+        '${targets.isEmpty ? '' : ', ${targets.join('/')}'})';
   }
 
   /// Draws one throwaway frame, so the demo has built.

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
+import 'package:flutterware/motion.dart';
 import 'package:flutterware/previews.dart';
 
+import 'onboarding.motion.dart';
 import 'onboarding_page.dart';
 import 'onboarding_wave.dart';
 
@@ -18,8 +20,17 @@ import 'onboarding_wave.dart';
 /// same component plays from a gesture here and from a frame counter in a video
 /// renderer, with no second code path.
 ///
-/// Two knobs: `language` swaps every string for its German equivalent, which is
-/// 30–45% longer, and `page` parks the flow so a still can be taken mid-fuse.
+/// **The flow has a playhead of its own**, and that is what makes the whole
+/// journey exportable rather than only a single page. A gesture has nothing to
+/// seek, so a flow driven only by swipes can be watched and never rendered.
+/// `onboardingMotion` gives the composition a timeline, the `PageView` follows
+/// it, and a swipe writes back into it — two writers of one offset, which is
+/// the honest shape of a screen that is both used and filmed.
+///
+/// One knob: `language` swaps every string for its German equivalent, which is
+/// 30–45% longer. The `page` knob is gone — the playhead replaced it, and it is
+/// the better handle: a `?t=` parks the flow mid-transition *and* is what the
+/// renderer already walks.
 @Preview(name: 'Onboarding', group: 'Motion', wrapper: wrapInDark)
 Widget onboarding() => const _Onboarding();
 
@@ -94,20 +105,34 @@ class _OnboardingState extends State<_Onboarding> {
   final _pages = PageController();
   final _email = TextEditingController();
   final _form = GlobalKey<FormState>();
-  double _parked = 0;
+
+  /// The composition's playhead. `autoplay: false` because the studio should
+  /// open on the first page rather than march through the flow unasked; a
+  /// scrub, a `?t=` or a render is what moves it.
+  final _flow = MotionController(autoplay: false);
+
+  /// The offset the playhead last asked for, so a swipe is not fought.
+  ///
+  /// Without it every rebuild would re-issue the playhead's `jumpTo` and drag
+  /// the flow back to where the scrubber is, which is exactly what a finger on
+  /// the screen is trying to change. Writing only on a *change* leaves the
+  /// gesture in charge between seeks.
+  double? _driven;
 
   @override
   void dispose() {
     _pages.dispose();
     _email.dispose();
+    _flow.dispose();
     super.dispose();
   }
 
   /// Where the flow is, as a continuous number: 0.0 is page one, 1.5 is
   /// halfway between two and three.
-  double get _offset => _pages.hasClients && _pages.position.haveDimensions
-      ? _pages.page ?? _parked
-      : _parked;
+  double _offset(double fallback) =>
+      _pages.hasClients && _pages.position.haveDimensions
+      ? _pages.page ?? fallback
+      : fallback;
 
   @override
   Widget build(BuildContext context) {
@@ -117,15 +142,23 @@ class _OnboardingState extends State<_Onboarding> {
     }, false);
     var copy = german ? _german : _english;
 
-    var wanted = context.knobs.double('page', 0, min: 0, max: 2);
-    if (wanted != _parked) {
-      _parked = wanted;
+    return MotionScope(
+      motion: onboardingMotion,
+      controller: _flow,
+      builder: (m) => _build(copy, german, m),
+    );
+  }
+
+  Widget _build(List<_Copy> copy, bool german, Motion m) {
+    // The playhead *is* the offset: `flow` runs 0..1 over the journey, and the
+    // last page's index turns it into the `PageView`'s own units.
+    var driven = m.target('flow').progress * (copy.length - 1);
+    if (driven != _driven) {
+      _driven = driven;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_pages.hasClients) return;
-        // Scrubbed, not paged: a fractional value parks the flow between two
-        // pages so a still can be taken mid-transition, which is the only way
-        // to look at the middle of an animation in a screenshot.
-        _pages.jumpTo(wanted * _pages.position.viewportDimension);
+        if (!mounted || !_pages.hasClients) return;
+        if (!_pages.position.haveDimensions) return;
+        _pages.jumpTo(driven * _pages.position.viewportDimension);
       });
     }
 
@@ -134,19 +167,26 @@ class _OnboardingState extends State<_Onboarding> {
       body: AnimatedBuilder(
         animation: _pages,
         builder: (context, _) {
-          var offset = _offset;
+          var offset = _offset(driven);
           return Stack(
             fit: StackFit.expand,
             children: [
               PageView(
                 controller: _pages,
-                // `jumpTo` on paging physics snaps to the nearest page, so a
-                // fractional park was silently rounded and the middle of the
-                // transition could not be photographed at all. Scrubbing turns
-                // the snapping off; swiping puts it back.
-                physics: _parked == _parked.roundToDouble()
-                    ? const PageScrollPhysics()
-                    : const ClampingScrollPhysics(),
+                // `pageSnapping`, and it has to be this rather than `physics`.
+                // A `jumpTo` ends in `goBallistic`, and `PageScrollPhysics`
+                // turns that into a spring toward the nearest page — so a
+                // playhead parked between two pages was snapped back to one of
+                // them and the middle of a transition could not be rendered at
+                // all. Passing `ClampingScrollPhysics` does *not* prevent it:
+                // `PageView` layers `PageScrollPhysics` over whatever it is
+                // given whenever `pageSnapping` is true (`page_view.dart`,
+                // `_kPagePhysics.applyTo(widget.physics)`). Only this flag
+                // takes it off.
+                //
+                // On a page boundary it goes back on, so a swipe still pages.
+                pageSnapping: driven == driven.roundToDouble(),
+                physics: const ClampingScrollPhysics(),
                 children: [
                   for (var (index, page) in copy.indexed)
                     OnboardingPage(

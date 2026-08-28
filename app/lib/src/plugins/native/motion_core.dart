@@ -359,6 +359,18 @@ class MotionCore extends PluginCore {
                 'What the shell around the demo offers — `theme=dark`. Same '
                 'syntax as knobs.',
           ),
+          const ActionParameter(
+            'scope',
+            'Scope',
+            required: false,
+            description:
+                'Which mounted playhead to walk, when the screen has several. '
+                'A composed screen mounts one scope for its own flow and one '
+                'per component inside it. Omitted, the outermost — the flow — '
+                'because scopes mount in tree order. The scopes a render saw '
+                'come back on the result, so a clip of the wrong timeline is '
+                'visible rather than merely wrong.',
+          ),
         ],
       ),
       PluginAction(
@@ -668,6 +680,7 @@ class MotionCore extends PluginCore {
           : CaptureViewport.of(device),
       knobs: knobs,
       axes: axes,
+      scope: arguments['scope'] as String?,
     );
 
     return Artifact(
@@ -691,6 +704,8 @@ class MotionCore extends PluginCore {
         'device': ?device?.id,
         if (knobs.isNotEmpty) 'knobs': knobs,
         if (axes.isNotEmpty) 'axes': axes,
+        'scope': video.scope,
+        if (video.mountedScopes.length > 1) 'scopes': video.mountedScopes,
       },
     );
   }

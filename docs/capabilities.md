@@ -1318,7 +1318,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 Renders the whole motion to an mp4 at its own duration, one frame per video frame. Not a screen recording: every frame is the motion evaluated at a playhead position, so the clip is exactly what the scrubber shows and is not rendered in real time. Needs `ffmpeg` on PATH.
 
 ```sh
-fw run motion video --motion=<string> [--fps=…] [--package=…] [--device=…] [--knobs=…] [--axes=…]
+fw run motion video --motion=<string> [--fps=…] [--package=…] [--device=…] [--knobs=…] [--axes=…] [--scope=…]
 ```
 
 Returns `Artifact`:
@@ -1339,6 +1339,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 | `device` | choice | no | — | A device to render as; the panel otherwise |
 | `knobs` | string | no | — | Values to turn before rendering: `name=value,name=value`, or a JSON object. This is how one authored motion becomes many clips — the same timing over different words, a different accent, a different locale — without touching the file it was authored in. |
 | `axes` | string | no | — | What the shell around the demo offers — `theme=dark`. Same syntax as knobs. |
+| `scope` | string | no | — | Which mounted playhead to walk, when the screen has several. A composed screen mounts one scope for its own flow and one per component inside it. Omitted, the outermost — the flow — because scopes mount in tree order. The scopes a render saw come back on the result, so a clip of the wrong timeline is visible rather than merely wrong. |
 
 #### `new` — New motion
 
