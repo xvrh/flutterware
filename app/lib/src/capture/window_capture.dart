@@ -1,6 +1,8 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/offscreen_raster.dart';
 import 'package:image/image.dart' as img;
 
 import '../embedder/embedded_engine.dart';
@@ -15,6 +17,11 @@ import '../embedder/embedded_engine.dart';
 /// zero alpha. So the host raster has a hole in it, and the guest's own frame
 /// goes into that hole.
 ///
+/// The hole is now dug on purpose. On Linux the same raster does not return an
+/// empty rectangle but takes the process down, so [OffscreenRaster] lifts every
+/// guest texture out of the tree for the frame this photographs — which leaves
+/// exactly the hole macOS was leaving anyway, on every host.
+///
 /// See decision 5 of
 /// `docs/superpowers/specs/2026-07-27-gui-cli-mcp-architecture.md`, which
 /// records the measurement and why the OS-level alternative was rejected.
@@ -25,18 +32,28 @@ abstract final class WindowCapture {
     RenderRepaintBoundary boundary, {
     required double pixelRatio,
   }) async {
-    var host = await _raster(boundary, pixelRatio);
-    for (var texture in _texturesUnder(boundary)) {
-      var engine = EmbeddedEngine.withTexture(texture.textureId);
-      // A texture nobody claims is left as the hole it is. It is not this
-      // function's business to decide that is wrong — a host with a texture
-      // from somewhere else is a legitimate thing to photograph.
-      if (engine == null) continue;
-      await _compositeGuest(
-        host,
-        engine,
-        _rectOf(texture, boundary, pixelRatio),
-      );
+    // **Read before the raster, not after.** [OffscreenRaster] takes every
+    // guest out of the layer tree for the frame the raster photographs, and
+    // reading here rather than around the loop is what keeps this independent
+    // of *how*: `GuestTexture` withholds a paint today and leaves the
+    // `TextureBox` in place, but a version that withheld the widget would take
+    // the box with it, and this would then be filling holes it could no longer
+    // find. Where each guest painted is the one thing that has to be known
+    // first anyway.
+    //
+    // A texture nobody claims is left as the hole it is. It is not this
+    // function's business to decide that is wrong — a host with a texture from
+    // somewhere else is a legitimate thing to photograph.
+    var guests = [
+      for (var texture in _texturesUnder(boundary))
+        if (EmbeddedEngine.withTexture(texture.textureId) case var engine?)
+          (engine, _rectOf(texture, boundary, pixelRatio)),
+    ];
+    var host = await OffscreenRaster.around(
+      () => _raster(boundary, pixelRatio),
+    );
+    for (var (engine, rect) in guests) {
+      await _compositeGuest(host, engine, rect);
     }
     return host;
   }

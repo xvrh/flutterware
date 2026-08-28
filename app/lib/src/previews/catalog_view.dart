@@ -12,6 +12,7 @@ import '../address/address_scope.dart';
 import '../plugins/native/previews_address.dart';
 import '../capture/capture_mode.dart';
 import '../embedder/embedded_engine.dart';
+import '../embedder/guest_texture.dart';
 import '../embedder/input_region.dart';
 import '../embedder/protocol.dart';
 import '../inspect/node_highlight.dart';
@@ -911,7 +912,7 @@ class _CatalogViewState extends State<CatalogView> {
     // preview vanished the moment you went to point at it.
     var picture = engine.textureId == null
         ? sizedBox
-        : Texture(textureId: engine.textureId!);
+        : GuestTexture(textureId: engine.textureId!);
     return ValueListenableBuilder(
       valueListenable: _picking,
       builder: (context, picking, _) => picking

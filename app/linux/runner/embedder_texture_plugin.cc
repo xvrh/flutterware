@@ -31,9 +31,7 @@ G_DECLARE_FINAL_TYPE(FwEmbedderTexture,
 // `FlTextureGL` rather than the `FlPixelBufferTexture` this obviously wants to
 // be, because doing the upload ourselves is what a dmabuf import needs anyway
 // and there is nothing to be gained from the class that hands the engine a
-// pointer instead. Neither of them survives a panel resize on this engine
-// build — see the findings doc; the fault is the same either way and it is
-// not in this file.
+// pointer instead.
 struct _FwEmbedderTexture {
   FlTextureGL parent_instance;
 
@@ -54,12 +52,44 @@ struct _FwEmbedderTexture {
   GLuint name;
   uint32_t name_width;
   uint32_t name_height;
-
-  // Names replaced by a resize, deleted at the next safe point. Deleting one
-  // the moment it is replaced would free a name the engine is still holding
-  // from the frame it is in the middle of.
-  GArray* old_names;
 };
+
+// GL names waiting to be deleted, and the lock over them.
+//
+// **Per plugin rather than per texture, because the owner does not outlive the
+// name.** A name can only be freed with Flutter's GL context current, and
+// `populate` is the only place that ever holds it — so a name given up by a
+// texture that is being disposed has nobody left to free it, and every closed
+// panel stranded a full-size RGBA texture in the driver. Parked here instead,
+// and deleted by whichever texture paints next.
+//
+// Names given up by the last texture in the process wait for a panel that may
+// never open. That is the one leak this does not close, and it ends with the
+// GL context, which ends with the process.
+static GMutex fw_dead_names_lock;
+static GArray* fw_dead_names;
+
+// Hands a name over to be deleted at the next paint. Zero is not a name.
+static void fw_retire_gl_name(GLuint name) {
+  if (name == 0) return;
+  g_mutex_lock(&fw_dead_names_lock);
+  if (fw_dead_names == nullptr) {
+    fw_dead_names = g_array_new(FALSE, FALSE, sizeof(GLuint));
+  }
+  g_array_append_val(fw_dead_names, name);
+  g_mutex_unlock(&fw_dead_names_lock);
+}
+
+// Deletes everything parked. The caller holds Flutter's GL context.
+static void fw_delete_retired_gl_names() {
+  g_mutex_lock(&fw_dead_names_lock);
+  if (fw_dead_names != nullptr && fw_dead_names->len > 0) {
+    glDeleteTextures(fw_dead_names->len,
+                     &g_array_index(fw_dead_names, GLuint, 0));
+    g_array_set_size(fw_dead_names, 0);
+  }
+  g_mutex_unlock(&fw_dead_names_lock);
+}
 
 G_DEFINE_TYPE(FwEmbedderTexture, fw_embedder_texture, fl_texture_gl_get_type())
 
@@ -112,9 +142,9 @@ static gboolean fw_embedder_texture_map(FwEmbedderTexture* self,
       break;
     }
     void* base = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
-    // The mapping holds the object open, and the guest unlinks the name a
-    // generation later — so the descriptor has nothing left to do, and the
-    // pixels survive the name going away.
+    // The mapping holds the object open, so the descriptor has nothing left to
+    // do and the pixels survive the name going away — which they are about to,
+    // just below.
     close(fd);
     if (base == MAP_FAILED) {
       ok = FALSE;
@@ -130,7 +160,20 @@ static gboolean fw_embedder_texture_map(FwEmbedderTexture* self,
   }
 
   fw_embedder_texture_unmap(self);
-  for (size_t i = 0; i < count; i++) self->slots[i] = fresh[i];
+  // **Unlinked the moment they are mapped.** A mapping holds the object open,
+  // so the pixels outlive the name — and the name is what must not outlive the
+  // guest. `/dev/shm` keeps an entry until somebody unlinks it, the guest is
+  // stopped with a signal it does not handle, and a guest that crashes never
+  // gets the chance either: every panel that closed left its ring behind,
+  // ~11MB at 800x600, until the machine was rebooted. This is the one point at
+  // which both halves are provably done with the name — the guest has
+  // published it, this has it mapped — so it is where the name goes. The
+  // guest's own `shm_unlink` a generation later then finds nothing, which is
+  // exactly what it wants to find.
+  for (size_t i = 0; i < count; i++) {
+    shm_unlink(fl_value_get_string(fl_value_get_list_value(surfaces, i)));
+    self->slots[i] = fresh[i];
+  }
   self->mapped_size = size;
   self->width = width;
   self->height = height;
@@ -142,12 +185,13 @@ static gboolean fw_embedder_texture_map(FwEmbedderTexture* self,
 // is what makes uploading here legal and is where a dmabuf import would go when
 // this stops copying at all.
 //
-// **Not an `FlPixelBufferTexture`, and that is not a preference.** The obvious
-// class for a ring of CPU pixels crashed the studio: handing the engine a
-// buffer and a size — the mapping, or plugin-owned memory copied from it, it
-// made no difference — segfaulted deep inside `libflutter_linux_gtk` a second
-// or two after the first frame, every time, with the fault never once landing
-// in this file. Doing the upload ourselves does not go near that path.
+// **Not an `FlPixelBufferTexture`, which is a preference after all.** That
+// class was ruled out while a segfault was being chased through this file, and
+// the segfault turned out to be elsewhere entirely — a `toImage` over the
+// external texture, see the findings doc. What is left is the reason to keep
+// this one: doing the upload here is what a dmabuf import needs anyway, and
+// there is nothing to be gained from the class that hands the engine a
+// pointer instead.
 static gboolean fw_embedder_texture_populate(FlTextureGL* texture,
                                              uint32_t* target,
                                              uint32_t* name,
@@ -155,14 +199,12 @@ static gboolean fw_embedder_texture_populate(FlTextureGL* texture,
                                              uint32_t* height,
                                              GError** error) {
   FwEmbedderTexture* self = FW_EMBEDDER_TEXTURE(texture);
+  // Names given up by an earlier resize, or by a texture that has since been
+  // disposed. Deleted here rather than where they were given up because this is
+  // the only place with Flutter's GL context current — and outside this
+  // texture's lock, because the list belongs to every texture.
+  fw_delete_retired_gl_names();
   g_mutex_lock(&self->mutex);
-  // Names replaced by an earlier resize. Deleted here rather than there because
-  // this is the only place with Flutter's GL context current.
-  if (self->old_names->len > 0) {
-    glDeleteTextures(self->old_names->len,
-                     &g_array_index(self->old_names, GLuint, 0));
-    g_array_set_size(self->old_names, 0);
-  }
   const uint8_t* pixels = self->slots[self->current];
   uint32_t mapped_width = self->width;
   uint32_t mapped_height = self->height;
@@ -177,13 +219,12 @@ static gboolean fw_embedder_texture_populate(FlTextureGL* texture,
   // A resize gets a *new* name rather than a `glTexImage2D` at a new size on
   // the old one. The engine wraps what we hand it and keeps that wrapper, and
   // nothing in the contract says a name may change dimensions underneath it —
-  // reallocating one the compositor still holds is a hazard whether or not it
-  // is the one biting us. (It is not the one biting us: see the resize crash in
-  // `docs/superpowers/specs/2026-08-28-linux-embedder-guest-findings.md`, which
-  // this did not fix.)
+  // reallocating one the compositor still holds is a hazard on its own terms.
+  // It was not the resize crash — that was a `toImage`, and the findings doc
+  // has it — so this is care rather than a fix.
   if (self->name != 0 && (self->name_width != mapped_width ||
                           self->name_height != mapped_height)) {
-    g_array_append_val(self->old_names, self->name);
+    fw_retire_gl_name(self->name);
     self->name = 0;
   }
   if (self->name == 0) {
@@ -210,26 +251,36 @@ static gboolean fw_embedder_texture_populate(FlTextureGL* texture,
   return TRUE;
 }
 
+// GObject allows dispose to run more than once, so everything here is written
+// to survive that, and the mutex is cleared in finalize instead — which runs
+// exactly once. Clearing it here is how a second dispose comes to lock a mutex
+// that no longer exists.
 static void fw_embedder_texture_dispose(GObject* object) {
   FwEmbedderTexture* self = FW_EMBEDDER_TEXTURE(object);
   g_mutex_lock(&self->mutex);
   fw_embedder_texture_unmap(self);
-  // The GL names are Flutter's context's to reclaim; this runs on the platform
-  // thread with no context current, so deleting them here would be wrong.
-  g_clear_pointer(&self->old_names, g_array_unref);
+  // The platform thread holds no GL context, so the name is parked rather than
+  // deleted — see [fw_retire_gl_name].
+  fw_retire_gl_name(self->name);
+  self->name = 0;
   g_mutex_unlock(&self->mutex);
-  g_mutex_clear(&self->mutex);
   G_OBJECT_CLASS(fw_embedder_texture_parent_class)->dispose(object);
+}
+
+static void fw_embedder_texture_finalize(GObject* object) {
+  FwEmbedderTexture* self = FW_EMBEDDER_TEXTURE(object);
+  g_mutex_clear(&self->mutex);
+  G_OBJECT_CLASS(fw_embedder_texture_parent_class)->finalize(object);
 }
 
 static void fw_embedder_texture_class_init(FwEmbedderTextureClass* klass) {
   G_OBJECT_CLASS(klass)->dispose = fw_embedder_texture_dispose;
+  G_OBJECT_CLASS(klass)->finalize = fw_embedder_texture_finalize;
   FL_TEXTURE_GL_CLASS(klass)->populate = fw_embedder_texture_populate;
 }
 
 static void fw_embedder_texture_init(FwEmbedderTexture* self) {
   g_mutex_init(&self->mutex);
-  self->old_names = g_array_new(FALSE, FALSE, sizeof(GLuint));
 }
 
 G_DECLARE_FINAL_TYPE(FwEmbedderTexturePlugin,
@@ -318,6 +369,13 @@ static FlMethodResponse* handle_update(FwEmbedderTexturePlugin* self,
                                         arg_uint(args, "height"),
                                         arg_uint(args, "rowBytes"));
   g_mutex_unlock(&texture->mutex);
+  if (!ok) {
+    // The previous ring is still mapped and still showing, so the panel freezes
+    // at its old size rather than going blank. Worth naming: nothing about that
+    // state looks like a failure from anywhere else.
+    g_warning("[embedder_texture] could not map the ring; the panel is holding "
+              "its previous frame");
+  }
   return FL_METHOD_RESPONSE(
       fl_method_success_response_new(fl_value_new_bool(ok)));
 }

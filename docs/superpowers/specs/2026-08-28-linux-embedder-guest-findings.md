@@ -255,16 +255,19 @@ the first Linux run on a machine that had ever run the macOS code downloaded the
 Linux engine, found a stamped `FlutterEmbedder.framework` in the way, and kept
 it. It now applies the same completeness test it would have returned on.
 
-### The blocker: a resize takes the studio down
+### The blocker, and what it turned out to be
 
-Open a live demo, then widen the panel. A second later the studio dies with
-`SIGSEGV` — no Dart error, "Lost connection to device". The backtrace (caught
-with a temporary handler in the runner) is **entirely inside
-`libflutter_linux_gtk.so`**, ~20 frames of what reads as a recursive tree walk
-under the raster thread's entry, and it is byte-identical across everything
-tried below.
+**It is not the resize, and it is not the texture plugin. It is the
+screenshot.** Every `flutterware_act` step photographs the app with
+`OffsetLayer.toImage` (`lib/src/drive/guest_drive.dart`), and on this engine
+build that call segfaults when the layer tree contains an external texture
+whose cached image has to be re-resolved. A resize is simply what invalidates
+that cache.
 
-Ruled out, each by measurement:
+The symptom that hid it: open a live demo, widen the panel, and a second later
+the studio dies with `SIGSEGV` — no Dart error, "Lost connection to device".
+The fault is entirely inside `libflutter_linux_gtk.so`, and it is byte-identical
+across every variation below.
 
 | Suspected | Test | Result |
 | --- | --- | --- |
@@ -275,31 +278,205 @@ Ruled out, each by measurement:
 | The stage's own chrome | Refuse `createTexture`, so no texture is ever registered | **No crash** — the panel opens fine |
 | A name whose size changed | A fresh `glGenTextures` per size | Same crash |
 | Re-pointing a live texture | Dispose and re-create the texture on every resize | Survived one resize, died on the third |
+| **The drive screenshot** | **Make `_screenshot` return null, hot reload, resize** | **No crash — resize after resize** |
 
-So it needs the external texture to exist, it does not care which kind, it is
-not our memory, and it fires after our code has handed back a valid frame.
+The last row is the answer, and it was checked both ways in one session:
+screenshot off, two real resizes survived; screenshot restored by hot reload,
+the very next resize died with the identical backtrace.
 
-A minimal Flutter Linux app — one `FlTextureGL`, marked available on a 16ms
-timer, its size alternating 512×512 / 763×527 while the `Texture` widget's own
-box alternates too — **does not crash** in 30s of that. So the trigger needs
-something more of the studio's tree than "an external texture that resizes",
-and what that is remains open.
+### Reading a stripped engine
 
-### Where to pick it up
+Flutter publishes no symbols for `linux-x64` — `symbols.zip` and every spelling
+of it 404 at the pinned revision, and `libflutter_linux_gtk.so` is stripped down
+to 253 exported `fl_*` entries. That is still enough, and the way through is
+worth writing down because it took one run:
 
-1. Get symbols. Flutter publishes no `symbols.zip` for `linux-x64`, so this
-   means a local engine build or an unstripped `libflutter_linux_gtk.so`. One
-   symbolized frame probably ends this.
-2. Failing that, grow the minimal app toward the studio's stage — the device
-   frame, the clip, the `Fit` scaling, the inspect dock — until it crashes. The
-   step that flips it is the answer, and the app is then the bug report.
-3. Worth knowing either way: whether the studio survives it with Impeller off.
-   `flutter run --no-enable-impeller` answers it, but the run plugin has no way
-   to pass that through and the app cannot be driven when launched by hand — so
-   this needs either a knob on `run/launch` or an entry point that navigates
-   itself.
+`app/linux/runner/crash_report.cc` (gated on `FW_CRASH_REPORT=1`) installs a
+`SIGSEGV` handler that prints `si_addr`, the whole register file from the
+`ucontext`, the load address of every mapped object, and each backtrace frame as
+`<module>+<offset>`. `objdump -d --start-address=<offset>` then reads the
+faulting instruction and its callers straight out of the shipped `.so`. No local
+engine build, no debugger, no ptrace permission.
 
-Until then the Linux panel is a demo you must not resize, which is not a
-feature. The guest, the artifact plumbing, the protocol and the wire are all
-finished and independently useful — `previews screenshot --engine=guest` and
-`--logs` do not go anywhere near a texture.
+What it said:
+
+```
+signal 11 code 1 addr 0000000000000000 thread "io.flutter.rast"
+RDI 0000000000000000   RIP <libflutter_linux_gtk.so+0x1e4aa1a>
+```
+
+and at that offset:
+
+```
+1e4aa10: push %r14; push %rbx; push %rax
+1e4aa14: mov %rsi,%rbx      ; arg2 — a 64-byte struct the caller just zeroed
+1e4aa17: mov %rdi,%r14      ; arg1 — `this`
+1e4aa1a: mov (%rdi),%rax    ; load the vtable off a NULL `this`
+1e4aa1d: call *0x40(%rax)
+```
+
+A virtual call on a null object. Its caller picks which of two resolvers to
+call, and from which field:
+
+```
+1bf3e4e: mov 0x8(%r12),%rcx     ; ctx->gr_context
+1bf3e53: mov 0x10(%r12),%rax    ; ctx->aiks_context
+1bf3e8e: test %rax,%rax
+1bf3e91: je   1bf3e9d           ; no aiks_context → the Skia resolver…
+1bf3e9d: call 1bf45d0           ; …with rcx, which is NULL
+```
+
+`0x8` and `0x10` are `gr_context` and `aiks_context` of
+`flutter::Texture::PaintContext`, and `r15` holds four floats the code subtracts
+into a width and a height — the `paint_bounds()` that `TextureLayer::Paint`
+passes. So the frame is `EmbedderExternalTextureGL::ResolveTexture`, reached from
+`TextureLayer::Paint`, with **both** contexts null.
+
+### Why both contexts are null
+
+`OffsetLayer.toImage` lands in `Picture::RasterizeToImage`, which flattens the
+retained layer tree:
+
+```cpp
+auto aiks_context = is_impeller_enabled ? snapshot_delegate->GetAiksContext()
+                                        : nullptr;
+snapshot_display_list = layer_tree->Flatten(
+    DlRect::MakeWH(width, height),
+    snapshot_delegate->GetTextureRegistry(),
+    is_impeller_enabled ? nullptr : snapshot_delegate->GetGrContext(),
+    aiks_context.get());
+```
+
+Both arms of that ternary hand `Flatten` a null: whichever branch is taken, the
+other context is `nullptr` **by construction**. The registers say both were —
+`aiks_context` because the code took the `je`, `gr_context` because `rcx` was
+`0`. Which of the two produced it is not settled by the disassembly: either
+`is_impeller_enabled` reads false here and `GetGrContext()` is null because
+there is no Skia context under Impeller, or it reads true and
+`GetAiksContext()` returns null on this shell. Naming which needs a symbolized
+build; it does not change what to do about it.
+
+Two upstream faults, not one:
+
+1. A snapshot on this shell reaches `Flatten` with no usable context, so it
+   cannot resolve an external texture at all.
+2. `ResolveTexture` does not guard the fallback. Current master reads
+   `else if (context)`, which would return `nullptr` and draw nothing; the
+   pinned build has no such test — the disassembly above dereferences `rcx`
+   with no `test` before it.
+
+Fault 2 is what turns a blank rectangle into a crash. **macOS never sees
+either**: the same `toImage` there already returns a fully transparent rectangle
+where a guest panel is, which `app/lib/src/embedder/README.md` has documented
+all along as the reason a picture of a panel and its guest is two captures
+composited. Linux does not return the hole. It dies.
+
+### What this changes
+
+The Linux panel is **not** a demo you must not resize. It renders, it resizes,
+and it survives — measured, repeatedly, with the drive screenshot off. What
+cannot happen is `OffsetLayer.toImage` over a tree holding a `Texture`, which in
+this repository means:
+
+- the drive guest's per-step screenshot — every `flutterware_act` call;
+- `window_capture.dart`, capturing a panel that shows a guest;
+- anything else that rasterises the retained tree while a guest is on screen.
+
+So the studio is usable on Linux by a human today and unusable by an agent,
+which is the wrong way round for this repository.
+
+### The workaround that landed
+
+The picture that path produces is worthless anyway — a transparent hole on
+macOS — so the fix keeps the external texture out of the snapshot rather than
+making the snapshot draw it.
+
+- **`lib/src/offscreen_raster.dart`** (`package:flutterware`) is the notice:
+  `OffscreenRaster.around(raster)` raises a flag, spends **one frame** on it,
+  and only then rasters. The frame is the whole point — `toImage` reads the
+  tree the *last* frame left behind, so raising the flag and rastering in the
+  same turn photographs the texture regardless. It is forced when the window is
+  hidden, which is the state a studio is in for the whole of a drive session,
+  and skipped entirely when nothing is watching, so an app with no external
+  texture pays nothing.
+- **`app/lib/src/embedder/guest_texture.dart`** watches it. `GuestTexture` is
+  a `Texture` that stays out of the *layer* tree while a raster is up, and it
+  is now the only way this application mounts one — the catalog stage, the
+  motion stage and the embedder harness all go through it.
+
+  **It withholds a paint, not a widget, and that distinction was measured.**
+  The first cut swapped the `Texture` for a placeholder through a
+  `ValueListenableBuilder`, which works and flickers: every human click in a
+  live preview ends a burst the recorder photographs, and a rebuilt `Texture`
+  is a *newly registered* external texture that the compositor resolves to
+  black for one frame. The frame that goes away is not the visible one — the
+  stage paints its own ground behind the guest, so withholding reads as an
+  ordinary empty panel — the frame that comes *back* is. So the `TextureBox` is
+  now built once and never destroyed: a `RenderProxyBox` skips painting it and
+  the notice invalidates a repaint, nothing more. A test pins the identity of
+  that render object across a raster, because the property is invisible to
+  anything that only checks the picture.
+- **Both rasters** are wrapped: the drive guest's per-step screenshot
+  (`lib/src/drive/guest_drive.dart`) and `WindowCapture`. The latter also had
+  to start reading its texture rectangles *before* the raster rather than
+  after, because by then there is no `TextureBox` left to ask.
+
+Measured after: the same drag that killed the studio twice — live demo open,
+sidebar divider dragged, drive screenshots on — survives, along with demo
+switches and further resizes, with the crash handler armed and silent.
+
+The picture an agent gets of a live panel is a flat rectangle where the guest
+is. That is not new and not a Linux fact: the drive screenshot has always
+returned the hole on macOS too, and the composited picture is `WindowCapture`.
+
+### What is left
+
+1. **File both upstream faults** with the disassembly above: a snapshot that
+   reaches `Flatten` with no usable context on this shell, and a
+   `ResolveTexture` fallback that dereferences it without a null check.
+2. **Delete the workaround when the engine stops needing it.** It is one file
+   in each package plus three call sites, and both files say so at the top.
+3. **`crash_report.cc` stays** until 1 lands, gated on `FW_CRASH_REPORT=1`. It
+   cost one run to write and one run to use, against a session of elimination
+   that ruled out six innocent things.
+
+### What a review of it found
+
+Run over the branch after the workaround landed. Three of these are not about
+the workaround at all — they are in the guest that had been declared finished,
+and two of them were leaks nobody would have seen until a machine ran out of
+something.
+
+- **`/dev/shm` was never reclaimed.** `EmbeddedEngine.dispose` sends `Shutdown`
+  and then immediately `kill`s the guest, which installs no signal handler — so
+  `surface_ring_destroy`, the only place that unlinks, almost never ran. A
+  POSIX shared-memory object outlives its process. **Measured on this machine
+  after one session of ordinary work: 49 stranded objects, 236MB**, and a
+  crashed guest leaked the same way. The plugin now unlinks each name the
+  moment it has it mapped, which is the only point both halves are provably
+  done with it and which covers a crash as well as a clean stop. Re-measured
+  after the fix, with three guests live and rendering: **zero**.
+- **Every closed panel stranded a GL texture.** `FlTextureGL` does not own the
+  name `populate` hands it, and nothing deleted it — 7.7MB of VRAM at
+  1600×1200 per panel, plus one more per resize. Names are now parked on a
+  plugin-wide list and deleted by whichever texture paints next, because the
+  texture that gives a name up is often the one being disposed and `populate`
+  is the only place with the GL context current.
+- **`g_mutex_clear` sat in `dispose`**, which GObject may run twice; moved to
+  `finalize`.
+- **The flip scratch was allocated after the ring was committed**, and
+  `surface_gl_readback` answers a missing scratch by returning early — which
+  publishes the slot upside down. It is allocated with the ring now and fails
+  with it.
+- **A refused remap was silent** on both sides; it now says so, because a panel
+  frozen at its old size looks like nothing in particular from Dart.
+- **`OffscreenRaster.around` was not reentrant.** This process holds two
+  rasters and serialises neither, so the inner one's `finally` put the texture
+  back under the outer one — the crash again, intermittently and blaming the
+  wrong caller. Counted now, with a test.
+- **The hidden-window test tested nothing.** `platformDispatcher.onBeginFrame =
+  null` leaves `framesEnabled` true, so the forced-frame branch — the one the
+  whole workaround depends on during a drive session — was never taken, and
+  deleting it left every test green. It drives `AppLifecycleState.hidden` now
+  and asserts a frame was actually scheduled; both new assertions were checked
+  by breaking the code they guard.

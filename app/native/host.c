@@ -248,6 +248,13 @@ static uint32_t GlFbo(void* user_data, const FlutterFrameInfo* frame_info) {
 // before the GPU has finished writing what it reads — so by the time this
 // line is reached the frame is in the slot and OnFramePresented can be called
 // outright, where the Metal path has to wait for a command buffer to complete.
+// Note for whoever profiles this: on the Metal path `OnFramePresented` runs
+// from a command-buffer completion handler, off the raster thread. Here it runs
+// inline, so an armed capture does its `fwrite` — 7.7MB at 1600x1200 — and its
+// blocking `ipc_send` inside the engine's present callback, stalling the
+// guest's raster thread for the length of a disk write. Only a capture pays it,
+// and a capture is already a stop-and-photograph, but a guest that captured
+// every frame would be paced by the filesystem.
 static bool GlPresent(void* user_data) {
   (void)user_data;
   int slot = surface_ring_acquire();

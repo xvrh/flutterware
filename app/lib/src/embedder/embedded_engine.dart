@@ -255,10 +255,22 @@ class EmbeddedEngine extends ChangeNotifier {
       if (textureId case var id?) _byTextureId[id] = this;
       phase = EmbeddedEnginePhase.running;
     } else if (message.generation != _currentGeneration) {
-      await _channel.invokeMethod('updateSurfaces', {
+      var mapped = await _channel.invokeMethod<bool>('updateSurfaces', {
         'textureId': textureId,
         ..._surfaceArguments(message),
       });
+      // A refused ring is not an error the panel can act on — the previous one
+      // is still mapped, so the guest's picture freezes at the old size until
+      // the next generation lands, and it does land. But it is invisible from
+      // here otherwise, and a panel that has quietly stopped following a drag
+      // is worth a line in the log rather than a puzzle.
+      if (mapped == false) {
+        debugPrint(
+          '[guest] the platform could not map ring generation '
+          '${message.generation} (${message.width}x${message.height}); '
+          'holding the previous frame',
+        );
+      }
     }
     _currentGeneration = message.generation;
     notifyListeners();

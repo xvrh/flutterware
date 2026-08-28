@@ -18,12 +18,15 @@ same on every host, and it is confined to `native/surface.{m,c}` plus one
   from — one copy each way, ~2ms at 800×600. Zero-copy there means a dmabuf and
   is future work.
 
-**Linux is not finished.** The guest is: the headless pipeline below produces a
-correct `scene.png`, and the live panel comes up in the studio. But widening the
-panel segfaults the *host* application inside the engine's compositor, and the
-fault is reached with an external texture of any kind registered — see
-`docs/superpowers/specs/2026-08-28-linux-embedder-guest-findings.md` § "Phase 1,
-as built" for the seven things that were ruled out and where to pick it up.
+Linux carries one workaround the other host does not need, and it is not in
+this directory: `OffscreenRaster` (`package:flutterware`) takes every guest
+texture out of the widget tree for the frame a `toImage` photographs. macOS
+draws that rectangle transparent; the pinned Linux engine **segfaults the
+process** on the raster thread instead, because it hands the external texture
+a null graphics context and resolves against it unchecked. Both faults, and the
+disassembly that named them, are in
+`docs/superpowers/specs/2026-08-28-linux-embedder-guest-findings.md`. The
+workaround is temporary and should go when the engine stops needing it.
 
 ## Run the GUI harness
 
@@ -46,6 +49,10 @@ compositor at raster time, so `RenderRepaintBoundary.toImage()` of the window
 returns a fully transparent rectangle where the panel is. A picture of the
 window *and* its guest is two captures composited — measured, see decision 5 of
 `docs/superpowers/specs/2026-07-27-gui-cli-mcp-architecture.md`.
+
+That rectangle is now emptied deliberately rather than by the compositor's
+default: `GuestTexture` withholds the `Texture` for the frame the raster reads,
+because on Linux leaving it in kills the process rather than drawing nothing.
 
 ## Run the headless smoke
 
@@ -128,5 +135,4 @@ exactly how keyboard input looked fine while every key sat queued.
 ## Not yet implemented
 
 Hot reload (step 4), IME composition (dead keys, CJK), guest clipboard,
-multiple embedded engines, Windows, dmabuf zero-copy on Linux — and the Linux
-resize crash above.
+multiple embedded engines, Windows, and dmabuf zero-copy on Linux.

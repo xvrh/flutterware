@@ -137,7 +137,13 @@ bool surface_ring_init(int width, int height) {
   // a failed re-allocation leaves the existing ring intact and presentable.
   void* fresh_map[SURFACE_RING_COUNT] = {NULL, NULL, NULL};
   char fresh_name[SURFACE_RING_COUNT][64];
-  bool ok = true;
+  // The flip scratch, allocated with the ring rather than after it. Allocated
+  // after, its failure arrived once the ring was already swapped in, and
+  // `surface_gl_readback` answers a missing scratch by returning early — which
+  // publishes the slot bottom-up. A ring that cannot be flipped is a ring that
+  // cannot be shown, so it fails here with everything else.
+  uint8_t* fresh_row = (uint8_t*)malloc((size_t)width * 4);
+  bool ok = fresh_row != NULL;
   for (int i = 0; i < SURFACE_RING_COUNT && ok; i++) {
     snprintf(fresh_name[i], sizeof(fresh_name[i]), "/flutterware-%u-%u-%d",
              (unsigned)getpid(), serial, i);
@@ -171,6 +177,7 @@ bool surface_ring_init(int width, int height) {
         shm_unlink(fresh_name[i]);
       }
     }
+    free(fresh_row);
     return false;
   }
 
@@ -187,7 +194,7 @@ bool surface_ring_init(int width, int height) {
     memcpy(g_name[i], fresh_name[i], sizeof(fresh_name[i]));
   }
   free(g_row);
-  g_row = (uint8_t*)malloc((size_t)width * 4);
+  g_row = fresh_row;
   g_ring_serial = serial;
   g_size = size;
   g_width = width;

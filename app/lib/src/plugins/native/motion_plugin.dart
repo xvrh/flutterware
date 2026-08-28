@@ -8,6 +8,7 @@ import '../../address/address_scope.dart';
 import '../../previews/catalog_session.dart';
 import '../../previews/compiler_daemon_client.dart';
 import '../../embedder/embedded_engine.dart';
+import '../../embedder/guest_texture.dart';
 import '../../motion/discovery.dart';
 import '../../motion/lane_model.dart';
 import '../../motion/new_span.dart';
@@ -884,7 +885,7 @@ class _MotionStageState extends State<_MotionStage> {
         return Stack(
           fit: StackFit.expand,
           children: [
-            Texture(textureId: engine.textureId!),
+            GuestTexture(textureId: engine.textureId!),
             MotionStageHighlight(
               extent: highlight?.extent,
               label: highlight?.name,
