@@ -223,21 +223,35 @@ class ProcessLog {
 
   bool get ok => exitCode == 0;
 
-  /// The last [lines] non-blank lines — what a failure is actually about.
+  /// Every non-blank line, oldest first.
   ///
   /// Malformed bytes are allowed through: a build tool that emitted something
   /// undecodable has still failed, and refusing to read its log would replace a
   /// real error with a decoding one.
-  List<String> tail([int lines = 20]) {
+  List<String> lines() {
     if (file case var file? when file.existsSync()) {
-      var all = const LineSplitter()
+      return const LineSplitter()
           .convert(utf8.decode(file.readAsBytesSync(), allowMalformed: true))
           .where((line) => line.trim().isNotEmpty)
           .toList();
-      return all.length <= lines ? all : all.sublist(all.length - lines);
     }
     return const [];
   }
+
+  /// How many lines of a log a failure quotes.
+  ///
+  /// Named because two callers need the same window off two different reads:
+  /// [tail], and [describeFailure], which slices a list it already holds so
+  /// that quoting and recognising cost one read between them.
+  static const tailLines = 20;
+
+  /// The last [count] non-blank lines — what a failure is actually about.
+  List<String> tail([int count = tailLines]) => lastOf(lines(), count);
+
+  /// The tail of a log already read, so a caller holding [lines] does not
+  /// read the file again to quote the end of it.
+  static List<String> lastOf(List<String> all, [int count = tailLines]) =>
+      all.length <= count ? all : all.sublist(all.length - count);
 }
 
 /// How a failed step reports itself: the end of the log, then where the rest is.
@@ -247,14 +261,23 @@ class ProcessLog {
 ///
 /// Under `-v` there is neither, and that is right: the output the tail would
 /// quote already went past on its way to the screen.
+///
+/// What is quoted and what is *recognised* are deliberately two different
+/// reads of the same log. A build tool reports its cause and then keeps going,
+/// so the line that explains the failure is routinely nowhere near the end:
+/// measured on a consumer's stale hook cache, the kernel-version line sat
+/// above the twenty the tail keeps, and a recogniser fed the tail alone stayed
+/// silent about the one failure it exists for. The tail is what a person can
+/// read; the whole log is what a pattern is matched against. Both come off one
+/// [ProcessLog.lines] read, so the second costs nothing.
 void describeFailure(StringSink err, String message, ProcessLog log) {
   err.writeln('fw: $message');
   if (log.file case var file?) {
-    var tail = log.tail();
-    for (var line in tail) {
+    var all = log.lines();
+    for (var line in ProcessLog.lastOf(all)) {
       err.writeln('  $line');
     }
-    if (recogniseFailure(tail) case var hint?) {
+    if (recogniseFailure(all) case var hint?) {
       err.writeln('  $hint');
     }
     err.writeln('  full log: ${file.path}');

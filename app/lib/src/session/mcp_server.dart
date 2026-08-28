@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
+import 'package:meta/meta.dart';
 import 'package:dart_mcp/stdio.dart';
 import 'package:flutterware/plugins.dart';
 
@@ -11,6 +12,7 @@ import 'package:flutterware/src/log_client.dart';
 import 'package:path/path.dart' as p;
 
 import '../changes/review_agent.dart';
+import '../shell/repo_layout.dart';
 import '../constants.dart';
 import '../plugins/plugin_core.dart';
 import 'action_shapes.generated.dart';
@@ -197,10 +199,41 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
       return _error('$e');
     }
     try {
-      return await body(session);
+      var result = await body(session);
+      if (_staleResolutionNote(session.root) case var note?) {
+        return withNote(result, note);
+      }
+      return result;
     } finally {
       session.dispose();
     }
+  }
+
+  /// What flutterware resolved to when this process first answered.
+  ///
+  /// A server is `exec`'d once and then answers for the whole session out of
+  /// the code it was compiled from, while the project underneath it can be
+  /// upgraded, switched to a path dependency or rebased at any point. Nothing
+  /// in a reply says which of the two a reader is looking at, and the two
+  /// disagree in the worst possible way: a plugin the new revision defines is
+  /// reported as *declared with no implementation*, which reads as "your
+  /// `tool/flutterware.dart` is wrong" and sends the reader to the one file
+  /// that is fine. The CLI in the same worktree answers correctly, because it
+  /// is a fresh process — but only somebody who thinks to try both finds that
+  /// out.
+  ///
+  /// Latched on the first call rather than at construction: a client connects
+  /// while the bootstrap's `pub get` may still be settling, and the resolution
+  /// that matters is the one the first answer was built from.
+  String? _flutterwareSeen;
+
+  /// The line a reply owes when flutterware has been re-resolved under this
+  /// process, or null.
+  String? _staleResolutionNote(String root) {
+    var resolved = resolvedFlutterware(root);
+    if (resolved == null) return null;
+    var seen = _flutterwareSeen ??= resolved;
+    return staleResolutionNote(seen: seen, resolved: resolved);
   }
 
   /// How many rows of any one list a status reply carries.
@@ -1110,6 +1143,107 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
 
   static CallToolResult _json(Object? value) =>
       CallToolResult(content: [TextContent(text: _encode(value))]);
+
+  /// The project's own resolution file, or null where it has none.
+  ///
+  /// [root] is a git worktree with a `tool/flutterware.dart` in it, which is
+  /// not always a Dart package: a repo may keep its app in a subdirectory and
+  /// its config at the top, and `discoverPackages` supports exactly that. So
+  /// the root is tried first — a workspace writes one `package_config.json`
+  /// there and none in its members — and the declared packages after it.
+  /// Looking only at the root would have made this whole check a silent no-op
+  /// in the layouts least likely to notice.
+  static File? packageConfigOf(String root) {
+    var atRoot = File(p.join(root, '.dart_tool', 'package_config.json'));
+    // Answered before the scan, not inside it: this runs on every tool call,
+    // and the root holds the resolution in every layout but one.
+    if (atRoot.existsSync()) return atRoot;
+    for (var package in discoverPackages(root)) {
+      var file = File(
+        p.join(root, package, '.dart_tool', 'package_config.json'),
+      );
+      if (file.existsSync()) return file;
+    }
+    return null;
+  }
+
+  /// What the project resolves flutterware to, or null where nothing can be
+  /// read — the resolved locations of `flutterware` and `flutterware_app`,
+  /// which is what changes when the code behind a plugin id changes.
+  ///
+  /// The identity and not the file's timestamp. A timestamp answers "has
+  /// anything been resolved", which is a different and much commoner event:
+  /// an IDE runs `pub get` when a pubspec is saved, a rebase moves one, an
+  /// unrelated dependency is added — and none of those make this server stale.
+  /// A `rootUri` carries the version for a hosted dependency and the commit
+  /// for a git one, so it moves when, and only when, the answer would differ.
+  ///
+  /// It cannot see a **path** dependency whose source was edited in place:
+  /// nothing in the resolution moves, and the running process is the only
+  /// thing that is out of date. That is the checkout-on-itself case, where
+  /// a rebuild is the loop anyway.
+  static String? resolvedFlutterware(String root) {
+    var file = packageConfigOf(root);
+    if (file == null) return null;
+    try {
+      var json = jsonDecode(file.readAsStringSync());
+      if (json is! Map<String, Object?>) return null;
+      var packages = json['packages'];
+      if (packages is! List) return null;
+      var resolved = [
+        for (var package in packages)
+          if (package is Map<String, Object?> &&
+              const {
+                'flutterware',
+                'flutterware_app',
+              }.contains(package['name']))
+            '${package['name']}=${package['rootUri']}',
+      ]..sort();
+      return resolved.isEmpty ? null : resolved.join(' ');
+    } on FormatException {
+      // A resolution being rewritten under the read is half a file, not an
+      // answer. Saying nothing is right: the next call reads a whole one.
+      return null;
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  /// [result] with one more text block on the end of its content.
+  ///
+  /// Spread rather than rebuilt through `CallToolResult(...)`: that constructor
+  /// takes four fields today, and a result also carrying a `meta` or a
+  /// `structuredContent` would have them dropped — silently, and only on the
+  /// stale path, which is the one nothing exercises. `content` is named by the
+  /// MCP schema rather than by this client library, so the literal is the
+  /// stable spelling; the cast is an extension type over its own wire map.
+  @visibleForTesting
+  static CallToolResult withNote(CallToolResult result, String note) =>
+      CallToolResult.fromMap({
+        ...(result as Map<String, Object?>),
+        'content': [...result.content, TextContent(text: note)],
+      });
+
+  /// What to say when a server older than the project's flutterware answers.
+  ///
+  /// Deliberately on every reply while it lasts rather than once: the reader
+  /// who needs it is the one holding a confusing answer, and there is no
+  /// saying in advance which call that will be. It ends by reconnecting, which
+  /// is the only thing that can end it — an MCP client cannot re-exec its
+  /// server mid-session, and this process cannot re-link itself.
+  static String? staleResolutionNote({
+    required String seen,
+    required String resolved,
+  }) {
+    if (seen == resolved) return null;
+    return 'Note: the project has resolved a different flutterware since this '
+        'MCP server started, and the server still serves $flutterwareVersion '
+        'out of the code it was built from. Anything that resolution changed '
+        'is not in it — a plugin reported as declared with no implementation '
+        'may be defined in the project and missing only here. `fw` in the '
+        'same worktree is a fresh process and will answer correctly; '
+        'reconnect the MCP client to bring this one up to date.';
+  }
 
   /// Errors go back as tool results with [isError], not as protocol errors —
   /// "you named a plugin that does not exist" is something the model should

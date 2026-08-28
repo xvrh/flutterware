@@ -69,7 +69,23 @@ class ScenarioNetworkPolicy {
   /// await s.tap('Place order');
   /// expect(s.network.requests.last.url.path, '/api/orders');
   /// ```
+  ///
+  /// Emptied between the branches of a `split` — see [resetForReplay] — so it
+  /// answers "what did *this path* ask for". [requestsEver] is the other
+  /// question.
   final requests = <ScenarioRequest>[];
+
+  /// How many exchanges this scenario has made across **every** branch of its
+  /// splits.
+  ///
+  /// [requests] cannot answer this: each replay states its own answers from
+  /// the top and its log is dropped with them, so after the last branch it
+  /// holds only that branch's. A reader asking "did this scenario ever open a
+  /// request at all" — which is what a mode claiming to reach the network is
+  /// judged against — would otherwise get the last path's answer and take it
+  /// for the scenario's.
+  int get requestsEver => _requestsEver;
+  var _requestsEver = 0;
 
   /// Stated answers, most recent first — so re-stating a url mid-flow changes
   /// what it answers from there on, which is how "and now the list has the new
@@ -317,6 +333,7 @@ class ScenarioNetworkPolicy {
 
   void _record(ScenarioRequest request) {
     requests.add(request);
+    _requestsEver++;
     recordAppEvent(
       request.status == null
           // Nothing answered it, so there is no status to show — the second
