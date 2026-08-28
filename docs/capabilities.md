@@ -1443,7 +1443,8 @@ packages: List<ScenarioRunPackage>
       frameHeight: int?
       frameIntervalMs: int?   # Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.
       framesDropped: int?   # Frames refused by the recorder's cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.
-      settled: bool?   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
+      settled: bool?   # False when frames were still scheduled at the shutter: something on this screen was still moving, and the capture is of a moving picture.
+      waited: bool?   # Whether this step's settle policy was one that waits for the app to go quiet — `Settle.upTo` and `Settle.full`, and not `Settle.none`, `Settle.frames` or `Settle.elapse`, which stop on a count or on the clock.
       landed: bool?   # False when the shutter fell with an image decode or an asset read still in flight — the picture is of a screen that was still filling in, and the artwork it is missing turns up on the next step; `true` is the absence of a report rather than a claim that everything the screen wanted has arrived, and a step that is not a `screen` has nothing to land and reads `true` vacuously.
       digest: String?   # What this step captured, hashed — the pixels for a screen, the payload for a document.
       strayFrames: int?   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
@@ -1452,7 +1453,7 @@ packages: List<ScenarioRunPackage>
       failure: String?   # The error, when this is the step a scenario broke on.
     stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
     unchangedCount: int   # How many of those steps a verb acted for nothing on — pictures byte-identical to their parent's.
-    unsettledCount: int   # How many of those steps were captured with the app still animating — `settled: false`, the bounded settle giving up with frames still scheduled.
+    unsettledCount: int   # How many of those steps were captured with the app still animating after a policy that **waited** for it to stop — `settled: false` with `waited: true`, the settle giving up with frames still scheduled.
     stepsElided: int?   # How many of [stepCount]'s steps are on disk rather than in this copy — zero when [steps] is the whole of them, which is what `run.json` and a `steps: all` request both hold.
     errors: List<ScenarioRunError>?   # The failure, when [ok] is false.
       error: String

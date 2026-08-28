@@ -1150,6 +1150,7 @@ Future<Map<String, Object?>> _runOne(
       eventTitles: inlineEventTitles(capture.events),
       eventsDropped: capture.eventsDropped > 0 ? capture.eventsDropped : null,
       settled: capture.settled,
+      waited: capture.waited,
       landed: capture.landed,
       digest: digest,
       strayFrames: capture.strayFrames,
@@ -1335,6 +1336,7 @@ Future<Map<String, Object?>> _runOne(
           ? capture.motion.dropped
           : null,
       settled: capture.settled,
+      waited: capture.waited,
       landed: capture.landed,
       // Absent on a pixel-less capture, for the reason `unchanged` is false
       // there: every such step digests the same empty bytes, so a *reported*
@@ -1480,7 +1482,7 @@ Future<Map<String, Object?>> _runOne(
     steps: steps,
     stepCount: steps.length,
     unchangedCount: steps.where((step) => step.unchanged).length,
-    unsettledCount: steps.where((step) => !step.settled).length,
+    unsettledCount: steps.where((step) => !step.settled && step.waited).length,
     errors: passed ? const [] : errors,
     translations: read.isNotEmpty ? read : null,
   );

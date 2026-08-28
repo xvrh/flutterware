@@ -1471,8 +1471,11 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   /// which is the same number but only lands when the scenario finishes: the
   /// flow fills in live, and a count that appears at the end would be news
   /// about a screen the reader has already scrolled past.
+  /// The same pair `unsettledCount` reads: a capture parked on purpose is not
+  /// one of these, and counting it would make the badge a measure of how much
+  /// mid-flight this suite photographs.
   int _unsettled(ScenarioPanelRun? run) =>
-      run?.steps.where((step) => !step.settled).length ?? 0;
+      run?.steps.where((step) => !step.settled && step.waited).length ?? 0;
 
   /// What to say about where this run's requests went, or null for a run that
   /// made none go anywhere.
