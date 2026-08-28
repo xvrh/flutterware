@@ -296,6 +296,50 @@ class MotionCore extends PluginCore {
         ],
       ),
       PluginAction(
+        'video',
+        'Video',
+        returns: Artifact,
+        description:
+            'Renders the whole motion to an mp4 at its own duration, one '
+            'frame per video frame. Not a screen recording: every frame is '
+            'the motion evaluated at a playhead position, so the clip is '
+            'exactly what the scrubber shows and is not rendered in real '
+            'time. Needs `ffmpeg` on PATH.',
+        parameters: [
+          ActionParameter(
+            'motion',
+            'Motion',
+            required: true,
+            description: 'The `motion:` identifier, as `list` reports it',
+          ),
+          const ActionParameter(
+            'fps',
+            'Frames per second',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description: 'Frames a second of output. 30 when omitted.',
+          ),
+          ActionParameter(
+            'package',
+            'Package',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'Which declared package; the only one when omitted',
+            options: [
+              for (var path in packages)
+                ActionOption(path, label: path == '.' ? 'root' : path),
+            ],
+          ),
+          const ActionParameter(
+            'device',
+            'Device',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'A device to render as; the panel otherwise',
+          ),
+        ],
+      ),
+      PluginAction(
         'new',
         'New motion',
         returns: Artifact,
@@ -463,6 +507,7 @@ class MotionCore extends PluginCore {
   }) async {
     if (actionId == 'capture') return _capture(arguments);
     if (actionId == 'filmstrip') return _filmstrip(arguments);
+    if (actionId == 'video') return _video(arguments);
     if (actionId == 'new') return _new(arguments);
     if (actionId == 'add-element') return _addElement(arguments);
     if (actionId != 'list') return super.invoke(actionId, arguments: arguments);
@@ -569,6 +614,54 @@ class MotionCore extends PluginCore {
         'frames': strip.stops.length,
         'durationMs': strip.durationMs,
         'bytes': strip.file.lengthSync(),
+        'device': ?device?.id,
+      },
+    );
+  }
+
+  /// The whole motion, as a file somebody can play.
+  Future<Artifact> _video(Map<String, Object?> arguments) async {
+    var (packagePath, motion, entry, catalog) = await _resolve(arguments);
+    var fps = switch (arguments['fps']) {
+      int value => value,
+      String text when int.tryParse(text) != null => int.parse(text),
+      _ => 30,
+    }.clamp(1, 120);
+
+    var device = _deviceOf(arguments);
+    var output = p.join(
+      host.workspace.appContext.appToolDirectory.path,
+      'build',
+      'motion',
+      '${motion.values}.mp4',
+    );
+    var video = await catalog.video(
+      entryId: entry.id,
+      output: output,
+      fps: fps,
+      viewport: device == null
+          ? CaptureViewport.panel
+          : CaptureViewport.of(device),
+    );
+
+    return Artifact(
+      kind: Artifact.mp4,
+      // The whole motion rather than a moment in it, so the address has no `t`.
+      address: addressFor(
+        packagePath,
+        file: motion.file,
+        motion: motion.values,
+      ),
+      path: p.relative(video.file.path, from: host.worktree.path),
+      meta: {
+        'motion': motion.values,
+        'file': motion.file,
+        'fps': video.fps,
+        'frames': video.frames,
+        'durationMs': video.durationMs,
+        'renderMs': video.renderTime.inMilliseconds,
+        'encodeMs': video.encodeTime.inMilliseconds,
+        'bytes': video.file.lengthSync(),
         'device': ?device?.id,
       },
     );

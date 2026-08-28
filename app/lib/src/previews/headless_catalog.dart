@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../motion/filmstrip.dart';
+import '../motion/video.dart';
 
 // The knob types, not the umbrella `ui_catalog.dart`: that one exports the
 // demo annotations, which reach `package:flutter/widgets.dart` and would make
@@ -140,6 +141,78 @@ class HeadlessCatalog {
       // The sheet is the artifact; the frames were scaffolding.
       if (scratch.existsSync()) scratch.deleteSync(recursive: true);
     }
+  });
+
+  /// The whole motion as a video file.
+  ///
+  /// The same loop as [filmstrip] — one guest, N seeks — with two differences,
+  /// and both of them are why this is worth having rather than a filmstrip
+  /// with a large `frames`. The stops come from the motion's *own* duration so
+  /// the clip plays at the speed it was authored at, and the frames go
+  /// straight to the encoder as pixels instead of becoming N PNGs on disk.
+  ///
+  /// Nothing here plays anything. Every frame is `evaluate(t)` at a stop this
+  /// method chose, which is the same call the scrubber makes and the same one
+  /// a golden test makes — so a video cannot drift from what the panel shows,
+  /// and rendering is not bounded by real time. That is the whole reason the
+  /// law is worth keeping: a clock in the motion would make this a recording.
+  Future<CatalogVideo> video({
+    required String entryId,
+    required String output,
+    int fps = 30,
+    CaptureViewport viewport = CaptureViewport.panel,
+    Map<String, String> knobs = const {},
+    Map<String, String> axes = const {},
+  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
+    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
+    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
+
+    // The duration is the motion's, and only the guest knows it — so the
+    // first seek is what tells us how many frames there are to render.
+    var (_, durationMs) = await guest.seekMotion(0);
+    if (durationMs <= 0) {
+      throw StateError(
+        "this entry's motion reports no duration, so there is nothing to "
+        'render at $fps frames a second',
+      );
+    }
+    var stops = videoStops(durationMs: durationMs, fps: fps);
+
+    var render = Stopwatch()..start();
+    var (first, _) = await guest.captureImage(pixelRatio: viewport.pixelRatio);
+    var encoder = await VideoEncoder.start(
+      output: output,
+      width: first.width,
+      height: first.height,
+      fps: fps,
+    );
+    try {
+      encoder.add(first);
+      for (var t in stops.skip(1)) {
+        await guest.seekMotion(t);
+        var (frame, _) = await guest.captureImage(
+          pixelRatio: viewport.pixelRatio,
+        );
+        encoder.add(frame);
+      }
+    } catch (_) {
+      await encoder.abort();
+      rethrow;
+    }
+    render.stop();
+
+    var flush = Stopwatch()..start();
+    var file = await encoder.finish();
+    flush.stop();
+
+    return CatalogVideo(
+      file: file,
+      frames: encoder.frames,
+      fps: fps,
+      durationMs: durationMs,
+      renderTime: render.elapsed,
+      encodeTime: flush.elapsed,
+    );
   });
 
   /// Connects, compiles [entryId], launches one guest and hands it to [body].
@@ -549,6 +622,32 @@ class CatalogFilmstrip {
   final File file;
   final List<double> stops;
   final int durationMs;
+}
+
+/// A rendered motion, and what it cost to render.
+class CatalogVideo {
+  CatalogVideo({
+    required this.file,
+    required this.frames,
+    required this.fps,
+    required this.durationMs,
+    required this.renderTime,
+    required this.encodeTime,
+  });
+
+  final File file;
+  final int frames;
+  final int fps;
+
+  /// The motion's own duration, which is what set the frame count.
+  final int durationMs;
+
+  /// Seeking and capturing, which is the cost that scales with the clip.
+  final Duration renderTime;
+
+  /// Waiting for the encoder after the last frame went in. Small, because
+  /// `ffmpeg` was encoding all along.
+  final Duration encodeTime;
 }
 
 /// A captured frame, and the knobs it was rendered with.

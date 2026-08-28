@@ -1313,6 +1313,86 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 | `package` | choice | no | — | Which declared package; the only one when omitted |
 | `device` | choice | no | — | A device to render as; the panel otherwise |
 
+#### `video` — Video
+
+Renders the whole motion to an mp4 at its own duration, one frame per video frame. Not a screen recording: every frame is the motion evaluated at a playhead position, so the clip is exactly what the scrubber shows and is not rendered in real time. Needs `ffmpeg` on PATH.
+
+```sh
+fw run motion video --motion=<string> [--fps=…] [--package=…] [--device=…]
+```
+
+Returns `Artifact`:
+
+```
+kind: String   # A MIME type where one fits — see the constants above.
+address: String   # What this is an artifact of, axes included.
+path: String?   # Where it was written, when it was written.
+text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
+meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it |
+| `fps` | integer | no | — | Frames a second of output. 30 when omitted. |
+| `package` | choice | no | — | Which declared package; the only one when omitted |
+| `device` | choice | no | — | A device to render as; the panel otherwise |
+
+#### `new` — New motion
+
+Starts a motion from nothing: a stage, a values file and a preview entry, with one element already in them so the first render is not a blank screen. This is the cold start — by hand it is roughly a hundred lines across two files that have to agree on a string.
+
+```sh
+fw run motion new --name=<string> [--width=…] [--height=…] [--package=…]
+```
+
+Returns `Artifact`:
+
+```
+kind: String   # A MIME type where one fits — see the constants above.
+address: String   # What this is an artifact of, axes included.
+path: String?   # Where it was written, when it was written.
+text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
+meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `name` | string | yes | — | Lower snake case, and the basename of all three files — `checkout` gives `checkout.dart`, `checkout.motion.dart` and `checkout.stage.dart`. |
+| `width` | integer | no | — | Logical pixels. 360 when omitted. |
+| `height` | integer | no | — | Logical pixels. 640 when omitted. |
+| `package` | choice | no | — | Which declared package; the only one when omitted |
+
+#### `add-element` — Add element
+
+Adds one placeholder to a motion's draft stage. The stage is the only place the tool may create a target: the other place a target is named is your build method, which it does not touch. Refuses rather than approximates — a stage file outside the grammar comes back with the offset that broke it and nothing is written.
+
+```sh
+fw run motion add-element --motion=<string> --target=<string> [--kind=…] [--x=…] [--y=…] [--width=…] [--height=…] [--label=…] [--package=…]
+```
+
+Returns `Artifact`:
+
+```
+kind: String   # A MIME type where one fits — see the constants above.
+address: String   # What this is an artifact of, axes included.
+path: String?   # Where it was written, when it was written.
+text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
+meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it. Its stage is the `.stage.dart` beside it. |
+| `target` | string | yes | — | The name the lane and the read site will both use. Must not already be on the stage. |
+| `kind` | choice | no | — | box when omitted |
+| `x` | integer | no | — | Left, in stage pixels. 24 when omitted. |
+| `y` | integer | no | — | Top, in stage pixels. Below the lowest element when omitted, so a bare call stacks rather than overlaps. |
+| `width` | integer | no | — | 280 when omitted. |
+| `height` | integer | no | — | 48 when omitted. |
+| `label` | string | no | — | Shown inside a `text` placeholder. |
+| `package` | choice | no | — | Which declared package; the only one when omitted |
+
 #### `list` — List
 
 Every motion of a package, with its targets and where each is read — from the syntactic scan, without compiling or running anything. Read the diagnostics: a target named by an expression rather than a literal is real at run time and invisible here.
