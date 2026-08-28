@@ -11,3 +11,4 @@ library;
 
 export 'src/plugins/store.dart' show StoreCanvas, StoreTarget;
 export 'src/store/frame.dart';
+export 'src/store/status_chrome.dart';
