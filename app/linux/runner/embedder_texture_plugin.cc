@@ -1,5 +1,7 @@
 #include "embedder_texture_plugin.h"
 
+#include "crash_report.h"
+
 #include <epoxy/gl.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -244,6 +246,7 @@ static gboolean fw_embedder_texture_populate(FlTextureGL* texture,
                GL_RGBA, GL_UNSIGNED_BYTE, pixels);
   g_mutex_unlock(&self->mutex);
 
+  fw_crash_note(mapped_width, mapped_height, self->name, self->current);
   *target = GL_TEXTURE_2D;
   *name = self->name;
   *width = mapped_width;

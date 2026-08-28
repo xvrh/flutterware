@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME}
   "main.cc"
   "my_application.cc"
   "embedder_texture_plugin.cc"
+  "crash_report.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
 )
 
