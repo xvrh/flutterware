@@ -3,9 +3,15 @@
 /// A scenario runs under fake time, and `flutter_test` answers every request
 /// with an empty 400 — so an app that loads an avatar renders a blank box and
 /// says nothing about why. This is the setting that decides what happens
-/// instead, and it is said in the same places [Shots] is: a folder's
-/// `runScenarios(network: ...)`, one run's `--network=`, one
-/// `scenario(network: ...)`. Nearest wins, except that a run beats a folder.
+/// instead, and it is said in the same places [Shots] is: the project's
+/// `fw.network(...)`, a folder's `runScenarios(network: ...)`, one run's
+/// `--network=`, one `scenario(network: ...)`.
+///
+/// **Nearest wins**, and those four are the ladder in order — so a run reaches
+/// past a folder and the project, and a `scenario(network: ...)` reaches past
+/// all three. A run flag is not a master switch: `--network=record` against a
+/// scenario that states its own mode records nothing, and says so on stderr
+/// rather than leaving an empty store to be discovered later.
 ///
 /// Whatever the mode, a `s.network` stub always beats it — the mode governs
 /// what happens to the requests the scenario did not state an answer for.

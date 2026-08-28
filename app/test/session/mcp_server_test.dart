@@ -4,12 +4,14 @@ import 'dart:io';
 
 import 'package:dart_mcp/client.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/src/constants.dart';
 import 'package:flutterware_app/src/plugins/native/run_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/session/cli.dart';
 import 'package:flutterware_app/src/session/mcp_server.dart';
 import 'package:flutterware_app/src/shell/repo_layout.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
+import 'package:path/path.dart' as p;
 import 'package:stream_channel/stream_channel.dart';
 
 /// What `tool/flutterware.dart` declares, in declared order.
@@ -527,6 +529,136 @@ void main() {
       ).run(['mcp']);
 
       expect(out.toString(), isEmpty);
+    });
+  });
+
+  /// A server is `exec`'d once and answers out of the code it was built from,
+  /// while the project under it can be upgraded or switched to a path
+  /// dependency at any point. A consumer met the two disagreeing: the server
+  /// called a newly-added plugin "declared with no implementation" while `fw`
+  /// in the same worktree listed it, and the message pointed at
+  /// `tool/flutterware.dart`, which was the one file that was right.
+  group('a server older than the project says so', () {
+    /// A project rooted at [directory] resolving flutterware to [version],
+    /// plus one unrelated package to be moved around independently.
+    void resolve(
+      Directory directory,
+      String version, {
+      String at = '.',
+      String other = '1.0.0',
+    }) {
+      File(p.join(directory.path, at, '.dart_tool', 'package_config.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          jsonEncode({
+            'configVersion': 2,
+            'packages': [
+              {
+                'name': 'collection',
+                'rootUri': 'file:///pub/collection-$other',
+              },
+              {
+                'name': 'flutterware',
+                'rootUri': 'file:///pub/flutterware-$version',
+              },
+            ],
+          }),
+        );
+    }
+
+    test('reads what flutterware resolved to, or nothing at all', () {
+      var directory = Directory.systemTemp.createTempSync('fw_res');
+      addTearDown(() => directory.deleteSync(recursive: true));
+
+      expect(FlutterwareMcpServer.resolvedFlutterware(directory.path), isNull);
+
+      resolve(directory, '0.5.2');
+      expect(
+        FlutterwareMcpServer.resolvedFlutterware(directory.path),
+        contains('flutterware-0.5.2'),
+      );
+    });
+
+    // The false positive that would have made this unreadable: an IDE runs
+    // `pub get` whenever a pubspec is saved, and a rebase moves one. Neither
+    // makes the server stale, and a note nobody can dismiss on every reply for
+    // the rest of a session is worse than no note.
+    test('an unrelated dependency moving is not staleness', () {
+      var directory = Directory.systemTemp.createTempSync('fw_res');
+      addTearDown(() => directory.deleteSync(recursive: true));
+
+      resolve(directory, '0.5.2');
+      var seen = FlutterwareMcpServer.resolvedFlutterware(directory.path)!;
+      resolve(directory, '0.5.2', other: '2.0.0');
+      var after = FlutterwareMcpServer.resolvedFlutterware(directory.path)!;
+
+      expect(
+        FlutterwareMcpServer.staleResolutionNote(seen: seen, resolved: after),
+        isNull,
+      );
+    });
+
+    test('flutterware itself moving is', () {
+      var directory = Directory.systemTemp.createTempSync('fw_res');
+      addTearDown(() => directory.deleteSync(recursive: true));
+
+      resolve(directory, '0.5.2');
+      var seen = FlutterwareMcpServer.resolvedFlutterware(directory.path)!;
+      resolve(directory, '0.5.3');
+      var after = FlutterwareMcpServer.resolvedFlutterware(directory.path)!;
+
+      var note = FlutterwareMcpServer.staleResolutionNote(
+        seen: seen,
+        resolved: after,
+      );
+      expect(note, isNotNull);
+      expect(note, contains(flutterwareVersion));
+      expect(note, contains('no implementation'));
+      expect(note, contains('reconnect'));
+    });
+
+    // A repo may keep `tool/flutterware.dart` at the top and its app in a
+    // subdirectory, so the root is not always a package. Looking only there
+    // made the whole check a silent no-op in exactly those projects.
+    test('finds the resolution when the root is not the package', () {
+      var directory = Directory.systemTemp.createTempSync('fw_res');
+      addTearDown(() => directory.deleteSync(recursive: true));
+      File(p.join(directory.path, 'my_app', 'pubspec.yaml'))
+          .createSync(recursive: true);
+      resolve(directory, '0.5.2', at: 'my_app');
+
+      expect(
+        FlutterwareMcpServer.resolvedFlutterware(directory.path),
+        contains('flutterware-0.5.2'),
+      );
+    });
+
+    // The note is appended to a result somebody else built, and rebuilding
+    // one field at a time is how the rest go missing.
+    test('appending the note keeps everything else the result carried', () {
+      var noted = FlutterwareMcpServer.withNote(
+        CallToolResult(
+          content: [TextContent(text: 'the answer')],
+          structuredContent: {'plugins': 3},
+          isError: true,
+        ),
+        'stale',
+      );
+
+      expect(noted.structuredContent, {'plugins': 3});
+      expect(noted.isError, isTrue);
+      expect((noted.content.first as TextContent).text, 'the answer');
+      expect((noted.content.last as TextContent).text, 'stale');
+    });
+
+    test('half a file being written is not an answer', () {
+      var directory = Directory.systemTemp.createTempSync('fw_res');
+      addTearDown(() => directory.deleteSync(recursive: true));
+      File(p.join(directory.path, '.dart_tool', 'package_config.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{"configVersion": 2, "packa');
+
+      expect(FlutterwareMcpServer.resolvedFlutterware(directory.path), isNull);
     });
   });
 }

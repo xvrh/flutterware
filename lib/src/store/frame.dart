@@ -297,15 +297,48 @@ class DefaultStoreFrame extends StoreFrame {
           // Bleeding off the bottom edge, which is the standard composition
           // because it uses a very tall canvas without leaving the device
           // stranded in the middle of it.
+          //
+          // Whether it *does* bleed is a race between two numbers, and the
+          // margins below are what settle it: the body is scaled to the width
+          // its padding leaves, so a narrower pair of margins makes it taller.
+          // A phone is taller than the space under the band on Play's canvas —
+          // which is the only place this frame is forced — so at these values
+          // it overflows and the overflow is clipped away. The headline-less
+          // pair is the tighter of the two on purpose: with no caption to make
+          // room for there is more width to spend, and at the 0.09 it used to
+          // share with the caption case the body came out 16 logical pixels
+          // *short* of the space — no bleed, and 42 physical pixels of ground
+          // under the device, which is the stranded look this composition
+          // exists to avoid, arrived at from the other side. What was actually
+          // drawn there was worse still, and the `minHeight` below is that
+          // half: the floor stretched those 16 pixels back out of the picture.
+          //
+          // A device shorter than the space cannot bleed at any margin — that
+          // would mean scaling past the canvas width and cropping the picture
+          // sideways, which is the one thing a store screenshot must not do.
+          // There it sits at the top of the space, and `defaultStoreFrame`
+          // keeps it out of that case by handing those targets a
+          // [PlainStoreFrame] instead.
           Expanded(
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal:
-                    canvas.logicalWidth * (headline == null ? 0.09 : 0.11),
+                    canvas.logicalWidth * (headline == null ? 0.07 : 0.11),
               ),
               child: ClipRect(
                 child: OverflowBox(
                   alignment: Alignment.topCenter,
+                  // Both ends, and `minHeight` is the load-bearing one.
+                  // `OverflowBox` inherits whichever bounds it is not given,
+                  // and the bound here comes from an `Expanded` — which is
+                  // tight. So a body shorter than the space was being
+                  // stretched to fill it, and [_Body] paints the capture with
+                  // `BoxFit.fill`: the picture came out squashed by however
+                  // much it was short, silently, which is the one failure a
+                  // store screenshot cannot survive. Releasing the floor lets
+                  // a short body stay its own height and sit at the top of the
+                  // space — visibly imperfect, and imperfect beats wrong.
+                  minHeight: 0,
                   maxHeight: double.infinity,
                   child: _Body(
                     shot: shot,

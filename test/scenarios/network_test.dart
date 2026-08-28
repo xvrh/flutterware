@@ -287,6 +287,42 @@ void main() {
     });
   });
 
+  group('what a scenario ever asked for', () {
+    // `resetForReplay` empties the requests log between branches, because a
+    // branch asserting on what it asked for must not see the branch before
+    // it. The count a *mode* is judged against is the other question and must
+    // outlive the reset: a scenario that fetched in one branch has fetched,
+    // whatever the last path through it did.
+    var counted = <String, ({int here, int ever})>{};
+    scenario('outlives the branch that asked', network: ScenarioNetwork.live, (
+      s,
+    ) async {
+      await s.pumpWidget(_Blank());
+      await s.split({
+        'fetches': () async {
+          await _statuses(s, base);
+          counted['fetches'] = (
+            here: s.network.requests.length,
+            ever: s.network.requestsEver,
+          );
+        },
+        'quiet': () async {
+          counted['quiet'] = (
+            here: s.network.requests.length,
+            ever: s.network.requestsEver,
+          );
+        },
+      });
+    });
+    tearDown(() {
+      expect(counted['fetches'], (here: 1, ever: 1));
+      // The branch asked for nothing, and the scenario still asked for
+      // something. Reading `requests` here is what made a split scenario
+      // report its stated mode as inert.
+      expect(counted['quiet'], (here: 0, ever: 1));
+    });
+  });
+
   group('a refusal is reported, not fatal', () {
     // An `Image.network` with no `errorBuilder` has no error listener of its
     // own, so the throw reaches `FlutterError.reportError` — which in a test

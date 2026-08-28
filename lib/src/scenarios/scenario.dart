@@ -66,6 +66,17 @@ import 'harness.dart' show scenarioFileSafe, scenarioNameMax;
 /// Null outside the harness, where nothing is collecting.
 List<String>? scenarioDeclarationSink;
 
+/// The file whose `main()` is declaring right now, or null outside the
+/// harness.
+///
+/// Armed beside [scenarioDeclarationSink] and for the same reason: under the
+/// runner one process declares every file, so nothing a scenario knows about
+/// itself is unique to it. A description is not — two files may each hold a
+/// `scenario('Home')`, and anything this package keys on the description alone
+/// silently treats them as one scenario. The standalone lane needs no such
+/// thing, because `flutter test` gives each file its own process.
+String? scenarioAmbientFile;
+
 /// What a scenario that names no [Timeout] of its own gets.
 ///
 /// Null here, so a bare `flutter test` keeps `flutter_test`'s answer. The
@@ -122,6 +133,13 @@ void scenario(
       ? null
       : scenarioDeclaringFile(StackTrace.current);
 
+  // What the once-per-scenario network notices are remembered under. Built
+  // here because both halves only exist here: the ambient file is armed around
+  // this declaration and cleared before any body runs, and a matrix declares
+  // one body once per point — all of them under this one description, which is
+  // what makes a matrix say it once rather than once per axis.
+  var noticeKey = '${source ?? scenarioAmbientFile ?? ''}\u0000$description';
+
   testWidgets(
     name,
     skip: skip,
@@ -151,7 +169,9 @@ void scenario(
           assignment,
           source,
           keyboard,
-          _reachOf(network, folderReach),
+          _reachOf(network, folderReach, description, noticeKey),
+          statedNetwork: network != null,
+          noticeKey: noticeKey,
         ),
       );
     },
@@ -227,18 +247,122 @@ ScenarioNetwork? get resolvedScenarioNetwork =>
 
 /// What one scenario's http requests reach, resolved as it runs.
 ///
-/// Nearest wins, except that a run beats a folder: an explicit `--network=` on
-/// one run is somebody saying "not this time", which is the whole reason a run
-/// flag exists. [own] is the `scenario(network: ...)` and [folder] the
-/// `runScenarios(network: ...)`, both captured at declaration; the middle two
-/// are read here because they are not armed until the walk reaches this
-/// scenario.
-ScenarioNetwork _reachOf(ScenarioNetwork? own, ScenarioNetwork? folder) =>
-    own ??
-    resolvedScenarioNetwork ??
-    folder ??
-    scenarioProjectNetwork ??
-    ScenarioNetwork.off;
+/// Nearest wins, and a run sits in the middle of the ladder rather than at the
+/// top of it: an explicit `--network=` overrules the folder and the project,
+/// and is itself overruled by what a scenario said about itself. [own] is the
+/// `scenario(network: ...)` and [folder] the `runScenarios(network: ...)`,
+/// both captured at declaration; the middle two are read here because they are
+/// not armed until the walk reaches this scenario.
+///
+/// One losing combination says so out loud — see [recordOverriddenMessage].
+ScenarioNetwork _reachOf(
+  ScenarioNetwork? own,
+  ScenarioNetwork? folder,
+  String scenario,
+  String noticeKey,
+) {
+  var run = resolvedScenarioNetwork;
+  var reach =
+      own ?? run ?? folder ?? scenarioProjectNetwork ?? ScenarioNetwork.off;
+  if (recordOverriddenMessage(scenario, own, run) case var said?
+      when _recordOverridesSaid.add(noticeKey)) {
+    stderr.writeln('[flutterware] $said');
+  }
+  return reach;
+}
+
+/// Which scenarios have already had their overruled `record` reported.
+///
+/// Keyed on the file *and* the description, not the description alone: the
+/// harness declares every file in one process, so two files each holding a
+/// `scenario('Home')` would otherwise be one entry here and the second would
+/// go unreported. Keyed rather than counted so that a matrix — which declares
+/// one body once per point, all under one description — says it once rather
+/// than once per axis.
+final _recordOverridesSaid = <String>{};
+
+/// The sentence a `record` run owes [scenario], or null when nothing is wrong.
+///
+/// The one losing combination in the ladder worth interrupting for, because it
+/// is the only one where nothing on the screen and nothing in the output says
+/// what happened: the suite passes, every picture is the one `replay` already
+/// had, and the store the run was for stays exactly as it was. Every other
+/// pairing shows itself — a scenario keeping `off` against a `live` run draws
+/// the blank image and reports the refusal on the step.
+///
+/// A message rather than a rule. Letting `record` reach past [own] would put a
+/// special case inside a precedence ladder, and a ladder with an exception in
+/// it is what was misread here to begin with — it would also start recording
+/// for a scenario that deliberately said `live`.
+@visibleForTesting
+String? recordOverriddenMessage(
+  String scenario,
+  ScenarioNetwork? own,
+  ScenarioNetwork? run,
+) {
+  if (run != ScenarioNetwork.record) return null;
+  if (own == null || own == ScenarioNetwork.record) return null;
+  return '"$scenario" states `network: ${own.name}`, so this `record` run '
+      'left it alone and wrote nothing for it. Nearest wins: a '
+      '`scenario(network: ...)` is nearer than a run, and a run only reaches '
+      'past a folder and the project. To record it, move the declaration up '
+      'to the folder — `runScenarios(network: ...)` in '
+      '`flutter_test_config.dart` — which is the altitude a `--network=` can '
+      'reach.';
+}
+
+/// Which scenarios have already been told their stated mode did nothing.
+/// Keyed like [_recordOverridesSaid].
+final _inertNetworksSaid = <String>{};
+
+/// Forgets which scenarios have already been warned about their network.
+///
+/// Said once per scenario, but "once" has to mean once per *run*. The harness
+/// keeps a guest warm across many requests, so without this a suite re-run in
+/// the same process is silent about a mis-wiring it reported the first time —
+/// and the first time is the run nobody was reading. The bare `flutter test`
+/// lane never calls it and never needs to: that process runs one suite.
+void resetScenarioNetworkNotices() {
+  _recordOverridesSaid.clear();
+  _inertNetworksSaid.clear();
+}
+
+/// The sentence a scenario owes when it stated a mode and then asked for
+/// nothing, or null.
+///
+/// A mode is a claim about what this scenario's requests reach, and zero
+/// requests contradicts it. The usual cause is not the mode but the app: a
+/// layer that answers before anything opens an `HttpClient` is a layer the
+/// funnel cannot see, and the failure is silent in both directions — the
+/// screen shows a broken-image placeholder and the suite goes green.
+///
+/// Only a `scenario(network: ...)` is held to this. A folder's
+/// `runScenarios(network: ...)` and the project's `fw.network(...)` are
+/// defaults over a whole suite, where most scenarios legitimately touch
+/// nothing, and warning per scenario there would be dozens of lines saying
+/// that a login flow did not fetch anything. Stating a mode on **one**
+/// scenario is a sentence about that scenario, and this is what it means for
+/// it to have turned out false.
+@visibleForTesting
+String? inertNetworkMessage(
+  String scenario,
+  ScenarioNetwork reach, {
+  required bool stated,
+  required int requests,
+}) {
+  if (!stated || requests > 0 || reach == ScenarioNetwork.off) return null;
+  return '"$scenario" states `network: ${reach.name}` and then made no http '
+      'request at all, so the mode did nothing. A request reaches the funnel '
+      'only if something actually opens an `HttpClient`: `HttpOverrides` '
+      "catches the app's own client and everything built on it — "
+      '`package:http`, `dio` — and `NetworkImage` is caught alongside it. '
+      'What is not caught is a layer that answers before opening one. A '
+      '`CachedNetworkImage` is the common case: its bytes come from a '
+      '`BaseCacheManager`, and the no-op manager a project writes because the '
+      'real one cannot run on a test binding fails every url without opening '
+      'anything. A manager whose `getFileStream` is a plain `HttpClient` '
+      'passthrough is caught like everything else.';
+}
 
 ScenarioNetwork? get _scenarioNetworkFromHost {
   const define = String.fromEnvironment('fw.network');
@@ -256,8 +380,10 @@ Future<void> _runScenario(
   ScenarioAssignment? assignment,
   String? source,
   bool wantsKeyboard,
-  ScenarioNetwork reach,
-) async {
+  ScenarioNetwork reach, {
+  required bool statedNetwork,
+  required String noticeKey,
+}) async {
   // The runner's assignment wins, like its args do below: the declaration
   // captured the ambient one, which under the runner is null — and a body
   // reading `s.assignment?.language` has to see the language the request
@@ -429,6 +555,21 @@ Future<void> _runScenario(
         Error.throwWithStackTrace(inContext, stack);
       }
     } while (state.plan.advance());
+
+    if (inertNetworkMessage(
+          description,
+          reach,
+          stated: statedNetwork,
+          requests: network.requestsEver,
+        )
+        case var said?
+        // Never on top of the override message. That is the more specific
+        // reading of the same silence — the mode did nothing *because* a
+        // record run could not reach it — and it already names the fix.
+        when !_recordOverridesSaid.contains(noticeKey) &&
+            _inertNetworksSaid.add(noticeKey)) {
+      stderr.writeln('[flutterware] $said');
+    }
   } finally {
     // Unconditional, because the chain above is: the binding asserts at the
     // end that it got its own handler back.

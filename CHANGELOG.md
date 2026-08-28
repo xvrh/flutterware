@@ -1,5 +1,71 @@
 ## Unreleased
 
+- **A network mode that did nothing now says so.** Two silences a consumer hit
+  in one sitting, both of which ended with a passing suite and no output.
+
+  The first: `--network=record` (or `FW_NETWORK=record`) against a scenario
+  that states `network:` for itself records nothing, because nearest wins and a
+  scenario is nearer than a run. That precedence is right and stays — letting
+  `record` reach past it would put an exception inside a ladder, and would
+  start recording for a scenario that deliberately said `live`. What was
+  missing is anybody saying so, so such a run now names the scenario, its mode,
+  and the altitude a `--network=` can actually reach. The doc comment on
+  `ScenarioNetwork` said "nearest wins, except that a run beats a folder",
+  which reads as though a run beats everything under it; it now spells the
+  ladder out.
+
+  The second: a scenario that states a mode and then makes no request at all.
+  The funnel catches an `HttpClient` the app opens and everything on top of it,
+  plus `NetworkImage` — but not a layer that answers before opening one. A
+  `CachedNetworkImage` is the common case: its bytes come from a
+  `BaseCacheManager`, and the no-op manager a project writes (because the real
+  one cannot run on a test binding) fails every url without opening anything.
+  `replay` was inert and the only symptom was a broken-image placeholder. A
+  scenario that states a mode for itself and then asks for nothing now says
+  what that usually means. Only a `scenario(network: ...)` is held to it: a
+  folder's `runScenarios(network: ...)` is a default over a whole suite, where
+  most scenarios legitimately fetch nothing.
+
+- **The default store frame bleeds, and never squashes.** Two faults in one
+  layout, found measuring a real Play export.
+
+  `DefaultStoreFrame` scales the device body to the width its margins leave, so
+  the margins decide whether the body is taller than the space under the
+  headline band — which is what "bleeding off the bottom edge" needs. With a
+  headline it was; with none it came out 16 logical pixels short, which on
+  Play's phone canvas is a device stranded above 42 pixels of ground rather
+  than one running off the edge. The headline-less margins are now tighter than
+  the captioned ones, which is also the right design: with no caption to make
+  room for there is more width to spend.
+
+  Underneath that, the `OverflowBox` staging the body released only its
+  ceiling. It inherits whatever bound it is not given, and the bound came from
+  an `Expanded` — tight — so a body shorter than its space was stretched to
+  fill it and the capture, painted with `BoxFit.fill`, came out squashed by
+  however much it was short. Silently, and on the one axis a store screenshot
+  cannot survive being wrong on. The floor is released too, so a short body
+  keeps the device's aspect ratio and sits at the top of the space.
+
+- **Two tools that pointed nowhere now point somewhere.** `fw: could not build
+  the CLI.` quotes the end of the build log and, since #256, recognises a stale
+  `.dart_tool/hooks_runner` in it — but it was matching against the last twenty
+  lines only. A build tool reports its cause and keeps going, so the
+  kernel-version line that explains the failure sits well above them, and the
+  hint stayed silent about the one failure it exists for. What is quoted and
+  what is recognised are now two reads of the same log.
+
+  And the MCP server is `exec`'d once, so it answers for a whole session out of
+  the code it started with while the project under it can be upgraded or
+  switched to a path dependency. A plugin the new revision defines was reported
+  as declared with no implementation, which reads as a broken
+  `tool/flutterware.dart` and sends the reader to the one file that is fine.
+  A server whose project has resolved a *different flutterware* under it now
+  says so on every reply, and says that reconnecting is what ends it. It
+  watches where flutterware resolved to rather than when anything last
+  resolved: an IDE runs `pub get` whenever a pubspec is saved, and a note
+  nobody can dismiss on every reply for the rest of a session would be worse
+  than no note at all.
+
 - **A caret that blinks is an animation, and a scenario is not waiting for it.**
   On iOS a `TextField` animates its caret through an `AnimationController`
   rather than a `Timer.periodic` — which means that on an iOS-staged device,

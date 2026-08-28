@@ -388,6 +388,11 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
       group(entry.key, () {
         var sink = <String>[];
         scenarioDeclarationSink = sink;
+        // Which file is declaring, for anything that has to tell two
+        // identically-named scenarios apart — see [scenarioAmbientFile]. Armed
+        // and cleared with the sink because it has the sink's lifetime
+        // exactly: a file's `main()`, and nothing either side of it.
+        scenarioAmbientFile = entry.key;
         // The folder's shots policy, armed around the file's own `main()`:
         // under this runner `runScenarios` returns at the probe, so the
         // ambient it sets in the `flutter test` lane is never set here and the
@@ -400,6 +405,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
           entry.value();
         } finally {
           scenarioDeclarationSink = null;
+          scenarioAmbientFile = null;
           scenarioAmbientShots = null;
           scenarioAmbientKeyboard = null;
           scenarioAmbientNetwork = null;
@@ -699,6 +705,10 @@ Future<Map<String, Object?>> _run(
   // Emptied rather than read cumulatively: a warm guest serves many requests,
   // and a mode one of them ran under is not a fact about the next.
   scenarioNetworkModesRun.clear();
+  // And the once-per-scenario network warnings, for the same reason: a warm
+  // guest that stayed quiet on a re-run would be quiet about the run somebody
+  // is actually watching.
+  resetScenarioNetworkNotices();
   // What the first scenario's clock started at — the whole run's, since the
   // origin is resolved from the request and the request is one.
   DateTime? clockOrigin;

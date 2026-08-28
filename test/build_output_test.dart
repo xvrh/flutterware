@@ -302,6 +302,34 @@ void main() {
       expect(err.toString(), contains('a different Dart SDK'));
     });
 
+    test('the cause is recognised from above the tail window', () {
+      var directory = Directory.systemTemp.createTempSync('fw_log');
+      addTearDown(() => directory.deleteSync(recursive: true));
+      // Where the consumer actually met it: a build tool reports the cause and
+      // then keeps going, so by the time it gives up the explanation is fifty
+      // lines back. The tail quotes the giving up; only the whole log holds
+      // the reason.
+      var kernel =
+          "Can't load Kernel binary: Invalid kernel binary format version "
+          '(expected 139, found 138).';
+      var log = File('${directory.path}/build.log')
+        ..writeAsStringSync(
+          [
+            kernel,
+            for (var i = 0; i < 50; i++) 'building step $i',
+            'Bad state: Generating AOT kernel dill failed!',
+          ].join('\n'),
+        );
+
+      var err = StringBuffer();
+      describeFailure(err, 'could not build the CLI.', ProcessLog(1, log));
+
+      expect(err.toString(), contains('rm -rf .dart_tool/hooks_runner'));
+      // Still only the tail is quoted — the whole log is matched against, not
+      // printed.
+      expect(err.toString(), isNot(contains("Can't load Kernel binary")));
+    });
+
     test('an ordinary failure is left to speak for itself', () {
       expect(recogniseFailure(const ['Error: it broke']), isNull);
     });
