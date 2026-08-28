@@ -16,5 +16,13 @@ const checkoutStage = MotionStage(
     ),
     StageElement(target: 'card', x: 24, y: 188, width: 280, height: 90),
     StageElement(target: 'cta', x: 24, y: 294, width: 280, height: 46),
+    StageElement(
+      target: 'text',
+      kind: StageKind.text,
+      x: 27,
+      y: 370,
+      width: 312,
+      height: 28,
+    ),
   ],
 );

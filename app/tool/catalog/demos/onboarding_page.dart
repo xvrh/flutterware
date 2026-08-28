@@ -29,6 +29,7 @@ class OnboardingPage extends StatefulWidget {
     required this.subtitle,
     required this.action,
     required this.progress,
+    required this.travel,
     required this.accent,
   });
 
@@ -46,8 +47,18 @@ class OnboardingPage extends StatefulWidget {
   /// `TextFormField` and a submit on the last. A slot, so it stays live.
   final Widget action;
 
-  /// 0..1 through this page's entrance.
+  /// 0..1 — how present this page is. 1 when it is the one you are looking at,
+  /// 0 when it is a neighbour off the side.
   final double progress;
+
+  /// -1..1 — **where** this page is, signed. Negative is still to come,
+  /// positive is already gone.
+  ///
+  /// Two continuous inputs rather than one, because they answer different
+  /// questions: the entrance wants to know how far along it is, and the
+  /// headline's pass wants to know which way it is already travelling. A
+  /// single unsigned progress cannot tell arriving from leaving.
+  final double travel;
 
   final Color accent;
 
@@ -104,10 +115,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         child: FuseLabel(
                           left: widget.titleLeft,
                           right: widget.titleRight,
-                          // The nested timeline's window, in Dart rather than
-                          // in a values file: this page's first 80% drives the
-                          // whole of the fuse.
-                          progress: (widget.progress / 0.8).clamp(0.0, 1.0),
+                          // The nested timeline's mapping, in Dart rather than
+                          // in a values file: the page's position is the
+                          // headline's position, one to one.
+                          position: widget.travel,
                           glow: widget.accent,
                           style: const TextStyle(
                             fontSize: 38,

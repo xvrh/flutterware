@@ -151,6 +151,11 @@ class _OnboardingState extends State<_Onboarding> {
                   for (var (index, page) in copy.indexed)
                     OnboardingPage(
                       progress: (1 - (offset - index).abs()).clamp(0.0, 1.0),
+                      // Signed: negative while the page is still to the right
+                      // and has not been reached, positive once it has been
+                      // swiped past. The headline reads the sign to know which
+                      // way it is already going.
+                      travel: (offset - index).clamp(-1.0, 1.0),
                       accent: _accents[index],
                       image: AuroraImage(
                         seed: index * 977,

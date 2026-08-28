@@ -35,6 +35,15 @@ const signInMotion = MotionValues(
           curve: Curves.easeOutCubic,
         ),
       ],
+      'blur': [
+        Seg<double>(
+          start: Duration.zero,
+          end: Duration(milliseconds: 900),
+          from: 8,
+          to: 0,
+          curve: Curves.easeOutCubic,
+        ),
+      ],
     },
 
     'email': {

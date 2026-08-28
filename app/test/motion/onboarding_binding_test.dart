@@ -17,6 +17,9 @@ void main() {
       backgroundColor: const Color(0xFF0C0913),
       body: OnboardingPage(
         progress: progress,
+        // Settled: the headline is at its reading position, so the layout
+        // assertion below is about the entrance and not about the pass.
+        travel: 0,
         accent: const Color(0xFFB980FF),
         image: const AuroraImage(seed: 1, accent: Color(0xFFB980FF)),
         titleLeft: 'Start your',

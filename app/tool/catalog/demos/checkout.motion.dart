@@ -26,5 +26,38 @@ const checkoutMotion = MotionValues(
         ),
       ],
     },
+
+    'cta': {
+      'borderRadius': [
+        Seg<double>(
+          start: Duration(milliseconds: 261),
+          end: Duration(milliseconds: 495),
+          from: 24,
+          to: 0,
+          curve: Curves.easeOutCubic,
+        ),
+      ],
+    },
+
+    'card': {
+      'borderRadius': [
+        Seg<double>(
+          start: Duration.zero,
+          end: Duration(milliseconds: 600),
+          from: 0,
+          to: 19.53283132530111,
+          curve: Curves.easeOutCubic,
+        ),
+      ],
+      'translateY': [
+        Seg<double>(
+          start: Duration.zero,
+          end: Duration(milliseconds: 600),
+          from: 0,
+          to: 30,
+          curve: Curves.easeOutCubic,
+        ),
+      ],
+    },
   },
 );

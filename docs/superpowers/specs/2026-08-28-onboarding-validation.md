@@ -48,6 +48,27 @@ hands it. The page neither knows nor sets its timing.
 **Percentage units survive resize.** The wave's amplitude is a fraction of the
 image height, so it scales correctly from a phone to an iPad.
 
+## The headline is a pass, not an entrance
+
+Revised after looking at the first filmstrip. The two lines sit on **different
+rows**, travel in opposite directions, cross, decelerate into a settled reading
+moment at the middle of the timeline, then continue the way they were already
+going and re-accelerate off the page.
+
+Three consequences, all of them improvements:
+
+- **The `Row` overflow dissolves.** Each line lays out on its own, so a long
+  German line shrinks or wraps without the other one caring. The fix below is
+  still needed per line, but the structural problem is gone.
+- **The host hands in a signed position, not a progress.** `-1` is still to
+  come, `0` is the settled frame, `+1` is already gone. An unsigned progress
+  cannot tell arriving from leaving, and the sign is exactly what tells a line
+  which way it is already travelling.
+- **A component wants more than one continuous input.** The page's entrance
+  reads presence (`0..1`, peaks when current); the headline reads position
+  (`-1..1`). Same gesture, two derived numbers, because they answer different
+  questions.
+
 ## What broke
 
 **German overflowed by 35 pixels**, with Flutter's yellow stripe — a hard
@@ -100,9 +121,32 @@ Ranked, after the build rather than before it.
 7. **Nesting multiplies scopes.** Three pages plus three fuses is six mounted
    `MotionScope`s. The guest resolves a scope only when exactly one is mounted,
    and the panel's model is "pick one" — which will not survive nesting.
-8. **Interactivity must follow visibility.** `Opacity(opacity: 0)` still
+8. **Computed target names stay invisible to the scan.** The two glow layers
+   are reached through `for (var layer in const ['glowB', 'glowA'])`, so
+   `motion list` reports this component's targets as `left` and `right` only.
+   The same hole as `m.target('row$i')`, met again in ordinary code rather than
+   in a demo written to provoke it.
+9. **Interactivity must follow visibility.** `Opacity(opacity: 0)` still
    hit-tests, so an invisible element eats taps. Easy to fix, impossible to
    remember, therefore must be automatic.
+
+## `motion filmstrip` renders a stale guest
+
+Found while re-shooting the revised fuse. The values file changed from 900ms to
+1000ms and a whole second segment was added; the strip came back byte-identical
+and still reported `durationMs: 900`. Deleting the cached PNG changed nothing,
+so it is the compiled guest that is behind rather than the artifact.
+
+`previews screenshot` picks up the same edit immediately, so the two capture
+paths do not agree about when to sweep for edited sources.
+
+What makes this worse than an ordinary staleness bug: **`motion list` updated in
+the same call.** The listing reported the motion's new line number from a fresh
+syntactic scan while the picture showed the previous version. Half the panel is
+current and half is a version behind, with nothing saying so.
+
+This is the exact failure that makes a tuning tool untrustworthy — change a
+value, re-render, see the old picture, conclude the edit did nothing.
 
 ## Not verified
 
