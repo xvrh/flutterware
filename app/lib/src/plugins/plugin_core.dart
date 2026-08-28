@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutterware/plugins.dart';
 
+import '../previews/catalog_roots.dart';
 import '../shell/workspace.dart';
 import '../shell/worktree.dart';
 import '../utils/value_stream.dart';
@@ -202,17 +203,23 @@ class PluginCoreRegistry {
     PluginManifest manifest,
     Worktree worktree,
     Workspace workspace,
-  ) => [
-    for (var declaration in manifest.plugins)
-      create(
-        PluginHost(
-          id: declaration.id,
-          label: declaration.label,
-          worktree: worktree,
-          workspace: workspace,
-          config: declaration.config,
-          projectClock: manifest.clock,
+  ) {
+    // Resolved once and handed to every plugin: the catalog is one compiler
+    // per package, and a plugin that works out its own roots forks it.
+    var catalogRoots = catalogRootsFrom(manifest);
+    return [
+      for (var declaration in manifest.plugins)
+        create(
+          PluginHost(
+            id: declaration.id,
+            label: declaration.label,
+            worktree: worktree,
+            workspace: workspace,
+            config: declaration.config,
+            projectClock: manifest.clock,
+            catalogRoots: catalogRoots,
+          ),
         ),
-      ),
-  ];
+    ];
+  }
 }

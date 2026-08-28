@@ -978,7 +978,10 @@ class _${pascal}State extends State<_$pascal> {
       appToolDirectory: host.workspace.appContext.appToolDirectory.path,
       packageRoot: host.workspace.packageFor(packagePath).directory.path,
       flutterSdkRoot: host.workspace.flutterSdk.root,
-      roots: [directoryFor(packagePath)],
+      // The catalog's roots, not this plugin's scan directory. A motion is
+      // *rendered* through the previews catalog, and asking for a narrower
+      // root does not narrow the catalog — it forks the compiler.
+      roots: host.catalogRootsFor(packagePath),
       clock: host.projectClock,
     ),
   );

@@ -496,7 +496,9 @@ class _MotionStageState extends State<_MotionStage> {
       flutterSdkRoot: core.host.workspace.flutterSdk.root,
       projectRoot: p.join(core.host.worktree.path, package),
       worktreeRoot: core.host.worktree.path,
-      roots: [core.directoryFor(package)],
+      // Same catalog as the previews panel, so the two share one daemon and
+      // one warm kernel rather than compiling the same files twice.
+      roots: core.host.catalogRootsFor(package),
       clock: core.host.projectClock,
       connectToDaemon: CompilerDaemonClient.connect,
     )..addListener(_onSession);

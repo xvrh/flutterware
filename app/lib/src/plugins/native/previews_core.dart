@@ -83,9 +83,6 @@ Status? previewsRunnerStatus(TesterPhaseReading reading) =>
       TesterPhase.ready => null,
     };
 
-/// What a package is scanned for when it does not say otherwise: all of it.
-const _defaultRoot = defaultCatalogRoot;
-
 /// What the scan knows about a package before anything is compiled.
 enum CatalogSetup {
   /// Nothing has scanned this package yet.
@@ -511,14 +508,13 @@ class PreviewsCore extends PluginCore {
   /// fields [DaemonConfig] hashes — so the panel has to reach *this* answer
   /// rather than compute its own. It had a byte-identical copy in
   /// `PreviewsPlugin` until that copy became the next `appPackageRoot`.
-  String rootFor(String path) {
-    for (var config in host.packageConfigs) {
-      if (config['path'] != path) continue;
-      var directory = config['directory'];
-      if (directory is String && directory.isNotEmpty) return directory;
-    }
-    return _defaultRoot;
-  }
+  /// Where this package's entries are discovered.
+  ///
+  /// Reads the project-wide resolution rather than this plugin's own config,
+  /// so that "where the catalog looks" has exactly one answer and every plugin
+  /// that renders through it arrives at the same daemon. See
+  /// [PluginHost.catalogRootsFor].
+  String rootFor(String path) => host.catalogRootsFor(path).first;
 
   /// Where a *new* preview file goes — `demo/` unless the package narrowed the
   /// scan, in which case it goes where the scan is looking.
