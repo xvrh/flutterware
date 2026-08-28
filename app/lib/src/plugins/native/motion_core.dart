@@ -705,6 +705,7 @@ class MotionCore extends PluginCore {
         if (knobs.isNotEmpty) 'knobs': knobs,
         if (axes.isNotEmpty) 'axes': axes,
         'scope': video.scope,
+        'timings': video.timings.toJson(),
         if (video.mountedScopes.length > 1) 'scopes': video.mountedScopes,
       },
     );

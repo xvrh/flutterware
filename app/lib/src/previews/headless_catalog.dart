@@ -222,6 +222,7 @@ class HeadlessCatalog {
       encodeTime: flush.elapsed,
       scope: opening.scope,
       mountedScopes: opening.mounted,
+      timings: guest.timings,
     );
   });
 
@@ -638,6 +639,34 @@ class CatalogFilmstrip {
   final int durationMs;
 }
 
+/// Where a render's time went, inside the guest exchange.
+///
+/// A frame of a motion costs four VM service round trips and one socket
+/// exchange, and the four are not equal: `motion.list` walks every target and
+/// every segment, `motion.seek` waits a frame, and the settle asks whether the
+/// picture has stopped moving at least twice. Splitting them is the difference
+/// between "render on another engine" and "stop asking the same question".
+class GuestTimings {
+  Duration motionList = Duration.zero;
+  Duration motionSeek = Duration.zero;
+  Duration settle = Duration.zero;
+  Duration frame = Duration.zero;
+
+  int listCalls = 0;
+  int seekCalls = 0;
+  int frames = 0;
+
+  Map<String, Object?> toJson() => {
+    'motionListMs': motionList.inMilliseconds,
+    'motionSeekMs': motionSeek.inMilliseconds,
+    'settleMs': settle.inMilliseconds,
+    'frameMs': frame.inMilliseconds,
+    'listCalls': listCalls,
+    'seekCalls': seekCalls,
+    'frames': frames,
+  };
+}
+
 /// Where a seek landed, and which scope took it.
 ///
 /// [scope] and [mounted] ride along because a composed screen mounts several
@@ -677,6 +706,7 @@ class CatalogVideo {
     required this.encodeTime,
     required this.scope,
     required this.mountedScopes,
+    required this.timings,
   });
 
   final File file;
@@ -689,6 +719,9 @@ class CatalogVideo {
   /// Every playhead that was mounted, so a render of the wrong one is visible
   /// rather than merely wrong.
   final List<String> mountedScopes;
+
+  /// Where the per-frame time went.
+  final GuestTimings timings;
 
   /// The motion's own duration, which is what set the frame count.
   final int durationMs;
@@ -1159,7 +1192,10 @@ class _GuestSession {
     // while exactly one scope is mounted, so a composed screen would refuse —
     // and the refusal surfaced here as the misleading "no mounted
     // MotionScope".
+    var watch = Stopwatch()..start();
     var listed = await _vmService.callExtension('ext.flutterware.motion.list');
+    timings.motionList += watch.elapsed;
+    timings.listCalls++;
     var scopes = <Map<String, Object?>>[
       for (var entry in (listed?['scopes'] as List?) ?? const [])
         if (entry is Map) entry.cast<String, Object?>(),
@@ -1185,10 +1221,13 @@ class _GuestSession {
     }
 
     var id = chosen['id'] as String?;
+    watch.reset();
     var reply = await _vmService.callExtension(
       'ext.flutterware.motion.seek',
       args: {'scope': ?id, 't': '$t'},
     );
+    timings.motionSeek += watch.elapsed;
+    timings.seekCalls++;
     if (reply == null) {
       throw ArgumentError.value(
         t,
@@ -1289,8 +1328,14 @@ class _GuestSession {
   Future<(img.Image, ({bool settled, bool seesAnimations}))> captureImage({
     double pixelRatio = 1,
   }) async {
+    var watch = Stopwatch()..start();
     var settled = await _settle();
-    return (await _capture.capture(pixelRatio: pixelRatio), settled);
+    timings.settle += watch.elapsed;
+    watch.reset();
+    var image = await _capture.capture(pixelRatio: pixelRatio);
+    timings.frame += watch.elapsed;
+    timings.frames++;
+    return (image, settled);
   }
 
   /// Asks the guest to write its next frame, and waits for the ack.
@@ -1321,6 +1366,15 @@ class _GuestSession {
   }
 
   final _floor = SettleFloor();
+
+  /// Where a render's per-frame time went, accumulated across the session.
+  ///
+  /// Kept here rather than measured by the caller because the caller sees one
+  /// number per frame and the interesting split is inside it: a seek is two
+  /// VM service calls, a capture is a settle loop plus a socket exchange, and
+  /// which of those dominates decides whether a faster renderer means a
+  /// different engine or merely fewer round trips.
+  final timings = GuestTimings();
 
   /// Waits until the guest has no image loads in flight, bounded.
   ///
