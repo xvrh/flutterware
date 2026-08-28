@@ -13,6 +13,7 @@ import '../../motion/lane_model.dart';
 import '../../motion/new_span.dart';
 import '../../motion/values_file.dart';
 import '../../ui/empty_state.dart';
+import '../../ui/filter_bar.dart';
 import '../../ui/loading_state.dart';
 import '../../ui/tappable.dart';
 import '../native_plugin.dart';
@@ -753,6 +754,21 @@ class _MotionStageState extends State<_MotionStage> {
     }
   }
 
+  /// Flips which body the guest builds — the draft stage or the real screen.
+  ///
+  /// A guest verb rather than a rebuild of anything here: the two bodies live
+  /// in one `MotionScope`, so the playhead, the lanes and the selection are all
+  /// the same objects on the other side of the flip. Refreshing after it is
+  /// what redraws the lanes, since a target that only the draft names appears
+  /// and disappears with the host.
+  Future<void> _setHost(MotionHostView host) async {
+    await _session?.callGuestExtension(
+      'ext.flutterware.motion.host',
+      args: {..._scopeArgs, 'host': host.wire},
+    );
+    await _refresh();
+  }
+
   Future<void> _transport(String verb) async {
     // Play and restart hand the playhead back; pause leaves it where it is, and
     // the panel goes on owning it so the next scrub has something to start from.
@@ -819,6 +835,9 @@ class _MotionStageState extends State<_MotionStage> {
                     scope: _scope,
                     value: _playhead,
                     onTransport: _transport,
+                    host: scope?.host ?? MotionHostView.real,
+                    hosts: scope?.hosts ?? const [],
+                    onHost: _setHost,
                     railOpen: showRail,
                     onToggleRail: () => setState(() => _showRail = !showRail),
                   ),
@@ -924,6 +943,9 @@ class _Transport extends StatelessWidget {
     required this.scope,
     required this.value,
     required this.onTransport,
+    required this.host,
+    required this.hosts,
+    required this.onHost,
     required this.railOpen,
     required this.onToggleRail,
   });
@@ -931,6 +953,9 @@ class _Transport extends StatelessWidget {
   final Map<String, dynamic>? scope;
   final double? value;
   final ValueChanged<String> onTransport;
+  final MotionHostView host;
+  final List<MotionHostView> hosts;
+  final ValueChanged<MotionHostView> onHost;
   final bool railOpen;
   final VoidCallback onToggleRail;
 
@@ -960,6 +985,19 @@ class _Transport extends StatelessWidget {
             icon: const Icon(Icons.replay),
             tooltip: 'Play from the start',
           ),
+          const Gap(FwSpacing.sm),
+          // Draft or real, and only where there are both. A motion with one
+          // body would get a control whose every use is a refusal, and a
+          // control that cannot be used still has to be read.
+          if (hosts.length > 1)
+            for (var candidate in hosts) ...[
+              FwPill(
+                label: candidate.label,
+                selected: candidate == host,
+                onTap: () => onHost(candidate),
+              ),
+              const Gap(FwSpacing.xs),
+            ],
           const Spacer(),
           // Milliseconds, not a fraction: the values file is written in
           // milliseconds and this is the number you would type into it.

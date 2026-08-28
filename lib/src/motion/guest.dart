@@ -7,6 +7,25 @@ import 'package:flutter/widgets.dart';
 import 'controller.dart';
 import 'values.dart';
 
+/// Which body a scope builds.
+///
+/// A motion with a draft stage has two, and they are the same motion — the
+/// switch chooses between `builder` and `MotionStageView` *inside* one scope,
+/// so the playhead, the registry id and the tuned values all survive the flip.
+///
+/// This is deliberately not a knob in anybody's file. Draft-versus-real is a
+/// view onto one motion rather than a property of the app, so the tool owns it:
+/// a file says what bodies exist and the studio says which one to look at.
+enum MotionHost {
+  /// The `builder` — real widgets, real layout, intrinsic properties read at
+  /// the call site. What ships.
+  real,
+
+  /// The `stage` — placeholders the tool owns, positioned absolutely. What
+  /// `motion new` writes and what an editor can add to.
+  draft,
+}
+
 /// What the transport needs from a mounted scope.
 ///
 /// Narrow on purpose: the registry must not depend on the widget, or a guest
@@ -32,6 +51,21 @@ abstract class MotionSurface {
   /// Where a target is on screen, in the guest's own coordinates, or null when
   /// nothing has pointed at it. See `MotionExtent`.
   Rect? extentOf(String target);
+
+  /// The bodies this scope has, in the order a control should offer them.
+  ///
+  /// One of them is the normal case and the panel must not draw a switch for
+  /// it: a scope with no stage can only refuse `draft`, and an affordance whose
+  /// every use is a refusal is worse than no affordance.
+  List<MotionHost> get hosts;
+
+  /// Which body is building.
+  MotionHost get host;
+
+  /// Builds the other one from the next frame. A host not in [hosts] is
+  /// ignored here and refused at the extension, where there is somebody to
+  /// tell.
+  set host(MotionHost value);
 }
 
 /// The door a motion is driven through from outside it.
@@ -49,6 +83,7 @@ abstract class MotionSurface {
 ///   `ext.flutterware.motion.list`                    every mounted scope
 ///   `ext.flutterware.motion.seek`     `scope`, `t`   0..1, or `ms`
 ///   `ext.flutterware.motion.transport` `scope`, `verb`
+///   `ext.flutterware.motion.host`     `scope`, `host` draft or real
 ///
 /// `seek` answers **after the frame**, so a reply means the picture has caught
 /// up. A scrubber that answered earlier would report positions the screen had
@@ -146,6 +181,43 @@ class MotionRegistry {
       );
     });
 
+    // Which body a scope builds — the draft stage or the real screen.
+    //
+    // An extension rather than a knob in the user's file, because the choice is
+    // the studio's: a `host` knob put the same twelve lines of `switch` in
+    // every entry point, and shipped them.
+    //
+    // Reads with no `host`, which is how a panel syncs a control it did not
+    // last set.
+    developer.registerExtension('ext.flutterware.motion.host', (_, args) async {
+      var scope = resolve(args['scope']);
+      if (scope == null) return _noScope(args['scope']);
+      if (args['host'] case var raw?) {
+        var wanted = switch (raw) {
+          'real' => MotionHost.real,
+          'draft' => MotionHost.draft,
+          _ => null,
+        };
+        if (wanted == null || !scope.hosts.contains(wanted)) {
+          return developer.ServiceExtensionResponse.error(
+            developer.ServiceExtensionResponse.invalidParams,
+            jsonEncode({
+              'error': 'no host "$raw" on this scope',
+              'hosts': [for (var host in scope.hosts) host.name],
+            }),
+          );
+        }
+        scope.host = wanted;
+        await _settle();
+      }
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode({
+          'host': scope.host.name,
+          'hosts': [for (var host in scope.hosts) host.name],
+        }),
+      );
+    });
+
     developer.registerExtension('ext.flutterware.motion.transport', (
       _,
       args,
@@ -216,6 +288,8 @@ Map<String, Object?> _describeScope(String id, MotionSurface scope) {
   return {
     'id': id,
     'durationMs': values.resolveDuration().inMilliseconds,
+    'host': scope.host.name,
+    'hosts': [for (var host in scope.hosts) host.name],
     'ms': controller.position.inMilliseconds,
     'progress': controller.progress,
     'playing': controller.isAnimating,

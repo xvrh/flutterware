@@ -808,9 +808,10 @@ import '$name.stage.dart';
 
 /// Written by `fw run motion new`. Yours from here.
 ///
-/// It opens on the draft stage, because there is nothing real to bind to yet.
-/// When there is, put the real screen in `_real` and the `host` knob switches
-/// between them — the same motion drives both.
+/// It has only the draft stage, because there is nothing real to bind to yet.
+/// Give the scope a `builder` when there is, and the studio's Draft/Real switch
+/// appears on its own — the same motion drives both, so it is a rehearsal of
+/// the screen rather than a second drawing of it.
 @Preview(name: '$camel', group: 'Motion')
 Widget $camel() => const _$pascal();
 
@@ -834,40 +835,23 @@ class _${pascal}State extends State<_$pascal> {
   Widget build(BuildContext context) {
     _controller.progress = context.knobs.double('t', 1, min: 0, max: 1);
 
-    var host = context.knobs.picker('host', {
-      'Draft': 'draft',
-      'Real': 'real',
-    }, 'draft');
-
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _controller.play(restart: true),
       child: Scaffold(
         backgroundColor: const Color(0xFFE9ECF0),
-        // One scope, two bodies. The switch keeps the playhead, because `t`
-        // lives on the scope rather than on either host.
         body: MotionScope(
           motion: ${camel}Motion,
+          stage: ${camel}Stage,
           controller: _controller,
-          builder: (m) => switch (host) {
-            'real' => _real(m),
-            _ => MotionStageView(
-              stage: ${camel}Stage,
-              motion: m,
-              showNames: context.knobs.bool('names', true),
-            ),
-          },
+          // Your screen goes here. Read the same targets the stage stands in
+          // for — `m.target('first')` — and nothing else has to change.
+          //
+          // builder: (m) => MotionBox(m.target('first'), child: ...),
         ),
       ),
     );
   }
-
-  /// Your screen goes here. Read the same targets the stage stands in for —
-  /// `m.target('first')` — and the draft becomes a rehearsal of the real thing
-  /// rather than a separate drawing of it.
-  Widget _real(Motion m) => const Center(
-    child: Text('Nothing bound yet. Flip `host` back to Draft.'),
-  );
 }
 """;
   }

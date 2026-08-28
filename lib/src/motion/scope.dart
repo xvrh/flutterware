@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'controller.dart';
 import 'guest.dart';
+import 'stage.dart';
 import 'target.dart';
 import 'values.dart';
 
@@ -27,13 +28,23 @@ import 'values.dart';
 ///
 /// The scope owns the playhead, so two of these — two list items, the same
 /// screen pushed twice — each animate independently with no arrangement.
+///
+/// A [stage] gives it a second body: the draft scene, placeholders the tool
+/// owns. Which of the two builds is the studio's choice rather than the file's
+/// — see [MotionHost] — so a motion that has both reads exactly like one that
+/// has only the screen. A motion that has only the stage is what `motion new`
+/// writes, and it needs no [builder] at all until there is something to bind.
 class MotionScope extends StatefulWidget {
   const MotionScope({
     super.key,
     required this.motion,
-    required this.builder,
+    this.builder,
+    this.stage,
     this.controller,
-  });
+  }) : assert(
+         builder != null || stage != null,
+         'A MotionScope needs a builder, a stage, or both.',
+       );
 
   /// The tuned values, normally the `const` from a `<screen>.motion.dart`.
   final MotionValues motion;
@@ -43,7 +54,16 @@ class MotionScope extends StatefulWidget {
   /// needs no code at all.
   final MotionController? controller;
 
-  final Widget Function(Motion m) builder;
+  /// The real screen. Omitted only while [stage] stands in for it.
+  final Widget Function(Motion m)? builder;
+
+  /// The draft scene, normally the `const` from a `<screen>.stage.dart`.
+  ///
+  /// Kept beside the real body rather than in a separate entry point, because
+  /// the point of a draft is that it is the *same motion* — one playhead, one
+  /// set of tuned values, one registry id, so flipping mid-scrub keeps `t` and
+  /// a lane tuned on the draft is the lane the screen will run.
+  final MotionStage? stage;
 
   @override
   State<MotionScope> createState() => MotionScopeState();
@@ -93,8 +113,33 @@ class MotionScopeState extends State<MotionScope>
   Rect? extentOf(String target) => _motion.extentOf(target);
 
   @override
+  List<MotionHost> get hosts => [
+    if (widget.builder != null) MotionHost.real,
+    if (widget.stage != null) MotionHost.draft,
+  ];
+
+  /// Real wherever there is a real body, because a shipped app must never draw
+  /// placeholders — the switch is something the studio does to a running guest,
+  /// not a state a file can start in.
+  ///
+  /// Read through [hosts] rather than off the field: a hot reload can take the
+  /// body you are looking at away, and answering with one that no longer exists
+  /// would build null.
+  @override
+  MotionHost get host => hosts.contains(_host) ? _host : hosts.first;
+
+  @override
+  set host(MotionHost value) {
+    if (_host == value || !hosts.contains(value)) return;
+    setState(() => _host = value);
+  }
+
+  late MotionHost _host;
+
+  @override
   void initState() {
     super.initState();
+    _host = widget.builder != null ? MotionHost.real : MotionHost.draft;
     _motion = Motion(widget.motion);
     _adoptController(widget.controller);
     // Registered on mount rather than before `runApp`: a motion lives in
@@ -148,6 +193,11 @@ class MotionScopeState extends State<MotionScope>
   @override
   Widget build(BuildContext context) {
     _motion.beginBuild();
-    return widget.builder(_motion);
+    if (widget.stage case var stage? when host == MotionHost.draft) {
+      return MotionStageView(stage: stage, motion: _motion);
+    }
+    // `hosts` cannot report `real` without a builder, and `host` is read
+    // through `hosts` — so this is unreachable rather than optimistic.
+    return widget.builder!(_motion);
   }
 }

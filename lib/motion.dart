@@ -40,6 +40,7 @@ library;
 
 export 'src/motion/guest.dart'
     show
+        MotionHost,
         MotionRegistry,
         MotionSurface,
         curveByName,
