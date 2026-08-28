@@ -1,5 +1,52 @@
 ## Unreleased
 
+- **A comparison's `index.json` is published API.**
+  `package:flutterware/comparison_report.dart` reads back what `fw compare`
+  wrote: every preview entry and every scenario step, what the four channels
+  found, and where the two frames are — typed, so a `tool/` script gating a
+  pull request is a few lines rather than a map walk written once per project.
+  `ComparisonReport.read` takes an exported page's directory,
+  `ComparisonIndex.findings` is the verdict worst-first across both halves, and
+  `ComparisonIndex.ok` is the gate.
+
+  The model *moved* into the package rather than being copied beside it. A
+  second reader is two hand-kept copies that drift a field apart, and this one
+  already had three careers before a consumer's script became the fourth. What
+  is published is the file's vocabulary and nothing else: the runner's live
+  frames and its step aligner never reach the file, so they stayed where they
+  are.
+
+  The file now carries `version`, refused by a reader that does not know it
+  rather than half-decoded, and `frames`, which says whether the frames it
+  names can be opened from beside it. Both `index.json`s hold the same verdict;
+  only the exported one holds pictures, and a reader asking the other for a
+  frame is told so and told which flag produces one.
+
+- **A comparison says why it rendered what it rendered.** The skip rule always
+  knew — it computes the differing path per entry — and nothing showed it. A
+  branch that touched no widget and rendered the whole catalog anyway is not a
+  slow comparison; it is one file the two checkouts disagree about, and now
+  `fw compare` names it: `because pubspec.lock differs — 90 entries`, folded so
+  one cause is one line however many rows carry it. It rides in `index.json`
+  too, per half.
+
+- **A scenario half that could not run says so.** A base harness that will not
+  build leaves the same empty list as a project with no scenarios, and printed
+  the same `0 scenarios, 0 run, 0 skipped`. The note that separates them was
+  recorded in the artifact and shown nowhere; it is now printed above that
+  summary, and it keeps the compiler's diagnostics instead of only its first
+  line — a refusal naming neither the file nor the symbol is one nobody can act
+  on.
+
+- **A `GlobalObjectKey` over a lower-case type no longer defeats the
+  identity-hash elision.** `GlobalObjectKey` and `ObjectKey` spell themselves
+  as their own type, a space, then the identity of the object they identify —
+  so the token before the hash is the *value's* runtime type and may be
+  anything. `[GlobalObjectKey int#8cc0b]` slipped through and cost a consumer
+  every scenario of a routed app reported as changed on every comparison,
+  forever: `go_router` keys its navigator with one, so it is in the tree of
+  every screen and in none of the previews.
+
 - **A capture parked mid-flight is no longer reported as a settle that gave
   up.** `settled: false` said one thing and was read as another. It states a
   fact about frames — something was still scheduled when the shutter fell —

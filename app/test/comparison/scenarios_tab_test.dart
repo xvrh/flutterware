@@ -1,10 +1,8 @@
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/capture/settle.dart';
-import 'package:flutterware_app/src/comparison/channels.dart';
 import 'package:flutterware_app/src/comparison/comparison_controller.dart';
-import 'package:flutterware_app/src/comparison/frame_ref.dart';
-import 'package:flutterware_app/src/comparison/scenario_comparison.dart';
 import 'package:flutterware_app/src/comparison/shot_store.dart';
 import 'package:flutterware_app/src/comparison/ui/merged_tree.dart';
 import 'package:flutterware_app/src/comparison/ui/scenarios_tab.dart';

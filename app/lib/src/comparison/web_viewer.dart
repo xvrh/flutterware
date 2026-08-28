@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -8,7 +9,6 @@ import '../capture/settle.dart';
 import '../ui/empty_state.dart';
 import '../ui/theme.dart';
 import 'comparison_controller.dart';
-import 'index_reader.dart';
 import 'shot_store_http.dart';
 import 'ui/previews_tab.dart';
 import 'ui/scenarios_tab.dart';

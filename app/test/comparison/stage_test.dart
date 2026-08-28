@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware_app/src/comparison/pixel_diff.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
 import 'package:flutterware_app/src/comparison/shot_store_io.dart';
 import 'package:flutterware_app/src/comparison/ui/shot_image.dart';

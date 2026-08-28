@@ -1,5 +1,4 @@
-// ignore: implementation_imports
-import 'package:flutterware/src/inspect/node.dart';
+import '../inspect/node.dart';
 
 /// Why the pixels differ, in words.
 ///

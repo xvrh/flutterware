@@ -1,13 +1,10 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutterware_app/src/comparison/artifact.dart';
-import 'package:flutterware_app/src/comparison/channels.dart';
-import 'package:flutterware_app/src/comparison/frame_ref.dart';
-import 'package:flutterware_app/src/comparison/pixel_diff.dart';
 import 'package:flutterware_app/src/comparison/pr_report.dart';
 import 'package:flutterware_app/src/comparison/runner.dart';
-import 'package:flutterware_app/src/comparison/scenario_comparison.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;

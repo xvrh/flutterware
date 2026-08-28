@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutterware_app/src/comparison/artifact.dart';
-import 'package:flutterware_app/src/comparison/channels.dart';
 import 'package:flutterware_app/src/comparison/runner.dart';
-import 'package:flutterware_app/src/comparison/scenario_comparison.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 

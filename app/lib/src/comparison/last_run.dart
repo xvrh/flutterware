@@ -1,5 +1,4 @@
-import 'channels.dart';
-import 'scenario_comparison.dart';
+import 'package:flutterware/comparison_report.dart';
 
 /// What one half concluded the last time it ran, kept so the panel can show
 /// it again without running anything.

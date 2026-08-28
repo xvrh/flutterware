@@ -1,20 +1,18 @@
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:path/path.dart' as p;
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 
 import 'cancel.dart';
-import 'channels.dart';
 import 'closure.dart';
 import 'import_graph.dart';
 import '../utils/flutter_sdk.dart';
-import 'pixel_diff.dart';
 import 'shot_cache.dart';
 import 'shot_key.dart';
 import 'skip.dart';
-import 'tree_diff.dart';
 
 /// One side of a comparison, as the runner needs to talk to it.
 ///
@@ -88,6 +86,7 @@ class ComparisonResult {
     required this.headRoot,
     required this.elapsed,
     required this.rendered,
+    this.because = const {},
   });
 
   /// Worst first — [ComparedState] is declared in that order, so ranking is a
@@ -102,6 +101,15 @@ class ComparisonResult {
   /// The number that says whether the skip rule earned its keep.
   final int rendered;
 
+  /// Why the skip rule could not answer the entries it could not answer,
+  /// folded — see [foldReasons].
+  ///
+  /// The other half of [rendered]. That number says the skip rule did not
+  /// earn its keep; this one says which path it was that both checkouts
+  /// disagreed about, which is the only form of the answer anybody can act
+  /// on.
+  final Map<String, int> because;
+
   int countOf(ComparedState state) =>
       items.where((item) => item.state == state).length;
 
@@ -110,6 +118,7 @@ class ComparisonResult {
   /// `ComparisonArtifact` writes them once at the top.
   Map<String, Object?> toJson() => {
     'rendered': rendered,
+    'because': ?(because.isEmpty ? null : because),
     'ms': elapsed.inMilliseconds,
     'counts': {
       for (var state in ComparedState.values)
@@ -126,6 +135,7 @@ class ComparisonPlan {
     required this.toRender,
     required this.keys,
     required this.total,
+    this.because = const {},
   });
 
   /// Rows whose verdict needed no picture: added, removed, skipped.
@@ -133,6 +143,9 @@ class ComparisonPlan {
 
   /// The entries that have to be rendered to be answered.
   final List<String> toRender;
+
+  /// Why [toRender] has to be rendered, folded — see [foldReasons].
+  final Map<String, int> because;
 
   /// Each entry's cache key on both sides.
   final Map<String, ({String base, String head})> keys;
@@ -322,6 +335,7 @@ class ComparisonRunner {
       toRender: decided.toRender,
       keys: decided.keys,
       total: settled.length + decided.toRender.length,
+      because: decided.because,
     );
   }
 
@@ -478,6 +492,7 @@ class ComparisonRunner {
       headRoot: headRoot,
       elapsed: watch.elapsed,
       rendered: rendered,
+      because: plan.because,
     );
   }
 
@@ -587,6 +602,7 @@ class _PlanInputs {
     List<String> skipped,
     List<String> toRender,
     Map<String, ({String base, String head})> keys,
+    Map<String, int> because,
   })
   decide() {
     var memo = ClosureMemo(memoDirectory);
@@ -611,6 +627,7 @@ class _PlanInputs {
 
     var skipped = <String>[];
     var toRender = <String>[];
+    var reasons = <String>[];
     var keys = <String, ({String base, String head})>{};
     for (var id in ids) {
       var file = files[id]!;
@@ -634,8 +651,14 @@ class _PlanInputs {
         continue;
       }
       toRender.add(id);
+      if (decision.reason case var reason?) reasons.add(reason);
     }
-    return (skipped: skipped, toRender: toRender, keys: keys);
+    return (
+      skipped: skipped,
+      toRender: toRender,
+      keys: keys,
+      because: foldReasons(reasons),
+    );
   }
 
   ImportGraph _graphFor(String checkout) => ImportGraph.read(

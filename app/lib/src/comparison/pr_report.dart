@@ -1,14 +1,11 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import 'artifact.dart';
-import 'channels.dart';
-import 'frame_ref.dart';
-import 'pixel_diff.dart';
-import 'scenario_comparison.dart';
 import 'shot_cache.dart';
 
 /// What a pull-request comment needs, as files.

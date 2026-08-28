@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:http/http.dart' as http;
 
-import 'frame_ref.dart';
 import 'shot_store.dart';
 
 /// The exported page's store: every name in its `index.json` is a relative
