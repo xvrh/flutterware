@@ -212,6 +212,7 @@ class PluginCoreRegistry {
           workspace: workspace,
           config: declaration.config,
           projectClock: manifest.clock,
+          projectNetwork: manifest.network,
         ),
       ),
   ];

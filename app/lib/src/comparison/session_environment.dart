@@ -286,6 +286,7 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
       packagePath: _relative(package),
       directory: core.scanRootFor(package),
       projectClock: core.host.projectClock,
+      projectNetwork: core.host.projectNetwork,
     );
   }
 

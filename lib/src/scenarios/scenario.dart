@@ -24,6 +24,7 @@ import '../app_events/events.dart';
 import '../devices.dart';
 import 'keyboard.dart';
 import 'motion.dart';
+import 'network.dart';
 import 'notification.dart';
 import 'profile.dart';
 import 'real_work.dart';
@@ -83,6 +84,7 @@ void scenario(
   bool? skip,
   Timeout? timeout,
   Object? tags,
+  ScenarioNetwork? network,
 }) {
   // Captured as the scenario is *declared*, not read when it runs: a matrix
   // declares this same body once per assignment, and each declaration keeps
@@ -98,6 +100,14 @@ void scenario(
   // the folder said otherwise — see [scenarioAmbientKeyboard] for what off
   // restores.
   var keyboard = scenarioAmbientKeyboard ?? true;
+  // The folder's network policy, captured here for the reason the two above
+  // are — and *only* the folder's. The rest of the ladder is resolved when the
+  // body runs, in [_reachOf]: under the runner, `scenarioRunArgs` is armed per
+  // scenario inside the walk, long after this function has run for every file,
+  // so a `--network=` read here would always be null and the flag would be a
+  // silent no-op. Two altitudes, two times, and each read where its answer
+  // exists.
+  var folderReach = scenarioAmbientNetwork;
   var name =
       scenarioAmbientIsMatrix && assignment != null && !assignment.isEmpty
       ? '$description [${assignment.label}]'
@@ -141,6 +151,7 @@ void scenario(
           assignment,
           source,
           keyboard,
+          _reachOf(network, folderReach),
         ),
       );
     },
@@ -205,6 +216,37 @@ DateTime? get _scenarioClockOrigin {
   return raw == 'now' ? DateTime.now() : DateTime.parse(raw);
 }
 
+/// What the run said its http requests reach, or null when it said nothing.
+///
+/// The runner's request first, then the pair every other "the host tells the
+/// test process something" setting reads — a `fw.network` dart-define, then
+/// `FW_NETWORK` — which is how the bare `flutter test` lane, that reads no
+/// request and no manifest, is told at all.
+ScenarioNetwork? get resolvedScenarioNetwork =>
+    scenarioRunArgs?.network ?? _scenarioNetworkFromHost;
+
+/// What one scenario's http requests reach, resolved as it runs.
+///
+/// Nearest wins, except that a run beats a folder: an explicit `--network=` on
+/// one run is somebody saying "not this time", which is the whole reason a run
+/// flag exists. [own] is the `scenario(network: ...)` and [folder] the
+/// `runScenarios(network: ...)`, both captured at declaration; the middle two
+/// are read here because they are not armed until the walk reaches this
+/// scenario.
+ScenarioNetwork _reachOf(ScenarioNetwork? own, ScenarioNetwork? folder) =>
+    own ??
+    resolvedScenarioNetwork ??
+    folder ??
+    scenarioProjectNetwork ??
+    ScenarioNetwork.off;
+
+ScenarioNetwork? get _scenarioNetworkFromHost {
+  const define = String.fromEnvironment('fw.network');
+  var raw = define.isNotEmpty ? define : Platform.environment['FW_NETWORK'];
+  if (raw == null || raw.isEmpty) return null;
+  return parseScenarioNetwork(raw);
+}
+
 Future<void> _runScenario(
   WidgetTester tester,
   String description,
@@ -214,6 +256,7 @@ Future<void> _runScenario(
   ScenarioAssignment? assignment,
   String? source,
   bool wantsKeyboard,
+  ScenarioNetwork reach,
 ) async {
   // The runner's assignment wins, like its args do below: the declaration
   // captured the ambient one, which under the runner is null — and a body
@@ -262,6 +305,12 @@ Future<void> _runScenario(
   var priorCursor = EditableText.debugDeterministicCursor;
   EditableText.debugDeterministicCursor = true;
   var assets = ScenarioAssetBundle();
+  // One policy for the scenario, shared by every replay of its splits the way
+  // the bundle and the keyboard are — a real connection pool that a branch
+  // rebuilt would leak, and one thing for the `finally` below to close.
+  var network = ScenarioNetworkPolicy(reach);
+  scenarioNetworkModesRun.add(reach);
+  var restoreNetwork = installScenarioNetwork(network);
   _countFrames(tester);
   var state = _ReplayState();
   // Under the runner only: every exception the binding sees goes into the
@@ -278,6 +327,26 @@ Future<void> _runScenario(
   // failure passes through at all — and `flutter test` is the lane the
   // Flutter GPU diagnosis exists for.
   FlutterError.onError = (details) {
+    // A refusal is already *on* the step, as a network event carrying the
+    // whole message — so it is reported, and reporting it twice would be the
+    // second report failing the scenario.
+    //
+    // Which it would: an `Image.network` with no `errorBuilder` has no error
+    // listener of its own, so `MultiFrameImageStreamCompleter` hands the throw
+    // to `FlutterError.reportError`, and in a test binding that is what turns a
+    // test red. Left alone, `off` would fail every scenario with an
+    // unguarded network image on screen — including the https ones that
+    // silently drew a blank frame and passed before any of this existed, which
+    // is precisely the upgrade nobody asked for.
+    //
+    // Only a refusal, and never a stub's own `throws:`: an author who wrote
+    // `throws: SocketException(...)` is injecting an error on purpose and
+    // wants it to behave like one.
+    //
+    // Outermost of the three handlers chained here, so it also keeps the
+    // refusal out of the runner's caught-errors buffer — a scenario that did
+    // not fail must not be reported with an error against it.
+    if (details.exception is ScenarioNetworkRefusal) return;
     announceFlutterGpuDiagnosis(
       details.exceptionAsString(),
       executableArguments: Platform.executableArguments,
@@ -309,6 +378,10 @@ Future<void> _runScenario(
         // With the tree goes the keyboard: the next branch starts from a fresh
         // app, and one left up would be over a form nobody has touched yet.
         keyboard.reset();
+        // And with it the stated answers: each path through the splits states
+        // its own from the top, so a branch must not inherit what the branch
+        // before it said — nor read its requests back.
+        network.resetForReplay();
       }
       first = false;
       var s = ScenarioTester._(
@@ -321,6 +394,7 @@ Future<void> _runScenario(
         source,
         assets,
         keyboard,
+        network,
       );
       try {
         await body(s);
@@ -364,6 +438,10 @@ Future<void> _runScenario(
     // the end of the body, before tearDowns run.
     state.disposeSemantics();
     EditableText.debugDeterministicCursor = priorCursor;
+    // Before the tearDowns for the reason the semantics handle is: the binding
+    // asserts no timer is pending at the end of the body, and a live keepalive
+    // connection holds one.
+    restoreNetwork();
     restore?.call();
     restoreErrors?.call();
   }
@@ -557,6 +635,7 @@ class ScenarioTester {
     this._source,
     this.assets,
     this._keyboard,
+    this.network,
   );
 
   /// The real tester — the escape hatch to the full `flutter_test` surface.
@@ -580,6 +659,24 @@ class ScenarioTester {
   /// What raises and lowers the software keyboard — shared across replays for
   /// the same reason [assets] is.
   final ScenarioKeyboard _keyboard;
+
+  /// What this scenario's http requests reach, and where it states the answers
+  /// it wants.
+  ///
+  /// ```dart
+  /// s.network.get('/api/messages', json: []);
+  /// s.network.image('/avatars/1.png', scenarioPlaceholderPng(width: 64));
+  /// s.network.any(throws: const SocketException('Network is unreachable'));
+  /// ```
+  ///
+  /// A stub always beats the mode, so a scenario under
+  /// [ScenarioNetwork.live] can still pin the one response it is about and let
+  /// the rest go out. `s.network.requests` is what was actually asked for, and
+  /// every one of them is on the step's Events pane besides.
+  ///
+  /// One per scenario, shared by every replay of its splits — and reset at the
+  /// top of each replay, so a branch states its own answers.
+  final ScenarioNetworkPolicy network;
 
   /// The software keyboard, for a scenario that wants to say it explicitly.
   ///

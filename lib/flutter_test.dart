@@ -13,6 +13,17 @@ export 'src/scenarios/aim.dart' show ScenarioAim;
 export 'src/scenarios/asset_bundle.dart' show ScenarioAssetBundle;
 export 'src/scenarios/fonts.dart' show loadScenarioFonts, loadedScenarioFonts;
 export 'src/app_events/events.dart' show AppChannel, AppEvent, recordAppEvent;
+export 'src/scenarios/network.dart'
+    show
+        ScenarioNetwork,
+        ScenarioNetworkPolicy,
+        ScenarioNetworkRefusal,
+        ScenarioNetworkStore,
+        ScenarioRecording,
+        ScenarioRequest,
+        defaultScenarioNetworkStore,
+        scenarioNetworkStorePath,
+        scenarioPlaceholderPng;
 export 'src/scenarios/notification.dart' show ScenarioNotification;
 export 'src/scenarios/profile.dart'
     show ScenarioAssignment, ScenarioProfile, runScenarios;

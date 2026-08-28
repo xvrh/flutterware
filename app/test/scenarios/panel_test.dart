@@ -1423,6 +1423,9 @@ class _FakeRunner extends ScenarioRunner {
     double? recordScale,
     int recordMaxFrames = 90,
     DateTime? clock,
+    ScenarioNetwork? network,
+    ScenarioNetwork? projectNetwork,
+    String? networkStore,
   }) async {
     runs++;
     seenAxes.add(axes);

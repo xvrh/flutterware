@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/scenarios/network_mode.dart';
 
 import '../scenarios/runner.dart';
 import '../embedder/build_directory.dart';
@@ -24,6 +26,7 @@ class ScenariosSide {
     required this.packagePath,
     required this.directory,
     this.projectClock,
+    this.projectNetwork,
   });
 
   final String flutterSdkRoot;
@@ -49,6 +52,11 @@ class ScenariosSide {
   /// own `fw.clock(...)`, so both checkouts render at the date the rest of the
   /// project renders at.
   final DateTime? projectClock;
+
+  /// The project's `fw.network(...)`, carried for the reason [projectClock] is:
+  /// both sides of a comparison have to reach the same thing, or the diff is
+  /// about the network rather than about the branch.
+  final ScenarioNetwork? projectNetwork;
 
   /// An id is `<file>#<scenario>` — the same grammar a preview entry uses, and
   /// the same reason: the file alone does not name one, since a file holds
@@ -92,6 +100,7 @@ class ScenariosSide {
         root: comparisonBuildRoot,
       ),
       projectClock: projectClock,
+      projectNetwork: projectNetwork,
     );
   }
 

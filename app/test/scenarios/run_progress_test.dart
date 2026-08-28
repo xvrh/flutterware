@@ -240,6 +240,9 @@ class _Gated extends ScenarioRunner {
     double? recordScale,
     int recordMaxFrames = 90,
     DateTime? clock,
+    ScenarioNetwork? network,
+    ScenarioNetwork? projectNetwork,
+    String? networkStore,
   }) async {
     _outDir = outDir;
     Directory(outDir).createSync(recursive: true);
