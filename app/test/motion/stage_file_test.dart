@@ -112,4 +112,57 @@ void main() {
       expect(parseStageFile('const x = 1;'), isA<StageParseFailure>());
     });
   });
+
+  test('wraps where the formatter wraps', () {
+    var short = emitStageFile(
+      const StageFile(
+        name: 'aStage',
+        width: 360,
+        height: 560,
+        background: null,
+        elements: [
+          StageElementModel(
+            target: 'cta',
+            x: 24,
+            y: 80,
+            width: 312,
+            height: 48,
+          ),
+        ],
+      ),
+    );
+    // One line, because that is what `dart format` would leave — an emitter
+    // that split it would churn the file on the next commit.
+    expect(
+      short,
+      contains(
+        "    StageElement(target: 'cta', x: 24, y: 80, width: 312, height: 48),",
+      ),
+    );
+
+    var long = emitStageFile(
+      const StageFile(
+        name: 'aStage',
+        width: 360,
+        height: 560,
+        background: null,
+        elements: [
+          StageElementModel(
+            target: 'aRatherLongTargetName',
+            kind: 'text',
+            label: 'Total  £248.00',
+            x: 24,
+            y: 80,
+            width: 312,
+            height: 48,
+          ),
+        ],
+      ),
+    );
+    expect(long, contains('    StageElement(\n'));
+    expect(long, contains("      target: 'aRatherLongTargetName',\n"));
+    for (var line in long.split('\n')) {
+      expect(line.length, lessThanOrEqualTo(80), reason: line);
+    }
+  });
 }

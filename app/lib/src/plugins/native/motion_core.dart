@@ -664,6 +664,55 @@ class MotionCore extends PluginCore {
   ///
   /// The stage is the only place the tool may create a target. The other place
   /// a target is named is your build method, and it does not touch that.
+  /// Where a motion keeps its draft stage: the `.stage.dart` beside its entry.
+  ///
+  /// A convention rather than a declaration, and the same one everywhere — the
+  /// action, the panel and `motion new` all derive it here so a motion cannot
+  /// have two stages depending on who asked.
+  String stagePathFor(String packagePath, String motionFile) => p.join(
+    host.workspace.packageFor(packagePath).directory.path,
+    motionFile.replaceFirst(RegExp(r'\.dart$'), '.stage.dart'),
+  );
+
+  /// The parsed stage, a failure saying why not, or null where there is no
+  /// stage file at all — which is the ordinary shape of a motion whose targets
+  /// only live in a build method.
+  StageParseResult? readStage(String packagePath, String motionFile) {
+    var file = File(stagePathFor(packagePath, motionFile));
+    if (!file.existsSync()) return null;
+    return parseStageFile(file.readAsStringSync());
+  }
+
+  /// Writes a stage back whole, and returns what the caller should say about
+  /// it. The disk is the model: nothing is pushed into the guest, which picks
+  /// the edit up through the ordinary reload.
+  void writeStage(String packagePath, String motionFile, StageFile stage) =>
+      File(stagePathFor(packagePath, motionFile))
+          .writeAsStringSync(emitStageFile(stage));
+
+  /// A target name nothing on [stage] is using, from a kind — `box`, `box2`.
+  ///
+  /// The panel adds without asking for a name, because a dialog per element is
+  /// the wrong price for placing a rectangle; the name is a field on the
+  /// element like any other and is changed where the rest of it is.
+  static String freeTarget(StageFile stage, String kind) {
+    if (!stage.hasTarget(kind)) return kind;
+    for (var n = 2; ; n++) {
+      if (!stage.hasTarget('$kind$n')) return '$kind$n';
+    }
+  }
+
+  /// Where an element goes when nobody said: below the lowest one there is, so
+  /// a bare add puts something you can see rather than something underneath
+  /// the last one.
+  static double belowEverything(StageFile stage) =>
+      stage.elements.fold<double>(
+        40,
+        (lowest, each) =>
+            each.y + each.height > lowest ? each.y + each.height : lowest,
+      ) +
+      16;
+
   Future<Artifact> _addElement(Map<String, Object?> arguments) async {
     var packagePath = _requestedPackages(arguments['package']).first;
     track(packagePath);
@@ -688,10 +737,7 @@ class MotionCore extends PluginCore {
       );
     }
 
-    var stagePath = p.join(
-      host.workspace.packageFor(packagePath).directory.path,
-      motion.file.replaceFirst(RegExp(r'\.dart$'), '.stage.dart'),
-    );
+    var stagePath = stagePathFor(packagePath, motion.file);
     var stageFile = File(stagePath);
     var relative = p.relative(stagePath, from: host.worktree.path);
     if (!stageFile.existsSync()) {
@@ -715,13 +761,6 @@ class MotionCore extends PluginCore {
         }
         var width = _int(arguments['width']) ?? 280;
         var height = _int(arguments['height']) ?? 48;
-        // Stack below what is there when no `y` is given, so a bare call adds
-        // something you can see rather than something under the last one.
-        var bottom = stage.elements.fold<double>(
-          40,
-          (lowest, each) =>
-              each.y + each.height > lowest ? each.y + each.height : lowest,
-        );
         var element = StageElementModel(
           target: target,
           kind: switch (arguments['kind']) {
@@ -730,13 +769,13 @@ class MotionCore extends PluginCore {
             _ => 'box',
           },
           x: (_int(arguments['x']) ?? 24).toDouble(),
-          y: (_int(arguments['y']) ?? (bottom + 16)).toDouble(),
+          y: (_int(arguments['y']) ?? belowEverything(stage)).toDouble(),
           width: width.toDouble(),
           height: height.toDouble(),
           label: arguments['label'] as String?,
         );
         var grown = stage.withElement(element);
-        stageFile.writeAsStringSync(emitStageFile(grown));
+        writeStage(packagePath, motion.file, grown);
 
         return Artifact(
           kind: Artifact.plainText,

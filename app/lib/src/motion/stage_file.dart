@@ -272,23 +272,25 @@ String emitStageFile(StageFile stage, {String? header}) {
   }
   buffer.writeln('  elements: [');
   for (var element in stage.elements) {
+    var arguments = [
+      "target: '${element.target}'",
+      if (element.kind != 'box') 'kind: StageKind.${element.kind}',
+      if (element.label case var label?) "label: '$label'",
+      'x: ${_emitNumber(element.x)}',
+      'y: ${_emitNumber(element.y)}',
+      'width: ${_emitNumber(element.width)}',
+      'height: ${_emitNumber(element.height)}',
+      if (element.tint case var tint?) 'tint: $tint',
+      if (element.radius case var radius?) 'radius: ${_emitNumber(radius)}',
+    ];
+    var oneLine = '    StageElement(${arguments.join(', ')}),';
+    if (oneLine.length <= _pageWidth) {
+      buffer.writeln(oneLine);
+      continue;
+    }
     buffer.writeln('    StageElement(');
-    buffer.writeln("      target: '${element.target}',");
-    if (element.kind != 'box') {
-      buffer.writeln('      kind: StageKind.${element.kind},');
-    }
-    if (element.label case var label?) {
-      buffer.writeln("      label: '$label',");
-    }
-    buffer.writeln('      x: ${_emitNumber(element.x)},');
-    buffer.writeln('      y: ${_emitNumber(element.y)},');
-    buffer.writeln('      width: ${_emitNumber(element.width)},');
-    buffer.writeln('      height: ${_emitNumber(element.height)},');
-    if (element.tint case var tint?) {
-      buffer.writeln('      tint: $tint,');
-    }
-    if (element.radius case var radius?) {
-      buffer.writeln('      radius: ${_emitNumber(radius)},');
+    for (var argument in arguments) {
+      buffer.writeln('      $argument,');
     }
     buffer.writeln('    ),');
   }
@@ -296,6 +298,15 @@ String emitStageFile(StageFile stage, {String? header}) {
   buffer.writeln(');');
   return buffer.toString();
 }
+
+/// Where the formatter wraps, and therefore where this does.
+///
+/// The emitter has to agree with `dart format` or every write churns lines
+/// nobody touched: the tool writes one element split across seven lines, the
+/// formatter joins it back on the next commit, and a one-element diff arrives
+/// carrying the whole list. Agreeing costs one comparison — an argument list
+/// that fits goes on one line, exactly as the formatter would leave it.
+const _pageWidth = 80;
 
 /// Whole numbers as `28`, not `28.0` — the same rule the values file keeps, and
 /// for the same reason: an emitter that churned every literal would rewrite a
