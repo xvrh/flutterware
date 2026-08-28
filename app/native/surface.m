@@ -1,5 +1,7 @@
 #include "surface.h"
 
+#include <stdio.h>
+
 #import <Foundation/Foundation.h>
 #import <IOSurface/IOSurface.h>
 #import <Metal/Metal.h>
@@ -148,11 +150,17 @@ void surface_unlock(int slot) {
   IOSurfaceUnlock(g_ios[slot], kIOSurfaceLockReadOnly, NULL);
 }
 
-void surface_ring_ids(uint32_t out[SURFACE_RING_COUNT]) {
-  for (int i = 0; i < SURFACE_RING_COUNT; i++) {
-    out[i] = g_ios[i] ? IOSurfaceGetID(g_ios[i]) : 0;
-  }
+const char* surface_ring_handle(int slot) {
+  if (slot < 0 || slot >= SURFACE_RING_COUNT || !g_ios[slot]) return NULL;
+  // One buffer per slot, rewritten on each call. The caller sends the string
+  // before it asks about another slot, and only the socket loop asks at all.
+  static char handles[SURFACE_RING_COUNT][16];
+  snprintf(handles[slot], sizeof(handles[slot]), "%u",
+           (unsigned)IOSurfaceGetID(g_ios[slot]));
+  return handles[slot];
 }
+
+uint32_t surface_ring_pixel_order(void) { return kSurfaceOrderBgra; }
 
 int surface_ring_width(void) { return g_width; }
 int surface_ring_height(void) { return g_height; }

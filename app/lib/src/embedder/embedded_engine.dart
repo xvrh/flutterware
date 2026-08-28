@@ -248,20 +248,46 @@ class EmbeddedEngine extends ChangeNotifier {
     textureWidth = message.width;
     textureHeight = message.height;
     if (textureId == null) {
-      textureId = await _channel.invokeMethod<int>('createTexture', {
-        'surfaceIds': message.surfaceIds,
-      });
+      textureId = await _channel.invokeMethod<int>(
+        'createTexture',
+        _surfaceArguments(message),
+      );
       if (textureId case var id?) _byTextureId[id] = this;
       phase = EmbeddedEnginePhase.running;
     } else if (message.generation != _currentGeneration) {
-      await _channel.invokeMethod('updateSurfaces', {
+      var mapped = await _channel.invokeMethod<bool>('updateSurfaces', {
         'textureId': textureId,
-        'surfaceIds': message.surfaceIds,
+        ..._surfaceArguments(message),
       });
+      // A refused ring is not an error the panel can act on — the previous one
+      // is still mapped, so the guest's picture freezes at the old size until
+      // the next generation lands, and it does land. But it is invisible from
+      // here otherwise, and a panel that has quietly stopped following a drag
+      // is worth a line in the log rather than a puzzle.
+      if (mapped == false) {
+        debugPrint(
+          '[guest] the platform could not map ring generation '
+          '${message.generation} (${message.width}x${message.height}); '
+          'holding the previous frame',
+        );
+      }
     }
     _currentGeneration = message.generation;
     notifyListeners();
   }
+
+  /// What the platform side needs to resolve a ring.
+  ///
+  /// The geometry rides along with the handles because a shared-memory name
+  /// does not carry its own: an `IOSurface` knows how big it is and a mapping
+  /// has to be told. Sending it on both hosts rather than only where it is read
+  /// keeps this one message rather than two.
+  Map<String, Object?> _surfaceArguments(SurfacesAllocatedMessage message) => {
+    'surfaces': message.surfaces,
+    'width': message.width,
+    'height': message.height,
+    'rowBytes': message.rowBytes,
+  };
 
   void _onSocketClosed() {
     if (phase != EmbeddedEnginePhase.error && !_disposed) {

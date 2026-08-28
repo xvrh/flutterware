@@ -29,7 +29,7 @@ void main() {
     );
     Directory(buildDir).createSync(recursive: true);
 
-    var engineDir = await ensureEmbedderFramework(cache);
+    var engineDir = await ensureEmbedderEngine(cache);
     await compileScene(
       scenePath: p.join(packageRoot, 'tool', 'embedder', 'scene.dart'),
       kernelBlob: p.join(assetsDir, 'kernel_blob.bin'),
@@ -87,8 +87,8 @@ void main() {
     var first = await next<SurfacesAllocatedMessage>();
     expect(first.width, 800);
     expect(first.height, 600);
-    expect(first.surfaceIds, hasLength(3));
-    expect(first.surfaceIds.every((id) => id != 0), isTrue);
+    expect(first.surfaces, hasLength(3));
+    expect(first.surfaces.every((handle) => handle.isNotEmpty), isTrue);
 
     // Continuous frames: collect several with strictly increasing frameIds.
     var frameIds = <int>[];

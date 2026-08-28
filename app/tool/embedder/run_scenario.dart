@@ -51,7 +51,7 @@ Future<void> main(List<String> args) async {
   if (out.existsSync()) out.deleteSync(recursive: true);
   out.createSync(recursive: true);
 
-  var engineDir = await ensureEmbedderFramework(cache);
+  var engineDir = await ensureEmbedderEngine(cache);
   // The asset bundle (fonts, MaterialIcons, compiled shaders, manifests) is
   // what makes the guest behave like a real app — the ink-sparkle shader in
   // particular, which the FilledButton tap below loads on first use.

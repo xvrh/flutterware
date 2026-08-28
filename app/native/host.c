@@ -1,13 +1,22 @@
-// Long-lived Flutter-engine guest: runs a kernel blob, renders with the Metal
-// renderer directly into shared IOSurface-backed Metal textures (zero-copy),
-// and exchanges frames + input with a controlling process over a Unix domain
-// socket.
+// Long-lived Flutter-engine guest: runs a kernel blob, renders into a ring of
+// surfaces shared with a controlling process, and exchanges frames + input with
+// it over a Unix domain socket.
+//
+// The renderer is the one thing that is not the same on every host — Metal
+// into IOSurface-backed textures on macOS, GL into a framebuffer read back
+// into shared memory elsewhere — and it is confined to the two blocks marked
+// `__APPLE__` below plus `surface.m` / `surface_gl.c`. Everything else here —
+// the socket loop, resize, capture, window metrics, input — is written once.
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef __APPLE__
+#include <EGL/egl.h>
+#endif
 
 #include "flutter_embedder.h"
 #include "input.h"
@@ -44,8 +53,11 @@ static void OnLogMessage(const char* tag, const char* message,
   fflush(stdout);
 }
 
-// Writes a step-2 raw frame file: 12-byte LE header (width, height, row_bytes)
-// then the raw BGRA pixels read back from ring slot `slot`.
+// Writes a raw frame file: a 16-byte LE header (width, height, row_bytes,
+// pixel order) then the pixels read back from ring slot `slot`.
+//
+// The order is in the header rather than agreed in advance because it differs
+// per host — see `surface_ring_pixel_order`.
 static void WriteRawCapture(const char* path, int slot) {
   const void* base = surface_lock(slot);
   if (!base) return;
@@ -53,19 +65,26 @@ static void WriteRawCapture(const char* path, int slot) {
   size_t height = (size_t)surface_ring_height();
   FILE* f = fopen(path, "wb");
   if (f) {
-    uint32_t header[3] = {(uint32_t)surface_ring_width(), (uint32_t)height,
-                          (uint32_t)row_bytes};
-    fwrite(header, sizeof(uint32_t), 3, f);
+    uint32_t header[4] = {(uint32_t)surface_ring_width(), (uint32_t)height,
+                          (uint32_t)row_bytes, surface_ring_pixel_order()};
+    fwrite(header, sizeof(uint32_t), 4, f);
     fwrite(base, 1, row_bytes * height, f);
     fclose(f);
   }
   surface_unlock(slot);
 }
 
+// Announces the ring: its size, and how the GUI is to find each slot.
+//
+// The handles are length-prefixed strings rather than the fixed-width ids this
+// used to send, because what a slot *is* differs per host — an IOSurfaceID
+// there, a shared-memory name here — and one shape both can say is worth more
+// than four bytes.
 static void SendSurfacesAllocated(void) {
-  uint32_t ids[SURFACE_RING_COUNT];
-  surface_ring_ids(ids);
-  uint8_t payload[5 * 4 + SURFACE_RING_COUNT * 4];
+  // 5 header words, then a length and a name per slot. 256 is well past the
+  // longest handle either host produces (an IOSurfaceID in decimal, or
+  // "/flutterware-<pid>-<serial>-<slot>").
+  uint8_t payload[5 * 4 + SURFACE_RING_COUNT * (4 + 256)];
   uint32_t generation = g_generation;
   uint32_t count = SURFACE_RING_COUNT;
   uint32_t width = (uint32_t)surface_ring_width();
@@ -76,10 +95,17 @@ static void SendSurfacesAllocated(void) {
   memcpy(payload + 8, &width, 4);
   memcpy(payload + 12, &height, 4);
   memcpy(payload + 16, &row_bytes, 4);
+  size_t at = 20;
   for (int i = 0; i < SURFACE_RING_COUNT; i++) {
-    memcpy(payload + 20 + i * 4, &ids[i], 4);
+    const char* handle = surface_ring_handle(i);
+    if (handle == NULL) handle = "";
+    uint32_t len = (uint32_t)strlen(handle);
+    if (len > 256) len = 256;
+    memcpy(payload + at, &len, 4);
+    memcpy(payload + at + 4, handle, len);
+    at += 4 + len;
   }
-  ipc_send(g_socket, kMsgSurfacesAllocated, payload, sizeof(payload));
+  ipc_send(g_socket, kMsgSurfacesAllocated, payload, at);
 }
 
 // `insets` is top, right, bottom, left in physical pixels — a device's safe
@@ -136,6 +162,22 @@ static void OnFramePresented(void* user_data) {
   free(frame);
 }
 
+// Reallocates the ring when the engine asks for a size it is not, and tells the
+// GUI when it did. Called from the engine's raster thread on every frame, on
+// both hosts — at that point the engine holds no drawable, so freeing the old
+// ring is safe and no cross-thread locking is needed.
+static void ResizeRingIfNeeded(const FlutterFrameInfo* frame_info) {
+  int width = (int)frame_info->size.width;
+  int height = (int)frame_info->size.height;
+  if (width == surface_ring_width() && height == surface_ring_height()) return;
+  if (surface_ring_init(width, height)) {
+    g_generation++;
+    SendSurfacesAllocated();
+  }
+}
+
+#ifdef __APPLE__
+
 // Engine raster thread: hands the engine the next ring slot's Metal texture.
 // If the engine asks for a size different from the current ring (a resize),
 // the ring is reallocated here — at this point the engine holds no texture, so
@@ -143,14 +185,7 @@ static void OnFramePresented(void* user_data) {
 static FlutterMetalTexture GetNextDrawable(
     void* user_data, const FlutterFrameInfo* frame_info) {
   (void)user_data;
-  int width = (int)frame_info->size.width;
-  int height = (int)frame_info->size.height;
-  if (width != surface_ring_width() || height != surface_ring_height()) {
-    if (surface_ring_init(width, height)) {
-      g_generation++;
-      SendSurfacesAllocated();
-    }
-  }
+  ResizeRingIfNeeded(frame_info);
   int slot = surface_ring_acquire();
   FlutterMetalTexture texture = {0};
   texture.struct_size = sizeof(FlutterMetalTexture);
@@ -175,6 +210,70 @@ static bool PresentDrawable(void* user_data,
   surface_present_fence(OnFramePresented, frame);
   return true;
 }
+
+#else  // __APPLE__
+
+// The engine's OpenGL renderer, in four callbacks it invokes on its own
+// threads. Everything they do lives in `surface_gl.c`; these exist because the
+// engine's signatures carry a user_data the surface unit has no use for.
+static bool GlMakeCurrent(void* user_data) {
+  (void)user_data;
+  return surface_gl_make_current();
+}
+
+static bool GlClearCurrent(void* user_data) {
+  (void)user_data;
+  return surface_gl_clear_current();
+}
+
+static bool GlMakeResourceCurrent(void* user_data) {
+  (void)user_data;
+  return surface_gl_make_resource_current();
+}
+
+// Engine raster thread, once per frame — `fbo_reset_after_present` is what
+// makes it once per frame rather than once per run, and that is what gives the
+// GL host the resize hook `get_next_drawable` is on Metal.
+static uint32_t GlFbo(void* user_data, const FlutterFrameInfo* frame_info) {
+  (void)user_data;
+  ResizeRingIfNeeded(frame_info);
+  return surface_gl_fbo();
+}
+
+// Engine raster thread: the frame is in the framebuffer, so copy it into the
+// ring and say so.
+//
+// There is no fence here and nothing to wait for. `surface_gl_readback` ends in
+// a `glReadPixels`, which is synchronous by definition — it cannot return
+// before the GPU has finished writing what it reads — so by the time this
+// line is reached the frame is in the slot and OnFramePresented can be called
+// outright, where the Metal path has to wait for a command buffer to complete.
+// Note for whoever profiles this: on the Metal path `OnFramePresented` runs
+// from a command-buffer completion handler, off the raster thread. Here it runs
+// inline, so an armed capture does its `fwrite` — 7.7MB at 1600x1200 — and its
+// blocking `ipc_send` inside the engine's present callback, stalling the
+// guest's raster thread for the length of a disk write. Only a capture pays it,
+// and a capture is already a stop-and-photograph, but a guest that captured
+// every frame would be paced by the filesystem.
+static bool GlPresent(void* user_data) {
+  (void)user_data;
+  int slot = surface_ring_acquire();
+  surface_gl_readback(slot);
+  PresentedFrame* frame = (PresentedFrame*)malloc(sizeof(PresentedFrame));
+  frame->ring_index = (uint32_t)slot;
+  frame->frame_id = ++g_frame_id;
+  frame->generation = g_generation;
+  surface_ring_advance();
+  OnFramePresented(frame);
+  return true;
+}
+
+static void* GlProcResolver(void* user_data, const char* name) {
+  (void)user_data;
+  return (void*)eglGetProcAddress(name);
+}
+
+#endif  // __APPLE__
 
 int main(int argc, char** argv) {
   if (argc < 6) {
@@ -202,18 +301,30 @@ int main(int argc, char** argv) {
   }
 
   if (!surface_ring_init(width, height)) {
-    const char* msg = "Metal surface allocation failed";
+    const char* msg = "surface allocation failed";
     ipc_send(g_socket, kMsgError, (const uint8_t*)msg, strlen(msg));
     return 1;
   }
 
   FlutterRendererConfig renderer = {0};
+#ifdef __APPLE__
   renderer.type = kMetal;
   renderer.metal.struct_size = sizeof(FlutterMetalRendererConfig);
   renderer.metal.device = surface_metal_device();
   renderer.metal.present_command_queue = surface_metal_queue();
   renderer.metal.get_next_drawable_callback = GetNextDrawable;
   renderer.metal.present_drawable_callback = PresentDrawable;
+#else
+  renderer.type = kOpenGL;
+  renderer.open_gl.struct_size = sizeof(FlutterOpenGLRendererConfig);
+  renderer.open_gl.make_current = GlMakeCurrent;
+  renderer.open_gl.clear_current = GlClearCurrent;
+  renderer.open_gl.make_resource_current = GlMakeResourceCurrent;
+  renderer.open_gl.present = GlPresent;
+  renderer.open_gl.fbo_with_frame_info_callback = GlFbo;
+  renderer.open_gl.fbo_reset_after_present = true;
+  renderer.open_gl.gl_proc_resolver = GlProcResolver;
+#endif
 
   FlutterProjectArgs args = {0};
   args.struct_size = sizeof(FlutterProjectArgs);
@@ -231,11 +342,24 @@ int main(int argc, char** argv) {
   // every desktop embedder has to ask. The name below is
   // `softwareRenderingKey` in `app/lib/src/constants.dart`; the two halves
   // have to agree.
+  //
+  // The GL host names its backend and the Metal one does not, which is not an
+  // inconsistency: an unqualified `--enable-impeller` falls through to the
+  // engine's Vulkan branch, and on Linux there is a Vulkan driver for it to
+  // fall through *to* — a renderer config saying `kOpenGL` and a rasterizer
+  // that came up on Vulkan. Naming `opengles` is what holds the two together.
+  // Nothing is named on macOS because nothing has needed to be; the Metal
+  // config has always been enough there, and a flag added on a host this
+  // cannot be run on is a change made blind.
   const char* engine_argv[] = {"flutterware_guest", "--enable-impeller",
+#ifndef __APPLE__
+                               "--impeller-backend=opengles",
+#endif
                                "--enable-flutter-gpu"};
   const char* software = getenv("FW_SOFTWARE_RENDERING");
   if (software == NULL || strcmp(software, "1") != 0) {
-    args.command_line_argc = 3;
+    args.command_line_argc =
+        (int)(sizeof(engine_argv) / sizeof(engine_argv[0]));
     args.command_line_argv = engine_argv;
   }
 
