@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
 import 'package:collection/collection.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
@@ -16,6 +18,7 @@ import '../../motion/stage_file.dart';
 import '../../motion/values_file.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
+import 'previews_core.dart';
 import 'motion_address.dart';
 import 'motion_results.dart';
 
@@ -337,6 +340,25 @@ class MotionCore extends PluginCore {
             required: false,
             description: 'A device to render as; the panel otherwise',
           ),
+          const ActionParameter(
+            'knobs',
+            'Knobs',
+            required: false,
+            description:
+                'Values to turn before rendering: `name=value,name=value`, or '
+                'a JSON object. This is how one authored motion becomes many '
+                'clips — the same timing over different words, a different '
+                'accent, a different locale — without touching the file it '
+                'was authored in.',
+          ),
+          const ActionParameter(
+            'axes',
+            'Axes',
+            required: false,
+            description:
+                'What the shell around the demo offers — `theme=dark`. Same '
+                'syntax as knobs.',
+          ),
         ],
       ),
       PluginAction(
@@ -629,11 +651,13 @@ class MotionCore extends PluginCore {
     }.clamp(1, 120);
 
     var device = _deviceOf(arguments);
+    var knobs = PreviewsCore.parsePairs(arguments['knobs']);
+    var axes = PreviewsCore.parsePairs(arguments['axes']);
     var output = p.join(
       host.workspace.appContext.appToolDirectory.path,
       'build',
       'motion',
-      '${motion.values}.mp4',
+      '${motion.values}${_settingSuffix(knobs, axes)}.mp4',
     );
     var video = await catalog.video(
       entryId: entry.id,
@@ -642,6 +666,8 @@ class MotionCore extends PluginCore {
       viewport: device == null
           ? CaptureViewport.panel
           : CaptureViewport.of(device),
+      knobs: knobs,
+      axes: axes,
     );
 
     return Artifact(
@@ -663,8 +689,30 @@ class MotionCore extends PluginCore {
         'encodeMs': video.encodeTime.inMilliseconds,
         'bytes': video.file.lengthSync(),
         'device': ?device?.id,
+        if (knobs.isNotEmpty) 'knobs': knobs,
+        if (axes.isNotEmpty) 'axes': axes,
       },
     );
+  }
+
+  /// What distinguishes one setting's clip from another's, in a filename.
+  ///
+  /// Renders of the same motion at different knobs are different videos, and
+  /// they have to be different files: the whole point of injecting parameters
+  /// is having all the clips at once, and a fixed name would leave whichever
+  /// finished last. Sorted before hashing so the same setting written in a
+  /// different order is the same file rather than a second one.
+  ///
+  /// A digest rather than the values themselves because a knob's value is
+  /// arbitrary text — a sentence, a locale, a JSON object — and none of that
+  /// belongs in a path. The values travel in `meta`, where they can be read.
+  String _settingSuffix(Map<String, String> knobs, Map<String, String> axes) {
+    if (knobs.isEmpty && axes.isEmpty) return '';
+    var canonical = [
+      for (var key in knobs.keys.toList()..sort()) 'k:$key=${knobs[key]}',
+      for (var key in axes.keys.toList()..sort()) 'a:$key=${axes[key]}',
+    ].join('\u0000');
+    return '-${sha1.convert(utf8.encode(canonical)).toString().substring(0, 8)}';
   }
 
   /// The cold start, in one call.
