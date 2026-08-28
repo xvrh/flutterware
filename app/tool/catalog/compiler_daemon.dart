@@ -971,10 +971,44 @@ class _Daemon {
     // The baseline every later sweep reads against. Taken here rather than on
     // the first request: a file edited between startup and that request would
     // otherwise be recorded *as* the baseline, and the edit would never compile.
+    //
+    // `compiledAt` is what makes the baseline honest after a **warm** start.
+    // The compile above began from a kernel an earlier session wrote, and
+    // `frontend_server` recompiles nothing it is not named — so every file
+    // edited since that kernel was saved is in the program, stale, and
+    // invisible. Recording it as the baseline is what made it invisible
+    // *forever*: the mtime matched from then on, so no later sweep reported it
+    // either. Measured on this repo: a values file edited between two daemons
+    // rendered the previous version through every capture, while the panel's
+    // own scan showed the new one.
     var sweep = Stopwatch()..start();
-    _invalidator.sweep(compiler.sources);
+    var stale = _invalidator.sweep(
+      compiler.sources,
+      compiledAt: compiler.startedFromStamp,
+    );
     _timings['source baseline (${_invalidator.watched} files)'] =
         sweep.elapsedMilliseconds;
+    if (stale.isNotEmpty) {
+      stderr.writeln(
+        '[catalog] ${stale.length} sources are newer than the warm kernel; '
+        'recompiling them',
+      );
+      // Whole program, not a delta: the kernel at `_outputDill` is what a guest
+      // loads from disk and what `saveWarmStart` is about to publish, and a
+      // delta is not a program.
+      compiler.reset();
+      cold = await _timed(
+        'warm start repair (${stale.length} edited)',
+        () => _compileServingWhatWorks(stale),
+      );
+      if (!cold.ok) {
+        throw StateError(
+          'the catalog compiled from its warm kernel, but recompiling the '
+          '${stale.length} sources edited since did not:\n'
+          '${cold.output.join('\n')}',
+        );
+      }
+    }
     compiler.saveWarmStart();
     // Written beside the kernel it belongs to: the warm kernel and the
     // quarantine describe the same compile, and a quarantine recorded against a

@@ -42,11 +42,23 @@ class CompileOutcome {
 /// `docs/superpowers/specs/2026-07-26-s3-hot-switch-findings.md`.
 ///
 /// The *first* compile is warm too when a `warmDill` is given: the compiler
-/// loads a kernel an earlier session produced and recompiles only what has
-/// changed since. Measured against `app/tool/catalog/demos`, that is 2396ms
-/// cold against 341ms warm, and an edited demo still comes back edited.
+/// loads a kernel an earlier session produced. Measured against
+/// `app/tool/catalog/demos`, that is 2396ms cold against 341ms warm.
+///
+/// It does **not** recompile what changed since that kernel was written, and
+/// this doc used to claim it did. `recompile` drops exactly the libraries it is
+/// named and serves every other one from the state it was initialised with, so
+/// a file edited between one session saving a warm kernel and the next starting
+/// from it is served stale until somebody says otherwise. [startedFrom] is who
+/// says: stat it, and anything newer has to be invalidated by hand. See
+/// `SourceInvalidator.sweep`'s `compiledAt`.
 class ResidentCompiler {
-  ResidentCompiler._(this._server, this.outputDill, this._warmDill);
+  ResidentCompiler._(
+    this._server,
+    this.outputDill,
+    this._warmDill,
+    this.startedFrom,
+  );
 
   final FrontendServer _server;
 
@@ -56,6 +68,19 @@ class ResidentCompiler {
   /// Where that kernel is kept for the *next* session to start warm from, or
   /// null when warm starts are off.
   final String? _warmDill;
+
+  /// The kernel this compiler was initialised from, or null when the compile
+  /// was genuinely cold.
+  ///
+  /// The program this holds is as old as this file, which is the only thing
+  /// that says which sources its state can still be trusted for.
+  final String? startedFrom;
+
+  /// When [startedFrom] was written, or null for a cold compile.
+  DateTime? get startedFromStamp => switch (startedFrom) {
+    var path? when File(path).existsSync() => File(path).statSync().modified,
+    _ => null,
+  };
 
   /// Every file the compiled program is made of, which is what a
   /// `SourceInvalidator` stats to answer "what did the user edit".
@@ -120,7 +145,7 @@ class ResidentCompiler {
       initializeFromDill: warm,
       extraArguments: argumentsFor(trackWidgetCreation: trackWidgetCreation),
     );
-    return ResidentCompiler._(server, outputDill, warmDill);
+    return ResidentCompiler._(server, outputDill, warmDill, warm);
   }
 
   /// The compiler flags a [start] with these settings passes.

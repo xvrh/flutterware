@@ -130,23 +130,47 @@ Ranked, after the build rather than before it.
    hit-tests, so an invisible element eats taps. Easy to fix, impossible to
    remember, therefore must be automatic.
 
-## `motion filmstrip` renders a stale guest
+## A capture rendered a stale guest — found, diagnosed, fixed
 
 Found while re-shooting the revised fuse. The values file changed from 900ms to
 1000ms and a whole second segment was added; the strip came back byte-identical
 and still reported `durationMs: 900`. Deleting the cached PNG changed nothing,
-so it is the compiled guest that is behind rather than the artifact.
+and it stayed stale across repeated calls, so it was neither an artifact cache
+nor a race.
 
-`previews screenshot` picks up the same edit immediately, so the two capture
-paths do not agree about when to sweep for edited sources.
+What made it diagnosable: **`motion list` updated in the same call.** The listing
+reported the motion's new line number from a fresh syntactic scan while the
+picture showed the previous version. Half the panel current, half a version
+behind, with nothing saying so.
 
-What makes this worse than an ordinary staleness bug: **`motion list` updated in
-the same call.** The listing reported the motion's new line number from a fresh
-syntactic scan while the picture showed the previous version. Half the panel is
-current and half is a version behind, with nothing saying so.
+The cause is an interaction between two correct-looking pieces:
 
-This is the exact failure that makes a tuning tool untrustworthy — change a
-value, re-render, see the old picture, conclude the edit did nothing.
+- `ResidentCompiler` starts `frontend_server` with `--initialize-from-dill`, so
+  the first compile begins from a kernel an *earlier session* wrote. Its doc
+  claimed the compiler "recompiles only what has changed since" and that "an
+  edited demo still comes back edited". Neither is true.
+- `SourceInvalidator`'s own doc has it right: `frontend_server` invalidates
+  nothing on its own, and a caller that names nothing gets its previous program
+  back however much the files have moved.
+- The daemon takes its baseline sweep *after* the cold compile, recording every
+  source's mtime and reporting none — correct when that compile really was cold,
+  and wrong after a warm start. A file edited between one daemon saving its warm
+  kernel and the next starting from it was recorded as the baseline, so it was
+  stale in the program **and** invisible to every later sweep. Permanently.
+
+`touch` on the source fixed it, which is what confirmed the diagnosis: the
+invalidation machinery worked, the baseline was a lie.
+
+Fixed by giving the sweep a `compiledAt` — when the kernel the compiler was
+initialised from was written — so a first sighting newer than that kernel is
+reported rather than recorded, and the daemon recompiles exactly those before
+serving anything. Cold compiles keep the old behaviour, so nothing pays for it.
+Verified end to end: a fresh daemon now picks up an edit made before it started.
+
+Worth noting why this one matters beyond the bug. It is the exact failure that
+makes a tuning tool untrustworthy — change a value, re-render, see the old
+picture, conclude the edit did nothing — and the tool this session is trying to
+justify is a tuning tool.
 
 ## Not verified
 
