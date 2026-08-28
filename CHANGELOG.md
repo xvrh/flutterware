@@ -1,5 +1,40 @@
 ## Unreleased
 
+- **A capture parked mid-flight is no longer reported as a settle that gave
+  up.** `settled: false` said one thing and was read as another. It states a
+  fact about frames — something was still scheduled when the shutter fell —
+  and the step page turned that into "the settle budget ran out", which is
+  only true where a policy was waiting for the app to go quiet in the first
+  place. Three of them are not: `Settle.none` draws one frame, `Settle.frames`
+  draws a count, and `Settle.elapse` spends a clock. A screen photographed
+  under those is *meant* to be moving.
+
+  So `Settle` now says which it is — `waits`, true for `upTo` and `full` — and
+  every step carries the answer as `waited`. The wire omits it on the true
+  side, so a report written before this reads as it always did. `settled` is
+  untouched, and still means exactly what it measured.
+
+  Three things read the pair rather than the flag alone. The step notice says
+  "parked mid-flight" in the neutral tone instead of warning; the step label
+  drops the amber; and `unsettledCount` counts only the steps that asked and
+  did not get it. That number was the one worth having and the one that had
+  stopped meaning anything: measured on a consumer suite of 127 scenarios that
+  photographs loading screens on purpose, 70 of 1213 steps carried a frame
+  still scheduled and **68 of them were parked deliberately**. The two left
+  were both defects — a split branch photographing a spinner it had named for
+  the loaded list, and a tap whose bounded settle could not outlast a chain of
+  delayed calls. Neither had been visible in a count of 70, and both were
+  fixed the same afternoon they became visible.
+
+  An adoption merges over the *pair* rather than over either flag, which is not
+  the obvious rule and is the one the evidence forced. A verb parked with a
+  frame outstanding and a `screen` that waited and got its quiet screen are two
+  halves that each did what they were told; merging `settled` pessimistically
+  and `waited` pessimistically made that stretch claim a settle had run out.
+  So one half that waited *and did not get it* makes the stretch one that gave
+  up, and a stretch with none of those is parked however many policies waited
+  inside it.
+
 - **`Settle.full` samples the keyboard on both sides of its loop.** It used to
   sample once, before `pumpAndSettle` started — which is enough for a raise,
   because the verb that gave a field focus has already run. It is not enough for

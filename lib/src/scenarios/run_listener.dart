@@ -42,6 +42,7 @@ class ScenarioStepCapture {
     this.motion = ScenarioMotionFrames.empty,
     this.motionInterval,
     this.settled = true,
+    this.waited = true,
     this.landed = true,
     this.strayFrames = 0,
     this.failure,
@@ -164,6 +165,13 @@ class ScenarioStepCapture {
   /// — an indefinite animation on screen, which is worth seeing rather than
   /// failing on.
   final bool settled;
+
+  /// Whether the policy this step ran under was one that waits for the app to
+  /// go quiet — see `Settle.waits`.
+  ///
+  /// False and [settled] false together is a capture parked mid-flight on
+  /// purpose: nothing gave up, because nothing was asked to wait.
+  final bool waited;
 
   /// False when the shutter fell with work still in flight that the step was
   /// waiting for — an image decode or an asset read that had not finished

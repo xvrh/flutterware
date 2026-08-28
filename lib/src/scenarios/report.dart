@@ -285,7 +285,7 @@ class ScenarioRunOutcome {
       ),
       unsettledCount: _int(
         json['unsettledCount'],
-        steps.where((step) => !step.settled).length,
+        steps.where((step) => !step.settled && step.waited).length,
       ),
       errors: _listOf(json['errors'], ScenarioRunError.fromJson),
       translations: _translationsOrNull(json['translations']),
@@ -353,9 +353,15 @@ class ScenarioRunOutcome {
   /// that makes a stall visible in it.
   final int unchangedCount;
 
-  /// How many of those steps were captured with the app still animating —
-  /// `settled: false`, the bounded settle giving up with frames still
-  /// scheduled.
+  /// How many of those steps were captured with the app still animating after
+  /// a policy that **waited** for it to stop — `settled: false` with
+  /// `waited: true`, the settle giving up with frames still scheduled.
+  ///
+  /// A capture parked on purpose is not one of these. `Settle.none`,
+  /// `Settle.frames` and `Settle.elapse` stop on a count or on the clock, so
+  /// a frame still scheduled when they return is what the author asked to
+  /// photograph — counting those makes the number a measure of how much
+  /// mid-flight the suite captures rather than of anything to look at.
   ///
   /// Not a failure and not usually a surprise: a spinner does it, and the
   /// default policy exists to survive one. It is here because nothing at a
@@ -569,6 +575,7 @@ class ScenarioRunStep {
         frameIntervalMs: json['frameIntervalMs'] as int?,
         framesDropped: json['framesDropped'] as int?,
         settled: json['settled'] as bool? ?? true,
+        waited: json['waited'] as bool? ?? true,
         landed: json['landed'] as bool? ?? true,
         digest: json['digest'] as String?,
         strayFrames: _int(json['strayFrames'], 0),
@@ -617,6 +624,7 @@ class ScenarioRunStep {
     this.frameIntervalMs,
     this.framesDropped,
     this.settled = true,
+    this.waited = true,
     this.landed = true,
     this.digest,
     this.strayFrames = 0,
@@ -841,10 +849,24 @@ class ScenarioRunStep {
   final String? statusBrightness;
   final String? navBrightness;
 
-  /// False when the verb's settle policy gave up with frames still scheduled:
-  /// something on this screen animates indefinitely — a spinner, a shimmer —
-  /// and the capture is of a moving picture. Not a failure.
+  /// False when frames were still scheduled at the shutter: something on this
+  /// screen was still moving, and the capture is of a moving picture. Not a
+  /// failure.
+  ///
+  /// Read it with [waited], which says whether anything was *asked*. False
+  /// here and true there is a settle that gave up. False in both is a picture
+  /// parked mid-flight on purpose.
   final bool settled;
+
+  /// Whether this step's settle policy was one that waits for the app to go
+  /// quiet — `Settle.upTo` and `Settle.full`, and not `Settle.none`,
+  /// `Settle.frames` or `Settle.elapse`, which stop on a count or on the
+  /// clock.
+  ///
+  /// The wire omits the field on the `true` side, so a report written before
+  /// this existed reads as every step having waited — which is what a reader
+  /// of one already assumed.
+  final bool waited;
 
   /// False when the shutter fell with an image decode or an asset read still
   /// in flight — the picture is of a screen that was still filling in, and
@@ -986,6 +1008,7 @@ class ScenarioRunStep {
     frameIntervalMs: frameIntervalMs,
     framesDropped: framesDropped,
     settled: settled,
+    waited: waited,
     landed: landed,
     digest: digest,
     strayFrames: strayFrames,
@@ -1044,6 +1067,7 @@ class ScenarioRunStep {
     // size it was. Each writes its field rather than a literal so the shape
     // extractor carries the field's doc into `docs/capabilities.md`.
     if (!settled) 'settled': settled,
+    if (!waited) 'waited': waited,
     if (!landed) 'landed': landed,
     if (digest != null) 'digest': digest,
     if (strayFrames > 0) 'strayFrames': strayFrames,

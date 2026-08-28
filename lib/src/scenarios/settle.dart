@@ -105,6 +105,20 @@ sealed class Settle {
   /// verb to discover.
   static const full = _Full();
 
+  /// Whether the app going quiet is what stops this policy.
+  ///
+  /// True for [Settle.upTo] and [Settle.full], which pump *while* the app
+  /// keeps asking for frames. False for the three that stop on a count or on
+  /// the clock — [Settle.none], [Settle.frames] and [Settle.elapse]: they were
+  /// never asked to wait, so a frame still scheduled when they return is the
+  /// picture the author wanted rather than a budget that ran out.
+  ///
+  /// [apply]'s answer says what it says either way — whether a frame was
+  /// scheduled — and this is what tells a run which of those answers is worth
+  /// reporting. A step captured mid-flight on purpose and a settle that gave
+  /// up are the same fact about frames and opposite facts about the scenario.
+  bool get waits => true;
+
   /// Applies the policy. False when the app was still scheduling frames when
   /// the policy gave up — the step is captured either way.
   ///
@@ -167,6 +181,9 @@ class _Elapsed extends Settle {
   final Duration budget;
 
   @override
+  bool get waits => false;
+
+  @override
   Future<bool> apply(
     WidgetTester tester, {
     ScenarioMotionRecorder? record,
@@ -191,6 +208,9 @@ class _None extends Settle {
   const _None();
 
   @override
+  bool get waits => false;
+
+  @override
   Future<bool> apply(
     WidgetTester tester, {
     ScenarioMotionRecorder? record,
@@ -208,6 +228,9 @@ class _Frames extends Settle {
 
   final int count;
   final Duration interval;
+
+  @override
+  bool get waits => false;
 
   @override
   Future<bool> apply(

@@ -1527,6 +1527,7 @@ class ScenarioTester {
         events: List.of(events),
         eventsDropped: dropped,
         settled: true,
+        waited: true,
         landed: true,
         strayFrames: 0,
         failure: null,
@@ -1735,6 +1736,7 @@ class ScenarioTester {
     // the flow. Read before the action, reported on the step it precedes.
     var stray = _frames - _framesAtLastStep;
     _aim = null;
+    var policy = settle ?? _settle;
     bool settled;
     bool landed;
     T result;
@@ -1744,7 +1746,6 @@ class ScenarioTester {
       // "before" is nowhere in it.
       _recorder?.capture(tester);
       result = await action();
-      var policy = settle ?? _settle;
       // One purse for the whole step: the policy's frames draw whatever has
       // announced itself as they go — otherwise fake time runs the transition
       // out in a few real milliseconds and every frame of the movie behind the
@@ -1785,6 +1786,7 @@ class ScenarioTester {
     await _afterStep(
       shot,
       settled: settled,
+      waited: policy.waits,
       landed: landed,
       stray: stray,
       verb: verb,
@@ -1862,6 +1864,7 @@ class ScenarioTester {
   Future<void> _afterStep(
     Shot? shot, {
     required bool settled,
+    required bool waited,
     required bool landed,
     required int stray,
     String? verb,
@@ -1878,6 +1881,7 @@ class ScenarioTester {
     await _capture(
       shot,
       settled: settled,
+      waited: waited,
       landed: landed,
       stray: stray,
       verb: verb,
@@ -2099,6 +2103,7 @@ class ScenarioTester {
     Shot shot,
     (List<AppEvent>, int) drained, {
     required bool settled,
+    required bool waited,
     required bool landed,
     int stray = 0,
     ScenarioMotionFrames? motion,
@@ -2106,7 +2111,15 @@ class ScenarioTester {
     var pending = _pending!;
     pending.name = shot.name;
     pending.tags = shot.tags;
+    // `waited` is only ever read beside a false `settled`, and there it has to
+    // name the half that *produced* the false: two halves that each did what
+    // they were told do not add up to a settle that gave up. So the merge is
+    // over the pair rather than over either flag — one half that waited and
+    // did not get it makes the stretch one that gave up, and a stretch with
+    // none of those is parked however many policies waited inside it.
+    var gaveUp = (!pending.settled && pending.waited) || (!settled && waited);
     pending.settled = pending.settled && settled;
+    pending.waited = pending.settled || gaveUp;
     pending.landed = pending.landed && landed;
     pending.strayFrames += stray;
     pending.overflowErrors += _overflowsSinceLastCapture;
@@ -2233,6 +2246,7 @@ class ScenarioTester {
   Future<void> _capture(
     Shot? shot, {
     bool settled = true,
+    bool waited = true,
     bool landed = true,
     int stray = 0,
     String? verb,
@@ -2301,6 +2315,7 @@ class ScenarioTester {
         shot,
         appEventBuffer?.drain() ?? (const <AppEvent>[], 0),
         settled: settled,
+        waited: waited,
         landed: landed,
         stray: stray,
       );
@@ -2316,6 +2331,7 @@ class ScenarioTester {
         branch: branch,
         shot: shot,
         settled: settled,
+        waited: waited,
         landed: landed,
         stray: stray,
         verb: verb,
@@ -2429,6 +2445,7 @@ class ScenarioTester {
     required String? branch,
     required Shot? shot,
     required bool settled,
+    bool waited = true,
     bool landed = true,
     int stray = 0,
     String? verb,
@@ -2565,6 +2582,7 @@ class ScenarioTester {
         motion: motion,
         motionInterval: _recorder?.interval,
         settled: settled,
+        waited: waited,
         landed: landed,
         strayFrames: stray,
         failure: failure,
@@ -2586,6 +2604,7 @@ class ScenarioTester {
         shot!,
         (events, dropped),
         settled: settled,
+        waited: waited,
         landed: landed,
         stray: stray,
         motion: adoptedMotion,
@@ -2662,6 +2681,7 @@ class _PendingEmit {
     required this.events,
     required this.eventsDropped,
     required this.settled,
+    required this.waited,
     required this.landed,
     required this.strayFrames,
     required this.failure,
@@ -2731,6 +2751,7 @@ class _PendingEmit {
   ScenarioMotionFrames motion;
   final Duration? motionInterval;
   bool settled;
+  bool waited;
   bool landed;
   int strayFrames;
   final String? failure;
@@ -2775,6 +2796,7 @@ class _PendingEmit {
     motion: motion,
     motionInterval: motionInterval,
     settled: settled,
+    waited: waited,
     landed: landed,
     strayFrames: strayFrames,
     failure: failure,
