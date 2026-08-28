@@ -375,7 +375,7 @@ class TesterHost {
       [
         '--vm-service-port=0',
         '--disable-service-auth-codes',
-        '--icu-data-file-path=${_cache.testerIcuData}',
+        '--icu-data-file-path=${_cache.icuData}',
         '--enable-checked-mode',
         '--verify-entry-points',
         ...rasterizerArguments(

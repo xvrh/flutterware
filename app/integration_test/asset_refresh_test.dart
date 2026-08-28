@@ -117,7 +117,7 @@ void main() => runApp(
   ),
 );
 ''');
-    var engineDir = await ensureEmbedderFramework(cache);
+    var engineDir = await ensureEmbedderEngine(cache);
     var hostPath = await buildHost(
       nativeSourceDir: p.join(appRoot, 'native'),
       nativeBuildDir: p.join(appRoot, 'build', 'catalog', 'native'),

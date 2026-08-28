@@ -72,20 +72,30 @@ class CapturedMessage extends EmbedderMessage {
   final String path;
 }
 
+/// Guest to GUI: here is the ring, and here is how to find each slot in it.
 class SurfacesAllocatedMessage extends EmbedderMessage {
   const SurfacesAllocatedMessage({
     required this.generation,
     required this.width,
     required this.height,
     required this.rowBytes,
-    required this.surfaceIds,
+    required this.surfaces,
   });
 
   final int generation;
   final int width;
   final int height;
   final int rowBytes;
-  final List<int> surfaceIds;
+
+  /// One opaque handle per ring slot, in slot order, for the platform side to
+  /// resolve: an `IOSurfaceID` in decimal on macOS, a POSIX shared-memory name
+  /// (`/flutterware-<pid>-<serial>-<slot>`) elsewhere.
+  ///
+  /// Strings, and opaque here, because this half of the bridge has no business
+  /// knowing which kind it is holding — it carries them from the guest to the
+  /// plugin that made them meaningful in the first place. They were fixed-width
+  /// integers while an `IOSurfaceID` was the only thing they could be.
+  final List<String> surfaces;
 }
 
 class FrameReadyMessage extends EmbedderMessage {
@@ -238,12 +248,14 @@ Uint8List encodeMessage(EmbedderMessage message) {
     case SurfacesAllocatedMessage():
       body.addByte(MessageType.surfacesAllocated.tag);
       _u32(body, message.generation);
-      _u32(body, message.surfaceIds.length);
+      _u32(body, message.surfaces.length);
       _u32(body, message.width);
       _u32(body, message.height);
       _u32(body, message.rowBytes);
-      for (var id in message.surfaceIds) {
-        _u32(body, id);
+      for (var handle in message.surfaces) {
+        var bytes = utf8.encode(handle);
+        _u32(body, bytes.length);
+        body.add(bytes);
       }
     case FrameReadyMessage():
       body.addByte(MessageType.frameReady.tag);
@@ -332,16 +344,20 @@ EmbedderMessage decodeMessageBody(Uint8List body) {
       var width = data.getUint32(8, Endian.little);
       var height = data.getUint32(12, Endian.little);
       var rowBytes = data.getUint32(16, Endian.little);
-      var ids = [
-        for (var i = 0; i < count; i++)
-          data.getUint32(20 + i * 4, Endian.little),
-      ];
+      var surfaces = <String>[];
+      var at = 20;
+      for (var i = 0; i < count; i++) {
+        var length = data.getUint32(at, Endian.little);
+        at += 4;
+        surfaces.add(utf8.decode(body.sublist(1 + at, 1 + at + length)));
+        at += length;
+      }
       return SurfacesAllocatedMessage(
         generation: generation,
         width: width,
         height: height,
         rowBytes: rowBytes,
-        surfaceIds: ids,
+        surfaces: surfaces,
       );
     case MessageType.frameReady:
       return FrameReadyMessage(

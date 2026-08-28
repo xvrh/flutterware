@@ -32,7 +32,7 @@ Future<void> main() async {
 
   Directory(buildDir).createSync(recursive: true);
 
-  var engineDir = await ensureEmbedderFramework(cache);
+  var engineDir = await ensureEmbedderEngine(cache);
   await compileScene(
     scenePath: p.join(packageRoot, 'tool', 'embedder', 'scene.dart'),
     kernelBlob: kernelBlob,

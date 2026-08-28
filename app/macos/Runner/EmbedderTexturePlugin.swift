@@ -67,6 +67,17 @@ public class EmbedderTexturePlugin: NSObject, FlutterPlugin {
     super.init()
   }
 
+  /// The ring handles out of a call's arguments.
+  ///
+  /// They arrive as strings because the other hosts' handles are names rather
+  /// than numbers; here every one of them is an `IOSurfaceID` written in
+  /// decimal, and a handle that is not is a guest talking to the wrong plugin.
+  private static func parse(_ args: [String: Any]) -> [UInt32]? {
+    guard let surfaces = args["surfaces"] as? [String] else { return nil }
+    let ids = surfaces.compactMap { UInt32($0) }
+    return ids.count == surfaces.count ? ids : nil
+  }
+
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
       name: "flutterware/embedder_texture",
@@ -80,12 +91,11 @@ public class EmbedderTexturePlugin: NSObject, FlutterPlugin {
     let args = call.arguments as? [String: Any] ?? [:]
     switch call.method {
     case "createTexture":
-      guard let ids = args["surfaceIds"] as? [Int] else {
+      guard let surfaceIds = EmbedderTexturePlugin.parse(args) else {
         result(FlutterError(code: "bad_args",
-                            message: "surfaceIds required", details: nil))
+                            message: "surfaces required", details: nil))
         return
       }
-      let surfaceIds = ids.map { UInt32(truncatingIfNeeded: $0) }
       guard let texture = EmbedderTexture(surfaceIds: surfaceIds) else {
         result(FlutterError(code: "lookup_failed",
                             message: "IOSurfaceLookup failed", details: nil))
@@ -96,15 +106,13 @@ public class EmbedderTexturePlugin: NSObject, FlutterPlugin {
       result(NSNumber(value: textureId))
     case "updateSurfaces":
       guard let textureId = (args["textureId"] as? Int).map({ Int64($0) }),
-            let ids = args["surfaceIds"] as? [Int],
+            let surfaceIds = EmbedderTexturePlugin.parse(args),
             let texture = textures[textureId] else {
         result(FlutterError(code: "bad_args",
                             message: "unknown texture", details: nil))
         return
       }
-      let ok = texture.setSurfaces(
-        ids.map { UInt32(truncatingIfNeeded: $0) })
-      result(NSNumber(value: ok))
+      result(NSNumber(value: texture.setSurfaces(surfaceIds)))
     case "markFrameAvailable":
       guard let textureId = (args["textureId"] as? Int).map({ Int64($0) }),
             let ringIndex = args["ringIndex"] as? Int,

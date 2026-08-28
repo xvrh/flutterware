@@ -19,10 +19,11 @@ import 'package:test/test.dart';
 /// by path and answers with the path when the bytes have landed.
 Uint8List _rawFrame(int width, int height, {int? rowBytes}) {
   var stride = rowBytes ?? width * 4;
-  var header = ByteData(12)
+  var header = ByteData(16)
     ..setUint32(0, width, Endian.little)
     ..setUint32(4, height, Endian.little)
-    ..setUint32(8, stride, Endian.little);
+    ..setUint32(8, stride, Endian.little)
+    ..setUint32(12, 0, Endian.little); // BGRA, as the Metal ring writes
   return (BytesBuilder()
         ..add(header.buffer.asUint8List())
         // Opaque white, so an annotation's magenta is visible against it.
