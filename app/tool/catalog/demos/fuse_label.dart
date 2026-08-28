@@ -1,7 +1,41 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/motion.dart';
+import 'package:flutterware/previews.dart';
 
 import 'fuse_label.motion.dart';
+
+/// The fuse on its own, which is how a reusable animation wants to be worked
+/// on: its own entry, its own playhead, nothing else on screen to explain a
+/// mistake away.
+///
+/// It is also what makes it capturable at all — `motion filmstrip` finds a
+/// motion through an entry in the same file, so a component whose file has no
+/// entry cannot be photographed.
+@Preview(name: 'Fuse label', group: 'Motion', wrapper: onInk)
+Widget fuseLabelPreview() => Builder(
+  builder: (context) => Center(
+    child: FuseLabel(
+      left: context.knobs.string('left', 'Find your'),
+      right: context.knobs.string('right', 'morning'),
+      progress: context.knobs.double('t', 1, min: 0, max: 1),
+      glow: const Color(0xFFFF8A4C),
+      style: const TextStyle(
+        fontSize: 38,
+        height: 1.05,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -1.1,
+        color: Colors.white,
+      ),
+    ),
+  ),
+);
+
+Widget onInk(Widget child) => MaterialApp(
+  debugShowCheckedModeBanner: false,
+  theme: ThemeData.dark(useMaterial3: true),
+  home: Scaffold(backgroundColor: const Color(0xFF0C0913), body: child),
+);
 
 /// Two strings that arrive from opposite sides and fuse into one line.
 ///
