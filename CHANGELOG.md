@@ -1,5 +1,25 @@
 ## Unreleased
 
+- **`Settle.full` samples the keyboard on both sides of its loop.** It used to
+  sample once, before `pumpAndSettle` started — which is enough for a raise,
+  because the verb that gave a field focus has already run. It is not enough for
+  the reverse. A settle that navigates away from a form takes the focus with it,
+  and the policy owns no per-frame hook to have noticed, so the keyboard stayed
+  staged at the height the vanished field asked for.
+
+  The next verb then discovered it. Where that verb was a capture pinned to
+  `Settle.none` — one frame, no clock — the picture came out with a full
+  keyboard over a screen that has no field on it, sliding away, and the step
+  reported `settled: false` for an animation the harness had started itself. The
+  reader was sent looking for a spinner.
+
+  So `apply` lands again after the loop and settles what that starts. Two rounds
+  and not a fixpoint: what a landing starts is one 250ms animation, so the
+  second round finishes what the first found, and a tree that keeps changing
+  focus under a settle is a tree still moving — the next verb's business rather
+  than something to spin here over. `pumpAndSettle`'s semantics are untouched,
+  the ten-minute throw included.
+
 - **A network mode that did nothing now says so.** Two silences a consumer hit
   in one sitting, both of which ended with a passing suite and no output.
 

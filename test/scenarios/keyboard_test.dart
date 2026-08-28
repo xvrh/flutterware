@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
 import 'package:flutterware/src/scenarios/keyboard.dart';
@@ -84,12 +86,31 @@ void main() {
 
     scenario('and `Settle.full` waits it out too', (s) async {
       // The one policy with no per-frame hook — `pumpAndSettle` owns its loop.
-      // It lands once *before* the loop, which is all the keyboard needs: it
-      // reads the focus there, points its ticker, and the SDK's own settle
-      // waits the slide out like any other animation.
+      // It lands *around* it instead. The round before is all a raise needs:
+      // the tap has already given the field focus, so the sample points the
+      // ticker and the SDK's own settle waits the slide out like any other
+      // animation.
       await s.pumpWidget(const _Form());
       await s.tap(const Key('name'), settle: Settle.full);
       expect(s.keyboard.height, 336);
+    });
+
+    scenario('and it takes down the keyboard the loop itself let go of', (
+      s,
+    ) async {
+      // The round *after* is for this one, and nothing else can be: the focus
+      // is still on the form when the loop starts and the form is gone by the
+      // time it ends, so a policy that sampled only at the start would leave
+      // 336 points of keyboard staged over a screen with no field on it —
+      // for the next verb to start sliding away, one frame into its own
+      // capture.
+      await s.pumpWidget(const _Form());
+      await s.tap(const Key('name'));
+      expect(s.keyboard.height, 336);
+
+      await s.act('the app leaves the form', _leaveForm, settle: Settle.full);
+      expect(s.keyboard.height, 0);
+      expect(captures.last.settled, isTrue);
     });
 
     scenario('and a policy that pumps one frame catches it mid-slide', (
@@ -389,6 +410,24 @@ KeyboardVariant _drawnVariant(ScenarioTester s) {
   return (paint.painter! as FakeKeyboardPainter).variant;
 }
 
+/// Pushes a page over the form, from outside the tree — the shape a deep link
+/// or a tapped notification has, and the reason the focus goes away somewhere
+/// a verb is not looking.
+void _leaveForm() {
+  // A block body, not an arrow: `push` completes when the route is *popped*,
+  // and `void` erases the type without dropping the object — so an arrow hands
+  // the verb a future that never completes.
+  unawaited(
+    _formNavigator.currentState!.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Center(child: Text('elsewhere'))),
+      ),
+    ),
+  );
+}
+
+final _formNavigator = GlobalKey<NavigatorState>();
+
 class _Form extends StatefulWidget {
   const _Form({this.resizes = true, this.custom = false, this.number = false});
 
@@ -411,6 +450,7 @@ class _FormState extends State<_Form> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+    navigatorKey: _formNavigator,
     home: Scaffold(
       resizeToAvoidBottomInset: widget.resizes,
       body: Column(
