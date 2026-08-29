@@ -24,6 +24,7 @@ import 'package:flutterware/src/ui_catalog/axis.dart';
 import 'package:flutterware/src/ui_catalog/knob.dart';
 
 import '../embedder/frame_capture.dart';
+import '../embedder/raw_frame.dart';
 import '../embedder/protocol.dart';
 import 'catalog_picture.dart';
 import 'catalog_render.dart';
@@ -139,20 +140,33 @@ class HeadlessCatalog extends CatalogRenderer {
     var stops = videoStops(durationMs: durationMs, fps: fps);
 
     var render = Stopwatch()..start();
-    var (first, _) = await guest.captureImage();
+    var first = await guest.captureRawFrame(
+      alreadySettled: opening.settled ?? false,
+    );
     var encoder = await VideoEncoder.start(
       output: output,
       width: first.width,
       height: first.height,
       fps: fps,
+      // The guest's own order. Converting it here would cost more than the
+      // encode does — see [FrameCapture.captureRaw].
+      pixelFormat: first.pixelFormat,
     );
     try {
-      encoder.add(first);
+      var handoff = Stopwatch();
+      handoff.start();
+      encoder.addRaw(first);
+      handoff.stop();
       for (var t in stops.skip(1)) {
-        await guest.seekMotion(t, scope: opening.scope);
-        var (frame, _) = await guest.captureImage();
-        encoder.add(frame);
+        var landed = await guest.seekMotion(t, scope: opening.scope);
+        var frame = await guest.captureRawFrame(
+          alreadySettled: landed.settled ?? false,
+        );
+        handoff.start();
+        encoder.addRaw(frame);
+        handoff.stop();
       }
+      guest.timings.encoderHandoff = handoff.elapsed;
     } catch (_) {
       await encoder.abort();
       rethrow;
@@ -172,7 +186,7 @@ class HeadlessCatalog extends CatalogRenderer {
       encodeTime: flush.elapsed,
       scope: opening.scope,
       mountedScopes: opening.mounted,
-      timings: guest.timings,
+      timings: guest.readCaptureCosts(),
     );
   });
 
@@ -410,11 +424,25 @@ class GuestTimings {
   int seekCalls = 0;
   int frames = 0;
 
+  /// Copying decoded pixels into the encoder's stdin.
+  Duration encoderHandoff = Duration.zero;
+
+  /// The capture, split into what the guest did and what this side did.
+  Duration captureDraw = Duration.zero;
+  Duration captureRead = Duration.zero;
+  Duration captureDecode = Duration.zero;
+  int captureBytes = 0;
+
   Map<String, Object?> toJson() => {
     'motionListMs': motionList.inMilliseconds,
     'motionSeekMs': motionSeek.inMilliseconds,
     'settleMs': settle.inMilliseconds,
     'frameMs': frame.inMilliseconds,
+    'captureDrawMs': captureDraw.inMilliseconds,
+    'captureReadMs': captureRead.inMilliseconds,
+    'captureDecodeMs': captureDecode.inMilliseconds,
+    'encoderHandoffMs': encoderHandoff.inMilliseconds,
+    'capturedMB': (captureBytes / 1048576).round(),
     'listCalls': listCalls,
     'seekCalls': seekCalls,
     'frames': frames,
@@ -433,6 +461,7 @@ class MotionSeek {
     required this.durationMs,
     required this.scope,
     required this.mounted,
+    required this.settled,
   });
 
   /// Where the playhead landed, in the motion's own milliseconds.
@@ -447,6 +476,15 @@ class MotionSeek {
   /// Every scope mounted at the time, in mount order — which is tree order,
   /// so the first encloses the rest.
   final List<String> mounted;
+
+  /// Whether the frame this seek waited for was already quiet — no image
+  /// loads outstanding, nothing animating — or null from a guest too old to
+  /// say.
+  ///
+  /// Null and false are the same instruction (settle before capturing) and
+  /// are kept apart anyway, because a guest that cannot answer is a version
+  /// skew and a guest that answers "no" is a picture still moving.
+  final bool? settled;
 }
 
 /// A rendered motion, and what it cost to render.
@@ -930,6 +968,24 @@ class _GuestSession {
       await _renderScratchFrame();
       _motionReady = true;
     }
+    // A caller that already knows which scope it is walking does not need the
+    // listing, and a render asks 1800 times for a minute of video. The listing
+    // is what *chooses* a scope and what makes a refusal name the others, so
+    // it is skipped only when the id was given — and a seek that then fails
+    // falls back to it, so the refusal is as good as it ever was.
+    if (scope != null) {
+      var direct = await _seek(scope, t);
+      if (direct != null) {
+        return MotionSeek(
+          ms: (direct['ms'] as num?)?.toInt() ?? 0,
+          durationMs: _durationByScope[scope] ?? 0,
+          scope: scope,
+          mounted: _mountedByScope,
+          settled: _readSettled(direct),
+        );
+      }
+    }
+
     // List first, and seek by id: the guest resolves a nameless seek only
     // while exactly one scope is mounted, so a composed screen would refuse —
     // and the refusal surfaced here as the misleading "no mounted
@@ -963,13 +1019,13 @@ class _GuestSession {
     }
 
     var id = chosen['id'] as String?;
-    watch.reset();
-    var reply = await _vmService.callExtension(
-      'ext.flutterware.motion.seek',
-      args: {'scope': ?id, 't': '$t'},
-    );
-    timings.motionSeek += watch.elapsed;
-    timings.seekCalls++;
+    _mountedByScope = [for (var one in scopes) one['id'] as String? ?? ''];
+    for (var one in scopes) {
+      if (one['id'] case String key) {
+        _durationByScope[key] = (one['durationMs'] as num?)?.toInt() ?? 0;
+      }
+    }
+    var reply = await _seek(id, t);
     if (reply == null) {
       throw ArgumentError.value(
         t,
@@ -985,9 +1041,31 @@ class _GuestSession {
       // composition's own timeline rather than one of the components inside
       // it. Reported rather than assumed: a caller that got the wrong one
       // should be able to see that it did, and name the other.
-      mounted: [for (var one in scopes) one['id'] as String? ?? ''],
+      mounted: _mountedByScope,
+      settled: _readSettled(reply),
     );
   }
+
+  /// What the last listing said, so the fast path can answer without one.
+  var _mountedByScope = <String>[];
+  final _durationByScope = <String, int>{};
+
+  Future<Map<String, Object?>?> _seek(String? scope, double t) async {
+    var watch = Stopwatch()..start();
+    var reply = await _vmService.callExtension(
+      'ext.flutterware.motion.seek',
+      args: {'scope': ?scope, 't': '$t'},
+    );
+    timings.motionSeek += watch.elapsed;
+    timings.seekCalls++;
+    return reply;
+  }
+
+  static bool? _readSettled(Map<String, Object?> reply) =>
+      switch ((reply['pending'], reply['transient'])) {
+        (num pending, num transient) => pending == 0 && transient == 0,
+        _ => null,
+      };
 
   /// One mounted scope, for a refusal that teaches which to name.
   static String _describeMountedScope(Map<String, Object?> scope) {
@@ -1081,6 +1159,35 @@ class _GuestSession {
 
   /// Where a render's per-frame time went, accumulated across the session.
   final timings = GuestTimings();
+
+  /// [timings], with the capture's own three-way split folded in.
+  ///
+  /// Read at the end rather than accumulated as it goes: `FrameCapture` counts
+  /// for the whole session and this is the one place that knows a render is
+  /// over.
+  /// [captureImage] with the pixels left as the guest wrote them.
+  ///
+  /// [alreadySettled] skips the settle loop, and is only ever true because a
+  /// *seek* just reported the frame it drew was quiet. The loop it skips is
+  /// two forced frames — the capture forces its own anyway — so on a parked
+  /// motion this is the difference between four rendered frames per captured
+  /// one and two.
+  Future<RawFrame> captureRawFrame({bool alreadySettled = false}) async {
+    var watch = Stopwatch()..start();
+    if (!alreadySettled) await _settle();
+    timings.settle += watch.elapsed;
+    watch.reset();
+    var frame = await _capture.captureRaw();
+    timings.frame += watch.elapsed;
+    timings.frames++;
+    return frame;
+  }
+
+  GuestTimings readCaptureCosts() => timings
+    ..captureDraw = _capture.drawTime
+    ..captureRead = _capture.readTime
+    ..captureDecode = _capture.decodeTime
+    ..captureBytes = _capture.readBytes;
 
   /// Waits until the guest has no image loads in flight, bounded.
   ///

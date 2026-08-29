@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'dart:typed_data';
+
 import 'package:image/image.dart' as img;
+
+import '../embedder/raw_frame.dart';
 
 /// Encodes a sequence of rendered frames into a video file, through `ffmpeg`.
 ///
@@ -17,7 +21,14 @@ import 'package:image/image.dart' as img;
 /// export that silently produced an unplayable file would be worse than one
 /// that refuses.
 class VideoEncoder {
-  VideoEncoder._(this._process, this._errors, this.file, this.fps);
+  VideoEncoder._(
+    this._process,
+    this._errors,
+    this.file,
+    this.fps,
+    this._width,
+    this._height,
+  );
 
   /// Starts an encoder writing [output] at [fps], for frames of [width] by
   /// [height] physical pixels.
@@ -32,6 +43,13 @@ class VideoEncoder {
     required int width,
     required int height,
     required int fps,
+
+    /// The byte order the frames arrive in — what the guest wrote, not what
+    /// the encoder would prefer. `ffmpeg` reads either at no cost, so telling
+    /// it the truth is cheaper than converting: the guest's ring is BGRA on a
+    /// Metal host and RGBA on a GL one, and swizzling in Dart to hide that
+    /// costs more than the encode.
+    String pixelFormat = 'rgba',
   }) async {
     var file = File(output);
     file.parent.createSync(recursive: true);
@@ -43,7 +61,7 @@ class VideoEncoder {
         '-hide_banner',
         '-loglevel', 'error',
         '-f', 'rawvideo',
-        '-pix_fmt', 'rgba',
+        '-pix_fmt', pixelFormat,
         '-s', '${width}x$height',
         '-r', '$fps',
         '-i', '-',
@@ -75,7 +93,7 @@ class VideoEncoder {
     );
     unawaited(process.stdout.drain<void>());
 
-    return VideoEncoder._(process, errors, file, fps);
+    return VideoEncoder._(process, errors, file, fps, width, height);
   }
 
   static const executable = 'ffmpeg';
@@ -90,8 +108,8 @@ class VideoEncoder {
   int get frames => _frames;
   var _frames = 0;
 
-  int? _width;
-  int? _height;
+  final int _width;
+  final int _height;
 
   /// Hands one frame to the encoder.
   ///
@@ -100,17 +118,40 @@ class VideoEncoder {
   /// [VideoEncoder] ignorant of motion and reusable by anything that renders a
   /// sequence.
   void add(img.Image frame) {
-    _width ??= frame.width;
-    _height ??= frame.height;
-    if (frame.width != _width || frame.height != _height) {
-      throw StateError(
-        'frame ${_frames + 1} is ${frame.width}x${frame.height}, but the '
-        'stream was opened at ${_width}x$_height — raw video carries no size, '
-        'so a frame that changes it corrupts everything after it',
-      );
-    }
+    _require(frame.width, frame.height);
     _process.stdin.add(frame.getBytes(order: img.ChannelOrder.rgba));
     _frames++;
+  }
+
+  /// Hands over a frame the guest wrote, without decoding it.
+  ///
+  /// Rows are written one at a time when the guest padded them, because raw
+  /// video has no stride — a padded row handed over whole shifts every
+  /// subsequent pixel and the picture shears.
+  void addRaw(RawFrame frame) {
+    _require(frame.width, frame.height);
+    if (frame.isPacked) {
+      _process.stdin.add(frame.pixels);
+    } else {
+      var row = frame.width * 4;
+      for (var y = 0; y < frame.height; y++) {
+        var start = y * frame.rowBytes;
+        _process.stdin.add(
+          Uint8List.sublistView(frame.pixels, start, start + row),
+        );
+      }
+    }
+    _frames++;
+  }
+
+  void _require(int width, int height) {
+    if (width != _width || height != _height) {
+      throw StateError(
+        'frame ${_frames + 1} is ${width}x$height, but the stream was opened '
+        'at ${_width}x$_height — raw video carries no size, so a frame that '
+        'changes it corrupts everything after it',
+      );
+    }
   }
 
   /// Closes the stream and waits for the file to be written.

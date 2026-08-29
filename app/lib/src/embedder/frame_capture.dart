@@ -91,8 +91,24 @@ class FrameCapture {
   Future<img.Image> capture({
     String name = 'screenshot',
     Duration timeout = const Duration(seconds: 30),
-  }) {
-    var result = _turn.then((_) => _capture(name: name, timeout: timeout));
+  }) async => await _queued(name, timeout, raw: false) as img.Image;
+
+  /// [capture]'s frame with the pixels left exactly as the guest wrote them.
+  ///
+  /// For a consumer that reads BGRA as happily as RGBA — `ffmpeg` does — and
+  /// so should not pay a 3-megapixel channel swizzle in Dart to be handed what
+  /// it was already sent. Measured at 26ms a frame at phone resolution, which
+  /// on a one-minute clip is 47 seconds spent converting pixels into a form
+  /// the encoder immediately converts back.
+  Future<RawFrame> captureRaw({
+    String name = 'screenshot',
+    Duration timeout = const Duration(seconds: 30),
+  }) async => await _queued(name, timeout, raw: true) as RawFrame;
+
+  Future<Object> _queued(String name, Duration timeout, {required bool raw}) {
+    var result = _turn.then(
+      (_) => _capture(name: name, timeout: timeout, raw: raw),
+    );
     // The queue must not inherit this one's failure, or one bad capture would
     // fail every capture after it. Swallowed here only — `result` still throws
     // to the caller, and having a listener from this moment is also what keeps
@@ -101,9 +117,21 @@ class FrameCapture {
     return result;
   }
 
-  Future<img.Image> _capture({
+  /// What a captured frame costs, split three ways.
+  ///
+  /// The guest draws and writes, this side reads and decodes, and only the
+  /// first of those is rendering. Kept apart because they are fixed by
+  /// different things — a scene's complexity, the disk, and the pixel format —
+  /// and a plan to make capture cheaper has to know which one it is aimed at.
+  Duration drawTime = Duration.zero;
+  Duration readTime = Duration.zero;
+  Duration decodeTime = Duration.zero;
+  int readBytes = 0;
+
+  Future<Object> _capture({
     required String name,
     required Duration timeout,
+    bool raw = false,
   }) async {
     Directory(workDir).createSync(recursive: true);
     var path = p.join(workDir, '$name.rawframe');
@@ -115,8 +143,10 @@ class FrameCapture {
     var done = _pending[path] = Completer<Object?>();
     Object? failure;
     try {
+      var watch = Stopwatch()..start();
       await send(CaptureMessage(path));
       failure = await done.future.timeout(timeout);
+      drawTime += watch.elapsed;
 
       // `Object`, because it is whatever the socket handler was given — an
       // `ErrorMessage`'s text arrives wrapped in a StateError today, and this
@@ -124,10 +154,19 @@ class FrameCapture {
       // ignore: only_throw_errors
       if (failure != null) throw failure;
 
+      watch.reset();
+      var bytes = file.readAsBytesSync();
+      readTime += watch.elapsed;
+      readBytes += bytes.length;
+
       // Decoded and handed back, and no further: framing a picture is
       // `catalog_picture.dart`'s, because it is the same work whichever engine
       // drew the frame.
-      return decodeRawFrame(file.readAsBytesSync());
+      if (raw) return readRawFrame(bytes);
+      watch.reset();
+      var image = decodeRawFrame(bytes);
+      decodeTime += watch.elapsed;
+      return image;
     } finally {
       _pending.remove(path);
       // Whatever happened. A frame is tens of megabytes uncompressed, and on

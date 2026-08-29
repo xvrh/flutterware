@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'controller.dart';
@@ -177,6 +178,15 @@ class MotionRegistry {
         jsonEncode({
           'progress': controller.progress,
           'ms': controller.position.inMilliseconds,
+          // What a caller would otherwise ask `ext.flutterware.imagesSettled`
+          // for, straight after this — and that question costs a *forced
+          // frame*, twice, because the host wants two quiet ones in a row.
+          // This reply already waited a frame, so the counts are true of the
+          // picture it is reporting, and a caller that sees them quiet has no
+          // reason to ask again. Measured: it is 33ms a frame of a render, on
+          // every frame, at any resolution.
+          'pending': PaintingBinding.instance.imageCache.pendingImageCount,
+          'transient': SchedulerBinding.instance.transientCallbackCount,
         }),
       );
     });
