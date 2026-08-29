@@ -49,6 +49,18 @@ const scenarioRunReportVersion = 1;
 /// half of an answer that summarised.
 const scenarioRunReportFile = 'run.json';
 
+/// What a run writes beside [scenarioRunReportFile] when it had a run before
+/// it to compare against: [ScenarioRunDrift], whole.
+///
+/// Its own file rather than a key in the report, because the report is a
+/// record of one run and which run came before it is not a fact about that
+/// run — a copy of it taken elsewhere would carry a baseline that means
+/// nothing there. Its own file also because the drift a caller is handed back
+/// is capped and this is not: the full list of what moved is the thing an
+/// agent chasing a regression actually wants, and truncating names while
+/// keeping counts is the wrong end to cut.
+const scenarioRunDriftFile = 'drift.json';
+
 /// What a matrix run writes at the root of its output tree: one line per
 /// point, each naming the directory whose `run.json` holds the rest.
 ///
@@ -238,16 +250,24 @@ class ScenarioRunPackage {
   /// compile, the tester did not start — in which case [scenarios] is empty.
   final String? error;
 
-  /// How this run's pictures compare with the previous run of the same
-  /// package: `compared`, and a count plus a capped list of steps under
-  /// `changed`, `added` and `removed` — a suite that is green every pass and
-  /// draws different pixels every pass says so here and nowhere else. Null
-  /// when there was no previous run to compare against. See
-  /// [compareScenarioRuns].
+  /// What this run recorded that the run before it did not: `compared`,
+  /// `nameMatched`, the `baseline` it was compared against, and a count plus a
+  /// capped list of steps under `changed`, `added` and `removed`, each saying
+  /// in `what` which facets moved.
+  ///
+  /// A suite that is green every pass and draws different pixels every pass
+  /// says so here and nowhere else — and so does one whose status bar stopped
+  /// being tinted, which no screenshot of the app's own surface can show. Null
+  /// when there was no run before this one to compare against, which is not
+  /// the same answer as a suite that did not move.
+  ///
+  /// The lists are capped; `file` names the `drift.json` beside the report
+  /// that holds all of them. See [compareScenarioRuns] for how two runs are
+  /// paired, which is the part worth knowing before trusting a count.
   ///
   /// Not part of what the harness writes to `run.json`: a report is about the
-  /// run it belongs to, and only the caller that chose the output directory
-  /// knows which run came before it.
+  /// run it belongs to, and which run came before it is not a fact about that
+  /// run. It has its own file — [scenarioRunDriftFile].
   final ScenarioRunDrift? drift;
 
   Map<String, Object?> toJson() => {
@@ -1226,7 +1246,7 @@ List<T> _listOf<T>(Object? value, T Function(Map<String, Object?>) decode) => [
     if (entry is Map) decode(entry.cast<String, Object?>()),
 ];
 
-/// Two runs of the same suite, compared by what their steps captured.
+/// Two runs of the same suite, compared by what their steps recorded.
 ///
 /// A suite can be entirely green while a third of its screenshots move every
 /// pass, and nothing else in a run report shows it: every scenario passes,
@@ -1240,56 +1260,93 @@ List<T> _listOf<T>(Object? value, T Function(Map<String, Object?>) decode) => [
 /// useful as the suite's determinism, because a suite that moves on its own
 /// drowns the change that was actually asked about.
 ///
-/// Steps are matched by package, axis point, file, scenario and
-/// [ScenarioRunStep.position] — never by index, which shifts under any
-/// insertion. A step with no digest is not compared, and a scenario with no
+/// **What is compared.** The captured surface, and the facets recorded beside
+/// it that the surface does not contain — see [ScenarioDriftFacet]. A status
+/// bar that stopped being tinted moves no pixel of a capture that never
+/// included the status bar, and a comparison that reads that as "nothing
+/// moved" is worse than one that says nothing at all.
+///
+/// **Which steps.** A step carrying a digest in both runs. A step with no
+/// digest is not compared on its other facets either, and a scenario with no
 /// digested step at all is not looked at: a notification beat captured no
 /// bytes, and a run written by a flutterware that predates digests carries
 /// none anywhere, which answers here as two runs with nothing to compare
 /// rather than as a suite that moved entirely.
+///
+/// **How they are paired.** By package, axis point, file, scenario, branch and
+/// then — within the branch — by the `Shot`'s name. Never by
+/// [ScenarioRunStep.index], which shifts under any insertion, and not by
+/// [ScenarioRunStep.position] alone, which shifts under one too: its ordinal
+/// counts captures since the branch began, so inserting a step renumbers every
+/// step after it and the comparison reports a cascade — one changed, one added
+/// and one removed per step below the cut — that says nothing about either
+/// run. A name does not move when a step is inserted beside it. An unnamed
+/// step is pinned to the nearest name above it plus its distance from it, so
+/// an insertion disturbs only the unnamed steps between two names; one before
+/// its branch's first name has nothing to hold on to and falls back to its
+/// position. [ScenarioRunDrift.nameMatched] reports how much of the comparison
+/// was anchored rather than guessed, which is the number that says whether the
+/// rest of the report can be trusted.
 ///
 /// Only scenarios both runs contain are looked at. One of them may have been a
 /// selective run — one file, one name, one tag — and a scenario the other never
 /// executed is not a scenario that moved. A scenario genuinely added or deleted
 /// between the two is a change to the suite, which the suite already knows
 /// about; this function is for unintended change.
+///
+/// [baseline] names `before` for a reader who did not choose it — the run
+/// directory, worktree-relative. It defaults to the one `before` recorded for
+/// itself.
 ScenarioRunDrift compareScenarioRuns(
   ScenarioRunResult before,
-  ScenarioRunResult after,
-) {
+  ScenarioRunResult after, {
+  String? baseline,
+}) {
   var changed = <ScenarioStepDrift>[];
   var added = <ScenarioStepDrift>[];
   var removed = <ScenarioStepDrift>[];
   var compared = 0;
+  var nameMatched = 0;
+  var unanchored = 0;
 
   var shared = _scenarios(before).intersection(_scenarios(after));
 
-  var old = <String, String>{};
-  for (var (scenario, key, _, digest) in _walk(before)) {
-    if (digest != null && shared.contains(scenario)) old[key] = digest;
+  var old = <String, _Compared>{};
+  for (var step in _walk(before)) {
+    if (step.record != null && shared.contains(step.scenario)) {
+      old[step.key] = step.record!;
+    }
   }
 
   var seen = <String>{};
-  for (var (scenario, key, step, digest) in _walk(after)) {
-    if (digest == null || !shared.contains(scenario)) continue;
-    seen.add(key);
-    var was = old[key];
+  for (var step in _walk(after)) {
+    if (step.record == null || !shared.contains(step.scenario)) continue;
+    seen.add(step.key);
+    var was = old[step.key];
     if (was == null) {
-      added.add(step);
+      added.add(step.drift);
       continue;
     }
     compared++;
-    if (was != digest) changed.add(step);
+    if (step.pairing == _Pairing.name) nameMatched++;
+    if (step.pairing == _Pairing.position) unanchored++;
+    var moved = was.difference(step.record!);
+    if (moved.isNotEmpty) changed.add(step.drift.movedIn(moved));
   }
 
-  for (var (scenario, key, step, digest) in _walk(before)) {
-    if (digest != null && shared.contains(scenario) && !seen.contains(key)) {
-      removed.add(step);
+  for (var step in _walk(before)) {
+    if (step.record != null &&
+        shared.contains(step.scenario) &&
+        !seen.contains(step.key)) {
+      removed.add(step.drift);
     }
   }
 
   return ScenarioRunDrift(
     compared: compared,
+    nameMatched: nameMatched,
+    unanchored: unanchored,
+    baseline: baseline ?? before.packages.firstOrNull?.output,
     changed: changed,
     added: added,
     removed: removed,
@@ -1304,25 +1361,111 @@ ScenarioRunDrift compareScenarioRuns(
 /// as present would report every step of the newer run as added. A scenario
 /// with nothing to compare is a scenario neither run says anything about.
 Set<String> _scenarios(ScenarioRunResult run) => {
-  for (var (scenario, _, _, digest) in _walk(run))
-    if (digest != null) scenario,
+  for (var step in _walk(run))
+    if (step.record != null) step.scenario,
 };
 
-/// Every step of a run as (which scenario, which step, what to call it, what
-/// it captured).
-Iterable<(String, String, ScenarioStepDrift, String?)> _walk(
-  ScenarioRunResult run,
-) sync* {
+/// What one step of a run offers a comparison: which scenario it belongs to,
+/// what pairs it with the other run's, how to name it, and what it recorded.
+class _Walked {
+  _Walked({
+    required this.scenario,
+    required this.key,
+    required this.pairing,
+    required this.drift,
+    required this.record,
+  });
+
+  /// The scenario's cross-run identity.
+  final String scenario;
+
+  /// What this step is paired against in the other run.
+  final String key;
+
+  /// What [key] rests on, and so how much an edit to the suite can move it.
+  final _Pairing pairing;
+
+  final ScenarioStepDrift drift;
+
+  /// Null for a step that captured no pixels, which is not compared at all.
+  final _Compared? record;
+}
+
+/// The facets of a step two runs are compared on.
+class _Compared {
+  _Compared(this.step);
+
+  final ScenarioRunStep step;
+
+  /// Which of [ScenarioDriftFacet] disagree between this and [other], in the
+  /// order the facets are declared, so two reports of the same drift read the
+  /// same way.
+  List<String> difference(_Compared other) => [
+    if (step.digest != other.step.digest) ScenarioDriftFacet.pixels,
+    if (step.statusBrightness != other.step.statusBrightness)
+      ScenarioDriftFacet.statusBrightness,
+    if (step.navBrightness != other.step.navBrightness)
+      ScenarioDriftFacet.navBrightness,
+    if (step.keyboard != other.step.keyboard) ScenarioDriftFacet.keyboard,
+    if (step.settled != other.step.settled) ScenarioDriftFacet.settled,
+    if (step.landed != other.step.landed) ScenarioDriftFacet.landed,
+  ];
+}
+
+/// Every step of a run, with what pairs it against the other run's.
+///
+/// The pairing is the delicate half — see [compareScenarioRuns] for why a
+/// position alone will not do. The state here is per branch: a `split` gives
+/// one parent several children, the same shot name can appear in each of them,
+/// and an unnamed step counts its distance from the last name *in its own
+/// branch*. A branch inherits the anchor its parent had reached, which is the
+/// split point, so the first steps of a branch are pinned to the name above
+/// the fork rather than falling back to a position.
+Iterable<_Walked> _walk(ScenarioRunResult run) sync* {
   for (var package in run.packages) {
     var axes = package.axes == null ? null : _slug(package.axes!);
     for (var scenario in package.scenarios) {
       var id =
           '${package.path} ${axes ?? ''} ${scenario.file} ${scenario.name}';
+      // Branch path → how many times each name has been seen in it, the
+      // anchor it last reached, and how far past that anchor it has walked.
+      var repeats = <String, Map<String, int>>{};
+      var anchors = <String, String?>{};
+      var since = <String, int>{};
       for (var step in scenario.steps) {
-        yield (
-          id,
-          '$id ${step.position}',
-          ScenarioStepDrift(
+        var branch = _branch(step.position);
+        if (!anchors.containsKey(branch)) {
+          // Seeded from the fork, not from nothing: `'0.1'` continues where
+          // `'0'` had got to, and `''` starts with nothing above it.
+          var parent = _parent(branch);
+          anchors[branch] = parent == null ? null : anchors[parent];
+          since[branch] = parent == null ? 0 : (since[parent] ?? 0);
+          repeats[branch] = {...?repeats[_parent(branch)]};
+        }
+        String anchor;
+        _Pairing pairing;
+        var name = step.name;
+        if (name != null && name.isNotEmpty) {
+          // Names are not unique within a scenario — a shot taken in a loop
+          // has the same one every pass — so the repeat count is part of it.
+          var nth = (repeats[branch]![name] ?? 0) + 1;
+          repeats[branch]![name] = nth;
+          anchor = '@$name#$nth';
+          anchors[branch] = anchor;
+          since[branch] = 0;
+          pairing = _Pairing.name;
+        } else if (anchors[branch] case var above?) {
+          anchor = '$above+${since[branch] = since[branch]! + 1}';
+          pairing = _Pairing.relative;
+        } else {
+          anchor = step.position;
+          pairing = _Pairing.position;
+        }
+        yield _Walked(
+          scenario: id,
+          key: '$id $branch $anchor',
+          pairing: pairing,
+          drift: ScenarioStepDrift(
             package: package.path,
             axes: axes,
             file: scenario.file,
@@ -1330,11 +1473,40 @@ Iterable<(String, String, ScenarioStepDrift, String?)> _walk(
             position: step.position,
             name: step.name,
           ),
-          step.digest,
+          record: step.digest == null ? null : _Compared(step),
         );
       }
     }
   }
+}
+
+/// What a step's pairing rests on, weakest last.
+enum _Pairing {
+  /// The step's own `Shot` name. Immune to an insertion anywhere.
+  name,
+
+  /// The nearest name above it, plus the distance. Moves only when a step is
+  /// inserted between the two.
+  relative,
+
+  /// The raw position, for a step with no name above it at all. Moves under
+  /// any insertion earlier in its branch — the cascade case.
+  position,
+}
+
+/// The `split` choices half of a position — `'0.1'` of `'0.1#3'`, `''` on the
+/// trunk. The stable half: inserting a step moves the ordinal after the `#`
+/// and never this.
+String _branch(String position) {
+  var cut = position.lastIndexOf('#');
+  return cut < 0 ? position : position.substring(0, cut);
+}
+
+/// The branch this one forked from, or null for the trunk.
+String? _parent(String branch) {
+  if (branch.isEmpty) return null;
+  var cut = branch.lastIndexOf('.');
+  return cut < 0 ? '' : branch.substring(0, cut);
 }
 
 /// The axis map as one comparable string, ordered so that two runs spell the

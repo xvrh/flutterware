@@ -88,13 +88,14 @@ Every action that can be invoked, per plugin. Call this before flutterware_invok
 
 ### `flutterware_invoke`
 
-Run one plugin action. Argument keys are the parameter ids reported by flutterware_actions. Returns whatever the action produced — often a path to an artifact. A slow action narrates: ask for progress and what the panel is saying arrives as it changes — the entry being compiled, the point of a matrix, the launcher building an app.
+Run one plugin action. Argument keys are the parameter ids reported by flutterware_actions. Returns whatever the action produced — often a path to an artifact — with the plugin's status and a capped projection of its panel after the fact. A slow action narrates: ask for progress and what the panel is saying arrives as it changes — the entry being compiled, the point of a matrix, the launcher building an app.
 
 | argument | required | |
 |---|---|---|
 | `plugin` | yes | Plugin id, or its last dotted segment: "flutterware.scenarios" or just "scenarios". |
 | `action` | yes | Action id. |
 | `arguments` | no | Action arguments, keyed by parameter id. |
+| `brief` | no | Drop the panel projection from the reply, keeping the status line and the per-package entries. The projection is the plugin's inventory, which is the same catalog its own actions serve in full and does not change because an action ran — on a 127-scenario suite it was twice the answer it rode on. |
 
 ### `flutterware_act`
 
@@ -1350,6 +1351,28 @@ packages: List<MotionListPackage>
 
 Scenarios — deterministic headless flows through the app — listed, run, and read back a step at a time with what each step had on screen.
 
+#### `diff` — Diff
+
+Compares two runs that are already on disk and reports which steps moved — the same comparison every `run` makes against whatever ran before it, over two directories you name. A green suite whose pictures move every pass is a suite no comparison against a base checkout can be trusted through, and nothing else in a run report shows it. Compares more than the pictures: the status and nav bar tints, the soft keyboard's height and whether each step settled are recorded beside the capture and are invisible to it, so a behaviour change no screenshot could show still reports here.
+
+```sh
+fw run scenarios diff --before=<string> [--after=…] [--steps=…]
+```
+
+Returns `ScenarioDiffResult`:
+
+```
+before: String   # The run compared against, worktree-relative.
+after: String   # The run compared, worktree-relative.
+drift: Map<String, Object?>   # What moved, in the shape `run` reports under the same key — so a reader who knows one knows the other.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `before` | string | yes | — | The run to compare against, as a directory holding a `run.json` — worktree-relative unless absolute. One point of a matrix is a directory of its own; `index.json` at the root of a matrix names them |
+| `after` | string | no | — | The run to compare, same shape as `before`. Omitted, the newest run on disk that holds a report |
+| `steps` | string | no | — | How many moved steps of each list ride back. 20 by default, `all` for every one of them — the counts are whole either way, and it is the names an agent chasing a regression reads |
+
 #### `list` — List
 
 Every scenario of a package, with its source location — from the syntactic scan, without compiling or running anything
@@ -1379,10 +1402,10 @@ packages: List<ScenarioListPackage>
 
 #### `run` — Run
 
-Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured **at** the failure, whatever the capture policy. The answer summarises the steps (see `steps=`); `run.json` in the output directory always carries every one.
+Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured **at** the failure, whatever the capture policy. The answer summarises the steps (see `steps=`); `run.json` in the output directory always carries every one. Every run also compares itself against the run before it and reports the `drift`: which steps of a green suite moved that nobody asked to move — see the `diff` action, which is the same comparison over two runs you name.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--orientation=…] [--language=…] [--devices=…] [--languages=…] [--orientations=…] [--matrix=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--network=…] [--format=…] [--pixels=…] [--expand=…] [--device-choice=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--baseline=…] [--device=…] [--orientation=…] [--language=…] [--devices=…] [--languages=…] [--orientations=…] [--matrix=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--network=…] [--format=…] [--pixels=…] [--expand=…] [--device-choice=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -1462,7 +1485,7 @@ packages: List<ScenarioRunPackage>
   report: String?   # The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.
   log: String?   # The harness process's console, whole, on disk — engine noise, and anything printed outside a test zone.
   error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
-  drift: Map<String, Object?>?   # How this run's pictures compare with the previous run of the same package: `compared`, and a count plus a capped list of steps under `changed`, `added` and `removed` — a suite that is green every pass and draws different pixels every pass says so here and nowhere else.
+  drift: Map<String, Object?>?   # What this run recorded that the run before it did not: `compared`, `nameMatched`, the `baseline` it was compared against, and a count plus a capped list of steps under `changed`, `added` and `removed`, each saying in `what` which facets moved.
 ```
 
 Exits 1 when `ok` is false, so a job can gate on this action.
@@ -1473,6 +1496,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it. A directory runs everything under it, which is the unit the folder profiles are declared in |
 | `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
 | `output` | string | no | — | Where step artifacts are written, worktree-relative unless absolute; a fresh directory under the package's build/ when omitted. run.json lands in the same directory as the images it names. |
+| `baseline` | string | no | — | Which run to compare this one against for `drift`, as a directory holding a `run.json` — worktree-relative unless absolute. Omitted, the newest earlier run of the same point under the package's build/, which is 'whatever ran last in this directory' and so is not something CI can depend on: a gate that wants to catch a suite going non-deterministic names a stored base instead. A fanned-out run takes the matching point inside it — `<baseline>/<slug>` — and refuses where that point is missing rather than comparing one point against another, which shares no scenario and would answer `compared: 0` |
 | `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted lets each scenario run as its own folder says — the first device of the profile its `flutter_test_config.dart` declares, or iphone-13 where a folder declares none. `fit` means the bare 800×600 test surface. The same vocabulary Previews frames with. |
 | `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height, and the safe areas become the ones that device declares for landscape (a phone loses its status bar rather than moving it). Ignored by anything that cannot turn, which is every desktop size and `fit`. Applies to whatever device the run ends up as, including one a folder's profile chose rather than this call. |
 | `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale and as the scenario's own assignment (`s.assignment?.language`), the same pair `FW_LANGUAGES` sets under `flutter test` |

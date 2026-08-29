@@ -12,6 +12,8 @@ import 'package:json_annotation/json_annotation.dart';
 // `dart:io` reader, and this file still has to compile for the exported web
 // page.
 // ignore: implementation_imports
+import 'package:flutterware/src/scenarios/report.dart';
+// ignore: implementation_imports
 export 'package:flutterware/src/scenarios/report.dart';
 // The reported events themselves, for `read events: true`. Same reason as
 // above for the `src` path, and this half is plain Dart either way.
@@ -401,4 +403,46 @@ class ScenarioReadResult implements PluginResult, ProducesArtifacts {
 
   @override
   Map<String, Object?> toJson() => _$ScenarioReadResultToJson(this);
+}
+
+/// `diff` — two runs of one suite, compared.
+///
+/// The same comparison every `run` does against whatever ran before it, over
+/// two directories a caller names instead. That is the difference worth having
+/// a separate action for: a run's own drift answers "is this suite
+/// deterministic *here, now*", and this answers "has it moved since the base
+/// we agreed on", which is the question a CI gate asks and the one a
+/// walk-backwards baseline cannot be pointed at.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioDiffResult implements PluginResult {
+  ScenarioDiffResult({
+    required this.before,
+    required this.after,
+    required ScenarioRunDrift comparison,
+    int? maxSteps,
+  }) : comparison = comparison,
+       drift = comparison.toJson(maxSteps: maxSteps);
+
+  /// The run compared against, worktree-relative.
+  final String before;
+
+  /// The run compared, worktree-relative.
+  final String after;
+
+  /// What moved, in the shape `run` reports under the same key — so a reader
+  /// who knows one knows the other. Capped by `steps=` unless that said `all`;
+  /// the counts beside each list are whole either way.
+  final Map<String, Object?> drift;
+
+  /// The same comparison, typed — for a caller inside this process rather than
+  /// on the wire.
+  @JsonKey(includeToJson: false)
+  final ScenarioRunDrift comparison;
+
+  @override
+  Map<String, Object?> toJson() => _$ScenarioDiffResultToJson(this);
 }
