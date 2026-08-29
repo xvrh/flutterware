@@ -10,7 +10,12 @@
 /// * [ScenarioRunReport.read] takes a run's output directory and hands back
 ///   the [ScenarioRunResult] with a way to open what its steps name.
 /// * [compareScenarioRuns] takes two of those and says which steps moved —
-///   the check that a green suite is also a *deterministic* one.
+///   the check that a green suite is also a *deterministic* one. It compares
+///   more than the pictures: the facets a capture cannot show are in
+///   [ScenarioDriftFacet].
+/// * [readScenarioRunDrift] reads the `drift.json` a run leaves beside its
+///   report — the same comparison against whatever ran before it, with every
+///   moved step named.
 /// * [readScenarioRunIndex] reads the `index.json` a matrix run leaves at the
 ///   root of its output tree — the entry point a CI job walks.
 /// * [AppEvent.fromJson] (from `package:flutterware/app_events.dart`)

@@ -143,6 +143,13 @@ String? scenarioRunnerPhase(String line) {
   return null;
 }
 
+/// A run to compare against, and the directory it was read from.
+///
+/// The directory travels with the report because the report does not carry it
+/// usefully: `output` is what that run was *written* to, which a checkout
+/// moved or copied since no longer names.
+typedef _Baseline = ({String dir, ScenarioRunResult run});
+
 /// Scenarios for each declared package: the syntactic scan projected into the
 /// report and the `list` action, the `run` action in a warm
 /// [ScenarioRunner], and the panel's per-scenario run state on the same
@@ -625,6 +632,55 @@ class ScenariosCore extends PluginCore {
           ? const StatusBadge.dot(Tone.error)
           : StatusBadge.none,
       actions: [
+        const PluginAction(
+          'diff',
+          'Diff',
+          returns: ScenarioDiffResult,
+          description:
+              'Compares two runs that are already on disk and reports which '
+              'steps moved — the same comparison every `run` makes against '
+              'whatever ran before it, over two directories you name. A green '
+              'suite whose pictures move every pass is a suite no comparison '
+              'against a base checkout can be trusted through, and nothing '
+              'else in a run report shows it. Compares more than the '
+              "pictures: the status and nav bar tints, the soft keyboard's "
+              'height and whether each step settled are recorded beside the '
+              'capture and are invisible to it, so a behaviour change no '
+              'screenshot could show still reports here.',
+          parameters: [
+            ActionParameter(
+              'before',
+              'Baseline run',
+              kind: ActionParameterKind.string,
+              required: true,
+              description:
+                  'The run to compare against, as a directory holding a '
+                  '`run.json` — worktree-relative unless absolute. One point '
+                  'of a matrix is a directory of its own; `index.json` at the '
+                  'root of a matrix names them',
+            ),
+            ActionParameter(
+              'after',
+              'Run',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'The run to compare, same shape as `before`. Omitted, the '
+                  'newest run on disk that holds a report',
+            ),
+            ActionParameter(
+              'steps',
+              'Steps',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'How many moved steps of each list ride back. 20 by '
+                  'default, `all` for every one of them — the counts are '
+                  'whole either way, and it is the names an agent chasing a '
+                  'regression reads',
+            ),
+          ],
+        ),
         PluginAction(
           'list',
           'List',
@@ -657,7 +713,11 @@ class ScenariosCore extends PluginCore {
               'artifacts; a failing scenario reports its error with the frame '
               'captured **at** the failure, whatever the capture policy. The '
               'answer summarises the steps (see `steps=`); `run.json` in the '
-              'output directory always carries every one.',
+              'output directory always carries every one. Every run also '
+              'compares itself against the run before it and reports the '
+              '`drift`: which steps of a green suite moved that nobody asked '
+              'to move — see the `diff` action, which is the same comparison '
+              'over two runs you name.',
           parameters: [
             ActionParameter(
               'package',
@@ -699,6 +759,24 @@ class ScenariosCore extends PluginCore {
                   "unless absolute; a fresh directory under the package's "
                   'build/ when omitted. run.json lands in the same '
                   'directory as the images it names.',
+            ),
+            const ActionParameter(
+              'baseline',
+              'Baseline',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Which run to compare this one against for `drift`, as a '
+                  'directory holding a `run.json` — worktree-relative unless '
+                  'absolute. Omitted, the newest earlier run of the same '
+                  "point under the package's build/, which is 'whatever ran "
+                  "last in this directory' and so is not something CI can "
+                  'depend on: a gate that wants to catch a suite going '
+                  'non-deterministic names a stored base instead. A fanned-'
+                  'out run takes the matching point inside it — '
+                  '`<baseline>/<slug>` — and refuses where that point is '
+                  'missing rather than comparing one point against another, '
+                  'which shares no scenario and would answer `compared: 0`',
             ),
             // The axes. Declared because they change the pixels, and anything
             // that changes the pixels is recorded on the artifact's address.
@@ -1743,8 +1821,16 @@ class ScenariosCore extends PluginCore {
             // to. Sticky until the next run replaces it, because that is the
             // question it answers: not "is the suite green" — it was — but
             // "is it the same suite twice".
-            if (_lastDrift[path]?.summary case var drift?)
-              ViewText('$drift from the previous run', tone: Tone.warn),
+            if (_lastDrift[path] case var drift? when drift.summary != null)
+              ViewText(
+                // Named, not "the previous run": the baseline is chosen by
+                // walking backwards past panel sessions and report-less
+                // directories, which is not a walk a reader can redo in their
+                // head — and a number whose origin they cannot place is a
+                // number they cannot act on.
+                '${drift.summary} · against ${drift.baseline ?? 'the previous run'}',
+                tone: Tone.warn,
+              ),
             for (var diagnostic in result.diagnostics)
               ViewText(diagnostic, tone: Tone.warn),
             ViewItems([
@@ -1776,6 +1862,7 @@ class ScenariosCore extends PluginCore {
     return switch (actionId) {
       'list' => _list(arguments),
       'run' => _run(arguments),
+      'diff' => _diff(arguments),
       webExportActionId => _exportWeb(arguments),
       'new' => _new(arguments),
       'shots' => _shots(arguments),
@@ -2116,11 +2203,14 @@ class ScenariosCore extends PluginCore {
   }
 
   /// The run to count into: the one named, or the newest the package has.
-  String _runDirectory(Map<String, Object?> arguments) {
-    if (arguments['output'] case String given when given.isNotEmpty) {
+  String _runDirectory(
+    Map<String, Object?> arguments, {
+    String parameter = 'output',
+  }) {
+    if (arguments[parameter] case String given when given.isNotEmpty) {
       var path = _absolute(given);
       if (!Directory(path).existsSync()) {
-        throw ArgumentError.value(given, 'output', 'no such directory');
+        throw ArgumentError.value(given, parameter, 'no such directory');
       }
       return path;
     }
@@ -2140,10 +2230,10 @@ class ScenariosCore extends PluginCore {
     if (candidates.isEmpty) {
       throw ArgumentError.value(
         null,
-        'output',
+        parameter,
         'this package has no scenario run on disk. Run one first — `run '
-            'scenarios run` — or give `output` a directory that holds a '
-            '$scenarioRunReportFile.',
+        'scenarios run` — or give `$parameter` a directory that holds a '
+        '$scenarioRunReportFile.',
       );
     }
     // Only directories that can answer. A panel session writes captures but
@@ -2162,19 +2252,20 @@ class ScenariosCore extends PluginCore {
     if (runs.isEmpty) {
       throw ArgumentError.value(
         _relative(candidates.last.path),
-        'output',
+        parameter,
         '${candidates.length} capture '
-            'director${candidates.length == 1 ? 'y' : 'ies'} on disk, but '
-            'none holds a $scenarioRunReportFile — panel sessions write '
-            'captures without one. Run `run scenarios run` first, or name a '
-            'capture directly with `step`.',
+        'director${candidates.length == 1 ? 'y' : 'ies'} on disk, but '
+        'none holds a $scenarioRunReportFile — panel sessions write '
+        'captures without one. Run `run scenarios run` first, or give '
+        '`$parameter` a directory that holds one.',
       );
     }
     runs.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
     return runs.last.path;
   }
 
-  /// The run this one should be compared against — see [compareScenarioRuns].
+  /// The run this one should be compared against, and the directory it came
+  /// from — see [compareScenarioRuns].
   ///
   /// Read **before** the run, because the caller that named a fixed `output`
   /// is about to overwrite the report sitting in it. Where the directory is
@@ -2182,8 +2273,42 @@ class ScenariosCore extends PluginCore {
   /// point*: `<runs>/<stamp>` for a plain run and `<runs>/<stamp>/<slug>` for
   /// one point of a matrix, so a French iPhone is never compared against an
   /// English one.
-  ScenarioRunResult? _previousRun(String outDir, String packageRoot) {
-    if (_reportIn(outDir) case var here?) return here;
+  ///
+  /// The directory comes back with the report because a baseline chosen by
+  /// walking backwards past panel sessions and report-less directories is not
+  /// one the reader of the answer could guess, and a drift they cannot place
+  /// the origin of is a number they cannot act on. [given] short-circuits the
+  /// walk for a caller who named one; [point] is the axis slug this call is
+  /// for, and only a fanned-out run has one.
+  _Baseline? _previousRun(
+    String outDir,
+    String packageRoot, {
+    String? given,
+    String? point,
+  }) {
+    if (given != null) {
+      // A matrix compares point against point, so a named baseline means the
+      // same point *inside* it — and where that point is missing this refuses
+      // rather than falling back to the directory itself. The fallback looked
+      // forgiving and was not: an axis slug is part of a scenario's cross-run
+      // identity, so an iPhone compared against a baseline that is not the
+      // iPhone shares no scenario at all and answers `compared: 0` — a
+      // silence indistinguishable from a suite that did not move.
+      var dir = point == null ? given : p.join(given, point);
+      if (_reportIn(dir) case var previous?) return (dir: dir, run: previous);
+      throw ArgumentError.value(
+        _relative(given),
+        'baseline',
+        point == null
+            ? 'no $scenarioRunReportFile there, so there is no run to compare '
+                  'against. ${_listing(Directory(given))}'
+            : 'this run fanned out, and that baseline holds no '
+                  '$scenarioRunReportFile for the point `$point` — one point '
+                  'is never compared against another, so there is nothing '
+                  'here to compare it with. ${_pointsIn(given)}',
+      );
+    }
+    if (_reportIn(outDir) case var here?) return (dir: outDir, run: here);
     var runs = Directory(
       p.join(packageRoot, 'build', 'flutterware', 'scenario_runs'),
     );
@@ -2201,7 +2326,7 @@ class ScenariosCore extends PluginCore {
       // `_runDirectory` names.
       if (name == stamp || name.startsWith('panel-')) continue;
       var dir = p.joinAll([runs.path, name, ...suffix]);
-      if (_reportIn(dir) case var previous?) return previous;
+      if (_reportIn(dir) case var previous?) return (dir: dir, run: previous);
     }
     return null;
   }
@@ -2281,6 +2406,28 @@ class ScenariosCore extends PluginCore {
       );
 
   /// What is in a directory, as values that can be passed straight back.
+  /// Which points a baseline directory holds, for a refusal that would
+  /// otherwise leave the caller guessing what to name instead.
+  ///
+  /// A point is a subdirectory carrying a report, which is what a fanned-out
+  /// run writes. A baseline with none of those was written by a run that did
+  /// not fan out, and saying *that* is the answer — the two shapes are not
+  /// interchangeable and no amount of naming a subdirectory will make them so.
+  String _pointsIn(String directory) {
+    var points = [
+      for (var entry in Directory(directory).listSync().whereType<Directory>())
+        if (File(p.join(entry.path, scenarioRunReportFile)).existsSync())
+          p.basename(entry.path),
+    ]..sort();
+    if (points.isEmpty) {
+      return 'It holds no points at all, so it is the output of a run that '
+          'did not fan out. Compare against a matrix run, or run this one '
+          'without `devices=`/`languages=`/`orientations=`.';
+    }
+    return 'It holds ${points.length} '
+        'point${points.length == 1 ? '' : 's'}: ${points.join(', ')}.';
+  }
+
   String _listing(Directory directory) {
     var steps = [
       for (var file in directory.listSync().whereType<File>())
@@ -2856,6 +3003,14 @@ class ScenariosCore extends PluginCore {
       throw ArgumentError.value(steps, 'steps', 'accepted: failing, all, none');
     }
 
+    String? baseline;
+    if (arguments['baseline'] case String given when given.isNotEmpty) {
+      baseline = _absolute(given);
+      if (!Directory(baseline).existsSync()) {
+        throw ArgumentError.value(given, 'baseline', 'no such directory');
+      }
+    }
+
     var results = <ScenarioRunPackage>[];
     // Keyed by output directory, which is one per point of the matrix and so
     // the one thing that separates two entries of the same package.
@@ -2927,6 +3082,17 @@ class ScenariosCore extends PluginCore {
         // assignment overwrites the first — same file, same scenario, same
         // step names — and only the last language survives on disk.
         var outDir = fannedOut ? p.join(base, axisSlug(assignment)) : base;
+        // Before the run, not after: a caller that named a fixed `output` is
+        // about to overwrite the report sitting in it. And before this point
+        // is marked busy, because a named `baseline` that holds no run is
+        // refused from here — a throw between `_setBusy` and the `finally`
+        // that clears it would leave the plugin reading `running…` forever.
+        var previous = _previousRun(
+          outDir,
+          packageRoot,
+          given: baseline,
+          point: fannedOut ? axisSlug(assignment) : null,
+        );
         // From zero for this point: the count is how far *this* pass has
         // got, and one that carried the previous point's over would start the
         // second language at 46 of 46.
@@ -2942,9 +3108,6 @@ class ScenariosCore extends PluginCore {
                 : _running,
           ),
         );
-        // Before the run, not after: a caller that named a fixed `output` is
-        // about to overwrite the report sitting in it.
-        var previous = _previousRun(outDir, packageRoot);
         try {
           var report = await _runnerFor(path).run(
             outDir: outDir,
@@ -3007,8 +3170,13 @@ class ScenariosCore extends PluginCore {
           } else {
             if (previous != null) {
               var drift = compareScenarioRuns(
-                previous,
+                previous.run,
                 ScenarioRunResult(packages: [described]),
+                // The directory it was actually read from, worktree-relative:
+                // the `output` the baseline recorded for itself is where that
+                // run was written, which a copied or moved checkout no longer
+                // names — and this one is what `diff` takes back.
+                baseline: _relative(previous.dir),
               );
               drifts[outDir] = drift;
               // One point of a matrix is as good a witness as the whole of
@@ -3054,6 +3222,75 @@ class ScenariosCore extends PluginCore {
     return _carrying(whole, steps);
   }
 
+  /// Two runs already on disk, compared.
+  ///
+  /// The reader half of what `run` does on its own. A run's own drift asks
+  /// whether the suite is deterministic here and now, against whatever
+  /// happened to run last in the same directory; this asks whether it has
+  /// moved since a base somebody chose — which is the question a CI gate has,
+  /// and the one a walk-backwards baseline cannot be pointed at.
+  Future<ScenarioDiffResult> _diff(Map<String, Object?> arguments) async {
+    ScenarioRunResult read(String dir, String parameter) {
+      if (!Directory(dir).existsSync()) {
+        throw ArgumentError.value(
+          _relative(dir),
+          parameter,
+          'no such directory',
+        );
+      }
+      if (_reportIn(dir) case var report?) return report;
+      throw ArgumentError.value(
+        _relative(dir),
+        parameter,
+        'no $scenarioRunReportFile there, so there is no run to compare. '
+        '${_listing(Directory(dir))}',
+      );
+    }
+
+    var before = switch (arguments['before']) {
+      String given when given.isNotEmpty => _absolute(given),
+      var other => throw ArgumentError.value(
+        other,
+        'before',
+        'required — the run to compare against, as a directory holding a '
+            '$scenarioRunReportFile',
+      ),
+    };
+    // The newest run that can answer, by the same rule every other read here
+    // uses — a panel session writes captures and no report, and its name sorts
+    // after every stamp.
+    // Its own refusals name `after`, which is the parameter this caller has —
+    // the same helper answers `read`, where it is called `output`.
+    var after = _runDirectory(arguments, parameter: 'after');
+
+    // Parsed once and checked for a range, not just for digits: `take` refuses
+    // a negative and would answer a caller's typo with a RangeError from three
+    // frames down instead of the refusal below.
+    int? maxSteps = 20;
+    if (arguments['steps'] case var raw? when '$raw'.isNotEmpty) {
+      var count = raw == 'all' ? null : int.tryParse('$raw');
+      if (raw != 'all' && (count == null || count < 0)) {
+        throw ArgumentError.value(
+          raw,
+          'steps',
+          'a count of 0 or more, or `all`',
+        );
+      }
+      maxSteps = count;
+    }
+
+    return ScenarioDiffResult(
+      before: _relative(before),
+      after: _relative(after),
+      maxSteps: maxSteps,
+      comparison: compareScenarioRuns(
+        read(before, 'before'),
+        read(after, 'after'),
+        baseline: _relative(before),
+      ),
+    );
+  }
+
   /// Trims this package's old run directories, and says nothing about it.
   ///
   /// A run writes a directory per invocation and a recorded panel session
@@ -3083,32 +3320,62 @@ class ScenariosCore extends PluginCore {
     ScenarioRunDrift? drift, {
     DateTime? clock,
   }) {
-    ScenarioRunPackage carrying(String? file) => ScenarioRunPackage(
-      path: run.path,
-      output: run.output,
-      axes: run.axes,
-      ms: run.ms,
-      scenarios: run.scenarios,
-      report: file,
-      log: run.log,
-      error: run.error,
-      drift: drift,
-    );
-    if (run.scenarios.isEmpty) return carrying(run.report);
+    ScenarioRunPackage carrying(String? file, ScenarioRunDrift? drift) =>
+        ScenarioRunPackage(
+          path: run.path,
+          output: run.output,
+          axes: run.axes,
+          ms: run.ms,
+          scenarios: run.scenarios,
+          report: file,
+          log: run.log,
+          error: run.error,
+          drift: drift,
+        );
+    if (run.scenarios.isEmpty) return carrying(run.report, drift);
     var file = p.join(run.output, scenarioRunReportFile);
     try {
       Directory(run.output).createSync(recursive: true);
       // Written from `run` rather than from what this returns, so the file
       // stays a record of its own run: which run came before it is the
-      // caller's knowledge, not the report's.
+      // caller's knowledge, not the report's. The drift goes in its own file
+      // beside it for that reason, and for one more — what a caller is handed
+      // back is capped and this is not.
       File(file).writeAsStringSync(
         const JsonEncoder.withIndent('  ')
             .convert(ScenarioRunResult(packages: [run], clock: clock).toJson()),
       );
     } catch (_) {
-      return carrying(run.report);
+      return carrying(run.report, drift);
     }
-    return carrying(file);
+    return carrying(file, _withDriftOnDisk(run.output, drift));
+  }
+
+  /// Writes the whole of [drift] beside the run's own report and hands it back
+  /// saying where it went.
+  ///
+  /// The counts a call answers with were always honest and the lists under
+  /// them were always capped — which is the wrong end to cut for a reader who
+  /// wants the *names*. This is where all of them are. Best effort, like the
+  /// report beside it: a run that produced pictures is not a failure because
+  /// the directory turned read-only.
+  ///
+  /// Written for a comparison that found nothing too, which is the whole
+  /// difference between "there was no run to compare against" and "there was,
+  /// and the suite is clean". Both would otherwise be an absent file, and a CI
+  /// gate reading one cannot tell an unverified run from a verified one.
+  ScenarioRunDrift? _withDriftOnDisk(String outDir, ScenarioRunDrift? drift) {
+    if (drift == null) return null;
+    var file = p.join(outDir, scenarioRunDriftFile);
+    try {
+      File(file).writeAsStringSync(
+        const JsonEncoder.withIndent('  ')
+            .convert(drift.inFile(_relative(file)).toJson(maxSteps: null)),
+      );
+    } catch (_) {
+      return drift;
+    }
+    return drift.inFile(_relative(file));
   }
 
   /// [whole] with the steps [mode] asks for — the rest are in the file each

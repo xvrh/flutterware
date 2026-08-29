@@ -102,3 +102,10 @@ Map<String, dynamic> _$ScenarioReadResultToJson(ScenarioReadResult instance) =>
       'next': ?instance.next,
       'steps': instance.steps,
     };
+
+Map<String, dynamic> _$ScenarioDiffResultToJson(ScenarioDiffResult instance) =>
+    <String, dynamic>{
+      'before': instance.before,
+      'after': instance.after,
+      'drift': instance.drift,
+    };

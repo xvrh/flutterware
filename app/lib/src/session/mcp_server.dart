@@ -613,9 +613,11 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
     description:
         'Run one plugin action. Argument keys are the parameter ids reported '
         'by flutterware_actions. Returns whatever the action produced — often '
-        'a path to an artifact. A slow action narrates: ask for progress and '
-        'what the panel is saying arrives as it changes — the entry being '
-        'compiled, the point of a matrix, the launcher building an app.',
+        "a path to an artifact — with the plugin's status and a capped "
+        'projection of its panel after the fact. A slow action narrates: ask '
+        'for progress and what the panel is saying arrives as it changes — '
+        'the entry being compiled, the point of a matrix, the launcher '
+        'building an app.',
     inputSchema: Schema.object(
       properties: {
         'plugin': Schema.string(
@@ -626,6 +628,14 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         'action': Schema.string(description: 'Action id.'),
         'arguments': Schema.object(
           description: 'Action arguments, keyed by parameter id.',
+        ),
+        'brief': Schema.bool(
+          description:
+              'Drop the panel projection from the reply, keeping the status '
+              'line and the per-package entries. The projection is the '
+              "plugin's inventory, which is the same catalog its own actions "
+              'serve in full and does not change because an action ran — on a '
+              '127-scenario suite it was twice the answer it rode on.',
         ),
       },
       required: ['plugin', 'action'],
@@ -645,6 +655,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
     var arguments =
         (request.arguments?['arguments'] as Map?)?.cast<String, Object?>() ??
         const <String, Object?>{};
+    var brief = request.arguments?['brief'] == true;
 
     PluginCore core;
     try {
@@ -690,7 +701,20 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
       // screenshot's reply 94% boilerplate. An agent iterating on a widget
       // calls this every edit, so that was the cost paid most often here: ~6.9k
       // tokens per call on the sample project, ~9.8k on flutterware's own repo.
-      'report': core.report.toJson(includeActions: false),
+      //
+      // The view is capped for the same reason and by the same rule the status
+      // tool uses, because most of it is the *inventory* — which did not
+      // change either, and whose rows are the expensive kind: each carries a
+      // `fw://` address the result beside it does not. `scenarios run` with
+      // `steps: none` on a 63-scenario suite came back 50KB and blew the MCP
+      // result limit with an 18KB result under a 34KB re-listing of scenarios
+      // nobody had asked to see. The leaner the answer asked for, the larger
+      // the projection's share of it — which is exactly backwards.
+      'report': core.report.toJson(
+        includeActions: false,
+        includeView: !brief,
+        viewRows: _statusViewRows,
+      ),
     };
 
     return _jsonWithImage(session, artifact, summary);

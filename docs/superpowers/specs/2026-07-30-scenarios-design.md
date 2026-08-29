@@ -395,19 +395,37 @@ instead of the injectable clock), and finding them by eye took a day.
 So every step that captures bytes records a **digest** of them —
 `ScenarioRunStep.digest`, the pixels for a screen and the payload for a
 document — and `compareScenarioRuns(before, after)` answers which steps moved.
-The `run` action reads the previous run's report *before* it starts (a fixed
+The `run` action reads the baseline's report *before* it starts (a fixed
 `output` is about to be overwritten; otherwise the newest earlier run of the
-same matrix point) and reports the answer as `ScenarioRunPackage.drift`.
+same matrix point, unless `baseline=` names one) and reports the answer as
+`ScenarioRunPackage.drift`. `drift.json` beside the report carries every moved
+step where the answer's lists are capped, and the `diff` action asks the same
+question about two runs a caller names — which is the form a CI gate needs,
+because "whatever ran last in this directory" is not a base it can depend on.
 
-Three rules keep it from crying wolf:
+**The digest is not the whole step.** The status and nav bar tints, the soft
+keyboard's height and whether a step settled are recorded beside the capture
+and drawn *around* it, so no digest of the app's own surface can see them
+change. They are compared too, and each moved step says which facets moved in
+`what` — a behaviour change reading as "nothing moved" is the most dangerous
+answer this can give.
 
-- **Matched by `position`, never by index.** An inserted step shifts every
-  index below it and no position but its own siblings'.
+Rules that keep it from crying wolf:
+
+- **Paired by the `Shot` name, then by branch, and only then by position.** A
+  position's ordinal counts captures since its branch began, so an inserted
+  step renumbers every step after it — matched on that, one insertion answers
+  with a cascade of changed/added/removed per step below the cut. A name does
+  not move. An unnamed step is pinned to the nearest name above it plus its
+  distance from it, so an insertion disturbs only the unnamed steps between two
+  names; `nameMatched` and `unanchored` report which regime a comparison ran
+  in.
 - **Only scenarios both runs captured bytes for.** One of them may have been a
   selective run, and a scenario the other never executed did not move.
 - **A run with no digests anywhere is a run with nothing to compare**, not a
   suite that moved entirely — which is what a report written before this
-  existed looks like.
+  existed looks like. The digest is the eligibility gate, so a step with no
+  pixels is not compared on its other facets either.
 
 It matters beyond tidiness: a comparison against a base checkout is only as
 useful as the suite's determinism, because a suite that moves on its own

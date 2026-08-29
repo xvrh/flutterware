@@ -156,7 +156,7 @@ void main() {
     expect(text, contains('"parameters" is not an argument'));
     expect(
       text,
-      contains('It takes: plugin, action, arguments.'),
+      contains('It takes: plugin, action, arguments, brief.'),
       reason: 'naming what it does take is what saves the round trip',
     );
   });
@@ -323,6 +323,47 @@ void main() {
         expect(report, isNot(contains('actions')));
         // The point of sending it at all: what changed.
         expect(report, contains('status'));
+      },
+    );
+
+    test(
+      'the projection after an invoke is capped, and brief drops it',
+      () async {
+        // The inventory is not what changed, and its rows are the expensive
+        // kind: each carries a `fw://` address the result beside it does not. A
+        // 63-scenario `run` with `steps: none` came back 50KB and blew the MCP
+        // result limit — an 18KB result under a 34KB re-listing of scenarios
+        // nobody had asked to see.
+        Future<Map<String, Object?>> invoke({bool? brief}) async => _decode(
+          await connection.callTool(
+            CallToolRequest(
+              name: 'flutterware_invoke',
+              arguments: {
+                'plugin': 'dependencies',
+                'action': 'list',
+                'brief': ?brief,
+              },
+            ),
+          ),
+        );
+
+        var full = await invoke();
+        var report = full['report']! as Map<String, Object?>;
+        expect(report, contains('view'));
+        for (var row in _rowsIn(report['view'])) {
+          expect(
+            row,
+            lessThanOrEqualTo(10),
+            reason:
+                'the status tool caps at 10 and this one did not cap at all',
+          );
+        }
+
+        var brief =
+            (await invoke(brief: true))['report']! as Map<String, Object?>;
+        expect(brief, isNot(contains('view')));
+        // What a report is actually for survives the cut.
+        expect(brief, contains('status'));
       },
     );
 
@@ -668,3 +709,16 @@ String _text(CallToolResult result) =>
 
 Map<String, Object?> _decode(CallToolResult result) =>
     jsonDecode(_text(result)) as Map<String, Object?>;
+
+/// How long every list and table in a view projection is, nested included.
+List<int> _rowsIn(Object? node) => switch (node) {
+  List list => [for (var entry in list) ..._rowsIn(entry)],
+  Map map => [
+    for (var entry in map.entries) ...[
+      if ((entry.key == 'items' || entry.key == 'rows') && entry.value is List)
+        (entry.value as List).length,
+      ..._rowsIn(entry.value),
+    ],
+  ],
+  _ => const [],
+};

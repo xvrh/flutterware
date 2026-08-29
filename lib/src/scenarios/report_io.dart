@@ -104,6 +104,36 @@ class ScenarioRunReport {
   }
 }
 
+/// Reads the `drift.json` a run wrote beside its report — what moved between
+/// it and the run before it, with every step named rather than the first
+/// twenty a call hands back.
+///
+/// Null when the directory holds none — which means the run had no baseline
+/// to compare against, not that it compared and found nothing. Those are
+/// different answers and a gate needs to tell them apart: a run that did
+/// compare writes this file whether or not anything moved, so a clean one
+/// comes back non-null with [ScenarioRunDrift.isEmpty] true.
+///
+/// ```dart
+/// var drift = await readScenarioRunDrift('build/flutterware/screenshots');
+/// for (var step in drift?.changed ?? const []) {
+///   if (step.isPixelsOnly) continue;
+///   print('$step moved where no screenshot could show it');
+/// }
+/// ```
+Future<ScenarioRunDrift?> readScenarioRunDrift(String directory) async {
+  var file = File('$directory${Platform.pathSeparator}$scenarioRunDriftFile');
+  if (!file.existsSync()) return null;
+  return ScenarioRunDrift.fromJson(switch (jsonDecode(
+    await file.readAsString(),
+  )) {
+    Map json => json.cast<String, Object?>(),
+    var other => throw FormatException(
+      '${file.path} is ${other.runtimeType}, not an object.',
+    ),
+  });
+}
+
 /// Reads the `index.json` a matrix run wrote at the root of its output tree.
 ///
 /// Each entry's [ScenarioRunIndexEntry.output] is relative to [directory];

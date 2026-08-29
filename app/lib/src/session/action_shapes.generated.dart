@@ -4249,6 +4249,26 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'ScenarioDiffResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioDiffResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'before',
+        'type': 'String',
+        'doc': 'The run compared against, worktree-relative.',
+      },
+      <String, Object?>{
+        'name': 'after',
+        'type': 'String',
+        'doc': 'The run compared, worktree-relative.',
+      },
+      <String, Object?>{
+        'name': 'drift',
+        'type': 'Map<String, Object?>',
+        'doc': 'What moved, in the shape `run` reports under the same key — so a reader who knows one knows the other.',
+      },
+    ],
+  }),
   'ScenarioListEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioListEntry',
     'fields': <Object?>[
@@ -5223,7 +5243,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'drift',
         'type': 'Map<String, Object?>',
         'optional': true,
-        'doc': 'How this run\'s pictures compare with the previous run of the same package: `compared`, and a count plus a capped list of steps under `changed`, `added` and `removed` — a suite that is green every pass and draws different pixels every pass says so here and nowhere else.',
+        'doc': 'What this run recorded that the run before it did not: `compared`, `nameMatched`, the `baseline` it was compared against, and a count plus a capped list of steps under `changed`, `added` and `removed`, each saying in `what` which facets moved.',
       },
     ],
   }),
@@ -5631,7 +5651,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'drift',
               'type': 'Map<String, Object?>',
               'optional': true,
-              'doc': 'How this run\'s pictures compare with the previous run of the same package: `compared`, and a count plus a capped list of steps under `changed`, `added` and `removed` — a suite that is green every pass and draws different pixels every pass says so here and nowhere else.',
+              'doc': 'What this run recorded that the run before it did not: `compared`, `nameMatched`, the `baseline` it was compared against, and a count plus a capped list of steps under `changed`, `added` and `removed`, each saying in `what` which facets moved.',
             },
           ],
         },
