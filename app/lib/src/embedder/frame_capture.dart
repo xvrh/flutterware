@@ -84,11 +84,11 @@ class FrameCapture {
   /// frames takes as long as it takes, and a deadline measured from *arming*
   /// would fail the last frame of every long render. The caller awaits them in
   /// turn and is the one that knows what waiting too long means.
-  List<Future<RawFrame>> captureSequence({
+  Future<List<Future<RawFrame>>> captureSequence({
     required String prefix,
     required int count,
     int stride = 1,
-  }) {
+  }) async {
     Directory(workDir).createSync(recursive: true);
     var futures = <Future<RawFrame>>[];
     for (var index = 0; index < count; index++) {
@@ -115,10 +115,13 @@ class FrameCapture {
         }),
       );
     }
-    unawaited(
-      send(
-        CaptureSequenceMessage(prefix: prefix, count: count, stride: stride),
-      ),
+    // Awaited, and it has to be. The frames this counts are presented by the
+    // guest on the strength of a VM service call the caller makes next, over a
+    // different transport — so an arm still in flight lets the first frames of
+    // a render present unarmed, the host starts counting mid-stream, and every
+    // picture in the clip is of a stop it does not name.
+    await send(
+      CaptureSequenceMessage(prefix: prefix, count: count, stride: stride),
     );
     return futures;
   }

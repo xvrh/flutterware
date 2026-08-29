@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
 import 'package:image/image.dart' as img;
@@ -225,30 +226,77 @@ class HeadlessCatalog extends CatalogRenderer {
     );
   });
 
-  /// How many frames a stop is worth on this screen, measured rather than
-  /// assumed.
+  /// How many frames a stop is worth on this screen, measured **on the
+  /// pixels**.
   ///
-  /// Seeks somewhere the screen is *not*, because that is the only place the
-  /// question has an answer: parking the playhead where it already sits
-  /// changes nothing, schedules nothing, and reports the one frame every
-  /// screen takes. The onboarding flow measured 1 that way and needed 3.
+  /// The question is "when has the screen finished arriving", and the only
+  /// honest answer to it is that two frames in a row came out the same. Asking
+  /// the scheduler instead — is a frame pending, is a ticker running — was
+  /// tried and under-reports: a `PageView` moved by `jumpTo` onto a page
+  /// boundary toggles `pageSnapping`, which makes `Scrollable` build a new
+  /// `ScrollPosition` and absorb the old one, and in the frames that takes
+  /// there are moments when nothing is scheduled and nothing is ticking and
+  /// the picture is still a page behind. Measured on the onboarding flow, the
+  /// scheduler said two where the pixels say five, and a filmstrip rendered at
+  /// two was a faithful picture of the wrong moments.
+  ///
+  /// Seeks somewhere the screen is *not*, because parking the playhead where
+  /// it already sits changes nothing and every screen answers one. Three stops
+  /// are probed and the deepest wins: stops do not settle alike, and the
+  /// expensive ones are exactly the ones a cheap probe misses.
   Future<int> _measureSettleDepth(
     _GuestSession guest,
     String scope,
     List<double> stops,
   ) async {
-    // Several stops, and the deepest wins. One probe is not enough because
-    // stops do not settle alike: the onboarding flow needs one frame where the
-    // playhead only nudges a wave, and three where it lands the `PageView` on
-    // a page boundary and `pageSnapping` turns the jump into a spring. A depth
-    // measured on the cheap stop renders the expensive ones a frame early.
     var deepest = 1;
     for (var fraction in const [0.25, 0.5, 0.75]) {
       var index = (stops.length * fraction).floor().clamp(0, stops.length - 1);
       var probe = await guest.seekMotion(stops[index], scope: scope);
-      if (probe.settleFrames > deepest) deepest = probe.settleFrames;
+      // The seek drew this many getting here; every capture below draws one
+      // more, because arming a capture forces a frame.
+      var drawn = probe.settleFrames;
+      var previous = await guest.captureRawFrame(alreadySettled: true);
+      drawn++;
+      while (drawn < _settleDepthCap) {
+        var next = await guest.captureRawFrame(alreadySettled: true);
+        drawn++;
+        if (_sameFrame(previous, next)) {
+          // `next` matched, so the screen was already finished when `previous`
+          // was taken — one frame earlier than the one that proved it.
+          drawn--;
+          break;
+        }
+        previous = next;
+      }
+      if (drawn > deepest) deepest = drawn;
     }
     return deepest;
+  }
+
+  /// Where the probe gives up. A screen that never repeats a frame is
+  /// animating on its own, and no number of frames would settle it.
+  static const _settleDepthCap = 12;
+
+  /// Whether two frames are the same picture.
+  ///
+  /// Compared eight bytes at a time, and every byte of them: a sampled
+  /// comparison would call a screen settled that had one page-shift left to
+  /// go, which is precisely the case this exists to catch.
+  static bool _sameFrame(RawFrame a, RawFrame b) {
+    if (a.width != b.width || a.height != b.height) return false;
+    if (a.pixels.length != b.pixels.length) return false;
+    var words = a.pixels.length ~/ 8;
+    // Byte offsets into the source, not element counts of the view.
+    var left = Uint64List.sublistView(a.pixels, 0, words * 8);
+    var right = Uint64List.sublistView(b.pixels, 0, words * 8);
+    for (var i = 0; i < words; i++) {
+      if (left[i] != right[i]) return false;
+    }
+    for (var i = words * 8; i < a.pixels.length; i++) {
+      if (a.pixels[i] != b.pixels[i]) return false;
+    }
+    return true;
   }
 
   /// Connects, compiles [entryId], launches one guest and hands it to [body].
@@ -1303,7 +1351,7 @@ class _GuestSession {
     await _seek(scope, stops.first);
     await _settle();
     var prefix = p.join(_capture.workDir, 'seq-');
-    var frames = _capture.captureSequence(
+    var frames = await _capture.captureSequence(
       prefix: prefix,
       count: stops.length,
       stride: framesPerStop,
