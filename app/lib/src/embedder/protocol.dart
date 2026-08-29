@@ -75,7 +75,11 @@ class CaptureMessage extends EmbedderMessage {
 /// [CapturedMessage] exactly as a single capture does, so a caller can count
 /// what landed rather than trust that it did.
 class CaptureSequenceMessage extends EmbedderMessage {
-  const CaptureSequenceMessage({required this.prefix, required this.count});
+  const CaptureSequenceMessage({
+    required this.prefix,
+    required this.count,
+    this.stride = 1,
+  });
 
   /// What each file's name starts with; the frame's index and `.rawframe`
   /// follow.
@@ -83,6 +87,10 @@ class CaptureSequenceMessage extends EmbedderMessage {
 
   /// How many presented frames to write before disarming. Zero disarms.
   final int count;
+
+  /// How many frames the guest presents for each one written — the last of
+  /// each group is kept. See [CaptureSequenceMessage] and `native/host.c`.
+  final int stride;
 }
 
 /// Guest to GUI: the capture at [path] is written.
@@ -336,6 +344,7 @@ Uint8List encodeMessage(EmbedderMessage message) {
     case CaptureSequenceMessage():
       body.addByte(MessageType.captureSequence.tag);
       _u32(body, message.count);
+      _u32(body, message.stride);
       body.add(utf8.encode(message.prefix));
   }
   var bodyBytes = body.toBytes();
@@ -365,7 +374,8 @@ EmbedderMessage decodeMessageBody(Uint8List body) {
     case MessageType.captureSequence:
       return CaptureSequenceMessage(
         count: data.getUint32(0, Endian.little),
-        prefix: utf8.decode(body.sublist(5)),
+        stride: data.getUint32(4, Endian.little),
+        prefix: utf8.decode(body.sublist(9)),
       );
     case MessageType.surfacesAllocated:
       var generation = data.getUint32(0, Endian.little);

@@ -1293,7 +1293,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 Renders a motion at several points on its playhead and composes them into one contact sheet. This is how to look at an animation without watching it: one image, N moments, each labelled with its t and its milliseconds.
 
 ```sh
-fw run motion filmstrip --motion=<string> [--frames=…] [--package=…] [--device=…]
+fw run motion filmstrip --motion=<string> [--frames=…] [--framesPerStop=…] [--package=…] [--device=…]
 ```
 
 Returns `Artifact`:
@@ -1310,6 +1310,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 |---|---|---|---|---|
 | `motion` | string | yes | — | The `motion:` identifier, as `list` reports it |
 | `frames` | integer | no | — | How many, including both ends. 5 when omitted. |
+| `framesPerStop` | integer | no | — | How many frames to draw before taking each picture. Measured from the screen when omitted, which is right for most and cannot be right for all: how long a screen takes to arrive at a playhead depends on where it came from. Raise it if a frame looks like the moment before the one it is labelled. |
 | `package` | choice | no | — | Which declared package; the only one when omitted |
 | `device` | choice | no | — | A device to render as; the panel otherwise |
 
@@ -1318,7 +1319,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 Renders the whole motion to an mp4 at its own duration, one frame per video frame. Not a screen recording: every frame is the motion evaluated at a playhead position, so the clip is exactly what the scrubber shows and is not rendered in real time. Needs `ffmpeg` on PATH.
 
 ```sh
-fw run motion video --motion=<string> [--fps=…] [--package=…] [--device=…] [--knobs=…] [--axes=…] [--scope=…]
+fw run motion video --motion=<string> [--fps=…] [--package=…] [--device=…] [--knobs=…] [--axes=…] [--framesPerStop=…] [--scope=…]
 ```
 
 Returns `Artifact`:
@@ -1339,6 +1340,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 | `device` | choice | no | — | A device to render as; the panel otherwise |
 | `knobs` | string | no | — | Values to turn before rendering: `name=value,name=value`, or a JSON object. This is how one authored motion becomes many clips — the same timing over different words, a different accent, a different locale — without touching the file it was authored in. |
 | `axes` | string | no | — | What the shell around the demo offers — `theme=dark`. Same syntax as knobs. |
+| `framesPerStop` | integer | no | — | How many frames to draw before capturing each one. Measured from the screen when omitted. Raise it if a frame shows the moment before the one it is labelled — a screen that moves a scrollable to follow its playhead takes several frames to arrive, and how many is not reliably reportable. |
 | `scope` | string | no | — | Which mounted playhead to walk, when the screen has several. A composed screen mounts one scope for its own flow and one per component inside it. Omitted, the outermost — the flow — because scopes mount in tree order. The scopes a render saw come back on the result, so a clip of the wrong timeline is visible rather than merely wrong. |
 
 #### `new` — New motion

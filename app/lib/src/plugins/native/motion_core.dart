@@ -279,6 +279,18 @@ class MotionCore extends PluginCore {
             required: false,
             description: 'How many, including both ends. 5 when omitted.',
           ),
+          const ActionParameter(
+            'framesPerStop',
+            'Frames per stop',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description:
+                'How many frames to draw before taking each picture. Measured '
+                'from the screen when omitted, which is right for most and '
+                'cannot be right for all: how long a screen takes to arrive '
+                'at a playhead depends on where it came from. Raise it if a '
+                'frame looks like the moment before the one it is labelled.',
+          ),
           ActionParameter(
             'package',
             'Package',
@@ -359,6 +371,18 @@ class MotionCore extends PluginCore {
             description:
                 'What the shell around the demo offers — `theme=dark`. Same '
                 'syntax as knobs.',
+          ),
+          const ActionParameter(
+            'framesPerStop',
+            'Frames per stop',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description:
+                'How many frames to draw before capturing each one. Measured '
+                'from the screen when omitted. Raise it if a frame shows the '
+                'moment before the one it is labelled — a screen that moves a '
+                'scrollable to follow its playhead takes several frames to '
+                'arrive, and how many is not reliably reportable.',
           ),
           const ActionParameter(
             'scope',
@@ -631,6 +655,11 @@ class MotionCore extends PluginCore {
       entryId: entry.id,
       output: output,
       stops: filmstripStops(frames),
+      framesPerStop: switch (arguments['framesPerStop']) {
+        int value => value,
+        String text when int.tryParse(text) != null => int.parse(text),
+        _ => null,
+      },
       viewport: device == null
           ? CaptureViewport.panel
           : CaptureViewport.of(device),
@@ -649,6 +678,7 @@ class MotionCore extends PluginCore {
         'motion': motion.values,
         'file': motion.file,
         'frames': strip.stops.length,
+        'framesPerStop': strip.framesPerStop,
         'durationMs': strip.durationMs,
         'bytes': strip.file.lengthSync(),
         'device': ?device?.id,
@@ -684,6 +714,11 @@ class MotionCore extends PluginCore {
       knobs: knobs,
       axes: axes,
       scope: arguments['scope'] as String?,
+      framesPerStop: switch (arguments['framesPerStop']) {
+        int value => value,
+        String text when int.tryParse(text) != null => int.parse(text),
+        _ => null,
+      },
     );
 
     return Artifact(

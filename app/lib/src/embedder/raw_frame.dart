@@ -51,6 +51,22 @@ class RawFrame {
 
   /// Whether rows are packed with no padding, and so can be handed on whole.
   bool get isPacked => rowBytes == width * 4;
+
+  /// The same pixels as an [Image], paying the channel swizzle after all.
+  ///
+  /// For the callers that genuinely need one — anything that composites,
+  /// crops or annotates. A consumer that only forwards the bytes should not
+  /// call this: the conversion is ~26ms a frame at phone resolution, which is
+  /// what [RawFrame] exists to let a video skip.
+  Image toImage() => Image.fromBytes(
+    width: width,
+    height: height,
+    bytes: pixels.buffer,
+    bytesOffset: pixels.offsetInBytes,
+    numChannels: 4,
+    rowStride: rowBytes,
+    order: order == 0 ? ChannelOrder.bgra : ChannelOrder.rgba,
+  );
 }
 
 /// Reads a raw frame's header and returns its pixels unconverted.

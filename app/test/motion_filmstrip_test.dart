@@ -5,12 +5,10 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-File _png(Directory dir, String name, int width, int height) {
+img.Image _cell(int width, int height) {
   var image = img.Image(width: width, height: height);
   img.fill(image, color: img.ColorRgb8(200, 40, 40));
-  var file = File(p.join(dir.path, name))
-    ..writeAsBytesSync(img.encodePng(image));
-  return file;
+  return image;
 }
 
 void main() {
@@ -42,12 +40,8 @@ void main() {
 
     test('lays frames out side by side with room for the labels', () {
       var frames = [
-        for (var (i, t) in filmstripStops(3).indexed)
-          FilmstripFrame(
-            file: _png(dir, 'f$i.png', 640, 480),
-            t: t,
-            ms: (t * 900).round(),
-          ),
+        for (var t in filmstripStops(3))
+          FilmstripFrame(image: _cell(640, 480), t: t, ms: (t * 900).round()),
       ];
       var output = p.join(dir.path, 'strip.png');
       var sheet = img.decodePng(
@@ -67,9 +61,7 @@ void main() {
     test('scales down, never up', () {
       // A frame rendered small and enlarged is a blurrier frame, and the sheet
       // is for judging timing rather than pixels.
-      var frames = [
-        FilmstripFrame(file: _png(dir, 'small.png', 80, 60), t: 1, ms: 900),
-      ];
+      var frames = [FilmstripFrame(image: _cell(80, 60), t: 1, ms: 900)];
       var sheet = img.decodePng(
         composeFilmstrip(
           frames,

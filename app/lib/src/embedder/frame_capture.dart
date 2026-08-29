@@ -87,6 +87,7 @@ class FrameCapture {
   List<Future<RawFrame>> captureSequence({
     required String prefix,
     required int count,
+    int stride = 1,
   }) {
     Directory(workDir).createSync(recursive: true);
     var futures = <Future<RawFrame>>[];
@@ -114,7 +115,11 @@ class FrameCapture {
         }),
       );
     }
-    unawaited(send(CaptureSequenceMessage(prefix: prefix, count: count)));
+    unawaited(
+      send(
+        CaptureSequenceMessage(prefix: prefix, count: count, stride: stride),
+      ),
+    );
     return futures;
   }
 

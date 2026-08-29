@@ -73,33 +73,46 @@ class HeadlessCatalog extends CatalogRenderer {
     Map<String, String> axes = const {},
     int cellWidth = 320,
     String? scope,
+
+    /// Frames to draw per stop, overriding what a probe measures. The probe is
+    /// right for most screens and cannot be right for all of them: how long a
+    /// screen takes to arrive at a playhead depends on where it is coming
+    /// from, and a probe samples a few places rather than every one.
+    int? framesPerStop,
   }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
     if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
     if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
 
-    var scratch = Directory(p.join(p.dirname(output), 'frames'))
-      ..createSync(recursive: true);
+    // One opening seek to learn the duration and settle on a scope, then the
+    // whole strip in a single call — the same batched render a video walks.
+    var opening = await guest.seekMotion(stops.first, scope: scope);
     var frames = <FilmstripFrame>[];
-    try {
-      var durationMs = 0;
-      for (var (index, t) in stops.indexed) {
-        var landed = await guest.seekMotion(t, scope: scope);
-        durationMs = landed.durationMs;
-        var file = await guest.capture(
-          p.join(scratch.path, 'frame-$index.png'),
-          pixelRatio: viewport.pixelRatio,
-        );
-        frames.add(FilmstripFrame(file: file, t: t, ms: landed.ms));
-      }
-      return CatalogFilmstrip(
-        file: composeFilmstrip(frames, output: output, cellWidth: cellWidth),
-        stops: stops,
-        durationMs: durationMs,
+    var index = 0;
+    var perStop =
+        framesPerStop ?? await _measureSettleDepth(guest, opening.scope, stops);
+    await for (var raw in guest.renderSequence(
+      scope: opening.scope,
+      stops: stops,
+      framesPerStop: perStop,
+    )) {
+      var t = stops[index++];
+      frames.add(
+        FilmstripFrame(
+          image: raw.toImage(),
+          t: t,
+          // The playhead's own units, computed rather than reported: a
+          // batched render is not asked where it landed frame by frame, and
+          // `t` of a known duration is the same number the guest would give.
+          ms: (t * opening.durationMs).round(),
+        ),
       );
-    } finally {
-      // The sheet is the artifact; the frames were scaffolding.
-      if (scratch.existsSync()) scratch.deleteSync(recursive: true);
     }
+    return CatalogFilmstrip(
+      file: composeFilmstrip(frames, output: output, cellWidth: cellWidth),
+      stops: stops,
+      durationMs: opening.durationMs,
+      framesPerStop: perStop,
+    );
   });
 
   /// The whole motion as a video file.
@@ -123,6 +136,10 @@ class HeadlessCatalog extends CatalogRenderer {
     Map<String, String> knobs = const {},
     Map<String, String> axes = const {},
     String? scope,
+
+    /// Frames to draw per stop, overriding what a probe measures. See
+    /// [filmstrip].
+    int? framesPerStop,
   }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
     if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
     if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
@@ -143,7 +160,16 @@ class HeadlessCatalog extends CatalogRenderer {
     // The frames arrive as a sequence the guest writes on its own, so the
     // first one has to be waited for before the encoder can be opened — it is
     // what says how big the picture is and what order its bytes are in.
-    var frames = guest.renderSequence(scope: opening.scope, stops: stops);
+    var frames = guest.renderSequence(
+      scope: opening.scope,
+      stops: stops,
+      // A screen that applies its playhead in stages shows the *previous*
+      // stop on the frame that moved it, so its picture is the last of the
+      // group. Measured on this screen rather than assumed.
+      framesPerStop:
+          framesPerStop ??
+          await _measureSettleDepth(guest, opening.scope, stops),
+    );
     VideoEncoder? encoder;
     try {
       var handoff = Stopwatch();
@@ -198,6 +224,32 @@ class HeadlessCatalog extends CatalogRenderer {
       timings: guest.readCaptureCosts(),
     );
   });
+
+  /// How many frames a stop is worth on this screen, measured rather than
+  /// assumed.
+  ///
+  /// Seeks somewhere the screen is *not*, because that is the only place the
+  /// question has an answer: parking the playhead where it already sits
+  /// changes nothing, schedules nothing, and reports the one frame every
+  /// screen takes. The onboarding flow measured 1 that way and needed 3.
+  Future<int> _measureSettleDepth(
+    _GuestSession guest,
+    String scope,
+    List<double> stops,
+  ) async {
+    // Several stops, and the deepest wins. One probe is not enough because
+    // stops do not settle alike: the onboarding flow needs one frame where the
+    // playhead only nudges a wave, and three where it lands the `PageView` on
+    // a page boundary and `pageSnapping` turns the jump into a spring. A depth
+    // measured on the cheap stop renders the expensive ones a frame early.
+    var deepest = 1;
+    for (var fraction in const [0.25, 0.5, 0.75]) {
+      var index = (stops.length * fraction).floor().clamp(0, stops.length - 1);
+      var probe = await guest.seekMotion(stops[index], scope: scope);
+      if (probe.settleFrames > deepest) deepest = probe.settleFrames;
+    }
+    return deepest;
+  }
 
   /// Connects, compiles [entryId], launches one guest and hands it to [body].
   ///
@@ -484,6 +536,7 @@ class MotionSeek {
     required this.scope,
     required this.mounted,
     required this.settled,
+    required this.settleFrames,
   });
 
   /// Where the playhead landed, in the motion's own milliseconds.
@@ -507,6 +560,15 @@ class MotionSeek {
   /// are kept apart anyway, because a guest that cannot answer is a version
   /// skew and a guest that answers "no" is a picture still moving.
   final bool? settled;
+
+  /// How many frames this seek had to draw before the screen stopped drawing
+  /// — one for a screen that shows its playhead where it reads it, more for
+  /// one that applies it in stages.
+  ///
+  /// It is what a render uses to decide how many frames a stop is worth.
+  /// Guessing wrong photographs a screen still on its way, which looks like a
+  /// perfectly good picture of the wrong moment.
+  final int settleFrames;
 }
 
 /// A rendered motion, and what it cost to render.
@@ -554,7 +616,14 @@ class CatalogFilmstrip {
     required this.file,
     required this.stops,
     required this.durationMs,
+    this.framesPerStop = 1,
   });
+
+  /// How many frames each stop was drawn before its picture was taken.
+  ///
+  /// Recorded because a clip rendered a frame early looks entirely plausible,
+  /// and this is the number that decides whether it was.
+  final int framesPerStop;
 
   final File file;
   final List<double> stops;
@@ -1008,6 +1077,7 @@ class _GuestSession {
           scope: scope,
           mounted: _mountedByScope,
           settled: _readSettled(direct),
+          settleFrames: (direct['settleFrames'] as num?)?.toInt() ?? 1,
         );
       }
     }
@@ -1069,6 +1139,7 @@ class _GuestSession {
       // should be able to see that it did, and name the other.
       mounted: _mountedByScope,
       settled: _readSettled(reply),
+      settleFrames: (reply['settleFrames'] as num?)?.toInt() ?? 1,
     );
   }
 
@@ -1212,10 +1283,31 @@ class _GuestSession {
   Stream<RawFrame> renderSequence({
     required String scope,
     required List<double> stops,
+
+    /// How many frames the guest draws for each one kept — the last of each
+    /// group. One unless the screen applies its playhead late, which
+    /// [MotionSeek.settleFrames] is how to find out.
+    int framesPerStop = 1,
   }) async* {
+    // **Nothing may be in flight when the sequence is armed.** The host writes
+    // frames as they present, and pairing them with stops is positional — so a
+    // single frame left over from whatever ran before shifts every picture in
+    // the clip by one, and each of them still looks perfectly good. That is
+    // how the first batched filmstrip came out: a probe seek left a spring
+    // running, its last frame was written as stop zero, and the strip was a
+    // faithful render of the wrong six moments.
+    //
+    // Seeking to the first stop is what quiets it, because a seek now draws
+    // until the screen stops drawing. The settle after it is for image loads,
+    // which are the other thing that presents a frame nobody asked for.
+    await _seek(scope, stops.first);
     await _settle();
     var prefix = p.join(_capture.workDir, 'seq-');
-    var frames = _capture.captureSequence(prefix: prefix, count: stops.length);
+    var frames = _capture.captureSequence(
+      prefix: prefix,
+      count: stops.length,
+      stride: framesPerStop,
+    );
     // Unawaited on purpose: it answers when the *last* frame has been drawn,
     // and the whole point is to be reading the first one long before then.
     //
@@ -1228,10 +1320,25 @@ class _GuestSession {
     var done = _vmService
         .callExtension(
           'ext.flutterware.motion.render',
-          args: {'scope': scope, 'stops': stops.join(',')},
+          args: {
+            'scope': scope,
+            'stops': stops.join(','),
+            'framesPerStop': '$framesPerStop',
+          },
         )
         .then<void>(
-          (_) {},
+          (reply) {
+            // Loud rather than subtle: a stop still drawing when its picture
+            // was taken is a frame of the wrong moment, and the picture looks
+            // entirely plausible.
+            if ((reply?['unsettled'] as num? ?? 0) > 0) {
+              failure = StateError(
+                '${reply?['unsettled']} of ${stops.length} stops were still '
+                'drawing when their frame was taken, at $framesPerStop frames '
+                'a stop — the clip would be of the wrong moments',
+              );
+            }
+          },
           onError: (Object error) {
             failure = error;
             _capture.endSequence(prefix, because: error);

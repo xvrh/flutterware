@@ -173,11 +173,27 @@ class MotionRegistry {
           jsonEncode({'error': 'seek wants t (0..1) or ms'}),
         );
       }
+      // Drawn until it stops drawing, counting. One frame is the normal
+      // answer. More means the screen applies the playhead in stages — a
+      // `PageView` moved by `jumpTo` from a post-frame callback takes three:
+      // the frame that moves the playhead, the one the jump schedules, and the
+      // one the scroll position's own listeners schedule after it.
+      //
+      // The count is the useful part. A scrubber does not care, having drawn
+      // again by the time anyone looks; a *render* takes one picture per stop
+      // and needs to know how many frames a stop is really worth, or it
+      // photographs a screen still on its way to where it was sent.
+      var settleFrames = 1;
       await _settle();
+      while (_stillArriving && settleFrames < 12) {
+        await _settle();
+        settleFrames++;
+      }
       return developer.ServiceExtensionResponse.result(
         jsonEncode({
           'progress': controller.progress,
           'ms': controller.position.inMilliseconds,
+          'settleFrames': settleFrames,
           // What a caller would otherwise ask `ext.flutterware.imagesSettled`
           // for, straight after this — and that question costs a *forced
           // frame*, twice, because the host wants two quiet ones in a row.
@@ -187,6 +203,14 @@ class MotionRegistry {
           // every frame, at any resolution.
           'pending': PaintingBinding.instance.imageCache.pendingImageCount,
           'transient': SchedulerBinding.instance.transientCallbackCount,
+          // Whether the frame this reply describes left another one *already
+          // scheduled* behind it. A screen that applies the playhead from a
+          // post-frame callback does — `PageView.jumpTo` cannot be called
+          // during a build, so a flow driven by one is a frame behind its own
+          // playhead. Harmless to a scrubber, which draws again immediately;
+          // fatal to a render, which captures one frame per stop and would
+          // photograph the previous one.
+          'scheduled': SchedulerBinding.instance.hasScheduledFrame,
         }),
       );
     });
@@ -270,20 +294,39 @@ class MotionRegistry {
         );
       }
 
+      // How many frames each stop is given before its picture is taken.
+      //
+      // One is right for a screen that draws its playhead where it reads it.
+      // Two is right for one that defers — a `PageView` driven by `jumpTo`
+      // from a post-frame callback shows the *previous* offset on the frame
+      // that moved the playhead, and a render taking one frame per stop
+      // photographs a flow a slide behind itself. The caller chooses, from
+      // what a seek told it; `unsettled` below is what catches it choosing
+      // wrong.
+      var perStop = int.tryParse(args['framesPerStop'] ?? '') ?? 1;
+      if (perStop < 1) perStop = 1;
+
       var controller = scope.controller;
       var rendered = 0;
+      var unsettled = 0;
       for (var t in stops) {
         controller.progress = t;
-        // One frame per stop, and the frame is scheduled *because* the
-        // playhead moved — a controller write marks the tree dirty. Forcing
-        // one as well would present twice for one stop and shift every file
-        // after it by one.
-        await _settle();
+        // The frames are scheduled *because* the playhead moved — a controller
+        // write marks the tree dirty — so nothing is forced here. Forcing one
+        // as well would present an extra frame and shift every file after it.
+        for (var i = 0; i < perStop; i++) {
+          await _settle();
+        }
         rendered++;
+        // Still more to draw after its whole allowance: this stop's picture is
+        // of a screen that had not finished arriving at it.
+        if (_stillArriving) unsettled++;
       }
       return developer.ServiceExtensionResponse.result(
         jsonEncode({
           'rendered': rendered,
+          'unsettled': unsettled,
+          'framesPerStop': perStop,
           'durationMs': scope.motionValues.resolveDuration().inMilliseconds,
           'pending': PaintingBinding.instance.imageCache.pendingImageCount,
           'transient': SchedulerBinding.instance.transientCallbackCount,
@@ -338,6 +381,23 @@ class MotionRegistry {
     const Duration(seconds: 2),
     onTimeout: () {},
   );
+
+  /// Whether the screen is still on its way somewhere.
+  ///
+  /// **A scheduled frame is not enough to ask about.** A `PageView` moved by
+  /// `jumpTo` lands on a page boundary and `pageSnapping` turns that into a
+  /// ballistic spring, which is a *ticker*: it schedules its next frame from
+  /// inside the current one, and between the two there is a moment when
+  /// nothing is scheduled and the screen is nowhere near arrived. Measured on
+  /// the onboarding flow, `hasScheduledFrame` alone said two frames where the
+  /// picture needed five, and the filmstrip came out a slide early with every
+  /// frame looking perfectly plausible.
+  ///
+  /// A running ticker is the other half of the question, and together they are
+  /// the difference between "no frame is pending" and "nothing is moving".
+  static bool get _stillArriving =>
+      SchedulerBinding.instance.hasScheduledFrame ||
+      SchedulerBinding.instance.transientCallbackCount > 0;
 
   /// Every mounted scope, and everything a panel draws a lane from.
   Map<String, Object?> describe() => {

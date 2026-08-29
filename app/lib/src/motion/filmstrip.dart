@@ -3,10 +3,15 @@ import 'dart:io';
 import 'package:image/image.dart' as img;
 
 /// One frame of a filmstrip, and where on the playhead it was taken.
+///
+/// The picture rather than a path to one: a filmstrip's frames are scaffolding
+/// that only ever existed to be composited, and writing each to disk as a PNG
+/// so the compositor could decode it back cost an encode and a decode a frame
+/// for nothing.
 class FilmstripFrame {
-  FilmstripFrame({required this.file, required this.t, required this.ms});
+  FilmstripFrame({required this.image, required this.t, required this.ms});
 
-  final File file;
+  final img.Image image;
   final double t;
   final int ms;
 }
@@ -40,16 +45,12 @@ File composeFilmstrip(
 
   var cells = <img.Image>[];
   for (var frame in frames) {
-    var decoded = img.decodePng(frame.file.readAsBytesSync());
-    if (decoded == null) {
-      throw StateError('frame at t=${frame.t} is not a readable PNG');
-    }
     // Scaled down, never up: a frame rendered small and enlarged is a blurrier
     // frame, and the sheet is for judging timing rather than pixels.
     cells.add(
-      decoded.width <= cellWidth
-          ? decoded
-          : img.copyResize(decoded, width: cellWidth),
+      frame.image.width <= cellWidth
+          ? frame.image
+          : img.copyResize(frame.image, width: cellWidth),
     );
   }
 
