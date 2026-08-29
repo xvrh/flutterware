@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
 import 'package:image/image.dart' as img;
@@ -75,10 +74,16 @@ class HeadlessCatalog extends CatalogRenderer {
     int cellWidth = 320,
     String? scope,
 
-    /// Frames to draw per stop, overriding what a probe measures. The probe is
-    /// right for most screens and cannot be right for all of them: how long a
-    /// screen takes to arrive at a playhead depends on where it is coming
-    /// from, and a probe samples a few places rather than every one.
+    /// Frames to draw per stop. One, and one is the answer for anything worth
+    /// rendering: a scene is a function of its playhead, so setting the
+    /// playhead and drawing is the whole of it.
+    ///
+    /// Raise it for a screen that is a *state machine* rather than a scene —
+    /// one that reads its playhead during build and then moves something else
+    /// from a post-frame callback, the way a flow driven by `PageView.jumpTo`
+    /// does. Such a screen shows the previous position on the frame that moved
+    /// the playhead. It is not what a video is of, but it is something a
+    /// filmstrip gets pointed at, so the knob exists.
     int? framesPerStop,
   }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
     if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
@@ -89,8 +94,7 @@ class HeadlessCatalog extends CatalogRenderer {
     var opening = await guest.seekMotion(stops.first, scope: scope);
     var frames = <FilmstripFrame>[];
     var index = 0;
-    var perStop =
-        framesPerStop ?? await _measureSettleDepth(guest, opening.scope, stops);
+    var perStop = framesPerStop ?? 1;
     await for (var raw in guest.renderSequence(
       scope: opening.scope,
       stops: stops,
@@ -138,8 +142,7 @@ class HeadlessCatalog extends CatalogRenderer {
     Map<String, String> axes = const {},
     String? scope,
 
-    /// Frames to draw per stop, overriding what a probe measures. See
-    /// [filmstrip].
+    /// Frames to draw per stop. See [filmstrip]; one is right for a scene.
     int? framesPerStop,
   }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
     if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
@@ -167,9 +170,7 @@ class HeadlessCatalog extends CatalogRenderer {
       // A screen that applies its playhead in stages shows the *previous*
       // stop on the frame that moved it, so its picture is the last of the
       // group. Measured on this screen rather than assumed.
-      framesPerStop:
-          framesPerStop ??
-          await _measureSettleDepth(guest, opening.scope, stops),
+      framesPerStop: framesPerStop ?? 1,
     );
     VideoEncoder? encoder;
     try {
@@ -225,79 +226,6 @@ class HeadlessCatalog extends CatalogRenderer {
       timings: guest.readCaptureCosts(),
     );
   });
-
-  /// How many frames a stop is worth on this screen, measured **on the
-  /// pixels**.
-  ///
-  /// The question is "when has the screen finished arriving", and the only
-  /// honest answer to it is that two frames in a row came out the same. Asking
-  /// the scheduler instead — is a frame pending, is a ticker running — was
-  /// tried and under-reports: a `PageView` moved by `jumpTo` onto a page
-  /// boundary toggles `pageSnapping`, which makes `Scrollable` build a new
-  /// `ScrollPosition` and absorb the old one, and in the frames that takes
-  /// there are moments when nothing is scheduled and nothing is ticking and
-  /// the picture is still a page behind. Measured on the onboarding flow, the
-  /// scheduler said two where the pixels say five, and a filmstrip rendered at
-  /// two was a faithful picture of the wrong moments.
-  ///
-  /// Seeks somewhere the screen is *not*, because parking the playhead where
-  /// it already sits changes nothing and every screen answers one. Three stops
-  /// are probed and the deepest wins: stops do not settle alike, and the
-  /// expensive ones are exactly the ones a cheap probe misses.
-  Future<int> _measureSettleDepth(
-    _GuestSession guest,
-    String scope,
-    List<double> stops,
-  ) async {
-    var deepest = 1;
-    for (var fraction in const [0.25, 0.5, 0.75]) {
-      var index = (stops.length * fraction).floor().clamp(0, stops.length - 1);
-      var probe = await guest.seekMotion(stops[index], scope: scope);
-      // The seek drew this many getting here; every capture below draws one
-      // more, because arming a capture forces a frame.
-      var drawn = probe.settleFrames;
-      var previous = await guest.captureRawFrame(alreadySettled: true);
-      drawn++;
-      while (drawn < _settleDepthCap) {
-        var next = await guest.captureRawFrame(alreadySettled: true);
-        drawn++;
-        if (_sameFrame(previous, next)) {
-          // `next` matched, so the screen was already finished when `previous`
-          // was taken — one frame earlier than the one that proved it.
-          drawn--;
-          break;
-        }
-        previous = next;
-      }
-      if (drawn > deepest) deepest = drawn;
-    }
-    return deepest;
-  }
-
-  /// Where the probe gives up. A screen that never repeats a frame is
-  /// animating on its own, and no number of frames would settle it.
-  static const _settleDepthCap = 12;
-
-  /// Whether two frames are the same picture.
-  ///
-  /// Compared eight bytes at a time, and every byte of them: a sampled
-  /// comparison would call a screen settled that had one page-shift left to
-  /// go, which is precisely the case this exists to catch.
-  static bool _sameFrame(RawFrame a, RawFrame b) {
-    if (a.width != b.width || a.height != b.height) return false;
-    if (a.pixels.length != b.pixels.length) return false;
-    var words = a.pixels.length ~/ 8;
-    // Byte offsets into the source, not element counts of the view.
-    var left = Uint64List.sublistView(a.pixels, 0, words * 8);
-    var right = Uint64List.sublistView(b.pixels, 0, words * 8);
-    for (var i = 0; i < words; i++) {
-      if (left[i] != right[i]) return false;
-    }
-    for (var i = words * 8; i < a.pixels.length; i++) {
-      if (a.pixels[i] != b.pixels[i]) return false;
-    }
-    return true;
-  }
 
   /// Connects, compiles [entryId], launches one guest and hands it to [body].
   ///
@@ -1382,8 +1310,14 @@ class _GuestSession {
             if ((reply?['unsettled'] as num? ?? 0) > 0) {
               failure = StateError(
                 '${reply?['unsettled']} of ${stops.length} stops were still '
-                'drawing when their frame was taken, at $framesPerStop frames '
-                'a stop — the clip would be of the wrong moments',
+                'drawing when their frame was taken, at $framesPerStop frame'
+                '${framesPerStop == 1 ? '' : 's'} a stop — the clip would be '
+                'of the wrong moments.\n'
+                'This screen reads its playhead and then moves something else '
+                'from a post-frame callback, so the frame that moved the '
+                'playhead still shows the position before it. A scene does '
+                'not do that; a flow driven by `PageView.jumpTo` does. Raise '
+                '`framesPerStop` until this stops.',
               );
             }
           },
