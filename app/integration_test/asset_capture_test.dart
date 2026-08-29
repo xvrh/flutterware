@@ -4,6 +4,7 @@ library;
 
 import 'dart:io';
 
+import 'package:flutterware_app/src/previews/catalog_render.dart';
 import 'package:flutterware_app/src/previews/compiler_daemon_client.dart';
 import 'package:flutterware_app/src/previews/headless_catalog.dart';
 import 'package:flutterware_app/src/previews/package_config_locator.dart';
@@ -53,10 +54,16 @@ void main() {
       Directory.systemTemp.createTempSync('fw_asset_capture').path,
       'smoke.png',
     );
-    var capture = await HeadlessCatalog(
-      dartExecutable: dartExecutable,
-      config: config,
-    ).capture(entryId: 'demo/asset_smoke.dart#assetSmoke', output: output);
+    var capture =
+        await HeadlessCatalog(
+          dartExecutable: dartExecutable,
+          config: config,
+        ).capture(
+          CatalogRender(
+            entryId: 'demo/asset_smoke.dart#assetSmoke',
+            screenshot: output,
+          ),
+        );
 
     var picture = img.decodePng(File(capture.file.path).readAsBytesSync())!;
     var fixtureBlue = 0;

@@ -12,13 +12,13 @@ void main() {
       isTrue,
       reason: 'platform_strong.dill should exist at ${cache.platformDill}',
     );
-    // The tester lane's ICU, which is the one that resolves per host: this is
-    // what `audit`, the thumbnails and the scenario runner all spawn against,
-    // so on Linux and Windows it is the assertion that matters.
+    // One ICU for both lanes now — the tester spawns against it and so does the
+    // guest. It resolves per host, so on Linux and Windows this is the
+    // assertion that matters.
     expect(
-      File(cache.testerIcuData).existsSync(),
+      File(cache.icuData).existsSync(),
       isTrue,
-      reason: 'icudtl.dat should exist at ${cache.testerIcuData}',
+      reason: 'icudtl.dat should exist at ${cache.icuData}',
     );
     expect(
       cache.engineRevision,
@@ -27,17 +27,16 @@ void main() {
     );
   });
 
-  test("resolves the embedder guest's own ICU", () {
-    // Separate, and macOS-only, because [FlutterCache.icuData] is deliberately
-    // `darwin-x64`: it is loaded beside `FlutterEmbedder.framework`, which
-    // ships for macOS and nowhere else. Off macOS there is no such file and
-    // nothing that would read it — see the guest's README.
+  test('names this host the way the artifact server does', () {
     var cache = FlutterCache.fromRunningSdk();
 
+    // The same string indexes the local cache and the download URL, so a typo
+    // here is a 404 rather than a missing directory.
     expect(
-      File(cache.icuData).existsSync(),
-      isTrue,
-      reason: 'icudtl.dat should exist at ${cache.icuData}',
+      cache.hostPlatform,
+      Platform.isMacOS
+          ? 'darwin-x64'
+          : matches(RegExp(r'^(linux|windows)-(x64|arm64)$')),
     );
-  }, skip: Platform.isMacOS ? null : 'the embedder guest is macOS-only');
+  });
 }

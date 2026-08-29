@@ -62,14 +62,15 @@ class FlutterCache {
   String get platformDill =>
       p.join(flutterPatchedSdkDir, 'platform_strong.dill');
 
-  /// ICU data the *embedder guest's* engine needs at startup. macOS-only,
-  /// like the `FlutterEmbedder.framework` it is loaded next to; the tester
-  /// lane reads [testerIcuData] instead.
-  //
-  // `darwin-x64` is the canonical macOS desktop artifact directory for every
-  // host architecture (including Apple Silicon) — there is no `darwin-arm64`
-  // engine dir, and the engine binaries shipped here are universal.
-  String get icuData => p.join(_engine, 'darwin-x64', 'icudtl.dat');
+  /// ICU data, for anything that starts an engine — the embedder guest at
+  /// startup, `flutter_tester` through `--icu-data-file-path`.
+  ///
+  /// One expression for both, now that the guest is not macOS-only. It was two,
+  /// and the guest's half named `darwin-x64` outright; what that cost was a
+  /// tester spawned on Linux with a path into the macOS artifact directory —
+  /// wrong on the host it was reached from, and reached from there by a lane
+  /// that had nothing to do with the guest.
+  String get icuData => p.join(_hostEngineDir, 'icudtl.dat');
 
   /// The Impeller shader compiler, a host tool shipped in every desktop
   /// host's engine directory.
@@ -84,27 +85,29 @@ class FlutterCache {
       p.join(_hostEngineDir, 'isolate_snapshot.bin');
 
   /// The engine revision the cached artifacts were built at. Used to fetch the
-  /// matching `FlutterEmbedder.framework` from Flutter's artifact storage.
+  /// matching embedder engine from Flutter's artifact storage.
   String get engineRevision =>
       File(p.join(cacheDir, 'engine.stamp')).readAsStringSync().trim();
 
-  /// The host platform's engine artifact directory — unlike [icuData] this is
-  /// not embedder-specific, so it covers the three desktop hosts.
+  /// What Flutter's artifact storage calls this host — `darwin-x64`,
+  /// `linux-x64`, `linux-arm64`, `windows-x64`. It names both a directory in
+  /// the local cache and a directory on the download server, which is what lets
+  /// [icuData] and `ensureEmbedderEngine` agree about which host they are on.
   ///
   /// macOS is always `darwin-x64` — the binaries there are universal and no
   /// `darwin-arm64` dir exists — but Linux and Windows cache per architecture,
   /// so the suffix comes from the VM actually running this.
-  String get _hostEngineDir {
-    if (Platform.isMacOS) return p.join(_engine, 'darwin-x64');
+  String get hostPlatform {
+    if (Platform.isMacOS) return 'darwin-x64';
     var os = Platform.isLinux ? 'linux' : 'windows';
     var arch = Platform.version.contains('arm64') ? 'arm64' : 'x64';
-    return p.join(_engine, '$os-$arch');
+    return '$os-$arch';
   }
+
+  /// The host platform's engine artifact directory.
+  String get _hostEngineDir => p.join(_engine, hostPlatform);
 
   /// The headless test shell `flutter test` runs — and the scenario runner
   /// spawns directly (S4, `2026-07-30-s4-flutter-tester-findings.md`).
   String get flutterTester => p.join(_hostEngineDir, 'flutter_tester$_exe');
-
-  /// ICU data beside [flutterTester], for its `--icu-data-file-path`.
-  String get testerIcuData => p.join(_hostEngineDir, 'icudtl.dat');
 }

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:path/path.dart' as p;
 
 import '../plugins/native/previews_core.dart';
@@ -11,13 +12,11 @@ import 'artifact.dart';
 import 'base_checkout.dart';
 import 'base_ref.dart';
 import 'cancel.dart';
-import 'channels.dart';
 import 'comparison_controller.dart';
 import 'last_run.dart';
 import 'last_run_store.dart';
 import 'previews_side.dart';
 import 'runner.dart';
-import 'scenario_comparison.dart';
 import 'scenarios_runner.dart';
 import 'scenarios_side.dart';
 import 'shot_cache.dart';
@@ -286,6 +285,7 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
       packagePath: _relative(package),
       directory: core.scanRootFor(package),
       projectClock: core.host.projectClock,
+      projectNetwork: core.host.projectNetwork,
     );
   }
 

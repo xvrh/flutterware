@@ -1,8 +1,7 @@
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 
 import '../../ui/theme.dart';
-import '../channels.dart';
-import '../tree_diff.dart';
 
 /// The tree, the texts and the events, as prose.
 ///

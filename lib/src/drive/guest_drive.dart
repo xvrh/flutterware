@@ -11,6 +11,7 @@ import '../inspect/guest_errors.dart';
 import '../inspect/guest_inspect.dart';
 import '../inspect/guest_logs.dart';
 import '../inspect/log.dart';
+import '../offscreen_raster.dart';
 import '../scenarios/target.dart';
 import 'drive.dart';
 import 'human_actions.dart';
@@ -420,7 +421,12 @@ class GuestDrive {
       var longest = math.max(physical.width, physical.height);
       if (longest > maxSide) scale = maxSide / longest;
     }
-    var image = await layer.toImage(Offset.zero & physical, pixelRatio: scale);
+    // Under [OffscreenRaster] because this is the raster that cannot hold an
+    // external texture — on Linux it takes the whole application down. The
+    // notice is what lets the app take one out of the tree first.
+    var image = await OffscreenRaster.around(
+      () => layer.toImage(Offset.zero & physical, pixelRatio: scale),
+    );
     try {
       var bytes = await image.toByteData(format: ui.ImageByteFormat.png);
       if (bytes == null) return null;

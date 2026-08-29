@@ -1,12 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutterware/app_events.dart';
-import 'package:flutterware_app/src/comparison/channels.dart';
-import 'package:flutterware_app/src/comparison/pixel_diff.dart';
-import 'package:flutterware_app/src/comparison/tree_diff.dart';
-import 'package:test/test.dart';
-// ignore: implementation_imports
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutterware/src/inspect/node.dart';
+import 'package:test/test.dart';
 
 /// One thing compared on every channel that had something to say, and the
 /// verdict that comes out of them.

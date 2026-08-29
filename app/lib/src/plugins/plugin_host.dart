@@ -1,3 +1,6 @@
+// ignore: implementation_imports
+import 'package:flutterware/src/scenarios/network_mode.dart';
+
 import '../previews/catalog_roots.dart';
 import '../shell/workspace.dart';
 import '../shell/worktree.dart';
@@ -16,6 +19,7 @@ class PluginHost {
     this.config = const {},
     this.projectClock,
     this.catalogRoots = const {},
+    this.projectNetwork,
   });
 
   /// The declared id — also the registry key its implementation was found by.
@@ -35,6 +39,10 @@ class PluginHost {
   /// The one project-level fact a plugin is handed rather than a shell screen,
   /// because four plugins render a date and they have to render the same one.
   final DateTime? projectClock;
+
+  /// What the project declared with `fw.network(...)`, or null for
+  /// [ScenarioNetwork.off] — the lowest altitude of the four.
+  final ScenarioNetwork? projectNetwork;
 
   /// Whatever `tool/flutterware.dart` passed for this instance. Already decoded
   /// from the manifest; plugins are responsible for validating their own keys.

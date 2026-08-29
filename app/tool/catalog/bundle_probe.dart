@@ -58,7 +58,7 @@ void main() => runApp(
 );
 ''');
 
-  var engineDir = await ensureEmbedderFramework(cache);
+  var engineDir = await ensureEmbedderEngine(cache);
   var hostPath = await buildHost(
     nativeSourceDir: p.join(packageRoot, 'native'),
     nativeBuildDir: p.join(packageRoot, 'build', 'catalog', 'native'),
@@ -103,15 +103,72 @@ void main() => runApp(
       .copySync(p.join(fastDir, 'kernel_blob.bin'));
 
   // The scene never draws the framework shaders, so frame identity cannot
-  // vouch for them; their compiled bytes are compared directly instead.
-  for (var shader in ['ink_sparkle.frag', 'stretch_effect.frag']) {
+  // vouch for them; their compiled bytes are checked directly instead — but
+  // not for equality, which they deliberately no longer have. `flutter build
+  // bundle` compiles for one target platform and ships that target's stages;
+  // [shaderStages] is the union of every list flutter_tools has, because the
+  // file cached here is loaded by a `flutter_tester` on the host's own backend
+  // *and* by a Metal guest, and no single target covers both.
+  //
+  // So the check is the two halves that can still be exact. The tool's bytes
+  // have to be reproducible from one of flutter_tools' own stage lists — that
+  // is what says the invocation in [compileShader] is faithful, which is all
+  // the old byte-for-byte comparison ever established — and ours have to be the
+  // union build of the same source, no more and no less.
+  var scratch = Directory(p.join(work.path, 'shader_probe'))
+    ..createSync(recursive: true);
+  for (var source in frameworkShaderSources(cache)) {
+    var shader = p.basename(source);
     var tool = File(p.join(toolDir, 'shaders', shader)).readAsBytesSync();
     var fast = File(p.join(fastDir, 'shaders', shader)).readAsBytesSync();
-    var same = tool.length == fast.length && _digest(tool) == _digest(fast);
+
+    Future<String?> digestFor(String label, List<String> stages) async {
+      var out = p.join(scratch.path, '$label-$shader');
+      try {
+        await compileShader(
+          cache: cache,
+          source: source,
+          destination: out,
+          stages: stages,
+        );
+      } on StateError {
+        // A stage list this impellerc will not take is not this probe's
+        // business; it just cannot be the one the tool used.
+        return null;
+      }
+      return _digest(File(out).readAsBytesSync());
+    }
+
+    var matched = <String>[];
+    for (var target in _toolShaderStages.entries) {
+      if (await digestFor(target.key, target.value) == _digest(tool)) {
+        matched.add(target.key);
+      }
+    }
+    if (matched.isEmpty) {
+      stdout.writeln(
+        "shaders/$shader — the tool's ${tool.length} bytes match no "
+        'flutter_tools stage list compiled here; the invocation has drifted',
+      );
+      exit(1);
+    }
     stdout.writeln(
-      'shaders/$shader ${same ? '— identical (${tool.length} bytes)' : '— DIFFERENT'}',
+      'shaders/$shader — the tool targeted ${matched.join(' or ')}, '
+      'reproduced here byte for byte (${tool.length} bytes)',
     );
-    if (!same) exit(1);
+
+    var union = await digestFor('union', shaderStages);
+    if (union != _digest(fast)) {
+      stdout.writeln(
+        'shaders/$shader — the bundled ${fast.length} bytes are not the '
+        'union build of this source',
+      );
+      exit(1);
+    }
+    stdout.writeln(
+      'shaders/$shader — bundled as the union of every stage '
+      '(${fast.length} bytes, against the tool)',
+    );
   }
 
   var a = await _render(hostPath, toolDir, cache, work.path, 'tool');
@@ -203,6 +260,26 @@ Future<List<int>> _render(
 }
 
 /// A cheap content fingerprint; the frames are either identical or not.
+/// Every stage list `ShaderCompiler` in flutter_tools hands `impellerc`, by the
+/// target platforms that select it — `_shaderTargetsFromTargetPlatform`, read
+/// from the SDK this repo pins.
+///
+/// Here so the probe can say *which* target `flutter build bundle` chose rather
+/// than assume one: the default has moved before and the answer is worth
+/// printing either way.
+const _toolShaderStages = {
+  'android, linux or windows': [
+    '--sksl',
+    '--runtime-stage-gles',
+    '--runtime-stage-gles3',
+    '--runtime-stage-vulkan',
+  ],
+  'darwin': ['--sksl', '--runtime-stage-metal'],
+  'ios': ['--runtime-stage-metal'],
+  'tester or fuchsia': ['--sksl', '--runtime-stage-vulkan'],
+  'web': ['--sksl'],
+};
+
 String _digest(List<int> bytes) {
   var hash = 0x811c9dc5;
   for (var byte in bytes) {

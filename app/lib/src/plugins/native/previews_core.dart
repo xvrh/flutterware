@@ -31,6 +31,8 @@ import '../../previews/discovery.dart';
 import '../../previews/inspect_client.dart';
 import '../../previews/live_session.dart';
 import '../../previews/protocol.dart';
+import '../../previews/catalog_render.dart';
+import '../../previews/tester_renderer.dart';
 import '../../previews/headless_catalog.dart';
 import '../../previews/test_runner.dart';
 import '../../previews/web_build.dart';
@@ -188,7 +190,7 @@ const _liveDoc =
     'determinism: the same command answers differently depending on whether a '
     'window happens to be open, which is a poor default for CI and for an agent '
     'that did not know to look. So it is opt-in, and `readFrom` says which one '
-    'you got either way. Even switched on it declines unless a session is open '
+    'you got either way — and which engine drew it when it was not this.  Even switched on it declines unless a session is open '
     'on this exact entry and nothing here would change what is drawn, and it '
     'never switches what that window is showing.';
 
@@ -987,6 +989,39 @@ class PreviewsCore extends PluginCore {
                 'Draw a box and its node id over every widget, so a tree read '
                 'and a picture of it can be laid side by side',
           ),
+          const ActionParameter(
+            'engine',
+            'Engine',
+            kind: ActionParameterKind.choice,
+            required: false,
+            options: [
+              ActionOption(
+                'harness',
+                label:
+                    'The default. Renders under `flutter_tester` on a warm '
+                    "harness: tens of milliseconds against the guest's ~12.7s "
+                    'of daemon-connect, compile, spawn and teardown, and '
+                    'reproducible — under a fake clock the same entry renders '
+                    'byte-identically.',
+              ),
+              ActionOption(
+                'guest',
+                label:
+                    'The embedder — a real engine drawing a real frame, which '
+                    'is what the panel shows. Slower and not reproducible: it '
+                    'photographs whatever real instant the render landed on. '
+                    'Ask for it to settle an argument about which lane is '
+                    'wrong, or for `--logs`, which only it can collect. The '
+                    'two agree about the layout, and a test pins that.',
+              ),
+            ],
+            description:
+                'Which engine renders this. Both mount the same widgets on the '
+                'same screen and a parity test holds them to it; what differs '
+                'is the clock and the rasterizer. Omitted picks the harness, '
+                'except where the call needs the guest — `--logs` does. The '
+                'answer says which one drew it.',
+          ),
         ],
       ),
       PluginAction(
@@ -1169,6 +1204,39 @@ class PreviewsCore extends PluginCore {
                 'screenshot. Now genuinely the same tree as the one reported '
                 'rather than a second reading that happened to agree, which '
                 'was the point of having it.',
+          ),
+          const ActionParameter(
+            'engine',
+            'Engine',
+            kind: ActionParameterKind.choice,
+            required: false,
+            options: [
+              ActionOption(
+                'harness',
+                label:
+                    'The default. Renders under `flutter_tester` on a warm '
+                    "harness: tens of milliseconds against the guest's ~12.7s "
+                    'of daemon-connect, compile, spawn and teardown, and '
+                    'reproducible — under a fake clock the same entry renders '
+                    'byte-identically.',
+              ),
+              ActionOption(
+                'guest',
+                label:
+                    'The embedder — a real engine drawing a real frame, which '
+                    'is what the panel shows. Slower and not reproducible: it '
+                    'photographs whatever real instant the render landed on. '
+                    'Ask for it to settle an argument about which lane is '
+                    'wrong, or for `--logs`, which only it can collect. The '
+                    'two agree about the layout, and a test pins that.',
+              ),
+            ],
+            description:
+                'Which engine renders this. Both mount the same widgets on the '
+                'same screen and a parity test holds them to it; what differs '
+                'is the clock and the rasterizer. Omitted picks the harness, '
+                'except where the call needs the guest — `--logs` does. The '
+                'answer says which one drew it.',
           ),
           ActionParameter(
             'device',
@@ -2086,26 +2154,34 @@ class PreviewsCore extends PluginCore {
     var wantsAxes = arguments['with-axes'] == true;
     if (!wantsKnobs && !wantsAxes) return describe();
 
-    // One guest for both when both are asked for: each costs a compile and a
-    // frame, and running the pipeline twice to answer two questions about the
-    // same build is the cost with none of the benefit.
-    var headless = _headlessFor(packagePath);
-    var axisReport = wantsAxes
-        ? await headless.axes(entryId: entryId)
-        : AxisReport.empty;
-    if (!wantsKnobs) {
-      return describe(
-        axes: [for (var axis in axisReport.axes) _asKnob(axis)],
-        shell: axisReport.shellId,
-      );
-    }
-
-    var report = await headless.knobs(entryId: entryId);
+    // **One render for both**, which the comment here used to claim and the
+    // code did not do: `axes` and `knobs` were a `_withGuest` each, so asking
+    // for both compiled, launched and tore down two guests to read two
+    // projections of the same build.
+    //
+    // And on the harness rather than the guest, because neither answer is a
+    // picture: what a demo declares it declares by *building*, which is what
+    // this lane does in tens of milliseconds against the guest's ~12.7s.
+    var observed = await TesterRenderer(runner: testRunnerFor(packagePath))
+        .render(
+          CatalogRender(
+            entryId: entryId,
+            wantKnobs: wantsKnobs,
+            wantAxes: wantsAxes,
+          ),
+        );
+    var axisReport = observed.axes ?? AxisReport.empty;
     // An entry that declares none answers with an empty list: "it has no
     // knobs" and "we did not look" are different questions, and only one of
     // them was asked. Which is why the field is nullable and this is a list.
     return describe(
-      knobs: [for (var knob in report.knobs) _asKnob(knob)],
+      knobs: wantsKnobs
+          ? [
+              for (var knob
+                  in observed.knobs?.knobs ?? const <KnobDescriptor>[])
+                _asKnob(knob),
+            ]
+          : null,
       axes: wantsAxes
           ? [for (var axis in axisReport.axes) _asKnob(axis)]
           : null,
@@ -2402,25 +2478,35 @@ class PreviewsCore extends PluginCore {
     if (open != null) return (open, true);
 
     return (
-      await _headlessFor(packagePath).observe(
-        entryId: want.entryId,
-        viewport: want.viewport,
-        knobs: want.knobs,
-        axes: want.axes,
-        debug: want.debug,
-        // The tree is read whenever anything needs it — a query, a hit, a crop,
-        // an annotation — and `observe` works that out for itself rather than
-        // being told twice.
-        wantTree: want.tree || want.query != null || want.screen || want.styles,
-        wantLogs: want.logs,
-        at: want.at == null
-            ? null
-            : (want.at!.$1.toDouble(), want.at!.$2.toDouble()),
-        screenshot: want.picture
-            ? _outputFor(want, packagePath, address)
-            : null,
-        annotate: want.annotate,
-        cropNode: want.node,
+      await _rendererFor(
+        packagePath,
+        engine: want.engine,
+        wantsLogs: want.logs,
+      ).render(
+        CatalogRender(
+          entryId: want.entryId,
+          viewport: want.viewport,
+          knobs: want.knobs,
+          axes: want.axes,
+          debug: want.debug,
+          // Only what the *caller* asked about. A tree needed to resolve a hit,
+          // a crop or an annotation is `CatalogRender.needsTree`'s business,
+          // which is why that is on the request rather than worked out here:
+          // every backend has to make the same decision, and one that made it
+          // differently would answer a question nobody could see it had been
+          // asked.
+          wantTree:
+              want.tree || want.query != null || want.screen || want.styles,
+          wantLogs: want.logs,
+          at: want.at == null
+              ? null
+              : (want.at!.$1.toDouble(), want.at!.$2.toDouble()),
+          screenshot: want.picture
+              ? _outputFor(want, packagePath, address)
+              : null,
+          annotate: want.annotate,
+          cropNode: want.node,
+        ),
       ),
       false,
     );
@@ -2472,7 +2558,12 @@ class PreviewsCore extends PluginCore {
     return CatalogInspectResult(
       entry: want.entryId,
       address: '$address',
-      readFrom: live ? 'live' : 'render',
+      readFrom: switch (live) {
+        true => 'live',
+        false when _onGuest(engine: want.engine, wantsLogs: want.logs) =>
+          'guest',
+        false => 'harness',
+      },
       lens: want.lens.name,
       ok: observed.errors.isEmpty,
       // `ok` is answered whatever else was asked, so the list that explains it
@@ -2726,6 +2817,49 @@ class PreviewsCore extends PluginCore {
     }
   }
 
+  /// Which engine renders a call, and why.
+  ///
+  /// **The harness by default, the guest when the call needs it.** Measured
+  /// 2026-08-27 on this repo's catalog, a guest render is ~12.7s of
+  /// daemon-connect, whole-kernel compile, spawn and teardown against a warm
+  /// harness's tens of milliseconds — and the harness is reproducible, which
+  /// the guest is not: under FakeAsync the same entry renders byte-identically
+  /// where the guest photographs whatever real instant its socket round trip
+  /// lands on. That the two agree about the *layout* is not assumed, it is
+  /// pinned (`app/test/previews/lane_parity_test.dart`).
+  ///
+  /// Two things send a call to the guest anyway, and both are named in the
+  /// answer rather than guessed at by the caller:
+  ///
+  /// - **`logs`.** A demo's `print` inside a widget test rides the runner's
+  ///   own message stream, not the zone `GuestLogs` wraps, so the harness has
+  ///   nothing to collect. Refusing would be the other option and is worse: a
+  ///   flag that worked yesterday would stop, to save a caller from a slower
+  ///   answer it did not ask about.
+  /// - **`engine=guest`**, said out loud. The escape hatch is not decoration:
+  ///   with everything else on the harness, this is what still exercises the
+  ///   embedder outside the panel, and what settles an argument about which
+  ///   lane is wrong when the parity check is not enough.
+  CatalogRenderer _rendererFor(
+    String packagePath, {
+    Object? engine,
+    bool wantsLogs = false,
+  }) {
+    if (engine != null && engine != 'guest' && engine != 'harness') {
+      throw ArgumentError.value(
+        engine,
+        'engine',
+        'no such engine. Accepted: harness, guest',
+      );
+    }
+    if (engine == 'guest' || wantsLogs) return _headlessFor(packagePath);
+    return TesterRenderer(runner: testRunnerFor(packagePath));
+  }
+
+  /// Whether [engine] and the request between them put this call on the guest.
+  bool _onGuest({Object? engine, bool wantsLogs = false}) =>
+      engine == 'guest' || wantsLogs;
+
   /// The headless pipeline for one declared package.
   ///
   /// The config comes from [DaemonConfig.forPackage] so that this and the GUI's
@@ -2809,16 +2943,19 @@ class PreviewsCore extends PluginCore {
           _defaultFileName(address),
         );
 
-    var captured = await _headlessFor(packagePath).capture(
-      entryId: entryId,
-      output: output,
-      viewport: viewport,
-      knobs: knobs,
-      axes: axes,
-      debug: debug,
-      node: node,
-      annotate: annotate,
-    );
+    var captured = await _rendererFor(packagePath, engine: arguments['engine'])
+        .capture(
+          CatalogRender(
+            entryId: entryId,
+            screenshot: output,
+            viewport: viewport,
+            knobs: knobs,
+            axes: axes,
+            debug: debug,
+            cropNode: node,
+            annotate: annotate,
+          ),
+        );
 
     return Artifact(
       kind: Artifact.png,
@@ -3104,7 +3241,13 @@ class _InspectRequest {
     required this.axes,
     required this.debug,
     required this.mayAttach,
+    required this.engine,
   });
+
+  /// Which engine to render on when the live session is not the answer — null
+  /// for the default, `guest` to say it out loud. See
+  /// [PreviewsCore._rendererFor].
+  final Object? engine;
 
   factory _InspectRequest.of(
     Map<String, Object?> arguments, {
@@ -3180,6 +3323,7 @@ class _InspectRequest {
         wantsPicture: picture,
         reframed: deviceId != null || viewport != CaptureViewport.panel,
       ),
+      engine: arguments['engine'],
     );
   }
 

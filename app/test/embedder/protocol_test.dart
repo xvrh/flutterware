@@ -26,14 +26,17 @@ void main() {
         width: 800,
         height: 600,
         rowBytes: 3200,
-        surfaceIds: [11, 22, 33],
+        surfaces: ['11', '/flutterware-42-1-1', ''],
       ),
     );
     expect(msg.generation, 7);
     expect(msg.width, 800);
     expect(msg.height, 600);
     expect(msg.rowBytes, 3200);
-    expect(msg.surfaceIds, [11, 22, 33]);
+    // Three shapes on purpose: an IOSurfaceID, a shared-memory name, and the
+    // empty string a slot that failed to allocate is sent as. The wire carries
+    // them all the same way, which is the point of them being strings.
+    expect(msg.surfaces, ['11', '/flutterware-42-1-1', '']);
   });
 
   test('round-trips FrameReady with a large frameId', () {

@@ -12,7 +12,7 @@ import '../previews/catalog_entry.dart';
 import '../previews/devices.dart';
 import '../previews/discovery.dart';
 import '../previews/test_runner.dart';
-import 'build_directory.dart';
+import '../embedder/build_directory.dart';
 import 'cancel.dart';
 import 'runner.dart';
 
@@ -122,7 +122,10 @@ class PreviewsSide implements ComparisonSide {
     // renumber and prune that harness's wrappers — the head checkout *is* the
     // panel's worktree — and the base checkout is shared by every comparison
     // on the machine.
-    var buildDirectory = claimComparisonBuildDirectory(packageRoot);
+    var buildDirectory = claimBuildDirectory(
+      packageRoot,
+      root: comparisonBuildRoot,
+    );
     var runner = PreviewTestRunner(
       packageRoot: packageRoot,
       flutterSdkRoot: flutterSdkRoot,
@@ -195,7 +198,11 @@ class PreviewsSide implements ComparisonSide {
       // A `flutter_tester` and its compiler are child processes; nothing else
       // reaps them.
       await runner.dispose();
-      releaseComparisonBuildDirectory(packageRoot, buildDirectory);
+      releaseBuildDirectory(
+        packageRoot,
+        buildDirectory,
+        root: comparisonBuildRoot,
+      );
       try {
         outDir.deleteSync(recursive: true);
       } on FileSystemException {

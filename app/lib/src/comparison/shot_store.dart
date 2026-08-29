@@ -1,7 +1,7 @@
+import 'package:flutterware/comparison_report.dart';
+
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-
-import 'frame_ref.dart';
 
 /// One frame, decoded once and kept.
 class Shot {

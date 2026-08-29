@@ -6,6 +6,7 @@ import 'package:meta/meta.dart';
 import '../devices.dart';
 import '../translations/index.dart';
 import 'fonts.dart';
+import 'network.dart';
 import 'shots.dart';
 
 /// What a folder of scenarios is *for* — the devices and languages worth
@@ -152,6 +153,20 @@ ScenarioAssignment? scenarioAmbientAssignment;
 /// a phone could have taken. See [scenarioAmbientKeyboard] for what turning it
 /// off restores and why a suite adopting this sees its pictures move once.
 ///
+/// [network] is what this folder's http requests reach, and it is
+/// [ScenarioNetwork.off]: nothing leaves the process, and a request nothing
+/// stubbed fails with a message naming itself rather than hanging. A folder
+/// whose scenarios are worth pointing at a real service says so once:
+///
+/// ```dart
+/// Future<void> testExecutable(FutureOr<void> Function() testMain) =>
+///     runScenarios(testMain, network: ScenarioNetwork.live);
+/// ```
+///
+/// A `scenario()` that names its own `network:` still wins, and so does a run
+/// that named one — `--network=live`, or `FW_NETWORK=live` in the bare
+/// `flutter test` lane.
+///
 /// Also loads the project's fonts, once, before anything is declared — the
 /// step `flutter test` otherwise leaves to each project's own
 /// `flutter_test_config.dart`. Without it this lane measures text in the
@@ -162,6 +177,7 @@ Future<void> runScenarios(
   ScenarioProfile? profile,
   Shots? shots,
   bool keyboard = true,
+  ScenarioNetwork? network,
 }) async {
   // Under the flutterware runner this is called to *ask* what the folder is
   // for, not to declare anything: the harness reads the profile here and
@@ -178,6 +194,7 @@ Future<void> runScenarios(
     scenarioProbedProfile = profile;
     scenarioProbedShots = shots;
     scenarioProbedKeyboard = keyboard;
+    scenarioProbedNetwork = network;
     return;
   }
 
@@ -195,6 +212,7 @@ Future<void> runScenarios(
   var assignments = scenarioAssignments(profile);
   scenarioAmbientShots = shots;
   scenarioAmbientKeyboard = keyboard;
+  scenarioAmbientNetwork = network;
   try {
     for (var assignment in assignments) {
       scenarioAmbientAssignment = assignment;
@@ -209,6 +227,7 @@ Future<void> runScenarios(
     scenarioAmbientIsMatrix = false;
     scenarioAmbientShots = null;
     scenarioAmbientKeyboard = null;
+    scenarioAmbientNetwork = null;
   }
 }
 
@@ -226,6 +245,19 @@ bool? scenarioAmbientKeyboard;
 
 /// What the last probed config said about the keyboard.
 bool? scenarioProbedKeyboard;
+
+/// What the folder being declared right now said its http requests reach, or
+/// null where it said nothing.
+///
+/// Read by `scenario()` **as it declares**, like [scenarioAmbientShots] and for
+/// the same reason. A folder is the right altitude for this: the folder that
+/// renders a design system wants nothing to leave the process, and the one
+/// that exercises a payment sandbox does — and neither is a fact about a single
+/// scenario.
+ScenarioNetwork? scenarioAmbientNetwork;
+
+/// What the last probed config said its http requests reach.
+ScenarioNetwork? scenarioProbedNetwork;
 
 /// The shots policy the folder being declared right now asked for, or null
 /// where it asked for nothing.

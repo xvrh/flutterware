@@ -1,12 +1,11 @@
 import 'dart:async';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutterware_app/src/comparison/artifact.dart';
 import 'package:flutterware_app/src/comparison/cancel.dart';
-import 'package:flutterware_app/src/comparison/channels.dart';
 import 'package:flutterware_app/src/comparison/comparison_controller.dart';
 import 'package:flutterware_app/src/comparison/last_run.dart';
 import 'package:flutterware_app/src/comparison/runner.dart';
-import 'package:flutterware_app/src/comparison/scenario_comparison.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
 import 'package:test/test.dart';
 

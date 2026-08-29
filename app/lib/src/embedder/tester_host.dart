@@ -10,6 +10,7 @@ import '../constants.dart';
 import '../previews/asset_bundle.dart';
 import '../previews/package_config_locator.dart';
 import '../utils/run_dir.dart';
+import 'build_directory.dart';
 import 'flutter_cache.dart';
 import 'frontend_server.dart';
 import 'guest_vm_service.dart';
@@ -78,12 +79,12 @@ class TesterHost {
     required this.packageRoot,
     required this.flutterSdkRoot,
     required this.program,
-    this.buildDirectory = defaultBuildDirectory,
+    required this.lane,
     this.onLog,
   });
 
   /// Where every artifact of the default lane lives, relative to the package.
-  static const defaultBuildDirectory = 'build/flutterware';
+  static const defaultBuildDirectory = defaultBuildRoot;
 
   final String packageRoot;
   final String flutterSdkRoot;
@@ -95,12 +96,15 @@ class TesterHost {
   /// [exclusive] serializes calls *within* one host and says nothing about a
   /// second host on the same package: two of those with one directory are two
   /// `frontend_server`s writing one dill and two generators rewriting one
-  /// entrypoint under each other. Anyone who cannot rule the panel's warm
-  /// runner out — the comparison renders the very worktree it lives in — takes
-  /// a directory of its own. The program's generated entrypoint must sit under
-  /// the same directory, which is the owner's job to arrange: this host never
-  /// sees that path, only the dill the compiler makes of it.
-  final String buildDirectory;
+  /// entrypoint under each other. Which is why this is a [BuildLane] and not a
+  /// path — the lane is *taken*, and a host that cannot have the one it wanted
+  /// gets a claim of its own rather than a collision. The program's generated
+  /// entrypoint must sit under the same directory, which is the owner's job to
+  /// arrange by handing it this same lane: this host never sees that path,
+  /// only the dill the compiler makes of it.
+  final BuildLane lane;
+
+  String get buildDirectory => lane.path;
 
   final void Function(String line)? onLog;
 
@@ -371,7 +375,7 @@ class TesterHost {
       [
         '--vm-service-port=0',
         '--disable-service-auth-codes',
-        '--icu-data-file-path=${_cache.testerIcuData}',
+        '--icu-data-file-path=${_cache.icuData}',
         '--enable-checked-mode',
         '--verify-entry-points',
         ...rasterizerArguments(

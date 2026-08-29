@@ -13,12 +13,11 @@
 /// where a project keeps its marketing copy — see the design's §2.
 library;
 
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../devices.dart';
 import '../plugins/store.dart';
+import 'status_chrome.dart';
 
 /// What a frame is handed: everything only flutterware knows, and nothing else.
 ///
@@ -36,6 +35,8 @@ class StoreShot {
     required this.locale,
     required this.device,
     required this.canvas,
+    this.statusBrightness = Brightness.dark,
+    this.navBrightness = Brightness.dark,
   });
 
   /// The app's own pixels, as captured.
@@ -83,6 +84,18 @@ class StoreShot {
 
   /// What has to be filled, and at what scale — see [StoreCanvas.pixelRatio].
   final StoreCanvas canvas;
+
+  /// What the app declared through `SystemUiOverlayStyle` when this shot was
+  /// captured, naming the **icons** — [Brightness.dark] is dark icons, over a
+  /// light app.
+  ///
+  /// Recorded per step rather than per set, because an app that turns one
+  /// screen dark turns its status bar light with it, and a set drawn at one
+  /// brightness throughout would be wrong on exactly that screen. Defaulted
+  /// rather than required: an app that declares no style leaves nothing to
+  /// record, and dark icons are what a light app wants.
+  final Brightness statusBrightness;
+  final Brightness navBrightness;
 
   /// How wide a scene spanning the whole set is, in the canvas's logical
   /// units — [total] canvases side by side.
@@ -136,6 +149,60 @@ abstract class StoreFrame extends StatelessWidget {
   final StoreShot shot;
 }
 
+/// The frame a project that declares none gets: chrome everywhere, a
+/// composition only where geometry forces one.
+///
+/// The rule decision 7 settles, and it turns on a distinction that decision
+/// did not originally draw. Inventing a ground and a device body is a
+/// **marketing** decision and stays opt-in — but a status bar is not marketing.
+/// It is the one piece of a real screenshot a `flutter_tester` cannot draw, and
+/// a store set without one reads as a mockup of the app rather than a picture
+/// of it. So every set is framed now; what a declaration decides is whether the
+/// frame is a composition or a pane of glass.
+///
+/// Apple's sets keep their exact pixels either way: an uncomposed canvas *is*
+/// its device's, so [PlainStoreFrame] draws the capture 1:1 and adds the bar.
+StoreFrame defaultStoreFrame(StoreShot shot) =>
+    shot.canvas == StoreCanvas.of(shot.device)
+    ? PlainStoreFrame(shot)
+    : DefaultStoreFrame(shot);
+
+/// The app's own pixels, edge to edge, wearing the chrome a real screenshot
+/// would have. No ground, no device body, no rounding.
+///
+/// What a set gets where the store's canvas is already the device's own output,
+/// which is both of Apple's classes and Play's tablet. The image is drawn at
+/// its own size onto a canvas of that size, so nothing is resampled and the
+/// bytes under the bar are the ones the app painted.
+class PlainStoreFrame extends StoreFrame {
+  const PlainStoreFrame(super.shot, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    var canvas = shot.canvas;
+    // One where this frame applies at all. Computed rather than assumed
+    // because nothing stops a project naming it in `frame:`, and a chrome
+    // drawn at the wrong scale is worse than none.
+    var scale = canvas.logicalWidth / shot.imageSize.width;
+    return SizedBox(
+      width: canvas.logicalWidth,
+      height: canvas.logicalHeight,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image(image: shot.image, fit: BoxFit.fill),
+          StatusChrome(
+            device: shot.device,
+            scale: scale,
+            statusBrightness: shot.statusBrightness,
+            navBrightness: shot.navBrightness,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The composition a project gets when it declares no frame of its own.
 ///
 /// Deliberately a real design rather than a placeholder, and deliberately a
@@ -170,13 +237,23 @@ class DefaultStoreFrame extends StoreFrame {
   /// The headline's colour, and the device body's edge.
   final Color ink;
 
-  /// A phone's corner is rounder than a tablet's, and a desktop window's is
-  /// rounder than neither — derived rather than declared, because a caller has
-  /// no better information than the device kind.
-  double get _radius => switch (shot.device.kind) {
-    DeviceKind.phone => 44,
-    DeviceKind.tablet => 22,
-    DeviceKind.desktop => 10,
+  /// The body's corner, in the **device's** own logical pixels.
+  ///
+  /// A corner belongs to the phone, not to the canvas it is drawn on, so this
+  /// is scaled with the body like every other device measurement — see
+  /// [_Body]. Declared in canvas units it was a constant while the thing it
+  /// rounded changed size, which is a corner that grows tighter the larger the
+  /// device is drawn.
+  ///
+  /// Keyed on the platform as well as the kind because the two phone families
+  /// genuinely differ: an iPhone 16's corner is about an eighth of its width,
+  /// an Android's nearer a sixteenth, and one number for both gives the
+  /// Android a silhouette twice as round as the device it claims to be.
+  double get _radius => switch ((shot.device.kind, shot.device.platform)) {
+    (DeviceKind.phone, DevicePlatform.ios) => 55,
+    (DeviceKind.phone, _) => 26,
+    (DeviceKind.tablet, _) => 18,
+    (DeviceKind.desktop, _) => 8,
   };
 
   @override
@@ -220,15 +297,48 @@ class DefaultStoreFrame extends StoreFrame {
           // Bleeding off the bottom edge, which is the standard composition
           // because it uses a very tall canvas without leaving the device
           // stranded in the middle of it.
+          //
+          // Whether it *does* bleed is a race between two numbers, and the
+          // margins below are what settle it: the body is scaled to the width
+          // its padding leaves, so a narrower pair of margins makes it taller.
+          // A phone is taller than the space under the band on Play's canvas —
+          // which is the only place this frame is forced — so at these values
+          // it overflows and the overflow is clipped away. The headline-less
+          // pair is the tighter of the two on purpose: with no caption to make
+          // room for there is more width to spend, and at the 0.09 it used to
+          // share with the caption case the body came out 16 logical pixels
+          // *short* of the space — no bleed, and 42 physical pixels of ground
+          // under the device, which is the stranded look this composition
+          // exists to avoid, arrived at from the other side. What was actually
+          // drawn there was worse still, and the `minHeight` below is that
+          // half: the floor stretched those 16 pixels back out of the picture.
+          //
+          // A device shorter than the space cannot bleed at any margin — that
+          // would mean scaling past the canvas width and cropping the picture
+          // sideways, which is the one thing a store screenshot must not do.
+          // There it sits at the top of the space, and `defaultStoreFrame`
+          // keeps it out of that case by handing those targets a
+          // [PlainStoreFrame] instead.
           Expanded(
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal:
-                    canvas.logicalWidth * (headline == null ? 0.09 : 0.11),
+                    canvas.logicalWidth * (headline == null ? 0.07 : 0.11),
               ),
               child: ClipRect(
                 child: OverflowBox(
                   alignment: Alignment.topCenter,
+                  // Both ends, and `minHeight` is the load-bearing one.
+                  // `OverflowBox` inherits whichever bounds it is not given,
+                  // and the bound here comes from an `Expanded` — which is
+                  // tight. So a body shorter than the space was being
+                  // stretched to fill it, and [_Body] paints the capture with
+                  // `BoxFit.fill`: the picture came out squashed by however
+                  // much it was short, silently, which is the one failure a
+                  // store screenshot cannot survive. Releasing the floor lets
+                  // a short body stay its own height and sit at the top of the
+                  // space — visibly imperfect, and imperfect beats wrong.
+                  minHeight: 0,
                   maxHeight: double.infinity,
                   child: _Body(
                     shot: shot,
@@ -265,30 +375,30 @@ class _Body extends StatelessWidget {
         // Scaled to the width it has been given; the height follows and the
         // overflow is what bleeds off the bottom.
         var scale = constraints.maxWidth / shot.imageSize.width;
+        // Every device measurement below is in the device's own logical pixels
+        // and reaches the canvas through this one multiplication — the corner,
+        // the safe area, the chrome inside it. That is what keeps a body drawn
+        // at 0.8 looking like the same phone as one drawn at 1.
+        var corner = radius * scale;
         return SizedBox(
           width: constraints.maxWidth,
           height: shot.imageSize.height * scale,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(radius),
+              borderRadius: BorderRadius.circular(corner),
               border: Border.all(color: edge, width: 1),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(radius),
+              borderRadius: BorderRadius.circular(corner),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   Image(image: shot.image, fit: BoxFit.fill),
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: _StatusBar(
-                      device: shot.device,
-                      scale: scale,
-                      radius: radius,
-                      brightness: Brightness.dark,
-                    ),
+                  StatusChrome(
+                    device: shot.device,
+                    scale: scale,
+                    statusBrightness: shot.statusBrightness,
+                    navBrightness: shot.navBrightness,
                   ),
                 ],
               ),
@@ -296,88 +406,6 @@ class _Body extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-/// The clock and the indicators a real screenshot would have.
-///
-/// A capture has none: nothing in a `flutter_tester` draws a status bar, so a
-/// screenshot straight out of one reads as a mockup even though every pixel of
-/// the app is real. Drawn rather than captured, which also means the time is
-/// ours to fix — 9:41, as it has been on every Apple screenshot since 2007.
-class _StatusBar extends StatelessWidget {
-  const _StatusBar({
-    required this.device,
-    required this.scale,
-    required this.radius,
-    required this.brightness,
-  });
-
-  final Device device;
-  final double scale;
-
-  /// The body's corner radius — see [_clearance].
-  final double radius;
-
-  final Brightness brightness;
-
-  /// How far in from the edge the bar's contents have to start.
-  ///
-  /// The bar sits *inside* the body's rounded corner, so its ends are clipped
-  /// by it — and by how much depends on both numbers. An iPhone's 59-point
-  /// inset is taller than its corner and barely notices; an Android's 24 is
-  /// half the radius, and the clip ate the first two characters, so `9:41`
-  /// rendered as `41` and nothing said anything.
-  ///
-  /// Solved rather than padded by guess: at height [y] down from the top, a
-  /// circular corner of [radius] intrudes `r − √(r² − (r − y)²)` horizontally.
-  /// Measured at the bar's vertical centre, which is where its text sits.
-  static double _clearance(double radius, double height) {
-    var y = height / 2;
-    if (y >= radius) return 0;
-    var reach = radius - y;
-    return radius - math.sqrt(radius * radius - reach * reach);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    var inset = device.insetTop * scale;
-    if (inset <= 0) return const SizedBox.shrink();
-    var color = brightness == Brightness.dark
-        ? const Color(0xFF000000)
-        : const Color(0xFFFFFFFF);
-    var size = inset * 0.34;
-    return SizedBox(
-      height: inset,
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: _clearance(radius, inset) + inset * 0.35,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              '9:41',
-              style: TextStyle(
-                color: color,
-                fontSize: size,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Row(
-              children: [
-                Icon(Icons.signal_cellular_alt, color: color, size: size),
-                SizedBox(width: size * 0.3),
-                Icon(Icons.wifi, color: color, size: size),
-                SizedBox(width: size * 0.3),
-                Icon(Icons.battery_full, color: color, size: size),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

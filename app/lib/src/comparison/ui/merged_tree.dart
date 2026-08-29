@@ -1,15 +1,12 @@
 import 'dart:async';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../../ui/zoomable_canvas.dart';
 import '../../utils/graphite.dart';
-import '../channels.dart';
-import '../frame_ref.dart';
-import '../scenario_alignment.dart';
-import '../scenario_comparison.dart';
 import '../shot_store.dart';
 import 'shot_image.dart';
 import 'state_chip.dart';

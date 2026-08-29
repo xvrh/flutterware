@@ -25,6 +25,7 @@ import 'async_watchdog.dart';
 import '../app_events/events.dart';
 import 'fonts.dart';
 import 'motion.dart';
+import 'network.dart';
 import 'notification.dart';
 import 'profile.dart';
 import 'selector.dart';
@@ -164,8 +165,14 @@ Future<void> _runHarness(
   // returns — which is why it is on here rather than behind a request field.
   TranslationIndex.recording = true;
 
-  var (:profiles, shots: folderShots, keyboards: folderKeyboards) =
-      await _probeFolders(configs);
+  var (
+    :profiles,
+    shots: folderShots,
+    keyboards: folderKeyboards,
+    networks: folderNetworks,
+  ) = await _probeFolders(
+    configs,
+  );
 
   var inspector = GuestInspector(
     rootOf: () => binding.rootElement,
@@ -180,6 +187,14 @@ Future<void> _runHarness(
 
   developer.registerExtension('ext.flutterware.scenarios.run', (_, args) async {
     try {
+      // The project's own default, under everything: a folder, a run and a
+      // scenario each beat it. Read per request rather than once, because a
+      // warm guest outlives an edit to `tool/flutterware.dart`.
+      scenarioProjectNetwork = switch (args['networkDefault']) {
+        null => null,
+        var raw => parseScenarioNetwork(raw),
+      };
+      scenarioNetworkStorePath = args['networkStore'];
       var report = await _run(
         scenarioMains,
         inspector: inspector,
@@ -191,6 +206,7 @@ Future<void> _runHarness(
         profiles: profiles,
         shots: folderShots,
         keyboards: folderKeyboards,
+        networks: folderNetworks,
         // The host resolved a device id to geometry, or said it had nobody's
         // choice to resolve — in which case the folder's profile speaks and
         // the geometry that did arrive is only the host's fallback.
@@ -363,6 +379,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
   Map<String, void Function()> scenarioMains, {
   Map<String, Shots> shots = const {},
   Map<String, bool> keyboards = const {},
+  Map<String, ScenarioNetwork> networks = const {},
 }) {
   var declarer = Declarer();
   var scenarios = <String, Set<String>>{};
@@ -371,6 +388,11 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
       group(entry.key, () {
         var sink = <String>[];
         scenarioDeclarationSink = sink;
+        // Which file is declaring, for anything that has to tell two
+        // identically-named scenarios apart — see [scenarioAmbientFile]. Armed
+        // and cleared with the sink because it has the sink's lifetime
+        // exactly: a file's `main()`, and nothing either side of it.
+        scenarioAmbientFile = entry.key;
         // The folder's shots policy, armed around the file's own `main()`:
         // under this runner `runScenarios` returns at the probe, so the
         // ambient it sets in the `flutter test` lane is never set here and the
@@ -378,12 +400,15 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
         // index two functions up.
         scenarioAmbientShots = _nearest(entry.key, shots);
         scenarioAmbientKeyboard = _nearest(entry.key, keyboards);
+        scenarioAmbientNetwork = _nearest(entry.key, networks);
         try {
           entry.value();
         } finally {
           scenarioDeclarationSink = null;
+          scenarioAmbientFile = null;
           scenarioAmbientShots = null;
           scenarioAmbientKeyboard = null;
+          scenarioAmbientNetwork = null;
         }
         scenarios[entry.key] = sink.toSet();
       });
@@ -403,6 +428,7 @@ Future<
     Map<String, ScenarioProfile> profiles,
     Map<String, Shots> shots,
     Map<String, bool> keyboards,
+    Map<String, ScenarioNetwork> networks,
   })
 >
 _probeFolders(
@@ -411,11 +437,13 @@ _probeFolders(
   var profiles = <String, ScenarioProfile>{};
   var shots = <String, Shots>{};
   var keyboards = <String, bool>{};
+  var networks = <String, ScenarioNetwork>{};
   for (var MapEntry(key: directory, value: config) in configs.entries) {
     scenarioProbing = true;
     scenarioProbedProfile = null;
     scenarioProbedShots = null;
     scenarioProbedKeyboard = null;
+    scenarioProbedNetwork = null;
     try {
       await config(() {});
       if (scenarioProbedProfile case var profile?) {
@@ -427,6 +455,9 @@ _probeFolders(
       if (scenarioProbedKeyboard case var wanted?) {
         keyboards[directory] = wanted;
       }
+      if (scenarioProbedNetwork case var reach?) {
+        networks[directory] = reach;
+      }
     } catch (error, stack) {
       stderr.writeln('[harness] $directory config: $error\n$stack');
     } finally {
@@ -434,9 +465,15 @@ _probeFolders(
       scenarioProbedProfile = null;
       scenarioProbedShots = null;
       scenarioProbedKeyboard = null;
+      scenarioProbedNetwork = null;
     }
   }
-  return (profiles: profiles, shots: shots, keyboards: keyboards);
+  return (
+    profiles: profiles,
+    shots: shots,
+    keyboards: keyboards,
+    networks: networks,
+  );
 }
 
 /// The profile whose folder contains [file] — the nearest one above it, which
@@ -606,6 +643,10 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       null => null,
       var raw => DateTime.parse(raw),
     },
+    network: switch (args['network']) {
+      null => null,
+      var raw => parseScenarioNetwork(raw),
+    },
     assignment: assignment.isEmpty ? null : assignment,
   );
   var untouched =
@@ -623,6 +664,7 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       runArgs.pixels == ScenarioPixels.all &&
       runArgs.record == null &&
       runArgs.clockOrigin == null &&
+      runArgs.network == null &&
       runArgs.assignment == null &&
       runArgs.expandTranslations == null;
   return untouched ? null : runArgs;
@@ -639,6 +681,7 @@ Future<Map<String, Object?>> _run(
   Map<String, ScenarioProfile> profiles = const {},
   Map<String, Shots> shots = const {},
   Map<String, bool> keyboards = const {},
+  Map<String, ScenarioNetwork> networks = const {},
   String? device,
   bool deviceUnspecified = false,
   bool narrowestDevice = false,
@@ -650,10 +693,22 @@ Future<Map<String, Object?>> _run(
           for (var entry in scenarioMains.entries)
             if (selectsFile(file, entry.key)) entry.key: entry.value,
         };
-  var declared = _declare(mains, shots: shots, keyboards: keyboards);
+  var declared = _declare(
+    mains,
+    shots: shots,
+    keyboards: keyboards,
+    networks: networks,
+  );
   var root = declared.root;
 
   var outcomes = <Map<String, Object?>>[];
+  // Emptied rather than read cumulatively: a warm guest serves many requests,
+  // and a mode one of them ran under is not a fact about the next.
+  scenarioNetworkModesRun.clear();
+  // And the once-per-scenario network warnings, for the same reason: a warm
+  // guest that stayed quiet on a re-run would be quiet about the run somebody
+  // is actually watching.
+  resetScenarioNetworkNotices();
   // What the first scenario's clock started at — the whole run's, since the
   // origin is resolved from the request and the request is one.
   DateTime? clockOrigin;
@@ -874,6 +929,11 @@ Future<Map<String, Object?>> _run(
     'ms': watch.elapsedMilliseconds,
     'scenarios': outcomes,
     if (clockOrigin != null) 'clock': clockOrigin!.toIso8601String(),
+    if (scenarioNetworkModesRun.isNotEmpty)
+      'network': [
+        for (var mode in ScenarioNetwork.values)
+          if (scenarioNetworkModesRun.contains(mode)) mode.name,
+      ],
     // Says the list is short because the run stopped, not because that was
     // everything — and tells the host its guest is spent.
     if (abandoned) 'abandoned': true,
@@ -1090,6 +1150,7 @@ Future<Map<String, Object?>> _runOne(
       eventTitles: inlineEventTitles(capture.events),
       eventsDropped: capture.eventsDropped > 0 ? capture.eventsDropped : null,
       settled: capture.settled,
+      waited: capture.waited,
       landed: capture.landed,
       digest: digest,
       strayFrames: capture.strayFrames,
@@ -1275,6 +1336,7 @@ Future<Map<String, Object?>> _runOne(
           ? capture.motion.dropped
           : null,
       settled: capture.settled,
+      waited: capture.waited,
       landed: capture.landed,
       // Absent on a pixel-less capture, for the reason `unchanged` is false
       // there: every such step digests the same empty bytes, so a *reported*
@@ -1420,7 +1482,7 @@ Future<Map<String, Object?>> _runOne(
     steps: steps,
     stepCount: steps.length,
     unchangedCount: steps.where((step) => step.unchanged).length,
-    unsettledCount: steps.where((step) => !step.settled).length,
+    unsettledCount: steps.where((step) => !step.settled && step.waited).length,
     errors: passed ? const [] : errors,
     translations: read.isNotEmpty ? read : null,
   );

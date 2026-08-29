@@ -1,5 +1,198 @@
 ## Unreleased
 
+- **A comparison's `index.json` is published API.**
+  `package:flutterware/comparison_report.dart` reads back what `fw compare`
+  wrote: every preview entry and every scenario step, what the four channels
+  found, and where the two frames are — typed, so a `tool/` script gating a
+  pull request is a few lines rather than a map walk written once per project.
+  `ComparisonReport.read` takes an exported page's directory,
+  `ComparisonIndex.findings` is the verdict worst-first across both halves, and
+  `ComparisonIndex.ok` is the gate.
+
+  The model *moved* into the package rather than being copied beside it. A
+  second reader is two hand-kept copies that drift a field apart, and this one
+  already had three careers before a consumer's script became the fourth. What
+  is published is the file's vocabulary and nothing else: the runner's live
+  frames and its step aligner never reach the file, so they stayed where they
+  are.
+
+  The file now carries `version`, refused by a reader that does not know it
+  rather than half-decoded, and `frames`, which says whether the frames it
+  names can be opened from beside it. Both `index.json`s hold the same verdict;
+  only the exported one holds pictures, and a reader asking the other for a
+  frame is told so and told which flag produces one.
+
+- **A comparison says why it rendered what it rendered.** The skip rule always
+  knew — it computes the differing path per entry — and nothing showed it. A
+  branch that touched no widget and rendered the whole catalog anyway is not a
+  slow comparison; it is one file the two checkouts disagree about, and now
+  `fw compare` names it: `because pubspec.lock differs — 90 entries`, folded so
+  one cause is one line however many rows carry it. It rides in `index.json`
+  too, per half.
+
+- **A scenario half that could not run says so.** A base harness that will not
+  build leaves the same empty list as a project with no scenarios, and printed
+  the same `0 scenarios, 0 run, 0 skipped`. The note that separates them was
+  recorded in the artifact and shown nowhere; it is now printed above that
+  summary, and it keeps the compiler's diagnostics instead of only its first
+  line — a refusal naming neither the file nor the symbol is one nobody can act
+  on.
+
+- **A `GlobalObjectKey` over a lower-case type no longer defeats the
+  identity-hash elision.** `GlobalObjectKey` and `ObjectKey` spell themselves
+  as their own type, a space, then the identity of the object they identify —
+  so the token before the hash is the *value's* runtime type and may be
+  anything. `[GlobalObjectKey int#8cc0b]` slipped through and cost a consumer
+  every scenario of a routed app reported as changed on every comparison,
+  forever: `go_router` keys its navigator with one, so it is in the tree of
+  every screen and in none of the previews.
+
+- **A capture parked mid-flight is no longer reported as a settle that gave
+  up.** `settled: false` said one thing and was read as another. It states a
+  fact about frames — something was still scheduled when the shutter fell —
+  and the step page turned that into "the settle budget ran out", which is
+  only true where a policy was waiting for the app to go quiet in the first
+  place. Three of them are not: `Settle.none` draws one frame, `Settle.frames`
+  draws a count, and `Settle.elapse` spends a clock. A screen photographed
+  under those is *meant* to be moving.
+
+  So `Settle` now says which it is — `waits`, true for `upTo` and `full` — and
+  every step carries the answer as `waited`. The wire omits it on the true
+  side, so a report written before this reads as it always did. `settled` is
+  untouched, and still means exactly what it measured.
+
+  Three things read the pair rather than the flag alone. The step notice says
+  "parked mid-flight" in the neutral tone instead of warning; the step label
+  drops the amber; and `unsettledCount` counts only the steps that asked and
+  did not get it. That number was the one worth having and the one that had
+  stopped meaning anything: measured on a consumer suite of 127 scenarios that
+  photographs loading screens on purpose, 70 of 1213 steps carried a frame
+  still scheduled and **68 of them were parked deliberately**. The two left
+  were both defects — a split branch photographing a spinner it had named for
+  the loaded list, and a tap whose bounded settle could not outlast a chain of
+  delayed calls. Neither had been visible in a count of 70, and both were
+  fixed the same afternoon they became visible.
+
+  An adoption merges over the *pair* rather than over either flag, which is not
+  the obvious rule and is the one the evidence forced. A verb parked with a
+  frame outstanding and a `screen` that waited and got its quiet screen are two
+  halves that each did what they were told; merging `settled` pessimistically
+  and `waited` pessimistically made that stretch claim a settle had run out.
+  So one half that waited *and did not get it* makes the stretch one that gave
+  up, and a stretch with none of those is parked however many policies waited
+  inside it.
+
+- **`Settle.full` samples the keyboard on both sides of its loop.** It used to
+  sample once, before `pumpAndSettle` started — which is enough for a raise,
+  because the verb that gave a field focus has already run. It is not enough for
+  the reverse. A settle that navigates away from a form takes the focus with it,
+  and the policy owns no per-frame hook to have noticed, so the keyboard stayed
+  staged at the height the vanished field asked for.
+
+  The next verb then discovered it. Where that verb was a capture pinned to
+  `Settle.none` — one frame, no clock — the picture came out with a full
+  keyboard over a screen that has no field on it, sliding away, and the step
+  reported `settled: false` for an animation the harness had started itself. The
+  reader was sent looking for a spinner.
+
+  So `apply` lands again after the loop and settles what that starts. Two rounds
+  and not a fixpoint: what a landing starts is one 250ms animation, so the
+  second round finishes what the first found, and a tree that keeps changing
+  focus under a settle is a tree still moving — the next verb's business rather
+  than something to spin here over. `pumpAndSettle`'s semantics are untouched,
+  the ten-minute throw included.
+
+- **A network mode that did nothing now says so.** Two silences a consumer hit
+  in one sitting, both of which ended with a passing suite and no output.
+
+  The first: `--network=record` (or `FW_NETWORK=record`) against a scenario
+  that states `network:` for itself records nothing, because nearest wins and a
+  scenario is nearer than a run. That precedence is right and stays — letting
+  `record` reach past it would put an exception inside a ladder, and would
+  start recording for a scenario that deliberately said `live`. What was
+  missing is anybody saying so, so such a run now names the scenario, its mode,
+  and the altitude a `--network=` can actually reach. The doc comment on
+  `ScenarioNetwork` said "nearest wins, except that a run beats a folder",
+  which reads as though a run beats everything under it; it now spells the
+  ladder out.
+
+  The second: a scenario that states a mode and then makes no request at all.
+  The funnel catches an `HttpClient` the app opens and everything on top of it,
+  plus `NetworkImage` — but not a layer that answers before opening one. A
+  `CachedNetworkImage` is the common case: its bytes come from a
+  `BaseCacheManager`, and the no-op manager a project writes (because the real
+  one cannot run on a test binding) fails every url without opening anything.
+  `replay` was inert and the only symptom was a broken-image placeholder. A
+  scenario that states a mode for itself and then asks for nothing now says
+  what that usually means. Only a `scenario(network: ...)` is held to it: a
+  folder's `runScenarios(network: ...)` is a default over a whole suite, where
+  most scenarios legitimately fetch nothing.
+
+- **The default store frame bleeds, and never squashes.** Two faults in one
+  layout, found measuring a real Play export.
+
+  `DefaultStoreFrame` scales the device body to the width its margins leave, so
+  the margins decide whether the body is taller than the space under the
+  headline band — which is what "bleeding off the bottom edge" needs. With a
+  headline it was; with none it came out 16 logical pixels short, which on
+  Play's phone canvas is a device stranded above 42 pixels of ground rather
+  than one running off the edge. The headline-less margins are now tighter than
+  the captioned ones, which is also the right design: with no caption to make
+  room for there is more width to spend.
+
+  Underneath that, the `OverflowBox` staging the body released only its
+  ceiling. It inherits whatever bound it is not given, and the bound came from
+  an `Expanded` — tight — so a body shorter than its space was stretched to
+  fill it and the capture, painted with `BoxFit.fill`, came out squashed by
+  however much it was short. Silently, and on the one axis a store screenshot
+  cannot survive being wrong on. The floor is released too, so a short body
+  keeps the device's aspect ratio and sits at the top of the space.
+
+- **Two tools that pointed nowhere now point somewhere.** `fw: could not build
+  the CLI.` quotes the end of the build log and, since #256, recognises a stale
+  `.dart_tool/hooks_runner` in it — but it was matching against the last twenty
+  lines only. A build tool reports its cause and keeps going, so the
+  kernel-version line that explains the failure sits well above them, and the
+  hint stayed silent about the one failure it exists for. What is quoted and
+  what is recognised are now two reads of the same log.
+
+  And the MCP server is `exec`'d once, so it answers for a whole session out of
+  the code it started with while the project under it can be upgraded or
+  switched to a path dependency. A plugin the new revision defines was reported
+  as declared with no implementation, which reads as a broken
+  `tool/flutterware.dart` and sends the reader to the one file that is fine.
+  A server whose project has resolved a *different flutterware* under it now
+  says so on every reply, and says that reconnecting is what ends it. It
+  watches where flutterware resolved to rather than when anything last
+  resolved: an IDE runs `pub get` whenever a pubspec is saved, and a note
+  nobody can dismiss on every reply for the rest of a session would be worse
+  than no note at all.
+
+- **A caret that blinks is an animation, and a scenario is not waiting for it.**
+  On iOS a `TextField` animates its caret through an `AnimationController`
+  rather than a `Timer.periodic` — which means that on an iOS-staged device,
+  every screen with a focused field is asking for a frame forever. Nothing in a
+  settle policy can tell that from a spinner.
+
+  `Settle.upTo` got away with it by accident: the controller runs a one-second
+  simulation and restarts itself on a `Timer.zero`, so a loop that stops at the
+  first quiet frame finds one at the blink boundary. The two policies that do
+  not stop there had no such luck. `Settle.elapse` — what a boot-time pump
+  spends — and `Settle.none` land wherever the blink happens to be, so the step
+  reported `settled: false`, and the report told the reader a screen was still
+  animating and to go looking for the spinner. There was none.
+
+  It cost pictures too. Whether the caret is painted, and at what opacity, is
+  part of the bytes, so the same frame rendered twice was not the same frame:
+  `screen` refused to adopt its verb's capture and emitted a second step,
+  flagged `unchanged`. Measured on a real suite, 13 steps existed for that
+  reason and no other.
+
+  So a run now holds the caret still — `EditableText.debugDeterministicCursor`
+  for the length of the body, restored on the way out. It is the same kind of
+  repair as the fonts and the clock: what a capture shows may not depend on
+  which millisecond took it.
+
 - **A scenario runs at a date, not at whenever it ran.** `clock.now()` inside a
   scenario used to start at the wall time of the run and advance from there
   under FakeAsync — so every screen showing a date differed run to run, and no
@@ -38,6 +231,28 @@
   retyped — the store has no clock opinion of its own, and the field only ever
   existed to compensate for the old default. `previewClockOrigin` is now
   `pinnedClockOrigin` (still exported from `previews_guest.dart`).
+
+- **A fragment shader loads under Impeller on macOS.**
+  `FragmentProgram.fromAsset` threw *"does not contain appropriate runtime stage
+  data for current backend (Metal)"* on any preview or scenario that reaches one
+  — an M3 ripple is one — because the shaders bundled for the catalog were
+  compiled without a Metal stage. They now carry it.
+
+  What makes it worth a line of its own is the half that is not the compiler
+  invocation. The compiled form is cached under `~/.flutterware/shaders/` per
+  engine revision, so correcting the invocation fixed nothing on any machine
+  that had already rendered a preview once: the old four-stage file sat at the
+  key the new code read, and the crash was word for word the one before it. The
+  stage list is part of that key now, so changing what is compiled is the whole
+  of invalidating what was.
+
+  Two consequences. A picture is filed under everything that decides its pixels,
+  and a shader that would not load is one of them, so `ShotKey.revision` moves
+  to v6 and every stored preview thumbnail is taken again once — the entries
+  that were drawing without their ripple are the ones that change. And the
+  compile scratch file is named per compile rather than per process: two
+  builders overlap inside one process whenever the comparison runner lists both
+  sides at once, and a cold cache is the only time either of them compiles.
 
 - **The catalog is a page of pictures, and it is rendered once.**
   Opening Previews used to be a list of names beside an empty stage. The

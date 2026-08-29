@@ -25,7 +25,9 @@ import 'package:flutterware/src/ui_catalog/knob.dart';
 
 import '../embedder/frame_capture.dart';
 import '../embedder/protocol.dart';
-import 'catalog_params.dart';
+import 'catalog_picture.dart';
+import 'catalog_render.dart';
+import 'catalog_values.dart';
 import 'debug_flags.dart';
 import 'devices.dart';
 import 'catalog_entry.dart';
@@ -38,13 +40,15 @@ import 'protocol.dart';
 /// The catalog pipeline with no GUI involved: render an entry, ask what builds,
 /// ask what knobs an entry declares.
 ///
-/// The same pipeline the GUI drives, invoked by whoever asks — a button, `fw`,
-/// or an agent. Nothing here touches Flutter, so it runs anywhere the daemon
-/// does.
+/// **The embedder backend of [CatalogRenderer]** — a real engine drawing a real
+/// frame, which is what the panel shows and therefore what a picture meant to
+/// agree with the panel comes from. The same pipeline the GUI drives, invoked
+/// by whoever asks — a button, `fw`, or an agent. Nothing here touches Flutter,
+/// so it runs anywhere the daemon does.
 ///
 /// The guest is spawned with `--capture-raw`, which writes the composited frame
 /// the user would have seen rather than re-rasterising it.
-class HeadlessCatalog {
+class HeadlessCatalog extends CatalogRenderer {
   HeadlessCatalog({required this.dartExecutable, required this.config});
 
   /// A real Dart VM — the Flutter SDK's `dart`, never the running executable
@@ -52,58 +56,6 @@ class HeadlessCatalog {
   final String dartExecutable;
 
   final DaemonConfig config;
-
-  /// Screenshots [entryId] into [output], optionally with its knobs turned.
-  ///
-  /// Starts a daemon, compiles the entry, renders one frame, and shuts
-  /// everything down. Fine for one entry, which is the shape of every caller
-  /// left: catalog-wide batches — the audit, the comparison — render under
-  /// `flutter_tester` instead, where a demo that animates for ever costs fake
-  /// clock rather than real seconds.
-  ///
-  /// [knobs] are raw strings — a flag and a JSON object both arrive as text —
-  /// and are coerced to whatever kind the demo declared. A name the entry does
-  /// not declare is an error naming the ones it does: a silently ignored knob
-  /// produces a picture that looks right and is not.
-  Future<CatalogCapture> capture({
-    required String entryId,
-    required String output,
-    CaptureViewport viewport = CaptureViewport.panel,
-    Map<String, String> knobs = const {},
-    Map<String, String> axes = const {},
-    Map<String, String> debug = const {},
-
-    /// Cut the picture down to one widget, by name or by a tree id.
-    String? node,
-
-    /// Draw every node of the tree over the picture, id and all.
-    bool annotate = false,
-
-    /// Where to park the entry's motion, 0..1.
-    double? motionT,
-
-    /// Which mounted playhead [motionT] refers to.
-    String? motionScope,
-  }) async {
-    var observed = await observe(
-      entryId: entryId,
-      viewport: viewport,
-      knobs: knobs,
-      axes: axes,
-      debug: debug,
-      screenshot: output,
-      annotate: annotate,
-      cropNode: node,
-      wantKnobs: true,
-      motionT: motionT,
-      motionScope: motionScope,
-    );
-    return CatalogCapture(
-      // `observe` was asked for a screenshot, so it took one or threw.
-      file: observed.screenshot!,
-      knobs: observed.knobs?.knobs ?? const [],
-    );
-  }
 
   /// N frames of one entry's motion, as one contact sheet.
   ///
@@ -187,7 +139,7 @@ class HeadlessCatalog {
     var stops = videoStops(durationMs: durationMs, fps: fps);
 
     var render = Stopwatch()..start();
-    var (first, _) = await guest.captureImage(pixelRatio: viewport.pixelRatio);
+    var (first, _) = await guest.captureImage();
     var encoder = await VideoEncoder.start(
       output: output,
       width: first.width,
@@ -198,9 +150,7 @@ class HeadlessCatalog {
       encoder.add(first);
       for (var t in stops.skip(1)) {
         await guest.seekMotion(t, scope: opening.scope);
-        var (frame, _) = await guest.captureImage(
-          pixelRatio: viewport.pixelRatio,
-        );
+        var (frame, _) = await guest.captureImage();
         encoder.add(frame);
       }
     } catch (_) {
@@ -333,21 +283,13 @@ class HeadlessCatalog {
     (guest) => guest.settledAxes(entryId),
   );
 
-  /// Everything asked about **one** rendered build.
+  /// One entry, in a guest of its own: start a daemon, compile the entry,
+  /// render one frame, tear it all down.
   ///
-  /// The point of the whole thing. `tree`, `find`, `at`, `errors` and `logs`
-  /// are not five capabilities — they are five projections of one observation,
-  /// with the same inputs and the same precondition, and each used to pay a
-  /// full compile-launch-render to answer one question about a frame the others
-  /// also had to produce. Three questions was three renders, which for an agent
-  /// in an edit loop is the dominant per-iteration cost.
-  ///
-  /// It also removes an assumption rather than only a cost. `screenshot
-  /// --annotate` read its own tree, so a caller that ran `tree` and then
-  /// `screenshot --annotate` got two trees from two processes; the ids on the
-  /// picture matched the ids in the tree because the build is deterministic,
-  /// not because they were the same object. Closing that loop was the entire
-  /// point of `--annotate`. One render, one tree, both projections off it.
+  /// Fine for one entry, which is the shape of every caller left here.
+  /// Catalog-wide batches — the audit, the comparison, the thumbnails — render
+  /// under `flutter_tester` instead, where a demo that animates for ever costs
+  /// fake clock rather than real seconds.
   ///
   /// Order matters and is not arbitrary: axes before knobs because a shell
   /// rebuild changes what the demo is handed; debug before any read because
@@ -355,288 +297,100 @@ class HeadlessCatalog {
   /// the hit test because a hit is only meaningful against a particular tree;
   /// and the capture last, because a picture should be of the state everything
   /// else described.
-  Future<CatalogObservation> observe({
-    required String entryId,
-    CaptureViewport viewport = CaptureViewport.panel,
-    Map<String, String> knobs = const {},
-    Map<String, String> axes = const {},
-    Map<String, String> debug = const {},
-    bool wantTree = false,
-    bool wantLogs = false,
-    bool wantKnobs = false,
-    (double, double)? at,
-    String? screenshot,
-    bool annotate = false,
-    String? cropNode,
-
-    /// Where to park the entry's motion, 0..1. See [_GuestSession.seekMotion].
-    double? motionT,
-
-    /// Which mounted playhead [motionT] refers to. Omitted, the outermost —
-    /// a composed screen mounts one per component as well as its own.
-    String? motionScope,
-  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
-    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
-    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
-    await guest.applyDebug(debug);
-    // After the knobs and the axes, because both rebuild the demo and a
-    // rebuilt scope would start wherever its controller says rather than where
-    // this was asked to put it.
-    if (motionT != null) await guest.seekMotion(motionT, scope: motionScope);
-
-    // Read whenever anything needs it, which is more often than the caller asked
-    // for it: a hit resolves ids against a tree, a crop needs a node's rect, and
-    // `--annotate` needs every node's.
-    var needsTree =
-        wantTree || at != null || annotate || (cropNode?.isNotEmpty ?? false);
-    var framed = annotate || (cropNode?.isNotEmpty ?? false);
-
-    // **One frame, then every read off it.** This is the actual content of "one
-    // render", and it was not true before: each `settled*` drew its own scratch
-    // frame, so an observation asking five questions drew five or six — and
-    // `settledHitTest` read a *second* tree to resolve against, which is the
-    // assumption collapsing the actions was supposed to remove rather than
-    // preserve.
-    //
-    // When a picture is wanted and nothing has to be read *before* it is taken,
-    // the picture **is** the settling frame. That is not a micro-optimisation:
-    // a plain `screenshot` is the commonest call there is, and every frame here
-    // writes a PNG to disk and deletes it again. A crop or an annotation needs
-    // the tree first, so those still settle separately.
-    File? picture;
-    if (screenshot != null && !framed) {
-      picture = await guest.capture(
-        screenshot,
-        pixelRatio: viewport.pixelRatio,
-      );
-    } else {
-      await guest.settle();
-    }
-
-    var tree = needsTree ? await guest.readTree(entryId) : null;
-
-    // Against the tree above, by argument rather than by luck.
-    var hits = at == null || tree == null
-        ? null
-        : await guest.readHitTest(tree, at.$1, at.$2);
-
-    var errors = await guest.readErrors(entryId);
-    var logs = wantLogs ? await guest.readLogs(entryId) : null;
-    var applied = wantKnobs ? await guest.readKnobs(entryId) : null;
-
-    if (screenshot != null && picture == null) {
-      var framing = _Framing.of(
-        // `framed` is what put us here, and `needsTree` covers it, so the tree
-        // has been read.
-        tree!,
-        node: cropNode,
-        annotate: annotate,
-        entryId: entryId,
-      );
-      picture = await guest.capture(
-        screenshot,
-        crop: framing.crop,
-        annotate: framing.boxes,
-        pixelRatio: viewport.pixelRatio,
-      );
-    }
-
-    return CatalogObservation(
-      tree: tree,
-      errors: errors,
-      logs: logs,
-      knobs: applied,
-      hits: hits,
-      screenshot: picture,
-    );
-  });
-}
-
-/// What `--node` and `--annotate` mean against one tree: a rect to crop to, and
-/// the boxes to draw.
-///
-/// One implementation, because there were briefly two. `observe` was written
-/// with a copy of `capture`'s version — the same lookup, the same two error
-/// messages, byte for byte — which is precisely the drift that produced every
-/// other defect this file carries a note about: `settledAxes` beside
-/// `_readAxes`, the panel's tolerant writes, `setParameter` surviving a rename.
-/// A rule about what a node id means belongs in one place.
-class _Framing {
-  const _Framing({this.crop, this.boxes = const []});
-
-  /// Resolves [node] and [annotate] against [tree], refusing rather than
-  /// approximating: an id that names nothing, and a widget with no box of its
-  /// own, are different mistakes and each gets its own answer.
-  factory _Framing.of(
-    InspectTree tree, {
-    required String? node,
-    required bool annotate,
-    required String entryId,
-  }) {
-    InspectLayout? crop;
-    if (node != null && node.isNotEmpty) {
-      crop = _cropTo(tree, node, entryId);
-    }
-    return _Framing(
-      crop: crop,
-      boxes: annotate ? tree.nodes.toList() : const [],
-    );
-  }
-
-  /// The box [selector] names — **a widget's name, or a tree id**.
   ///
-  /// The name is what this is for, and the id is the fallback rather than the
-  /// other way round. Asking for a picture of a widget you are working on is
-  /// the common case by a distance, and requiring an id made it a two-step:
-  /// read a tree, find the position, ask again — thousands of tokens to
-  /// photograph something the caller could already name. `SplitButton` is what
-  /// somebody has in their hand.
-  ///
-  /// Matched by [InspectTree.matching], which is the same matcher `find` uses,
-  /// so one grammar covers looking something up and cropping to it.
-  ///
-  /// Several matches are refused, never guessed. A silently-picked first
-  /// match is a picture of the wrong widget that looks like a picture of the
-  /// right one, and the refusal carries the ids so the next call is exact.
-  static InspectLayout _cropTo(
-    InspectTree tree,
-    String selector,
-    String entryId,
-  ) {
-    var found = tree.resolve(selector);
-    if (found.length == 1) return _boxOf(found.single, selector, entryId);
+  /// A knob name the entry does not declare is an error naming the ones it
+  /// does: a silently ignored knob produces a picture that looks right and is
+  /// not.
+  @override
+  Future<CatalogObservation> render(CatalogRender request) => _withGuest(
+    entryId: request.entryId,
+    viewport: request.viewport,
+    (guest) async {
+      var entryId = request.entryId;
+      // **The device's identity, which the resize cannot carry.** The
+      // embedder's window-metrics event has a size, a ratio and four insets
+      // and nothing else, so everything beyond geometry travels over the VM
+      // service — and until now only the *panel* sent this one
+      // (`catalog_view.dart`'s `stageAs`). Headless, a preview asked for on an
+      // iPhone was given a phone's screen and left running as whatever
+      // platform the bare embedder reports: Cupertino widgets picked the wrong
+      // branch, and a `ThemeData` computing `materialTapTargetSize` from
+      // `defaultTargetPlatform` sized its buttons for the wrong machine.
+      // `CaptureViewport.platform` has always existed to say this; nothing
+      // outside the panel said it.
+      await guest.stageAs(request.viewport.platform);
+      if (request.axes.isNotEmpty) await guest.applyAxes(entryId, request.axes);
+      if (request.knobs.isNotEmpty) {
+        await guest.applyKnobs(entryId, request.knobs);
+      }
+      await guest.applyDebug(request.debug);
+      // After the knobs and the axes, because both rebuild the demo and a
+      // rebuilt scope would start wherever its controller says rather than
+      // where this was asked to put it.
+      if (request.motionT case var t?) await guest.seekMotion(t);
 
-    var matches = [
-      for (var node in found)
-        if (node.layout != null) node,
-    ];
-    if (matches.length == 1) return matches.single.layout!;
-    if (matches.isEmpty) {
-      throw ArgumentError.value(
-        selector,
-        'node',
-        'nothing in $entryId is called that, and it is not the id of a node '
-            'either. `node` takes a widget name — `SplitButton`, `Save` — '
-            'matched against every type, description and label on screen, or '
-            'an id from a tree read. Read the entry without `node` to see '
-            'what is there.',
+      // **One frame, then every read off it.** This is the actual content of
+      // "one render", and it was not true before: each `settled*` drew its own
+      // scratch frame, so an observation asking five questions drew five or six
+      // — and `settledHitTest` read a *second* tree to resolve against, which
+      // is the assumption collapsing the actions was supposed to remove rather
+      // than preserve.
+      //
+      // When a picture is wanted and nothing has to be read *before* it is
+      // taken, the picture **is** the settling frame. That is not a
+      // micro-optimisation: a plain `screenshot` is the commonest call there
+      // is, and every frame here writes a PNG to disk and deletes it again. A
+      // crop or an annotation needs the tree first, so those still settle
+      // separately.
+      File? picture;
+      if (request.screenshot case var output? when !request.framed) {
+        picture = await guest.capture(
+          output,
+          pixelRatio: request.viewport.pixelRatio,
+        );
+      } else {
+        await guest.settle();
+      }
+
+      var tree = request.needsTree ? await guest.readTree(entryId) : null;
+
+      // Against the tree above, by argument rather than by luck.
+      var hits = request.at == null || tree == null
+          ? null
+          : await guest.readHitTest(tree, request.at!.$1, request.at!.$2);
+
+      var errors = await guest.readErrors(entryId);
+      var logs = request.wantLogs ? await guest.readLogs(entryId) : null;
+      var applied = request.wantKnobs ? await guest.readKnobs(entryId) : null;
+      var axes = request.wantAxes ? await guest.readAxes(entryId) : null;
+
+      if (request.screenshot case var output? when picture == null) {
+        var framing = PictureFraming.of(
+          // `framed` is what put us here, and `needsTree` covers it, so the
+          // tree has been read.
+          tree!,
+          node: request.cropNode,
+          annotate: request.annotate,
+          entryId: entryId,
+        );
+        picture = await guest.capture(
+          output,
+          framing: framing,
+          pixelRatio: request.viewport.pixelRatio,
+        );
+      }
+
+      return CatalogObservation(
+        tree: tree,
+        errors: errors,
+        logs: logs,
+        knobs: applied,
+        axes: axes,
+        hits: hits,
+        screenshot: picture,
       );
-    }
-    var named = matches
-        .take(8)
-        .map((node) => '${node.type} (${node.id})')
-        .join(', ');
-    throw ArgumentError.value(
-      selector,
-      'node',
-      '${matches.length} widgets match "$selector" in $entryId, and cropping '
-          'to the wrong one produces a picture that looks right: $named'
-          '${matches.length > 8 ? ', …' : ''}. Name one by its id, or narrow '
-          'the text.',
-    );
-  }
-
-  static InspectLayout _boxOf(InspectNode found, String named, String entryId) {
-    var box = found.layout;
-    if (box == null) {
-      throw ArgumentError.value(
-        named,
-        'node',
-        '${found.type} has no box of its own to crop to. Providers and '
-            'builders lay nothing out; ask for one of its children.',
-      );
-    }
-    return box;
-  }
-
-  final InspectLayout? crop;
-  final List<InspectNode> boxes;
-}
-
-/// One rendered build, and everything the call asked about it.
-///
-/// Nullable per section rather than empty-per-section, and the distinction is
-/// load-bearing: null means *not asked for*, empty means *asked and there is
-/// nothing*. A demo that printed nothing and a demo whose logs were not
-/// requested are different answers, and a caller that could not tell them apart
-/// would read the second as the first.
-///
-/// The same shape whether the reading came from a fresh guest or from the
-/// session a person has open, so the two paths cannot drift in what they can
-/// report.
-class CatalogObservation {
-  const CatalogObservation({
-    required this.errors,
-    this.tree,
-    this.logs,
-    this.knobs,
-    this.hits,
-    this.screenshot,
-  });
-
-  /// Always read, whatever was asked for. It is the answer to "is this one
-  /// broken", which is the question behind asking anything at all — and it
-  /// costs a round trip against a guest that is already running.
-  final InspectErrors errors;
-
-  final InspectTree? tree;
-  final InspectLogs? logs;
-
-  /// The knobs the captured build declared, when they were asked for.
-  ///
-  /// Here rather than only on `capture` because a picture and a list of the
-  /// controls that produced it are two projections of one frame, like everything
-  /// else here.
-  final KnobReport? knobs;
-
-  /// The node ids under the probed point, outermost first. Empty is an answer:
-  /// there is nothing of the demo's there.
-  final List<String>? hits;
-
-  final File? screenshot;
-}
-
-/// Turns a knob value written as text into whatever kind the demo declared.
-///
-/// Everything arrives as text: a shell flag has no types, and a JSON object
-/// from an agent may disagree with the demo about int versus double. The demo
-/// is the authority, so this follows [KnobDescriptor.kind] rather than guessing
-/// from the characters — `count=5` is an int for a demo that declared an int
-/// and a string for one that declared a string.
-Object? coerceKnob(KnobDescriptor knob, String value) => switch (knob.kind) {
-  KnobKind.boolean => switch (value.toLowerCase()) {
-    'true' || 'yes' || '1' => true,
-    'false' || 'no' || '0' => false,
-    _ => throw ArgumentError.value(value, knob.name, 'expected true or false'),
-  },
-  KnobKind.integer =>
-    int.tryParse(value) ??
-        (throw ArgumentError.value(value, knob.name, 'expected an integer')),
-  KnobKind.number =>
-    num.tryParse(value) ??
-        (throw ArgumentError.value(value, knob.name, 'expected a number')),
-  KnobKind.picker =>
-    knob.options.contains(value)
-        ? value
-        : throw ArgumentError.value(
-            value,
-            knob.name,
-            'expected one of: ${knob.options.join(', ')}',
-          ),
-  KnobKind.string => value,
-};
-
-/// A contact sheet, and where on the playhead its frames were taken.
-class CatalogFilmstrip {
-  CatalogFilmstrip({
-    required this.file,
-    required this.stops,
-    required this.durationMs,
-  });
-
-  final File file;
-  final List<double> stops;
-  final int durationMs;
+    },
+  );
 }
 
 /// Where a render's time went, inside the guest exchange.
@@ -734,15 +488,17 @@ class CatalogVideo {
   final Duration encodeTime;
 }
 
-/// A captured frame, and the knobs it was rendered with.
-class CatalogCapture {
-  CatalogCapture({required this.file, required this.knobs});
+/// A contact sheet, and where on the playhead its frames were taken.
+class CatalogFilmstrip {
+  CatalogFilmstrip({
+    required this.file,
+    required this.stops,
+    required this.durationMs,
+  });
 
   final File file;
-
-  /// What the entry reported *after* the values were applied — so a clamped or
-  /// ignored value is visible rather than assumed.
-  final List<KnobDescriptor> knobs;
+  final List<double> stops;
+  final int durationMs;
 }
 
 /// What the compiler could and could not build.
@@ -974,16 +730,30 @@ class _GuestSession {
     }
   }
 
+  /// **The insets are scaled and the size is not, and that asymmetry is the
+  /// message's.** `ResizeMessage` is physical throughout —
+  /// `physical_view_inset_*` is what the engine reads — and
+  /// `CaptureViewport` carries a physical size beside *logical* insets,
+  /// because those are the space `EdgeInsets` and `MediaQuery.padding` are
+  /// written in everywhere else.
+  ///
+  /// Unscaled, a phone's safe areas came out divided by its pixel ratio: an
+  /// iPhone 16 was staged with a 19.67pt cutout instead of 59, and an iPhone
+  /// SE with 10 instead of 20. Nothing failed and every picture looked
+  /// plausible — an `AppBar` merely sat too high, under the notch a phone
+  /// frame exists to catch. The panel had it right all along
+  /// (`catalog_view.dart`'s `insets: safeAreas * dpr`); this path did not, and
+  /// `lane_parity_test.dart` is what noticed.
   void _resize(CaptureViewport viewport) => _connection.add(
     encodeMessage(
       ResizeMessage(
         width: viewport.width,
         height: viewport.height,
         pixelRatio: viewport.pixelRatio,
-        insetTop: viewport.insetTop,
-        insetRight: viewport.insetRight,
-        insetBottom: viewport.insetBottom,
-        insetLeft: viewport.insetLeft,
+        insetTop: viewport.insetTop * viewport.pixelRatio,
+        insetRight: viewport.insetRight * viewport.pixelRatio,
+        insetBottom: viewport.insetBottom * viewport.pixelRatio,
+        insetLeft: viewport.insetLeft * viewport.pixelRatio,
       ),
     ),
   );
@@ -1087,43 +857,9 @@ class _GuestSession {
     Map<String, String> values,
   ) async {
     var declared = await settledAxes(entryId);
-    var shellId = declared.shellId;
-    if (values.isEmpty) return declared;
-    if (shellId == null) {
-      throw ArgumentError.value(
-        values.keys.join(', '),
-        'axes',
-        'this entry has no shell, so it offers no axes. Axes are declared by a '
-            'PreviewShell around the demo.',
-      );
-    }
-
-    var known = {for (var axis in declared.axes) axis.name: axis};
-    var payload = <String, Object?>{};
-    for (var axis in declared.axes) {
-      var raw = values[axis.name];
-      payload[axis.name] = raw == null
-          ? null
-          : paramOptionFor(axis, paramSlug(raw)) ??
-                paramOptionFor(axis, raw) ??
-                (throw ArgumentError.value(
-                  raw,
-                  axis.name,
-                  axis.options.isEmpty
-                      ? 'not a ${axis.kind.name}'
-                      : 'no such option. Declared: ${axis.options.join(', ')}',
-                ));
-    }
-    for (var name in values.keys) {
-      if (known.containsKey(name)) continue;
-      throw ArgumentError.value(
-        name,
-        'axes',
-        'no such axis on this shell. Declared: ${known.keys.join(', ')}',
-      );
-    }
-
-    return await _inspect.setAxes(jsonEncode({shellId: payload})) ?? declared;
+    var payload = axisPayloadFor(declared, values);
+    if (payload == null) return declared;
+    return await _inspect.setAxes(jsonEncode(payload)) ?? declared;
   }
 
   /// What [entryId] reported while building and painting.
@@ -1163,6 +899,12 @@ class _GuestSession {
   /// connect and registration comes back "method not found". Measured: every
   /// flag failed that way until a frame went first, and the spike missed it
   /// only because it happened to render before asking.
+  /// Tells the guest which device it *is*, where the resize told it how big.
+  Future<void> stageAs(DevicePlatform? platform) async {
+    await _renderScratchFrame();
+    await _inspect.setStaging(platform);
+  }
+
   Future<void> applyDebug(Map<String, String> values) async {
     if (values.isEmpty) return;
     await _renderScratchFrame();
@@ -1286,31 +1028,8 @@ class _GuestSession {
     Map<String, String> values,
   ) async {
     var declared = await settledKnobs(entryId);
-    var known = {for (var knob in declared.knobs) knob.name: knob};
-
-    for (var name in values.keys) {
-      if (known.containsKey(name)) continue;
-      throw ArgumentError.value(
-        name,
-        'knob',
-        known.isEmpty
-            ? 'this entry declares no knobs'
-            : 'no such knob on $entryId. Declared: ${known.keys.join(', ')}',
-      );
-    }
-
-    // One call carrying every declared knob, not one call per knob: a write is
-    // the whole state, and a name absent from the payload is what says "leave
-    // this at its default". The panel builds the same shape in
-    // `paramPayloadFor`.
     await _inspect.setKnobs(
-      jsonEncode({
-        for (var knob in declared.knobs)
-          knob.name: switch (values[knob.name]) {
-            var raw? => coerceKnob(knob, raw),
-            null => null,
-          },
-      }),
+      jsonEncode(knobPayloadFor(declared, values, entryId: entryId)),
     );
 
     // Read once at the end: a demo's build decides what knobs exist, so
@@ -1325,55 +1044,42 @@ class _GuestSession {
   /// the file, and the encoder it skips costs ~7.5ms a picture — measured on
   /// `ScenarioRunArgs.captureRaw`, along with what it costs in bytes.
   /// The frame, and what the guest could say about it having stopped moving.
-  Future<(img.Image, ({bool settled, bool seesAnimations}))> captureImage({
-    double pixelRatio = 1,
-  }) async {
+  Future<(img.Image, ({bool settled, bool seesAnimations}))>
+  captureImage() async {
     var watch = Stopwatch()..start();
     var settled = await _settle();
     timings.settle += watch.elapsed;
     watch.reset();
-    var image = await _capture.capture(pixelRatio: pixelRatio);
+    var image = await _capture.capture();
     timings.frame += watch.elapsed;
     timings.frames++;
     return (image, settled);
   }
 
-  /// Asks the guest to write its next frame, and waits for the ack.
+  /// Asks the guest to write its next frame, waits for the ack, and files it.
+  ///
+  /// The framing and the encoding are `catalog_picture.dart`'s: what is this
+  /// session's is getting a frame out of a guest, and what a `--node` means
+  /// against a tree is the same question whichever engine drew it.
   Future<File> capture(
     String output, {
+    PictureFraming framing = const PictureFraming(),
 
-    /// Crop to this rect, in the guest's logical coordinates — the same space
-    /// [InspectLayout] reports, which is why a node's rect crops its own
-    /// picture without a transform.
-    InspectLayout? crop,
-
-    /// Draw a box and a node id over each of these.
-    List<InspectNode> annotate = const [],
-
-    /// Logical-to-physical, for turning either of the above into pixels.
+    /// Logical-to-physical, for turning a layout rect into pixels.
     double pixelRatio = 1,
   }) async {
     await _settle();
-    var image = await _capture.capture(
-      crop: crop,
-      annotate: annotate,
+    return writePicture(
+      await _capture.capture(),
+      output,
+      framing: framing,
       pixelRatio: pixelRatio,
     );
-    var file = File(output);
-    file.parent.createSync(recursive: true);
-    file.writeAsBytesSync(img.encodePng(image));
-    return file;
   }
 
   final _floor = SettleFloor();
 
   /// Where a render's per-frame time went, accumulated across the session.
-  ///
-  /// Kept here rather than measured by the caller because the caller sees one
-  /// number per frame and the interesting split is inside it: a seek is two
-  /// VM service calls, a capture is a settle loop plus a socket exchange, and
-  /// which of those dominates decides whether a faster renderer means a
-  /// different engine or merely fewer round trips.
   final timings = GuestTimings();
 
   /// Waits until the guest has no image loads in flight, bounded.

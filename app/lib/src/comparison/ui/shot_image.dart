@@ -1,7 +1,7 @@
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 
 import '../../capture/settle.dart';
-import '../frame_ref.dart';
 import '../shot_store.dart';
 
 export '../shot_store.dart' show Shot;

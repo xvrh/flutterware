@@ -33,6 +33,9 @@ void main() {
               ),
               Form(key: GlobalKey<FormState>(), child: const Text('f')),
               const Placeholder(key: ValueKey('tile')),
+              // A key that identifies something else, which is how the hash
+              // gets in behind a lower-case type name.
+              Placeholder(key: GlobalObjectKey(1)),
             ],
           ),
         ),
@@ -89,6 +92,12 @@ void main() {
           ('Card-[GlobalKey#04a2f]', 'Card'),
           ('Row-[#a1b2c]', 'Row'),
           ('Tile-[GlobalObjectKey Item#1234f]', 'Tile'),
+          // The value's type, not the key's, so it may be lower-case or
+          // carry a space inside its generics. `go_router` keys its
+          // `_CustomNavigator` with the first of these.
+          ('Nav-[GlobalObjectKey int#8cc0b]', 'Nav'),
+          ('Nav-[GlobalObjectKey<int>#8cc0b]', 'Nav'),
+          ('Cell-[ObjectKey Map<String, int>#04a2f]', 'Cell'),
         ])
           InspectNode.splitKey(pair.$1, pair.$2).key,
       },
@@ -97,6 +106,9 @@ void main() {
         '[GlobalKey#]',
         '[#]',
         '[GlobalObjectKey Item#]',
+        '[GlobalObjectKey int#]',
+        '[GlobalObjectKey<int>#]',
+        '[ObjectKey Map<String, int>#]',
       },
     );
   });

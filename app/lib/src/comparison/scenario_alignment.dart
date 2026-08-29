@@ -1,3 +1,5 @@
+import 'package:flutterware/comparison_report.dart';
+
 /// One step of a scenario, as the aligner needs to see it.
 ///
 /// Deliberately not `ScenarioRunStep`: the aligner is a pure algorithm over a
@@ -78,32 +80,6 @@ class AlignedPair {
 
   /// The path a report addresses it by.
   String get path => [...?branch, (head ?? base)!.label].join(' › ');
-}
-
-/// A whole branch that exists on one side only.
-///
-/// Reported as **one** delta rather than as N added steps. A new `split`
-/// branch is one decision in the source; listing its four steps as four
-/// additions describes the same decision four times and buries whatever else
-/// the run found.
-class BranchDelta {
-  const BranchDelta({
-    required this.label,
-    required this.added,
-    required this.steps,
-    required this.path,
-  });
-
-  final String label;
-
-  /// True when the branch is on head only, false when it is on base only.
-  final bool added;
-
-  /// How many steps went with it — collapsed, not listed.
-  final int steps;
-
-  /// Where the split is, innermost last.
-  final List<String> path;
 }
 
 /// Two runs of one scenario, matched up.

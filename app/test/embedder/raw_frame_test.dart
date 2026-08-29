@@ -3,12 +3,19 @@ import 'dart:typed_data';
 import 'package:flutterware_app/src/embedder/raw_frame.dart';
 import 'package:test/test.dart';
 
-/// Builds a raw frame file: 12-byte LE header + [pixels].
-Uint8List _rawFrame(int width, int height, int rowBytes, List<int> pixels) {
-  var header = ByteData(12)
+/// Builds a raw frame file: 16-byte LE header + [pixels].
+Uint8List _rawFrame(
+  int width,
+  int height,
+  int rowBytes,
+  List<int> pixels, {
+  int order = 0,
+}) {
+  var header = ByteData(16)
     ..setUint32(0, width, Endian.little)
     ..setUint32(4, height, Endian.little)
-    ..setUint32(8, rowBytes, Endian.little);
+    ..setUint32(8, rowBytes, Endian.little)
+    ..setUint32(12, order, Endian.little);
   return (BytesBuilder()
         ..add(header.buffer.asUint8List())
         ..add(pixels))
@@ -33,6 +40,28 @@ void main() {
     expect(p1.b.toInt(), 0);
   });
 
+  test('decodes the same buffer the other way round when told RGBA', () {
+    // The same bytes as above. What changes is only the word in the header, so
+    // the blue pixel comes back red — which is exactly the mistake the word
+    // exists to prevent, and the reason it is asserted rather than assumed.
+    var pixels = [255, 0, 0, 255, 0, 0, 255, 255];
+    var image = decodeRawFrame(_rawFrame(2, 1, 8, pixels, order: 1));
+
+    var p0 = image.getPixel(0, 0);
+    expect(p0.r.toInt(), 255);
+    expect(p0.b.toInt(), 0);
+    var p1 = image.getPixel(1, 0);
+    expect(p1.r.toInt(), 0);
+    expect(p1.b.toInt(), 255);
+  });
+
+  test('rejects a pixel order it does not know', () {
+    expect(
+      () => decodeRawFrame(_rawFrame(2, 1, 8, List.filled(16, 0), order: 2)),
+      throwsFormatException,
+    );
+  });
+
   test('honours row-stride padding', () {
     // 1x2 image, rowBytes 8 = 4 pixel bytes + 4 padding bytes per row.
     var row0 = [255, 0, 0, 255, 9, 9, 9, 9]; // blue + padding (BGRA)
@@ -48,7 +77,7 @@ void main() {
   });
 
   test('rejects a truncated file (shorter than the header)', () {
-    expect(() => decodeRawFrame(Uint8List(6)), throwsFormatException);
+    expect(() => decodeRawFrame(Uint8List(12)), throwsFormatException);
   });
 
   test('rejects a payload size mismatch', () {

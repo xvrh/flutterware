@@ -1,7 +1,7 @@
 // SPIKE — not shipped. Measures what photographing a whole catalog costs, and
 // how much of it a smaller render gives back.
 //
-//   fvm dart run tool/spike/capture_cost.dart <package> [scale] [tree] [format]
+//   fvm dart run tool/spike/capture_cost.dart <package> [ratio] [tree] [format]
 //
 // e.g. `tool/spike/capture_cost.dart app 0.25 false`. Prints the per-stage
 // numbers the harness writes to stderr, plus totals.
@@ -15,7 +15,7 @@ import 'package:path/path.dart' as p;
 
 Future<void> main(List<String> args) async {
   var package = args.isEmpty ? 'app' : args[0];
-  var scale = args.length > 1 ? double.parse(args[1]) : 1.0;
+  var pixelRatio = args.length > 1 ? double.parse(args[1]) : 1.0;
   var wantTree = args.length > 2 ? args[2] != 'false' : true;
   var format = args.length > 3 ? args[3] : 'raw';
 
@@ -34,7 +34,8 @@ Future<void> main(List<String> args) async {
   var scan = CatalogScanner(projectRoot: packageRoot, roots: roots).scan();
   var entries = scan.entries;
   stdout.writeln(
-    'package=$package entries=${entries.length} scale=$scale tree=$wantTree '
+    'package=$package entries=${entries.length} ratio=$pixelRatio '
+    'tree=$wantTree '
     'format=$format',
   );
 
@@ -89,7 +90,7 @@ Future<void> main(List<String> args) async {
   var broken = 0;
   var firstAt = Duration.zero;
   var whole = Stopwatch()..start();
-  if (scale == 0) {
+  if (pixelRatio == 0) {
     // The control: render every entry and photograph none of it, so what a
     // picture costs is the difference between this and a capture run.
     var audited = await runner.audit(entryIds: [for (var e in entries) e.id]);
@@ -100,7 +101,7 @@ Future<void> main(List<String> args) async {
     await runner.capture(
       entryIds: [for (var e in entries) e.id],
       outDir: out.path,
-      scale: scale,
+      pixelRatio: pixelRatio,
       tree: wantTree,
       timings: true,
       format: format,

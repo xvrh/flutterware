@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:path/path.dart' as p;
 
 import '../plugins/native/previews_core.dart';
@@ -10,8 +11,6 @@ import '../utils/run_dir.dart';
 import 'artifact.dart';
 import 'base_checkout.dart';
 import 'base_ref.dart';
-import 'channels.dart';
-import 'scenario_comparison.dart';
 import 'pr_report.dart';
 import 'previews_side.dart';
 import 'runner.dart';
@@ -280,38 +279,14 @@ Future<ComparisonCompareResult> runCompareAction({
   );
 
   var artifact = outcome.artifact;
-  // Worst first across both halves, the way every list on this surface ranks.
-  var ranked =
-      <(ComparedState, ComparisonFinding)>[
-        for (var item in artifact.previews.items)
-          if (_isFinding(item.state))
-            (
-              item.state,
-              ComparisonFinding(
-                id: item.id,
-                half: 'previews',
-                state: item.state.name,
-                note: item.note,
-                delta: _pixelsDelta(item),
-              ),
-            ),
-        for (var scenario
-            in artifact.scenarios?.items ?? const <ScenarioComparison>[])
-          if (_isFinding(scenario.state))
-            (
-              scenario.state,
-              ComparisonFinding(
-                id: scenario.scenario,
-                half: 'scenarios',
-                state: scenario.state.name,
-                delta: _scenarioDelta(scenario),
-              ),
-            ),
-      ]..sort(
-        (a, b) => a.$1.index == b.$1.index
-            ? a.$2.id.compareTo(b.$2.id)
-            : a.$1.index.compareTo(b.$1.index),
-      );
+  // Ranked by the published reader's own function rather than here. Two
+  // implementations of "which rows are worth attention, and in what order"
+  // is two answers to one question, and this surface and a consumer's script
+  // reading the same `index.json` may not give different ones.
+  var ranked = rankComparedFindings(
+    previews: artifact.previews.items,
+    scenarios: artifact.scenarios?.items ?? const [],
+  );
 
   var report = outcome.report;
   return ComparisonCompareResult(
@@ -320,16 +295,24 @@ Future<ComparisonCompareResult> runCompareAction({
     counts: {
       for (var entry in artifact.counts.entries) entry.key.name: entry.value,
     },
-    findings: [for (var (_, finding) in ranked) finding],
+    findings: [
+      for (var finding in ranked)
+        ComparisonFinding(
+          id: finding.id,
+          half: finding.half.name,
+          state: finding.state.name,
+          note: finding.note,
+          delta: finding.preview == null
+              ? _scenarioDelta(finding.scenario!)
+              : _pixelsDelta(finding.preview!),
+        ),
+    ],
     index: outcome.indexPath,
     export: outcome.exported?.output,
     report: report == null ? null : p.dirname(report.commentPath),
     scenariosNote: artifact.scenarios?.note,
   );
 }
-
-bool _isFinding(ComparedState state) =>
-    state != ComparedState.same && state != ComparedState.skipped;
 
 String? _pixelsDelta(ComparedItem item) {
   var pixels = item.pixels?.diff;
@@ -341,7 +324,7 @@ String? _pixelsDelta(ComparedItem item) {
 
 String? _scenarioDelta(ScenarioComparison scenario) {
   for (var step in scenario.items) {
-    if (_isFinding(step.state)) return 'step `${step.id}`';
+    if (isComparedFinding(step.state)) return 'step `${step.id}`';
   }
   if (scenario.branches.isNotEmpty) {
     return '${scenario.branches.length} '
@@ -416,8 +399,14 @@ Future<ScenarioResults?> _compareScenarios({
       // into the artifact too: an empty list is what a project with no
       // scenarios leaves behind, and a reader has to be able to tell the two
       // apart.
-      var note = '$error'.split('\n').first;
-      onProgress?.call('scenarios: $note');
+      //
+      // **Whole, not the first line**, for the reason the previews half
+      // already learned: the compiler puts its summary on the first line and
+      // its diagnostics on the ones after, and a note naming neither the file
+      // nor the symbol is a refusal nobody can act on. A progress line is one
+      // line by definition, so that one still gets the head of it.
+      var note = '$error';
+      onProgress?.call('scenarios: ${note.split('\n').first}');
       return ScenarioResults.of(
         items: const [],
         ran: 0,

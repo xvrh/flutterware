@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutterware_app/src/previews/devices.dart';
+import 'package:flutterware_app/src/previews/catalog_render.dart';
 import 'package:flutterware_app/src/previews/headless_catalog.dart';
 import 'package:flutterware_app/src/previews/package_config_locator.dart';
 import 'package:flutterware_app/src/previews/protocol.dart';
@@ -60,10 +61,12 @@ Future<void> main(List<String> args) async {
       var name = '$slug-t${(t * 100).round().toString().padLeft(3, '0')}.png';
       var output = p.join(outputDir, name);
       var capture = await catalog.capture(
-        entryId: entryId,
-        output: output,
-        viewport: viewport,
-        knobs: {'t': '$t'},
+        CatalogRender(
+          entryId: entryId,
+          screenshot: output,
+          viewport: viewport,
+          knobs: {'t': '$t'},
+        ),
       );
       stdout.writeln('[shots] ${capture.file}');
     }

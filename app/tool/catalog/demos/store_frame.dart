@@ -32,6 +32,15 @@ Widget playFrame() => _framed(
 Widget bareFrame() =>
     _framed(AppStoreClass.iphone69.device, AppStoreClass.iphone69.canvas, null);
 
+/// The one composition the default frame is actually *forced* into — Play's
+/// phone, whose canvas is not its device — with the band a project that
+/// declared no headline gets. The two halves of [DefaultStoreFrame]'s layout
+/// meet here, and whether the body bleeds or floats is only answerable by
+/// looking.
+@Preview(name: 'Store frame · Play phone, no headline')
+Widget playBareFrame() =>
+    _framed(PlayClass.phone.device, PlayClass.phone.canvas, null);
+
 Widget _framed(Device device, StoreCanvas canvas, String? headline) {
   var shot = StoreShot(
     image: _StandInApp(device: device),

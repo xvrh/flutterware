@@ -115,6 +115,10 @@ void main() {
       File(p.join(out, 'index.json')).readAsStringSync(),
     ) as Map<String, Object?>;
     expect(written['against'], 'master');
+    // And it says so: every reference below has just been rewritten to a PNG
+    // beside this file, which is the whole difference between this copy and
+    // the one in the cache. A reader takes it as a promise.
+    expect(written['frames'], 'relative');
 
     // The preview row's cache keys became relative paths…
     var item =

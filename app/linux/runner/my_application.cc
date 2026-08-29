@@ -5,6 +5,7 @@
 #include <gdk/gdkx.h>
 #endif
 
+#include "embedder_texture_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 
 struct _MyApplication {
@@ -74,6 +75,14 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  // Not a pub plugin, so it is not in the generated registrant — the same
+  // reason `EmbedderTexturePlugin` is registered by hand in
+  // `macos/Runner/MainFlutterWindow.swift`.
+  g_autoptr(FlPluginRegistrar) embedder_texture_registrar =
+      fl_plugin_registry_get_registrar_for_plugin(FL_PLUGIN_REGISTRY(view),
+                                                  "FwEmbedderTexturePlugin");
+  fw_embedder_texture_plugin_register_with_registrar(
+      embedder_texture_registrar);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

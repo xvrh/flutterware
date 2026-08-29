@@ -543,6 +543,9 @@ class _FakeRunner extends ScenarioRunner {
     this.translations,
   }) : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
 
+  @override
+  String get logPath => '/none/scenarios.log';
+
   final bool ok;
   final String? failure;
 
@@ -593,6 +596,9 @@ class _FakeRunner extends ScenarioRunner {
     double? recordScale,
     int recordMaxFrames = 90,
     DateTime? clock,
+    ScenarioNetwork? network,
+    ScenarioNetwork? projectNetwork,
+    String? networkStore,
   }) async {
     axesSeen.add(axes);
     outDirsSeen.add(outDir);

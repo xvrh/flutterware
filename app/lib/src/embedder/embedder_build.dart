@@ -6,8 +6,8 @@ import '../utils/run_dir.dart';
 import 'compiler.dart';
 import 'flutter_cache.dart';
 
-/// Where `FlutterEmbedder.framework` for [revision] lives: once per machine,
-/// under `~/.flutterware/engine/<revision>/`.
+/// Where the embedder engine for [revision] lives: once per machine, under
+/// `~/.flutterware/engine/<revision>/`.
 ///
 /// Not under the package. It used to be `<appPackageRoot>/.engine`, and a
 /// hosted install unpacks `app/` per project — under
@@ -15,12 +15,25 @@ import 'flutter_cache.dart';
 /// its own copy of a 93MB artifact that depends on nothing but the engine
 /// revision. Keyed by revision here, so switching Flutter versions back and
 /// forth reuses what is already on disk instead of re-downloading each way.
-String embedderFrameworkDir(String revision) =>
+///
+/// Keyed by revision alone and not by host, because a machine is one host. What
+/// lands inside differs per host — a `FlutterEmbedder.framework` on macOS, a
+/// `libflutter_engine.so` elsewhere — which is what [embedderEngineMarker]
+/// names.
+String embedderEngineDir(String revision) =>
     p.join(flutterwareDir(), 'engine', revision);
+
+/// The file whose presence means [embedderEngineDir] holds a complete engine.
+///
+/// Also the thing CMake links against, so the two halves cannot drift: if this
+/// is there, `native/CMakeLists.txt` has what it needs.
+String embedderEngineMarker(String engineDir) => Platform.isMacOS
+    ? p.join(engineDir, 'FlutterEmbedder.framework')
+    : p.join(engineDir, 'libflutter_engine.so');
 
 /// Reclaims the per-package copy this used to keep at `<appPackageRoot>/.engine`.
 ///
-/// 93MB per project, and after the move to [embedderFrameworkDir] nothing reads
+/// 93MB per project, and after the move to [embedderEngineDir] nothing reads
 /// it — so without this, every install that ever ran the old code keeps a copy
 /// forever, in a directory named with a leading dot that nobody will think to
 /// look in.
@@ -41,7 +54,7 @@ void removeLegacyEngineDir(String appPackageRoot) {
     legacy.deleteSync(recursive: true);
     stdout.writeln(
       '[embedder] removed the per-package engine copy at ${legacy.path}; '
-      'it is shared under ${p.dirname(embedderFrameworkDir(''))} now',
+      'it is shared under ${p.dirname(embedderEngineDir(''))} now',
     );
   } catch (e) {
     // A cache we no longer read. Failing to reclaim it is not worth an error.
@@ -49,27 +62,29 @@ void removeLegacyEngineDir(String appPackageRoot) {
   }
 }
 
-/// Ensures `FlutterEmbedder.framework` (the C embedder API, not part of the
-/// local Flutter cache) is on disk for the running engine, downloading it from
-/// Flutter's artifact storage if it is not, and answers with the directory
+/// Ensures the embedder engine (the C embedder API, not part of the local
+/// Flutter cache) is on disk for the running engine revision, downloading it
+/// from Flutter's artifact storage if it is not, and answers with the directory
 /// holding it — what `buildHost` takes as its `engineDir`.
 ///
 /// Callers no longer choose the location: two of them choosing differently is
 /// how the same artifact came to be downloaded once per project.
-Future<String> ensureEmbedderFramework(FlutterCache cache) async {
+///
+/// The artifact is one file per host with two shapes. macOS ships
+/// `FlutterEmbedder.framework.zip`, a bundle that has to unzip *into* a
+/// directory of that name; every other host ships `<host>-embedder.zip`, which
+/// already holds `libflutter_engine.so` and a header at its top level and so
+/// unzips flat. [embedderEngineMarker] is what says which one landed.
+Future<String> ensureEmbedderEngine(FlutterCache cache) async {
   var revision = cache.engineRevision;
-  var engineDir = embedderFrameworkDir(revision);
-  var frameworkDir = p.join(engineDir, 'FlutterEmbedder.framework');
-  var stamp = File(p.join(engineDir, 'engine.revision'));
-  if (Directory(frameworkDir).existsSync() &&
-      stamp.existsSync() &&
-      stamp.readAsStringSync().trim() == revision) {
-    return engineDir;
-  }
+  var engineDir = embedderEngineDir(revision);
+  if (_isComplete(engineDir, revision)) return engineDir;
 
-  stdout.writeln(
-    '[embedder] downloading FlutterEmbedder.framework ($revision)',
-  );
+  var host = cache.hostPlatform;
+  var archive = Platform.isMacOS
+      ? 'FlutterEmbedder.framework.zip'
+      : '$host-embedder.zip';
+  stdout.writeln('[embedder] downloading $archive ($host, $revision)');
 
   // Downloaded beside the target and moved into place, never into it. Two
   // projects' daemons can start at once, and a half-unzipped directory that
@@ -82,15 +97,17 @@ Future<String> ensureEmbedderFramework(FlutterCache cache) async {
   try {
     var url =
         'https://storage.googleapis.com/flutter_infra_release/flutter/'
-        '$revision/darwin-x64/FlutterEmbedder.framework.zip';
-    var zip = p.join(staging.path, 'FlutterEmbedder.framework.zip');
+        '$revision/$host/$archive';
+    var zip = p.join(staging.path, archive);
     await _run('curl', ['-fSL', url, '-o', zip]);
     await _run('unzip', [
       '-q',
       '-o',
       zip,
       '-d',
-      p.join(staging.path, 'FlutterEmbedder.framework'),
+      Platform.isMacOS
+          ? p.join(staging.path, 'FlutterEmbedder.framework')
+          : staging.path,
     ]);
     File(zip).deleteSync();
     File(p.join(staging.path, 'engine.revision')).writeAsStringSync(revision);
@@ -99,10 +116,10 @@ Future<String> ensureEmbedderFramework(FlutterCache cache) async {
     try {
       staging.renameSync(engineDir);
     } on FileSystemException {
-      // Another process got there first, or a stale directory is in the way.
-      // Theirs is as good as ours — both are this revision — so the only thing
-      // worth doing is making sure what is there now is complete.
-      if (!stamp.existsSync()) {
+      // Another process got there first, or something stale is in the way.
+      // Theirs is as good as ours if it passes the same test we would have
+      // returned on; otherwise it is ours to replace.
+      if (!_isComplete(engineDir, revision)) {
         if (Directory(engineDir).existsSync()) {
           Directory(engineDir).deleteSync(recursive: true);
         }
@@ -113,6 +130,22 @@ Future<String> ensureEmbedderFramework(FlutterCache cache) async {
     if (staging.existsSync()) staging.deleteSync(recursive: true);
   }
   return engineDir;
+}
+
+/// Whether [engineDir] holds a usable engine for [revision] *on this host*.
+///
+/// The stamp alone is not that, and believing it was cost a whole afternoon:
+/// this directory is keyed by revision and not by host, so the first Linux run
+/// on a machine that had ever run the macOS code found a stamped, complete
+/// `FlutterEmbedder.framework` sitting at the path it wanted, downloaded the
+/// Linux engine, declined to replace what was there, and handed the linker a
+/// directory with no `libflutter_engine.so` in it.
+bool _isComplete(String engineDir, String revision) {
+  var stamp = File(p.join(engineDir, 'engine.revision'));
+  return FileSystemEntity.typeSync(embedderEngineMarker(engineDir)) !=
+          FileSystemEntityType.notFound &&
+      stamp.existsSync() &&
+      stamp.readAsStringSync().trim() == revision;
 }
 
 /// Compiles the embedder scene at [scenePath] to a kernel blob at [kernelBlob].
@@ -144,7 +177,7 @@ Future<String> buildHost({
     nativeSourceDir,
     '-B',
     nativeBuildDir,
-    '-DFLUTTER_FRAMEWORK_DIR=$engineDir',
+    '-DFLUTTER_ENGINE_DIR=$engineDir',
   ]);
   await _run('cmake', ['--build', nativeBuildDir]);
   return p.join(nativeBuildDir, 'host');
@@ -152,8 +185,10 @@ Future<String> buildHost({
 
 /// Resolves [name] without relying on `PATH`.
 ///
-/// A macOS app launched by `flutter run` inherits a stripped environment, so
-/// `cmake` is not findable by name even when a terminal finds it fine.
+/// A desktop app launched by `flutter run` inherits a stripped environment, so
+/// `cmake` is not findable by name even when a terminal finds it fine. This is
+/// how macOS behaves; the fallback list carries the places each host installs
+/// the two tools this file spawns.
 String resolveExecutable(String name) {
   var fromPath = Process.runSync('/usr/bin/which', [name]);
   if (fromPath.exitCode == 0) {
@@ -164,14 +199,15 @@ String resolveExecutable(String name) {
     '/opt/homebrew/bin',
     '/usr/local/bin',
     '/usr/bin',
+    '/bin',
     '/Applications/CMake.app/Contents/bin',
   ]) {
     var candidate = p.join(dir, name);
     if (File(candidate).existsSync()) return candidate;
   }
   throw StateError(
-    'Could not find "$name". It is needed to build the embedder guest, and a '
-    'macOS app launched by `flutter run` does not inherit your shell PATH.',
+    'Could not find "$name". It is needed to build the embedder guest, and an '
+    'app launched by `flutter run` does not inherit your shell PATH.',
   );
 }
 

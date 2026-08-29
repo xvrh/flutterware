@@ -94,12 +94,30 @@ sealed class Settle {
   /// be trading the exact semantics this policy exists to provide for a
   /// nicety.
   ///
-  /// [apply] still lands once *before* the loop, which is the whole of what a
-  /// hookless policy can do and is enough for anything that only needs to be
-  /// told where to head: the software keyboard reads the app's focus there,
-  /// points its ticker at the right height, and `pumpAndSettle` waits the
-  /// slide out like any other animation.
+  /// [apply] lands *around* the loop rather than inside it, which is the whole
+  /// of what a hookless policy can do. Before is enough for anything that only
+  /// needs to be told where to head: the software keyboard reads the app's
+  /// focus there, points its ticker at the right height, and `pumpAndSettle`
+  /// waits the slide out like any other animation. After is for what the loop
+  /// itself changed — a settle that navigates away from a form takes the focus
+  /// with it, and a policy that only sampled at the start would leave the
+  /// keyboard staged at a height nothing on screen is asking for, for the next
+  /// verb to discover.
   static const full = _Full();
+
+  /// Whether the app going quiet is what stops this policy.
+  ///
+  /// True for [Settle.upTo] and [Settle.full], which pump *while* the app
+  /// keeps asking for frames. False for the three that stop on a count or on
+  /// the clock — [Settle.none], [Settle.frames] and [Settle.elapse]: they were
+  /// never asked to wait, so a frame still scheduled when they return is the
+  /// picture the author wanted rather than a budget that ran out.
+  ///
+  /// [apply]'s answer says what it says either way — whether a frame was
+  /// scheduled — and this is what tells a run which of those answers is worth
+  /// reporting. A step captured mid-flight on purpose and a settle that gave
+  /// up are the same fact about frames and opposite facts about the scenario.
+  bool get waits => true;
 
   /// Applies the policy. False when the app was still scheduling frames when
   /// the policy gave up — the step is captured either way.
@@ -163,6 +181,9 @@ class _Elapsed extends Settle {
   final Duration budget;
 
   @override
+  bool get waits => false;
+
+  @override
   Future<bool> apply(
     WidgetTester tester, {
     ScenarioMotionRecorder? record,
@@ -187,6 +208,9 @@ class _None extends Settle {
   const _None();
 
   @override
+  bool get waits => false;
+
+  @override
   Future<bool> apply(
     WidgetTester tester, {
     ScenarioMotionRecorder? record,
@@ -204,6 +228,9 @@ class _Frames extends Settle {
 
   final int count;
   final Duration interval;
+
+  @override
+  bool get waits => false;
 
   @override
   Future<bool> apply(
@@ -231,10 +258,22 @@ class _Full extends Settle {
     ScenarioMotionRecorder? record,
     Future<void> Function()? land,
   }) async {
-    // Once, and there is nowhere else to put it: `pumpAndSettle` owns its own
-    // loop. Enough for whatever only needs pointing — see [Settle.full].
+    // Around the loop, because `pumpAndSettle` owns its own and there is
+    // nowhere inside it to stand. Before points whatever needs pointing — see
+    // [Settle.full].
     await land?.call();
     await tester.pumpAndSettle();
+    // And again after, because the loop is where the app moves. A settle that
+    // leaves a form behind takes the focus with it, and this is the first
+    // moment anything can notice: sampling here aims the keyboard down, and
+    // the second settle is what runs the slide out.
+    //
+    // Two rounds and not a fixpoint. What [land] starts is one 250ms
+    // animation, so a second round finishes what the first found — and a tree
+    // that keeps changing focus under a settle is a tree still moving, which
+    // is the next verb's business rather than something to spin here over.
+    await land?.call();
+    if (tester.binding.hasScheduledFrame) await tester.pumpAndSettle();
     return true;
   }
 }

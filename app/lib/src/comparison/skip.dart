@@ -169,11 +169,17 @@ class SkipDecision {
 
   final bool skip;
 
-  /// The paths that differ, when any do — what the report shows under "why
-  /// this entry was rendered".
+  /// The paths that differ, when any do — the long form of [reason].
   final List<String> changed;
 
   /// Why it could not be skipped, or null when it was.
+  ///
+  /// Phrased as one clause naming a path, because a plan's reasons are folded
+  /// into [foldReasons] and shown as they are. It is the only thing that can
+  /// answer "why did a branch that touched no widget render all ninety
+  /// entries", and until it was shown, nothing could: a consumer measured
+  /// 141 of 141 entries rendered against an empty diff and had no way to
+  /// learn which path the two checkouts disagreed about.
   final String? reason;
 
   /// Decides for one entry, given the paths it was last compiled from.
@@ -236,4 +242,25 @@ class SkipDecision {
       },
     );
   }
+}
+
+/// The reasons a plan rendered what it rendered, folded — reason → how many
+/// entries carried it, commonest first.
+///
+/// Folded because a plan's reasons are overwhelmingly the *same* reason: one
+/// file both checkouts disagree about is in every entry's closure, so ninety
+/// entries produce one line rather than ninety. That is also the shape of the
+/// failure this exists to name — a skip rule that answers nothing does it to
+/// every entry at once, for one cause.
+Map<String, int> foldReasons(Iterable<String> reasons) {
+  var counts = <String, int>{};
+  for (var reason in reasons) {
+    counts[reason] = (counts[reason] ?? 0) + 1;
+  }
+  return Map.fromEntries(
+    counts.entries.toList()..sort((a, b) {
+      var byCount = b.value.compareTo(a.value);
+      return byCount != 0 ? byCount : a.key.compareTo(b.key);
+    }),
+  );
 }

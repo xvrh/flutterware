@@ -24,6 +24,7 @@ import '../app_events/events.dart';
 import '../devices.dart';
 import 'keyboard.dart';
 import 'motion.dart';
+import 'network.dart';
 import 'notification.dart';
 import 'profile.dart';
 import 'real_work.dart';
@@ -65,6 +66,17 @@ import 'harness.dart' show scenarioFileSafe, scenarioNameMax;
 /// Null outside the harness, where nothing is collecting.
 List<String>? scenarioDeclarationSink;
 
+/// The file whose `main()` is declaring right now, or null outside the
+/// harness.
+///
+/// Armed beside [scenarioDeclarationSink] and for the same reason: under the
+/// runner one process declares every file, so nothing a scenario knows about
+/// itself is unique to it. A description is not — two files may each hold a
+/// `scenario('Home')`, and anything this package keys on the description alone
+/// silently treats them as one scenario. The standalone lane needs no such
+/// thing, because `flutter test` gives each file its own process.
+String? scenarioAmbientFile;
+
 /// What a scenario that names no [Timeout] of its own gets.
 ///
 /// Null here, so a bare `flutter test` keeps `flutter_test`'s answer. The
@@ -83,6 +95,7 @@ void scenario(
   bool? skip,
   Timeout? timeout,
   Object? tags,
+  ScenarioNetwork? network,
 }) {
   // Captured as the scenario is *declared*, not read when it runs: a matrix
   // declares this same body once per assignment, and each declaration keeps
@@ -98,6 +111,14 @@ void scenario(
   // the folder said otherwise — see [scenarioAmbientKeyboard] for what off
   // restores.
   var keyboard = scenarioAmbientKeyboard ?? true;
+  // The folder's network policy, captured here for the reason the two above
+  // are — and *only* the folder's. The rest of the ladder is resolved when the
+  // body runs, in [_reachOf]: under the runner, `scenarioRunArgs` is armed per
+  // scenario inside the walk, long after this function has run for every file,
+  // so a `--network=` read here would always be null and the flag would be a
+  // silent no-op. Two altitudes, two times, and each read where its answer
+  // exists.
+  var folderReach = scenarioAmbientNetwork;
   var name =
       scenarioAmbientIsMatrix && assignment != null && !assignment.isEmpty
       ? '$description [${assignment.label}]'
@@ -111,6 +132,13 @@ void scenario(
   var source = ScenarioTester._screenshotsDestination == null
       ? null
       : scenarioDeclaringFile(StackTrace.current);
+
+  // What the once-per-scenario network notices are remembered under. Built
+  // here because both halves only exist here: the ambient file is armed around
+  // this declaration and cleared before any body runs, and a matrix declares
+  // one body once per point — all of them under this one description, which is
+  // what makes a matrix say it once rather than once per axis.
+  var noticeKey = '${source ?? scenarioAmbientFile ?? ''}\u0000$description';
 
   testWidgets(
     name,
@@ -141,6 +169,9 @@ void scenario(
           assignment,
           source,
           keyboard,
+          _reachOf(network, folderReach, description, noticeKey),
+          statedNetwork: network != null,
+          noticeKey: noticeKey,
         ),
       );
     },
@@ -205,6 +236,141 @@ DateTime? get _scenarioClockOrigin {
   return raw == 'now' ? DateTime.now() : DateTime.parse(raw);
 }
 
+/// What the run said its http requests reach, or null when it said nothing.
+///
+/// The runner's request first, then the pair every other "the host tells the
+/// test process something" setting reads — a `fw.network` dart-define, then
+/// `FW_NETWORK` — which is how the bare `flutter test` lane, that reads no
+/// request and no manifest, is told at all.
+ScenarioNetwork? get resolvedScenarioNetwork =>
+    scenarioRunArgs?.network ?? _scenarioNetworkFromHost;
+
+/// What one scenario's http requests reach, resolved as it runs.
+///
+/// Nearest wins, and a run sits in the middle of the ladder rather than at the
+/// top of it: an explicit `--network=` overrules the folder and the project,
+/// and is itself overruled by what a scenario said about itself. [own] is the
+/// `scenario(network: ...)` and [folder] the `runScenarios(network: ...)`,
+/// both captured at declaration; the middle two are read here because they are
+/// not armed until the walk reaches this scenario.
+///
+/// One losing combination says so out loud — see [recordOverriddenMessage].
+ScenarioNetwork _reachOf(
+  ScenarioNetwork? own,
+  ScenarioNetwork? folder,
+  String scenario,
+  String noticeKey,
+) {
+  var run = resolvedScenarioNetwork;
+  var reach =
+      own ?? run ?? folder ?? scenarioProjectNetwork ?? ScenarioNetwork.off;
+  if (recordOverriddenMessage(scenario, own, run) case var said?
+      when _recordOverridesSaid.add(noticeKey)) {
+    stderr.writeln('[flutterware] $said');
+  }
+  return reach;
+}
+
+/// Which scenarios have already had their overruled `record` reported.
+///
+/// Keyed on the file *and* the description, not the description alone: the
+/// harness declares every file in one process, so two files each holding a
+/// `scenario('Home')` would otherwise be one entry here and the second would
+/// go unreported. Keyed rather than counted so that a matrix — which declares
+/// one body once per point, all under one description — says it once rather
+/// than once per axis.
+final _recordOverridesSaid = <String>{};
+
+/// The sentence a `record` run owes [scenario], or null when nothing is wrong.
+///
+/// The one losing combination in the ladder worth interrupting for, because it
+/// is the only one where nothing on the screen and nothing in the output says
+/// what happened: the suite passes, every picture is the one `replay` already
+/// had, and the store the run was for stays exactly as it was. Every other
+/// pairing shows itself — a scenario keeping `off` against a `live` run draws
+/// the blank image and reports the refusal on the step.
+///
+/// A message rather than a rule. Letting `record` reach past [own] would put a
+/// special case inside a precedence ladder, and a ladder with an exception in
+/// it is what was misread here to begin with — it would also start recording
+/// for a scenario that deliberately said `live`.
+@visibleForTesting
+String? recordOverriddenMessage(
+  String scenario,
+  ScenarioNetwork? own,
+  ScenarioNetwork? run,
+) {
+  if (run != ScenarioNetwork.record) return null;
+  if (own == null || own == ScenarioNetwork.record) return null;
+  return '"$scenario" states `network: ${own.name}`, so this `record` run '
+      'left it alone and wrote nothing for it. Nearest wins: a '
+      '`scenario(network: ...)` is nearer than a run, and a run only reaches '
+      'past a folder and the project. To record it, move the declaration up '
+      'to the folder — `runScenarios(network: ...)` in '
+      '`flutter_test_config.dart` — which is the altitude a `--network=` can '
+      'reach.';
+}
+
+/// Which scenarios have already been told their stated mode did nothing.
+/// Keyed like [_recordOverridesSaid].
+final _inertNetworksSaid = <String>{};
+
+/// Forgets which scenarios have already been warned about their network.
+///
+/// Said once per scenario, but "once" has to mean once per *run*. The harness
+/// keeps a guest warm across many requests, so without this a suite re-run in
+/// the same process is silent about a mis-wiring it reported the first time —
+/// and the first time is the run nobody was reading. The bare `flutter test`
+/// lane never calls it and never needs to: that process runs one suite.
+void resetScenarioNetworkNotices() {
+  _recordOverridesSaid.clear();
+  _inertNetworksSaid.clear();
+}
+
+/// The sentence a scenario owes when it stated a mode and then asked for
+/// nothing, or null.
+///
+/// A mode is a claim about what this scenario's requests reach, and zero
+/// requests contradicts it. The usual cause is not the mode but the app: a
+/// layer that answers before anything opens an `HttpClient` is a layer the
+/// funnel cannot see, and the failure is silent in both directions — the
+/// screen shows a broken-image placeholder and the suite goes green.
+///
+/// Only a `scenario(network: ...)` is held to this. A folder's
+/// `runScenarios(network: ...)` and the project's `fw.network(...)` are
+/// defaults over a whole suite, where most scenarios legitimately touch
+/// nothing, and warning per scenario there would be dozens of lines saying
+/// that a login flow did not fetch anything. Stating a mode on **one**
+/// scenario is a sentence about that scenario, and this is what it means for
+/// it to have turned out false.
+@visibleForTesting
+String? inertNetworkMessage(
+  String scenario,
+  ScenarioNetwork reach, {
+  required bool stated,
+  required int requests,
+}) {
+  if (!stated || requests > 0 || reach == ScenarioNetwork.off) return null;
+  return '"$scenario" states `network: ${reach.name}` and then made no http '
+      'request at all, so the mode did nothing. A request reaches the funnel '
+      'only if something actually opens an `HttpClient`: `HttpOverrides` '
+      "catches the app's own client and everything built on it — "
+      '`package:http`, `dio` — and `NetworkImage` is caught alongside it. '
+      'What is not caught is a layer that answers before opening one. A '
+      '`CachedNetworkImage` is the common case: its bytes come from a '
+      '`BaseCacheManager`, and the no-op manager a project writes because the '
+      'real one cannot run on a test binding fails every url without opening '
+      'anything. A manager whose `getFileStream` is a plain `HttpClient` '
+      'passthrough is caught like everything else.';
+}
+
+ScenarioNetwork? get _scenarioNetworkFromHost {
+  const define = String.fromEnvironment('fw.network');
+  var raw = define.isNotEmpty ? define : Platform.environment['FW_NETWORK'];
+  if (raw == null || raw.isEmpty) return null;
+  return parseScenarioNetwork(raw);
+}
+
 Future<void> _runScenario(
   WidgetTester tester,
   String description,
@@ -214,7 +380,10 @@ Future<void> _runScenario(
   ScenarioAssignment? assignment,
   String? source,
   bool wantsKeyboard,
-) async {
+  ScenarioNetwork reach, {
+  required bool statedNetwork,
+  required String noticeKey,
+}) async {
   // The runner's assignment wins, like its args do below: the declaration
   // captured the ambient one, which under the runner is null — and a body
   // reading `s.assignment?.language` has to see the language the request
@@ -247,7 +416,27 @@ Future<void> _runScenario(
   // still in flight would have this one waiting out its whole allowance on
   // work that is not its own.
   resetAnnouncedWork();
+  // The iOS caret blinks through an `AnimationController`, not a timer, so on
+  // an iOS-staged device every screen with a focused field is asking for a
+  // frame forever, and no settle policy can tell that from a spinner.
+  // [Settle.upTo] gets away with it — the controller runs a one-second
+  // simulation and restarts on a `Timer.zero`, so the loop finds its quiet
+  // frame at the blink boundary. The two policies that do not stop there do
+  // not: [Settle.elapse], which is what a boot-time pump spends, and
+  // [Settle.none] land wherever the blink happens to be, and the step reports
+  // `settled: false` on the phase of an animation nobody is waiting for. The
+  // pixels move with it too — enough for a `screen` to refuse to adopt its
+  // verb's frame and emit a second step instead. Determinism here is this
+  // harness's, the same as the fonts and the clock.
+  var priorCursor = EditableText.debugDeterministicCursor;
+  EditableText.debugDeterministicCursor = true;
   var assets = ScenarioAssetBundle();
+  // One policy for the scenario, shared by every replay of its splits the way
+  // the bundle and the keyboard are — a real connection pool that a branch
+  // rebuilt would leak, and one thing for the `finally` below to close.
+  var network = ScenarioNetworkPolicy(reach);
+  scenarioNetworkModesRun.add(reach);
+  var restoreNetwork = installScenarioNetwork(network);
   _countFrames(tester);
   var state = _ReplayState();
   // Under the runner only: every exception the binding sees goes into the
@@ -264,6 +453,26 @@ Future<void> _runScenario(
   // failure passes through at all — and `flutter test` is the lane the
   // Flutter GPU diagnosis exists for.
   FlutterError.onError = (details) {
+    // A refusal is already *on* the step, as a network event carrying the
+    // whole message — so it is reported, and reporting it twice would be the
+    // second report failing the scenario.
+    //
+    // Which it would: an `Image.network` with no `errorBuilder` has no error
+    // listener of its own, so `MultiFrameImageStreamCompleter` hands the throw
+    // to `FlutterError.reportError`, and in a test binding that is what turns a
+    // test red. Left alone, `off` would fail every scenario with an
+    // unguarded network image on screen — including the https ones that
+    // silently drew a blank frame and passed before any of this existed, which
+    // is precisely the upgrade nobody asked for.
+    //
+    // Only a refusal, and never a stub's own `throws:`: an author who wrote
+    // `throws: SocketException(...)` is injecting an error on purpose and
+    // wants it to behave like one.
+    //
+    // Outermost of the three handlers chained here, so it also keeps the
+    // refusal out of the runner's caught-errors buffer — a scenario that did
+    // not fail must not be reported with an error against it.
+    if (details.exception is ScenarioNetworkRefusal) return;
     announceFlutterGpuDiagnosis(
       details.exceptionAsString(),
       executableArguments: Platform.executableArguments,
@@ -295,6 +504,10 @@ Future<void> _runScenario(
         // With the tree goes the keyboard: the next branch starts from a fresh
         // app, and one left up would be over a form nobody has touched yet.
         keyboard.reset();
+        // And with it the stated answers: each path through the splits states
+        // its own from the top, so a branch must not inherit what the branch
+        // before it said — nor read its requests back.
+        network.resetForReplay();
       }
       first = false;
       var s = ScenarioTester._(
@@ -307,6 +520,7 @@ Future<void> _runScenario(
         source,
         assets,
         keyboard,
+        network,
       );
       try {
         await body(s);
@@ -341,6 +555,21 @@ Future<void> _runScenario(
         Error.throwWithStackTrace(inContext, stack);
       }
     } while (state.plan.advance());
+
+    if (inertNetworkMessage(
+          description,
+          reach,
+          stated: statedNetwork,
+          requests: network.requestsEver,
+        )
+        case var said?
+        // Never on top of the override message. That is the more specific
+        // reading of the same silence — the mode did nothing *because* a
+        // record run could not reach it — and it already names the fix.
+        when !_recordOverridesSaid.contains(noticeKey) &&
+            _inertNetworksSaid.add(noticeKey)) {
+      stderr.writeln('[flutterware] $said');
+    }
   } finally {
     // Unconditional, because the chain above is: the binding asserts at the
     // end that it got its own handler back.
@@ -349,6 +578,11 @@ Future<void> _runScenario(
     // debug variables — and complains about a live semantics handle — at
     // the end of the body, before tearDowns run.
     state.disposeSemantics();
+    EditableText.debugDeterministicCursor = priorCursor;
+    // Before the tearDowns for the reason the semantics handle is: the binding
+    // asserts no timer is pending at the end of the body, and a live keepalive
+    // connection holds one.
+    restoreNetwork();
     restore?.call();
     restoreErrors?.call();
   }
@@ -542,6 +776,7 @@ class ScenarioTester {
     this._source,
     this.assets,
     this._keyboard,
+    this.network,
   );
 
   /// The real tester — the escape hatch to the full `flutter_test` surface.
@@ -565,6 +800,24 @@ class ScenarioTester {
   /// What raises and lowers the software keyboard — shared across replays for
   /// the same reason [assets] is.
   final ScenarioKeyboard _keyboard;
+
+  /// What this scenario's http requests reach, and where it states the answers
+  /// it wants.
+  ///
+  /// ```dart
+  /// s.network.get('/api/messages', json: []);
+  /// s.network.image('/avatars/1.png', scenarioPlaceholderPng(width: 64));
+  /// s.network.any(throws: const SocketException('Network is unreachable'));
+  /// ```
+  ///
+  /// A stub always beats the mode, so a scenario under
+  /// [ScenarioNetwork.live] can still pin the one response it is about and let
+  /// the rest go out. `s.network.requests` is what was actually asked for, and
+  /// every one of them is on the step's Events pane besides.
+  ///
+  /// One per scenario, shared by every replay of its splits — and reset at the
+  /// top of each replay, so a branch states its own answers.
+  final ScenarioNetworkPolicy network;
 
   /// The software keyboard, for a scenario that wants to say it explicitly.
   ///
@@ -1274,6 +1527,7 @@ class ScenarioTester {
         events: List.of(events),
         eventsDropped: dropped,
         settled: true,
+        waited: true,
         landed: true,
         strayFrames: 0,
         failure: null,
@@ -1482,6 +1736,7 @@ class ScenarioTester {
     // the flow. Read before the action, reported on the step it precedes.
     var stray = _frames - _framesAtLastStep;
     _aim = null;
+    var policy = settle ?? _settle;
     bool settled;
     bool landed;
     T result;
@@ -1491,7 +1746,6 @@ class ScenarioTester {
       // "before" is nowhere in it.
       _recorder?.capture(tester);
       result = await action();
-      var policy = settle ?? _settle;
       // One purse for the whole step: the policy's frames draw whatever has
       // announced itself as they go — otherwise fake time runs the transition
       // out in a few real milliseconds and every frame of the movie behind the
@@ -1532,6 +1786,7 @@ class ScenarioTester {
     await _afterStep(
       shot,
       settled: settled,
+      waited: policy.waits,
       landed: landed,
       stray: stray,
       verb: verb,
@@ -1609,6 +1864,7 @@ class ScenarioTester {
   Future<void> _afterStep(
     Shot? shot, {
     required bool settled,
+    required bool waited,
     required bool landed,
     required int stray,
     String? verb,
@@ -1625,6 +1881,7 @@ class ScenarioTester {
     await _capture(
       shot,
       settled: settled,
+      waited: waited,
       landed: landed,
       stray: stray,
       verb: verb,
@@ -1846,6 +2103,7 @@ class ScenarioTester {
     Shot shot,
     (List<AppEvent>, int) drained, {
     required bool settled,
+    required bool waited,
     required bool landed,
     int stray = 0,
     ScenarioMotionFrames? motion,
@@ -1853,7 +2111,15 @@ class ScenarioTester {
     var pending = _pending!;
     pending.name = shot.name;
     pending.tags = shot.tags;
+    // `waited` is only ever read beside a false `settled`, and there it has to
+    // name the half that *produced* the false: two halves that each did what
+    // they were told do not add up to a settle that gave up. So the merge is
+    // over the pair rather than over either flag — one half that waited and
+    // did not get it makes the stretch one that gave up, and a stretch with
+    // none of those is parked however many policies waited inside it.
+    var gaveUp = (!pending.settled && pending.waited) || (!settled && waited);
     pending.settled = pending.settled && settled;
+    pending.waited = pending.settled || gaveUp;
     pending.landed = pending.landed && landed;
     pending.strayFrames += stray;
     pending.overflowErrors += _overflowsSinceLastCapture;
@@ -1980,6 +2246,7 @@ class ScenarioTester {
   Future<void> _capture(
     Shot? shot, {
     bool settled = true,
+    bool waited = true,
     bool landed = true,
     int stray = 0,
     String? verb,
@@ -2048,6 +2315,7 @@ class ScenarioTester {
         shot,
         appEventBuffer?.drain() ?? (const <AppEvent>[], 0),
         settled: settled,
+        waited: waited,
         landed: landed,
         stray: stray,
       );
@@ -2063,6 +2331,7 @@ class ScenarioTester {
         branch: branch,
         shot: shot,
         settled: settled,
+        waited: waited,
         landed: landed,
         stray: stray,
         verb: verb,
@@ -2176,6 +2445,7 @@ class ScenarioTester {
     required String? branch,
     required Shot? shot,
     required bool settled,
+    bool waited = true,
     bool landed = true,
     int stray = 0,
     String? verb,
@@ -2312,6 +2582,7 @@ class ScenarioTester {
         motion: motion,
         motionInterval: _recorder?.interval,
         settled: settled,
+        waited: waited,
         landed: landed,
         strayFrames: stray,
         failure: failure,
@@ -2333,6 +2604,7 @@ class ScenarioTester {
         shot!,
         (events, dropped),
         settled: settled,
+        waited: waited,
         landed: landed,
         stray: stray,
         motion: adoptedMotion,
@@ -2409,6 +2681,7 @@ class _PendingEmit {
     required this.events,
     required this.eventsDropped,
     required this.settled,
+    required this.waited,
     required this.landed,
     required this.strayFrames,
     required this.failure,
@@ -2478,6 +2751,7 @@ class _PendingEmit {
   ScenarioMotionFrames motion;
   final Duration? motionInterval;
   bool settled;
+  bool waited;
   bool landed;
   int strayFrames;
   final String? failure;
@@ -2522,6 +2796,7 @@ class _PendingEmit {
     motion: motion,
     motionInterval: motionInterval,
     settled: settled,
+    waited: waited,
     landed: landed,
     strayFrames: strayFrames,
     failure: failure,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'embedded_engine.dart';
+import 'guest_texture.dart';
 import 'input_region.dart';
 
 /// A standalone dev harness that runs the embedder guest and shows its live
@@ -91,7 +92,7 @@ class _EmbedderHarnessScreenState extends State<EmbedderHarnessScreen> {
                     child: SizedBox.expand(
                       child: _engine.textureId == null
                           ? const SizedBox()
-                          : Texture(textureId: _engine.textureId!),
+                          : GuestTexture(textureId: _engine.textureId!),
                     ),
                   );
                 },

@@ -35,6 +35,7 @@ import '../scenarios/real_work.dart';
 import '../scenarios/run_args.dart';
 import '../scenarios/settle.dart';
 import '../scenarios/staging.dart';
+import '../ui_catalog/axes.dart';
 import '../ui_catalog/guest.dart';
 
 /// How much fake clock an entry is given before it is judged.
@@ -192,12 +193,92 @@ Future<void> _serve(
         // travels back is the paths, the way a scenario run reports its
         // captures.
         output: args['output'],
-        scale: double.tryParse(args['scale'] ?? '') ?? 1,
+        pixelRatio: double.tryParse(args['pixelRatio'] ?? '') ?? 1,
         tree: args['tree'] != 'false',
         // Off unless asked for. What it writes is a measurement, and a
         // measurement nobody asked for is noise in somebody's console.
         timings: args['timings'] == 'true',
         format: args['format'] ?? 'raw',
+      );
+      return developer.ServiceExtensionResponse.result(jsonEncode(report));
+    } catch (error, stack) {
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode({'error': '$error', 'stack': '$stack'}),
+      );
+    }
+  });
+
+  // **Its own extension, not a wider `audit`.** This file is published, so an
+  // extension is a wire contract with whatever `package:flutterware` the
+  // consumer's checkout resolves — and a checkout that predates a *argument*
+  // renders the entry and ignores it in silence, which is a trap the
+  // comparison already paid for once. A checkout that predates an *extension*
+  // refuses at the call, and the host can say which version is missing.
+  developer.registerExtension('ext.flutterware.previews.render', (
+    _,
+    args,
+  ) async {
+    try {
+      var request = jsonDecode(args['request'] ?? '{}') as Map<String, Object?>;
+      // What is left unanswerable is refused by name rather than dropped. A
+      // demo's `print` is the one: a test-zone print rides `live.onMessage`
+      // into the runner rather than through the zone `GuestLogs.install`
+      // wraps, so there is nothing here to collect — and a caller told "no
+      // logs" when it means "not on this engine" would go looking in the demo.
+      for (var unsupported in const ['logs']) {
+        if (request[unsupported] != null) {
+          return developer.ServiceExtensionResponse.result(
+            jsonEncode({
+              'error':
+                  'the previews harness cannot answer `$unsupported` yet; '
+                  'ask the embedder guest for it.',
+            }),
+          );
+        }
+      }
+      var report = await _render(
+        entries,
+        canvases,
+        entryId: request['entry']! as String,
+        device: switch (request['device']) {
+          String id => deviceById(id),
+          _ => null,
+        },
+        orientation: switch (request['orientation']) {
+          String name => orientationById(name),
+          _ => null,
+        },
+        knobValues: (request['knobs'] as Map?)?.cast<String, Object?>(),
+        axisValues: switch (request['axes']) {
+          Map byShell => {
+            for (var shell in byShell.entries)
+              '${shell.key}': (shell.value as Map).cast<String, Object?>(),
+          },
+          _ => null,
+        },
+        wantKnobs: request['wantKnobs'] == true,
+        wantAxes: request['wantAxes'] == true,
+        wantTree: request['tree'] == true,
+        at: switch (request['at']) {
+          String point when point.contains(',') => (
+            double.parse(point.split(',').first),
+            double.parse(point.split(',').last),
+          ),
+          _ => null,
+        },
+        output: request['output'] as String?,
+        format: request['format'] as String? ?? 'raw',
+        viewport: switch (request['viewport']) {
+          Map json => StagedViewport.fromJson(json.cast<String, Object?>()),
+          _ => null,
+        },
+        // Carried now though nothing here takes a picture yet, so that when
+        // one does it is asked for in physical pixels rather than acquiring a
+        // silent 1× default on the way — which is the whole of §4.2.
+        pixelRatio: switch (request['pixelRatio']) {
+          num ratio => ratio.toDouble(),
+          _ => 1,
+        },
       );
       return developer.ServiceExtensionResponse.result(jsonEncode(report));
     } catch (error, stack) {
@@ -224,10 +305,17 @@ Future<Map<String, Object?>> _audit(
   Device? device,
   ScreenOrientation? orientation,
   String? output,
-  double scale = 1,
+  double pixelRatio = 1,
   bool tree = true,
   bool timings = false,
   String format = 'raw',
+  Map<String, Object?>? knobValues,
+  Map<String, Map<String, Object?>>? axisValues,
+  bool wantKnobs = false,
+  bool wantAxes = false,
+  bool wantTree = false,
+  (double, double)? at,
+  StagedViewport? viewport,
 }) async {
   var wanted = [
     for (var entry in entries)
@@ -235,6 +323,9 @@ Future<Map<String, Object?>> _audit(
   ];
   var collected = <String, InspectErrors>{};
   var captured = <String, Map<String, Object?>>{};
+  // Always collected: the surface rides every render, and the knobs and axes
+  // only when they were asked for.
+  var declared = <String, Map<String, Object?>>{};
   var declarer = Declarer();
   declarer.declare(
     () => _declare(
@@ -245,10 +336,18 @@ Future<Map<String, Object?>> _audit(
       orientation: orientation,
       output: output,
       captured: captured,
-      scale: scale,
+      pixelRatio: pixelRatio,
       tree: tree,
       timings: timings,
       format: format,
+      knobValues: knobValues,
+      axisValues: axisValues,
+      declared: declared,
+      wantKnobs: wantKnobs,
+      wantAxes: wantAxes,
+      wantTree: wantTree,
+      at: at,
+      viewport: viewport,
     ),
   );
   // Flat by construction — one `testWidgets` per entry, no groups — so the
@@ -292,6 +391,7 @@ Future<Map<String, Object?>> _audit(
         entry.id: {
           ...?collected[entry.id]?.toJson(),
           ...?captured[entry.id],
+          ...?declared[entry.id],
           // Something went wrong that is not a framework error the build
           // reported — the builder threw outright, a test timed out. Reported
           // separately because it is a different kind of broken: the entry did
@@ -300,6 +400,124 @@ Future<Map<String, Object?>> _audit(
         },
     },
   };
+}
+
+/// Stages [viewport] on [tester] and answers the callback that puts it back.
+///
+/// **A viewport, not a device**, and that is the whole of what this lane was
+/// missing. `applyDevice` needs a `Device`, and half the screens a preview is
+/// asked for are not one: the panel's own rectangle is no device, and
+/// `--width`/`--height` override a real one into a size no phone has. The
+/// numbers are what both backends are staged from — the guest over its resize
+/// message, this over `ScenarioRunArgs` — so a picture from either is of the
+/// same screen.
+///
+/// A null platform is left null rather than defaulted, which is the difference
+/// between *a rectangle* and *a Mac*: an override reassembles the application
+/// and would make a `ThemeData` built at the top of a demo describe a machine
+/// nobody asked about.
+VoidCallback _stageViewport(WidgetTester tester, StagedViewport viewport) {
+  var reset = applyScenarioRunArgs(
+    tester,
+    ScenarioRunArgs(
+      size: Size(viewport.logicalWidth, viewport.logicalHeight),
+      pixelRatio: viewport.pixelRatio,
+      padding: EdgeInsets.fromLTRB(
+        viewport.insetLeft,
+        viewport.insetTop,
+        viewport.insetRight,
+        viewport.insetBottom,
+      ),
+      // **Null is left null, and that is not obviously right.** A viewport
+      // with no platform is the panel's own rectangle, and the two lanes then
+      // each answer with a default of their own: this binding's, and — since
+      // `stageGuestPlatform(null)` resets the override — the machine the guest
+      // runs on. Where a theme computes `materialTapTargetSize` from
+      // `defaultTargetPlatform` that is a real difference: measured on this
+      // repo's own catalog, a `FilledButton` is 48 logical points tall here
+      // and 40 in the guest.
+      //
+      // Staging the host platform here was tried and made it worse, not
+      // better: it agreed with the guest on one catalog and disagreed on
+      // another, which means the rectangle's platform is not simply "the
+      // machine" and the question is what a *rectangle* should be. Left as it
+      // was until that is answered, because a change that trades one
+      // disagreement for another is not a fix — see §5.3 of
+      // `2026-08-27-previews-render-lane-design.md`.
+      platform: switch (viewport.platform) {
+        DevicePlatform.ios => TargetPlatform.iOS,
+        DevicePlatform.android => TargetPlatform.android,
+        DevicePlatform.macos => TargetPlatform.macOS,
+        DevicePlatform.windows => TargetPlatform.windows,
+        DevicePlatform.linux => TargetPlatform.linux,
+        null => null,
+      },
+    ),
+  );
+  // After the metrics, because it reads the padding it is about to eat into.
+  if (viewport.keyboardUp) stageKeyboard(tester, viewport.keyboard);
+  return reset;
+}
+
+/// One entry, staged, with [knobValues] and [axisValues] turned, and whatever
+/// it declares afterwards.
+///
+/// **Values are applied in the body, never over the VM service.** The guest's
+/// `setKnobs` and `setAxes` extensions await `endOfFrame` before they answer,
+/// and under FakeAsync with nobody pumping that never completes: an external
+/// call would wait out its own timeout and then report success against a build
+/// that never happened. In here there is a tester, so a value is applied and
+/// pumped in one breath.
+///
+/// **Already resolved when they arrive.** Which kind a knob is and which label
+/// an axis option answers to are facts about the build that declared them, and
+/// the host reads those in a first call and resolves against them — so the
+/// refusals for a name nobody declared are worded once, on the host, for both
+/// backends.
+Future<Map<String, Object?>> _render(
+  List<PreviewEntry> entries,
+  List<PreviewCanvas> canvases, {
+  required String entryId,
+  Device? device,
+  ScreenOrientation? orientation,
+  Map<String, Object?>? knobValues,
+  Map<String, Map<String, Object?>>? axisValues,
+  bool wantKnobs = false,
+  bool wantAxes = false,
+  bool wantTree = false,
+  (double, double)? at,
+  double pixelRatio = 1,
+  StagedViewport? viewport,
+  String? output,
+  String format = 'raw',
+}) async {
+  var entry = entries.where((entry) => entry.id == entryId).toList();
+  if (entry.isEmpty) {
+    return {
+      'error':
+          'no entry called $entryId. This harness holds '
+          '${entries.length} of them.',
+    };
+  }
+  return _audit(
+    entry,
+    canvases,
+    device: device,
+    orientation: orientation,
+    knobValues: knobValues,
+    axisValues: axisValues,
+    wantKnobs: wantKnobs,
+    wantAxes: wantAxes,
+    wantTree: wantTree,
+    at: at,
+    pixelRatio: pixelRatio,
+    viewport: viewport,
+    output: output,
+    format: format,
+    // The `tree.json` beside the frame is the catalog-wide lane's; here the
+    // tree travels inline and writing a second copy would be 9ms for nothing.
+    tree: false,
+  );
 }
 
 /// A row says what happened, not what `flutter_test` calls it.
@@ -347,10 +565,18 @@ void _declare(
   ScreenOrientation? orientation,
   String? output,
   Map<String, Map<String, Object?>>? captured,
-  double scale = 1,
+  double pixelRatio = 1,
   bool tree = true,
   bool timings = false,
   String format = 'raw',
+  Map<String, Object?>? knobValues,
+  Map<String, Map<String, Object?>>? axisValues,
+  Map<String, Map<String, Object?>>? declared,
+  bool wantKnobs = false,
+  bool wantAxes = false,
+  bool wantTree = false,
+  (double, double)? at,
+  StagedViewport? viewport,
 }) {
   for (var (index, entry) in entries.indexed) {
     testWidgets(entry.id, (tester) async {
@@ -376,6 +602,12 @@ void _declare(
       // rule that eventually differs.
       var canvas = canvasFor(canvases, entry.path);
       var reset = switch ((device, canvas?.defaultDevice)) {
+        // A viewport named for *this* render wins over everything: it is
+        // already the answer the host worked out — the entry's declared
+        // canvas, a device the call named, a `--width` override on top — and
+        // re-deriving any of that here would be a second opinion about one
+        // screen.
+        _ when viewport != null => _stageViewport(tester, viewport),
         (var named?, _) => tester.applyDevice(
           named,
           orientation: orientation,
@@ -430,7 +662,26 @@ void _declare(
             // scenario lane's `ScenarioKeyboard` — and this lane renders one
             // cold frame.
             child: ViewKeyboardSlab(
-              child: CatalogGuest(entryId: entry.id, child: entry.build()),
+              child: CatalogGuest(
+                entryId: entry.id,
+                // **The same three widgets the guest entrypoint mounts, in the
+                // same order**, and this one is easy to think unnecessary: the
+                // guest keys per entry so that *switching* remounts rather
+                // than reusing the last demo's State, and a body here renders
+                // one entry and throws the tree away.
+                //
+                // It is not about remounting. A node id is a *position in the
+                // summary tree*, so a widget the two lanes do not both mount
+                // shifts every id below it by one — `--node=0/1/2` would name
+                // different widgets depending on which engine answered, and an
+                // annotated screenshot's labels would not match a tree read
+                // from the other lane. Found by `lane_parity_test.dart` on its
+                // first run, which is what it is for.
+                child: KeyedSubtree(
+                  key: ValueKey<String>(entry.id),
+                  child: entry.build(),
+                ),
+              ),
             ),
           ),
         );
@@ -450,18 +701,77 @@ void _declare(
         // not exist was reported clean, because the read that would have thrown
         // never completed. So the settle lands announced work as it goes, out
         // of the same purse as the landing after it.
-        var budget = RealWorkBudget();
-        var settled = await auditSettle.apply(
-          tester,
-          land: () => budget.land(tester, assets),
-        );
-        await landRealWork(
-          tester,
-          auditSettle,
-          settled: settled,
-          budget: budget,
-          assets: assets,
-        );
+        Future<void> settle() async {
+          var budget = RealWorkBudget();
+          var settled = await auditSettle.apply(
+            tester,
+            land: () => budget.land(tester, assets),
+          );
+          await landRealWork(
+            tester,
+            auditSettle,
+            settled: settled,
+            budget: budget,
+            assets: assets,
+          );
+        }
+
+        await settle();
+
+        // Axes before knobs, exactly as the guest applies them: an axis
+        // rebuilds the *shell*, which changes what the demo is handed, so a
+        // knob turned first would be read back against the wrong build.
+        //
+        // And both after the first settle rather than before the pump: a knob
+        // does not exist until the demo has asked for it, and an axis until
+        // the shell has declared it. There is nothing to apply to a tree that
+        // has not built.
+        if (axisValues != null && CatalogAxes.instance.apply(axisValues)) {
+          await settle();
+        }
+        if (knobValues != null && CatalogKnobs.instance.applyAll(knobValues)) {
+          await settle();
+        }
+        if (declared != null) {
+          var view = tester.view;
+          declared[entry.id] = {
+            // **What it actually rendered on**, read off the binding rather
+            // than echoed back from the request. A staging that silently did
+            // not land is the one failure a caller cannot otherwise see: every
+            // other answer — the knobs, the errors, even a picture — looks
+            // exactly the same on the wrong surface as on the right one.
+            'viewport': {
+              'width': view.physicalSize.width,
+              'height': view.physicalSize.height,
+              'pixelRatio': view.devicePixelRatio,
+            },
+            // What the *settled* build declares, which is not what it started
+            // with: turning one knob can reveal or retire another, and only
+            // the set that survived is worth reporting.
+            if (wantKnobs) 'knobs': CatalogKnobs.instance.describe().toJson(),
+            if (wantAxes) 'axes': CatalogAxes.instance.describe().toJson(),
+          };
+          // **Inline, and the same walk the guest answers with.** A tree is
+          // tens of kilobytes for one entry and the guest's own
+          // `ext.flutterware.tree` hands one back over the service too, so
+          // this is the established size rather than a new one. The
+          // catalog-wide lane still writes to disk beside the frame, because
+          // there it is a tree per entry.
+          if (wantTree || at != null) {
+            var read = GuestInspector(
+              rootOf: () => CatalogGuest.demoRoot,
+              entryIdOf: () => entry.id,
+            );
+            if (wantTree) declared[entry.id]!['tree'] = read.read().toJson();
+            // Against the tree above, by construction: a hit resolved against
+            // a second read would be ids from one build reported beside boxes
+            // from another.
+            if (at case (var x, var y)?) {
+              declared[entry.id]!['hits'] = read.hitTest(x, y);
+            }
+          }
+        }
+
         // After the settle, so the picture is of the same screen the errors
         // are about. An entry whose build threw is photographed anyway — the
         // ErrorWidget is what is there — and the host decides whether that
@@ -472,7 +782,7 @@ void _declare(
             entry,
             output,
             index,
-            scale: scale,
+            pixelRatio: pixelRatio,
             tree: tree,
             timings: timings,
             format: format,
@@ -497,20 +807,24 @@ void _declare(
 /// Photographs the settled screen into [output] and reads the tree it drew,
 /// answering with the paths and the picture's dimensions.
 ///
-/// Raw rgba, never PNG — the comparison reads pixels, and encoding them here
-/// only to decode them again costs ~7.5ms a picture out and ~0.75ms back;
-/// `fw compare` is a CLI command, so the decode would have no engine codec
-/// and would fall to `package:image`. Same reasoning as the scenario
-/// capture's, and the numbers are on `ScenarioRunArgs.captureRaw`. The
-/// rect is physical and the output logical, which is also the scenario rule:
-/// the root layer's coordinates have the device-pixel-ratio transform inside
-/// them, so a 3× canvas captured at face value saves its top-left ninth.
+/// **[pixelRatio] is physical pixels per logical pixel, not a fraction of the
+/// screen** — the same word `FrameCapture` uses on the guest side, so the two
+/// backends are asked for a resolution in one vocabulary. The default of `1`
+/// therefore renders a 3× phone at its *logical* 440×956, which is right for a
+/// comparison diffing pixels and for a thumbnail nobody reads text in, and
+/// wrong for a picture somebody is going to judge a 16pt glyph in: that one
+/// passes the staged device's own ratio and gets 1320×2868. The rect is
+/// physical and the output logical-times-this, which is also the scenario
+/// rule: the root layer's coordinates have the device-pixel-ratio transform
+/// inside them, so a 3× canvas captured at face value saves its top-left
+/// ninth.
+///
 Future<Map<String, Object?>> _capture(
   WidgetTester tester,
   PreviewEntry entry,
   String output,
   int index, {
-  double scale = 1,
+  double pixelRatio = 1,
   bool tree = true,
   bool timings = false,
   String format = 'raw',
@@ -535,7 +849,7 @@ Future<Map<String, Object?>> _capture(
     var dpr = view.flutterView.devicePixelRatio;
     var image = await layer.toImage(
       Offset.zero & (view.size * dpr),
-      pixelRatio: scale / dpr,
+      pixelRatio: pixelRatio / dpr,
     );
     toImageUs = watch.elapsedMicroseconds;
     watch.reset();
@@ -567,17 +881,18 @@ Future<Map<String, Object?>> _capture(
   // the two things beside it are not:
   //
   //     tree.json                 9.07ms   — nine times the picture
-  //     png encode, full scale   12.46ms      36kb
+  //     png encode, 1x           12.46ms      36kb
   //     png encode, 700px         7.77ms      27kb
   //     png encode, quarter       1.07ms       4kb
-  //     raw, any scale            0.11ms     152kb at quarter, 2444kb at full
+  //     raw, any ratio            0.11ms     152kb at quarter, 2444kb at 1x
   //
   // Which is the whole argument for both options. [tree] is 9ms nobody looking
   // at a picture wants. [format] trades about 8ms of encode for **38× less
   // disk** — a whole catalog is 4MB as PNG against 368MB as raw — so a store
   // that keeps thumbnails keeps them as PNG, and a comparison, which diffs
-  // pixels and would decode straight back out, keeps raw. [scale] barely moves
-  // the clock either way; it moves the bytes.
+  // pixels and would decode straight back out, keeps raw. [pixelRatio] barely
+  // moves the clock either way; it moves the bytes — as the square of itself,
+  // which is why a 3× device is 9× the frame.
   if (timings) {
     stderr.writeln(
       '[capture] toImage=$toImageUs bytes=$bytesUs write=$writeUs '

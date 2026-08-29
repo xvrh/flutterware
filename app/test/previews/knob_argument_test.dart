@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/ui_catalog/knob.dart';
-import 'package:flutterware_app/src/previews/headless_catalog.dart';
+import 'package:flutterware_app/src/previews/catalog_values.dart';
 import 'package:flutterware_app/src/plugins/native/previews_core.dart';
 
 /// How a knob value gets from a command line or an agent to a demo.

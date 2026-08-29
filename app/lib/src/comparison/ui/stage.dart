@@ -1,10 +1,10 @@
 import 'dart:async';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
-import '../pixel_diff.dart';
 import 'shot_image.dart';
 import '../../ui/empty_state.dart';
 

@@ -31,7 +31,12 @@ String? scenarioStepTransition(ScenarioRunStep step) {
 Color scenarioStepTone(BuildContext context, ScenarioRunStep step) {
   var colors = context.colors;
   if (step.failure != null) return colors.red;
-  if (!step.settled || !step.landed || step.unchanged) return colors.amber;
+  // A capture parked on purpose is not amber: `Settle.none` was asked for a
+  // frame and gave one, so the animation still running is the subject of the
+  // picture rather than a warning about it.
+  if ((!step.settled && step.waited) || !step.landed || step.unchanged) {
+    return colors.amber;
+  }
   return colors.mut;
 }
 
@@ -46,13 +51,16 @@ class ScenarioStepNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    // Ordered by how much news each note carries. A capture parked on purpose
+    // is the quietest — it says what the author already knows — so it comes
+    // last and anything else the step has to say is shown instead.
     var (tone, icon, message) = switch (step) {
       ScenarioRunStep(failure: var failure?) => (
         colors.red,
         Icons.error_outline,
         failure,
       ),
-      ScenarioRunStep(settled: false) => (
+      ScenarioRunStep(settled: false, waited: true) => (
         colors.amber,
         Icons.motion_photos_on_outlined,
         'Still animating when this was captured — the settle budget ran out '
@@ -82,6 +90,14 @@ class ScenarioStepNotice extends StatelessWidget {
             'this step by something other than a scenario verb — the raw '
             '`tester`. Whatever the app showed in them is missing from this '
             'flow.',
+      ),
+      ScenarioRunStep(settled: false, waited: false) => (
+        colors.mut2,
+        Icons.motion_photos_paused_outlined,
+        'Parked mid-flight: this step ran under a policy that draws its '
+            'frames and stops rather than waiting for the app to go quiet, so '
+            'the screen still moving is what the picture is of. Nothing gave '
+            'up here.',
       ),
       _ => (null, null, null),
     };

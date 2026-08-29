@@ -1,11 +1,11 @@
 import 'dart:async';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 
 import '../../capture/settle.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
-import '../channels.dart';
 import '../comparison_controller.dart';
 import '../shot_store.dart';
 import 'channel_lines.dart';

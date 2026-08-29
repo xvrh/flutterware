@@ -1,13 +1,14 @@
+import 'scenario_diff.dart';
+
+import 'package:flutterware/comparison_report.dart';
 import 'package:path/path.dart' as p;
 
 import '../scenarios/runner.dart';
 import 'artifact.dart';
-import 'build_directory.dart';
+import '../embedder/build_directory.dart';
 import 'cancel.dart';
-import 'channels.dart';
 import 'closure.dart';
 import 'import_graph.dart';
-import 'scenario_comparison.dart';
 import 'scenarios_side.dart';
 import 'shot_cache.dart';
 import 'skip.dart';
@@ -81,9 +82,10 @@ class LiveScenarioSource implements ScenarioSource {
     // The runners built in claimed directories — `runnerFor` says why — and
     // the claim ends with the runner that held it.
     for (var runner in [_head, _base]) {
-      releaseComparisonBuildDirectory(
+      releaseBuildDirectory(
         runner.packageRoot,
         runner.buildDirectory,
+        root: comparisonBuildRoot,
       );
     }
   }
@@ -98,6 +100,7 @@ class ScenariosPlan {
     required this.settled,
     required this.toRun,
     required this.total,
+    this.because = const {},
   });
 
   /// Scenarios answered without replaying: added, removed, skipped.
@@ -107,6 +110,9 @@ class ScenariosPlan {
   final List<String> toRun;
 
   final int total;
+
+  /// Why [toRun] has to be replayed, folded — see [foldReasons].
+  final Map<String, int> because;
 }
 
 /// Runs the scenario half: decide, replay what is left, align, report.
@@ -194,6 +200,7 @@ class ScenariosRunner {
 
     var settled = <ScenarioComparison>[];
     var toRun = <String>[];
+    var reasons = <String>[];
     // One pass's digests, so the library every scenario imports is hashed
     // once rather than once per scenario. Scoped to this plan and no longer:
     // see [DigestCache].
@@ -206,20 +213,22 @@ class ScenariosRunner {
         continue;
       }
       cache.memo.remember(id, imports.closureOf(source.fileOf(id)));
-      if (SkipDecision.of(
+      var decision = SkipDecision.of(
         entryId: id,
         memo: cache.memo,
         baseRoot: baseRoot,
         headRoot: headRoot,
         pixels: pixels,
         digests: digests,
-      ).skip) {
+      );
+      if (decision.skip) {
         settled.add(
           ScenarioComparison.notRun(scenario: id, state: ComparedState.skipped),
         );
         continue;
       }
       toRun.add(id);
+      if (decision.reason case var reason?) reasons.add(reason);
     }
     for (var id in baseIds) {
       if (!headIds.contains(id)) {
@@ -233,6 +242,7 @@ class ScenariosRunner {
       settled: settled,
       toRun: toRun,
       total: settled.length + toRun.length,
+      because: foldReasons(reasons),
     );
   }
 
@@ -280,7 +290,7 @@ class ScenariosRunner {
         source.shots(id, base: false, outDir: outDir),
       ]);
       report(
-        ScenarioComparison.of(
+        compareScenarioSteps(
           scenario: id,
           base: replayed[0],
           head: replayed[1],
@@ -295,6 +305,7 @@ class ScenariosRunner {
           .where((s) => s.state == ComparedState.skipped)
           .length,
       elapsed: watch.elapsed,
+      because: plan.because,
     );
   }
 }

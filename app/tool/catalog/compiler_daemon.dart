@@ -914,7 +914,7 @@ class _Daemon {
   Future<String> _ensureHost() => _host ??= () async {
     try {
       var engineDir = await _timed('engine framework', () async {
-        var dir = await ensureEmbedderFramework(_cache);
+        var dir = await ensureEmbedderEngine(_cache);
         // Only once the shared copy is known good, so a failed download never
         // leaves an install with neither.
         removeLegacyEngineDir(config.appPackageRoot);

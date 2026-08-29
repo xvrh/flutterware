@@ -990,7 +990,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'readFrom',
         'type': 'String',
-        'doc': 'Where this reading came from: `live` when it was taken from a session somebody has open — the demo in whatever state they left it, including anything they reached by clicking — and `render` when this call built and drew its own copy.',
+        'doc': 'Where this reading came from: `live` when it was taken from a session somebody has open — the demo in whatever state they left it, including anything they reached by clicking — and, when this call built and drew its own copy, **which engine drew it**: `harness` for the `flutter_tester` lane, `guest` for the embedder.',
       },
       <String, Object?>{
         'name': 'ok',
@@ -4744,7 +4744,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'settled',
               'type': 'bool',
               'optional': true,
-              'doc': 'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+              'doc': 'False when frames were still scheduled at the shutter: something on this screen was still moving, and the capture is of a moving picture.',
+            },
+            <String, Object?>{
+              'name': 'waited',
+              'type': 'bool',
+              'optional': true,
+              'doc': 'Whether this step\'s settle policy was one that waits for the app to go quiet — `Settle.upTo` and `Settle.full`, and not `Settle.none`, `Settle.frames` or `Settle.elapse`, which stop on a count or on the clock.',
             },
             <String, Object?>{
               'name': 'landed',
@@ -4798,7 +4804,7 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'unsettledCount',
         'type': 'int',
-        'doc': 'How many of those steps were captured with the app still animating — `settled: false`, the bounded settle giving up with frames still scheduled.',
+        'doc': 'How many of those steps were captured with the app still animating after a policy that **waited** for it to stop — `settled: false` with `waited: true`, the settle giving up with frames still scheduled.',
       },
       <String, Object?>{
         'name': 'stepsElided',
@@ -5100,7 +5106,13 @@ final resultShapes = <String, ResultShape>{
                     'name': 'settled',
                     'type': 'bool',
                     'optional': true,
-                    'doc': 'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+                    'doc': 'False when frames were still scheduled at the shutter: something on this screen was still moving, and the capture is of a moving picture.',
+                  },
+                  <String, Object?>{
+                    'name': 'waited',
+                    'type': 'bool',
+                    'optional': true,
+                    'doc': 'Whether this step\'s settle policy was one that waits for the app to go quiet — `Settle.upTo` and `Settle.full`, and not `Settle.none`, `Settle.frames` or `Settle.elapse`, which stop on a count or on the clock.',
                   },
                   <String, Object?>{
                     'name': 'landed',
@@ -5155,7 +5167,7 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'unsettledCount',
               'type': 'int',
-              'doc': 'How many of those steps were captured with the app still animating — `settled: false`, the bounded settle giving up with frames still scheduled.',
+              'doc': 'How many of those steps were captured with the app still animating after a policy that **waited** for it to stop — `settled: false` with `waited: true`, the settle giving up with frames still scheduled.',
             },
             <String, Object?>{
               'name': 'stepsElided',
@@ -5503,7 +5515,13 @@ final resultShapes = <String, ResultShape>{
                           'name': 'settled',
                           'type': 'bool',
                           'optional': true,
-                          'doc': 'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+                          'doc': 'False when frames were still scheduled at the shutter: something on this screen was still moving, and the capture is of a moving picture.',
+                        },
+                        <String, Object?>{
+                          'name': 'waited',
+                          'type': 'bool',
+                          'optional': true,
+                          'doc': 'Whether this step\'s settle policy was one that waits for the app to go quiet — `Settle.upTo` and `Settle.full`, and not `Settle.none`, `Settle.frames` or `Settle.elapse`, which stop on a count or on the clock.',
                         },
                         <String, Object?>{
                           'name': 'landed',
@@ -5557,7 +5575,7 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'unsettledCount',
                     'type': 'int',
-                    'doc': 'How many of those steps were captured with the app still animating — `settled: false`, the bounded settle giving up with frames still scheduled.',
+                    'doc': 'How many of those steps were captured with the app still animating after a policy that **waited** for it to stop — `settled: false` with `waited: true`, the settle giving up with frames still scheduled.',
                   },
                   <String, Object?>{
                     'name': 'stepsElided',
@@ -5817,7 +5835,13 @@ final resultShapes = <String, ResultShape>{
         'name': 'settled',
         'type': 'bool',
         'optional': true,
-        'doc': 'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+        'doc': 'False when frames were still scheduled at the shutter: something on this screen was still moving, and the capture is of a moving picture.',
+      },
+      <String, Object?>{
+        'name': 'waited',
+        'type': 'bool',
+        'optional': true,
+        'doc': 'Whether this step\'s settle policy was one that waits for the app to go quiet — `Settle.upTo` and `Settle.full`, and not `Settle.none`, `Settle.frames` or `Settle.elapse`, which stop on a count or on the clock.',
       },
       <String, Object?>{
         'name': 'landed',

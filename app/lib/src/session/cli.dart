@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutterware/plugins.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../changes/changes_config_cache.dart';
@@ -9,10 +11,8 @@ import '../changes/changes_probe.dart';
 import '../changes/changes_text.dart';
 import '../changes/review_agent.dart';
 import '../comparison/artifact.dart';
-import '../comparison/channels.dart';
 import '../comparison/compare_command.dart';
 import '../comparison/runner.dart';
-import '../comparison/tree_diff.dart';
 import '../constants.dart';
 import '../plugins/plugin_core.dart';
 import '../shell/repo_layout.dart';
@@ -592,8 +592,8 @@ class FwCli {
           // end: the previews half is the fast one, and a terminal that shows
           // it while the slow half runs is the difference between a report
           // and a wait.
-          onPreviews: json ? null : _printPreviews,
-          onScenarios: json ? null : _printScenarios,
+          onPreviews: json ? null : printPreviews,
+          onScenarios: json ? null : printScenarios,
         );
       } on CompareException catch (e) {
         return fail('$e');
@@ -636,7 +636,8 @@ class FwCli {
   }
 
   /// The previews half, in a terminal.
-  void _printPreviews(ComparisonResult result) {
+  @visibleForTesting
+  void printPreviews(ComparisonResult result) {
     for (var item in result.items) {
       if (item.state == ComparedState.same ||
           item.state == ComparedState.skipped) {
@@ -655,6 +656,36 @@ class FwCli {
       '${result.countOf(ComparedState.skipped)} skipped '
       'in ${result.elapsed.inMilliseconds}ms',
     );
+    _printBecause(result.because, unit: 'entry', plural: 'entries');
+  }
+
+  /// Why the skip rule could not answer what it could not answer.
+  ///
+  /// The counterpart of the `n rendered` in the line above, and the only
+  /// thing that makes that number actionable. A branch that touched no widget
+  /// and rendered everything anyway is not a slow comparison, it is a path
+  /// the two checkouts disagree about — a lockfile the base's `pub get`
+  /// rewrote, a generated file only one side has — and naming it is the
+  /// difference between a three-minute mystery and one line.
+  ///
+  /// Capped, because on a real branch the reasons are per entry and the
+  /// summary would be as long as the catalog. Folded first, so the cap almost
+  /// never bites: one shared cause is one line however many entries carry it.
+  void _printBecause(
+    Map<String, int> because, {
+    required String unit,
+    required String plural,
+  }) {
+    const cap = 3;
+    for (var entry in because.entries.take(cap)) {
+      out.writeln(
+        '  because ${entry.key} — ${entry.value} '
+        '${entry.value == 1 ? unit : plural}',
+      );
+    }
+    if (because.length > cap) {
+      out.writeln('  … and ${because.length - cap} more reasons');
+    }
   }
 
   /// The scenario half, in a terminal.
@@ -662,7 +693,17 @@ class FwCli {
   /// Nested one level deeper than the previews half because a scenario *is*
   /// one level deeper: the row is the flow, and the lines under it are what
   /// happened inside it.
-  void _printScenarios(ScenarioResults results) {
+  ///
+  /// **The note is printed, and it is printed first.** A half that could not
+  /// run leaves the same empty list as a project with no scenarios, and the
+  /// summary line it prints — `0 scenarios, 0 run, 0 skipped` — reads as a
+  /// clean verdict either way. The note is the only thing that separates
+  /// them, and it was recorded in the artifact and shown to nobody.
+  @visibleForTesting
+  void printScenarios(ScenarioResults results) {
+    if (results.note case var note?) {
+      out.writeln('  scenarios: $note');
+    }
     for (var scenario in results.items) {
       if (scenario.state == ComparedState.same ||
           scenario.state == ComparedState.skipped) {
@@ -687,6 +728,7 @@ class FwCli {
       '${results.items.length} scenarios, ${results.ran} run, '
       '${results.skipped} skipped in ${results.elapsed.inMilliseconds}ms',
     );
+    _printBecause(results.because, unit: 'scenario', plural: 'scenarios');
   }
 
   /// A tree delta with the top of its path cut off.

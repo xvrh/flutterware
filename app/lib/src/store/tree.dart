@@ -140,7 +140,8 @@ bool storeShotMatches(String stem, String query) {
   return asNumber != null ? asNumber == number : storeSlug(wanted) == slug;
 }
 
-/// Whether this set is *composed* or handed over as the app drew it.
+/// Whether this set is *composed* — given a ground and a device body — rather
+/// than handed over close to how the app drew it.
 ///
 /// The rule decision 7 settles, in one place because it is the difference
 /// between two quite different outputs and reading it off two call sites would
@@ -153,6 +154,15 @@ bool storeShotMatches(String stem, String query) {
 /// a marketing decision, and not ours. What is left is the set whose canvas is
 /// not its device's, where there is no such option: Play's phone is 2:1 and no
 /// Android phone is.
+///
+/// **This is no longer the same question as whether a set is framed.** Every
+/// set goes through the frame pass, because every set wants the status bar a
+/// `flutter_tester` could not draw — see `defaultStoreFrame`, which hands an
+/// uncomposed set a pane of glass rather than a composition. What this still
+/// decides is the deliverable's *kind*, and therefore whether `unframed/` has
+/// anything to say: a composition is the case where the app's own pixels are
+/// not the deliverable, so it is the only case where keeping them is more than
+/// a second name for one file.
 bool storeShouldCompose({
   required bool hasFrame,
   required StoreTarget target,

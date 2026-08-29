@@ -95,7 +95,14 @@ class _Job {
       device = json['device']! as String,
       canvasWidth = json['canvasWidth']! as int,
       canvasHeight = json['canvasHeight']! as int,
-      canvasRatio = (json['canvasRatio']! as num).toDouble();
+      canvasRatio = (json['canvasRatio']! as num).toDouble(),
+      statusBrightness = _brightness(json['statusBrightness']),
+      navBrightness = _brightness(json['navBrightness']);
+
+  /// The names `SystemUiOverlayStyle` uses, as a scenario recorded them.
+  /// Absent — an app that declared no style — is dark icons, for a light app.
+  static Brightness _brightness(Object? name) =>
+      name == 'light' ? Brightness.light : Brightness.dark;
 
   final String image;
 
@@ -111,6 +118,8 @@ class _Job {
   final int canvasWidth;
   final int canvasHeight;
   final double canvasRatio;
+  final Brightness statusBrightness;
+  final Brightness navBrightness;
 }
 
 /// Every job in [manifest], composed and captured.
@@ -175,6 +184,8 @@ Future<Map<String, Object?>> composeStoreFrames(
             locale: _localeOf(job.locale),
             device: device,
             canvas: canvas,
+            statusBrightness: job.statusBrightness,
+            navBrightness: job.navBrightness,
           );
           await tester.pumpWidget(
             StoreFrameStage(shot: shot, child: build(shot)),

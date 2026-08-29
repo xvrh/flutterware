@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/foundation.dart';
 
 import 'artifact.dart';
 import 'cancel.dart';
-import 'channels.dart';
 import 'last_run.dart';
 import 'runner.dart';
-import 'scenario_comparison.dart';
 import 'shot_cache.dart';
 
 /// Which half of a comparison, where both are spelled the same way.

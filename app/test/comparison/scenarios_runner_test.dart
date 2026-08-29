@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutterware_app/src/comparison/channels.dart';
+import 'package:flutterware/comparison_report.dart';
+import 'package:flutterware_app/src/comparison/scenario_diff.dart';
 import 'package:flutterware_app/src/comparison/scenario_alignment.dart';
-import 'package:flutterware_app/src/comparison/scenario_comparison.dart';
 import 'package:flutterware_app/src/comparison/scenarios_runner.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
 import 'package:path/path.dart' as p;
