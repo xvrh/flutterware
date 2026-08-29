@@ -140,36 +140,45 @@ class HeadlessCatalog extends CatalogRenderer {
     var stops = videoStops(durationMs: durationMs, fps: fps);
 
     var render = Stopwatch()..start();
-    var first = await guest.captureRawFrame(
-      alreadySettled: opening.settled ?? false,
-    );
-    var encoder = await VideoEncoder.start(
-      output: output,
-      width: first.width,
-      height: first.height,
-      fps: fps,
-      // The guest's own order. Converting it here would cost more than the
-      // encode does — see [FrameCapture.captureRaw].
-      pixelFormat: first.pixelFormat,
-    );
+    // The frames arrive as a sequence the guest writes on its own, so the
+    // first one has to be waited for before the encoder can be opened — it is
+    // what says how big the picture is and what order its bytes are in.
+    var frames = guest.renderSequence(scope: opening.scope, stops: stops);
+    VideoEncoder? encoder;
     try {
       var handoff = Stopwatch();
-      handoff.start();
-      encoder.addRaw(first);
-      handoff.stop();
-      for (var t in stops.skip(1)) {
-        var landed = await guest.seekMotion(t, scope: opening.scope);
-        var frame = await guest.captureRawFrame(
-          alreadySettled: landed.settled ?? false,
+      var index = 0;
+      await for (var frame in frames) {
+        encoder ??= await VideoEncoder.start(
+          output: output,
+          width: frame.width,
+          height: frame.height,
+          fps: fps,
+          // The guest's own order. Converting it here would cost more than the
+          // encode does — see [FrameCapture.captureRaw].
+          pixelFormat: frame.pixelFormat,
         );
         handoff.start();
         encoder.addRaw(frame);
         handoff.stop();
+        index++;
       }
       guest.timings.encoderHandoff = handoff.elapsed;
+      // Position is the only thing pairing a file with a stop, so a short
+      // sequence is a video missing a moment rather than a shorter video.
+      if (index != stops.length) {
+        throw StateError(
+          'the guest rendered $index frames for ${stops.length} stops — '
+          'something other than the motion was scheduling frames, and the '
+          'clip would be of the wrong moments',
+        );
+      }
     } catch (_) {
-      await encoder.abort();
+      await encoder?.abort();
       rethrow;
+    }
+    if (encoder == null) {
+      throw StateError('the guest rendered nothing to encode');
     }
     render.stop();
 
@@ -427,6 +436,17 @@ class GuestTimings {
   /// Copying decoded pixels into the encoder's stdin.
   Duration encoderHandoff = Duration.zero;
 
+  /// The guest's own render loop, end to end — every frame drawn and written,
+  /// with nothing asked of it in between.
+  Duration guestRender = Duration.zero;
+
+  /// How long this side sat waiting for a frame that had not landed yet.
+  ///
+  /// Read against [guestRender] it says which half is the bottleneck: near it,
+  /// the guest is drawing and this side is idle; near zero, the guest is ahead
+  /// and reading and encoding is the wall.
+  Duration awaitingFrames = Duration.zero;
+
   /// The capture, split into what the guest did and what this side did.
   Duration captureDraw = Duration.zero;
   Duration captureRead = Duration.zero;
@@ -442,6 +462,8 @@ class GuestTimings {
     'captureReadMs': captureRead.inMilliseconds,
     'captureDecodeMs': captureDecode.inMilliseconds,
     'encoderHandoffMs': encoderHandoff.inMilliseconds,
+    'guestRenderMs': guestRender.inMilliseconds,
+    'awaitingFramesMs': awaitingFrames.inMilliseconds,
     'capturedMB': (captureBytes / 1048576).round(),
     'listCalls': listCalls,
     'seekCalls': seekCalls,
@@ -687,6 +709,10 @@ class _GuestSession {
         socketPath,
         '${viewport.width}',
         '${viewport.height}',
+        // Nothing watches this guest, so nothing is served by pacing it to a
+        // display — see `--free-vsync` in `native/host.c`. Measured at 4.4x
+        // on a render.
+        '--free-vsync',
       ]);
       var vmServiceUri = Completer<String>();
       // The guest's last few lines, kept rather than drained: an engine that
@@ -1165,7 +1191,73 @@ class _GuestSession {
   /// Read at the end rather than accumulated as it goes: `FrameCapture` counts
   /// for the whole session and this is the one place that knows a render is
   /// over.
+  /// Walks the whole playhead in one call, yielding frames as they land.
+  ///
+  /// **This is the batched render**, and what it removes is the conversation.
+  /// Driving a video with `seekMotion` + `captureRawFrame` costs two
+  /// cross-process round trips a frame — one over the VM service to move the
+  /// playhead, one over the socket to ask for the picture — and measured at
+  /// phone resolution those were 18 of the 22ms a frame cost, against 4ms of
+  /// drawing. Here the capture is armed once, the loop runs inside the guest
+  /// beside the playhead, and nothing is asked per frame.
+  ///
+  /// It yields rather than returns because the two halves then overlap: this
+  /// side reads and encodes frame 3 while the guest is still drawing frame 40,
+  /// where before each waited for the other.
+  ///
+  /// Frames pair with [stops] by **position**, which holds exactly as long as
+  /// nothing but the render loop schedules a frame. That is why this settles
+  /// first — a pending image load or a running transient would present frames
+  /// nobody asked for and shift every file after them.
+  Stream<RawFrame> renderSequence({
+    required String scope,
+    required List<double> stops,
+  }) async* {
+    await _settle();
+    var prefix = p.join(_capture.workDir, 'seq-');
+    var frames = _capture.captureSequence(prefix: prefix, count: stops.length);
+    // Unawaited on purpose: it answers when the *last* frame has been drawn,
+    // and the whole point is to be reading the first one long before then.
+    //
+    // A render that dies owes frames that are never coming, so its failure is
+    // pushed into the outstanding captures rather than only remembered —
+    // otherwise the loop below waits out a timeout for a file no one is
+    // writing, and reports that instead of the real error.
+    Object? failure;
+    var guestClock = Stopwatch()..start();
+    var done = _vmService
+        .callExtension(
+          'ext.flutterware.motion.render',
+          args: {'scope': scope, 'stops': stops.join(',')},
+        )
+        .then<void>(
+          (_) {},
+          onError: (Object error) {
+            failure = error;
+            _capture.endSequence(prefix, because: error);
+          },
+        )
+        .whenComplete(() => timings.guestRender = guestClock.elapsed);
+
+    try {
+      var waiting = Stopwatch();
+      for (var frame in frames) {
+        waiting.start();
+        var landed = await frame;
+        waiting.stop();
+        yield landed;
+        timings.frames++;
+      }
+      timings.awaitingFrames = waiting.elapsed;
+    } finally {
+      _capture.endSequence(prefix);
+      await done;
+    }
+    if (failure != null) throw StateError('the render failed: $failure');
+  }
+
   /// [captureImage] with the pixels left as the guest wrote them.
+
   ///
   /// [alreadySettled] skips the settle loop, and is only ever true because a
   /// *seek* just reported the frame it drew was quiet. The loop it skips is

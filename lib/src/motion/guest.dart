@@ -228,6 +228,69 @@ class MotionRegistry {
       );
     });
 
+    // **The whole sequence, in one call.**
+    //
+    // `seek` is the right shape for a scrubber, where a person moves the
+    // playhead once and looks. It is the wrong shape for a renderer, which
+    // moves it eighteen hundred times for a minute of video and looks at every
+    // one: each seek is a cross-process round trip, and each picture taken
+    // after it is another. Measured at phone resolution, those two round trips
+    // were 18 of the 22ms a frame cost, against 4ms of actual drawing.
+    //
+    // So the loop moves in here, where the playhead is. Nothing crosses the
+    // process boundary per frame; the caller arms a capture *sequence* on the
+    // side, and every frame this schedules is written as it lands.
+    //
+    // It renders exactly `stops.length` frames and says so, because the
+    // caller's only way to pair a file with a stop is position. That holds
+    // while nothing else schedules a frame — true of a parked motion, which is
+    // what a render walks — and a caller that got fewer files than it asked
+    // for must refuse rather than publish a video silently missing a moment.
+    developer.registerExtension('ext.flutterware.motion.render', (
+      _,
+      args,
+    ) async {
+      var scope = resolve(args['scope']);
+      if (scope == null) return _noScope(args['scope']);
+      var stops = <double>[];
+      for (var raw in (args['stops'] ?? '').split(',')) {
+        var value = double.tryParse(raw.trim());
+        if (value == null) {
+          return developer.ServiceExtensionResponse.error(
+            developer.ServiceExtensionResponse.invalidParams,
+            jsonEncode({'error': 'render wants stops as comma-separated 0..1'}),
+          );
+        }
+        stops.add(value.clamp(0.0, 1.0));
+      }
+      if (stops.isEmpty) {
+        return developer.ServiceExtensionResponse.error(
+          developer.ServiceExtensionResponse.invalidParams,
+          jsonEncode({'error': 'render wants at least one stop'}),
+        );
+      }
+
+      var controller = scope.controller;
+      var rendered = 0;
+      for (var t in stops) {
+        controller.progress = t;
+        // One frame per stop, and the frame is scheduled *because* the
+        // playhead moved — a controller write marks the tree dirty. Forcing
+        // one as well would present twice for one stop and shift every file
+        // after it by one.
+        await _settle();
+        rendered++;
+      }
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode({
+          'rendered': rendered,
+          'durationMs': scope.motionValues.resolveDuration().inMilliseconds,
+          'pending': PaintingBinding.instance.imageCache.pendingImageCount,
+          'transient': SchedulerBinding.instance.transientCallbackCount,
+        }),
+      );
+    });
+
     developer.registerExtension('ext.flutterware.motion.transport', (
       _,
       args,
