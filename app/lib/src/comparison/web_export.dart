@@ -6,6 +6,7 @@ import 'package:flutterware/comparison_report.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/base_href.dart';
 import 'shot_cache.dart';
 import 'shot_png.dart';
 
@@ -25,7 +26,8 @@ import 'shot_png.dart';
 ///
 /// The page must be **served**, not opened off the filesystem: it fetches
 /// `index.json` and every frame relative to itself, and a browser refuses
-/// those on a `file://` page.
+/// those on a `file://` page. Where it is served from is [defaultBaseHref]'s
+/// business: a page under a CI prefix is the common case, not the exception.
 class ComparisonWebExporter {
   ComparisonWebExporter({
     required this.flutterExecutable,
@@ -70,7 +72,7 @@ class ComparisonWebExporter {
     required ShotCache cache,
     required String against,
     required String output,
-    String? baseHref,
+    String baseHref = defaultBaseHref,
     bool offline = false,
     void Function(String line)? onOutput,
   }) async {
@@ -87,7 +89,7 @@ class ComparisonWebExporter {
 
     onOutput?.call('[export] copying the viewer');
     _copyDirectory(Directory(viewerDir), outputDir);
-    if (baseHref != null) _setBaseHref(p.join(output, 'index.html'), baseHref);
+    setBaseHrefIn(p.join(output, 'index.html'), baseHref);
 
     onOutput?.call('[export] encoding the frames');
     index['against'] = against;
@@ -224,22 +226,6 @@ class ComparisonWebExporter {
         'the tool, not in your project.',
       );
     }
-  }
-
-  /// Points the page at where it will actually be mounted.
-  ///
-  /// `flutter build web --base-href` only ever edits this one attribute, so
-  /// doing it here instead is what lets one compiled bundle serve every mount
-  /// point.
-  void _setBaseHref(String indexHtml, String baseHref) {
-    var file = File(indexHtml);
-    if (!file.existsSync()) return;
-    file.writeAsStringSync(
-      file.readAsStringSync().replaceAll(
-        RegExp(r'<base href="[^"]*">'),
-        '<base href="$baseHref">',
-      ),
-    );
   }
 
   static void _copyDirectory(Directory source, Directory destination) {

@@ -28,6 +28,7 @@ import '../../scenarios/run_dirs.dart';
 import '../../scenarios/runner.dart';
 import '../../scenarios/web_export.dart';
 import '../../scenarios/web_report.dart';
+import '../../utils/base_href.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 import 'scenarios_address.dart';
@@ -1292,8 +1293,11 @@ class ScenariosCore extends PluginCore {
               kind: ActionParameterKind.string,
               required: false,
               description:
-                  'What the page is mounted under when it is not the root — '
-                  '`/scenarios/`. Leading and trailing slash.',
+                  'Where the page is mounted. Defaults to `./`, which '
+                  "resolves against the page's own URL and so works at a "
+                  'server root and under a prefix alike. Give an absolute '
+                  '`/scenarios/` only for a host that serves a directory '
+                  'without redirecting to a trailing slash.',
             ),
             const ActionParameter(
               'offline',
@@ -3159,15 +3163,12 @@ class ScenariosCore extends PluginCore {
     Map<String, Object?> arguments, {
     void Function(String line)? onOutput,
   }) async {
-    var baseHref = arguments['base-href'] as String?;
-    if (baseHref != null &&
-        baseHref.isNotEmpty &&
-        (!baseHref.startsWith('/') || !baseHref.endsWith('/'))) {
-      throw ArgumentError.value(
-        baseHref,
-        'base-href',
-        'must begin and end with a slash — `/scenarios/`',
-      );
+    var baseHref = switch (arguments['base-href'] as String?) {
+      var given? when given.isNotEmpty => given,
+      _ => defaultBaseHref,
+    };
+    if (baseHrefProblem(baseHref) case var problem?) {
+      throw ArgumentError.value(baseHref, 'base-href', problem);
     }
     // One at a time: an export empties its output directory before writing,
     // and two of them pointed at the same one would each delete the other's
@@ -3214,7 +3215,7 @@ class ScenariosCore extends PluginCore {
           run: runResult,
         ),
         output: page,
-        baseHref: baseHref == null || baseHref.isEmpty ? null : baseHref,
+        baseHref: baseHref,
         offline: arguments['offline'] == 'true' || arguments['offline'] == true,
         onOutput: onOutput,
       );

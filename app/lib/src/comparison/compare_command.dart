@@ -7,6 +7,7 @@ import '../plugins/native/previews_core.dart';
 import '../plugins/native/previews_results.dart';
 import '../plugins/native/scenarios_core.dart';
 import '../session/session.dart';
+import '../utils/base_href.dart';
 import '../utils/run_dir.dart';
 import 'artifact.dart';
 import 'base_checkout.dart';
@@ -42,6 +43,7 @@ class CompareOptions {
     this.entries = const [],
     this.export = false,
     this.exportDir,
+    this.baseHref = defaultBaseHref,
     this.reportDir,
   });
 
@@ -63,6 +65,9 @@ class CompareOptions {
   /// when a report is being written, so a comment and the page it links are
   /// hosted together.
   final String? exportDir;
+
+  /// What the exported page says it is mounted under — see [defaultBaseHref].
+  final String baseHref;
 
   /// Write `comment.md` + `mosaic.png` here. Implies the page under
   /// `<reportDir>/web`.
@@ -230,6 +235,7 @@ Future<CompareOutcome> runComparison({
           (options.reportDir != null
               ? p.join(options.reportDir!, 'web')
               : p.join(top, 'build', 'comparison', 'web')),
+      baseHref: options.baseHref,
       onOutput: onProgress,
     );
   }
@@ -267,6 +273,13 @@ Future<ComparisonCompareResult> runCompareAction({
 }) async {
   var entry = arguments['entry'] as String?;
   var export = arguments['export'];
+  var baseHref = switch (arguments['base-href'] as String?) {
+    var given? when given.isNotEmpty => given,
+    _ => defaultBaseHref,
+  };
+  if (baseHrefProblem(baseHref) case var problem?) {
+    throw CompareException('`base-href` $problem.');
+  }
   var outcome = await runComparison(
     session: session,
     options: CompareOptions(
@@ -274,6 +287,7 @@ Future<ComparisonCompareResult> runCompareAction({
       package: arguments['package'] as String?,
       entries: [?entry],
       export: export == true || export == 'true',
+      baseHref: baseHref,
       reportDir: arguments['report'] as String?,
     ),
   );

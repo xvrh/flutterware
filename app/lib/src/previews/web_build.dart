@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../utils/base_href.dart';
 import 'catalog_entry.dart';
 import 'web_app_generator.dart';
 
@@ -57,7 +58,7 @@ class WebCatalogBuilder {
   Future<WebCatalogBuild> build({
     required List<CatalogEntry> entries,
     String? output,
-    String? baseHref,
+    String baseHref = defaultBaseHref,
     void Function(String line)? onOutput,
   }) async {
     if (entries.isEmpty) {
@@ -86,7 +87,6 @@ class WebCatalogBuilder {
       p.relative(target, from: packageRoot),
       '--output',
       outputDir,
-      if (baseHref != null) ...['--base-href', baseHref],
     ], onOutput);
     stopwatch.stop();
 
@@ -102,9 +102,15 @@ class WebCatalogBuilder {
       );
     }
 
+    // After the build rather than through `--base-href`, for the reason
+    // [setBaseHrefIn] gives: that flag cannot say `./`, and `./` is what a
+    // page published under a per-pull-request prefix needs.
+    var indexHtml = p.join(outputDir, 'index.html');
+    setBaseHrefIn(indexHtml, baseHref);
+
     return WebCatalogBuild(
       output: outputDir,
-      indexHtml: p.join(outputDir, 'index.html'),
+      indexHtml: indexHtml,
       entryCount: entries.length,
       duration: stopwatch.elapsed,
     );

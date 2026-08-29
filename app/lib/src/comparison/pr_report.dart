@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutterware/comparison_report.dart';
 import 'package:image/image.dart' as img;
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import 'artifact.dart';
@@ -24,16 +26,22 @@ class PrReport {
   final String? mosaicPath;
 }
 
-/// One row of the mosaic: what to call it, and the two frames.
+/// One cell of the mosaic: what to call it, and the two frames.
 class _MosaicRow {
   const _MosaicRow({
-    required this.title,
+    required this.state,
+    required this.id,
     required this.base,
     required this.head,
     this.clusters = const [],
   });
 
-  final String title;
+  /// The caption's first half, which always survives — it is one short word.
+  final String state;
+
+  /// The caption's second half, elided from the left when it will not fit.
+  final String id;
+
   final img.Image? base;
   final img.Image? head;
 
@@ -79,14 +87,30 @@ PrReport writePrReport({
 }
 
 /// The mosaic stops here and the comment says "and N more" — a comment is a
-/// teaser, and forty rows of phone frames is a page pretending to be one.
+/// teaser, and forty cells of phone frames is a page pretending to be one.
 const mosaicRowCap = 20;
 
 /// Both frames scale to this height, so a phone step and a wide desktop
-/// preview read as rows of one table rather than a ransom note.
+/// preview read as cells of one table rather than a ransom note.
 const _rowHeight = 320;
 const _pad = 12;
 const _titleHeight = 28;
+
+/// Cells are laid out across before they are laid down, and this is how far
+/// across they go before wrapping.
+///
+/// Stacked in one column a teaser got *taller* the more it had to show, which
+/// is backwards: fifteen findings came to 332×5580 — narrower than a comment's
+/// content column, so no client scaled it down, and the comment became a
+/// ribbon nobody reached the end of. Wide enough here for four phone pairs,
+/// and still under what a comment renders at.
+const _mosaicMaxWidth = 1400;
+
+/// What a clipped caption is replaced by. Three periods rather than `…`,
+/// which [_captionFont] has no glyph for and would draw as nothing at all.
+const _elision = '...';
+
+final _captionFont = img.arial14;
 
 /// One finding, whichever half it came from.
 class _Finding {
@@ -185,7 +209,8 @@ _MosaicRow? _row(_Finding finding, {required ShotCache cache}) {
   var head = decode(shots?.head, finding.frames?.head);
   if (base == null && head == null) return null;
   return _MosaicRow(
-    title: '${finding.state.name}  ${finding.id}',
+    state: finding.state.name,
+    id: finding.id,
     base: base,
     head: head,
     clusters: finding.item?.pixels?.diff.clusters ?? const [],
@@ -202,62 +227,140 @@ img.Image _fromRgba(Uint8List rgba, int width, int height) =>
       order: img.ChannelOrder.rgba,
     );
 
+/// One cell once its frames are scaled: what to draw, and how wide it draws.
+class _MosaicCell {
+  _MosaicCell({required this.row, this.base, this.head});
+
+  final _MosaicRow row;
+  final img.Image? base;
+  final img.Image? head;
+
+  int get width =>
+      (base?.width ?? 0) +
+      (head?.width ?? 0) +
+      (base != null && head != null ? _pad : 0);
+}
+
 Uint8List _mosaic(List<_MosaicRow> rows) {
-  var scaled = <(_MosaicRow, img.Image?, img.Image?)>[];
-  var width = 0;
-  for (var row in rows) {
-    var base = row.base == null
-        ? null
-        : img.copyResize(row.base!, height: _rowHeight);
-    img.Image? head;
-    if (row.head != null) {
-      // The clusters are burned in before scaling, in the frame's own pixel
-      // space — scaled coordinates drift a pixel per region and a box that
-      // misses what it points at is worse than none.
-      var full = row.head!.clone();
-      for (var rect in row.clusters) {
-        img.drawRect(
-          full,
-          x1: rect.x - 1,
-          y1: rect.y - 1,
-          x2: rect.x + rect.width + 1,
-          y2: rect.y + rect.height + 1,
-          color: img.ColorRgb8(255, 160, 0),
-          thickness: (full.width / 300).clamp(1, 4).toDouble(),
-        );
-      }
-      head = img.copyResize(full, height: _rowHeight);
+  var cells = [for (var row in rows) _scale(row)];
+
+  // Cells flow left to right and wrap, each keeping its own width. A uniform
+  // grid also cures the ribbon, but every column then has to be as wide as
+  // the widest cell — one desktop preview among fourteen phones made a
+  // 1396×2004 picture that was two thirds empty.
+  var lines = <List<_MosaicCell>>[[]];
+  var lineWidth = _pad;
+  for (var cell in cells) {
+    if (lines.last.isNotEmpty &&
+        lineWidth + cell.width + _pad > _mosaicMaxWidth) {
+      lines.add([]);
+      lineWidth = _pad;
     }
-    scaled.add((row, base, head));
-    var rowWidth = (base?.width ?? 0) + (head?.width ?? 0) + _pad * 3;
-    if (rowWidth > width) width = rowWidth;
+    lines.last.add(cell);
+    lineWidth += cell.width + _pad;
   }
 
-  var height = rows.length * (_rowHeight + _titleHeight + _pad * 2);
-  var canvas = img.Image(width: width, height: height, numChannels: 3);
+  var cellHeight = _titleHeight + _rowHeight;
+  var canvas = img.Image(
+    // The widest line rather than [_mosaicMaxWidth]: an all-phone mosaic
+    // should not be padded out to a width it does not use, and a lone cell
+    // too wide to wrap has to fit anyway.
+    width: lines
+        .map((line) => line.fold(_pad, (w, cell) => w + cell.width + _pad))
+        .reduce(max),
+    height: _pad + lines.length * (cellHeight + _pad),
+    numChannels: 3,
+  );
   img.fill(canvas, color: img.ColorRgb8(250, 250, 250));
 
-  var y = 0;
-  for (var (row, base, head) in scaled) {
-    img.drawString(
-      canvas,
-      row.title,
-      font: img.arial14,
-      x: _pad,
-      y: y + _pad,
-      color: img.ColorRgb8(40, 40, 40),
-    );
-    var top = y + _titleHeight + _pad;
+  var y = _pad;
+  for (var line in lines) {
     var x = _pad;
-    for (var frame in [base, head]) {
-      if (frame != null) {
-        img.compositeImage(canvas, frame, dstX: x, dstY: top);
-        x += frame.width + _pad;
+    for (var cell in line) {
+      img.drawString(
+        canvas,
+        mosaicCaption(cell.row.state, cell.row.id, cell.width),
+        font: _captionFont,
+        x: x,
+        y: y,
+        color: img.ColorRgb8(40, 40, 40),
+      );
+      var frameX = x;
+      for (var frame in [cell.base, cell.head]) {
+        if (frame == null) continue;
+        img.compositeImage(canvas, frame, dstX: frameX, dstY: y + _titleHeight);
+        frameX += frame.width + _pad;
       }
+      x += cell.width + _pad;
     }
-    y += _rowHeight + _titleHeight + _pad * 2;
+    y += cellHeight + _pad;
   }
   return img.encodePng(canvas);
+}
+
+/// Both frames to [_rowHeight], with the changed regions boxed on the head.
+_MosaicCell _scale(_MosaicRow row) {
+  var base = row.base == null
+      ? null
+      : img.copyResize(row.base!, height: _rowHeight);
+  img.Image? head;
+  if (row.head != null) {
+    // The clusters are burned in before scaling, in the frame's own pixel
+    // space — scaled coordinates drift a pixel per region and a box that
+    // misses what it points at is worse than none.
+    var full = row.head!.clone();
+    for (var rect in row.clusters) {
+      img.drawRect(
+        full,
+        x1: rect.x - 1,
+        y1: rect.y - 1,
+        x2: rect.x + rect.width + 1,
+        y2: rect.y + rect.height + 1,
+        color: img.ColorRgb8(255, 160, 0),
+        thickness: (full.width / 300).clamp(1, 4).toDouble(),
+      );
+    }
+    head = img.copyResize(full, height: _rowHeight);
+  }
+  return _MosaicCell(row: row, base: base, head: head);
+}
+
+/// A cell's caption, sized to the cell rather than to the frames under it.
+///
+/// Drawn unmeasured it ran off the right edge of the canvas and was simply
+/// clipped, which cost the leaf and the symbol — the half that says *which*
+/// entry this is. So the id is elided from the **left** and the state, one
+/// short word, always survives: `changed  ...card.dart#TaskCardExample.new`.
+@visibleForTesting
+String mosaicCaption(String state, String id, int width) {
+  var prefix = '$state  ';
+  return '$prefix${_elideLeft(id, width - mosaicTextWidth(prefix))}';
+}
+
+String _elideLeft(String text, int width) {
+  if (mosaicTextWidth(text) <= width) return text;
+  var budget = width - mosaicTextWidth(_elision);
+  var taken = 0;
+  var kept = 0;
+  for (var index = text.length - 1; index >= 0; index--) {
+    var advance =
+        _captionFont.characters[text.codeUnitAt(index)]?.xAdvance ?? 0;
+    if (taken + advance > budget) break;
+    taken += advance;
+    kept++;
+  }
+  return '$_elision${text.substring(text.length - kept)}';
+}
+
+/// What [img.drawString] will measure this at — the same rule it uses, down to
+/// dropping a character the font has no glyph for.
+@visibleForTesting
+int mosaicTextWidth(String text) {
+  var width = 0;
+  for (var unit in text.codeUnits) {
+    width += _captionFont.characters[unit]?.xAdvance ?? 0;
+  }
+  return width;
 }
 
 String _comment(

@@ -144,4 +144,77 @@ void main() {
     expect(comment, contains('step `guest › Pay`'));
     expect(report.mosaicPath, isNotNull);
   });
+
+  group('the mosaic lays its cells across before it lays them down', () {
+    /// Phone-shaped, and [wideIndex] desktop-shaped — a mix is the case that
+    /// decides the layout, not one shape repeated.
+    img.Image mosaicOf(int findings, {int wideIndex = -1}) {
+      var items = <ComparedItem>[];
+      for (var index = 0; index < findings; index++) {
+        var wide = index == wideIndex;
+        var width = wide ? 1280 : 300;
+        var height = wide ? 800 : 650;
+        for (var key in ['base$index', 'head$index']) {
+          file(key, 180, width: width, height: height);
+        }
+        items.add(
+          ComparedItem(
+            id: 'demo/card$index.dart#card',
+            state: ComparedState.changed,
+            shots: (base: 'base$index', head: 'head$index'),
+          ),
+        );
+      }
+      var report = writePrReport(
+        artifact: ComparisonArtifact(previews: previews(items)),
+        cache: cache,
+        against: 'master',
+        directory: p.join(temp.path, 'report$findings$wideIndex'),
+      );
+      return img.decodePng(File(report.mosaicPath!).readAsBytesSync())!;
+    }
+
+    test('so more findings make it wider, not taller', () {
+      var one = mosaicOf(1);
+      var fifteen = mosaicOf(15);
+
+      // Stacked in one column, fifteen findings were fifteen times as tall as
+      // one and no wider — a ribbon narrower than a comment's content column,
+      // so no client scaled it and nobody read past the third row.
+      expect(fifteen.width, greaterThan(one.width));
+      expect(fifteen.height, lessThan(one.height * 15));
+      // And it stops growing sideways rather than running off the other way.
+      expect(fifteen.width, lessThanOrEqualTo(1400));
+    });
+
+    test('and one desktop entry does not collapse it back to a column', () {
+      var fifteen = mosaicOf(15, wideIndex: 14);
+
+      // A desktop pair is 1036px at full height, which leaves room for one
+      // column — so everything shrinks together until two fit. Without that
+      // this came back 1060 × 5412, which is the ribbon again.
+      expect(fifteen.width, lessThanOrEqualTo(1400));
+      // Wider than a single cell can be, so there is more than one column.
+      expect(fifteen.width, greaterThan(700));
+      expect(fifteen.height, lessThan(3000));
+    });
+  });
+
+  group('a mosaic caption', () {
+    test('is left alone when it fits its cell', () {
+      expect(mosaicCaption('added', 'a.dart#b', 400), 'added  a.dart#b');
+    });
+
+    test('elides from the left, so the leaf survives', () {
+      const id =
+          'examples/src/assessment/list_card.dart#AssessmentListCardExample.new';
+      var caption = mosaicCaption('changed', id, 332);
+
+      expect(mosaicTextWidth(caption), lessThanOrEqualTo(332));
+      // The state word says what happened and the tail says to what; it is
+      // the middle of a path that identifies nothing.
+      expect(caption, startsWith('changed  ...'));
+      expect(caption, endsWith('CardExample.new'));
+    });
+  });
 }

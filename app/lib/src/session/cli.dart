@@ -17,6 +17,7 @@ import '../constants.dart';
 import '../plugins/plugin_core.dart';
 import '../shell/repo_layout.dart';
 import '../shell/worktree_discovery.dart';
+import '../utils/base_href.dart';
 import '../utils/flutter_sdk.dart';
 import '../worktrees/facts.dart';
 import '../worktrees/facts_probe.dart';
@@ -227,7 +228,7 @@ const fwCommands = [
     'compare',
     usage:
         'compare [--base=<ref>] [--package=<path>] [--entry=<id>] '
-        '[--export[=<dir>]] [--report=<dir>] [--json]',
+        '[--export[=<dir>]] [--base-href=<path>] [--report=<dir>] [--json]',
     summary: 'what this worktree did to the pictures, against its base',
     details:
         'Renders previews and replays scenarios on both sides of the branch '
@@ -249,8 +250,14 @@ const fwCommands = [
         'a\n`file://` page cannot fetch its own frames. The default directory '
         'is\n`build/comparison/web` at the repository top level.\n'
         '\n'
+        'The page resolves everything against its own URL, so it works '
+        'wherever\nit is hosted — a bucket root or a per-pull-request prefix '
+        '— without\nbeing told. Pass `--base-href=/comparisons/42/` only for '
+        'a host that\nserves the directory without redirecting to a trailing '
+        'slash.\n'
+        '\n'
         '`--report` writes what a pull-request comment needs: `comment.md`, '
-        'a\n`mosaic.png` of the changed rows, and the exported page under '
+        'a\n`mosaic.png` of the changed entries, and the exported page under '
         '`web/`.\nThe comment references images by `__MOSAIC_URL__` and '
         '`__VIEWER_URL__`\nplaceholders for the workflow to substitute after '
         'it hosts the files.',
@@ -551,6 +558,7 @@ class FwCli {
     var only = <String>[];
     var export = false;
     String? exportDir;
+    var baseHref = defaultBaseHref;
     String? reportDir;
     for (var argument in arguments) {
       if (argument.startsWith('--base=')) {
@@ -564,11 +572,16 @@ class FwCli {
       } else if (argument.startsWith('--export=')) {
         export = true;
         exportDir = argument.substring('--export='.length);
+      } else if (argument.startsWith('--base-href=')) {
+        baseHref = argument.substring('--base-href='.length);
       } else if (argument.startsWith('--report=')) {
         reportDir = argument.substring('--report='.length);
       } else if (argument.startsWith('-')) {
         return fail('unknown option "$argument". Try `fw help compare`.');
       }
+    }
+    if (baseHrefProblem(baseHref) case var problem?) {
+      return fail('--base-href $problem.');
     }
 
     var session = await openSession();
@@ -583,6 +596,7 @@ class FwCli {
             entries: only,
             export: export,
             exportDir: exportDir,
+            baseHref: baseHref,
             reportDir: reportDir,
           ),
           // Progress belongs to a terminal, not to a document: a `--json` run
