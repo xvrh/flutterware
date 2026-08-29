@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/base_href.dart';
 import 'web_report.dart';
 
 /// Writes a run out as a browsable page.
@@ -70,7 +71,7 @@ class ScenarioWebExporter {
   Future<ScenarioWebExport> export({
     required ScenarioWebReport report,
     required String output,
-    String? baseHref,
+    String baseHref = defaultBaseHref,
     bool offline = false,
     void Function(String line)? onOutput,
   }) async {
@@ -87,7 +88,7 @@ class ScenarioWebExporter {
 
     onOutput?.call('[export] copying the viewer');
     _copyDirectory(Directory(viewerDir), outputDir);
-    if (baseHref != null) _setBaseHref(p.join(output, 'index.html'), baseHref);
+    setBaseHrefIn(p.join(output, 'index.html'), baseHref);
 
     onOutput?.call('[export] collecting the artifacts');
     // Through the encoder and back rather than `toJson()` alone: the model's
@@ -243,22 +244,6 @@ class ScenarioWebExporter {
         'the tool, not in your project.',
       );
     }
-  }
-
-  /// Points the page at where it will actually be mounted.
-  ///
-  /// `flutter build web --base-href` only ever edits this one attribute, so
-  /// doing it here instead is what lets one compiled bundle serve every mount
-  /// point — including two exports of the same run to two different ones.
-  void _setBaseHref(String indexHtml, String baseHref) {
-    var file = File(indexHtml);
-    if (!file.existsSync()) return;
-    file.writeAsStringSync(
-      file.readAsStringSync().replaceAll(
-        RegExp(r'<base href="[^"]*">'),
-        '<base href="$baseHref">',
-      ),
-    );
   }
 
   static void _copyDirectory(Directory source, Directory destination) {

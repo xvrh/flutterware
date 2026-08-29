@@ -190,6 +190,23 @@ void main() {
     expect(export.frames, 1);
   });
 
+  test('the page resolves against its own URL unless told otherwise', () async {
+    var out = p.join(temp.path, 'page');
+    await exporter.export(
+      index: index(),
+      cache: cache,
+      against: 'master',
+      output: out,
+    );
+
+    // The compiled-in `/` only ever worked at a domain root, and a CI
+    // artifact is never at one.
+    expect(
+      File(p.join(out, 'index.html')).readAsStringSync(),
+      contains('<base href="./">'),
+    );
+  });
+
   test('a base href points the page at its mount', () async {
     var out = p.join(temp.path, 'page');
     await exporter.export(

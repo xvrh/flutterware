@@ -29,7 +29,7 @@ cd app && dart run bin/fw.dart <command>
 | `init` | write the two files this project needs |
 | `app [--release] [--json]` | open the flutterware GUI |
 | `mcp` | serve this project to an agent, over stdio |
-| `compare [--base=<ref>] [--package=<path>] [--entry=<id>] [--export[=<dir>]] [--report=<dir>] [--json]` | what this worktree did to the pictures, against its base |
+| `compare [--base=<ref>] [--package=<path>] [--entry=<id>] [--export[=<dir>]] [--base-href=<path>] [--report=<dir>] [--json]` | what this worktree did to the pictures, against its base |
 | `capture [<address>] -o <file> [--size=WxH] [--theme=light\|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI window itself, at an address |
 | `version [--json]` | which flutterware this is, and where it came from |
 | `help [<command>]` | this, or one command in detail |
@@ -1579,7 +1579,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `scenario` | string | no | — | Export only this scenario, by name. Needs `file` too. |
 | `tag` | string | no | — | Export only scenarios carrying this tag |
 | `output` | string | no | — | Where the page goes, worktree-relative unless absolute; defaults to `build/scenarios/web` under the package. Emptied before writing. |
-| `base-href` | string | no | — | What the page is mounted under when it is not the root — `/scenarios/`. Leading and trailing slash. |
+| `base-href` | string | no | — | Where the page is mounted. Defaults to `./`, which resolves against the page's own URL and so works at a server root and under a prefix alike. Give an absolute `/scenarios/` only for a host that serves a directory without redirecting to a trailing slash. |
 | `offline` | choice | no | — | Bundle CanvasKit into the page instead of fetching it from Google's CDN. Bigger, and the only form that works behind a firewall or after the engine revision stops being hosted. |
 | `device` | choice | no | — | Run as a device before capturing the page |
 | `orientation` | choice | no | — | Which way up that device is, before capturing |
@@ -2427,14 +2427,14 @@ durationMs: int
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; the only one when there is one |
 | `output` | string | no | — | Where the page goes. Package-relative unless absolute; defaults to `build/catalog/web`. |
-| `base-href` | string | no | — | What `flutter build web --base-href` takes, for serving the page from a subdirectory rather than the root of a host. Must begin and end with a slash — `/catalog/`. |
+| `base-href` | string | no | — | Where the page is mounted. Defaults to `./`, which resolves against the page's own URL and so works at a host root and under a subdirectory alike. Give an absolute `/catalog/` only for a host that serves a directory without redirecting to a trailing slash. |
 
 #### `compare` — Compare against the base
 
 What this worktree did to the pictures: renders previews and replays scenarios on both sides of the branch and diffs them — pixels, widget tree, visible texts. Nothing is blessed: both sides are computed from git on demand, and the skip rule answers entries whose closure nothing touched without rendering anything. Returns the verdict; the artifact at `index` has every row and channel.
 
 ```sh
-fw run previews compare [--base=…] [--package=…] [--entry=…] [--export=…] [--report=…]
+fw run previews compare [--base=…] [--package=…] [--entry=…] [--export=…] [--base-href=…] [--report=…]
 ```
 
 Returns `ComparisonCompareResult`:
@@ -2461,6 +2461,7 @@ scenariosNote: String?   # Why the scenario half has nothing to say, when it has
 | `package` | choice | no | — | Which declared previews package; the first when omitted |
 | `entry` | string | no | — | Narrow to one entry or scenario id — as `entries` and the scenarios `list` action report them |
 | `export` | boolean | no | — | Write the comparison as a browsable page under `build/comparison/web` — the viewer, the index and a PNG per frame. Serve it over HTTP. |
+| `base-href` | string | no | — | Where the exported page is mounted. Defaults to `./`, which resolves against the page's own URL and so works at a bucket root and under a per-pull-request prefix alike. Give an absolute `/comparisons/42/` only for a host that serves a directory without redirecting to a trailing slash. |
 | `report` | string | no | — | Write what a pull-request comment needs into this directory: `comment.md`, `mosaic.png`, and the page under `web/`. The comment references images by `__MOSAIC_URL__` and `__VIEWER_URL__` placeholders for the workflow to substitute after it hosts the files. |
 
 

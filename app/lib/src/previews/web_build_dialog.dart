@@ -8,6 +8,7 @@ import '../plugins/native/previews_core.dart';
 import '../plugins/native/previews_results.dart';
 import '../ui/design/design.dart';
 import '../ui/theme.dart';
+import '../utils/base_href.dart';
 import 'web_build.dart';
 
 /// Configures a web build, runs it, and shows what the tool says while it does.
@@ -153,13 +154,13 @@ class _WebBuildDialogState extends State<_WebBuildDialog> {
       var result = await widget.core.buildWeb(
         package: widget.package,
         output: _output.text.trim().isEmpty ? null : _output.text.trim(),
-        baseHref: baseHref.isEmpty ? null : baseHref,
+        baseHref: baseHref.isEmpty ? defaultBaseHref : baseHref,
         onOutput: _append,
       );
       if (mounted) {
         setState(() {
           _built = result;
-          _builtBaseHref = baseHref.isEmpty ? null : baseHref;
+          _builtBaseHref = absoluteMount(baseHref);
         });
       }
     } catch (e) {
@@ -178,7 +179,8 @@ class _WebBuildDialogState extends State<_WebBuildDialog> {
     try {
       // Mounted where the build was told it would be. A page built with
       // `--base-href=/catalog/` carries that in its `<base>`, so served at the
-      // root it loads and then asks for every asset one directory up.
+      // root it loads and then asks for every asset one directory up. The
+      // relative default carries no mount, so it is served at the root.
       var url = await widget.serve(
         built.output,
         basePath: _builtBaseHref ?? '/',
@@ -240,7 +242,7 @@ class _WebBuildDialogState extends State<_WebBuildDialog> {
               label: 'Base href',
               controller: _baseHref,
               enabled: !_running,
-              hint: 'optional — /catalog/ to serve from a subdirectory',
+              hint: '$defaultBaseHref — serves from anywhere it is hosted',
             ),
             const Gap(FwSpacing.lg),
             _CommandLine(command: _command),

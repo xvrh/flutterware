@@ -279,6 +279,15 @@ void main() {
     expect(readReport().toString(), isNot(contains('frameCount')));
   });
 
+  test('the page resolves against its own URL unless told otherwise', () async {
+    await exporter().export(report: report([step(1)]), output: output());
+
+    expect(
+      File(p.join(output(), 'index.html')).readAsStringSync(),
+      contains('<base href="./">'),
+    );
+  });
+
   test('the base href is rewritten rather than recompiled', () async {
     await exporter().export(
       report: report([step(1)]),

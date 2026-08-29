@@ -38,6 +38,7 @@ import '../../previews/test_runner.dart';
 import '../../previews/web_build.dart';
 import '../../inspect/lens.dart';
 import '../../inspect/screen_read.dart';
+import '../../utils/base_href.dart';
 import '../plugin_core.dart';
 import 'previews_address.dart';
 import 'previews_results.dart';
@@ -1420,9 +1421,11 @@ class PreviewsCore extends PluginCore {
             'Base href',
             required: false,
             description:
-                'What `flutter build web --base-href` takes, for serving the '
-                'page from a subdirectory rather than the root of a host. Must '
-                'begin and end with a slash — `/catalog/`.',
+                'Where the page is mounted. Defaults to `./`, which resolves '
+                "against the page's own URL and so works at a host root and "
+                'under a subdirectory alike. Give an absolute `/catalog/` '
+                'only for a host that serves a directory without redirecting '
+                'to a trailing slash.',
           ),
         ],
       ),
@@ -1477,6 +1480,17 @@ class PreviewsCore extends PluginCore {
                 'Write the comparison as a browsable page under '
                 '`build/comparison/web` — the viewer, the index and a PNG '
                 'per frame. Serve it over HTTP.',
+          ),
+          const ActionParameter(
+            'base-href',
+            'Base href',
+            required: false,
+            description:
+                'Where the exported page is mounted. Defaults to `./`, which '
+                "resolves against the page's own URL and so works at a "
+                'bucket root and under a per-pull-request prefix alike. Give '
+                'an absolute `/comparisons/42/` only for a host that serves '
+                'a directory without redirecting to a trailing slash.',
           ),
           const ActionParameter(
             'report',
@@ -1869,7 +1883,7 @@ class PreviewsCore extends PluginCore {
   Future<CatalogWebBuildResult> buildWeb({
     String? package,
     String? output,
-    String? baseHref,
+    String baseHref = defaultBaseHref,
     void Function(String line)? onOutput,
   }) async {
     var packagePath = _requireOnePackage(package);
@@ -1930,16 +1944,11 @@ class PreviewsCore extends PluginCore {
       return value.isEmpty ? null : value;
     }
 
-    var baseHref = text('base-href');
+    var baseHref = text('base-href') ?? defaultBaseHref;
     // Checked here rather than left to the tool, which fails after the whole
     // compile with a message about a value this action accepted.
-    if (baseHref != null &&
-        (!baseHref.startsWith('/') || !baseHref.endsWith('/'))) {
-      throw ArgumentError.value(
-        baseHref,
-        'base-href',
-        'must begin and end with a slash — `/catalog/`',
-      );
+    if (baseHrefProblem(baseHref) case var problem?) {
+      throw ArgumentError.value(baseHref, 'base-href', problem);
     }
 
     return buildWeb(

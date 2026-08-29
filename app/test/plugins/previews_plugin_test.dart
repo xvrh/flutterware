@@ -871,7 +871,7 @@ Widget added() => const Placeholder();
           isA<ArgumentError>().having(
             (e) => '$e',
             'message',
-            contains('begin and end with a slash'),
+            contains('begins and ends with a slash'),
           ),
         ),
       );

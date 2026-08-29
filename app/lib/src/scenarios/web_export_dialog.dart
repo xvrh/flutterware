@@ -9,6 +9,7 @@ import '../plugins/native/scenarios_results.dart';
 import '../previews/web_build_dialog.dart' show ServeBuild;
 import '../ui/design/design.dart';
 import '../ui/theme.dart';
+import '../utils/base_href.dart';
 import 'web_export.dart';
 
 /// Configures an export, runs it, and shows what it says while it does.
@@ -144,7 +145,7 @@ class _WebExportDialogState extends State<_WebExportDialog> {
       if (mounted) {
         setState(() {
           _exported = result;
-          _exportedBaseHref = baseHref.isEmpty ? null : baseHref;
+          _exportedBaseHref = absoluteMount(baseHref);
         });
       }
     } catch (e) {
@@ -216,7 +217,7 @@ class _WebExportDialogState extends State<_WebExportDialog> {
               label: 'Base href',
               controller: _baseHref,
               enabled: !_running,
-              hint: 'optional — /scenarios/ to serve from a subdirectory',
+              hint: '$defaultBaseHref — serves from anywhere it is hosted',
             ),
             const Gap(FwSpacing.sm),
             CheckboxListTile(
