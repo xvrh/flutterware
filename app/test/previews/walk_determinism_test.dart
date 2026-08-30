@@ -66,9 +66,10 @@ void main() {
       try {
         var renderer = TesterRenderer(runner: runner);
         var stops = [for (var i = 0; i < 5; i++) i / 4];
-        Future<List<WalkFrame>> walk(List<double> order) => renderer
-            .walk(CatalogWalk(entryId: entry.id, stops: order))
-            .toList();
+        Future<List<WalkFrame>> walk(List<double> order) async =>
+            (await renderer.walk(CatalogWalk(entryId: entry.id, stops: order)))
+                .frames
+                .toList();
 
         var first = await walk(stops);
         expect(first, hasLength(stops.length));

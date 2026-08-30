@@ -37,22 +37,44 @@ Future<void> main(List<String> args) async {
     var renderer = TesterRenderer(runner: previews.testRunnerFor('app'));
     Future<List<WalkFrame>> once() async {
       var watch = Stopwatch()..start();
-      var frames = await renderer
-          .walk(
-            CatalogWalk(
-              entryId: entry.id,
-              stops: stops,
-              mode: mode,
-              viewport: CaptureViewport.panel,
-            ),
-          )
-          .toList();
+      var frames = await (await renderer.walk(
+        CatalogWalk(
+          entryId: entry.id,
+          stops: stops,
+          mode: mode,
+          viewport: CaptureViewport.panel,
+        ),
+      )).frames.toList();
       stdout.writeln(
         '  ${frames.length} frames in ${watch.elapsedMilliseconds}ms '
         '(${frames.first.width}x${frames.first.height})',
       );
       return frames;
     }
+
+    // The whole-motion path: stops omitted, so the harness derives them.
+    var whole = await renderer.walk(
+      CatalogWalk(
+        entryId: entry.id,
+        viewport: CaptureViewport.panel,
+        mode: mode,
+      ),
+    );
+    var count = 0;
+    await for (var _ in whole.frames) {
+      count++;
+      if (count > 200) {
+        stdout.writeln(
+          '  ABORT — over 200 frames, durationMs=${whole.durationMs} '
+          'scope=${whole.scope} ${whole.scopes}',
+        );
+        return;
+      }
+    }
+    stdout.writeln(
+      '  whole motion: $count frames, durationMs=${whole.durationMs}, '
+      'scope=${whole.scope} ${whole.scopes}',
+    );
 
     var a = await once();
     var b = await once();
@@ -67,16 +89,14 @@ Future<void> main(List<String> args) async {
           : '  DIFFERS — $differing of ${a.length} stops',
     );
     // Same pictures walked backwards is what tells a scene from a state machine.
-    var reversed = await renderer
-        .walk(
-          CatalogWalk(
-            entryId: entry.id,
-            stops: stops.reversed.toList(),
-            mode: mode,
-            viewport: CaptureViewport.panel,
-          ),
-        )
-        .toList();
+    var reversed = await (await renderer.walk(
+      CatalogWalk(
+        entryId: entry.id,
+        stops: stops.reversed.toList(),
+        mode: mode,
+        viewport: CaptureViewport.panel,
+      ),
+    )).frames.toList();
     var back = reversed.reversed.toList();
     var order = 0;
     for (var i = 0; i < a.length; i++) {

@@ -36,6 +36,7 @@ import '../scenarios/real_work.dart';
 import '../scenarios/run_args.dart';
 import '../scenarios/settle.dart';
 import '../motion/guest.dart';
+import '../motion/stops.dart';
 import '../motion/testing.dart';
 import '../scenarios/staging.dart';
 import '../ui_catalog/axes.dart';
@@ -868,15 +869,11 @@ void _declare(
 /// a different question: a capture asks what the settled screen looks like, and
 /// this asks what the screen looks like at each of a list of moments.
 class _Walk {
-  const _Walk({
-    required this.stops,
-    this.scope,
-    this.timed = false,
-    this.fps = 30,
-  });
+  const _Walk({this.stops, this.scope, this.timed = false, this.fps = 30});
 
-  /// Playhead positions, 0..1, **in the order given** — see [_walk].
-  final List<double> stops;
+  /// Playhead positions, 0..1, **in the order given**, or null for the whole
+  /// motion at [fps] — which only the mounted motion can work out. See [_walk].
+  final List<double>? stops;
 
   /// Which mounted scope to drive; the only one when null.
   final String? scope;
@@ -893,9 +890,8 @@ class _Walk {
       for (var part in raw.split(','))
         if (part.trim().isNotEmpty) double.parse(part.trim()),
     ];
-    if (stops.isEmpty) return null;
     return _Walk(
-      stops: stops,
+      stops: stops.isEmpty ? null : stops,
       scope: json['scope'] as String?,
       timed: json['mode'] == 'time',
       fps: switch (json['fps']) {
@@ -957,8 +953,12 @@ Future<Map<String, Object?>> _walk(
   // see there were others rather than discover it in the picture.
   var mounted = MotionRegistry.instance.ids.toList();
   var scope = walk.scope ?? (mounted.length == 1 ? null : mounted.firstOrNull);
+  var durationMs = tester.motionDuration(scope: scope).inMilliseconds;
+  // The whole motion when the caller did not say: it could not have, because
+  // the duration is the running motion's and nobody outside it knows.
+  var stops = walk.stops ?? videoStops(durationMs: durationMs, fps: walk.fps);
   var frames = <Map<String, Object?>>[];
-  for (var (index, t) in walk.stops.indexed) {
+  for (var (index, t) in stops.indexed) {
     await tester.seekMotion(t, scope: scope);
     // **Let the screen finish applying the playhead, without letting time
     // pass.** A screen that reads `t` during build and then moves something
@@ -1015,6 +1015,7 @@ Future<Map<String, Object?>> _walk(
   }
   return {
     'walk': frames,
+    'durationMs': durationMs,
     'scope': ?scope,
     if (mounted.length > 1) 'scopes': mounted,
   };

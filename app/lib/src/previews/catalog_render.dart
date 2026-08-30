@@ -175,7 +175,7 @@ enum WalkMode {
 class CatalogWalk {
   const CatalogWalk({
     required this.entryId,
-    required this.stops,
+    this.stops,
     this.viewport = CaptureViewport.panel,
     this.knobs = const {},
     this.axes = const {},
@@ -186,13 +186,19 @@ class CatalogWalk {
 
   final String entryId;
 
-  /// Playhead positions, 0..1, **in the order they are to be taken**.
+  /// Playhead positions, 0..1, **in the order they are to be taken**, or null
+  /// for the whole motion at [fps].
   ///
   /// Order is part of the request rather than a detail of the loop because it
   /// is the one thing that tells a scene from a state machine: taken
   /// backwards, a scene renders the same pictures and a state machine does
   /// not. `motion verify` is that comparison.
-  final List<double> stops;
+  ///
+  /// Null is the ordinary case for a clip, and it is not a convenience: only
+  /// the running motion knows how long it is, so a caller that computed stops
+  /// itself would have to render once to ask. See `videoStops`, which is what
+  /// answers it on the other side.
+  final List<double>? stops;
 
   final CaptureViewport viewport;
   final Map<String, String> knobs;
@@ -206,6 +212,36 @@ class CatalogWalk {
   /// Frames a second — what a stop is worth in [WalkMode.time], and what the
   /// clip is encoded at.
   final int fps;
+}
+
+/// A walk, and what the running motion said about itself while it was taken.
+///
+/// The facts ride with the frames rather than being asked for separately,
+/// because only a mounted motion knows them: how long it is, and which
+/// playhead was driven when the screen has more than one.
+class CatalogWalkResult {
+  const CatalogWalkResult({
+    required this.frames,
+    required this.durationMs,
+    this.scope,
+    this.scopes = const [],
+  });
+
+  /// The frames, in the order the stops were asked for.
+  ///
+  /// A stream because a clip is bigger than memory: sixty frames of a phone at
+  /// 3x is about a gigabyte, and an encoder wants them one at a time anyway.
+  final Stream<WalkFrame> frames;
+
+  /// The motion's own duration, which is what decides a clip's frame count.
+  final int durationMs;
+
+  /// The playhead that was driven.
+  final String? scope;
+
+  /// Every playhead that was mounted, when there was more than one — so a walk
+  /// of the wrong one is visible rather than merely wrong.
+  final List<String> scopes;
 }
 
 /// One frame of a walk, as packed RGBA.
@@ -262,7 +298,7 @@ abstract class CatalogRenderer {
   /// is rasterised from the layer tree the pump just produced — so it
   /// overrides this. A backend that cannot promise one frame per stop should
   /// say so here rather than offer a second, wrong, implementation.
-  Stream<WalkFrame> walk(CatalogWalk request) => throw UnsupportedError(
+  Future<CatalogWalkResult> walk(CatalogWalk request) => throw UnsupportedError(
     'this backend cannot walk a playhead: it pairs written frames with stops '
     'by position, and nothing guarantees one presented frame per stop. Render '
     'the walk on the `flutter_tester` harness.',

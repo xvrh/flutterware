@@ -109,7 +109,7 @@ class TesterRenderer extends CatalogRenderer {
   /// is an encoder, which wants pixels and wants them as they come. Sixty
   /// frames of a phone at 3x is a gigabyte if it is gathered first.
   @override
-  Stream<WalkFrame> walk(CatalogWalk request) async* {
+  Future<CatalogWalkResult> walk(CatalogWalk request) async {
     var probe = CatalogRender(
       entryId: request.entryId,
       viewport: request.viewport,
@@ -138,12 +138,32 @@ class TesterRenderer extends CatalogRenderer {
     );
 
     var frames = reply.walk;
-    if (frames.length != request.stops.length) {
+    if (request.stops case var asked? when frames.length != asked.length) {
       throw StateError(
-        'the harness returned ${frames.length} frames for '
-        '${request.stops.length} stops',
+        'the harness returned ${frames.length} frames for ${asked.length} '
+        'stops',
       );
     }
+    if (frames.isEmpty) {
+      throw StateError(
+        'the harness walked no stops of ${request.entryId} — it reports a '
+        'motion ${reply.durationMs}ms long, and a motion of no duration has '
+        'nothing to render',
+      );
+    }
+    return CatalogWalkResult(
+      durationMs: reply.durationMs,
+      scope: reply.scope,
+      scopes: reply.scopes,
+      frames: _read(frames),
+    );
+  }
+
+  /// Reads the harness's frames one at a time, and sweeps them after.
+  ///
+  /// Lazily, because a clip is bigger than memory — sixty frames of a phone at
+  /// 3x is about a gigabyte — and the encoder wants them one at a time anyway.
+  Stream<WalkFrame> _read(List<_WalkFrame> frames) async* {
     try {
       for (var frame in frames) {
         yield WalkFrame(
@@ -155,12 +175,10 @@ class TesterRenderer extends CatalogRenderer {
       }
     } finally {
       // The frames were scaffolding on their way to a clip, and they are
-      // megabytes each.
-      for (var frame in frames) {
-        var directory = Directory(p.dirname(frame.path));
-        if (directory.existsSync()) directory.deleteSync(recursive: true);
-        break;
-      }
+      // megabytes each. One directory holds the walk, so one delete does it —
+      // including when the consumer gave up half way.
+      var directory = Directory(p.dirname(frames.first.path));
+      if (directory.existsSync()) directory.deleteSync(recursive: true);
     }
   }
 
@@ -249,7 +267,9 @@ class TesterRenderer extends CatalogRenderer {
           // PNG each would be encoded here only to be decoded again there.
           'format': 'raw',
           'walk': {
-            'stops': walk.stops.join(','),
+            // Empty says "the whole motion at fps", which only the running
+            // motion can turn into stops.
+            'stops': walk.stops?.join(',') ?? '',
             'scope': ?walk.scope,
             'mode': walk.mode.name,
             'fps': walk.fps,
@@ -292,6 +312,9 @@ class TesterRenderer extends CatalogRenderer {
         List ids => [for (var id in ids) '$id'],
         _ => null,
       },
+      durationMs: (reply['durationMs'] as num? ?? 0).toInt(),
+      scope: reply['scope'] as String?,
+      scopes: [for (var id in (reply['scopes'] as List? ?? const [])) '$id'],
       walk: [
         for (var frame in (reply['walk'] as List? ?? const []))
           if (frame is Map)
@@ -353,6 +376,9 @@ class _Reply {
     this.hits,
     this.frame,
     this.walk = const [],
+    this.durationMs = 0,
+    this.scope,
+    this.scopes = const [],
   });
 
   final StagedViewport? stagedOn;
@@ -363,6 +389,9 @@ class _Reply {
   final List<String>? hits;
   final _Frame? frame;
   final List<_WalkFrame> walk;
+  final int durationMs;
+  final String? scope;
+  final List<String> scopes;
 }
 
 /// One frame of a walk as the harness reported it: where it is, and which stop

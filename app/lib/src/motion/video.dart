@@ -5,7 +5,11 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
+// ignore: implementation_imports
+export 'package:flutterware/src/motion/stops.dart' show videoStops;
+
 import '../embedder/raw_frame.dart';
+import '../previews/catalog_render.dart';
 
 /// Encodes a sequence of rendered frames into a video file, through `ffmpeg`.
 ///
@@ -144,6 +148,17 @@ class VideoEncoder {
     _frames++;
   }
 
+  /// Hands over one frame of a walk, which is already packed RGBA.
+  ///
+  /// No stride to undo and no channels to swap: the harness rasterises the
+  /// layer tree straight to `rawRgba`, which is the format the encoder was
+  /// opened on.
+  void addPacked(Uint8List pixels, {required int width, required int height}) {
+    _require(width, height);
+    _process.stdin.add(pixels);
+    _frames++;
+  }
+
   void _require(int width, int height) {
     if (width != _width || height != _height) {
       throw StateError(
@@ -188,17 +203,87 @@ class VideoEncoder {
   }
 }
 
-/// The playhead positions a motion of [durationMs] should be rendered at to
-/// play back at [fps].
+/// One clip, and what the motion said about itself while it was rendered.
+class MotionVideo {
+  MotionVideo({
+    required this.file,
+    required this.frames,
+    required this.fps,
+    required this.durationMs,
+    required this.renderTime,
+    required this.encodeTime,
+    this.scope,
+    this.scopes = const [],
+  });
+
+  final File file;
+  final int frames;
+  final int fps;
+
+  /// The motion's own duration, which is what set the frame count.
+  final int durationMs;
+
+  /// Rendering and handing frames over, which is the cost that scales.
+  final Duration renderTime;
+
+  /// Waiting for the encoder after the last frame went in. Small, because
+  /// `ffmpeg` was encoding all along.
+  final Duration encodeTime;
+
+  final String? scope;
+
+  /// Every playhead that was mounted, when there was more than one.
+  final List<String> scopes;
+}
+
+/// Encodes a walk into a clip.
 ///
-/// Both ends included, like a filmstrip's stops and for the same reason: the
-/// first frame is what the motion starts from and the last is where it lands,
-/// and a video missing either does not show the motion. That makes the clip
-/// one frame longer than `duration × fps` — 31 frames for a second at 30fps —
-/// which is the correct length for a motion that is played once rather than
-/// looped.
-List<double> videoStops({required int durationMs, required int fps}) {
-  var count = (durationMs * fps / 1000).round() + 1;
-  if (count < 2) return const [0, 1];
-  return [for (var i = 0; i < count; i++) i / (count - 1)];
+/// Lane-agnostic on purpose: it takes a [CatalogWalkResult] and knows nothing
+/// about how the frames were drawn, which is what lets the renderer be chosen
+/// per call rather than baked in here.
+///
+/// The encoder is opened on the *first* frame's size rather than on a device's,
+/// because raw video carries no header and what matters is the size the frames
+/// actually came out — a clip opened at the size we asked for and fed frames of
+/// another shears rather than fails.
+Future<MotionVideo> encodeWalk(
+  CatalogWalkResult walk, {
+  required String output,
+  required int fps,
+}) async {
+  var render = Stopwatch()..start();
+  VideoEncoder? encoder;
+  var count = 0;
+  try {
+    await for (var frame in walk.frames) {
+      encoder ??= await VideoEncoder.start(
+        output: output,
+        width: frame.width,
+        height: frame.height,
+        fps: fps,
+      );
+      encoder.addPacked(frame.pixels, width: frame.width, height: frame.height);
+      count++;
+    }
+  } catch (_) {
+    await encoder?.abort();
+    rethrow;
+  }
+  if (encoder == null) throw StateError('the walk rendered nothing to encode');
+  render.stop();
+
+  var flush = Stopwatch()..start();
+  var file = await encoder.finish();
+  flush.stop();
+
+  return MotionVideo(
+    file: file,
+    frames: count,
+    fps: fps,
+    durationMs: walk.durationMs,
+    renderTime: render.elapsed,
+    encodeTime: flush.elapsed,
+    scope: walk.scope,
+    scopes: walk.scopes,
+  );
 }
