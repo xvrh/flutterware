@@ -41,40 +41,7 @@ static double g_pixel_ratio = 1.0;
 static pthread_mutex_t g_capture_lock = PTHREAD_MUTEX_INITIALIZER;
 static char* g_capture_path = NULL;
 
-// A *sequence* of captures: every frame presented while this is armed is
-// written, named `<prefix><n>.rawframe`, and acked like a single capture.
-//
-// It exists because a video is not N screenshots. Driving one capture per
-// frame from the GUI costs two cross-process round trips a frame — one to move
-// the playhead and one to ask for the picture — and measured at phone
-// resolution those were 18 of the 22ms a frame cost, against 4ms of actual
-// drawing. Armed once, the loop that remains is entirely inside the guest:
-// Dart moves the playhead and awaits a frame, and every frame that lands is
-// written here with no one asked anything.
-//
-// Frames map onto the caller's stops by *position*, which is exactly true for
-// as long as nothing but that loop schedules a frame. The caller is what
-// enforces that: it settles first, and refuses the result unless it was acked
-// the number of frames it asked for.
-
-// How many presented frames make one written one. A screen that applies its
-// playhead from a post-frame callback needs two — the frame that moved the
-// playhead shows the previous position — and writing both would shift every
-// file after it rather than fix anything. So the guest draws `stride` frames a
-// stop and only the last is kept.
-
-// The engine asks the platform to wait for a vsync, and the platform hands the
-// baton back when the next one lands. With no callback registered the engine
-// uses its own waiter, which on a desktop is the real display link — so a
-// headless render that draws as fast as it can was still paced at 60Hz, one
-// frame every 16.6ms whatever it was drawing. Measured: 31 frames took 515ms
-// at 900x700, at iPhone SE and at iPhone 13 alike, a 4.6x range of pixels for
-// the same wall clock. The display was the only thing being measured.
-//
-// So the wait is ours, and it is skipped exactly while a capture sequence is
-// armed. Nothing else changes: an interactive guest is still paced to a
-// display, because a preview panel rendering flat out would burn a core to
-// produce frames the panel drops.
+// The interval `OnVsyncRequest` hands back — see it for why.
 static const uint64_t kFrameIntervalNanos = 16600000;
 
 // Whether this guest paces itself to a display at all. Off unless
