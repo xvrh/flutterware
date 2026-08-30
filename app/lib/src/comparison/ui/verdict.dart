@@ -1,7 +1,6 @@
 import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 
-import '../../ui/count_badge.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../rules.dart';
@@ -107,8 +106,17 @@ class ComparisonVerdict extends StatelessWidget {
       for (var channel in _channels)
         if (!total.containsKey(channel)) channel,
     ];
+    // Pixels are excluded from the fold on purpose. A pixel delta has no
+    // subject and no field — its property is the word `changed` — so every
+    // one of them groups together and the row comes out claiming *the same
+    // field moved in 6 of 6 entries · changed*, which is nonsense wearing a
+    // number. The percentage on each row is what says how much moved.
     var shapes = foldChannelDeltas([
-      for (var item in findings) set.visible(item),
+      for (var item in findings)
+        [
+          for (var delta in set.visible(item))
+            if (delta.channel != 'pixels') delta,
+        ],
     ]);
     // Every subchannel the events channel actually produced, most-said first.
     // `system` is the whole reason this exists: it was 11 of 11 findings here
@@ -196,7 +204,7 @@ class ComparisonVerdict extends StatelessWidget {
           ],
           if (shapes.isNotEmpty && shapes.first.repeated) ...[
             const Gap(FwSpacing.xs),
-            _Shape(shapes.first, unit: unit),
+            _Shape(shapes.first, unit: unit, of: findings.length),
           ],
         ],
       ),
@@ -217,43 +225,71 @@ class ComparisonVerdict extends StatelessWidget {
 /// Drawn only when the top shape actually repeats: on a branch whose findings
 /// are all different, this line would be one finding pretending to be a
 /// summary.
+/// What most of the findings turned out to be, said as a sentence.
+///
+/// This read `system · flutter/textinput TextInput.setClient ·
+/// data.arguments[1].autofill.uniqueIdentifier ⟨11⟩ in 11 steps` — three
+/// identifiers glued with dots and two numbers that were the same number.
+/// Nothing in it told a reader what to conclude, which is the whole job of a
+/// line in a summary.
+///
+/// So: the claim first, in words, and the identifiers after the dash where
+/// they are reference rather than message. The proportion is the point — *all
+/// of them* and *4 of 11* are different situations and a bare count says
+/// neither.
 class _Shape extends StatelessWidget {
-  const _Shape(this.row, {required this.unit});
+  const _Shape(this.row, {required this.unit, required this.of});
 
   final FoldedDelta row;
   final String unit;
 
+  /// How many findings there are in total — the denominator that turns a
+  /// count into a proportion.
+  final int of;
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var delta = row.delta;
-    var name = [?delta.subchannel, ?delta.subject, ?delta.property].join(' · ');
-    return Row(
-      children: [
-        Flexible(
-          child: Text(
-            name,
-            style: context.type.caption.copyWith(color: colors.mut),
-            overflow: TextOverflow.ellipsis,
+    var how = row.items >= of
+        ? 'all $of $unit${of == 1 ? '' : 's'}'
+        : '${row.items} of $of';
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: 'the same field moved in $how'),
+          TextSpan(
+            text: ' — ${_where(row.delta)}',
+            style: TextStyle(color: colors.mut3),
           ),
-        ),
-        const Gap(FwSpacing.sm),
-        CountBadge(row.count, active: false),
-        const Gap(FwSpacing.sm),
-        Text(
-          'in ${row.items} $unit${row.items == 1 ? '' : 's'}',
-          style: context.type.micro.copyWith(color: colors.mut),
-        ),
-      ],
+        ],
+      ),
+      style: context.type.caption.copyWith(color: colors.mut),
+      overflow: TextOverflow.ellipsis,
     );
+  }
+
+  /// Which field, in the shortest form that still identifies it.
+  ///
+  /// The property is trimmed to its last two segments the way
+  /// `ChannelLines` already trims a tree path to its last two names, and for
+  /// the same reason: `data.arguments[1].autofill.uniqueIdentifier` is a wire
+  /// path whose first half is plumbing, and `autofill.uniqueIdentifier` is the
+  /// half anybody could name.
+  static String _where(ChannelDelta delta) {
+    return [
+      ?delta.subject,
+      if (delta.property case var property?) _tail(property),
+    ].join(' · ');
+  }
+
+  static String _tail(String property) {
+    var parts = property.split('.');
+    return parts.length <= 2
+        ? property
+        : parts.sublist(parts.length - 2).join('.');
   }
 }
 
-/// A channel that had something to say, and how many findings it was.
-///
-/// Not a control yet — v1 is read-only, and a chip that looks pressable and
-/// is not is worse than one that does not. The shape is the one the toggle
-/// will take, so v1.5 changes its behaviour rather than its drawing.
 /// A channel or subchannel, its count, and whether it is being looked at.
 ///
 /// An excluded chip is struck through and keeps the count it is **hiding**,

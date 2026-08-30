@@ -11,20 +11,37 @@ import 'package:flutterware_app/src/comparison/ui/verdict.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
 void main() {
+  /// A `TextInput.setClient` as the framework really reports it — the autofill
+  /// id is four levels down, which is what makes the untrimmed property path
+  /// unreadable.
   ComparedItem eventStep(String id, {String hash = '1'}) => ComparedItem.of(
     id: id,
     baseEvents: [
       {
         'channel': 'system',
         'title': 'flutter/textinput TextInput.setClient',
-        'data': {'autofill': 'EditableText-$hash'},
+        'data': {
+          'arguments': [
+            1,
+            {
+              'autofill': {'uniqueIdentifier': 'EditableText-$hash'},
+            },
+          ],
+        },
       },
     ],
     headEvents: [
       {
         'channel': 'system',
         'title': 'flutter/textinput TextInput.setClient',
-        'data': {'autofill': 'EditableText-'},
+        'data': {
+          'arguments': [
+            1,
+            {
+              'autofill': {'uniqueIdentifier': 'EditableText-'},
+            },
+          ],
+        },
       },
     ],
   );
@@ -63,7 +80,13 @@ void main() {
     expect(find.textContaining('changed'), findsNothing);
   });
 
-  testWidgets('one repeated shape is one line with its count', (tester) async {
+  // It read `system · flutter/textinput TextInput.setClient ·
+  // data.arguments[1].autofill.uniqueIdentifier ⟨11⟩ in 11 steps` — three
+  // identifiers and two numbers that were the same number, telling a reader
+  // nothing to conclude.
+  testWidgets('one repeated shape is a sentence, not a pile of ids', (
+    tester,
+  ) async {
     await pump(
       tester,
       ComparisonVerdict(
@@ -76,8 +99,36 @@ void main() {
       ),
     );
 
-    expect(find.text('in 3 steps'), findsOne);
-    expect(find.textContaining('data.autofill'), findsOne);
+    expect(
+      find.textContaining('the same field moved in all 3 steps'),
+      findsOne,
+    );
+    // Trimmed to the half anybody could name: the plumbing in front of it is
+    // a wire path, not a field.
+    expect(find.textContaining('data.arguments'), findsNothing);
+    expect(find.textContaining('autofill.uniqueIdentifier'), findsOne);
+  });
+
+  testWidgets('a shape only some findings wear is a proportion', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      ComparisonVerdict(
+        findings: [
+          eventStep('a', hash: '11'),
+          eventStep('b', hash: '22'),
+          ComparedItem.of(
+            id: 'c',
+            baseTexts: const ['Save'],
+            headTexts: const ['Pay'],
+          ),
+        ],
+        unit: 'step',
+      ),
+    );
+
+    expect(find.textContaining('the same field moved in 2 of 3'), findsOne);
   });
 
   // Null and zero are different answers: no previous run means "new" cannot

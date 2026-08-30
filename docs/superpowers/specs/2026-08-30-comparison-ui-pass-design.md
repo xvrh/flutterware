@@ -444,7 +444,35 @@ system · TextInput.setClient · autofill.uniqueIdentifier      11 steps
 ```
 
 So **the verdict folds identical deltas** — same `subchannel`, `subject` and
-`property` — into one row carrying a count, and expands on demand. That is
+`property` — into one row carrying a count.
+
+**Say it as a sentence.** The first drawing of that row read
+
+```
+system · flutter/textinput TextInput.setClient · data.arguments[1].autofill.uniqueIdentifier  ⟨11⟩  in 11 steps
+```
+
+— three identifiers glued with dots and two numbers that were the same
+number. Nothing in it told a reader what to conclude, which is the entire job
+of a line in a summary. It reads
+
+```
+the same field moved in all 11 steps — flutter/textinput TextInput.setClient · autofill.uniqueIdentifier
+```
+
+The claim is in words and comes first; the identifiers follow the dash in
+lighter ink, where they are reference rather than message. **The proportion is
+the point** — *all of them* and *4 of 11* are different situations and a bare
+count says neither. And the property is trimmed to its last two segments the
+way `ChannelLines` already trims a tree path to its last two names, for the
+same reason: `data.arguments[1]` is plumbing and `autofill.uniqueIdentifier`
+is the half anybody could name.
+
+**Pixels are excluded from the fold**, which writing the sentence exposed as a
+bug rather than a preference. A pixel delta has no subject and its property is
+the word `changed`, so every one of them groups together and the row came out
+claiming *the same field moved in 6 of 6 entries · changed* — nonsense wearing
+a number. The percentage on each row is what says how much moved. That is
 where the reading gain is, and it is a prerequisite for §3 rather than a
 refinement of it: authoring a rule *by pointing* (§3) is far better aimed at a
 folded row that already names the shape than at one of eleven identical lines.
