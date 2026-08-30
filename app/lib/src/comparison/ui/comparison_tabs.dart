@@ -14,6 +14,7 @@ import '../comparison_controller.dart';
 import '../session_environment.dart';
 import '../shot_store_io.dart';
 import 'previews_tab.dart';
+import 'verdict.dart';
 import 'scenarios_tab.dart';
 import 'state_chip.dart';
 import '../../ui/error_state.dart';
@@ -707,6 +708,10 @@ class _HalfView extends StatelessWidget {
               environment: controller.environment,
               onCompare: _compare,
             ),
+            if (_hasRows) ...[
+              _verdict(),
+              Divider(height: 1, color: context.colors.line),
+            ],
             Expanded(
               child: _hasRows
                   ? _rows(context)
@@ -715,6 +720,52 @@ class _HalfView extends StatelessWidget {
           ],
         );
     }
+  }
+
+  /// What this half concluded, above both panes.
+  ///
+  /// The scenario half's findings are its **steps**, not its flows: a flow's
+  /// verdict is a roll-up of the steps inside it, and the channels live on the
+  /// steps. Counting flows would say `7 findings` and then be unable to name a
+  /// single channel.
+  Widget _verdict() {
+    var findings = switch (half.kind) {
+      ComparisonHalfKind.previews => [
+        for (var row in half.rows)
+          if (row.state.isFinding) row,
+      ],
+      ComparisonHalfKind.scenarios => [
+        for (var scenario in half.scenarios)
+          for (var step in scenario.items)
+            if (step.state.isFinding) step,
+      ],
+    };
+    return ComparisonVerdict(
+      findings: findings,
+      unit: switch (half.kind) {
+        ComparisonHalfKind.previews => 'entry',
+        ComparisonHalfKind.scenarios => 'step',
+      },
+      newCount: switch (half.previousFindingIds) {
+        var previous? => switch (half.kind) {
+          ComparisonHalfKind.previews =>
+            half.rows
+                .where(
+                  (row) => row.state.isFinding && !previous.contains(row.id),
+                )
+                .length,
+          ComparisonHalfKind.scenarios =>
+            half.scenarios
+                .where(
+                  (scenario) =>
+                      scenario.state.isFinding &&
+                      !previous.contains(scenario.scenario),
+                )
+                .length,
+        },
+        null => null,
+      },
+    );
   }
 
   Widget _rows(BuildContext context) => switch (half.kind) {

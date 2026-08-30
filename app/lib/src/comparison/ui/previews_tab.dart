@@ -339,7 +339,18 @@ class _IndexRow extends StatelessWidget {
               ),
             ),
             const Gap(FwSpacing.sm),
-            if (item.state.isFinding) StateChip(item.state),
+            // Named, not coloured. The row already carries a `StateChip`, and
+            // the events pane's channel palette collides with it on the two
+            // colours that carry meaning — green is `added` and `analytics`,
+            // amber is `changed` and `db`. Colour stays for state.
+            if (item.state.isFinding) ...[
+              Text(
+                item.channelsFired.join(' · '),
+                style: context.type.micro.copyWith(color: colors.mut),
+              ),
+              const Gap(FwSpacing.sm),
+              StateChip(item.state),
+            ],
           ],
         ),
       ),

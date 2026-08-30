@@ -84,6 +84,15 @@ class ComparisonHalf extends ChangeNotifier {
   /// against, how long it took. Set on completion, and on restore from disk.
   LastComparison? lastRun;
 
+  /// The finding ids the *previous* comparison reported, or null before there
+  /// has ever been one.
+  ///
+  /// Null and empty mean different things and must not be conflated: no
+  /// previous run means "new" cannot be answered, where an empty one means
+  /// every finding is new. Four entries that report changed on every
+  /// comparison forever are what this exists to stop shouting.
+  Set<String>? previousFindingIds;
+
   /// True when [rows] came off disk rather than from a run this session.
   var restored = false;
 
@@ -242,6 +251,10 @@ abstract interface class ComparisonEnvironment {
   /// The half's last finished run, if one was kept.
   Future<LastComparison?> lastRun(ComparisonHalfKind kind);
 
+  /// The run before [lastRun]'s, for *new since you last looked*. Null when
+  /// there has never been one.
+  Future<LastComparison?> previousRun(ComparisonHalfKind kind);
+
   /// Keeps [last] as the half's answer for the next visit.
   Future<void> saveLastRun(ComparisonHalfKind kind, LastComparison last);
 
@@ -332,7 +345,35 @@ class ComparisonController extends ChangeNotifier {
       // A run that started while the file was loading owns the half now.
       if (half.stage != HalfStage.idle || half.hasRun) continue;
       half.restoreFrom(last);
+      half.previousFindingIds = await _previousFindings(half.kind);
     }
+  }
+
+  /// The finding ids to measure *new* against.
+  ///
+  /// [current] is the difference between the two callers. A restored half is
+  /// showing the last run, so its predecessor is the `previous` slot. A half
+  /// that has just finished is showing a run that is not on disk yet, so its
+  /// predecessor is the `last` slot — the one about to be rotated.
+  Future<Set<String>?> _previousFindings(
+    ComparisonHalfKind kind, {
+    bool current = false,
+  }) async {
+    LastComparison? last;
+    try {
+      last = current
+          ? await environment.lastRun(kind)
+          : await environment.previousRun(kind);
+    } on Object {
+      return null;
+    }
+    if (last == null) return null;
+    return {
+      for (var item in last.items ?? const <ComparedItem>[])
+        if (item.state.isFinding) item.id,
+      for (var scenario in last.scenarios ?? const <ScenarioComparison>[])
+        if (scenario.state.isFinding) scenario.scenario,
+    };
   }
 
   /// Materialises the base checkout. Idempotent: two halves compared one after
@@ -459,6 +500,10 @@ class ComparisonController extends ChangeNotifier {
         ..pending.clear()
         ..moveTo(HalfStage.done);
       if (half.lastRun case var last?) {
+        // Read *before* saving, since saving rotates this run's predecessor
+        // into the previous slot and would otherwise answer with the run that
+        // just finished.
+        half.previousFindingIds = await _previousFindings(kind, current: true);
         // Best effort: a run whose receipt cannot be written is still a run.
         try {
           await environment.saveLastRun(kind, last);

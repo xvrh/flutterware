@@ -104,6 +104,18 @@ class ComparedItem {
     );
   }
 
+  /// Which channels had something to say about this item.
+  ///
+  /// The cheap question, kept apart from [deltas] because a list draws it on
+  /// every row of every frame and [deltas] allocates. Nothing here builds a
+  /// delta: it asks each channel whether it changed and takes its name.
+  List<String> get channelsFired => [
+    if (pixels?.changed ?? false) 'pixels',
+    if (tree?.changed ?? false) 'tree',
+    if (texts?.changed ?? false) 'texts',
+    if (events?.changed ?? false) 'events',
+  ];
+
   /// Every difference this item found, on every channel, as one flat list.
   ///
   /// The **facet contract** — one shape a reader can filter, count and rank

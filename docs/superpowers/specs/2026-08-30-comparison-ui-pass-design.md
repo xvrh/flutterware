@@ -32,13 +32,45 @@ and the reasons are written down in
 
 None of that is what this note changes.
 
-## 1. The screen has no verdict
+## 1. ✅ The screen has no verdict
 
 `ComparisonIndex.findings` merges both halves and ranks them worst-first. `fw
 compare` uses it. The exported page uses it. `comment.md` uses it. **The studio
 does not** — you land on `files`, and each half's findings live behind its own
 tab, so the question the whole feature exists to answer has no place on screen
 that answers it.
+
+**Built, and building it corrected the shape twice.** What shipped is not what
+this section first described; both corrections came from running it rather than
+from reading it.
+
+**It does not carry the counts.** The `_ReceiptStrip` directly above already
+says `7 changed · 9 unchanged`, and drawing them again did not merely repeat —
+the two *disagreed*. A scenario half lists flows and its channels live on the
+steps inside them, so the receipt said `7` and the verdict said `11 findings`,
+three numbers with two meanings on one screen. So the verdict says only what
+the receipt cannot: which channels spoke, which stayed silent, what the
+findings are mostly made of. The counts stay where they already were.
+
+**The unit is named.** `events · 11 steps` and `in 11 steps`, because the
+verdict counts steps where the list counts flows, and the noun is the only
+thing that stops a reader adding them together.
+
+As shipped, over this branch's own scenario half:
+
+```
+7 changed · 9 unchanged                     ran in 7.5s · 2m ago  [Compare again]
+events · 11 steps
+nothing moved on pixels, tree or texts
+system · flutter/textinput TextInput.setClient · data.arguments[1]…   ⟨11⟩  in 11 steps
+```
+
+Three lines, none repeating another. The chips are **not controls in v1** — a
+chip that looks pressable and is not is worse than one that does not — but they
+are the shape v1.5's toggle takes, so that step changes behaviour rather than
+drawing.
+
+The section as originally argued follows.
 
 A **verdict strip** above the tab row, always present once either half has run:
 
@@ -311,15 +343,28 @@ which is ours to own rather than theirs to declare. The filter is therefore the
 cheapest discovery channel we have for entries that should never have needed
 filtering. No analysis: watch what people exclude.
 
-## 4. New since the last comparison
+## 4. ✅ New since the last comparison
 
 *"Four entries report changed on every comparison, permanently, are enough to
 teach a reviewer to skim past the list."* That is the failure mode a comparison
 tool dies of, and it does not need review state to fix.
 
-The previous `index.json` is already on disk per worktree. Diffing this
-findings set against it costs nothing and turns the verdict into
-`6 findings · 1 new`. A permanently-noisy entry stops shouting without being
+**Built.** `LastRunStore` keeps one generation: a write copies the outgoing
+`last-<half>.json` to `previous-<half>.json` first — copied rather than renamed,
+since a rename failing half way leaves no last run at all where a failed copy
+leaves both files as they were. One generation, because that is the whole
+question; a history answers something nobody asked.
+
+`null` and `0` are kept apart throughout, and that is the subtle part: no
+previous run means *new* **cannot be answered**, where an empty one means every
+finding is new. A verdict that prints `0 new` on a first-ever comparison is
+lying.
+
+The previous findings are also read at two different moments for two different
+reasons — a restored half is showing the last run, so its predecessor is the
+`previous` slot; a half that has just finished is showing a run not yet on
+disk, so its predecessor is the `last` slot, read *before* the rotation that
+would overwrite it. A permanently-noisy entry stops shouting without being
 hidden, and the one that appeared because of this branch is the one the eye
 lands on.
 

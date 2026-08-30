@@ -400,6 +400,16 @@ class _FakeEnvironment implements ComparisonEnvironment {
   Future<LastComparison?> lastRun(ComparisonHalfKind kind) async =>
       kind == ComparisonHalfKind.previews ? keptPreviews : keptScenarios;
 
+  /// What the run before the kept one found, for *new since you last looked*.
+  LastComparison? previousPreviews;
+  LastComparison? previousScenarios;
+
+  @override
+  Future<LastComparison?> previousRun(ComparisonHalfKind kind) async =>
+      kind == ComparisonHalfKind.previews
+      ? previousPreviews
+      : previousScenarios;
+
   @override
   Future<void> saveLastRun(ComparisonHalfKind kind, LastComparison last) async {
     saved[kind] = last;
