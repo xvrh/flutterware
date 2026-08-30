@@ -11,8 +11,8 @@ import '../../ui/theme.dart';
 import '../comparison_controller.dart';
 import '../rules.dart';
 import '../shot_store.dart';
-import 'channel_lines.dart';
 import 'merged_tree.dart';
+import 'step_page.dart';
 import 'shot_image.dart';
 import 'stage.dart';
 import 'state_chip.dart';
@@ -20,9 +20,6 @@ import 'state_chip.dart';
 const scenariosTabKey = Key('comparison.scenarios');
 
 Key scenarioRowKey(String id) => ValueKey('comparison.scenario.$id');
-
-const stepPageKey = Key('comparison.step-page');
-const stepBackKey = Key('comparison.step-back');
 
 /// The scenario half: every flow on the left, the picked flow's merged tree
 /// beside it, and a picked *step* pushed over both.
@@ -198,7 +195,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
     // a step as a full page with a back arrow — and the flow stays one tap
     // away, in the address as well as on screen.
     if (step != null && scenario != null) {
-      return _StepPage(
+      return StepPage(
         item: step,
         shots: _shots,
         mode: _mode,
@@ -558,88 +555,3 @@ class _NotReplayed extends StatelessWidget {
 }
 
 /// One step, over the flow: the two frames, and what the other channels found.
-class _StepPage extends StatelessWidget {
-  const _StepPage({
-    required this.item,
-    required this.shots,
-    required this.mode,
-    required this.onMode,
-    required this.onBack,
-  });
-
-  final ComparedItem item;
-  final ShotPair shots;
-  final StageMode mode;
-  final ValueChanged<StageMode> onMode;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var hasChannels =
-        (item.tree?.changed ?? false) ||
-        item.texts != null ||
-        item.events != null;
-
-    return Column(
-      key: stepPageKey,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            FwSpacing.lg,
-            FwSpacing.md,
-            FwSpacing.xl,
-            0,
-          ),
-          child: Row(
-            children: [
-              Tappable(
-                key: stepBackKey,
-                onTap: onBack,
-                child: Icon(
-                  Icons.arrow_back,
-                  size: FwIconSize.lg,
-                  color: colors.mut,
-                ),
-              ),
-              const Gap(FwSpacing.lg),
-              Expanded(child: Text(item.id, style: context.type.heading)),
-              StateChip(item.state),
-            ],
-          ),
-        ),
-        if (item.note case var note?)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.xl,
-              FwSpacing.xs,
-              FwSpacing.xl,
-              0,
-            ),
-            child: Text(
-              note,
-              style: context.type.caption.copyWith(color: colors.red),
-            ),
-          ),
-        Expanded(
-          flex: 5,
-          child: shots.settled
-              ? ComparisonStage(
-                  shots: shots,
-                  mode: mode,
-                  onMode: onMode,
-                  diff: item.pixels?.diff,
-                )
-              : Center(
-                  child: Text(
-                    'Loading…',
-                    style: context.type.body.copyWith(color: colors.mut),
-                  ),
-                ),
-        ),
-        if (hasChannels) Expanded(flex: 2, child: ChannelLines(item)),
-      ],
-    );
-  }
-}

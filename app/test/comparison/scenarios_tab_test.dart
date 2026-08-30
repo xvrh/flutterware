@@ -6,6 +6,7 @@ import 'package:flutterware_app/src/comparison/comparison_controller.dart';
 import 'package:flutterware_app/src/comparison/shot_store.dart';
 import 'package:flutterware_app/src/comparison/ui/merged_tree.dart';
 import 'package:flutterware_app/src/comparison/ui/scenarios_tab.dart';
+import 'package:flutterware_app/src/comparison/ui/step_page.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
 /// The three verdicts reached **without replaying anything**, which is the

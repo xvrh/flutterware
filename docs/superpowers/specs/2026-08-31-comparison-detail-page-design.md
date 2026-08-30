@@ -92,8 +92,46 @@ The last pass's failure was procedural, so the fix is procedural.
 | 6 | broke / failed — one side did not render | ? | to check |
 | 7 | added / removed — exists on one side | ? | to check |
 
-States 6 and 7 are marked *to check* rather than guessed at; that is step 2's
-job.
+### ✅ Drawn — `tool/catalog/demos/comparison_states.dart`
+
+All seven against the real `StepPage` (extracted from `scenarios_tab.dart` so
+it could be an entry) over real decoded frames, at 900px. What they show:
+
+| # | state | verdict |
+|---|---|---|
+| 1 | pixels moved | **right.** The stage is the subject and the boxes point at it. Nothing to change. |
+| 2 | tree only | **worst of the seven.** See below. |
+| 3 | texts only | two identical frames over `- Save / + Pay`. The finding is two words at the bottom of a 700px page. |
+| 4 | events only | 415px of identical pictures; the finding is a **`POST /session  detail  200 → 500`** in grey, in the same weight as the autofill noise above it. A 500 is a regression, and it is drawn as a footnote to a picture that did not change. |
+| 5 | nothing changed | 700px of two identical frames and no words at all. Honest, but it is the whole page for *there is nothing here*. |
+| 6 | broke on head | **better than expected.** `base only`, one frame, the note in red, mode pills correctly disabled. The pills should not be *drawn* when there is one frame, but nothing here is wrong. |
+| 7 | only on head | same shape as 6 and equally sound. |
+
+So the damage is concentrated in **2, 3, 4 and 5** — every state where the
+pixels are identical. 1, 6 and 7 are fine and should be left alone.
+
+### Two bugs the drawing found, neither of them layout
+
+**A key change reads as two identical rows.** State 2 renders
+
+```
+TREE
++ Column › Text("This code is not valid.")
+- Column › Text("This code is not valid.")
+```
+
+which is, verbatim, the consumer report that started this whole thread. The
+cause was diagnosed on day one and never fixed: `TreeDiff._label` spells a
+widget's key back **only when the node has no description**, and a `Text`
+always has one — while its own docstring three lines above says the key is
+spelled back full stop. One line, still outstanding.
+
+**A key change on the root node produces no delta at all.** Measured
+separately: `TreeDiff.of` over two `Text`s differing only in a key gives
+**0 deltas** at the root and 2 on a child. `_walk` compares `description`,
+`layout` and children, and never `widgetKey` — the key only ever influences
+`_signature`, which is about *aligning children*. A single-node entry whose
+key changed therefore reports `same`. Narrow, but wrong.
 
 ## The shape being proposed
 
