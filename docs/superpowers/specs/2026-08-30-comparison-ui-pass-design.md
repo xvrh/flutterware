@@ -62,18 +62,94 @@ inside a `build`, and `findings` allocates a row per finding and sorts them."*
 The same trap has already been paid for once — a plugin's report join that went
 quadratic and cost 324 ms a frame. The strip reads counts; it never sorts.
 
+## 1a. Research — the studio already has most of this
+
+Before drawing anything, what exists. The answer changes the shape of the whole
+pass: **this is composition, not new components.**
+
+| what | where | what it already decides |
+|---|---|---|
+| `FwFilterBar` | `ui/filter_bar.dart` | Two axes, and the reasoning for them. `pills` are one-of; `toggles` are *"filters that narrow whatever `pills` chose, rather than replacing it"*, kept visually apart because a pill means one-of and these do not. Below 520px the count stands down. |
+| `CountBadge` | `ui/count_badge.dart` | `Events ⟨7⟩` reads as a label with a quantity; `Events 7` reads as two words. And `active: false` — *"Off recedes rather than disappears: the count is still the reason a reader would turn it back on."* |
+| `StateChip` | `comparison/ui/state_chip.dart` | *"Colour is the fastest thing on the screen and the least precise"* — red means three things here, so every chip carries its word too. Optional `count`, for standing in for a group. |
+| `_ChannelChip` | `scenarios/events_view.dart` | A channel name plus its `CountBadge`, toggled, accent-soft when on. The comparison's channel filter already exists; it is just pointed at one run instead of two. |
+| the files tab's `_Tab` strip | `changes/changes_screen.dart` | `All 1 · Important 1 · Review 0` — a filter strip **on this very screen**, and a `live` flag for the one count that is about *you* rather than about the checkout. |
+
+Two consequences.
+
+**§2's "monochrome badges" was wrong, and the code says why.** There is already a
+channel colour language — `network` accent, `analytics` green, `db` amber,
+`system` `mut3` — chosen *"so a transition can be skimmed for its shape before
+it is read: the two that usually matter stand out, chatter recedes."* Inventing
+a second one would be the mistake; so would ignoring it.
+
+But it cannot go on a finding row unaltered, because that row already carries a
+`StateChip`, and the two palettes collide on the two colours that matter: green
+is `added` **and** `analytics`, amber is `changed` **and** `db`. So: **channel
+colour belongs where events are the only subject** — the events pane, and the
+folded shape line — and **a finding row keeps state colour and names its
+channels in words.** `StateChip`'s own rule generalised: colour may be the fast
+path, never the only carrier.
+
+**The filter is not new work.** `FwFilterBar`'s two axes are exactly §3's
+`include` pills and `exclude` rules, and the run cockpit already argued the case
+for keeping them apart: folding `Errors` into the app/build/platform pills would
+have made it mean *everyone's* errors, throwing away the split at the one moment
+it earns its keep.
+
+## 1b. Five options, rendered
+
+Drawn as real widgets against the real design system —
+`app/tool/catalog/demos/comparison_verdict.dart`, entries under *Comparison* —
+because a mockup that does not use `FwSpacing` and `context.colors` cannot
+answer whether this fits.
+
+| | what it is | verdict |
+|---|---|---|
+| **A** | `StateChip`s alone: `7 changed · 2 added · 36 same · 156 skipped` | Familiar and free, and answers the wrong question. It counts *rows by state*, not what the branch did, and carries no channel at all — so the entire events channel is invisible on it. `36 same · 156 skipped` is coverage proof, which belongs in the artifact rather than in the headline. |
+| **B** | channel chips with counts, toggled | Closest to what the model now produces, and rendering exposed two faults. `pixels 0 · tree 0 · texts 0` spends three-fifths of the strip saying nothing. And `system 11` sits beside `events 7` as a sibling when it is a *subchannel* — a hierarchy drawn as a list. |
+| **C** | `FwFilterBar` — pills, toggles, search, count | Handsome, and it is the studio's own bar. But it is a **filter, not a verdict**: it says `9 of 201` and nothing about what changed. The search box earns nothing on a nine-item list. This is right for §3 and wrong for §1. |
+| **D** | one sentence, folded | Says the right things, including the one line no other option can print: *nothing moved on pixels, tree or texts*. But it is static — §1 requires every number to be a control. |
+| **E** | **D's sentence with B's controls** | Recommended. See below. |
+
+### Why E
+
+The counts lead, because they are the verdict. The channels that **fired** are
+chips, because a reader wants to click them; the channels that **did not** are a
+sentence, because three chips reading zero waste the strip and the sentence says
+it better. `system` sits in the events group rather than beside it. The folded
+shape (§4a) gets its own line with its count receding to the right, so a reader
+sees *what this comparison is mostly made of* without it competing with the
+verdict.
+
+### What rendering it caught, that reasoning did not
+
+**Narrow width is the discriminator, and it broke the first draft.** E as first
+written was a `Row`, and at 430px it threw **two** overflow exceptions. A `Wrap`
+fixes it — which is the lesson the files tab's own strip records three hundred
+lines away: *"`Wrap`, not `Row`, and the reason is the test binding... this strip
+really does overflow 320px."* The same mistake, on the same screen, twice.
+
+**C overflows around 358px** with five pills and a search box — narrower than
+this pane gets when a detail is open beside it. Not a bug in `FwFilterBar`,
+whose own `_roomy` rule stands the count down at 520; a constraint on how many
+pills §3 may spend.
+
+**Two facts joined by a `·` read as one list.** E's first draft ran the quiet-
+channels sentence into the folded shape. On screen they read as a single
+enumeration, though one is about coverage and the other about noise. Two lines.
+
 ## 2. A finding does not say which channel fired
 
 A row in either master list carries its state chip and its label. Whether it is
 there because of pixels, because of the tree, or because an event moved is
 invisible until you select it and read `ChannelLines`.
 
-Channel badges on the row, and **monochrome**. The stage already spends orange
-on cluster rects, `ChannelLines` spends red and green on text added and removed,
-and `state_chip.dart` owns the state colour. A second colour language for
-channel on the same row would put two systems saying different things side by
-side. Colour stays for state; channel is a short word or letter in the row's
-own ink.
+Channel badges on the row, **named rather than coloured** — see §1a for why
+this used to say "monochrome" and what corrected it. There is already a channel
+palette, and it is right where events are the only subject; on a finding row it
+collides with the `StateChip` on exactly the two colours that carry meaning.
+Colour stays for state; the channel is a word.
 
 The badge is also the filter's smallest handle: clicking `events` on a row is
 the same act as excluding every other channel.
