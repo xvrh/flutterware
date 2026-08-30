@@ -4,6 +4,15 @@ Phase C of `2026-08-29-comparison-events-channel-design.md`. That note makes
 every difference a delta carrying five facets; this one is about what the
 studio does with them.
 
+> **Scope correction, 2026-08-31.** This note is about the *summary strip* and
+> the *list*. It never opened the detail page underneath them, which is where
+> the larger problem was: on a branch whose findings are all invisible to a
+> screenshot, that page still gives 60% of its height to two identical frames
+> and 7% to the finding. See
+> `2026-08-31-comparison-detail-page-design.md`, which also records why this
+> pass missed it — the research asked *what can I build this from* and never
+> *what is this screen for*.
+
 The split matters: **the model decides what can be known, the UI decides what
 gets said.** Phase A and B ship a complete faceted artifact and change almost
 nothing on screen. Everything here reads that artifact and computes nothing of
