@@ -35,19 +35,26 @@ class _CheckoutState extends State<_Checkout> {
   Widget build(BuildContext context) {
     _controller.progress = context.knobs.double('t', 1, min: 0, max: 1);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _controller.play(restart: true),
-      child: Scaffold(
-        backgroundColor: const Color(0xFFE9ECF0),
-        body: MotionScope(
-          motion: checkoutMotion,
-          stage: checkoutStage,
-          controller: _controller,
-          // Your screen goes here. Read the same targets the stage stands in
-          // for — `m.target('first')` — and nothing else has to change.
-          //
-          // builder: (m) => MotionBox(m.target('first'), child: ...),
+    // The `MaterialApp` is here because a preview is rendered on its own, not
+    // inside your app: nothing above it supplies a theme or a text direction,
+    // and a `Scaffold` without one throws before it draws. Swap it for your
+    // own app widget when this becomes a rehearsal of a real screen.
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _controller.play(restart: true),
+        child: Scaffold(
+          backgroundColor: const Color(0xFFE9ECF0),
+          body: MotionScope(
+            motion: checkoutMotion,
+            stage: checkoutStage,
+            controller: _controller,
+            // Your screen goes here. Read the same targets the stage stands in
+            // for — `m.target('first')` — and nothing else has to change.
+            //
+            // builder: (m) => MotionBox(m.target('first'), child: ...),
+          ),
         ),
       ),
     );
