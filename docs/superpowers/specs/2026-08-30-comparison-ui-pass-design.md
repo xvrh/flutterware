@@ -122,6 +122,45 @@ shape (§4a) gets its own line with its count receding to the right, so a reader
 sees *what this comparison is mostly made of* without it competing with the
 verdict.
 
+### Where it goes: full width, above both panes
+
+The floating strip could not answer this, and the question is the first one a
+reader of the proposal asks. The tab's layout is the files tab's, and it has
+exactly one slot for something like this:
+
+```
+_Header            ← full width: title, branch, `0 files  +0  -0`, Watching
+Divider
+Expanded( Row( _IndexPane(width: 320), │ detail ) )
+```
+
+**The verdict takes the header slot** — full width, above the divider, above
+both panes. Drawn both ways at 900px
+(`tool/catalog/demos/comparison_verdict_in_place.dart`), and it is not close:
+
+- **Full width** — one line of counts and chips, the quiet-channels sentence
+  under it, the folded shape under that. Nothing wraps, nothing truncates.
+- **Over the index only** — inside 320px the chips wrap to a second row, the
+  shape line truncates to `autofill.uniqueIdenti…`, and the whole thing eats
+  about 110px of the list's height. It is also wrong in kind: a verdict is
+  about both halves and both panes, and putting it in the index column says it
+  is a property of the list.
+
+So the two things are in two places, and they are not the same thing:
+
+| | where | what it is |
+|---|---|---|
+| the **verdict** (§1) | the full-width header slot | what this branch did — counts, channels that fired, the folded shape |
+| the **filter** (§3) | inside the 320px index, where `All · Important · Review` already lives | what the list shows |
+
+That also settles the narrow-width worry: the verdict is only ever as narrow as
+the window, where the filter really does live in a 320px column. The `Wrap`
+stays anyway — a window can be narrow.
+
+One residual, visible in the full-width shot: at 900px the folded shape's count
+badge sits hard right, a long way from the text it counts. Either tuck it
+straight after the text or drop the `Expanded`.
+
 ### What rendering it caught, that reasoning did not
 
 **Narrow width is the discriminator, and it broke the first draft.** E as first
