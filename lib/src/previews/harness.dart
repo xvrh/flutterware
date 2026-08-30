@@ -848,21 +848,6 @@ void _declare(
   }
 }
 
-/// Photographs the settled screen into [output] and reads the tree it drew,
-/// answering with the paths and the picture's dimensions.
-///
-/// **[pixelRatio] is physical pixels per logical pixel, not a fraction of the
-/// screen** — the same word `FrameCapture` uses on the guest side, so the two
-/// backends are asked for a resolution in one vocabulary. The default of `1`
-/// therefore renders a 3× phone at its *logical* 440×956, which is right for a
-/// comparison diffing pixels and for a thumbnail nobody reads text in, and
-/// wrong for a picture somebody is going to judge a 16pt glyph in: that one
-/// passes the staged device's own ratio and gets 1320×2868. The rect is
-/// physical and the output logical-times-this, which is also the scenario
-/// rule: the root layer's coordinates have the device-pixel-ratio transform
-/// inside them, so a 3× canvas captured at face value saves its top-left
-/// ninth.
-///
 /// A walk of one entry's playhead, as the request spells it.
 ///
 /// A section of its own rather than extra keys on a capture, because a walk is
@@ -1032,6 +1017,20 @@ Future<Map<String, Object?>> _walk(
   };
 }
 
+/// Photographs the settled screen into [output] and reads the tree it drew,
+/// answering with the paths and the picture's dimensions.
+///
+/// **[pixelRatio] is physical pixels per logical pixel, not a fraction of the
+/// screen** — the same word `FrameCapture` uses on the guest side, so the two
+/// backends are asked for a resolution in one vocabulary. The default of `1`
+/// therefore renders a 3× phone at its *logical* 440×956, which is right for a
+/// comparison diffing pixels and for a thumbnail nobody reads text in, and
+/// wrong for a picture somebody is going to judge a 16pt glyph in: that one
+/// passes the staged device's own ratio and gets 1320×2868. The rect is
+/// physical and the output logical-times-this, which is also the scenario
+/// rule: the root layer's coordinates have the device-pixel-ratio transform
+/// inside them, so a 3× canvas captured at face value saves its top-left
+/// ninth.
 Future<Map<String, Object?>> _capture(
   WidgetTester tester,
   PreviewEntry entry,
