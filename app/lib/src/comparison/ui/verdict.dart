@@ -225,18 +225,20 @@ class ComparisonVerdict extends StatelessWidget {
 /// Drawn only when the top shape actually repeats: on a branch whose findings
 /// are all different, this line would be one finding pretending to be a
 /// summary.
-/// What most of the findings turned out to be, said as a sentence.
+/// Whether these are many problems or one problem many times.
 ///
-/// This read `system · flutter/textinput TextInput.setClient ·
-/// data.arguments[1].autofill.uniqueIdentifier ⟨11⟩ in 11 steps` — three
-/// identifiers glued with dots and two numbers that were the same number.
-/// Nothing in it told a reader what to conclude, which is the whole job of a
-/// line in a summary.
+/// The only question on this strip the chips cannot answer. `events · 11
+/// steps` says eleven steps have something to say; it cannot say whether that
+/// is eleven regressions or one fact repeated eleven times, and those are
+/// completely different mornings. Without it a reader opens seven rows to find
+/// out they were all the same thing, which is the skim-past-the-list failure
+/// the whole strip exists to prevent.
 ///
-/// So: the claim first, in words, and the identifiers after the dash where
-/// they are reference rather than message. The proportion is the point — *all
-/// of them* and *4 of 11* are different situations and a bare count says
-/// neither.
+/// **The values are shown, and they are the point.** `EditableText-1046586511
+/// → EditableText-` reads as *a hash* at a glance, and reading it as a hash is
+/// what lets a reader decide this is noise and exclude it. The field alone
+/// cannot be judged, which is why the earlier drawing of this line — three
+/// identifiers and a count — told nobody anything.
 class _Shape extends StatelessWidget {
   const _Shape(this.row, {required this.unit, required this.of});
 
@@ -244,21 +246,24 @@ class _Shape extends StatelessWidget {
   final String unit;
 
   /// How many findings there are in total — the denominator that turns a
-  /// count into a proportion.
+  /// count into a proportion. *All of them* and *4 of 11* are different
+  /// situations and a bare count says neither.
   final int of;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var how = row.items >= of
-        ? 'all $of $unit${of == 1 ? '' : 's'}'
-        : '${row.items} of $of';
+    var delta = row.delta;
+    var how = row.items >= of ? 'all $of' : '${row.items} of $of';
     return Text.rich(
       TextSpan(
         children: [
-          TextSpan(text: 'the same field moved in $how'),
+          TextSpan(text: '$how are the same change'),
           TextSpan(
-            text: ' — ${_where(row.delta)}',
+            text:
+                ' — ${_tail(delta.property ?? '')}'
+                '${delta.base == null ? '' : '  ${_short(delta.base!)} → '
+                          '${_short(delta.head ?? '')}'}',
             style: TextStyle(color: colors.mut3),
           ),
         ],
@@ -268,26 +273,21 @@ class _Shape extends StatelessWidget {
     );
   }
 
-  /// Which field, in the shortest form that still identifies it.
-  ///
-  /// The property is trimmed to its last two segments the way
-  /// `ChannelLines` already trims a tree path to its last two names, and for
-  /// the same reason: `data.arguments[1].autofill.uniqueIdentifier` is a wire
-  /// path whose first half is plumbing, and `autofill.uniqueIdentifier` is the
-  /// half anybody could name.
-  static String _where(ChannelDelta delta) {
-    return [
-      ?delta.subject,
-      if (delta.property case var property?) _tail(property),
-    ].join(' · ');
-  }
-
+  /// The field, trimmed to its last two segments the way `ChannelLines`
+  /// already trims a tree path to its last two names: `data.arguments[1]` is
+  /// a wire path and `autofill.uniqueIdentifier` is the half anybody can name.
   static String _tail(String property) {
     var parts = property.split('.');
     return parts.length <= 2
         ? property
         : parts.sublist(parts.length - 2).join('.');
   }
+
+  /// One value, short enough to sit on a summary line. What is being judged
+  /// here is the *shape* of the value — that it looks like a hash — and forty
+  /// characters is more than enough to see that.
+  static String _short(String value) =>
+      value.length <= 40 ? value : '${value.substring(0, 39)}…';
 }
 
 /// A channel or subchannel, its count, and whether it is being looked at.

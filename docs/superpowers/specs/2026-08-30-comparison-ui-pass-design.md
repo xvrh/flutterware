@@ -446,7 +446,22 @@ system · TextInput.setClient · autofill.uniqueIdentifier      11 steps
 So **the verdict folds identical deltas** — same `subchannel`, `subject` and
 `property` — into one row carrying a count.
 
-**Say it as a sentence.** The first drawing of that row read
+**What the line is for: whether these are many problems or one problem many
+times.** It is the only question on the strip the chips cannot answer.
+`events · 11 steps` says eleven steps have something to say; it cannot say
+whether that is eleven regressions or one fact repeated, and those are
+completely different mornings. Without it a reader opens seven rows to discover
+they were all the same thing — the skim-past-the-list failure the strip exists
+to prevent.
+
+**And the premise came from the wrong place.** The eleven lines the fold
+collapses never appear on screen: `ChannelLines` draws one step at a time in
+the detail pane. Eleven-at-once is the *MCP reply's* problem, and the first two
+drawings of this line were solving an agent's problem in a human's UI. That is
+what made them unreadable — not the wording.
+
+**Say it as a sentence, and show the values.** The first drawing of that row
+read
 
 ```
 system · flutter/textinput TextInput.setClient · data.arguments[1].autofill.uniqueIdentifier  ⟨11⟩  in 11 steps
@@ -457,16 +472,22 @@ number. Nothing in it told a reader what to conclude, which is the entire job
 of a line in a summary. It reads
 
 ```
-the same field moved in all 11 steps — flutter/textinput TextInput.setClient · autofill.uniqueIdentifier
+all 11 are the same change — autofill.uniqueIdentifier  EditableText-356345903 → EditableText-
 ```
 
-The claim is in words and comes first; the identifiers follow the dash in
-lighter ink, where they are reference rather than message. **The proportion is
-the point** — *all of them* and *4 of 11* are different situations and a bare
-count says neither. And the property is trimmed to its last two segments the
-way `ChannelLines` already trims a tree path to its last two names, for the
-same reason: `data.arguments[1]` is plumbing and `autofill.uniqueIdentifier`
-is the half anybody could name.
+The claim is in words and comes first. **The values are shown, and they are
+the point**: `EditableText-356345903 → EditableText-` reads as *a hash* at a
+glance, and reading it as a hash is what lets somebody decide this is noise and
+click `system`. A field name alone cannot be judged, which is why the earlier
+drawings — identifiers and a count — told nobody anything.
+
+**The proportion, not a count** — *all of them* and *4 of 11* are different
+situations and a bare count says neither. The property is trimmed to its last
+two segments the way `ChannelLines` already trims a tree path to its last two
+names: `data.arguments[1]` is plumbing, `autofill.uniqueIdentifier` is the half
+anybody can name. The subject is dropped — `flutter/textinput
+TextInput.setClient` said the same thing twice and the values identify the
+event better than it did.
 
 **Pixels are excluded from the fold**, which writing the sentence exposed as a
 bug rather than a preference. A pixel delta has no subject and its property is

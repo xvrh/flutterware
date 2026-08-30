@@ -99,10 +99,10 @@ void main() {
       ),
     );
 
-    expect(
-      find.textContaining('the same field moved in all 3 steps'),
-      findsOne,
-    );
+    expect(find.textContaining('all 3 are the same change'), findsOne);
+    // The values are what let a reader see it is a hash and decide it is
+    // noise; the field alone cannot be judged.
+    expect(find.textContaining('EditableText-11 → EditableText-'), findsOne);
     // Trimmed to the half anybody could name: the plumbing in front of it is
     // a wire path, not a field.
     expect(find.textContaining('data.arguments'), findsNothing);
@@ -128,7 +128,7 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('the same field moved in 2 of 3'), findsOne);
+    expect(find.textContaining('2 of 3 are the same change'), findsOne);
   });
 
   // Null and zero are different answers: no previous run means "new" cannot
