@@ -115,6 +115,41 @@ void main() {
       ]);
     });
 
+    test('a comment above a segment is kept, because the gap is the hold', () {
+      // The one place a comment had nowhere to live. A pause between two
+      // segments is written as a gap and nothing else, so the only record of
+      // how long it is meant to be, and why, is a line above the segment that
+      // ends it.
+      var source = '''MotionValues(
+  targets: {
+    'flow': {
+      'progress': [
+        Seg<double>(
+          start: Duration.zero,
+          end: Duration(milliseconds: 700),
+          from: 0,
+          to: 0.5,
+        ),
+        // 700ms of hold: long enough to read the page.
+        Seg<double>(
+          start: Duration(milliseconds: 1400),
+          end: Duration(milliseconds: 2100),
+          from: 0.5,
+          to: 1,
+        ),
+      ],
+    },
+  },
+)''';
+      var result = _read(source);
+      var spans = result.file!.target('flow')!.property('progress')!.spans;
+      expect(spans.first.comments, isEmpty);
+      expect(spans.last.comments, [
+        '// 700ms of hold: long enough to read the page.',
+      ]);
+      expect(result.file!.rewrite(result.file!.targets), contains(source));
+    });
+
     test('a comment separated by a blank line belongs to the gap', () {
       var result = _read('''MotionValues(
   targets: {

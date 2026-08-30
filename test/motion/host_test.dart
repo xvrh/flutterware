@@ -44,7 +44,7 @@ Set<String> _targetNames() {
   var scope = scopes.single! as Map<String, Object?>;
   return {
     for (var target in scope['targets']! as List<Object?>)
-      '${(target as Map<String, Object?>)['name']}',
+      '${(target! as Map<String, Object?>)['name']}',
   };
 }
 

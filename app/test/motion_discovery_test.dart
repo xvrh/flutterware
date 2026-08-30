@@ -228,7 +228,15 @@ var b = MotionScope(motion: second, builder: (m) => MotionBox(m.target('b'), chi
         greaterThan(3),
       );
 
-      expect(result.diagnostics, isEmpty);
+      // One diagnostic, and it is the scan working rather than failing: the
+      // inbox names its five rows `'row$i'` from a loop, and a name that is
+      // only known once the file runs cannot be listed by reading it. The scan
+      // says so instead of guessing, and nothing else in the catalog does it.
+      expect(result.diagnostics, hasLength(1));
+      expect(
+        result.diagnostics.single,
+        contains('target name is not a string literal'),
+      );
     });
   });
 }
