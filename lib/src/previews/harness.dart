@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,6 +35,8 @@ import '../scenarios/fonts.dart';
 import '../scenarios/real_work.dart';
 import '../scenarios/run_args.dart';
 import '../scenarios/settle.dart';
+import '../motion/guest.dart';
+import '../motion/testing.dart';
 import '../scenarios/staging.dart';
 import '../ui_catalog/axes.dart';
 import '../ui_catalog/guest.dart';
@@ -268,6 +271,11 @@ Future<void> _serve(
         },
         output: request['output'] as String?,
         format: request['format'] as String? ?? 'raw',
+        walk: _Walk.fromJson(request['walk']),
+        motionT: switch (request['motionT']) {
+          num t => t.toDouble(),
+          _ => null,
+        },
         viewport: switch (request['viewport']) {
           Map json => StagedViewport.fromJson(json.cast<String, Object?>()),
           _ => null,
@@ -316,6 +324,8 @@ Future<Map<String, Object?>> _audit(
   bool wantTree = false,
   (double, double)? at,
   StagedViewport? viewport,
+  _Walk? walk,
+  double? motionT,
 }) async {
   var wanted = [
     for (var entry in entries)
@@ -348,6 +358,8 @@ Future<Map<String, Object?>> _audit(
       wantTree: wantTree,
       at: at,
       viewport: viewport,
+      walk: walk,
+      motionT: motionT,
     ),
   );
   // Flat by construction — one `testWidgets` per entry, no groups — so the
@@ -490,6 +502,14 @@ Future<Map<String, Object?>> _render(
   StagedViewport? viewport,
   String? output,
   String format = 'raw',
+
+  /// A walk of the playhead to photograph, instead of one picture of the
+  /// settled screen. See [_Walk].
+  _Walk? walk,
+
+  /// Where to park the playhead for the one picture. Ignored when [walk] says
+  /// to take many.
+  double? motionT,
 }) async {
   var entry = entries.where((entry) => entry.id == entryId).toList();
   if (entry.isEmpty) {
@@ -514,6 +534,8 @@ Future<Map<String, Object?>> _render(
     viewport: viewport,
     output: output,
     format: format,
+    walk: walk,
+    motionT: motionT,
     // The `tree.json` beside the frame is the catalog-wide lane's; here the
     // tree travels inline and writing a second copy would be 9ms for nothing.
     tree: false,
@@ -577,6 +599,8 @@ void _declare(
   bool wantTree = false,
   (double, double)? at,
   StagedViewport? viewport,
+  _Walk? walk,
+  double? motionT,
 }) {
   for (var (index, entry) in entries.indexed) {
     testWidgets(entry.id, (tester) async {
@@ -776,7 +800,26 @@ void _declare(
         // are about. An entry whose build threw is photographed anyway — the
         // ErrorWidget is what is there — and the host decides whether that
         // picture is worth comparing.
-        if (output != null) {
+        // Parks the playhead before the one picture is taken. A screenshot
+        // asked for at `t` and rendered at zero is wrong in the one way
+        // nothing catches, which is what this lane did until now.
+        if (walk == null && motionT != null) {
+          await tester.seekMotion(motionT);
+        }
+        if (output != null && walk != null) {
+          captured?[entry.id] = {
+            ...await _walk(
+              tester,
+              entry,
+              walk,
+              output,
+              assets: assets,
+              pixelRatio: pixelRatio,
+              timings: timings,
+              format: format,
+            ),
+          };
+        } else if (output != null) {
           captured?[entry.id] = await _capture(
             tester,
             entry,
@@ -819,6 +862,164 @@ void _declare(
 /// inside them, so a 3× canvas captured at face value saves its top-left
 /// ninth.
 ///
+/// A walk of one entry's playhead, as the request spells it.
+///
+/// A section of its own rather than extra keys on a capture, because a walk is
+/// a different question: a capture asks what the settled screen looks like, and
+/// this asks what the screen looks like at each of a list of moments.
+class _Walk {
+  const _Walk({
+    required this.stops,
+    this.scope,
+    this.timed = false,
+    this.fps = 30,
+  });
+
+  /// Playhead positions, 0..1, **in the order given** — see [_walk].
+  final List<double> stops;
+
+  /// Which mounted scope to drive; the only one when null.
+  final String? scope;
+
+  /// Whether a stop also advances the clock by one frame. See [_walk].
+  final bool timed;
+
+  final int fps;
+
+  static _Walk? fromJson(Object? json) {
+    if (json is! Map) return null;
+    var raw = '${json['stops'] ?? ''}';
+    var stops = [
+      for (var part in raw.split(','))
+        if (part.trim().isNotEmpty) double.parse(part.trim()),
+    ];
+    if (stops.isEmpty) return null;
+    return _Walk(
+      stops: stops,
+      scope: json['scope'] as String?,
+      timed: json['mode'] == 'time',
+      fps: switch (json['fps']) {
+        int value when value > 0 => value,
+        _ => 30,
+      },
+    );
+  }
+
+  /// What one stop is worth on the clock.
+  Duration get frame => Duration(microseconds: 1000000 ~/ fps);
+}
+
+/// How many zero-duration frames a stop is given to *apply* its playhead.
+///
+/// Structural work only — no time passes in any of them — so this bounds a
+/// chain of post-frame callbacks rather than a transition. Two is enough for
+/// the `jumpTo` shape that motivated it; the rest is room.
+const _applyPlayheadFrames = 6;
+
+/// Photographs the playhead at each of [walk]'s stops, in order.
+///
+/// **This is the whole reason export lives on this lane.** There is no wire
+/// and no second thread: `seekMotion` writes the playhead and pumps, and
+/// `toImage` rasterises the layer tree *that pump produced*. A frame cannot be
+/// of a moment other than the one just built. The embedder cannot say that —
+/// it advances the playhead on the UI thread and writes whatever its
+/// rasteriser presents, and measured over six trials the same walk came out
+/// differently in four of them.
+///
+/// Two clocks, because two kinds of screen ask for different things:
+///
+///   * **playhead** — set `t`, draw. No time passes, so the picture is
+///     `evaluate(t)` and nothing else. Right for a scene, and the order of the
+///     stops cannot matter, which is what makes a walk verifiable by taking it
+///     backwards.
+///   * **timed** — set `t`, then let exactly one frame of [_Walk.fps] elapse.
+///     A `Ticker`, an implicit animation or a scroll simulation then advances
+///     by exactly that much rather than by however long the machine took. This
+///     is what a fake clock buys and a real-time renderer cannot: the
+///     alternatives forbid such screens instead of rendering them.
+///
+/// Real work is a separate axis from the fake clock and is waited for in both
+/// modes — an image or a fetch genuinely in flight blocks the shutter rather
+/// than being photographed half-arrived.
+Future<Map<String, Object?>> _walk(
+  WidgetTester tester,
+  PreviewEntry entry,
+  _Walk walk,
+  String output, {
+  required ScenarioAssetBundle assets,
+  double pixelRatio = 1,
+  bool timings = false,
+  String format = 'raw',
+}) async {
+  // The first mounted scope when none was named, which is what the guest's
+  // seek does — a demo that mounts two would otherwise start refusing every
+  // clip it used to render. Which one was driven is reported, so a caller can
+  // see there were others rather than discover it in the picture.
+  var mounted = MotionRegistry.instance.ids.toList();
+  var scope = walk.scope ?? (mounted.length == 1 ? null : mounted.firstOrNull);
+  var frames = <Map<String, Object?>>[];
+  for (var (index, t) in walk.stops.indexed) {
+    await tester.seekMotion(t, scope: scope);
+    // **Let the screen finish applying the playhead, without letting time
+    // pass.** A screen that reads `t` during build and then moves something
+    // else from a post-frame callback — a flow driven by `PageView.jumpTo` is
+    // the everyday one — shows the *previous* position on the frame that moved
+    // the playhead. On a real clock that is unfixable without guessing how
+    // many frames to allow, which is what `framesPerStop` was.
+    //
+    // Here it costs nothing to be exact. A zero-duration pump runs layout,
+    // post-frame callbacks and a rebuild, and advances **no** animation at
+    // all, because a `Ticker` moves on elapsed time and none elapses. So this
+    // drains structural work and cannot overshoot into a transition. It stops
+    // the moment a ticker is what is asking for frames, since that will not
+    // converge and is the other mode's business.
+    var guard = 0;
+    while (tester.binding.hasScheduledFrame &&
+        SchedulerBinding.instance.transientCallbackCount == 0 &&
+        guard++ < _applyPlayheadFrames) {
+      await tester.pump(Duration.zero);
+    }
+    if (walk.timed) await tester.pump(walk.frame);
+    // The shutter waits for work that is genuinely on its way, which is this
+    // lane's answer to photographing a loading state. Announced work only —
+    // never a settle to quiet, which in `timed` would run an animation to its
+    // end inside a frame that is supposed to be a thirtieth of a second.
+    //
+    // A purse per stop, like a scenario's per step: a frame that waited out a
+    // slow decode must not leave the next one with less allowance than it
+    // needs for its own.
+    var budget = RealWorkBudget();
+    var landed = await budget.land(tester, assets);
+    // An image that arrived during the wait has not been painted yet.
+    if (tester.binding.hasScheduledFrame) await tester.pump(Duration.zero);
+    frames.add({
+      ...await _capture(
+        tester,
+        entry,
+        output,
+        index,
+        pixelRatio: pixelRatio,
+        tree: false,
+        timings: timings,
+        format: format,
+      ),
+      // Carried rather than inferred from position downstream: pairing a frame
+      // with a stop by position is the assumption that made the other lane
+      // wrong.
+      't': t,
+      // Reported rather than thrown: one stop that timed out on a decode is a
+      // fact about that frame, and the caller can decide whether a clip with
+      // it in is worth having.
+      if (!landed) 'pending': true,
+    });
+  }
+  return {
+    'walk': frames,
+    'scope': ?scope,
+    if (mounted.length > 1) 'scopes': mounted,
+  };
+}
+
 Future<Map<String, Object?>> _capture(
   WidgetTester tester,
   PreviewEntry entry,
