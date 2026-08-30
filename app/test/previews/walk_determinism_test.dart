@@ -5,6 +5,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/embedder/build_directory.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/motion/stops.dart';
 import 'package:flutterware_app/src/previews/catalog_render.dart';
 import 'package:flutterware_app/src/previews/discovery.dart';
 import 'package:flutterware_app/src/previews/test_runner.dart';
@@ -71,6 +73,10 @@ void main() {
                 .frames
                 .toList();
 
+        var whole0 = await renderer.walk(CatalogWalk(entryId: entry.id));
+        var frames0 = await whole0.frames.toList();
+        expect(frames0, isNotEmpty);
+
         var first = await walk(stops);
         expect(first, hasLength(stops.length));
         expect(
@@ -87,6 +93,19 @@ void main() {
             reason: 'stop ${stops[i]} differed between two identical walks',
           );
         }
+
+        // The whole motion, which is the ordinary case for a clip and the one
+        // nothing else covers: the stops are derived where the motion is
+        // mounted, because only a running motion knows how long it is.
+        var whole = await renderer.walk(CatalogWalk(entryId: entry.id));
+        var frames = await whole.frames.toList();
+        expect(whole.durationMs, greaterThan(0));
+        expect(
+          frames,
+          hasLength(videoStops(durationMs: whole.durationMs, fps: 30).length),
+        );
+        expect(frames.first.t, 0);
+        expect(frames.last.t, 1);
 
         var backwards = (await walk(stops.reversed.toList())).reversed.toList();
         for (var i = 0; i < stops.length; i++) {

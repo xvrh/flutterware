@@ -12,7 +12,12 @@ import '../../previews/catalog_render.dart';
 import '../../previews/catalog_entry.dart';
 import '../../previews/devices.dart';
 import '../../previews/headless_catalog.dart';
+import '../../embedder/build_directory.dart';
+import '../../motion/video.dart';
+import '../../previews/catalog_picture.dart';
 import '../../previews/protocol.dart';
+import '../../previews/test_runner.dart';
+import '../../previews/tester_renderer.dart';
 import '../../motion/discovery.dart';
 import '../../motion/filmstrip.dart';
 import '../../motion/stage_file.dart';
@@ -603,16 +608,17 @@ class MotionCore extends PluginCore {
       'motion',
       '${motion.values}-t${(t * 1000).round()}.png',
     );
-    var captured = await catalog.capture(
-      CatalogRender(
-        entryId: entry.id,
-        screenshot: output,
-        viewport: device == null
-            ? CaptureViewport.panel
-            : CaptureViewport.of(device),
-        motionT: t,
-      ),
-    );
+    var captured = await _rendererFor(packagePath, engine: arguments['engine'])
+        .capture(
+          CatalogRender(
+            entryId: entry.id,
+            screenshot: output,
+            viewport: device == null
+                ? CaptureViewport.panel
+                : CaptureViewport.of(device),
+            motionT: t,
+          ),
+        );
 
     return Artifact(
       kind: Artifact.png,
@@ -651,19 +657,37 @@ class MotionCore extends PluginCore {
       'motion',
       '${motion.values}-filmstrip.png',
     );
-    var strip = await catalog.filmstrip(
-      entryId: entry.id,
-      output: output,
-      stops: filmstripStops(frames),
-      framesPerStop: switch (arguments['framesPerStop']) {
-        int value => value,
-        String text when int.tryParse(text) != null => int.parse(text),
-        _ => null,
-      },
-      viewport: device == null
-          ? CaptureViewport.panel
-          : CaptureViewport.of(device),
-    );
+    var stops = filmstripStops(frames);
+    var walk = await _rendererFor(packagePath, engine: arguments['engine'])
+        .walk(
+          CatalogWalk(
+            entryId: entry.id,
+            stops: stops,
+            viewport: device == null
+                ? CaptureViewport.panel
+                : CaptureViewport.of(device),
+            scope: arguments['scope'] as String?,
+            mode: arguments['mode'] == 'time'
+                ? WalkMode.time
+                : WalkMode.playhead,
+          ),
+        );
+    var cells = <FilmstripFrame>[];
+    await for (var frame in walk.frames) {
+      cells.add(
+        FilmstripFrame(
+          image: decodeTesterFrame(
+            frame.pixels,
+            width: frame.width,
+            height: frame.height,
+          ),
+          t: frame.t,
+          // The playhead's own units, from the duration the walk reported.
+          ms: (frame.t * walk.durationMs).round(),
+        ),
+      );
+    }
+    var strip = composeFilmstrip(cells, output: output);
 
     return Artifact(
       kind: Artifact.png,
@@ -673,15 +697,16 @@ class MotionCore extends PluginCore {
         file: motion.file,
         motion: motion.values,
       ),
-      path: p.relative(strip.file.path, from: host.worktree.path),
+      path: p.relative(strip.path, from: host.worktree.path),
       meta: {
         'motion': motion.values,
         'file': motion.file,
-        'frames': strip.stops.length,
-        'framesPerStop': strip.framesPerStop,
-        'durationMs': strip.durationMs,
-        'bytes': strip.file.lengthSync(),
+        'frames': cells.length,
+        'durationMs': walk.durationMs,
+        'bytes': strip.lengthSync(),
         'device': ?device?.id,
+        'scope': ?walk.scope,
+        if (walk.scopes.length > 1) 'scopes': walk.scopes,
       },
     );
   }
@@ -704,22 +729,25 @@ class MotionCore extends PluginCore {
       'motion',
       '${motion.values}${_settingSuffix(knobs, axes)}.mp4',
     );
-    var video = await catalog.video(
-      entryId: entry.id,
-      output: output,
-      fps: fps,
-      viewport: device == null
-          ? CaptureViewport.panel
-          : CaptureViewport.of(device),
-      knobs: knobs,
-      axes: axes,
-      scope: arguments['scope'] as String?,
-      framesPerStop: switch (arguments['framesPerStop']) {
-        int value => value,
-        String text when int.tryParse(text) != null => int.parse(text),
-        _ => null,
-      },
-    );
+    // The whole motion at `fps`, and the stops are not computed here: only the
+    // running motion knows how long it is.
+    var walk = await _rendererFor(packagePath, engine: arguments['engine'])
+        .walk(
+          CatalogWalk(
+            entryId: entry.id,
+            fps: fps,
+            viewport: device == null
+                ? CaptureViewport.panel
+                : CaptureViewport.of(device),
+            knobs: knobs,
+            axes: axes,
+            scope: arguments['scope'] as String?,
+            mode: arguments['mode'] == 'time'
+                ? WalkMode.time
+                : WalkMode.playhead,
+          ),
+        );
+    var video = await encodeWalk(walk, output: output, fps: fps);
 
     return Artifact(
       kind: Artifact.mp4,
@@ -742,9 +770,8 @@ class MotionCore extends PluginCore {
         'device': ?device?.id,
         if (knobs.isNotEmpty) 'knobs': knobs,
         if (axes.isNotEmpty) 'axes': axes,
-        'scope': video.scope,
-        'timings': video.timings.toJson(),
-        if (video.mountedScopes.length > 1) 'scopes': video.mountedScopes,
+        'scope': ?video.scope,
+        if (video.scopes.length > 1) 'scopes': video.scopes,
       },
     );
   }
@@ -1164,7 +1191,78 @@ class _${pascal}State extends State<_$pascal> {
         'entry — a motion is captured through the demo that mounts it',
       );
     }
+    // What the harness is generated from — see [_runnerFor].
+    _entries[packagePath] = entry;
     return (packagePath, motion, entry, catalog);
+  }
+
+  /// The lane a motion is rendered on.
+  ///
+  /// The harness, and for a clip that is not a preference. A guest advances the
+  /// playhead on its UI thread while its host writes whatever the rasteriser
+  /// presents, and nothing joins the two — measured over six trials of one
+  /// motion it rendered a *different* clip from an identical walk in four of
+  /// them, frames offset by a stop. `CatalogRenderer.walk` refuses on that
+  /// backend rather than offering a second, wrong implementation.
+  ///
+  /// The guest stays reachable for a single picture, where it is correct and
+  /// is what the lane-parity check compares against.
+  CatalogRenderer _rendererFor(String packagePath, {Object? engine}) {
+    if (engine != null && engine != 'guest' && engine != 'harness') {
+      throw ArgumentError.value(
+        engine,
+        'engine',
+        'no such engine. Accepted: harness, guest',
+      );
+    }
+    if (engine == 'guest') return _headless(packagePath);
+    return TesterRenderer(runner: _runnerFor(packagePath));
+  }
+
+  /// The harness this plugin renders on, one per declared package.
+  ///
+  /// Its **own** runner rather than the previews plugin's, and its own build
+  /// lane with it: two `TesterHost`s on one directory are two
+  /// `frontend_server`s writing one dill, and the plugins sharing this lane
+  /// keep out of each other's way by naming their artifacts apart.
+  ///
+  /// **One entry, not the catalog.** The generated harness imports every entry
+  /// it is given, so reading the whole scan makes one clip pay a cold compile
+  /// of every demo in the project — minutes, against the seconds the render
+  /// takes. A walk renders one demo, so the harness holds one, and exporting
+  /// the same demo again reuses its dill.
+  PreviewTestRunner _runnerFor(String packagePath) => _runners.putIfAbsent(
+    packagePath,
+    () => PreviewTestRunner(
+      packageRoot: p.join(host.worktree.path, packagePath),
+      flutterSdkRoot: host.workspace.flutterSdk.root,
+      read: () => (entries: [?_entries[packagePath]], canvases: const []),
+      // The *preferred* lane, not a private claim: `takeBuildLane` hands it to
+      // whoever locks it first and gives everybody else one of their own, so a
+      // warm dill survives from one export to the next.
+      buildDirectory: motionBuildRoot,
+    ),
+  );
+
+  final _runners = <String, PreviewTestRunner>{};
+
+  /// The entry the last resolve landed on, per package — what [_runnerFor]'s
+  /// harness is generated from.
+  final _entries = <String, CatalogEntry>{};
+
+  /// Ends the harnesses this plugin started.
+  ///
+  /// **A `flutter_tester` is a child process, and an undisposed runner keeps
+  /// one alive.** What that looks like is not a crash: the render finishes, the
+  /// clip is written, and then `fw` simply never exits — which reads as a hang
+  /// in the render and sent me looking there for an afternoon.
+  @override
+  void dispose() {
+    for (var runner in _runners.values) {
+      unawaited(runner.dispose());
+    }
+    _runners.clear();
+    super.dispose();
   }
 
   HeadlessCatalog _headless(String packagePath) => HeadlessCatalog(

@@ -805,7 +805,7 @@ void _declare(
         // asked for at `t` and rendered at zero is wrong in the one way
         // nothing catches, which is what this lane did until now.
         if (walk == null && motionT != null) {
-          await tester.seekMotion(motionT);
+          await tester.seekMotion(motionT, scope: _defaultScope());
         }
         if (output != null && walk != null) {
           captured?[entry.id] = {
@@ -905,6 +905,17 @@ class _Walk {
   Duration get frame => Duration(microseconds: 1000000 ~/ fps);
 }
 
+/// The playhead to drive when the caller named none.
+///
+/// The first mounted one, which is what the guest's seek does — a demo that
+/// mounts two would otherwise refuse every picture it used to render. Null
+/// when there is only one, so the single-scope case keeps the registry's own
+/// refusal wording if it somehow has none.
+String? _defaultScope() {
+  var mounted = MotionRegistry.instance.ids.toList();
+  return mounted.length == 1 ? null : mounted.firstOrNull;
+}
+
 /// How many zero-duration frames a stop is given to *apply* its playhead.
 ///
 /// Structural work only — no time passes in any of them — so this bounds a
@@ -952,7 +963,7 @@ Future<Map<String, Object?>> _walk(
   // clip it used to render. Which one was driven is reported, so a caller can
   // see there were others rather than discover it in the picture.
   var mounted = MotionRegistry.instance.ids.toList();
-  var scope = walk.scope ?? (mounted.length == 1 ? null : mounted.firstOrNull);
+  var scope = walk.scope ?? _defaultScope();
   var durationMs = tester.motionDuration(scope: scope).inMilliseconds;
   // The whole motion when the caller did not say: it could not have, because
   // the duration is the running motion's and nobody outside it knows.
