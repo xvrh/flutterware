@@ -2,6 +2,7 @@ import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutterware_app/src/comparison/ui/state_chip.dart';
+import 'package:flutterware_app/src/comparison/ui/verdict.dart';
 import 'package:flutterware_app/src/ui/count_badge.dart';
 import 'package:flutterware_app/src/ui/filter_bar.dart';
 import 'package:flutterware_app/src/ui/tappable.dart';
@@ -47,6 +48,90 @@ Widget verdictOptionC() =>
 )
 Widget verdictOptionE() =>
     const Padding(padding: EdgeInsets.all(FwSpacing.md), child: _OptionE());
+
+/// How the summary line declines: all of them, most of them, and neither.
+@Preview(
+  name: 'Comparison verdict · how the line declines',
+  group: 'Comparison',
+  wrapper: wrapInAppTheme,
+)
+Widget verdictDeclension() => const _Declension();
+
+class _Declension extends StatelessWidget {
+  const _Declension();
+
+  static ComparedItem _autofill(String hash) => ComparedItem.of(
+    id: 'autofill-$hash',
+    baseEvents: [
+      {
+        'channel': 'system',
+        'title': 'flutter/textinput TextInput.setClient',
+        'data': {
+          'arguments': [
+            1,
+            {
+              'autofill': {'uniqueIdentifier': 'EditableText-$hash'},
+            },
+          ],
+        },
+      },
+    ],
+    headEvents: [
+      {
+        'channel': 'system',
+        'title': 'flutter/textinput TextInput.setClient',
+        'data': {
+          'arguments': [
+            1,
+            {
+              'autofill': {'uniqueIdentifier': 'EditableText-'},
+            },
+          ],
+        },
+      },
+    ],
+  );
+
+  static ComparedItem _other(int i) => ComparedItem.of(
+    id: 'other-$i',
+    baseTexts: const ['Save'],
+    headTexts: ['Pay $i'],
+  );
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: context.colors.bg,
+    child: ListView(
+      padding: const EdgeInsets.all(FwSpacing.xl),
+      children: [
+        _Case(
+          'all of them — one change, and nothing else',
+          ComparisonVerdict(
+            findings: [for (var i = 0; i < 4; i++) _autofill('$i')],
+            unit: 'step',
+          ),
+        ),
+        _Case(
+          'most of them — one change, and a few others worth reading',
+          ComparisonVerdict(
+            findings: [for (var i = 0; i < 3; i++) _autofill('$i'), _other(0)],
+            unit: 'step',
+          ),
+        ),
+        _Case(
+          'neither — no summary, because there is none to give',
+          ComparisonVerdict(
+            findings: [
+              for (var i = 0; i < 2; i++) _autofill('$i'),
+              for (var i = 0; i < 3; i++) _other(i),
+            ],
+            unit: 'step',
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
 class _Options extends StatelessWidget {
   const _Options();

@@ -481,8 +481,23 @@ glance, and reading it as a hash is what lets somebody decide this is noise and
 click `system`. A field name alone cannot be judged, which is why the earlier
 drawings — identifiers and a count — told nobody anything.
 
-**The proportion, not a count** — *all of them* and *4 of 11* are different
-situations and a bare count says neither. The property is trimmed to its last
+**The proportion, not a count**, and it declines in three ways rather than two
+— `tool/catalog/demos/comparison_verdict.dart#verdictDeclension` draws all
+three side by side:
+
+| what one shape covers | the line |
+|---|---|
+| all of the findings | `all 11 are the same change — …` |
+| most of them | `8 of 11 are the same change — …` — one thing *and a few others worth reading* |
+| fewer than half | nothing at all |
+
+The third is the one the first cut got wrong. It was gated on the shape merely
+*repeating*, so two findings out of fifty printed `2 of 50 are the same
+change` — putting the biggest minority cluster where a reader looks for the
+story, when the honest answer to *is this one thing or many* is **many**.
+Below a majority the summary stands down: the chips have already said how much
+there is, and a set of unrelated findings is read in the list, which is what
+the list is for. The property is trimmed to its last
 two segments the way `ChannelLines` already trims a tree path to its last two
 names: `data.arguments[1]` is plumbing, `autofill.uniqueIdentifier` is the half
 anybody can name. The subject is dropped — `flutter/textinput

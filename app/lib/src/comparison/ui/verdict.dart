@@ -202,9 +202,17 @@ class ComparisonVerdict extends StatelessWidget {
               style: context.type.caption.copyWith(color: colors.mut),
             ),
           ],
-          if (shapes.isNotEmpty && shapes.first.repeated) ...[
+          // Only when one shape accounts for **most** of them. The line
+          // answers *is this one thing or many*, so a shape covering two
+          // findings in fifty answers "many" — and printing `2 of 50 are the
+          // same change` puts the biggest minority cluster where a reader
+          // looks for the story. Below a majority the honest summary is
+          // silence: the chips said how much there is, and the list is where
+          // a set of unrelated findings gets read.
+          if (shapes.firstOrNull case var shape?
+              when shape.items * 2 > findings.length && shape.repeated) ...[
             const Gap(FwSpacing.xs),
-            _Shape(shapes.first, unit: unit, of: findings.length),
+            _Shape(shape, of: findings.length),
           ],
         ],
       ),
@@ -240,10 +248,9 @@ class ComparisonVerdict extends StatelessWidget {
 /// cannot be judged, which is why the earlier drawing of this line — three
 /// identifiers and a count — told nobody anything.
 class _Shape extends StatelessWidget {
-  const _Shape(this.row, {required this.unit, required this.of});
+  const _Shape(this.row, {required this.of});
 
   final FoldedDelta row;
-  final String unit;
 
   /// How many findings there are in total — the denominator that turns a
   /// count into a proportion. *All of them* and *4 of 11* are different
@@ -254,6 +261,9 @@ class _Shape extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var delta = row.delta;
+    // `all 11` and `8 of 11` are the two readings, and they are different
+    // news: the first says there is one thing here, the second says there is
+    // one thing *and a few others*, which is the reason to keep reading.
     var how = row.items >= of ? 'all $of' : '${row.items} of $of';
     return Text.rich(
       TextSpan(

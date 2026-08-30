@@ -131,6 +131,35 @@ void main() {
     expect(find.textContaining('2 of 3 are the same change'), findsOne);
   });
 
+  // The line answers *is this one thing or many*. A shape covering two
+  // findings in five answers "many", and printing it puts the biggest
+  // minority cluster where a reader looks for the story.
+  testWidgets('a shape that is not most of them is not the story', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      ComparisonVerdict(
+        findings: [
+          eventStep('a', hash: '11'),
+          eventStep('b', hash: '22'),
+          for (var i = 0; i < 3; i++)
+            ComparedItem.of(
+              id: 'text$i',
+              baseTexts: const ['Save'],
+              headTexts: ['Pay $i'],
+            ),
+        ],
+        unit: 'step',
+      ),
+    );
+
+    expect(find.textContaining('are the same change'), findsNothing);
+    // The counts still say how much there is; only the summary stands down.
+    expect(find.text('events · 2 steps'), findsOne);
+    expect(find.text('texts · 3 steps'), findsOne);
+  });
+
   // Null and zero are different answers: no previous run means "new" cannot
   // be answered, where an empty one means every finding is new.
   testWidgets('no previous comparison says nothing about new', (tester) async {
