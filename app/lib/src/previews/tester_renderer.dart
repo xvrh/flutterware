@@ -166,11 +166,19 @@ class TesterRenderer extends CatalogRenderer {
   Stream<WalkFrame> _read(List<_WalkFrame> frames) async* {
     try {
       for (var frame in frames) {
+        var file = File(frame.path);
+        var pixels = file.readAsBytesSync();
+        // **Dropped as it is consumed, not at the end.** A frame is megabytes
+        // — twelve of them at a phone's ratio — so a minute of video is tens
+        // of gigabytes, and holding the whole clip on disk to delete it later
+        // is a peak nothing needs. What the consumer has already encoded is
+        // not coming back.
+        if (file.existsSync()) file.deleteSync();
         yield WalkFrame(
           t: frame.t,
           width: frame.width,
           height: frame.height,
-          pixels: File(frame.path).readAsBytesSync(),
+          pixels: pixels,
         );
       }
     } finally {

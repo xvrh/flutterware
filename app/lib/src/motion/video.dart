@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as p;
 
+// ignore: implementation_imports
+import 'package:flutterware/src/motion/stops.dart';
 // ignore: implementation_imports
 export 'package:flutterware/src/motion/stops.dart' show videoStops;
 
@@ -226,6 +230,7 @@ class MotionVideo {
     required this.durationMs,
     required this.renderTime,
     required this.encodeTime,
+    this.parts = 1,
     this.scope,
     this.scopes = const [],
   });
@@ -243,6 +248,9 @@ class MotionVideo {
   /// Waiting for the encoder after the last frame went in. Small, because
   /// `ffmpeg` was encoding all along.
   final Duration encodeTime;
+
+  /// How many encoders the clip was spread across.
+  final int parts;
 
   final String? scope;
 
@@ -265,32 +273,72 @@ Future<MotionVideo> encodeWalk(
   required String output,
   required int fps,
   String preset = 'medium',
+
+  /// How many encoders to spread the clip across. One writes [output]
+  /// directly; more write parts that are joined afterwards. Null picks from
+  /// the machine and the clip's length.
+  int? parts,
 }) async {
+  // Decided before the first frame, because it decides where the first frame
+  // goes. The count comes from the same rule that produced the stops.
+  var perPart = _framesPerPart(
+    videoStops(durationMs: walk.durationMs, fps: fps).length,
+    parts: parts,
+  );
+  var scratch = Directory.systemTemp.createTempSync('fw-clip');
+  var encoders = <VideoEncoder>[];
   var render = Stopwatch()..start();
-  VideoEncoder? encoder;
   var count = 0;
+
   try {
     await for (var frame in walk.frames) {
-      encoder ??= await VideoEncoder.start(
-        output: output,
+      var index = perPart == 0 ? 0 : count ~/ perPart;
+      if (index >= encoders.length) {
+        encoders.add(
+          await VideoEncoder.start(
+            output: perPart == 0
+                ? output
+                : p.join(scratch.path, 'part-$index.mp4'),
+            width: frame.width,
+            height: frame.height,
+            fps: fps,
+            preset: preset,
+          ),
+        );
+      }
+      encoders[index].addPacked(
+        frame.pixels,
         width: frame.width,
         height: frame.height,
-        fps: fps,
-        preset: preset,
       );
-      encoder.addPacked(frame.pixels, width: frame.width, height: frame.height);
       count++;
     }
   } catch (_) {
-    await encoder?.abort();
+    for (var encoder in encoders) {
+      await encoder.abort();
+    }
+    scratch.deleteSync(recursive: true);
     rethrow;
   }
-  if (encoder == null) throw StateError('the walk rendered nothing to encode');
+  if (encoders.isEmpty) {
+    scratch.deleteSync(recursive: true);
+    throw StateError('the walk rendered nothing to encode');
+  }
   render.stop();
 
+  // **The concurrency is in never awaiting a part as it is fed.** Frames
+  // arrive in playhead order, so part `k` is still encoding while part `k+1`
+  // is being handed its pixels: the overlap costs no scheduling and no thread
+  // of ours, and what is waited for here is the slowest tail rather than the
+  // sum. Measured on this machine a single export used two of sixteen cores,
+  // which is the headroom this spends.
   var flush = Stopwatch()..start();
-  var file = await encoder.finish();
+  var files = await Future.wait([for (var e in encoders) e.finish()]);
+  var file = files.length == 1
+      ? files.single
+      : await _joinParts(files, output: output);
   flush.stop();
+  if (scratch.existsSync()) scratch.deleteSync(recursive: true);
 
   return MotionVideo(
     file: file,
@@ -299,7 +347,64 @@ Future<MotionVideo> encodeWalk(
     durationMs: walk.durationMs,
     renderTime: render.elapsed,
     encodeTime: flush.elapsed,
+    parts: files.length,
     scope: walk.scope,
     scopes: walk.scopes,
   );
+}
+
+/// How many frames each encoder takes, or zero for one encoder over the lot.
+///
+/// Splitting has to earn its join: a part wants to be long enough that its
+/// encoder spends more time on pixels than on starting, and there is no use
+/// having more parts than the machine has room for. A short clip therefore
+/// gets one encoder writing the output directly, with nothing to join.
+int _framesPerPart(int frames, {int? parts}) {
+  var wanted =
+      parts ??
+      (frames < _minimumPartFrames * 2
+          ? 1
+          : math.min(Platform.numberOfProcessors ~/ 2, 8));
+  if (wanted <= 1) return 0;
+  return math.max(_minimumPartFrames, (frames / wanted).ceil());
+}
+
+/// The shortest part worth starting an encoder for.
+const _minimumPartFrames = 60;
+
+/// Joins encoded parts into one clip, copying the streams rather than
+/// re-encoding them.
+///
+/// Sound because each part is its own encode and so opens on a keyframe; the
+/// concat demuxer only has to rebase timestamps. Re-encoding here would hand
+/// back everything the split bought.
+Future<File> _joinParts(List<File> parts, {required String output}) async {
+  var list = File(p.join(p.dirname(parts.first.path), 'parts.txt'))
+    ..writeAsStringSync(
+      [for (var part in parts) "file '${part.path}'"].join('\n'),
+    );
+  var out = File(output);
+  if (out.existsSync()) out.deleteSync();
+  var joined = await Process.run(VideoEncoder.executable, [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-f',
+    'concat',
+    '-safe',
+    '0',
+    '-i',
+    list.path,
+    '-c',
+    'copy',
+    '-movflags',
+    '+faststart',
+    output,
+  ]);
+  if (joined.exitCode != 0) {
+    throw StateError(
+      'joining ${parts.length} encoded parts failed:\n${joined.stderr}',
+    );
+  }
+  return out;
 }

@@ -837,6 +837,7 @@ class MotionCore extends PluginCore {
         'renderMs': video.renderTime.inMilliseconds,
         'encodeMs': video.encodeTime.inMilliseconds,
         'bytes': video.file.lengthSync(),
+        if (video.parts > 1) 'parts': video.parts,
         'device': ?device?.id,
         if (knobs.isNotEmpty) 'knobs': knobs,
         if (axes.isNotEmpty) 'axes': axes,
