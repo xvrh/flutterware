@@ -151,7 +151,7 @@ So the two things are in two places, and they are not the same thing:
 | | where | what it is |
 |---|---|---|
 | the **verdict** (§1) | the full-width header slot | what this branch did — counts, channels that fired, the folded shape |
-| the **filter** (§3) | inside the 320px index, where `All · Important · Review` already lives | what the list shows |
+| the **filter** (§3) | ~~inside the 320px index~~ → **the verdict header**, see §3a | what is *not* being looked at |
 
 That also settles the narrow-width worry: the verdict is only ever as narrow as
 the window, where the filter really does live in a 320px column. The `Wrap`
@@ -228,6 +228,79 @@ Three things the filter must not do:
 3. **Never reach the artifact.** `index.json` is written whole, filtered or
    not. A `tool/` script reading it gets the same answer regardless of what
    anybody had toggled.
+
+## 3a. Excluding some events from one file — audited and drawn
+
+The model carries five facets. Checking each against what the UI had actually
+drawn found one with no home at all.
+
+| facet | where a reader meets it | before this section |
+|---|---|---|
+| `half` | the tab strip — previews / scenarios | ✅ |
+| `channel` | verdict chips (§1), row badges (§2) | ✅ |
+| `subchannel` | verdict chips — `events`, `system` | ✅ |
+| `property` | the delta line in `ChannelLines` | ✅ |
+| `origin` | **nowhere** | ❌ — drawn now |
+
+Drawn as `tool/catalog/demos/comparison_filter.dart`. Three questions prose had
+left open, and none of them could be settled without drawing it.
+
+**Where is a rule authored?** From a **delta row in the detail pane**,
+right-click. That is the only place a reader is looking at an origin, and it is
+the point-at-an-example gesture §3 asked for. The menu is a **ladder by width**,
+because the fact somebody wants to stop seeing is at a different width every
+time:
+
+```
+Stop showing
+  this field, on this statement            1 delta
+  any field, on this statement             3 deltas
+  db events from cache.dart                3 deltas · 2 findings
+  everything from cache.dart               3 deltas · 2 findings
+  every db event                           9 deltas · 4 findings
+  ─────────────────────────────
+  Report this shape to flutterware…
+```
+
+Every rung says what it would remove, so nothing has to be tried to be
+understood. `MenuItem.onHover` already exists *"for a host that previews the
+row's effect somewhere else on screen while you point at it"* — so the list
+behind can dim what the rule would take while the pointer is on the rung.
+
+**Where does the chip then live? The verdict, not the index — the placement
+table above is corrected.** `All · Important · Review` in the index is a *list
+scope*: which rows to list. A rule is a statement about the whole comparison,
+it has to sit beside the counts it changes or §3's rule 2 is broken, and it
+does not fit in 320px beside a search box and three tabs. It reads
+`− db · cache.dart ⟨3⟩ ×` — struck through, muted, its count still legible,
+one click to undo.
+
+**What happens to a finding whose only delta a rule removed?** It is
+**demoted, not deleted** — greyed under `7 hidden by your rules`, with
+`7 findings hidden by 2 rules · show` in the verdict. This is not a new
+invention: the comparison design already decided this exact shape for
+`skipped` rows, on the grounds that *a row that is missing tells a reader
+nothing*. A row a **rule** removed is the same claim, made about the reader
+instead of about the tool, so it degrades the same way. It is also the only
+answer compatible with §3's rules 1 and 2 — the measured case would otherwise
+make all seven findings vanish at one click with nothing on screen saying so.
+
+### What is v1, and what is not
+
+The measured case does not need any of the authoring machinery, and that is
+the whole staging argument. `system` was 11 of 11 here and 192 of 293 on a
+consumer's suite: **a single-facet exclusion**, which is a chip you click on
+the verdict and nothing more.
+
+| | what | cost |
+|---|---|---|
+| **v1** | verdict (§1), row badges (§2), folding (§4a), new-since-last (§4) — all read-only | low; no rules anywhere |
+| **v1.5** | the verdict's channel chips become toggles — one facet, no authoring UI | low; covers the measured 90% |
+| **v2** | conjunction rules, the authoring ladder, `origin`, the hidden group | the rest of §3 and §3a |
+
+The seam that makes the staging safe is the same one as before: v1.5's toggle
+and v2's rule are the *same record* — a rule with one constraint — so the
+chip drawn in v1.5 is the chip v2 adds constraints to. Nothing is rebuilt.
 
 ### The exclusion log is a signal, not just a setting
 
