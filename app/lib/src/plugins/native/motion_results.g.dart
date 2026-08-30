@@ -36,3 +36,17 @@ Map<String, dynamic> _$MotionListTargetToJson(MotionListTarget instance) =>
       'properties': instance.properties,
       'boxed': instance.boxed,
     };
+
+Map<String, dynamic> _$MotionVerifyResultToJson(MotionVerifyResult instance) =>
+    <String, dynamic>{
+      'motion': instance.motion,
+      'file': instance.file,
+      'stops': instance.stops,
+      'durationMs': instance.durationMs,
+      'repeats': instance.repeats,
+      'orderFree': instance.orderFree,
+      'differingStops': instance.differingStops,
+      'scope': ?instance.scope,
+      'scopes': instance.scopes,
+      'ok': instance.ok,
+    };

@@ -44,7 +44,16 @@ class SourceInvalidator {
   /// sweep establishes the baseline that later ones are read against, which is
   /// why the daemon takes one as soon as the cold compile lands rather than
   /// waiting for the first request.
-  List<Uri> sweep(Iterable<Uri> sources) {
+  ///
+  /// [compiledAt] is the exception, and it exists because that baseline rule
+  /// assumes the compile it follows was made *from these files*. A compiler
+  /// started with `--initialize-from-dill` holds libraries somebody else
+  /// compiled, possibly before the files on disk were edited — and it will
+  /// serve them forever, because `recompile` only drops what it is told to
+  /// drop and the baseline told it nothing. Pass when that kernel was written
+  /// and a first sighting newer than it is reported rather than recorded, so
+  /// exactly the files the kernel cannot reflect get recompiled.
+  List<Uri> sweep(Iterable<Uri> sources, {DateTime? compiledAt}) {
     var watch = Stopwatch()..start();
     var invalidated = <Uri>[];
     var watched = 0;
@@ -63,7 +72,13 @@ class SourceInvalidator {
       var known = _seen.containsKey(uri);
       var previous = _seen[uri];
       _seen[uri] = modified;
-      if (known && modified != previous) invalidated.add(uri);
+      if (known) {
+        if (modified != previous) invalidated.add(uri);
+      } else if (compiledAt != null &&
+          modified != null &&
+          modified.isAfter(compiledAt)) {
+        invalidated.add(uri);
+      }
     }
     _watched = watched;
     _lastSweep = watch.elapsed;

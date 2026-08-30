@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifndef __APPLE__
 #include <EGL/egl.h>
@@ -39,6 +40,30 @@ static double g_pixel_ratio = 1.0;
 // Metal completion thread, so it is guarded.
 static pthread_mutex_t g_capture_lock = PTHREAD_MUTEX_INITIALIZER;
 static char* g_capture_path = NULL;
+
+// The interval `OnVsyncRequest` hands back — see it for why.
+static const uint64_t kFrameIntervalNanos = 16600000;
+
+// Whether this guest paces itself to a display at all. Off unless
+// `--free-vsync` says so, and only a headless render says so.
+static bool g_free_vsync = false;
+
+// The engine asks the platform to wait for a vsync and hands over a baton to
+// return when the next one lands. With no callback registered it uses its own
+// waiter, which on a desktop is the real display link — so a headless render
+// drawing as fast as it could was still paced at one frame every 16.6ms.
+// Measured: 31 frames took 515ms at 900x700, at iPhone SE and at iPhone 13
+// alike — a 4.6x range of pixels for identical wall clock, because the display
+// was the only thing being timed. Returning the baton immediately took the
+// same render to 118ms.
+//
+// Registered only for a guest launched to render, and never for one behind a
+// preview panel: a panel's guest paced by nothing would burn a core producing
+// frames the panel drops, and the engine's own waiter is already right for it.
+static void OnVsyncRequest(void* user_data, intptr_t baton) {
+  uint64_t now = FlutterEngineGetCurrentTime();
+  FlutterEngineOnVsync(g_engine, baton, now, now + kFrameIntervalNanos);
+}
 
 // Receives engine log output, including Dart print(). Kept on stdout so the
 // control socket carries only protocol traffic.
@@ -154,6 +179,7 @@ static void OnFramePresented(void* user_data) {
              strlen(capture_path));
     free(capture_path);
   }
+
   uint8_t payload[16];
   memcpy(payload + 0, &frame->ring_index, 4);
   memcpy(payload + 4, &frame->frame_id, 8);
@@ -279,7 +305,7 @@ int main(int argc, char** argv) {
   if (argc < 6) {
     fprintf(stderr,
             "usage: %s <assets_dir> <icu_data_path> <socket_path> "
-            "<width> <height> [--capture-raw <path>]\n",
+            "<width> <height> [--capture-raw <path>] [--free-vsync]\n",
             argv[0]);
     return 2;
   }
@@ -288,9 +314,15 @@ int main(int argc, char** argv) {
   const char* socket_path = argv[3];
   int width = atoi(argv[4]);
   int height = atoi(argv[5]);
-  for (int i = 6; i + 1 < argc; i += 2) {
-    if (strcmp(argv[i], "--capture-raw") == 0) {
-      g_capture_path = strdup(argv[i + 1]);
+  // One argument at a time, and the ones that take a value say so. The
+  // previous loop stepped in pairs, which silently swallowed any flag that
+  // stands alone: `--free-vsync` as the last argument left `i + 1 < argc`
+  // false and the loop never ran at all.
+  for (int i = 6; i < argc; i++) {
+    if (strcmp(argv[i], "--free-vsync") == 0) {
+      g_free_vsync = true;
+    } else if (strcmp(argv[i], "--capture-raw") == 0 && i + 1 < argc) {
+      g_capture_path = strdup(argv[++i]);
     }
   }
 
@@ -332,6 +364,7 @@ int main(int argc, char** argv) {
   args.icu_data_path = icu_data_path;
   args.log_message_callback = OnLogMessage;
   args.log_tag = "embedder";
+  if (g_free_vsync) args.vsync_callback = OnVsyncRequest;
 
   // Impeller, unless the escape hatch says otherwise. Two reasons it is not
   // optional: Flutter GPU needs it and refuses without it, and the tester the

@@ -6,19 +6,9 @@ import 'package:image/image.dart';
 /// `uint32`s.
 const _headerBytes = 16;
 
-/// Decodes a raw frame file written by the embedder C host into an [Image].
-///
-/// File layout: a 16-byte little-endian header (`width`, `height`, `rowBytes`,
-/// `order`) followed by `rowBytes * height` pixel bytes. `rowBytes` is a stride
-/// and may exceed `width * 4`.
-///
-/// `order` is `0` for BGRA and `1` for RGBA, and it is in the file because the
-/// guest's ring is not the same order on every host: an `IOSurface` feeding a
-/// `CVPixelBuffer` is BGRA, and a GL readback feeding an
-/// `FlPixelBufferTexture` is RGBA. Assuming either one produces a picture whose
-/// layout, type and timing are all perfect and whose blues are orange, which is
-/// a bug that survives every check but a human looking at it.
-Image decodeRawFrame(Uint8List fileBytes) {
+({int width, int height, int rowBytes, int order}) _header(
+  Uint8List fileBytes,
+) {
   if (fileBytes.length < _headerBytes) {
     throw FormatException(
       'Raw frame file too short: ${fileBytes.length} bytes',
@@ -46,7 +36,23 @@ Image decodeRawFrame(Uint8List fileBytes) {
       'file has ${fileBytes.length}',
     );
   }
+  return (width: width, height: height, rowBytes: rowBytes, order: order);
+}
 
+/// Decodes a raw frame file written by the embedder C host into an [Image].
+///
+/// File layout: a 16-byte little-endian header (`width`, `height`, `rowBytes`,
+/// `order`) followed by `rowBytes * height` pixel bytes. `rowBytes` is a stride
+/// and may exceed `width * 4`.
+///
+/// `order` is `0` for BGRA and `1` for RGBA, and it is in the file because the
+/// guest's ring is not the same order on every host: an `IOSurface` feeding a
+/// `CVPixelBuffer` is BGRA, and a GL readback feeding an
+/// `FlPixelBufferTexture` is RGBA. Assuming either one produces a picture whose
+/// layout, type and timing are all perfect and whose blues are orange, which is
+/// a bug that survives every check but a human looking at it.
+Image decodeRawFrame(Uint8List fileBytes) {
+  var (:width, :height, :rowBytes, :order) = _header(fileBytes);
   return Image.fromBytes(
     width: width,
     height: height,

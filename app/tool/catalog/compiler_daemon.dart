@@ -249,6 +249,18 @@ class _Daemon {
   /// still launch a guest against a kernel no later compile can move under it.
   String get _sharedAssetsDir => p.join(_buildDir, 'assets');
 
+  /// The shared bundle's directory, made if it is not there.
+  ///
+  /// Both readers below list it, and a `flutter clean` — or anyone deleting
+  /// `build/` under a running daemon — takes it away without the daemon
+  /// noticing. Listing it blind then throws a `PathNotFoundException` out of
+  /// `sendReady`, and every session that attaches afterwards fails with "the
+  /// guest could not start" until the daemon is restarted. An empty bundle is
+  /// a valid state, since the next compile refills it, so creating beats
+  /// throwing.
+  Directory get _sharedAssets =>
+      Directory(_sharedAssetsDir)..createSync(recursive: true);
+
   String get _outputDill => p.join(_buildDir, 'out', 'kernel_blob.bin');
 
   /// Re-runs discovery when the files under the roots have moved, so an entry
@@ -959,10 +971,44 @@ class _Daemon {
     // The baseline every later sweep reads against. Taken here rather than on
     // the first request: a file edited between startup and that request would
     // otherwise be recorded *as* the baseline, and the edit would never compile.
+    //
+    // `compiledAt` is what makes the baseline honest after a **warm** start.
+    // The compile above began from a kernel an earlier session wrote, and
+    // `frontend_server` recompiles nothing it is not named — so every file
+    // edited since that kernel was saved is in the program, stale, and
+    // invisible. Recording it as the baseline is what made it invisible
+    // *forever*: the mtime matched from then on, so no later sweep reported it
+    // either. Measured on this repo: a values file edited between two daemons
+    // rendered the previous version through every capture, while the panel's
+    // own scan showed the new one.
     var sweep = Stopwatch()..start();
-    _invalidator.sweep(compiler.sources);
+    var stale = _invalidator.sweep(
+      compiler.sources,
+      compiledAt: compiler.startedFromStamp,
+    );
     _timings['source baseline (${_invalidator.watched} files)'] =
         sweep.elapsedMilliseconds;
+    if (stale.isNotEmpty) {
+      stderr.writeln(
+        '[catalog] ${stale.length} sources are newer than the warm kernel; '
+        'recompiling them',
+      );
+      // Whole program, not a delta: the kernel at `_outputDill` is what a guest
+      // loads from disk and what `saveWarmStart` is about to publish, and a
+      // delta is not a program.
+      compiler.reset();
+      cold = await _timed(
+        'warm start repair (${stale.length} edited)',
+        () => _compileServingWhatWorks(stale),
+      );
+      if (!cold.ok) {
+        throw StateError(
+          'the catalog compiled from its warm kernel, but recompiling the '
+          '${stale.length} sources edited since did not:\n'
+          '${cold.output.join('\n')}',
+        );
+      }
+    }
     compiler.saveWarmStart();
     // Written beside the kernel it belongs to: the warm kernel and the
     // quarantine describe the same compile, and a quarantine recorded against a
@@ -1334,8 +1380,7 @@ class _Daemon {
   /// session's own, whether still the shared link or a compiled file.
   void _refreshSessionMirrors() {
     var shared = <String>{
-      for (var entity in Directory(_sharedAssetsDir).listSync())
-        p.basename(entity.path),
+      for (var entity in _sharedAssets.listSync()) p.basename(entity.path),
     };
     for (var session in [..._sessions]) {
       var dir = Directory(session.assetsDir);
@@ -1429,7 +1474,7 @@ class _Session {
     var target = Directory(assetsDir);
     if (target.existsSync()) target.deleteSync(recursive: true);
     target.createSync(recursive: true);
-    for (var entity in Directory(_daemon._sharedAssetsDir).listSync()) {
+    for (var entity in _daemon._sharedAssets.listSync()) {
       Link(p.join(assetsDir, p.basename(entity.path))).createSync(entity.path);
     }
   }

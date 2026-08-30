@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/motion.dart' show StageKind;
 import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
@@ -12,8 +14,10 @@ import '../../embedder/guest_texture.dart';
 import '../../motion/discovery.dart';
 import '../../motion/lane_model.dart';
 import '../../motion/new_span.dart';
+import '../../motion/stage_file.dart';
 import '../../motion/values_file.dart';
 import '../../ui/empty_state.dart';
+import '../../ui/filter_bar.dart';
 import '../../ui/loading_state.dart';
 import '../../ui/tappable.dart';
 import '../native_plugin.dart';
@@ -81,26 +85,42 @@ class _MotionPanelState extends State<_MotionPanel> {
 
   @override
   Widget build(BuildContext context) {
-    var place = _resolve();
-    if (place == null) {
-      return const NoPackagesConfigured(icon: Icons.movie_outlined);
-    }
+    // Rebuilds when a scan lands: the core notifies, the plugin forwards.
+    //
+    // Every other native panel does this and this one did not, so it read the
+    // core once and went cold — the scan finished, `notifyChanged` fired, and
+    // nothing here was listening. It looked fine for as long as the scan beat
+    // the first build; it stopped looking fine when the demo directory grew
+    // enough for the panel to win that race, and then "Scanning for motions…"
+    // stayed on screen until the panel was remounted by hand.
+    //
+    // Every read of the core belongs *inside* the builder, or the part left
+    // outside is the part that stays stale.
+    return AnimatedBuilder(
+      animation: widget.plugin,
+      builder: (context, _) {
+        var place = _resolve();
+        if (place == null) {
+          return const NoPackagesConfigured(icon: Icons.movie_outlined);
+        }
 
-    var result = _core.resultFor(place.package);
-    var selected = _selectedMotion(result, place);
+        var result = _core.resultFor(place.package);
+        var selected = _selectedMotion(result, place);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _MotionBand(
-          core: _core,
-          place: place,
-          result: result,
-          selected: selected,
-        ),
-        Divider(height: 1, color: context.colors.line),
-        Expanded(child: _body(context, place, result, selected)),
-      ],
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _MotionBand(
+              core: _core,
+              place: place,
+              result: result,
+              selected: selected,
+            ),
+            Divider(height: 1, color: context.colors.line),
+            Expanded(child: _body(context, place, result, selected)),
+          ],
+        );
+      },
     );
   }
 
@@ -392,6 +412,25 @@ class _MotionStageState extends State<_MotionStage> {
   Timer? _poll;
   Timer? _tick;
 
+  /// The draft stage as the file has it, or null where there is none.
+  ///
+  /// Two sources describe the same elements and they answer different
+  /// questions: the guest says where a target *is* on screen, which is what a
+  /// pointer hit-tests against, and this says what the file will be written
+  /// back as. Neither can be derived from the other — a placeholder's `x` is
+  /// not its extent, because the stage is centred in the guest.
+  StageFile? _stage;
+
+  /// Why the stage could not be read, if it could not. Shown rather than
+  /// swallowed: an editor that silently stops offering to add things looks
+  /// broken, and a refusal that names the offset is a fixable one.
+  String? _stageProblem;
+
+  /// What the file said last time, so a parse costs nothing on a poll that
+  /// changed nothing. A person editing the stage by hand is expected, so this
+  /// re-reads rather than trusting its own writes.
+  DateTime? _stageStamp;
+
   /// The guest's own answer, or null before it has given one.
   Map<String, dynamic>? _scope;
 
@@ -458,7 +497,9 @@ class _MotionStageState extends State<_MotionStage> {
       flutterSdkRoot: core.host.workspace.flutterSdk.root,
       projectRoot: p.join(core.host.worktree.path, package),
       worktreeRoot: core.host.worktree.path,
-      roots: [core.directoryFor(package)],
+      // Same catalog as the previews panel, so the two share one daemon and
+      // one warm kernel rather than compiling the same files twice.
+      roots: core.host.catalogRootsFor(package),
       clock: core.host.projectClock,
       connectToDaemon: CompilerDaemonClient.connect,
     )..addListener(_onSession);
@@ -529,6 +570,7 @@ class _MotionStageState extends State<_MotionStage> {
       'ext.flutterware.motion.list',
     );
     if (!mounted) return;
+    _loadStage();
     var scopes = (listed?['scopes'] as List?)?.cast<Map<String, dynamic>>();
     setState(
       () => _scope = scopes == null || scopes.isEmpty ? null : scopes.first,
@@ -540,6 +582,127 @@ class _MotionStageState extends State<_MotionStage> {
       _parked = true;
       unawaited(_seek(widget.place.t ?? 0));
     }
+  }
+
+  /// Reads the stage file when it has changed, and not otherwise.
+  ///
+  /// Called off the same one-second poll as the lanes. The stat is what makes
+  /// that free; the parse only runs on an edit, whoever made it.
+  void _loadStage() {
+    var path = widget.core.stagePathFor(
+      widget.place.package,
+      widget.motion.file,
+    );
+    var file = File(path);
+    if (!file.existsSync()) {
+      if (_stage != null || _stageProblem != null) {
+        setState(() {
+          _stage = null;
+          _stageProblem = null;
+          _stageStamp = null;
+        });
+      }
+      return;
+    }
+    var stamp = file.lastModifiedSync();
+    if (stamp == _stageStamp) return;
+    _stageStamp = stamp;
+    switch (parseStageFile(file.readAsStringSync())) {
+      case StageFile stage:
+        setState(() {
+          _stage = stage;
+          _stageProblem = null;
+        });
+      case StageParseFailure failure:
+        setState(() {
+          _stage = null;
+          _stageProblem = '$failure';
+        });
+    }
+  }
+
+  /// Writes the stage back and asks for the reload that carries it — exactly
+  /// what a lane edit does, and for the same reason: the disk is the model, but
+  /// the daemon only sweeps for edits when somebody asks it to compile. Writing
+  /// without this leaves a file on disk that nothing has read.
+  Future<void> _writeStage(StageFile stage) async {
+    widget.core.writeStage(widget.place.package, widget.motion.file, stage);
+    if (!mounted) return;
+    setState(() {
+      _stage = stage;
+      _stageStamp = null;
+    });
+    await _session?.reloadIfChanged();
+    await _refresh();
+  }
+
+  /// Puts a placeholder on the draft.
+  ///
+  /// No dialog and no name asked for: placing a rectangle should cost one
+  /// click, and the name is a field on the element like any other. It lands
+  /// below everything, which is the same rule `motion add-element` follows
+  /// when nobody gives it a `y`.
+  void _addElement(String kind) {
+    var stage = _stage;
+    if (stage == null) return;
+    unawaited(
+      _writeStage(
+        stage.withElement(
+          StageElementModel(
+            target: MotionCore.freeTarget(stage, kind),
+            kind: kind,
+            x: 24,
+            y: MotionCore.belowEverything(stage),
+            width: kind == 'circle' ? 48 : (stage.width - 48).clamp(48, 320),
+            height: kind == 'text' ? 28 : 48,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Moves one element by a whole number of stage pixels.
+  ///
+  /// Rounded, because a drag samples in fractions of a logical pixel and the
+  /// file is read by people — `x: 24` is a position, `x: 23.99999` is a
+  /// smudge. Clamped to the stage, so a placeholder cannot be dragged off the
+  /// only surface that shows it.
+  void _moveElement(String target, Offset by) {
+    var stage = _stage;
+    if (stage == null) return;
+    unawaited(
+      _writeStage(
+        StageFile(
+          name: stage.name,
+          width: stage.width,
+          height: stage.height,
+          background: stage.background,
+          elements: [
+            for (var element in stage.elements)
+              if (element.target != target)
+                element
+              else
+                StageElementModel(
+                  target: element.target,
+                  kind: element.kind,
+                  x: (element.x + by.dx).roundToDouble().clamp(
+                    0,
+                    stage.width - element.width,
+                  ),
+                  y: (element.y + by.dy).roundToDouble().clamp(
+                    0,
+                    stage.height - element.height,
+                  ),
+                  width: element.width,
+                  height: element.height,
+                  label: element.label,
+                  tint: element.tint,
+                  radius: element.radius,
+                ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// One seek in flight, and the last one always lands.
@@ -738,6 +901,21 @@ class _MotionStageState extends State<_MotionStage> {
     }
   }
 
+  /// Flips which body the guest builds — the draft stage or the real screen.
+  ///
+  /// A guest verb rather than a rebuild of anything here: the two bodies live
+  /// in one `MotionScope`, so the playhead, the lanes and the selection are all
+  /// the same objects on the other side of the flip. Refreshing after it is
+  /// what redraws the lanes, since a target that only the draft names appears
+  /// and disappears with the host.
+  Future<void> _setHost(MotionHostView host) async {
+    await _session?.callGuestExtension(
+      'ext.flutterware.motion.host',
+      args: {..._scopeArgs, 'host': host.wire},
+    );
+    await _refresh();
+  }
+
   Future<void> _transport(String verb) async {
     // Play and restart hand the playhead back; pause leaves it where it is, and
     // the panel goes on owning it so the next scrub has something to start from.
@@ -790,6 +968,7 @@ class _MotionStageState extends State<_MotionStage> {
                       child: _preview(
                         context,
                         session,
+                        scope,
                         // Only what is selected. Ringing every target at once
                         // would be a screen of rectangles and no answer to the
                         // question the ring is for — which one is this lane?
@@ -804,6 +983,15 @@ class _MotionStageState extends State<_MotionStage> {
                     scope: _scope,
                     value: _playhead,
                     onTransport: _transport,
+                    host: scope?.host ?? MotionHostView.real,
+                    hosts: scope?.hosts ?? const [],
+                    onHost: _setHost,
+                    // Only on the draft, and only where there is a stage file
+                    // to write. The real screen's targets are named in a build
+                    // method, and the tool may not touch one.
+                    onAdd: _stage != null && scope?.host == MotionHostView.draft
+                        ? _addElement
+                        : null,
                     railOpen: showRail,
                     onToggleRail: () => setState(() => _showRail = !showRail),
                   ),
@@ -853,6 +1041,7 @@ class _MotionStageState extends State<_MotionStage> {
   Widget _preview(
     BuildContext context,
     CatalogSession? session,
+    MotionScopeView? scope,
     MotionTargetView? highlight,
   ) {
     var engine = session?.engine;
@@ -882,6 +1071,10 @@ class _MotionStageState extends State<_MotionStage> {
           );
         });
         if (engine.textureId == null) return const SizedBox.expand();
+        // Only what is on the draft can be dragged, and only while the draft is
+        // what is being shown. A target the real screen lays out has no `x` to
+        // write — moving it would mean editing somebody's build method.
+        var stage = _stage;
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -890,9 +1083,148 @@ class _MotionStageState extends State<_MotionStage> {
               extent: highlight?.extent,
               label: highlight?.name,
             ),
+            if (stage != null && scope?.host == MotionHostView.draft)
+              _DraftDrag(stage: stage, guest: size, onMoved: _moveElement),
           ],
         );
       },
+    );
+  }
+}
+
+/// Dragging a placeholder around the draft.
+///
+/// The rects come from the stage file, not from the guest's reported extents,
+/// and the difference is not an optimisation. An extent is where a target has
+/// been *moved to* — that is the whole point of it, so a ring follows an
+/// animation — and the file holds where it was laid out. Dragging the moved box
+/// and writing the laid-out one puts the element somewhere neither of them was.
+/// The layout rect is also there before the guest has said anything, which is
+/// what makes a freshly added placeholder draggable straight away.
+///
+/// The one thing this has to know about the guest is that [MotionStageView]
+/// centres the stage in it, which is a translation and nothing else.
+class _DraftDrag extends StatefulWidget {
+  const _DraftDrag({
+    required this.stage,
+    required this.guest,
+    required this.onMoved,
+  });
+
+  final StageFile stage;
+
+  /// The guest's logical size, which is this layer's box — the panel is what
+  /// sized both.
+  final Size guest;
+
+  final void Function(String target, Offset by) onMoved;
+
+  @override
+  State<_DraftDrag> createState() => _DraftDragState();
+}
+
+class _DraftDragState extends State<_DraftDrag> {
+  String? _target;
+  Offset _by = Offset.zero;
+
+  /// Where the stage's own origin sits in this box.
+  Offset get _origin => Offset(
+    (widget.guest.width - widget.stage.width) / 2,
+    (widget.guest.height - widget.stage.height) / 2,
+  );
+
+  Rect _rectOf(StageElementModel element) => Rect.fromLTWH(
+    element.x + _origin.dx,
+    element.y + _origin.dy,
+    element.width,
+    element.height,
+  );
+
+  /// Topmost first, because a later element paints over an earlier one and the
+  /// thing you can see is the thing you meant to grab.
+  StageElementModel? _hit(Offset at) {
+    for (var element in widget.stage.elements.reversed) {
+      if (_rectOf(element).contains(at)) return element;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var target = _target;
+    var element = target == null
+        ? null
+        : widget.stage.elements.firstWhereOrNull((e) => e.target == target);
+    var ghost = element == null ? null : _rectOf(element).shift(_by);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.move,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onPanStart: (details) {
+          var hit = _hit(details.localPosition);
+          if (hit == null) return;
+          setState(() {
+            _target = hit.target;
+            _by = Offset.zero;
+          });
+        },
+        onPanUpdate: (details) {
+          if (_target == null) return;
+          setState(() => _by += details.delta);
+        },
+        onPanEnd: (_) {
+          var moved = _target;
+          if (moved == null) return;
+          // The write lands in `_stage` synchronously, so the ring is already
+          // at the new position when this clears — the texture catches up a
+          // beat later, which reads as the thing moving rather than as a snap
+          // back to where it was.
+          if (_by != Offset.zero) widget.onMoved(moved, _by);
+          setState(() {
+            _target = null;
+            _by = Offset.zero;
+          });
+        },
+        child: ghost == null
+            ? const SizedBox.expand()
+            : MotionStageHighlight(extent: ghost, label: target),
+      ),
+    );
+  }
+}
+
+/// The one thing that creates a target.
+///
+/// A menu of kinds rather than a form, because the name is not a decision to
+/// make before the rectangle exists — it is a field on the element, changed
+/// where the rest of it is. The kinds are the stage's own vocabulary, so this
+/// list is complete by construction rather than by remembering to update it.
+class _AddElement extends StatelessWidget {
+  const _AddElement({required this.onAdd});
+
+  final ValueChanged<String> onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      menuChildren: [
+        for (var kind in StageKind.values)
+          MenuItemButton(
+            onPressed: () => onAdd(kind.name),
+            child: Text(switch (kind) {
+              StageKind.box => 'Box',
+              StageKind.text => 'Text',
+              StageKind.circle => 'Circle',
+            }, style: context.type.body),
+          ),
+      ],
+      builder: (context, controller, _) => IconButton(
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+        icon: const Icon(Icons.add_box_outlined),
+        tooltip: 'Add a placeholder to the draft',
+      ),
     );
   }
 }
@@ -909,6 +1241,10 @@ class _Transport extends StatelessWidget {
     required this.scope,
     required this.value,
     required this.onTransport,
+    required this.host,
+    required this.hosts,
+    required this.onHost,
+    required this.onAdd,
     required this.railOpen,
     required this.onToggleRail,
   });
@@ -916,6 +1252,13 @@ class _Transport extends StatelessWidget {
   final Map<String, dynamic>? scope;
   final double? value;
   final ValueChanged<String> onTransport;
+  final MotionHostView host;
+  final List<MotionHostView> hosts;
+  final ValueChanged<MotionHostView> onHost;
+
+  /// Adds a placeholder of that kind, or null where nothing can be added.
+  final ValueChanged<String>? onAdd;
+
   final bool railOpen;
   final VoidCallback onToggleRail;
 
@@ -945,6 +1288,23 @@ class _Transport extends StatelessWidget {
             icon: const Icon(Icons.replay),
             tooltip: 'Play from the start',
           ),
+          const Gap(FwSpacing.sm),
+          // Draft or real, and only where there are both. A motion with one
+          // body would get a control whose every use is a refusal, and a
+          // control that cannot be used still has to be read.
+          if (hosts.length > 1)
+            for (var candidate in hosts) ...[
+              FwPill(
+                label: candidate.label,
+                selected: candidate == host,
+                onTap: () => onHost(candidate),
+              ),
+              const Gap(FwSpacing.xs),
+            ],
+          if (onAdd case var add?) ...[
+            const Gap(FwSpacing.xs),
+            _AddElement(onAdd: add),
+          ],
           const Spacer(),
           // Milliseconds, not a fraction: the values file is written in
           // milliseconds and this is the number you would type into it.

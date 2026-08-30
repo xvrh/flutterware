@@ -1,6 +1,7 @@
 // ignore: implementation_imports
 import 'package:flutterware/src/scenarios/network_mode.dart';
 
+import '../previews/catalog_roots.dart';
 import '../shell/workspace.dart';
 import '../shell/worktree.dart';
 
@@ -17,6 +18,7 @@ class PluginHost {
     required this.workspace,
     this.config = const {},
     this.projectClock,
+    this.catalogRoots = const {},
     this.projectNetwork,
   });
 
@@ -45,6 +47,40 @@ class PluginHost {
   /// Whatever `tool/flutterware.dart` passed for this instance. Already decoded
   /// from the manifest; plugins are responsible for validating their own keys.
   final Map<String, Object?> config;
+
+  /// Where the catalog discovers preview entries, per package — the previews
+  /// plugin's declaration, resolved once for the whole project.
+  ///
+  /// Handed to every plugin rather than read by each, because the daemon's
+  /// address hashes its roots: a plugin that renders through the catalog with
+  /// roots of its own does not get a narrower catalog, it gets a **second
+  /// compiler** on the same files. See [catalogRootsFrom].
+  final Map<String, List<String>> catalogRoots;
+
+  /// Where the catalog looks for entries in [package].
+  ///
+  /// Ask this before building a `DaemonConfig` or a `CatalogSession`. A plugin
+  /// that also scans sources of its own — motion looking for `MotionScope` —
+  /// keeps that directory separate: where to *scan* and where the catalog
+  /// *renders from* are different questions with one right answer each.
+  ///
+  /// Falls back to this host's **own** declaration when the project-wide map
+  /// has nothing, which is what a host built outside [PluginCoreRegistry] gets
+  /// — a unit test holding one core, mostly. That keeps a plugin reading its
+  /// own config in isolation and changes nothing about the resolved case: the
+  /// map is what makes two plugins agree, and only the registry can build it.
+  List<String> catalogRootsFor(String package) =>
+      catalogRoots[package] ?? [_declaredDirectory(package)];
+
+  /// The `directory` this plugin declared for [package], or the whole package.
+  String _declaredDirectory(String package) {
+    for (var config in packageConfigs) {
+      if (config['path'] != package) continue;
+      var directory = config['directory'];
+      if (directory is String && directory.isNotEmpty) return directory;
+    }
+    return defaultCatalogRoot;
+  }
 
   /// Reads a string setting, or [fallback] when absent or the wrong type.
   String? string(String key, [String? fallback]) {

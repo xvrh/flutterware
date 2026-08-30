@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 // The knob types, not the umbrella `ui_catalog.dart`: that one exports the
 // demo annotations, which reach `package:flutter/widgets.dart` and would make
@@ -140,6 +141,137 @@ class CatalogRender {
   );
 }
 
+/// How each stop of a [CatalogWalk] is reached.
+///
+/// The distinction is the one the whole export rests on: a screen that reads
+/// its playhead and draws is a **scene**, and a screen that reads its playhead
+/// and then starts an animation of its own is a **state machine**. Both are
+/// legitimate; they need different clocks.
+enum WalkMode {
+  /// Set the playhead, draw one frame, keep it.
+  ///
+  /// No time passes. Right for anything that is a function of `t` — which is
+  /// what a motion is supposed to be, and what [CatalogWalk] checks by being
+  /// renderable in any order.
+  playhead,
+
+  /// Set the playhead, then advance the clock by one frame of [CatalogWalk.fps]
+  /// and let the screen settle.
+  ///
+  /// Right for a screen with animation of its own — an `AnimationController`,
+  /// an implicit animation, a scroll physics simulation. Under a fake clock
+  /// that advance is *exact* rather than however long the machine took, so a
+  /// spring resolves to the same pixel every run. No real-time renderer can
+  /// offer this, which is why the alternatives forbid such screens instead of
+  /// rendering them.
+  time,
+}
+
+/// A walk of one entry's playhead, and everything needed to reproduce it.
+///
+/// A walk is a **projection of many renders** exactly as [CatalogRenderer.capture]
+/// is a projection of one, which is why it lives here beside [CatalogRender]
+/// rather than on whichever backend happens to perform it.
+class CatalogWalk {
+  const CatalogWalk({
+    required this.entryId,
+    this.stops,
+    this.viewport = CaptureViewport.panel,
+    this.knobs = const {},
+    this.axes = const {},
+    this.scope,
+    this.mode = WalkMode.playhead,
+    this.fps = 30,
+  });
+
+  final String entryId;
+
+  /// Playhead positions, 0..1, **in the order they are to be taken**, or null
+  /// for the whole motion at [fps].
+  ///
+  /// Order is part of the request rather than a detail of the loop because it
+  /// is the one thing that tells a scene from a state machine: taken
+  /// backwards, a scene renders the same pictures and a state machine does
+  /// not. `motion verify` is that comparison.
+  ///
+  /// Null is the ordinary case for a clip, and it is not a convenience: only
+  /// the running motion knows how long it is, so a caller that computed stops
+  /// itself would have to render once to ask. See `videoStops`, which is what
+  /// answers it on the other side.
+  final List<double>? stops;
+
+  final CaptureViewport viewport;
+  final Map<String, String> knobs;
+  final Map<String, String> axes;
+
+  /// Which mounted scope to drive; the only one when omitted.
+  final String? scope;
+
+  final WalkMode mode;
+
+  /// Frames a second — what a stop is worth in [WalkMode.time], and what the
+  /// clip is encoded at.
+  final int fps;
+}
+
+/// A walk, and what the running motion said about itself while it was taken.
+///
+/// The facts ride with the frames rather than being asked for separately,
+/// because only a mounted motion knows them: how long it is, and which
+/// playhead was driven when the screen has more than one.
+class CatalogWalkResult {
+  const CatalogWalkResult({
+    required this.frames,
+    required this.durationMs,
+    this.scope,
+    this.scopes = const [],
+  });
+
+  /// The frames, in the order the stops were asked for.
+  ///
+  /// A stream because a clip is bigger than memory: sixty frames of a phone at
+  /// 3x is about a gigabyte, and an encoder wants them one at a time anyway.
+  final Stream<WalkFrame> frames;
+
+  /// The motion's own duration, which is what decides a clip's frame count.
+  final int durationMs;
+
+  /// The playhead that was driven.
+  final String? scope;
+
+  /// Every playhead that was mounted, when there was more than one — so a walk
+  /// of the wrong one is visible rather than merely wrong.
+  final List<String> scopes;
+}
+
+/// One frame of a walk, as packed RGBA.
+///
+/// Packed rather than the embedder's padded-and-headed `.rawframe`, and
+/// unencoded rather than a PNG: a walk's consumer is an encoder or a contact
+/// sheet, and both would immediately undo a PNG. See `decodeTesterFrame` for
+/// turning one into an image.
+class WalkFrame {
+  const WalkFrame({
+    required this.t,
+    required this.width,
+    required this.height,
+    required this.pixels,
+  });
+
+  /// The playhead position this frame is of.
+  ///
+  /// Carried rather than inferred from position in the stream, because pairing
+  /// a frame with a stop by position is exactly the assumption that made the
+  /// embedder's clips wrong.
+  final double t;
+
+  final int width;
+  final int height;
+
+  /// `width * height * 4` bytes, RGBA.
+  final Uint8List pixels;
+}
+
 /// Something that can render one entry and answer questions about that frame.
 ///
 /// The interface exists so the answer's shape is fixed while the engine behind
@@ -151,6 +283,26 @@ abstract class CatalogRenderer {
   const CatalogRenderer();
 
   Future<CatalogObservation> render(CatalogRender request);
+
+  /// Walks one entry's playhead, yielding a frame per stop.
+  ///
+  /// **Refused by default, and that is the honest answer for the embedder.**
+  /// A guest advances its playhead on the UI thread while its host writes
+  /// whatever the *rasteriser* presents, and nothing joins the two: pairing a
+  /// written frame with a stop is positional, and measured over six trials of
+  /// one motion the same walk came out differently in four of them, frames
+  /// offset by a stop. A clip made that way is of the wrong moments and looks
+  /// entirely plausible.
+  ///
+  /// A harness under a fake clock has no second thread to lose — the picture
+  /// is rasterised from the layer tree the pump just produced — so it
+  /// overrides this. A backend that cannot promise one frame per stop should
+  /// say so here rather than offer a second, wrong, implementation.
+  Future<CatalogWalkResult> walk(CatalogWalk request) => throw UnsupportedError(
+    'this backend cannot walk a playhead: it pairs written frames with stops '
+    'by position, and nothing guarantees one presented frame per stop. Render '
+    'the walk on the `flutter_tester` harness.',
+  );
 
   /// A picture, and the knobs the build that produced it declared.
   ///

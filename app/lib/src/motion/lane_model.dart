@@ -230,6 +230,28 @@ class MotionTargetView {
   );
 }
 
+/// Which body a scope is building — the guest's `MotionHost`, parroted.
+///
+/// A second declaration rather than an import of the runtime's, for the reason
+/// the whole file exists: this model is what the panel draws from, and it must
+/// parse an answer from a guest whose `flutterware` is not necessarily this
+/// one. An unknown name reads as [real], which is what a guest too old to have
+/// a stage is.
+enum MotionHostView {
+  real,
+  draft;
+
+  static MotionHostView parse(Object? raw) => raw == 'draft' ? draft : real;
+
+  String get label => switch (this) {
+    real => 'Real',
+    draft => 'Draft',
+  };
+
+  /// What the extension wants back.
+  String get wire => name;
+}
+
 class MotionScopeView {
   const MotionScopeView({
     required this.id,
@@ -237,6 +259,8 @@ class MotionScopeView {
     required this.positionMs,
     required this.progress,
     required this.playing,
+    this.host = MotionHostView.real,
+    this.hosts = const [],
     this.targets = const [],
   });
 
@@ -245,6 +269,14 @@ class MotionScopeView {
   final int positionMs;
   final double progress;
   final bool playing;
+
+  /// Which body the scope is building, and which it could build.
+  ///
+  /// A scope with one host is the ordinary case and the panel draws no switch
+  /// for it — a control whose every use is a refusal is worse than none.
+  final MotionHostView host;
+  final List<MotionHostView> hosts;
+
   final List<MotionTargetView> targets;
 
   static MotionScopeView? parse(Map<String, dynamic>? raw) {
@@ -255,6 +287,11 @@ class MotionScopeView {
       positionMs: (raw['ms'] as num?)?.toInt() ?? 0,
       progress: (raw['progress'] as num?)?.toDouble() ?? 0,
       playing: raw['playing'] == true,
+      host: MotionHostView.parse(raw['host']),
+      hosts: [
+        for (var host in (raw['hosts'] as List? ?? const []))
+          MotionHostView.parse(host),
+      ],
       targets: [
         for (var target in (raw['targets'] as List? ?? const []))
           MotionTargetView.parse((target as Map).cast<String, dynamic>()),

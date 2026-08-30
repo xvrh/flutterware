@@ -14,6 +14,7 @@ import 'plugin_result.dart';
 /// under-specification the entry model warned about.
 class Artifact implements PluginResult {
   static const png = 'image/png';
+  static const mp4 = 'video/mp4';
   static const plainText = 'text/plain';
   static const json = 'application/json';
   static const widgetTree = 'application/vnd.flutterware.widget-tree+json';

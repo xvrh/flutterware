@@ -97,4 +97,46 @@ void main() {
     touch(helper, DateTime(2026, 7, 27, 12));
     expect(invalidator.sweep([demo, helper]), [helper]);
   });
+
+  group('after a warm start', () {
+    // `compiledAt` is when the kernel the compiler was initialised from was
+    // written. Everything the daemon knows about which of its sources that
+    // kernel can still be trusted for.
+    final kernelWrittenAt = DateTime(2026, 7, 27, 12);
+
+    test('a source edited since the warm kernel is reported', () {
+      var demo = write('demo/tile.dart', 'a');
+      touch(demo, kernelWrittenAt.add(const Duration(minutes: 5)));
+
+      expect(invalidator.sweep([demo], compiledAt: kernelWrittenAt), [
+        demo,
+      ], reason: 'the warm kernel predates this edit, so it holds the old one');
+    });
+
+    test('a source older than the warm kernel is left alone', () {
+      var demo = write('demo/tile.dart', 'a');
+      touch(demo, kernelWrittenAt.subtract(const Duration(minutes: 5)));
+
+      expect(invalidator.sweep([demo], compiledAt: kernelWrittenAt), isEmpty);
+    });
+
+    test('reporting it once does not report it forever', () {
+      var demo = write('demo/tile.dart', 'a');
+      touch(demo, kernelWrittenAt.add(const Duration(minutes: 5)));
+
+      expect(invalidator.sweep([demo], compiledAt: kernelWrittenAt), [demo]);
+      // The recompile that follows makes it current, and the mtime it was
+      // reported at is the baseline from here on.
+      expect(invalidator.sweep([demo]), isEmpty);
+    });
+
+    test('a cold compile keeps the plain baseline', () {
+      var demo = write('demo/tile.dart', 'a');
+      touch(demo, DateTime(2030, 1, 1));
+
+      // No kernel to be stale against: the compile that just ran built this
+      // file, however new it looks.
+      expect(invalidator.sweep([demo]), isEmpty);
+    });
+  });
 }

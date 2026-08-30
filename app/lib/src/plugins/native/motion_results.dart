@@ -109,3 +109,67 @@ class MotionListTarget {
 
   Map<String, Object?> toJson() => _$MotionListTargetToJson(this);
 }
+
+/// `verify` — whether a motion renders the same clip every time.
+///
+/// The question this answers is the one nothing downstream can: a frame of the
+/// wrong moment looks exactly as plausible as a frame of the right one, so a
+/// clip cannot be checked by watching it. What *can* be checked is whether the
+/// pictures depend on anything but the playhead.
+///
+/// Two claims, and the second is the stronger:
+///
+///   * **repeats** — the same stops rendered twice are byte-identical. A
+///     motion that fails this is not renderable at all; something in it reads
+///     a clock, a random, or the machine.
+///   * **orderFree** — the same stops rendered *backwards* are the same
+///     pictures. A motion that fails this renders its history rather than its
+///     playhead: an implicit animation, a spring, a scroll position. It can
+///     still be exported with the `time` clock, which drives such a screen
+///     deliberately, but it is not a scene and a `playhead` render of it is
+///     of the wrong moments.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class MotionVerifyResult implements PluginResult {
+  MotionVerifyResult({
+    required this.motion,
+    required this.file,
+    required this.stops,
+    required this.durationMs,
+    required this.repeats,
+    required this.orderFree,
+    this.differingStops = const [],
+    this.scope,
+    this.scopes = const [],
+  });
+
+  final String motion;
+  final String file;
+
+  /// How many playhead positions were compared.
+  final int stops;
+
+  final int durationMs;
+
+  final bool repeats;
+  final bool orderFree;
+
+  /// The playhead positions that came out different, so a failure names the
+  /// moments to look at rather than only the verdict.
+  final List<double> differingStops;
+
+  final String? scope;
+
+  /// Every playhead that was mounted, when there was more than one — a verdict
+  /// about the wrong one is worth being able to see.
+  final List<String> scopes;
+
+  /// Whether this motion can be rendered as a scene.
+  bool get ok => repeats && orderFree;
+
+  @override
+  Map<String, Object?> toJson() => _$MotionVerifyResultToJson(this);
+}

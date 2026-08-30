@@ -98,6 +98,98 @@ class TesterRenderer extends CatalogRenderer {
     );
   }
 
+  /// Walks the playhead, yielding a frame per stop.
+  ///
+  /// The knob and axis resolution is [render]'s, deliberately: a walk turns
+  /// the same values against the same declarations, and a second way of
+  /// resolving them is a second chance to disagree about what a knob named
+  /// `progress` is.
+  ///
+  /// Raw rather than PNG, and yielded rather than collected: a walk's consumer
+  /// is an encoder, which wants pixels and wants them as they come. Sixty
+  /// frames of a phone at 3x is a gigabyte if it is gathered first.
+  @override
+  Future<CatalogWalkResult> walk(CatalogWalk request) async {
+    var probe = CatalogRender(
+      entryId: request.entryId,
+      viewport: request.viewport,
+      knobs: request.knobs,
+      axes: request.axes,
+    );
+    var wantsValues = request.knobs.isNotEmpty || request.axes.isNotEmpty;
+    var declared = wantsValues
+        ? await _ask(probe, wantKnobs: true, wantAxes: true)
+        : null;
+
+    var reply = await _ask(
+      probe,
+      knobs: declared == null
+          ? null
+          : knobPayloadFor(
+              declared.knobs,
+              request.knobs,
+              entryId: request.entryId,
+            ),
+      axes: declared == null
+          ? null
+          : axisPayloadFor(declared.axes, request.axes),
+      walk: request,
+      sync: declared == null && sync,
+    );
+
+    var frames = reply.walk;
+    if (request.stops case var asked? when frames.length != asked.length) {
+      throw StateError(
+        'the harness returned ${frames.length} frames for ${asked.length} '
+        'stops',
+      );
+    }
+    if (frames.isEmpty) {
+      throw StateError(
+        'the harness walked no stops of ${request.entryId} — it reports a '
+        'motion ${reply.durationMs}ms long, and a motion of no duration has '
+        'nothing to render',
+      );
+    }
+    return CatalogWalkResult(
+      durationMs: reply.durationMs,
+      scope: reply.scope,
+      scopes: reply.scopes,
+      frames: _read(frames),
+    );
+  }
+
+  /// Reads the harness's frames one at a time, and sweeps them after.
+  ///
+  /// Lazily, because a clip is bigger than memory — sixty frames of a phone at
+  /// 3x is about a gigabyte — and the encoder wants them one at a time anyway.
+  Stream<WalkFrame> _read(List<_WalkFrame> frames) async* {
+    try {
+      for (var frame in frames) {
+        var file = File(frame.path);
+        var pixels = file.readAsBytesSync();
+        // **Dropped as it is consumed, not at the end.** A frame is megabytes
+        // — twelve of them at a phone's ratio — so a minute of video is tens
+        // of gigabytes, and holding the whole clip on disk to delete it later
+        // is a peak nothing needs. What the consumer has already encoded is
+        // not coming back.
+        if (file.existsSync()) file.deleteSync();
+        yield WalkFrame(
+          t: frame.t,
+          width: frame.width,
+          height: frame.height,
+          pixels: pixels,
+        );
+      }
+    } finally {
+      // The frames were scaffolding on their way to a clip, and they are
+      // megabytes each. One directory holds the walk, so one delete does it —
+      // including when the consumer gave up half way.
+      var directory = Directory(p.dirname(frames.first.path));
+      if (directory.existsSync()) directory.deleteSync(recursive: true);
+    }
+  }
+
   /// The frame the harness drew, framed and written where the caller asked.
   ///
   /// **The framing is host-side and shared**, which is the whole of §5.4: the
@@ -152,6 +244,7 @@ class TesterRenderer extends CatalogRenderer {
     bool wantKnobs = false,
     bool wantAxes = false,
     bool? sync,
+    CatalogWalk? walk,
   }) async {
     var reply = await runner.render(
       entryId: request.entryId,
@@ -176,10 +269,27 @@ class TesterRenderer extends CatalogRenderer {
         // megabytes of rgba to move across a disk for one picture — the
         // comparison keeps raw precisely because it diffs pixels and would
         // decode straight back out.
-        if (request.screenshot != null) ...{
+        if (walk != null) ...{
+          'output': _scratch,
+          // Raw: a walk's frames are pixels on their way to an encoder, and a
+          // PNG each would be encoded here only to be decoded again there.
+          'format': 'raw',
+          'walk': {
+            // Empty says "the whole motion at fps", which only the running
+            // motion can turn into stops.
+            'stops': walk.stops?.join(',') ?? '',
+            'scope': ?walk.scope,
+            'mode': walk.mode.name,
+            'fps': walk.fps,
+          },
+        } else if (request.screenshot != null) ...{
           'output': _scratch,
           'format': 'png',
         },
+        // The playhead for a single picture, which this lane used to drop on
+        // the floor — a `--engine harness` screenshot at `t` rendered `t=0`
+        // and reported success.
+        if (walk == null) 'motionT': ?request.motionT,
         if (request.needsTree) 'tree': true,
         if (request.at != null) 'at': '${request.at!.$1},${request.at!.$2}',
         // Named rather than omitted, so the harness refuses it by name — a
@@ -210,6 +320,19 @@ class TesterRenderer extends CatalogRenderer {
         List ids => [for (var id in ids) '$id'],
         _ => null,
       },
+      durationMs: (reply['durationMs'] as num? ?? 0).toInt(),
+      scope: reply['scope'] as String?,
+      scopes: [for (var id in (reply['scopes'] as List? ?? const [])) '$id'],
+      walk: [
+        for (var frame in (reply['walk'] as List? ?? const []))
+          if (frame is Map)
+            _WalkFrame(
+              path: '${frame['image']}',
+              t: (frame['t'] as num).toDouble(),
+              width: frame['width'] as int? ?? 0,
+              height: frame['height'] as int? ?? 0,
+            ),
+      ],
       frame: switch (reply['image']) {
         String path => _Frame(
           path: path,
@@ -260,6 +383,10 @@ class _Reply {
     this.tree,
     this.hits,
     this.frame,
+    this.walk = const [],
+    this.durationMs = 0,
+    this.scope,
+    this.scopes = const [],
   });
 
   final StagedViewport? stagedOn;
@@ -269,4 +396,24 @@ class _Reply {
   final InspectTree? tree;
   final List<String>? hits;
   final _Frame? frame;
+  final List<_WalkFrame> walk;
+  final int durationMs;
+  final String? scope;
+  final List<String> scopes;
+}
+
+/// One frame of a walk as the harness reported it: where it is, and which stop
+/// it is of.
+class _WalkFrame {
+  const _WalkFrame({
+    required this.path,
+    required this.t,
+    required this.width,
+    required this.height,
+  });
+
+  final String path;
+  final double t;
+  final int width;
+  final int height;
 }

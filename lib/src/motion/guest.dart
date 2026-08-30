@@ -2,10 +2,30 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'controller.dart';
 import 'values.dart';
+
+/// Which body a scope builds.
+///
+/// A motion with a draft stage has two, and they are the same motion — the
+/// switch chooses between `builder` and `MotionStageView` *inside* one scope,
+/// so the playhead, the registry id and the tuned values all survive the flip.
+///
+/// This is deliberately not a knob in anybody's file. Draft-versus-real is a
+/// view onto one motion rather than a property of the app, so the tool owns it:
+/// a file says what bodies exist and the studio says which one to look at.
+enum MotionHost {
+  /// The `builder` — real widgets, real layout, intrinsic properties read at
+  /// the call site. What ships.
+  real,
+
+  /// The `stage` — placeholders the tool owns, positioned absolutely. What
+  /// `motion new` writes and what an editor can add to.
+  draft,
+}
 
 /// What the transport needs from a mounted scope.
 ///
@@ -32,6 +52,21 @@ abstract class MotionSurface {
   /// Where a target is on screen, in the guest's own coordinates, or null when
   /// nothing has pointed at it. See `MotionExtent`.
   Rect? extentOf(String target);
+
+  /// The bodies this scope has, in the order a control should offer them.
+  ///
+  /// One of them is the normal case and the panel must not draw a switch for
+  /// it: a scope with no stage can only refuse `draft`, and an affordance whose
+  /// every use is a refusal is worse than no affordance.
+  List<MotionHost> get hosts;
+
+  /// Which body is building.
+  MotionHost get host;
+
+  /// Builds the other one from the next frame. A host not in [hosts] is
+  /// ignored here and refused at the extension, where there is somebody to
+  /// tell.
+  set host(MotionHost value);
 }
 
 /// The door a motion is driven through from outside it.
@@ -49,6 +84,7 @@ abstract class MotionSurface {
 ///   `ext.flutterware.motion.list`                    every mounted scope
 ///   `ext.flutterware.motion.seek`     `scope`, `t`   0..1, or `ms`
 ///   `ext.flutterware.motion.transport` `scope`, `verb`
+///   `ext.flutterware.motion.host`     `scope`, `host` draft or real
 ///
 /// `seek` answers **after the frame**, so a reply means the picture has caught
 /// up. A scrubber that answered earlier would report positions the screen had
@@ -137,11 +173,81 @@ class MotionRegistry {
           jsonEncode({'error': 'seek wants t (0..1) or ms'}),
         );
       }
+      // Drawn until it stops drawing, counting. One frame is the normal
+      // answer. More means the screen applies the playhead in stages — a
+      // `PageView` moved by `jumpTo` from a post-frame callback takes three:
+      // the frame that moves the playhead, the one the jump schedules, and the
+      // one the scroll position's own listeners schedule after it.
+      //
+      // The count is the useful part. A scrubber does not care, having drawn
+      // again by the time anyone looks; a *render* takes one picture per stop
+      // and needs to know how many frames a stop is really worth, or it
+      // photographs a screen still on its way to where it was sent.
+      var settleFrames = 1;
       await _settle();
+      while (_stillArriving && settleFrames < 12) {
+        await _settle();
+        settleFrames++;
+      }
       return developer.ServiceExtensionResponse.result(
         jsonEncode({
           'progress': controller.progress,
           'ms': controller.position.inMilliseconds,
+          'settleFrames': settleFrames,
+          // What a caller would otherwise ask `ext.flutterware.imagesSettled`
+          // for, straight after this — and that question costs a *forced
+          // frame*, twice, because the host wants two quiet ones in a row.
+          // This reply already waited a frame, so the counts are true of the
+          // picture it is reporting, and a caller that sees them quiet has no
+          // reason to ask again. Measured: it is 33ms a frame of a render, on
+          // every frame, at any resolution.
+          'pending': PaintingBinding.instance.imageCache.pendingImageCount,
+          'transient': SchedulerBinding.instance.transientCallbackCount,
+          // Whether the frame this reply describes left another one *already
+          // scheduled* behind it. A screen that applies the playhead from a
+          // post-frame callback does — `PageView.jumpTo` cannot be called
+          // during a build, so a flow driven by one is a frame behind its own
+          // playhead. Harmless to a scrubber, which draws again immediately;
+          // fatal to a render, which captures one frame per stop and would
+          // photograph the previous one.
+          'scheduled': SchedulerBinding.instance.hasScheduledFrame,
+        }),
+      );
+    });
+
+    // Which body a scope builds — the draft stage or the real screen.
+    //
+    // An extension rather than a knob in the user's file, because the choice is
+    // the studio's: a `host` knob put the same twelve lines of `switch` in
+    // every entry point, and shipped them.
+    //
+    // Reads with no `host`, which is how a panel syncs a control it did not
+    // last set.
+    developer.registerExtension('ext.flutterware.motion.host', (_, args) async {
+      var scope = resolve(args['scope']);
+      if (scope == null) return _noScope(args['scope']);
+      if (args['host'] case var raw?) {
+        var wanted = switch (raw) {
+          'real' => MotionHost.real,
+          'draft' => MotionHost.draft,
+          _ => null,
+        };
+        if (wanted == null || !scope.hosts.contains(wanted)) {
+          return developer.ServiceExtensionResponse.error(
+            developer.ServiceExtensionResponse.invalidParams,
+            jsonEncode({
+              'error': 'no host "$raw" on this scope',
+              'hosts': [for (var host in scope.hosts) host.name],
+            }),
+          );
+        }
+        scope.host = wanted;
+        await _settle();
+      }
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode({
+          'host': scope.host.name,
+          'hosts': [for (var host in scope.hosts) host.name],
         }),
       );
     });
@@ -194,6 +300,23 @@ class MotionRegistry {
     onTimeout: () {},
   );
 
+  /// Whether the screen is still on its way somewhere.
+  ///
+  /// **A scheduled frame is not enough to ask about.** A `PageView` moved by
+  /// `jumpTo` lands on a page boundary and `pageSnapping` turns that into a
+  /// ballistic spring, which is a *ticker*: it schedules its next frame from
+  /// inside the current one, and between the two there is a moment when
+  /// nothing is scheduled and the screen is nowhere near arrived. Measured on
+  /// the onboarding flow, `hasScheduledFrame` alone said two frames where the
+  /// picture needed five, and the filmstrip came out a slide early with every
+  /// frame looking perfectly plausible.
+  ///
+  /// A running ticker is the other half of the question, and together they are
+  /// the difference between "no frame is pending" and "nothing is moving".
+  static bool get _stillArriving =>
+      SchedulerBinding.instance.hasScheduledFrame ||
+      SchedulerBinding.instance.transientCallbackCount > 0;
+
   /// Every mounted scope, and everything a panel draws a lane from.
   Map<String, Object?> describe() => {
     'scopes': [
@@ -216,6 +339,8 @@ Map<String, Object?> _describeScope(String id, MotionSurface scope) {
   return {
     'id': id,
     'durationMs': values.resolveDuration().inMilliseconds,
+    'host': scope.host.name,
+    'hosts': [for (var host in scope.hosts) host.name],
     'ms': controller.position.inMilliseconds,
     'progress': controller.progress,
     'playing': controller.isAnimating,

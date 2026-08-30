@@ -68,6 +68,7 @@ class FrameCapture {
   }
 
   /// Captures run one at a time, and that is a property of the guest rather
+
   /// than a convenience here.
   ///
   /// The host keeps **one** armed capture path: `kMsgCapture` does

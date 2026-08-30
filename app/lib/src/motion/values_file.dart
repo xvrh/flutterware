@@ -61,12 +61,21 @@ class MotionSpan {
     required this.from,
     required this.to,
     this.curve,
+    this.comments = const [],
+    this.blankBefore = false,
   });
 
   final int startMs;
   final int endMs;
   final MotionLiteral from;
   final MotionLiteral to;
+
+  /// The comment lines directly above this segment, and whether a blank line
+  /// sat above those. Kept for the same reason as a property's: the gap between
+  /// two segments is where a *hold* lives, and the only place its length is
+  /// ever explained is a comment nobody else would think to write twice.
+  final List<String> comments;
+  final bool blankBefore;
 
   /// A `Curves.<name>`, or null for the default. Only a `Curves` member is
   /// understood; anything else makes the file unwritable rather than silently
@@ -87,6 +96,8 @@ class MotionSpan {
     from: from ?? this.from,
     to: to ?? this.to,
     curve: curve ?? this.curve,
+    comments: comments,
+    blankBefore: blankBefore,
   );
 
   bool get isColor => from is MotionColor;
@@ -403,7 +414,8 @@ List<MotionPropertyValues> _readProperties(
         comments: comments,
         blankBefore: blank,
         spans: [
-          for (var item in value.elements) ?_readSpan(item, problems, lineOf),
+          for (var item in value.elements)
+            ?_readSpan(item, source, problems, lineOf),
         ],
       ),
     );
@@ -413,6 +425,7 @@ List<MotionPropertyValues> _readProperties(
 
 MotionSpan? _readSpan(
   CollectionElement element,
+  String source,
   List<MotionFileProblem> problems,
   int Function(int) lineOf,
 ) {
@@ -495,12 +508,15 @@ MotionSpan? _readSpan(
   if (startMs == null || endMs == null || from == null || to == null) {
     return null;
   }
+  var (comments, blank) = _leading(element, source);
   return MotionSpan(
     startMs: startMs,
     endMs: endMs,
     from: from,
     to: to,
     curve: curve,
+    comments: comments,
+    blankBefore: blank,
   );
 }
 
@@ -690,6 +706,10 @@ String renderMotionValues(List<MotionTargetValues> targets, {int? durationMs}) {
       }
       out.writeln("      '${property.name}': [");
       for (var span in property.spans) {
+        if (span.blankBefore) out.writeln();
+        for (var comment in span.comments) {
+          out.writeln('        $comment');
+        }
         out
           ..writeln('        Seg<${span.isColor ? 'Color' : 'double'}>(')
           ..writeln('          start: ${_duration(span.startMs)},')

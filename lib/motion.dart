@@ -40,6 +40,7 @@ library;
 
 export 'src/motion/guest.dart'
     show
+        MotionHost,
         MotionRegistry,
         MotionSurface,
         curveByName,
@@ -50,6 +51,8 @@ export 'src/motion/controller.dart' show MotionController, MotionSource;
 export 'src/motion/extent.dart' show MotionExtent;
 export 'src/motion/motion_box.dart' show MotionBox;
 export 'src/motion/scope.dart' show MotionScope, MotionScopeState;
+export 'src/motion/stage.dart'
+    show MotionStage, MotionStageView, StageElement, StageKind;
 export 'src/motion/values.dart' show MotionValues, Seg;
 // Re-exported rather than declared here: the same names have to be reachable
 // without Flutter, for the tooling that reads code instead of running it.

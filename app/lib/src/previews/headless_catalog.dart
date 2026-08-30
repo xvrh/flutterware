@@ -2,10 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
-
-import '../motion/filmstrip.dart';
 
 // The knob types, not the umbrella `ui_catalog.dart`: that one exports the
 // demo annotations, which reach `package:flutter/widgets.dart` and would make
@@ -54,49 +53,6 @@ class HeadlessCatalog extends CatalogRenderer {
   final String dartExecutable;
 
   final DaemonConfig config;
-
-  /// N frames of one entry's motion, as one contact sheet.
-  ///
-  /// One guest, N seeks. Calling [capture] in a loop would compile, launch and
-  /// tear down a guest per frame, which is most of the cost and all of the wall
-  /// clock — the seek itself is a frame. That is why the filmstrip is a method
-  /// here rather than a loop in the caller.
-  Future<CatalogFilmstrip> filmstrip({
-    required String entryId,
-    required String output,
-    required List<double> stops,
-    CaptureViewport viewport = CaptureViewport.panel,
-    Map<String, String> knobs = const {},
-    Map<String, String> axes = const {},
-    int cellWidth = 320,
-  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
-    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
-    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
-
-    var scratch = Directory(p.join(p.dirname(output), 'frames'))
-      ..createSync(recursive: true);
-    var frames = <FilmstripFrame>[];
-    try {
-      var durationMs = 0;
-      for (var (index, t) in stops.indexed) {
-        var landed = await guest.seekMotion(t);
-        durationMs = landed.$2;
-        var file = await guest.capture(
-          p.join(scratch.path, 'frame-$index.png'),
-          pixelRatio: viewport.pixelRatio,
-        );
-        frames.add(FilmstripFrame(file: file, t: t, ms: landed.$1));
-      }
-      return CatalogFilmstrip(
-        file: composeFilmstrip(frames, output: output, cellWidth: cellWidth),
-        stops: stops,
-        durationMs: durationMs,
-      );
-    } finally {
-      // The sheet is the artifact; the frames were scaffolding.
-      if (scratch.existsSync()) scratch.deleteSync(recursive: true);
-    }
-  });
 
   /// Connects, compiles [entryId], launches one guest and hands it to [body].
   ///
@@ -315,19 +271,6 @@ class HeadlessCatalog extends CatalogRenderer {
   );
 }
 
-/// A contact sheet, and where on the playhead its frames were taken.
-class CatalogFilmstrip {
-  CatalogFilmstrip({
-    required this.file,
-    required this.stops,
-    required this.durationMs,
-  });
-
-  final File file;
-  final List<double> stops;
-  final int durationMs;
-}
-
 /// What the compiler could and could not build.
 class CatalogCheck {
   CatalogCheck({required this.servable, required this.quarantined});
@@ -476,6 +419,10 @@ class _GuestSession {
         socketPath,
         '${viewport.width}',
         '${viewport.height}',
+        // Nothing watches this guest, so nothing is served by pacing it to a
+        // display — see `--free-vsync` in `native/host.c`. Measured at 4.4x
+        // on a render.
+        '--free-vsync',
       ]);
       var vmServiceUri = Completer<String>();
       // The guest's last few lines, kept rather than drained: an engine that
@@ -749,23 +696,48 @@ class _GuestSession {
   /// settling of its own.
   var _motionReady = false;
 
-  Future<(int, int)> seekMotion(double t) async {
+  Future<void> seekMotion(double t, {String? scope}) async {
     // Only the first one pays for it. Once the scope has mounted the extension
-    // stays registered, and a filmstrip that rendered a throwaway frame before
-    // every seek would double the cost of the thing it exists to make cheap.
+    // stays registered, and a seek that rendered a throwaway frame first every
+    // time would double the cost of the thing it exists to make cheap.
     if (!_motionReady) {
       await _renderScratchFrame();
       _motionReady = true;
     }
-    // List first, and seek the scope the duration is read from: the guest
-    // resolves a nameless seek only while exactly one scope is mounted, so a
-    // demo with two would refuse — and the refusal surfaced here as the
-    // misleading "no mounted MotionScope".
+    // List first, and seek by id: the guest resolves a nameless seek only
+    // while exactly one scope is mounted, so a composed screen would refuse —
+    // and the refusal surfaced here as the misleading "no mounted
+    // MotionScope".
     var listed = await _vmService.callExtension('ext.flutterware.motion.list');
-    var scope = ((listed?['scopes'] as List?) ?? const []).firstOrNull as Map?;
+    var scopes = <Map<String, Object?>>[
+      for (var entry in (listed?['scopes'] as List?) ?? const [])
+        if (entry is Map) entry.cast<String, Object?>(),
+    ];
+    if (scopes.isEmpty) {
+      throw ArgumentError.value(
+        t,
+        't',
+        'this entry has no mounted MotionScope to seek',
+      );
+    }
+
+    var chosen = scope == null
+        ? scopes.first
+        : scopes.firstWhereOrNull((one) => one['id'] == scope);
+    if (chosen == null) {
+      throw ArgumentError.value(
+        scope,
+        'scope',
+        'no scope by that name is mounted. Mounted: '
+            '${scopes.map(_describeMountedScope).join('; ')}',
+      );
+    }
+
+    // Mount order is tree order, so the first is the outermost — the
+    // composition's own timeline rather than one of the components inside it.
     var reply = await _vmService.callExtension(
       'ext.flutterware.motion.seek',
-      args: {if (scope?['id'] case String id) 'scope': id, 't': '$t'},
+      args: {'scope': ?chosen['id'] as String?, 't': '$t'},
     );
     if (reply == null) {
       throw ArgumentError.value(
@@ -774,10 +746,16 @@ class _GuestSession {
         'this entry has no mounted MotionScope to seek',
       );
     }
-    return (
-      (reply['ms'] as num?)?.toInt() ?? 0,
-      (scope?['durationMs'] as num?)?.toInt() ?? 0,
-    );
+  }
+
+  /// One mounted scope, for a refusal that teaches which to name.
+  static String _describeMountedScope(Map<String, Object?> scope) {
+    var targets = [
+      for (var target in (scope['targets'] as List?) ?? const [])
+        if (target is Map && target['name'] is String) target['name'] as String,
+    ];
+    return '${scope['id']} (${scope['durationMs']}ms'
+        '${targets.isEmpty ? '' : ', ${targets.join('/')}'})';
   }
 
   /// Draws one throwaway frame, so the demo has built.

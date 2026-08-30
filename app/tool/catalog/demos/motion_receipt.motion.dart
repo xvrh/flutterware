@@ -146,8 +146,8 @@ const receiptMotion = MotionValues(
         Seg<double>(
           start: Duration(milliseconds: 360),
           end: Duration(milliseconds: 760),
-          from: 28,
-          to: 14,
+          from: 54.42333333333334,
+          to: 4.136666666666664,
           curve: Curves.easeOutCubic,
         ),
       ],
