@@ -2467,12 +2467,35 @@ Returns `ComparisonCompareResult`:
 against: String   # What the comparison was against — the ref's name, as a header shows it.
 baseSha: String   # The merge base it resolved to.
 counts: Map<String, int>   # Every row by state, both halves merged: `{"changed": 2, "skipped": 9}`.
+channels: Map<String, int>   # How many findings each channel had something to say about: `{"pixels": 5, "tree": 3, "events": 2}`.
+eventChannels: Map<String, int>   # Event deltas by the channel they travelled on: `{"system": 192, "db": 3}`.
+shapes: List<ComparisonDelta>   # The distinct *shapes* of difference across the whole comparison, in channel order, each with how many findings wore it.
+  channel: String   # `pixels`, `tree`, `texts` or `events`.
+  subchannel: String?   # For an event, the channel it travelled on: `network`, `db`, `log`, `system`.
+  subject: String?   # A widget's path through the tree, or an event's one-line summary.
+  property: String?   # Which field moved — `size`, `detail`, `data.cart.id` — or `added`, `removed`, `moved` where something arrived, left or changed places.
+  base: String?
+  head: String?
+  origin: String?   # Where the app made the event, when it said: a file and a symbol.
+  count: int?   # How many identical deltas this row stands for.
+  items: int?   # How many findings wore this shape.
 findings: List<ComparisonFinding>   # The rows worth attention, worst first.
   id: String   # The entry id, or the scenario id for a flow.
   half: String   # `previews` or `scenarios`.
   state: String   # `broke`, `failed`, `wasBroken`, `added`, `removed` or `changed` — declared worst-first, and the list is sorted by it.
   note: String?   # Why it is in the state it is, when the state alone does not say.
   delta: String?   # The size of the change: `0.38% · 2 regions` for pixels, the step that moved for a flow.
+  deltas: List<ComparisonDelta>   # What actually moved, on every channel — the facets a reader filters on.
+    channel: String   # `pixels`, `tree`, `texts` or `events`.
+    subchannel: String?   # For an event, the channel it travelled on: `network`, `db`, `log`, `system`.
+    subject: String?   # A widget's path through the tree, or an event's one-line summary.
+    property: String?   # Which field moved — `size`, `detail`, `data.cart.id` — or `added`, `removed`, `moved` where something arrived, left or changed places.
+    base: String?
+    head: String?
+    origin: String?   # Where the app made the event, when it said: a file and a symbol.
+    count: int?   # How many identical deltas this row stands for.
+    items: int?   # How many findings wore this shape.
+  deltasDropped: int
 index: String   # The whole verdict as a file — every row, every channel, the shot keys.
 export: String?   # The browsable page, when `export` asked for one.
 report: String?   # The PR report directory, when `report` asked for one: `comment.md`, `mosaic.png`, the page under `web/`.

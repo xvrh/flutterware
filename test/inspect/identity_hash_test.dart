@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/src/inspect/guest_inspect.dart';
 import 'package:flutterware/src/inspect/node.dart';
+import 'package:flutterware/src/utils/identity_hash.dart';
 
 /// Nothing a node carries may be a value the VM assigned per allocation.
 ///
@@ -111,5 +112,57 @@ void main() {
         '[ObjectKey Map<String, int>#]',
       },
     );
+  });
+
+  group('the two entries added for the events channel', () {
+    // A private member's name is mangled with a token derived from its
+    // library, and `Closure.toString()` prints the mangled form — so a widget
+    // holding a private callback renders a number two *compilations* need not
+    // agree on. Base and head are two compilations, which makes this a
+    // permanent false positive rather than run-to-run noise.
+    test("a private closure's mangling token goes, and nothing else does", () {
+      expect(
+        withoutIdentityHash(
+          'Closure: (Object?, Object?) => Object? '
+          "from Function '_imageBuilder@21460559':.",
+        ),
+        'Closure: (Object?, Object?) => Object? '
+        "from Function '_imageBuilder@':.",
+      );
+    });
+
+    // Measured: a closure prints no line:col to strip, and an anonymous one
+    // prints no name at all — so there is nothing else in one that moves.
+    test('a closure with nothing to mangle is left exactly as it is', () {
+      for (var value in const [
+        'Closure: (Object?) => Object?',
+        "Closure: () => void from Function 'main': static.",
+      ]) {
+        expect(withoutIdentityHash(value), value);
+      }
+    });
+
+    // `EditableTextState.autofillId` is its type and its hashCode, and it
+    // reaches a comparison through `TextInput.setClient`'s arguments. On a
+    // real 128-scenario suite it was 266 of the 402 run-to-run differences the
+    // events channel had.
+    test('an autofill id keeps its type and loses its hash', () {
+      expect(withoutIdentityHash('EditableText-873965551'), 'EditableText-');
+    });
+
+    // The bar every entry here has to clear: a value that merely *looks*
+    // like noise is somebody's data, and the only thing telling two of theirs
+    // apart.
+    test('a real value shaped like a hash is not touched', () {
+      for (var value in const [
+        "ValueKey('build#a1b2c')",
+        "[<'order-12345'>]",
+        'SKU-4491',
+        'Contact-4491',
+        'someone@12345',
+      ]) {
+        expect(withoutIdentityHash(value), value, reason: value);
+      }
+    });
   });
 }

@@ -183,6 +183,9 @@ Map<String, dynamic> _$ComparisonCompareResultToJson(
   'against': instance.against,
   'baseSha': instance.baseSha,
   'counts': instance.counts,
+  'channels': instance.channels,
+  'eventChannels': instance.eventChannels,
+  'shapes': instance.shapes.map((e) => e.toJson()).toList(),
   'findings': instance.findings.map((e) => e.toJson()).toList(),
   'index': instance.index,
   'export': ?instance.export,
@@ -197,4 +200,19 @@ Map<String, dynamic> _$ComparisonFindingToJson(ComparisonFinding instance) =>
       'state': instance.state,
       'note': ?instance.note,
       'delta': ?instance.delta,
+      'deltas': instance.deltas.map((e) => e.toJson()).toList(),
+      'deltasDropped': instance.deltasDropped,
+    };
+
+Map<String, dynamic> _$ComparisonDeltaToJson(ComparisonDelta instance) =>
+    <String, dynamic>{
+      'channel': instance.channel,
+      'subchannel': ?instance.subchannel,
+      'subject': ?instance.subject,
+      'property': ?instance.property,
+      'base': ?instance.base,
+      'head': ?instance.head,
+      'origin': ?instance.origin,
+      'count': ?instance.count,
+      'items': ?instance.items,
     };

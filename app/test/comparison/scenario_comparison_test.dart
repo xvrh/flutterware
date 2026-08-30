@@ -177,9 +177,21 @@ void main() {
       expect(result.items.single.pixels!.changed, isFalse);
     });
 
-    // An id in a path is the commonest way a run differs from itself for no
-    // reason at all.
-    test('an id in a url is masked away', () {
+    // An id in a path is how one request finds the other; it is not a reason
+    // to call them the same request.
+    //
+    // This used to read `same`, on the reasoning that an id is the commonest
+    // way a run differs from itself for no reason at all. Under a pinned clock
+    // and FakeAsync there is no such way: an order id that moves between two
+    // runs of one commit is the app minting it nondeterministically, which is
+    // a bug worth reporting, and between two commits it is the flow hitting a
+    // different record, which is the finding. Masking both away was the same
+    // hole that let a status flip pass as no change.
+    //
+    // The masking still does its real job — the two events *pair*, so this is
+    // one line saying which id moved rather than one request vanishing and
+    // another arriving.
+    test('an id in a url pairs the two requests, and names what moved', () {
       List<Map<String, Object?>> events(String url) => [
         {'channel': 'network', 'title': 'GET $url'},
       ];
@@ -189,7 +201,13 @@ void main() {
         [shot(1, name: 'Cart', events: events('/order/9921'))],
       );
 
-      expect(result.items.single.state, ComparedState.same);
+      var events_ = result.items.single.events!;
+      expect(result.items.single.state, ComparedState.changed);
+      expect(events_.added, isEmpty);
+      expect(events_.removed, isEmpty);
+      expect(events_.deltas.single.property, 'title');
+      expect(events_.deltas.single.base, 'GET /order/8814');
+      expect(events_.deltas.single.head, 'GET /order/9921');
     });
 
     test('a request that was not made before is named', () {

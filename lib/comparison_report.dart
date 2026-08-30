@@ -54,9 +54,16 @@ library;
 
 export 'src/comparison/channels.dart'
     show
+        ChannelDelta,
         ComparedItem,
         ComparedState,
         EventChannel,
+        EventDelta,
+        EventDeltaKind,
+        FoldedDelta,
+        foldChannelDeltas,
+        maxEventDeltas,
+        maxEventLeaves,
         PixelChannel,
         TextChannel,
         TreeChannel;

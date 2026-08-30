@@ -1661,6 +1661,77 @@ final resultShapes = <String, ResultShape>{
         'doc': 'Every row by state, both halves merged: `{"changed": 2, "skipped": 9}`.',
       },
       <String, Object?>{
+        'name': 'channels',
+        'type': 'Map<String, int>',
+        'doc': 'How many findings each channel had something to say about: `{"pixels": 5, "tree": 3, "events": 2}`.',
+      },
+      <String, Object?>{
+        'name': 'eventChannels',
+        'type': 'Map<String, int>',
+        'doc': 'Event deltas by the channel they travelled on: `{"system": 192, "db": 3}`.',
+      },
+      <String, Object?>{
+        'name': 'shapes',
+        'type': 'List<ComparisonDelta>',
+        'doc': 'The distinct *shapes* of difference across the whole comparison, in channel order, each with how many findings wore it.',
+        'shape': <String, Object?>{
+          'type': 'ComparisonDelta',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'channel',
+              'type': 'String',
+              'doc': '`pixels`, `tree`, `texts` or `events`.',
+            },
+            <String, Object?>{
+              'name': 'subchannel',
+              'type': 'String',
+              'optional': true,
+              'doc': 'For an event, the channel it travelled on: `network`, `db`, `log`, `system`.',
+            },
+            <String, Object?>{
+              'name': 'subject',
+              'type': 'String',
+              'optional': true,
+              'doc': 'A widget\'s path through the tree, or an event\'s one-line summary.',
+            },
+            <String, Object?>{
+              'name': 'property',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Which field moved — `size`, `detail`, `data.cart.id` — or `added`, `removed`, `moved` where something arrived, left or changed places.',
+            },
+            <String, Object?>{
+              'name': 'base',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'head',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'origin',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Where the app made the event, when it said: a file and a symbol.',
+            },
+            <String, Object?>{
+              'name': 'count',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How many identical deltas this row stands for.',
+            },
+            <String, Object?>{
+              'name': 'items',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How many findings wore this shape.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
         'name': 'findings',
         'type': 'List<ComparisonFinding>',
         'doc': 'The rows worth attention, worst first.',
@@ -1694,6 +1765,68 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
               'doc': 'The size of the change: `0.38% · 2 regions` for pixels, the step that moved for a flow.',
             },
+            <String, Object?>{
+              'name': 'deltas',
+              'type': 'List<ComparisonDelta>',
+              'doc': 'What actually moved, on every channel — the facets a reader filters on.',
+              'shape': <String, Object?>{
+                'type': 'ComparisonDelta',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'channel',
+                    'type': 'String',
+                    'doc': '`pixels`, `tree`, `texts` or `events`.',
+                  },
+                  <String, Object?>{
+                    'name': 'subchannel',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'For an event, the channel it travelled on: `network`, `db`, `log`, `system`.',
+                  },
+                  <String, Object?>{
+                    'name': 'subject',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'A widget\'s path through the tree, or an event\'s one-line summary.',
+                  },
+                  <String, Object?>{
+                    'name': 'property',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'Which field moved — `size`, `detail`, `data.cart.id` — or `added`, `removed`, `moved` where something arrived, left or changed places.',
+                  },
+                  <String, Object?>{
+                    'name': 'base',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'head',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'origin',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'Where the app made the event, when it said: a file and a symbol.',
+                  },
+                  <String, Object?>{
+                    'name': 'count',
+                    'type': 'int',
+                    'optional': true,
+                    'doc': 'How many identical deltas this row stands for.',
+                  },
+                  <String, Object?>{
+                    'name': 'items',
+                    'type': 'int',
+                    'optional': true,
+                    'doc': 'How many findings wore this shape.',
+                  },
+                ],
+              },
+            },
+            <String, Object?>{'name': 'deltasDropped', 'type': 'int'},
           ],
         },
       },
@@ -1719,6 +1852,55 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc': 'Why the scenario half has nothing to say, when it has nothing to say — a base harness that would not build reads differently from a project with no scenarios.',
+      },
+    ],
+  }),
+  'ComparisonDelta': ResultShape.fromJson(<String, Object?>{
+    'type': 'ComparisonDelta',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'channel',
+        'type': 'String',
+        'doc': '`pixels`, `tree`, `texts` or `events`.',
+      },
+      <String, Object?>{
+        'name': 'subchannel',
+        'type': 'String',
+        'optional': true,
+        'doc': 'For an event, the channel it travelled on: `network`, `db`, `log`, `system`.',
+      },
+      <String, Object?>{
+        'name': 'subject',
+        'type': 'String',
+        'optional': true,
+        'doc': 'A widget\'s path through the tree, or an event\'s one-line summary.',
+      },
+      <String, Object?>{
+        'name': 'property',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Which field moved — `size`, `detail`, `data.cart.id` — or `added`, `removed`, `moved` where something arrived, left or changed places.',
+      },
+      <String, Object?>{'name': 'base', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'head', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'origin',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Where the app made the event, when it said: a file and a symbol.',
+      },
+      <String, Object?>{
+        'name': 'count',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many identical deltas this row stands for.',
+      },
+      <String, Object?>{
+        'name': 'items',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many findings wore this shape.',
       },
     ],
   }),
@@ -1753,6 +1935,68 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc': 'The size of the change: `0.38% · 2 regions` for pixels, the step that moved for a flow.',
       },
+      <String, Object?>{
+        'name': 'deltas',
+        'type': 'List<ComparisonDelta>',
+        'doc': 'What actually moved, on every channel — the facets a reader filters on.',
+        'shape': <String, Object?>{
+          'type': 'ComparisonDelta',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'channel',
+              'type': 'String',
+              'doc': '`pixels`, `tree`, `texts` or `events`.',
+            },
+            <String, Object?>{
+              'name': 'subchannel',
+              'type': 'String',
+              'optional': true,
+              'doc': 'For an event, the channel it travelled on: `network`, `db`, `log`, `system`.',
+            },
+            <String, Object?>{
+              'name': 'subject',
+              'type': 'String',
+              'optional': true,
+              'doc': 'A widget\'s path through the tree, or an event\'s one-line summary.',
+            },
+            <String, Object?>{
+              'name': 'property',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Which field moved — `size`, `detail`, `data.cart.id` — or `added`, `removed`, `moved` where something arrived, left or changed places.',
+            },
+            <String, Object?>{
+              'name': 'base',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'head',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'origin',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Where the app made the event, when it said: a file and a symbol.',
+            },
+            <String, Object?>{
+              'name': 'count',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How many identical deltas this row stands for.',
+            },
+            <String, Object?>{
+              'name': 'items',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How many findings wore this shape.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{'name': 'deltasDropped', 'type': 'int'},
     ],
   }),
   'DependencyEntry': ResultShape.fromJson(<String, Object?>{

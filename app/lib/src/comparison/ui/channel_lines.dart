@@ -49,10 +49,45 @@ class ChannelLines extends StatelessWidget {
               _Line('- $event', color: colors.red),
             for (var event in events.added)
               _Line('+ $event', color: colors.grn),
+            // Folded, because the same field moving on four text fields of
+            // one screen is one fact and four lines. See
+            // `2026-08-30-comparison-ui-pass-design.md` §4a.
+            for (var row in foldChannelDeltas([
+              [
+                for (var delta in item.deltas)
+                  if (delta.channel == 'events' &&
+                      delta.property != 'added' &&
+                      delta.property != 'removed')
+                    delta,
+              ],
+            ]))
+              _Line(_describeEvent(row)),
+            if (events.deltasDropped > 0)
+              _Line('… ${events.deltasDropped} more'),
           ],
         ],
       ),
     );
+  }
+
+  /// One event field that moved, in the same three columns the tree uses.
+  ///
+  /// `network POST /login  detail  200 → 500`. The channel leads, because it
+  /// is the first thing a reader filters on and the thing that says whether
+  /// this line is about the network, the database or a log.
+  static String _describeEvent(FoldedDelta row) {
+    var delta = row.delta;
+    // When the title is what moved, it is already the `base` column — naming
+    // the event by it as well prints one long statement twice on one line,
+    // which is exactly the doubling this channel was rebuilt to stop.
+    var subject = delta.property == 'title'
+        ? '${delta.subchannel}'
+        : '${delta.subchannel} ${delta.subject}';
+    // A repeated shape says so rather than repeating itself, and says it after
+    // the values, so the eye reaches what moved before it reaches how often.
+    var times = row.repeated ? '  × ${row.count}' : '';
+    return '$subject  ${delta.property}  '
+        '${delta.base} → ${delta.head}$times';
   }
 
   /// A delta in the words a reader would use.
