@@ -19,22 +19,6 @@ void main() {
     expect(roundTrip(const ShutdownMessage()), isA<ShutdownMessage>());
   });
 
-  test('round-trips CaptureSequence', () {
-    var msg = roundTrip(
-      const CaptureSequenceMessage(prefix: '/tmp/fw-render/seq-', count: 1801),
-    );
-    expect(msg.prefix, '/tmp/fw-render/seq-');
-    expect(msg.count, 1801);
-  });
-
-  test('a CaptureSequence with no prefix still carries its count', () {
-    // How a render is *disarmed*, so the count has to survive an empty
-    // prefix — the host reads the count first and frees the prefix on zero.
-    var msg = roundTrip(const CaptureSequenceMessage(prefix: '', count: 0));
-    expect(msg.prefix, isEmpty);
-    expect(msg.count, 0);
-  });
-
   test('round-trips SurfacesAllocated', () {
     var msg = roundTrip(
       const SurfacesAllocatedMessage(

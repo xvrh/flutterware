@@ -18,8 +18,7 @@ enum MessageType {
   keyEvent(7),
   shutdown(8),
   capture(9),
-  captured(10),
-  captureSequence(11);
+  captured(10);
 
   const MessageType(this.tag);
   final int tag;
@@ -64,33 +63,6 @@ class CaptureMessage extends EmbedderMessage {
   const CaptureMessage(this.path);
 
   final String path;
-}
-
-/// GUI to guest: write the next [count] frames presented, named
-/// `<prefix><n>.rawframe`, and ack each.
-///
-/// The counterpart of [CaptureMessage] for a *sequence*, and it schedules no
-/// frame of its own — the point is that something inside the guest, holding
-/// the playhead, is about to schedule them. Each frame acks as
-/// [CapturedMessage] exactly as a single capture does, so a caller can count
-/// what landed rather than trust that it did.
-class CaptureSequenceMessage extends EmbedderMessage {
-  const CaptureSequenceMessage({
-    required this.prefix,
-    required this.count,
-    this.stride = 1,
-  });
-
-  /// What each file's name starts with; the frame's index and `.rawframe`
-  /// follow.
-  final String prefix;
-
-  /// How many presented frames to write before disarming. Zero disarms.
-  final int count;
-
-  /// How many frames the guest presents for each one written — the last of
-  /// each group is kept. See [CaptureSequenceMessage] and `native/host.c`.
-  final int stride;
 }
 
 /// Guest to GUI: the capture at [path] is written.
@@ -341,11 +313,6 @@ Uint8List encodeMessage(EmbedderMessage message) {
     case CapturedMessage():
       body.addByte(MessageType.captured.tag);
       body.add(utf8.encode(message.path));
-    case CaptureSequenceMessage():
-      body.addByte(MessageType.captureSequence.tag);
-      _u32(body, message.count);
-      _u32(body, message.stride);
-      body.add(utf8.encode(message.prefix));
   }
   var bodyBytes = body.toBytes();
   var frame = BytesBuilder();
@@ -371,12 +338,6 @@ EmbedderMessage decodeMessageBody(Uint8List body) {
       return CaptureMessage(utf8.decode(body.sublist(1)));
     case MessageType.captured:
       return CapturedMessage(utf8.decode(body.sublist(1)));
-    case MessageType.captureSequence:
-      return CaptureSequenceMessage(
-        count: data.getUint32(0, Endian.little),
-        stride: data.getUint32(4, Endian.little),
-        prefix: utf8.decode(body.sublist(9)),
-      );
     case MessageType.surfacesAllocated:
       var generation = data.getUint32(0, Endian.little);
       var count = data.getUint32(4, Endian.little);

@@ -240,7 +240,6 @@ class EmbeddedEngine extends ChangeNotifier {
       case KeyEventMessage():
       case ShutdownMessage():
       case CaptureMessage():
-      case CaptureSequenceMessage():
         break; // GUI-to-guest messages; never received here.
     }
   }

@@ -285,16 +285,22 @@ class MotionCore extends PluginCore {
             description: 'How many, including both ends. 5 when omitted.',
           ),
           const ActionParameter(
-            'framesPerStop',
-            'Frames per stop',
-            kind: ActionParameterKind.integer,
+            'mode',
+            'Clock',
+            kind: ActionParameterKind.choice,
             required: false,
             description:
-                'How many frames to draw before taking each picture. Measured '
-                'from the screen when omitted, which is right for most and '
-                'cannot be right for all: how long a screen takes to arrive '
-                'at a playhead depends on where it came from. Raise it if a '
-                'frame looks like the moment before the one it is labelled.',
+                'How each stop is reached. `playhead` sets the playhead and '
+                'draws, and no time passes — right for a scene, which is what '
+                'a motion is meant to be. `time` also lets exactly one frame '
+                'of the frame rate elapse, so a screen with animation of its '
+                'own — a controller, an implicit animation, a scroll spring — '
+                'advances by exactly that much rather than by however long '
+                'the machine took.',
+            options: [
+              ActionOption('playhead', label: 'playhead'),
+              ActionOption('time', label: 'time'),
+            ],
           ),
           ActionParameter(
             'package',
@@ -378,16 +384,22 @@ class MotionCore extends PluginCore {
                 'syntax as knobs.',
           ),
           const ActionParameter(
-            'framesPerStop',
-            'Frames per stop',
-            kind: ActionParameterKind.integer,
+            'mode',
+            'Clock',
+            kind: ActionParameterKind.choice,
             required: false,
             description:
-                'How many frames to draw before capturing each one. Measured '
-                'from the screen when omitted. Raise it if a frame shows the '
-                'moment before the one it is labelled — a screen that moves a '
-                'scrollable to follow its playhead takes several frames to '
-                'arrive, and how many is not reliably reportable.',
+                'How each stop is reached. `playhead` sets the playhead and '
+                'draws, and no time passes — right for a scene, which is what '
+                'a motion is meant to be. `time` also lets exactly one frame '
+                'of the frame rate elapse, so a screen with animation of its '
+                'own — a controller, an implicit animation, a scroll spring — '
+                'advances by exactly that much rather than by however long '
+                'the machine took.',
+            options: [
+              ActionOption('playhead', label: 'playhead'),
+              ActionOption('time', label: 'time'),
+            ],
           ),
           const ActionParameter(
             'scope',

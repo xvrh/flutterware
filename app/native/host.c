@@ -56,17 +56,12 @@ static char* g_capture_path = NULL;
 // as long as nothing but that loop schedules a frame. The caller is what
 // enforces that: it settles first, and refuses the result unless it was acked
 // the number of frames it asked for.
-static char* g_sequence_prefix = NULL;
-static uint32_t g_sequence_remaining = 0;
-static uint32_t g_sequence_index = 0;
 
 // How many presented frames make one written one. A screen that applies its
 // playhead from a post-frame callback needs two — the frame that moved the
 // playhead shows the previous position — and writing both would shift every
 // file after it rather than fix anything. So the guest draws `stride` frames a
 // stop and only the last is kept.
-static uint32_t g_sequence_stride = 1;
-static uint32_t g_sequence_tick = 0;
 
 // The engine asks the platform to wait for a vsync, and the platform hands the
 // baton back when the next one lands. With no callback registered the engine
@@ -218,32 +213,6 @@ static void OnFramePresented(void* user_data) {
     free(capture_path);
   }
 
-  // The sequence, taken under the same lock and for the same reason.
-  pthread_mutex_lock(&g_capture_lock);
-  char* sequence_path = NULL;
-  if (g_sequence_remaining > 0 && g_sequence_prefix) {
-    g_sequence_tick++;
-    if (g_sequence_tick % g_sequence_stride == 0) {
-      size_t size = strlen(g_sequence_prefix) + 32;
-      sequence_path = (char*)malloc(size);
-      snprintf(sequence_path, size, "%s%u.rawframe", g_sequence_prefix,
-               g_sequence_index);
-      g_sequence_index++;
-      g_sequence_remaining--;
-      if (g_sequence_remaining == 0) {
-        free(g_sequence_prefix);
-        g_sequence_prefix = NULL;
-      }
-    }
-  }
-  pthread_mutex_unlock(&g_capture_lock);
-
-  if (sequence_path) {
-    WriteRawCapture(sequence_path, (int)frame->ring_index);
-    ipc_send(g_socket, kMsgCaptured, (const uint8_t*)sequence_path,
-             strlen(sequence_path));
-    free(sequence_path);
-  }
   uint8_t payload[16];
   memcpy(payload + 0, &frame->ring_index, 4);
   memcpy(payload + 4, &frame->frame_id, 8);
@@ -510,29 +479,6 @@ int main(int argc, char** argv) {
       g_capture_path = path;
       pthread_mutex_unlock(&g_capture_lock);
       FlutterEngineScheduleFrame(g_engine);
-    } else if (type == kMsgCaptureSequence) {
-      // `<count u32 LE><stride u32 LE><prefix>`. No frame is scheduled: the point of a
-      // sequence is that the guest's own loop schedules them, and one forced
-      // here would be written as somebody's stop before that loop had set it.
-      if (len >= 8) {
-        uint32_t count;
-        uint32_t stride;
-        memcpy(&count, payload, 4);
-        memcpy(&stride, payload + 4, 4);
-        if (stride == 0) stride = 1;
-        char* prefix = (char*)malloc(len - 8 + 1);
-        memcpy(prefix, payload + 8, len - 8);
-        prefix[len - 8] = '\0';
-        pthread_mutex_lock(&g_capture_lock);
-        free(g_sequence_prefix);
-        g_sequence_prefix = count > 0 ? prefix : NULL;
-        if (count == 0) free(prefix);
-        g_sequence_remaining = count;
-        g_sequence_stride = stride;
-        g_sequence_index = 0;
-        g_sequence_tick = 0;
-        pthread_mutex_unlock(&g_capture_lock);
-      }
     } else if (type == kMsgShutdown) {
       free(payload);
       break;
