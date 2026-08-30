@@ -21,7 +21,6 @@ import 'package:flutterware/src/ui_catalog/axis.dart';
 import 'package:flutterware/src/ui_catalog/knob.dart';
 
 import '../embedder/frame_capture.dart';
-import '../embedder/raw_frame.dart';
 import '../embedder/protocol.dart';
 import 'catalog_picture.dart';
 import 'catalog_render.dart';
@@ -270,109 +269,6 @@ class HeadlessCatalog extends CatalogRenderer {
       );
     },
   );
-}
-
-/// Where a render's time went, inside the guest exchange.
-///
-/// A frame of a motion costs four VM service round trips and one socket
-/// exchange, and the four are not equal: `motion.list` walks every target and
-/// every segment, `motion.seek` waits a frame, and the settle asks whether the
-/// picture has stopped moving at least twice. Splitting them is the difference
-/// between "render on another engine" and "stop asking the same question".
-class GuestTimings {
-  Duration motionList = Duration.zero;
-  Duration motionSeek = Duration.zero;
-  Duration settle = Duration.zero;
-  Duration frame = Duration.zero;
-
-  int listCalls = 0;
-  int seekCalls = 0;
-  int frames = 0;
-
-  /// Copying decoded pixels into the encoder's stdin.
-  Duration encoderHandoff = Duration.zero;
-
-  /// The guest's own render loop, end to end — every frame drawn and written,
-  /// with nothing asked of it in between.
-  Duration guestRender = Duration.zero;
-
-  /// How long this side sat waiting for a frame that had not landed yet.
-  ///
-  /// Read against [guestRender] it says which half is the bottleneck: near it,
-  /// the guest is drawing and this side is idle; near zero, the guest is ahead
-  /// and reading and encoding is the wall.
-  Duration awaitingFrames = Duration.zero;
-
-  /// The capture, split into what the guest did and what this side did.
-  Duration captureDraw = Duration.zero;
-  Duration captureRead = Duration.zero;
-  Duration captureDecode = Duration.zero;
-  int captureBytes = 0;
-
-  Map<String, Object?> toJson() => {
-    'motionListMs': motionList.inMilliseconds,
-    'motionSeekMs': motionSeek.inMilliseconds,
-    'settleMs': settle.inMilliseconds,
-    'frameMs': frame.inMilliseconds,
-    'captureDrawMs': captureDraw.inMilliseconds,
-    'captureReadMs': captureRead.inMilliseconds,
-    'captureDecodeMs': captureDecode.inMilliseconds,
-    'encoderHandoffMs': encoderHandoff.inMilliseconds,
-    'guestRenderMs': guestRender.inMilliseconds,
-    'awaitingFramesMs': awaitingFrames.inMilliseconds,
-    'capturedMB': (captureBytes / 1048576).round(),
-    'listCalls': listCalls,
-    'seekCalls': seekCalls,
-    'frames': frames,
-  };
-}
-
-/// Where a seek landed, and which scope took it.
-///
-/// [scope] and [mounted] ride along because a composed screen mounts several
-/// playheads — a flow and the components inside it — and which one a render
-/// walked is not something the caller can infer from the picture. A video of
-/// the wrong timeline looks like a video.
-class MotionSeek {
-  MotionSeek({
-    required this.ms,
-    required this.durationMs,
-    required this.scope,
-    required this.mounted,
-    required this.settled,
-    required this.settleFrames,
-  });
-
-  /// Where the playhead landed, in the motion's own milliseconds.
-  final int ms;
-
-  /// That motion's whole duration.
-  final int durationMs;
-
-  /// The scope that was seeked.
-  final String scope;
-
-  /// Every scope mounted at the time, in mount order — which is tree order,
-  /// so the first encloses the rest.
-  final List<String> mounted;
-
-  /// Whether the frame this seek waited for was already quiet — no image
-  /// loads outstanding, nothing animating — or null from a guest too old to
-  /// say.
-  ///
-  /// Null and false are the same instruction (settle before capturing) and
-  /// are kept apart anyway, because a guest that cannot answer is a version
-  /// skew and a guest that answers "no" is a picture still moving.
-  final bool? settled;
-
-  /// How many frames this seek had to draw before the screen stopped drawing
-  /// — one for a screen that shows its playhead where it reads it, more for
-  /// one that applies it in stages.
-  ///
-  /// It is what a render uses to decide how many frames a stop is worth.
-  /// Guessing wrong photographs a screen still on its way, which looks like a
-  /// perfectly good picture of the wrong moment.
-  final int settleFrames;
 }
 
 /// What the compiler could and could not build.
@@ -800,41 +696,19 @@ class _GuestSession {
   /// settling of its own.
   var _motionReady = false;
 
-  Future<MotionSeek> seekMotion(double t, {String? scope}) async {
+  Future<void> seekMotion(double t, {String? scope}) async {
     // Only the first one pays for it. Once the scope has mounted the extension
-    // stays registered, and a filmstrip that rendered a throwaway frame before
-    // every seek would double the cost of the thing it exists to make cheap.
+    // stays registered, and a seek that rendered a throwaway frame first every
+    // time would double the cost of the thing it exists to make cheap.
     if (!_motionReady) {
       await _renderScratchFrame();
       _motionReady = true;
     }
-    // A caller that already knows which scope it is walking does not need the
-    // listing, and a render asks 1800 times for a minute of video. The listing
-    // is what *chooses* a scope and what makes a refusal name the others, so
-    // it is skipped only when the id was given — and a seek that then fails
-    // falls back to it, so the refusal is as good as it ever was.
-    if (scope != null) {
-      var direct = await _seek(scope, t);
-      if (direct != null) {
-        return MotionSeek(
-          ms: (direct['ms'] as num?)?.toInt() ?? 0,
-          durationMs: _durationByScope[scope] ?? 0,
-          scope: scope,
-          mounted: _mountedByScope,
-          settled: _readSettled(direct),
-          settleFrames: (direct['settleFrames'] as num?)?.toInt() ?? 1,
-        );
-      }
-    }
-
     // List first, and seek by id: the guest resolves a nameless seek only
     // while exactly one scope is mounted, so a composed screen would refuse —
     // and the refusal surfaced here as the misleading "no mounted
     // MotionScope".
-    var watch = Stopwatch()..start();
     var listed = await _vmService.callExtension('ext.flutterware.motion.list');
-    timings.motionList += watch.elapsed;
-    timings.listCalls++;
     var scopes = <Map<String, Object?>>[
       for (var entry in (listed?['scopes'] as List?) ?? const [])
         if (entry is Map) entry.cast<String, Object?>(),
@@ -859,14 +733,12 @@ class _GuestSession {
       );
     }
 
-    var id = chosen['id'] as String?;
-    _mountedByScope = [for (var one in scopes) one['id'] as String? ?? ''];
-    for (var one in scopes) {
-      if (one['id'] case String key) {
-        _durationByScope[key] = (one['durationMs'] as num?)?.toInt() ?? 0;
-      }
-    }
-    var reply = await _seek(id, t);
+    // Mount order is tree order, so the first is the outermost — the
+    // composition's own timeline rather than one of the components inside it.
+    var reply = await _vmService.callExtension(
+      'ext.flutterware.motion.seek',
+      args: {'scope': ?chosen['id'] as String?, 't': '$t'},
+    );
     if (reply == null) {
       throw ArgumentError.value(
         t,
@@ -874,40 +746,7 @@ class _GuestSession {
         'this entry has no mounted MotionScope to seek',
       );
     }
-    return MotionSeek(
-      ms: (reply['ms'] as num?)?.toInt() ?? 0,
-      durationMs: (chosen['durationMs'] as num?)?.toInt() ?? 0,
-      scope: id ?? '',
-      // Mount order is tree order, so the first is the outermost — the
-      // composition's own timeline rather than one of the components inside
-      // it. Reported rather than assumed: a caller that got the wrong one
-      // should be able to see that it did, and name the other.
-      mounted: _mountedByScope,
-      settled: _readSettled(reply),
-      settleFrames: (reply['settleFrames'] as num?)?.toInt() ?? 1,
-    );
   }
-
-  /// What the last listing said, so the fast path can answer without one.
-  var _mountedByScope = <String>[];
-  final _durationByScope = <String, int>{};
-
-  Future<Map<String, Object?>?> _seek(String? scope, double t) async {
-    var watch = Stopwatch()..start();
-    var reply = await _vmService.callExtension(
-      'ext.flutterware.motion.seek',
-      args: {'scope': ?scope, 't': '$t'},
-    );
-    timings.motionSeek += watch.elapsed;
-    timings.seekCalls++;
-    return reply;
-  }
-
-  static bool? _readSettled(Map<String, Object?> reply) =>
-      switch ((reply['pending'], reply['transient'])) {
-        (num pending, num transient) => pending == 0 && transient == 0,
-        _ => null,
-      };
 
   /// One mounted scope, for a refusal that teaches which to name.
   static String _describeMountedScope(Map<String, Object?> scope) {
@@ -966,14 +805,8 @@ class _GuestSession {
   /// The frame, and what the guest could say about it having stopped moving.
   Future<(img.Image, ({bool settled, bool seesAnimations}))>
   captureImage() async {
-    var watch = Stopwatch()..start();
     var settled = await _settle();
-    timings.settle += watch.elapsed;
-    watch.reset();
-    var image = await _capture.capture();
-    timings.frame += watch.elapsed;
-    timings.frames++;
-    return (image, settled);
+    return (await _capture.capture(), settled);
   }
 
   /// Asks the guest to write its next frame, waits for the ack, and files it.
@@ -998,28 +831,6 @@ class _GuestSession {
   }
 
   final _floor = SettleFloor();
-
-  /// Where a render's per-frame time went, accumulated across the session.
-  final timings = GuestTimings();
-
-  /// [captureImage] with the pixels left as the guest wrote them.
-
-  ///
-  /// [alreadySettled] skips the settle loop, and is only ever true because a
-  /// *seek* just reported the frame it drew was quiet. The loop it skips is
-  /// two forced frames — the capture forces its own anyway — so on a parked
-  /// motion this is the difference between four rendered frames per captured
-  /// one and two.
-  Future<RawFrame> captureRawFrame({bool alreadySettled = false}) async {
-    var watch = Stopwatch()..start();
-    if (!alreadySettled) await _settle();
-    timings.settle += watch.elapsed;
-    watch.reset();
-    var frame = await _capture.captureRaw();
-    timings.frame += watch.elapsed;
-    timings.frames++;
-    return frame;
-  }
 
   /// Waits until the guest has no image loads in flight, bounded.
   ///

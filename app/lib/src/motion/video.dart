@@ -12,7 +12,6 @@ import 'package:flutterware/src/motion/stops.dart';
 // ignore: implementation_imports
 export 'package:flutterware/src/motion/stops.dart' show videoStops;
 
-import '../embedder/raw_frame.dart';
 import '../previews/catalog_render.dart';
 
 /// Encodes a sequence of rendered frames into a video file, through `ffmpeg`.
@@ -142,27 +141,6 @@ class VideoEncoder {
   void add(img.Image frame) {
     _require(frame.width, frame.height);
     _process.stdin.add(frame.getBytes(order: img.ChannelOrder.rgba));
-    _frames++;
-  }
-
-  /// Hands over a frame the guest wrote, without decoding it.
-  ///
-  /// Rows are written one at a time when the guest padded them, because raw
-  /// video has no stride — a padded row handed over whole shifts every
-  /// subsequent pixel and the picture shears.
-  void addRaw(RawFrame frame) {
-    _require(frame.width, frame.height);
-    if (frame.isPacked) {
-      _process.stdin.add(frame.pixels);
-    } else {
-      var row = frame.width * 4;
-      for (var y = 0; y < frame.height; y++) {
-        var start = y * frame.rowBytes;
-        _process.stdin.add(
-          Uint8List.sublistView(frame.pixels, start, start + row),
-        );
-      }
-    }
     _frames++;
   }
 
