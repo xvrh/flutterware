@@ -2673,6 +2673,33 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'MotionVerifyResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'MotionVerifyResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'motion', 'type': 'String'},
+      <String, Object?>{'name': 'file', 'type': 'String'},
+      <String, Object?>{
+        'name': 'stops',
+        'type': 'int',
+        'doc': 'How many playhead positions were compared.',
+      },
+      <String, Object?>{'name': 'durationMs', 'type': 'int'},
+      <String, Object?>{'name': 'repeats', 'type': 'bool'},
+      <String, Object?>{'name': 'orderFree', 'type': 'bool'},
+      <String, Object?>{
+        'name': 'differingStops',
+        'type': 'List<double>',
+        'doc': 'The playhead positions that came out different, so a failure names the moments to look at rather than only the verdict.',
+      },
+      <String, Object?>{'name': 'scope', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'scopes',
+        'type': 'List<String>',
+        'doc': 'Every playhead that was mounted, when there was more than one — a verdict about the wrong one is worth being able to see.',
+      },
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
+    ],
+  }),
   'RasterFactsResult': ResultShape.fromJson(<String, Object?>{
     'type': 'RasterFactsResult',
     'fields': <Object?>[

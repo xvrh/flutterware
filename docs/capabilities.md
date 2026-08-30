@@ -1398,6 +1398,37 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 | `label` | string | no | — | Shown inside a `text` placeholder. |
 | `package` | choice | no | — | Which declared package; the only one when omitted |
 
+#### `verify` — Verify
+
+Renders the same moments twice, and again backwards, and reports whether the pictures were identical. This is how to know a motion will export correctly, because a clip cannot be checked by watching it: a frame of the wrong moment looks exactly as plausible as a frame of the right one. A motion that repeats and is order-free is a function of its playhead, which is what a scene is. One that is not can still be exported with `mode=time`, which drives such a screen deliberately.
+
+```sh
+fw run motion verify --motion=<string> [--stops=…] [--package=…] [--device=…] [--scope=…]
+```
+
+Returns `MotionVerifyResult`:
+
+```
+motion: String
+file: String
+stops: int   # How many playhead positions were compared.
+durationMs: int
+repeats: bool
+orderFree: bool
+differingStops: List<double>   # The playhead positions that came out different, so a failure names the moments to look at rather than only the verdict.
+scope: String?
+scopes: List<String>   # Every playhead that was mounted, when there was more than one — a verdict about the wrong one is worth being able to see.
+ok: bool
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it |
+| `stops` | integer | no | — | How many playhead positions to compare, including both ends. 9 when omitted. More is a finer check and a longer one. |
+| `package` | choice | no | — | Which declared package; the only one when omitted |
+| `device` | choice | no | — | A device to render as; the panel otherwise |
+| `scope` | string | no | — | Which mounted playhead to drive, when a screen has more than one |
+
 #### `list` — List
 
 Every motion of a package, with its targets and where each is read — from the syntactic scan, without compiling or running anything. Read the diagnostics: a target named by an expression rather than a literal is real at run time and invisible here.

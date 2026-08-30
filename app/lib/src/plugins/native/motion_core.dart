@@ -551,6 +551,63 @@ class MotionCore extends PluginCore {
         ],
       ),
       PluginAction(
+        'verify',
+        'Verify',
+        returns: MotionVerifyResult,
+        description:
+            'Renders the same moments twice, and again backwards, and reports '
+            'whether the pictures were identical. This is how to know a '
+            'motion will export correctly, because a clip cannot be checked '
+            'by watching it: a frame of the wrong moment looks exactly as '
+            'plausible as a frame of the right one. A motion that repeats and '
+            'is order-free is a function of its playhead, which is what a '
+            'scene is. One that is not can still be exported with '
+            '`mode=time`, which drives such a screen deliberately.',
+        parameters: [
+          ActionParameter(
+            'motion',
+            'Motion',
+            required: true,
+            description: 'The `motion:` identifier, as `list` reports it',
+          ),
+          const ActionParameter(
+            'stops',
+            'Stops',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description:
+                'How many playhead positions to compare, including both ends. '
+                '9 when omitted. More is a finer check and a longer one.',
+          ),
+          ActionParameter(
+            'package',
+            'Package',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'Which declared package; the only one when omitted',
+            options: [
+              for (var path in packages)
+                ActionOption(path, label: path == '.' ? 'root' : path),
+            ],
+          ),
+          const ActionParameter(
+            'device',
+            'Device',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'A device to render as; the panel otherwise',
+          ),
+          const ActionParameter(
+            'scope',
+            'Scope',
+            required: false,
+            description:
+                'Which mounted playhead to drive, when a screen has more '
+                'than one',
+          ),
+        ],
+      ),
+      PluginAction(
         'list',
         'List',
         returns: MotionListResult,
@@ -584,6 +641,7 @@ class MotionCore extends PluginCore {
     if (actionId == 'capture') return _capture(arguments);
     if (actionId == 'filmstrip') return _filmstrip(arguments);
     if (actionId == 'video') return _video(arguments);
+    if (actionId == 'verify') return _verify(arguments);
     if (actionId == 'new') return _new(arguments);
     if (actionId == 'add-element') return _addElement(arguments);
     if (actionId != 'list') return super.invoke(actionId, arguments: arguments);
@@ -786,6 +844,79 @@ class MotionCore extends PluginCore {
         if (video.scopes.length > 1) 'scopes': video.scopes,
       },
     );
+  }
+
+  /// Renders the same moments three ways and compares the pixels.
+  ///
+  /// The check a clip cannot get from being watched. Two runs of the same
+  /// stops say whether the render is reproducible at all; the same stops taken
+  /// **backwards** say whether the pictures depend on the playhead alone,
+  /// which is the property the word "scene" means and the one every
+  /// frame-based renderer states as a rule for its users to follow. Here it is
+  /// measured instead.
+  ///
+  /// Backwards rather than a second forward pass, because that is what an
+  /// implicit animation, a spring or a scroll position cannot survive: walked
+  /// the other way they arrive at each stop from the other side and settle
+  /// somewhere else. A forward pass repeated would agree with itself and say
+  /// nothing.
+  Future<MotionVerifyResult> _verify(Map<String, Object?> arguments) async {
+    var (packagePath, motion, entry, _) = await _resolve(arguments);
+    var count = switch (arguments['stops']) {
+      int value => value,
+      String text when int.tryParse(text) != null => int.parse(text),
+      _ => 9,
+    }.clamp(2, 60);
+    var stops = [for (var i = 0; i < count; i++) i / (count - 1)];
+    var device = _deviceOf(arguments);
+    var renderer = _rendererFor(packagePath, engine: arguments['engine']);
+
+    Future<CatalogWalkResult> take(List<double> order) => renderer.walk(
+      CatalogWalk(
+        entryId: entry.id,
+        stops: order,
+        viewport: device == null
+            ? CaptureViewport.panel
+            : CaptureViewport.of(device),
+        scope: arguments['scope'] as String?,
+      ),
+    );
+
+    var first = await take(stops);
+    var reference = await first.frames.toList();
+    var again = await (await take(stops)).frames.toList();
+    // Reversed back, so index i of both lists is the same stop.
+    var backwards = (await (await take(
+      stops.reversed.toList(),
+    )).frames.toList()).reversed.toList();
+
+    var repeatFailures = <double>{};
+    var orderFailures = <double>{};
+    for (var i = 0; i < reference.length; i++) {
+      if (!_samePixels(reference[i], again[i])) repeatFailures.add(stops[i]);
+      if (!_samePixels(reference[i], backwards[i])) orderFailures.add(stops[i]);
+    }
+
+    return MotionVerifyResult(
+      motion: motion.values ?? '',
+      file: motion.file,
+      stops: stops.length,
+      durationMs: first.durationMs,
+      repeats: repeatFailures.isEmpty,
+      orderFree: orderFailures.isEmpty,
+      differingStops: {...repeatFailures, ...orderFailures}.toList()..sort(),
+      scope: first.scope,
+      scopes: first.scopes,
+    );
+  }
+
+  static bool _samePixels(WalkFrame a, WalkFrame b) {
+    if (a.width != b.width || a.height != b.height) return false;
+    if (a.pixels.length != b.pixels.length) return false;
+    for (var i = 0; i < a.pixels.length; i++) {
+      if (a.pixels[i] != b.pixels[i]) return false;
+    }
+    return true;
   }
 
   /// What distinguishes one setting's clip from another's, in a filename.

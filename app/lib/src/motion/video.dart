@@ -54,6 +54,19 @@ class VideoEncoder {
     /// Metal host and RGBA on a GL one, and swizzling in Dart to hide that
     /// costs more than the encode.
     String pixelFormat = 'rgba',
+
+    /// What `libx264` trades encoding time against file size.
+    ///
+    /// **`medium`, and the fast presets are not worth taking.** The encode is
+    /// four fifths of an export's clock, which makes this look like the lever
+    /// it is not: measured on a 211-frame phone-resolution clip, the whole
+    /// span from `medium` to `ultrafast` is 1568ms to 1334ms — 15% — while
+    /// the file goes from 1.1MB to 3.0MB. The time is going into moving and
+    /// converting 2.5GB of pixels, which no preset changes.
+    ///
+    /// Exposed anyway, because a caller who wants the trade should be able to
+    /// take it; just not by default.
+    String preset = 'medium',
   }) async {
     var file = File(output);
     file.parent.createSync(recursive: true);
@@ -70,6 +83,7 @@ class VideoEncoder {
         '-r', '$fps',
         '-i', '-',
         '-c:v', 'libx264',
+        '-preset', preset,
         // Even dimensions: yuv420p subsamples chroma 2×2, so an odd width
         // fails the encoder outright. Motion renders at a device's pixel
         // ratio, which makes odd sizes ordinary rather than exotic.
@@ -250,6 +264,7 @@ Future<MotionVideo> encodeWalk(
   CatalogWalkResult walk, {
   required String output,
   required int fps,
+  String preset = 'medium',
 }) async {
   var render = Stopwatch()..start();
   VideoEncoder? encoder;
@@ -261,6 +276,7 @@ Future<MotionVideo> encodeWalk(
         width: frame.width,
         height: frame.height,
         fps: fps,
+        preset: preset,
       );
       encoder.addPacked(frame.pixels, width: frame.width, height: frame.height);
       count++;
