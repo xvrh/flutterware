@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'artifact.dart';
 import 'cancel.dart';
 import 'last_run.dart';
+import 'rules.dart';
 import 'runner.dart';
 import 'shot_cache.dart';
 
@@ -92,6 +93,26 @@ class ComparisonHalf extends ChangeNotifier {
   /// every finding is new. Four entries that report changed on every
   /// comparison forever are what this exists to stop shouting.
   Set<String>? previousFindingIds;
+
+  /// What this reader has said they do not want to see.
+  ///
+  /// Session-scoped and deliberately not persisted: a filter that survives a
+  /// restart with its chips off screen is how a reader is quietly lied to, and
+  /// the chips are only guaranteed visible while the panel is. It *does*
+  /// survive a re-compare, because the chips are right there and turning the
+  /// noise back on between two runs is nobody's intention.
+  final rules = <ComparisonRule>[];
+
+  /// Adds the rule, or removes the one that matches it.
+  void toggleRule(ComparisonRule rule) {
+    var existing = rules.indexWhere((held) => held.sameAs(rule));
+    if (existing >= 0) {
+      rules.removeAt(existing);
+    } else {
+      rules.add(rule);
+    }
+    notifyListeners();
+  }
 
   /// True when [rows] came off disk rather than from a run this session.
   var restored = false;

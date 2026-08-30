@@ -7,6 +7,7 @@ import '../../capture/settle.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../comparison_controller.dart';
+import '../rules.dart';
 import '../shot_store.dart';
 import 'channel_lines.dart';
 import 'shot_image.dart';
@@ -171,9 +172,18 @@ class _Index extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var rules = RuleSet(half.rules);
     var findings = [
       for (var row in half.rows)
-        if (row.state.isFinding) row,
+        if (row.state.isFinding && !rules.hidesAll(row)) row,
+    ];
+    // Demoted, not deleted. The comparison design already settled this shape
+    // for `skipped` rows — a row that is missing tells a reader nothing — and
+    // a row a *rule* removed is the same claim made about the reader instead
+    // of about the tool.
+    var hidden = [
+      for (var row in half.rows)
+        if (row.state.isFinding && rules.hidesAll(row)) row,
     ];
     var quiet = [
       for (var row in half.rows)
@@ -189,7 +199,7 @@ class _Index extends StatelessWidget {
             selected: row.id == selected,
             onTap: () => onSelect(row.id),
           ),
-        if (findings.isEmpty && !half.isRunning)
+        if (findings.isEmpty && hidden.isEmpty && !half.isRunning)
           Padding(
             padding: const EdgeInsets.all(FwSpacing.xl),
             child: Text(
@@ -213,6 +223,26 @@ class _Index extends StatelessWidget {
             ),
           ),
           for (var id in half.pending) _PendingRow(id),
+        ],
+        if (hidden.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.xl,
+              FwSpacing.lg,
+              FwSpacing.xl,
+              FwSpacing.sm,
+            ),
+            child: Text(
+              '${hidden.length} HIDDEN BY YOUR RULES',
+              style: context.type.micro.copyWith(color: context.colors.mut),
+            ),
+          ),
+          for (var row in hidden)
+            _IndexRow(
+              item: row,
+              selected: row.id == selected,
+              onTap: () => onSelect(row.id),
+            ),
         ],
         if (quiet.isNotEmpty) ...[
           Padding(

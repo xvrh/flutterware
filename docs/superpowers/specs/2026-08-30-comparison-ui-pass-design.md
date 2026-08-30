@@ -327,12 +327,44 @@ the verdict and nothing more.
 | | what | cost |
 |---|---|---|
 | **v1** | verdict (§1), row badges (§2), folding (§4a), new-since-last (§4) — all read-only | low; no rules anywhere |
-| **v1.5** | the verdict's channel chips become toggles — one facet, no authoring UI | low; covers the measured 90% |
+| **v1.5** | ✅ the verdict's channel chips become toggles — one facet, no authoring UI | low; covers the measured 90% |
 | **v2** | conjunction rules, the authoring ladder, `origin`, the hidden group | the rest of §3 and §3a |
 
 The seam that makes the staging safe is the same one as before: v1.5's toggle
 and v2's rule are the *same record* — a rule with one constraint — so the
 chip drawn in v1.5 is the chip v2 adds constraints to. Nothing is rebuilt.
+
+### What v1.5 shipped, and what building it added
+
+`ComparisonRule` is a **conjunction from the start**, though v1.5 only ever
+builds rules of one constraint. `RuleSet` decides what a list shows and never
+reaches the artifact: `index.json` is written whole, so a `tool/` script reads
+the same verdict whatever anybody toggled.
+
+Three things the drawing did not anticipate:
+
+- **A chip row that stops at `channel` cannot reach the measured case.**
+  `system` is a *sub*channel of `events`, so the verdict grows a chip per event
+  subchannel, ordered by how much each has to say. Excluding `system` is one
+  click, which is the whole v1.5 thesis.
+- **A channel emptied by a rule is not a channel that was silent.** Excluding
+  `system` left `events · 0 steps` in full ink, asserting the events channel
+  had found nothing — when what happened is that everything it found was on a
+  subchannel this reader excluded. Muted, not struck through: a third state,
+  between *speaking* and *excluded*.
+- **`Nothing changed.` above seven hidden rows is a lie.** The empty state now
+  waits for the hidden group to be empty too.
+
+Rules are **session-scoped and not persisted**. A filter that survives a
+restart with its chips off screen is exactly §3's rule 2; the chips are only
+guaranteed visible while the panel is. They do survive a re-compare, because
+the chips are right there and turning the noise back on between two runs is
+nobody's intention.
+
+The **detail pane is not filtered**, and that is deliberate. A rule decides
+what the list shows; a thing you deliberately opened shows what it found. The
+alternative is a step you reached *through* the hidden group opening on an
+empty detail.
 
 ### The exclusion log is a signal, not just a setting
 

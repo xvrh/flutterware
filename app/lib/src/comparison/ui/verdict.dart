@@ -2,7 +2,9 @@ import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 
 import '../../ui/count_badge.dart';
+import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
+import '../rules.dart';
 
 /// What *kind* of change this branch made, above both panes.
 ///
@@ -30,6 +32,8 @@ class ComparisonVerdict extends StatelessWidget {
     required this.findings,
     required this.unit,
     this.newCount,
+    this.rules = const [],
+    this.onToggle,
   });
 
   /// The things whose channels are counted. For the scenario half these are
@@ -49,25 +53,73 @@ class ComparisonVerdict extends StatelessWidget {
   /// not read as it.
   final int? newCount;
 
+  /// What this reader has excluded. Every one of them is drawn, struck
+  /// through, carrying the count it is suppressing — a rule you cannot see is
+  /// a rule that lies to you on the next comparison.
+  final List<ComparisonRule> rules;
+
+  /// Null draws the chips as labels rather than as controls, which is what v1
+  /// did: a chip that looks pressable and is not is worse than one that does
+  /// not.
+  final ValueChanged<ComparisonRule>? onToggle;
+
   static const _channels = ['pixels', 'tree', 'texts', 'events'];
+
+  /// Subchannel keys are prefixed so one map can hold both without a
+  /// subchannel named `tree` ever colliding with the channel called `tree`.
+  static const _subPrefix = 'events/';
+
+  static List<String> _facetsOf(ChannelDelta delta) => [
+    delta.channel,
+    if (delta.subchannel case var sub?) '$_subPrefix$sub',
+  ];
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
 
+    var set = RuleSet(rules);
+
+    // Counted twice on purpose. `fired` is what a reader can still see, and is
+    // what the chips read; `total` ignores every rule, and is what an excluded
+    // chip has to show — a chip reading `0` is one nobody would ever turn back
+    // on, which `CountBadge`'s own doc is about.
     var fired = <String, int>{};
+    var total = <String, int>{};
+    var hidden = 0;
     for (var item in findings) {
-      for (var channel in item.channelsFired) {
-        fired[channel] = (fired[channel] ?? 0) + 1;
+      var seen = <String>{};
+      var seenAll = <String>{};
+      for (var delta in item.deltas) {
+        seenAll.addAll(_facetsOf(delta));
+        if (!set.hides(delta)) seen.addAll(_facetsOf(delta));
       }
+      for (var key in seenAll) {
+        total[key] = (total[key] ?? 0) + 1;
+      }
+      for (var key in seen) {
+        fired[key] = (fired[key] ?? 0) + 1;
+      }
+      if (set.hidesAll(item)) hidden++;
     }
+
     var quiet = [
       for (var channel in _channels)
-        if (!fired.containsKey(channel)) channel,
+        if (!total.containsKey(channel)) channel,
     ];
-    var shapes = foldChannelDeltas([for (var item in findings) item.deltas]);
+    var shapes = foldChannelDeltas([
+      for (var item in findings) set.visible(item),
+    ]);
+    // Every subchannel the events channel actually produced, most-said first.
+    // `system` is the whole reason this exists: it was 11 of 11 findings here
+    // and 192 of 293 event differences on a consumer's suite, and it is a
+    // *sub*channel, so a chip row that stops at `events` cannot reach it.
+    var subchannels = [
+      for (var key in total.keys)
+        if (key.startsWith(_subPrefix)) key,
+    ]..sort((a, b) => (total[b] ?? 0).compareTo(total[a] ?? 0));
 
-    if (fired.isEmpty) return const SizedBox.shrink();
+    if (total.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         FwSpacing.xl,
@@ -87,8 +139,37 @@ class ComparisonVerdict extends StatelessWidget {
             runSpacing: FwSpacing.xs,
             children: [
               for (var channel in _channels)
-                if (fired[channel] case var count?)
-                  _ChannelCount(label: channel, count: count, unit: unit),
+                if (total[channel] case var count?)
+                  _ChannelCount(
+                    label: channel,
+                    count: fired[channel] ?? 0,
+                    hiddenCount: count,
+                    unit: unit,
+                    excluded: set.has('channel', channel),
+                    onToggle: onToggle == null
+                        ? null
+                        : () =>
+                              onToggle!(ComparisonRule.on('channel', channel)),
+                  ),
+              for (var key in subchannels)
+                _ChannelCount(
+                  label: key.substring(_subPrefix.length),
+                  count: fired[key] ?? 0,
+                  hiddenCount: total[key]!,
+                  unit: unit,
+                  excluded: set.has(
+                    'subchannel',
+                    key.substring(_subPrefix.length),
+                  ),
+                  onToggle: onToggle == null
+                      ? null
+                      : () => onToggle!(
+                          ComparisonRule.on(
+                            'subchannel',
+                            key.substring(_subPrefix.length),
+                          ),
+                        ),
+                ),
               if (newCount case var count? when count > 0)
                 Text(
                   '$count new since the last comparison',
@@ -96,6 +177,14 @@ class ComparisonVerdict extends StatelessWidget {
                 ),
             ],
           ),
+          if (hidden > 0) ...[
+            const Gap(FwSpacing.xs),
+            Text(
+              '$hidden $unit${hidden == 1 ? '' : 's'} hidden by '
+              '${rules.length} rule${rules.length == 1 ? '' : 's'}',
+              style: context.type.caption.copyWith(color: colors.amber),
+            ),
+          ],
           if (findings.isNotEmpty && quiet.isNotEmpty) ...[
             const Gap(FwSpacing.xs),
             // The strongest line the comparison can print, and no chip can
@@ -165,38 +254,78 @@ class _Shape extends StatelessWidget {
 /// Not a control yet — v1 is read-only, and a chip that looks pressable and
 /// is not is worse than one that does not. The shape is the one the toggle
 /// will take, so v1.5 changes its behaviour rather than its drawing.
+/// A channel or subchannel, its count, and whether it is being looked at.
+///
+/// An excluded chip is struck through and keeps the count it is **hiding**,
+/// not the zero it is showing: *"Off recedes rather than disappears — the
+/// count is still the reason a reader would turn it back on."*
 class _ChannelCount extends StatelessWidget {
   const _ChannelCount({
     required this.label,
     required this.count,
+    required this.hiddenCount,
     required this.unit,
+    required this.excluded,
+    this.onToggle,
   });
 
   final String label;
+
+  /// How many are visible under the rules in force.
   final int count;
+
+  /// How many there are when nothing is excluded.
+  final int hiddenCount;
+
   final String unit;
+  final bool excluded;
+  final VoidCallback? onToggle;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Container(
+    var shown = excluded ? hiddenCount : count;
+    // A channel emptied *by a rule* is not a channel that was silent, and the
+    // two must not read alike: `events · 0 steps` in full ink asserts the
+    // events channel found nothing, when what happened is that everything it
+    // found was on a subchannel this reader excluded.
+    var emptied = !excluded && count == 0 && hiddenCount > 0;
+    var chip = Container(
       padding: const EdgeInsets.symmetric(
         horizontal: FwSpacing.sm,
         vertical: 2,
       ),
       decoration: BoxDecoration(
+        color: excluded ? colors.panel2 : null,
         borderRadius: BorderRadius.circular(context.radii.radius),
         border: Border.all(color: colors.line),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (excluded) ...[
+            Text('−', style: context.type.micro.copyWith(color: colors.mut)),
+            const Gap(FwSpacing.xs),
+          ],
           Text(
-            '$label · $count $unit${count == 1 ? '' : 's'}',
-            style: context.type.micro.copyWith(color: colors.ink2),
+            '$label · $shown $unit${shown == 1 ? '' : 's'}',
+            style: context.type.micro.copyWith(
+              color: excluded || emptied ? colors.mut : colors.ink2,
+              decoration: excluded ? TextDecoration.lineThrough : null,
+            ),
           ),
+          if (excluded) ...[
+            const Gap(FwSpacing.xs),
+            Icon(Icons.close, size: 11, color: colors.mut),
+          ],
         ],
       ),
+    );
+    if (onToggle == null) return chip;
+    return Tooltip(
+      message: excluded ? 'Show $label again' : 'Stop showing $label',
+      waitDuration: const Duration(milliseconds: 400),
+      child: Tappable(onTap: onToggle, child: chip),
     );
   }
 }

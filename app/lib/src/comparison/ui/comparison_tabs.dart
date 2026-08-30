@@ -742,6 +742,8 @@ class _HalfView extends StatelessWidget {
     };
     return ComparisonVerdict(
       findings: findings,
+      rules: half.rules,
+      onToggle: half.toggleRule,
       unit: switch (half.kind) {
         ComparisonHalfKind.previews => 'entry',
         ComparisonHalfKind.scenarios => 'step',

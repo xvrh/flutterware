@@ -9,6 +9,7 @@ import '../../ui/empty_state.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../comparison_controller.dart';
+import '../rules.dart';
 import '../shot_store.dart';
 import 'channel_lines.dart';
 import 'merged_tree.dart';
@@ -280,9 +281,26 @@ class _Index extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var rules = RuleSet(half.rules);
+    // A flow is hidden when every finding *step* inside it is, since a flow
+    // has no channels of its own — its verdict is a roll-up of the steps.
+    bool allHidden(ScenarioComparison s) {
+      var any = false;
+      for (var step in s.items) {
+        if (!step.state.isFinding) continue;
+        any = true;
+        if (!rules.hidesAll(step)) return false;
+      }
+      return any;
+    }
+
     var findings = [
       for (var s in half.scenarios)
-        if (s.state.isFinding) s,
+        if (s.state.isFinding && !allHidden(s)) s,
+    ];
+    var hidden = [
+      for (var s in half.scenarios)
+        if (s.state.isFinding && allHidden(s)) s,
     ];
     var quiet = [
       for (var s in half.scenarios)
@@ -298,7 +316,7 @@ class _Index extends StatelessWidget {
             selected: s.scenario == selected,
             onTap: () => onSelect(s.scenario),
           ),
-        if (findings.isEmpty && !half.isRunning)
+        if (findings.isEmpty && hidden.isEmpty && !half.isRunning)
           Padding(
             padding: const EdgeInsets.all(FwSpacing.xl),
             child: Text(
@@ -322,6 +340,26 @@ class _Index extends StatelessWidget {
             ),
           ),
           for (var id in half.pending) _PendingRow(id),
+        ],
+        if (hidden.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.xl,
+              FwSpacing.lg,
+              FwSpacing.xl,
+              FwSpacing.sm,
+            ),
+            child: Text(
+              '${hidden.length} HIDDEN BY YOUR RULES',
+              style: context.type.micro.copyWith(color: context.colors.mut),
+            ),
+          ),
+          for (var s in hidden)
+            _IndexRow(
+              scenario: s,
+              selected: s.scenario == selected,
+              onTap: () => onSelect(s.scenario),
+            ),
         ],
         if (quiet.isNotEmpty) ...[
           Padding(

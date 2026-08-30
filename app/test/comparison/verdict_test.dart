@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/comparison/comparison_controller.dart';
 import 'package:flutterware_app/src/comparison/last_run.dart';
 import 'package:flutterware_app/src/comparison/last_run_store.dart';
+import 'package:flutterware_app/src/comparison/rules.dart';
 import 'package:flutterware_app/src/comparison/ui/verdict.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
@@ -152,6 +153,112 @@ void main() {
       store.write(ComparisonHalfKind.previews, run('b'));
 
       expect(store.readPrevious(ComparisonHalfKind.scenarios), isNull);
+    });
+  });
+
+  group('rules', () {
+    ChannelDelta delta(String channel, {String? sub, String? origin}) =>
+        ChannelDelta(
+          channel: channel,
+          subchannel: sub,
+          property: 'x',
+          origin: origin,
+        );
+
+    test('a one-constraint rule is what a chip builds', () {
+      var rule = ComparisonRule.on('subchannel', 'system');
+
+      expect(rule.isSingle, isTrue);
+      expect(rule.label, 'system');
+      expect(rule.matches(delta('events', sub: 'system')), isTrue);
+      expect(rule.matches(delta('events', sub: 'db')), isFalse);
+    });
+
+    // The seam the whole staging rests on: the chip and the authored rule are
+    // one record, so v2 lengthens it rather than replacing it.
+    test('constraints are ANDed, so a longer rule is narrower', () {
+      var rule = const ComparisonRule([
+        RuleConstraint('subchannel', 'db'),
+        RuleConstraint('origin', 'lib/cache.dart'),
+      ]);
+
+      expect(
+        rule.matches(delta('events', sub: 'db', origin: 'lib/cache.dart')),
+        isTrue,
+      );
+      expect(
+        rule.matches(delta('events', sub: 'db', origin: 'lib/other.dart')),
+        isFalse,
+      );
+      expect(rule.label, 'db · lib/cache.dart');
+    });
+
+    test('a finding is hidden only when every delta of it is', () {
+      var set = RuleSet([ComparisonRule.on('subchannel', 'system')]);
+      var noisy = eventStep('a');
+      var mixed = ComparedItem.of(
+        id: 'b',
+        baseEvents: [
+          {'channel': 'system', 'title': 't', 'detail': '1'},
+          {'channel': 'network', 'title': 'POST /x', 'detail': '200'},
+        ],
+        headEvents: [
+          {'channel': 'system', 'title': 't', 'detail': '2'},
+          {'channel': 'network', 'title': 'POST /x', 'detail': '500'},
+        ],
+      );
+
+      expect(set.hidesAll(noisy), isTrue);
+      expect(set.hidesAll(mixed), isFalse);
+      expect(set.visible(mixed), hasLength(1));
+    });
+
+    // `added`, `removed` and `broke` say something no channel does, and a rule
+    // about channels has no opinion about them. Hiding those would be the
+    // filter deciding what the comparison found.
+    test('a finding with no deltas at all is never hidden by a rule', () {
+      var set = RuleSet([ComparisonRule.on('channel', 'events')]);
+
+      expect(
+        set.hidesAll(const ComparedItem(id: 'a', state: ComparedState.added)),
+        isFalse,
+      );
+    });
+
+    testWidgets('an excluded chip keeps the count it is hiding', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        ComparisonVerdict(
+          findings: [eventStep('a'), eventStep('b')],
+          unit: 'step',
+          rules: [ComparisonRule.on('subchannel', 'system')],
+          onToggle: (_) {},
+        ),
+      );
+
+      // Not `0 steps`: a chip reading zero is one nobody would turn back on.
+      expect(find.text('system · 2 steps'), findsOne);
+      expect(find.text('2 steps hidden by 1 rule'), findsOne);
+    });
+
+    testWidgets('tapping a chip asks for the rule it stands for', (
+      tester,
+    ) async {
+      ComparisonRule? asked;
+      await pump(
+        tester,
+        ComparisonVerdict(
+          findings: [eventStep('a')],
+          unit: 'step',
+          onToggle: (rule) => asked = rule,
+        ),
+      );
+      await tester.tap(find.text('system · 1 step'));
+
+      expect(asked?.constraints.single.facet, 'subchannel');
+      expect(asked?.constraints.single.value, 'system');
     });
   });
 }
