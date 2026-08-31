@@ -363,6 +363,11 @@ int mosaicTextWidth(String text) {
   return width;
 }
 
+/// A comment is a teaser, and its visible height must not scale with what the
+/// comparison found: the heading carries the verdict, the mosaic carries the
+/// pictures, and the table — the only part that grows per finding — is folded
+/// into a `<details>`. The call to action is the page, so its link is the
+/// first line under the heading rather than the last thing before the footer.
 String _comment(
   ComparisonArtifact artifact, {
   required String against,
@@ -372,23 +377,43 @@ String _comment(
   var counts = artifact.counts;
   var compared = counts.values.fold(0, (a, b) => a + b);
   var skipped = counts[ComparedState.skipped] ?? 0;
-  var summary = [
-    for (var entry in counts.entries)
-      if (_isFinding(entry.key)) '${entry.value} ${entry.key.name}',
+  var elapsed =
+      artifact.previews.elapsed +
+      (artifact.scenarios?.elapsed ?? Duration.zero);
+  // The skip clause only when the skip rule answered anything: a cold CI run
+  // printing "0 skipped" is noise wearing a number.
+  var receipt = [
+    '$compared entries compared',
+    if (skipped > 0) '$skipped skipped',
+    if (elapsed > Duration.zero) 'in ${_took(elapsed)}',
   ].join(' · ');
 
-  var buffer = StringBuffer()..writeln('### Comparison against `$against`\n');
+  var buffer = StringBuffer();
   if (findings.isEmpty) {
-    buffer.writeln(
-      'Nothing changed — $compared entries compared, $skipped answered by '
-      'the skip rule.',
-    );
-  } else {
     buffer
+      ..writeln('### Comparison against `$against`\n')
+      ..writeln('Nothing changed — $receipt.');
+  } else {
+    var summary = [
+      for (var entry in counts.entries)
+        if (_isFinding(entry.key)) '${entry.value} ${entry.key.name}',
+    ].join(' · ');
+    buffer
+      ..writeln('### Comparison against `$against` — **$summary**\n')
       ..writeln(
-        '**$summary** — $compared entries compared, $skipped answered by '
-        'the skip rule.\n',
-      )
+        '[**Open the full comparison →**]($viewerUrlPlaceholder) · $receipt\n',
+      );
+    if (hasMosaic) {
+      buffer.writeln('![comparison]($mosaicUrlPlaceholder)\n');
+    }
+    // The summary line says the mosaic is a cap when it is one, which is the
+    // whole job the old "…and N more" footnote was doing.
+    var shown = hasMosaic && findings.length > mosaicRowCap
+        ? '${findings.length} findings (the picture shows the worst '
+              '$mosaicRowCap)'
+        : '${findings.length} finding${findings.length == 1 ? '' : 's'}';
+    buffer
+      ..writeln('<details><summary>$shown</summary>\n')
       ..writeln('| entry | state | Δ |')
       ..writeln('|---|---|---|');
     for (var finding in findings) {
@@ -396,23 +421,23 @@ String _comment(
         '| `${finding.id}` | ${finding.state.name} | ${finding.delta ?? ''} |',
       );
     }
-    buffer.writeln();
-    if (hasMosaic) {
-      buffer.writeln('![comparison]($mosaicUrlPlaceholder)\n');
-      if (findings.length > mosaicRowCap) {
-        buffer.writeln(
-          '*…and ${findings.length - mosaicRowCap} more — the page below has '
-          'them all.*\n',
-        );
-      }
-    }
-    buffer.writeln('[Open the full comparison]($viewerUrlPlaceholder)\n');
+    buffer.writeln('\n</details>\n');
   }
   buffer.writeln(
     '<sub>`fw compare` — both sides computed from git, with no stored '
     'baseline.</sub>',
   );
   return buffer.toString();
+}
+
+String _took(Duration elapsed) {
+  var ms = elapsed.inMilliseconds;
+  if (ms < 1000) return '${ms}ms';
+  if (ms < 60000) {
+    return '${(ms / 1000).toStringAsFixed(ms >= 10000 ? 0 : 1)}s';
+  }
+  return '${elapsed.inMinutes}m '
+      '${(elapsed.inSeconds % 60).toString().padLeft(2, '0')}s';
 }
 
 /// What the workflow substitutes once it has hosted `mosaic.png`.

@@ -723,52 +723,8 @@ class _HalfView extends StatelessWidget {
   /// Drawn here it sat above *everything the tab renders*, which includes a
   /// pushed step page — so a header about eleven steps stayed on screen over a
   /// page about one of them. Only the half knows when it is showing a list.
-  ///
-  /// The scenario half's findings are its **steps**, not its flows: a flow's
-  /// verdict is a roll-up of the steps inside it, and the channels live on the
-  /// steps. Counting flows would say `7 findings` and then be unable to name a
-  /// single channel.
-  Widget _verdict() {
-    var findings = switch (half.kind) {
-      ComparisonHalfKind.previews => [
-        for (var row in half.rows)
-          if (row.state.isFinding) row,
-      ],
-      ComparisonHalfKind.scenarios => [
-        for (var scenario in half.scenarios)
-          for (var step in scenario.items)
-            if (step.state.isFinding) step,
-      ],
-    };
-    return ComparisonVerdict(
-      findings: findings,
-      rules: half.rules,
-      onToggle: half.toggleRule,
-      unit: switch (half.kind) {
-        ComparisonHalfKind.previews => 'entry',
-        ComparisonHalfKind.scenarios => 'step',
-      },
-      newCount: switch (half.previousFindingIds) {
-        var previous? => switch (half.kind) {
-          ComparisonHalfKind.previews =>
-            half.rows
-                .where(
-                  (row) => row.state.isFinding && !previous.contains(row.id),
-                )
-                .length,
-          ComparisonHalfKind.scenarios =>
-            half.scenarios
-                .where(
-                  (scenario) =>
-                      scenario.state.isFinding &&
-                      !previous.contains(scenario.scenario),
-                )
-                .length,
-        },
-        null => null,
-      },
-    );
-  }
+  Widget _verdict() =>
+      ComparisonVerdict.ofHalf(half, onToggle: half.toggleRule);
 
   Widget _rows(BuildContext context) => switch (half.kind) {
     ComparisonHalfKind.previews => PreviewsTab(

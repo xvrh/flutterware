@@ -5,6 +5,7 @@ import '../../ui/popover.dart';
 import '../../ui/popover_menu.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
+import '../comparison_controller.dart';
 import '../rules.dart';
 import 'channel_lines.dart';
 
@@ -64,6 +65,59 @@ class ComparisonVerdict extends StatelessWidget {
   /// did: a chip that looks pressable and is not is worse than one that does
   /// not.
   final ValueChanged<ComparisonRule>? onToggle;
+
+  /// The verdict of one [ComparisonHalf], built the same wherever the half is
+  /// drawn — the panel wires [onToggle] to the half's own rules, the exported
+  /// page passes none and gets labels.
+  ///
+  /// The scenario half's findings are its **steps**, not its flows: a flow's
+  /// verdict is a roll-up of the steps inside it, and the channels live on the
+  /// steps. Counting flows would say `7 findings` and then be unable to name a
+  /// single channel.
+  static ComparisonVerdict ofHalf(
+    ComparisonHalf half, {
+    ValueChanged<ComparisonRule>? onToggle,
+  }) {
+    var findings = switch (half.kind) {
+      ComparisonHalfKind.previews => [
+        for (var row in half.rows)
+          if (row.state.isFinding) row,
+      ],
+      ComparisonHalfKind.scenarios => [
+        for (var scenario in half.scenarios)
+          for (var step in scenario.items)
+            if (step.state.isFinding) step,
+      ],
+    };
+    return ComparisonVerdict(
+      findings: findings,
+      rules: half.rules,
+      onToggle: onToggle,
+      unit: switch (half.kind) {
+        ComparisonHalfKind.previews => 'entry',
+        ComparisonHalfKind.scenarios => 'step',
+      },
+      newCount: switch (half.previousFindingIds) {
+        var previous? => switch (half.kind) {
+          ComparisonHalfKind.previews =>
+            half.rows
+                .where(
+                  (row) => row.state.isFinding && !previous.contains(row.id),
+                )
+                .length,
+          ComparisonHalfKind.scenarios =>
+            half.scenarios
+                .where(
+                  (scenario) =>
+                      scenario.state.isFinding &&
+                      !previous.contains(scenario.scenario),
+                )
+                .length,
+        },
+        null => null,
+      },
+    );
+  }
 
   static const _channels = ['pixels', 'tree', 'texts', 'events'];
 

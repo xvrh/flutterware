@@ -6,6 +6,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/base_href.dart';
+import '../utils/viewer_bundle.dart';
 import 'web_report.dart';
 
 /// Writes a run out as a browsable page.
@@ -28,17 +29,18 @@ import 'web_report.dart';
 /// See `2026-08-11-scenario-web-export-design.md`.
 class ScenarioWebExporter {
   ScenarioWebExporter({
-    required this.flutterExecutable,
-    required this.appToolRoot,
+    required String flutterExecutable,
+    required String appToolRoot,
     required this.worktreeRoot,
-  });
+  }) : _bundle = ViewerBundle(
+         flutterExecutable: flutterExecutable,
+         appToolRoot: appToolRoot,
+         target: 'lib/main_scenarios_web.dart',
+         buildDirName: 'scenario_web_viewer',
+         label: 'scenario page viewer',
+       );
 
-  final String flutterExecutable;
-
-  /// Where `flutterware_app` lives — this checkout's `app/`, or the unpacked
-  /// copy under `~/.flutterware/` for a hosted install. `flutter build web`
-  /// runs here.
-  final String appToolRoot;
+  final ViewerBundle _bundle;
 
   /// What the run's artifact paths are relative to.
   final String worktreeRoot;
@@ -51,13 +53,8 @@ class ScenarioWebExporter {
   static String defaultOutputIn(String packageRoot) =>
       p.join(packageRoot, 'build', 'scenarios', 'web');
 
-  /// Where the viewer bundle is compiled to.
-  ///
-  /// A fixed directory under the app package, so `flutter build web`'s own
-  /// incremental build decides whether a rebuild is needed. Hand-rolling that
-  /// question — hashing a version, stamping a manifest — would be a second
-  /// answer to it, and the one that goes stale is always the hand-rolled one.
-  String get viewerDir => p.join(appToolRoot, 'build', 'scenario_web_viewer');
+  /// Where the viewer bundle is compiled to. See [ViewerBundle.viewerDir].
+  String get viewerDir => _bundle.viewerDir;
 
   /// The artifact directory inside a page, relative to it.
   static const artifactsDir = 'artifacts';
@@ -66,7 +63,12 @@ class ScenarioWebExporter {
   /// can exercise everything after it — which is where all the logic is —
   /// without a toolchain and a minute of compiling.
   @visibleForTesting
-  Future<int> Function(List<String> arguments)? debugCompile;
+  Future<int> Function(List<String> arguments)? get debugCompile =>
+      _bundle.debugCompile;
+
+  @visibleForTesting
+  set debugCompile(Future<int> Function(List<String> arguments)? compile) =>
+      _bundle.debugCompile = compile;
 
   Future<ScenarioWebExport> export({
     required ScenarioWebReport report,
@@ -76,8 +78,8 @@ class ScenarioWebExporter {
     void Function(String line)? onOutput,
   }) async {
     var stopwatch = Stopwatch()..start();
-    await _buildViewer(offline: offline, onOutput: onOutput);
-    if (_cancelled) throw StateError('The export was cancelled.');
+    await _bundle.build(offline: offline, onOutput: onOutput);
+    if (_bundle.cancelled) throw StateError('The export was cancelled.');
 
     var outputDir = Directory(output);
     // Cleared rather than merged into: a scenario deleted since the last export
@@ -87,7 +89,7 @@ class ScenarioWebExporter {
     outputDir.createSync(recursive: true);
 
     onOutput?.call('[export] copying the viewer');
-    _copyDirectory(Directory(viewerDir), outputDir);
+    _bundle.copyTo(output);
     setBaseHrefIn(p.join(output, 'index.html'), baseHref);
 
     onOutput?.call('[export] collecting the artifacts');
@@ -217,84 +219,8 @@ class ScenarioWebExporter {
     return copied;
   }
 
-  /// Compiles the viewer, or lets the build system decide it need not.
-  Future<void> _buildViewer({
-    required bool offline,
-    void Function(String line)? onOutput,
-  }) async {
-    onOutput?.call('[export] building the viewer (this is cached after once)');
-    var exitCode = await _run([
-      'build',
-      'web',
-      '--release',
-      '--target',
-      'lib/main_scenarios_web.dart',
-      '--output',
-      viewerDir,
-      // The page carries its own CanvasKit rather than fetching it from
-      // Google's CDN — for a CI artifact read behind a firewall, or after the
-      // engine revision it was built against stops being hosted.
-      if (offline) '--no-web-resources-cdn',
-    ], onOutput);
-    if (_cancelled) return;
-    if (exitCode != 0) {
-      throw StateError(
-        'The scenario page viewer did not compile (exit $exitCode). It is '
-        "flutterware's own code in $appToolRoot — the error above is a bug in "
-        'the tool, not in your project.',
-      );
-    }
-  }
-
-  static void _copyDirectory(Directory source, Directory destination) {
-    for (var entity in source.listSync()) {
-      var target = p.join(destination.path, p.basename(entity.path));
-      if (entity is Directory) {
-        Directory(target).createSync(recursive: true);
-        _copyDirectory(entity, Directory(target));
-      } else if (entity is File) {
-        Directory(p.dirname(target)).createSync(recursive: true);
-        entity.copySync(target);
-      }
-    }
-  }
-
-  Process? _process;
-  var _cancelled = false;
-
   /// Ends the export, if one is running.
-  ///
-  /// A `flutter build web` is tens of seconds, and a child started with
-  /// `Process.start` is not killed when the Dart parent exits on macOS.
-  Future<void> cancel() async {
-    _cancelled = true;
-    _process?.kill();
-    _process = null;
-  }
-
-  Future<int> _run(
-    List<String> arguments,
-    void Function(String)? onOutput,
-  ) async {
-    if (debugCompile case var compile?) return compile(arguments);
-    var process = _process = await Process.start(
-      flutterExecutable,
-      arguments,
-      workingDirectory: appToolRoot,
-    );
-    if (_cancelled) process.kill();
-    var lines = <Future<void>>[
-      for (var stream in [process.stdout, process.stderr])
-        stream
-            .transform(const Utf8Decoder(allowMalformed: true))
-            .transform(const LineSplitter())
-            .forEach((line) => onOutput?.call(line)),
-    ];
-    var exitCode = await process.exitCode;
-    await Future.wait(lines);
-    _process = null;
-    return exitCode;
-  }
+  Future<void> cancel() => _bundle.cancel();
 }
 
 /// What a finished export produced.
