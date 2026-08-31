@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
+import 'package:flutterware_app/src/ui/action_button.dart';
 import 'package:flutterware_app/src/ui/picker.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
@@ -111,6 +112,23 @@ class _FormControlsState extends State<_FormControls> {
               hintText: '{"title": "…"}',
             ),
           ),
+        ),
+      ),
+      (
+        'Buttons, one height',
+        'Material buttons are themed onto the form family: 33 tall, house '
+            'corner, ramped label. FilledButton is the primary CTA; '
+            'FwActionButton stays the async panel action with its own states.',
+        Row(
+          children: [
+            FilledButton(onPressed: () {}, child: const Text('Create')),
+            const Gap(FwSpacing.md),
+            OutlinedButton(onPressed: () {}, child: const Text('Refresh')),
+            const Gap(FwSpacing.md),
+            TextButton(onPressed: () {}, child: const Text('Cancel')),
+            const Gap(FwSpacing.md),
+            FwActionButton(label: 'Reload', onPressed: () async {}),
+          ],
         ),
       ),
       (

@@ -62,9 +62,35 @@ ThemeData buildAppTheme(FwTokens tokens) {
     if (states.contains(WidgetState.focused)) return palette.focusRing;
     return null;
   });
+  // Laid over a primary fill, where the neutral ink of [overlay] disappears.
+  var overlayOnFill = WidgetStateProperty.resolveWith<Color?>((states) {
+    if (states.contains(WidgetState.pressed)) {
+      return palette.pressedOverlayOnFill;
+    }
+    if (states.contains(WidgetState.hovered)) return palette.hoverOverlayOnFill;
+    return null;
+  });
   var buttonStyle = ButtonStyle(
     overlayColor: overlay,
     splashFactory: NoSplash.splashFactory,
+  );
+  // The labeled buttons, sized and shaped as the form family. Measured before
+  // this block existed: a Material button stood on a 40px stadium beside a
+  // 33px picker and a 33px field — another design system's control in the
+  // middle of a form row. One height for all four, pinned by a standard
+  // density and a shrink-wrapped tap target so the harness and a desktop
+  // render agree about it.
+  var labeledButton = buttonStyle.copyWith(
+    shape: WidgetStatePropertyAll(
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(radii.radius)),
+    ),
+    minimumSize: const WidgetStatePropertyAll(Size(10, 33)),
+    padding: const WidgetStatePropertyAll(
+      EdgeInsets.symmetric(horizontal: FwSpacing.lg),
+    ),
+    textStyle: WidgetStatePropertyAll(type.button),
+    visualDensity: VisualDensity.standard,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
   );
 
   return base.copyWith(
@@ -77,9 +103,16 @@ ThemeData buildAppTheme(FwTokens tokens) {
     highlightColor: palette.pressedOverlay,
     focusColor: palette.focusRing,
     iconButtonTheme: IconButtonThemeData(style: buttonStyle),
-    textButtonTheme: TextButtonThemeData(style: buttonStyle),
-    outlinedButtonTheme: OutlinedButtonThemeData(style: buttonStyle),
-    filledButtonTheme: FilledButtonThemeData(style: buttonStyle),
+    textButtonTheme: TextButtonThemeData(style: labeledButton),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: labeledButton.copyWith(
+        side: WidgetStatePropertyAll(BorderSide(color: palette.line)),
+        foregroundColor: WidgetStatePropertyAll(palette.ink),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: labeledButton.copyWith(overlayColor: overlayOnFill),
+    ),
     textTheme: textTheme.copyWith(
       displayLarge: textTheme.displayLarge!.copyWith(
         fontSize: type.sizeDisplayLarge,
@@ -162,27 +195,12 @@ ThemeData buildAppTheme(FwTokens tokens) {
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
-      style:
-          ElevatedButton.styleFrom(
-            foregroundColor: palette.onPrimary,
-            backgroundColor: palette.primary,
-            elevation: 0,
-            minimumSize: const Size(10, 42),
-            textStyle: type.button,
-            splashFactory: NoSplash.splashFactory,
-            // Laid over the primary fill, so the neutral ink of [overlay] would
-            // disappear into it.
-          ).copyWith(
-            overlayColor: WidgetStateProperty.resolveWith<Color?>((states) {
-              if (states.contains(WidgetState.pressed)) {
-                return palette.pressedOverlayOnFill;
-              }
-              if (states.contains(WidgetState.hovered)) {
-                return palette.hoverOverlayOnFill;
-              }
-              return null;
-            }),
-          ),
+      style: labeledButton.copyWith(
+        foregroundColor: WidgetStatePropertyAll(palette.onPrimary),
+        backgroundColor: WidgetStatePropertyAll(palette.primary),
+        elevation: const WidgetStatePropertyAll(0),
+        overlayColor: overlayOnFill,
+      ),
     ),
     cardColor: palette.bg,
     cardTheme: base.cardTheme.copyWith(
