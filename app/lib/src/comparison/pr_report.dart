@@ -116,6 +116,7 @@ final _captionFont = img.arial14;
 class _Finding {
   const _Finding({
     required this.id,
+    required this.tab,
     required this.state,
     this.delta,
     this.item,
@@ -123,6 +124,11 @@ class _Finding {
   });
 
   final String id;
+
+  /// The exported page's tab this finding lives on — the first segment of the
+  /// fragment its table row links to.
+  final String tab;
+
   final ComparedState state;
 
   /// The third column: `0.38% · 2 regions`, or the step that moved.
@@ -140,7 +146,13 @@ List<_Finding> _findings(ComparisonArtifact artifact) {
   for (var item in artifact.previews.items) {
     if (!_isFinding(item.state)) continue;
     findings.add(
-      _Finding(id: item.id, state: item.state, delta: _delta(item), item: item),
+      _Finding(
+        id: item.id,
+        tab: 'previews',
+        state: item.state,
+        delta: _delta(item),
+        item: item,
+      ),
     );
   }
   for (var scenario
@@ -158,6 +170,7 @@ List<_Finding> _findings(ComparisonArtifact artifact) {
     findings.add(
       _Finding(
         id: scenario.scenario,
+        tab: 'scenarios',
         state: scenario.state,
         delta: worst == null
             ? scenario.branches.isEmpty
@@ -417,9 +430,22 @@ String _comment(
       ..writeln('| entry | state | Δ |')
       ..writeln('|---|---|---|');
     for (var finding in findings) {
-      buffer.writeln(
-        '| `${finding.id}` | ${finding.state.name} | ${finding.delta ?? ''} |',
-      );
+      // Every row is a door into the page: the entry opens its finding, and a
+      // scenario's Δ opens the very step that moved. The fragment grammar is
+      // the viewer's own — `<tab>/<selection>`, escapes spelled out so an
+      // id's `#` neither ends the URL nor breaks the markdown.
+      var entry =
+          '[`${finding.id}`]'
+          '($viewerUrlPlaceholder#${finding.tab}/${_component(finding.id)})';
+      var delta = finding.delta ?? '';
+      if (finding.tab == 'scenarios' &&
+          finding.item != null &&
+          delta.isNotEmpty) {
+        delta =
+            '[$delta]($viewerUrlPlaceholder#scenarios/'
+            '${_component(finding.id)}/${_component(finding.item!.id)})';
+      }
+      buffer.writeln('| $entry | ${finding.state.name} | $delta |');
     }
     buffer.writeln('\n</details>\n');
   }
@@ -429,6 +455,12 @@ String _comment(
   );
   return buffer.toString();
 }
+
+/// A fragment segment, escaped for the page *and* for markdown:
+/// [Uri.encodeComponent] leaves `(` and `)` alone, and an unescaped `)` in a
+/// link target ends the link mid-id.
+String _component(String value) =>
+    Uri.encodeComponent(value).replaceAll('(', '%28').replaceAll(')', '%29');
 
 String _took(Duration elapsed) {
   var ms = elapsed.inMilliseconds;

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:http/http.dart' as http;
 
 import 'src/comparison/web_viewer.dart';
@@ -23,6 +24,12 @@ import 'src/ui/theme.dart';
 /// twice — the entry point asks for the files instead, and hands the body to
 /// the viewer it names so nothing is fetched a second time.
 void main() {
+  // The engine's default strategy owns the browser history: it rewrites the
+  // URL during boot — dropping the fragment a deep link arrived on — and
+  // answers any outside change with a navigation back. This page's address
+  // *is* its fragment, kept by the comparison viewer, so the engine is told
+  // to leave the URL alone.
+  setUrlStrategy(null);
   runApp(ExportViewerApp(base: Uri.base));
 }
 

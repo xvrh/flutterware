@@ -12,8 +12,10 @@ finish the job.
 ```
 <dir>/
   comment.md    the verdict in the heading, the viewer link up top, and the
-                table of findings folded into a <details> — with
-                __MOSAIC_URL__ and __VIEWER_URL__ placeholders
+                table of findings folded into a <details> whose rows
+                deep-link into the page (`#previews/<entry>`,
+                `#scenarios/<flow>/<step>`) — with __MOSAIC_URL__ and
+                __VIEWER_URL__ placeholders
   mosaic.png    a grid of the findings (capped at 20), base beside head,
                 changed regions boxed — only written when something changed
   web/          the browsable page: viewer, index.json, a PNG per frame.
