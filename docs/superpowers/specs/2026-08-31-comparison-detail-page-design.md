@@ -248,3 +248,53 @@ Still not decided, and correctly so: **an affordance.** As the hero this wants
 a gesture — exclude this shape, or jump to that node — and that is the v2
 authoring ladder from `2026-08-30`'s §3a, which should arrive as one design
 rather than as a button bolted on here.
+
+
+## Where this stands, and what is weak (2026-08-31)
+
+Written for whoever picks the UI up next, because the honest summary is that
+the *model* is in good shape and the *drawing* is not. Every surface now
+answers **what changed** — the inventory above is complete — and none of them
+answers it well. What follows is what I know is weak, rather than a claim that
+it is finished.
+
+**The verdict strip reads like a log line.** Three stacked rows of small grey
+text at the top of the page: counts and chips, then the quiet-channels
+sentence, then the folded shape. Every one of them earns its place
+individually and together they have no hierarchy — nothing on that strip is
+bigger, bolder or more coloured than anything else, so the eye has no entry
+point.
+
+**`ChannelLines` does not align.** A delta is drawn as three parts now, with
+the values in ink, but the field names vary from `level` to
+`autofill.uniqueIdentifier` and so the values still start at a different x on
+every row. The ink/grey contrast carries it; column alignment would carry it
+better, and a fixed column wide enough for the longest field wastes the width
+on all the others.
+
+**Nothing is clickable that looks like it should be.** The folded shape line
+names a shape and the obvious gesture is *stop showing this*; it is inert. So
+are the delta rows. The v2 authoring ladder (`2026-08-30` §3a) is where that
+belongs and it is designed but unbuilt.
+
+**Severity has no expression.** Green and red mark arrival and departure. A
+`200 → 500` and an identity hash are drawn identically, because `error` is
+deliberately not compared and nothing else in the model ranks a delta. Either
+the model gains a notion of severity or the UI stops pretending the reader can
+tell — right now it silently does the second.
+
+**Small things.** The collapsed frame strip's 96px thumbnail and `compare
+anyway` link are arbitrary and unmeasured. The flow node now stacks a label, a
+chip and a channel list under a small thumbnail, which is three lines of
+furniture under one picture. The stage's five mode pills are drawn even when
+there is one frame or none.
+
+**The preview entries under `Comparison` and `Comparison states`** are worth
+keeping apart. `comparison_states.dart` is the state catalogue and should
+outlive this work — it is how the next change to `FindingBody` gets checked
+against all seven shapes. `channel_lines.dart` is the same for that widget.
+`comparison_filter.dart` draws v2, which is not built yet. `comparison_verdict
+.dart` and `comparison_verdict_in_place.dart` are exploration — five options
+of which one was chosen, and a placement question already settled — so they
+are 8 of the 18 entries every previews comparison now reports as `added`, and
+deleting them costs nothing the notes do not already record.
