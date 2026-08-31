@@ -6,6 +6,21 @@ import 'package:flutter/material.dart';
 
 enum NodeLayout { absolute, row, column }
 
+/// A node's name is its identity everywhere — the wire, the rects, the hit
+/// targets — and in the file it is the *field name* the node is declared
+/// under, so it must be a valid Dart identifier.
+final _identifier = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$');
+const _reserved = {
+  // Dart's reserved words — a field cannot be named these.
+  'assert', 'break', 'case', 'catch', 'class', 'const', 'continue', 'default',
+  'do', 'else', 'enum', 'extends', 'false', 'final', 'finally', 'for', 'if',
+  'in', 'is', 'new', 'null', 'rethrow', 'return', 'super', 'switch', 'this',
+  'throw', 'true', 'try', 'var', 'void', 'while', 'with',
+};
+
+bool isValidNodeName(String name) =>
+    _identifier.hasMatch(name) && !_reserved.contains(name);
+
 sealed class SceneNode {
   SceneNode(this.name);
 
@@ -155,6 +170,18 @@ class SceneDocument extends ChangeNotifier {
     yield* visit(root, 0);
   }
 
+  /// A fresh identifier-shaped name — names are field names in the file, so
+  /// they must be unique and valid Dart identifiers from the moment a node is
+  /// created, not sanitized at save time.
+  String uniqueName(String base) {
+    var taken = {for (var (n, _) in walk()) n.name};
+    var i = 1;
+    while (taken.contains('$base$i')) {
+      i++;
+    }
+    return '$base$i';
+  }
+
   FrameNode? parentOf(SceneNode node) {
     FrameNode? search(FrameNode frame) {
       if (frame.children.contains(node)) return frame;
@@ -247,12 +274,12 @@ class SceneDocument extends ChangeNotifier {
 /// The hard-coded "agent draft" of the coffee store banner: roughly right,
 /// to be refined by direct manipulation.
 SceneDocument coffeeBannerDraft() {
-  var root = FrameNode('Banner')
+  var root = FrameNode('root')
     ..width = 1024
     ..height = 500
     ..fill = const Color(0xFF2B1B12);
 
-  var glow = ShapeNode('Glow', circle: true)
+  var glow = ShapeNode('glow', circle: true)
     ..x = 600
     ..y = -110
     ..width = 480
@@ -260,32 +287,32 @@ SceneDocument coffeeBannerDraft() {
     ..fill = const Color(0xFF4A2F1F)
     ..opacity = 0.7;
 
-  var cup = TextNode('Cup', '☕')
+  var cup = TextNode('cup', '☕')
     ..x = 690
     ..y = 110
     ..fontSize = 190;
 
-  var headline = TextNode('Headline', 'Fresh coffee, faster')
+  var headline = TextNode('headline', 'Fresh coffee, faster')
     ..fontSize = 54
     ..weight = FontWeight.w700
     ..color = Colors.white;
 
-  var sub = TextNode('Subtitle', 'Order ahead. Skip the line. Earn rewards.')
+  var sub = TextNode('subtitle', 'Order ahead. Skip the line. Earn rewards.')
     ..fontSize = 20
     ..color = const Color(0xFFD8C9BD);
 
-  var ctaLabel = TextNode('CTA label', 'Get the app')
+  var ctaLabel = TextNode('ctaLabel', 'Get the app')
     ..fontSize = 17
     ..weight = FontWeight.w600
     ..color = Colors.white;
 
-  var cta = FrameNode('CTA', layout: NodeLayout.row)
+  var cta = FrameNode('cta', layout: NodeLayout.row)
     ..padding = 16
     ..fill = const Color(0xFFE8632B)
     ..cornerRadius = 28;
   cta.children.add(ctaLabel);
 
-  var copy = FrameNode('Copy', layout: NodeLayout.column)
+  var copy = FrameNode('copy', layout: NodeLayout.column)
     ..x = 64
     ..y = 120
     ..width = 500
@@ -294,17 +321,17 @@ SceneDocument coffeeBannerDraft() {
   copy.children.addAll([headline, sub, cta]);
 
   // External widgets — rendered as placeholders here, natively in the guest.
-  var badge = ExternalNode('Badge', 'DrinkBadge', args: {'size': 140.0})
+  var badge = ExternalNode('badge', 'DrinkBadge', args: {'size': 140.0})
     ..x = 560
     ..y = 290
     ..width = 140
     ..height = 140;
-  var spinner = ExternalNode('Loading', 'Spinner', args: {'size': 40.0})
+  var spinner = ExternalNode('loading', 'Spinner', args: {'size': 40.0})
     ..x = 950
     ..y = 430
     ..width = 40
     ..height = 40;
-  var order = ExternalNode('Order', 'OrderButton', args: {'label': 'Order now'})
+  var order = ExternalNode('order', 'OrderButton', args: {'label': 'Order now'})
     ..x = 830
     ..y = 400
     ..width = 150

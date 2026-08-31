@@ -7,12 +7,14 @@
 // booted by the same CatalogSession the previews and motion panels use.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import 'canvas_toy/main.dart';
 import 'canvas_toy/model.dart';
+import 'canvas_toy/scene_file.dart';
 import 'src/embedder/embedded_engine.dart';
 import 'src/embedder/guest_texture.dart';
 import 'src/previews/catalog_session.dart';
@@ -63,9 +65,11 @@ class SceneCanvasDevApp extends StatefulWidget {
 }
 
 class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
-  final doc = coffeeBannerDraft();
+  late final SceneDocument doc;
   final status = ValueNotifier('guest: booting…');
   late final CatalogSession session;
+  late final String _scenePath;
+  var _fileNote = '';
 
   var _inflight = false;
   var _dirty = false;
@@ -77,10 +81,13 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
   void initState() {
     super.initState();
     var worktree = p.normalize(p.join(widget.appRoot, '..'));
+    var projectRoot = p.join(worktree, 'examples', 'example');
+    _scenePath = p.join(projectRoot, 'demo', 'banner.scene.dart');
+    doc = _loadOrDraft();
     session = CatalogSession(
       appPackageRoot: widget.appRoot,
       flutterSdkRoot: widget.flutterSdkRoot,
-      projectRoot: p.join(worktree, 'examples', 'example'),
+      projectRoot: projectRoot,
       worktreeRoot: worktree,
       connectToDaemon: CompilerDaemonClient.connect,
     )..addListener(_onSession);
@@ -95,6 +102,47 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
         _push();
       }
     });
+  }
+
+  /// Load the persisted scene through the parse door, or fall back to the
+  /// hard-coded draft. Refusals are the collecting kind: all printed, and the
+  /// file yields no document.
+  SceneDocument _loadOrDraft() {
+    var file = File(_scenePath);
+    if (!file.existsSync()) {
+      _fileNote = 'no ${p.basename(_scenePath)} yet — using the draft';
+      return coffeeBannerDraft();
+    }
+    var parsed = parseSceneFile(file.readAsStringSync());
+    if (parsed.ok) {
+      _fileNote = 'loaded ${p.basename(_scenePath)} (${parsed.className})';
+      return parsed.doc!;
+    }
+    _fileNote =
+        '${p.basename(_scenePath)}: ${parsed.refusals.length} refusal(s) — '
+        'using the draft';
+    for (var refusal in parsed.refusals) {
+      print('scene refusal: $refusal');
+    }
+    return coffeeBannerDraft();
+  }
+
+  void _save() {
+    var emitted = emitSceneFile(doc, className: 'BannerScene');
+    // The door works both ways: never write a file the parser would refuse.
+    var check = parseSceneFile(emitted);
+    if (!check.ok) {
+      setState(() => _fileNote = 'not saved — emit refused its own output');
+      for (var refusal in check.refusals) {
+        print('scene refusal: $refusal');
+      }
+      return;
+    }
+    File(_scenePath).writeAsStringSync(emitted);
+    var nodes = doc.walk().length;
+    setState(
+      () => _fileNote = 'saved ${p.basename(_scenePath)} · $nodes nodes',
+    );
   }
 
   void _onSession() {
@@ -194,24 +242,55 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
         visualDensity: VisualDensity.compact,
       ),
       home: Scaffold(
-        body: AnimatedBuilder(
-          animation: doc,
-          builder: (context, _) => Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(width: 230, child: TreePanel(doc)),
-              const VerticalDivider(width: 1),
-              Expanded(
-                child: CanvasArea(
-                  doc,
-                  status: status,
-                  canvasContent: _guestCanvas(),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  FilledButton.tonal(
+                    onPressed: _save,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      minimumSize: const Size(0, 28),
+                    ),
+                    child: const Text('Save', style: TextStyle(fontSize: 12)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _fileNote,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: AnimatedBuilder(
+                animation: doc,
+                builder: (context, _) => Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(width: 230, child: TreePanel(doc)),
+                    const VerticalDivider(width: 1),
+                    Expanded(
+                      child: CanvasArea(
+                        doc,
+                        status: status,
+                        canvasContent: _guestCanvas(),
+                      ),
+                    ),
+                    const VerticalDivider(width: 1),
+                    SizedBox(width: 290, child: InspectorPanel(doc)),
+                  ],
                 ),
               ),
-              const VerticalDivider(width: 1),
-              SizedBox(width: 290, child: InspectorPanel(doc)),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

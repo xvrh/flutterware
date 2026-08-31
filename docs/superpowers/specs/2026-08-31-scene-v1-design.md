@@ -259,7 +259,12 @@ server-delivered scenes in v1).
    scene file is compiled against material. `SceneText`-style names, or no
    material import (which costs `Color`'s spelling). Must be settled before
    any real file ships; renames after are exactly the migration the format
-   avoids.
+   avoids. *Steered same day (see the motion-on-scene-ground addendum): the
+   collision was overstated — imports are not transitive and the tool owns
+   the file's `show` combinators, so short names stay in a single file. And
+   the name itself moved: a node's name is now its **field name**
+   (`late final headline = Text(…)`), so the string name left the grammar
+   entirely.*
 2. **The parameter grammar** — sketched in prose, unwritten in the parser.
    The one widening; write it next to the save/load wiring.
 3. **The note field** — comments' replacement; shape undecided.

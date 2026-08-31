@@ -5,23 +5,32 @@
 // THE GRAMMAR, on a page. A scene file is:
 //   - a `//@flutterware:scene=…` marker in its first line
 //   - file-level comments and imports (before the class body; not parsed)
-//   - exactly one class declaration, holding exactly one field:
-//     `final root = Frame(…);`
-//   - a node is a constructor invocation: Frame, Text, Shape or Ext, with a
-//     positional name (Text and Ext take one more positional), and named
-//     arguments from that node's fixed vocabulary
+//   - exactly one class declaration, whose members are all node fields:
+//     `late final <name> = <Node>(…);` — THE FIELD NAME IS THE NODE'S
+//     IDENTITY (unique by Dart's own rules, typed at every reference), and
+//     one field must be `root`, a Frame
+//   - a node is a constructor invocation: Frame, Text, Shape or Ext, with
+//     named arguments from that node's fixed vocabulary; Text takes its
+//     content as one positional string, Ext takes its registration entry as
+//     one positional identifier
+//   - `children: [ … ]` lists nodes BY FIELD NAME — every node is declared
+//     as its own field and placed exactly once (forward references are fine;
+//     `late` is what makes sibling references legal Dart)
 //   - values are: int/double literals (optionally negated), single string
 //     literals with no interpolation, bool literals, `Color(0x…)`,
-//     allowlisted enum references, `children: [ … ]` of nodes, and
-//     `args: {'k': literal}` maps
+//     allowlisted enum references, and `args: {'k': literal}` maps
 //   - nothing else: no comments inside the class body, no loops, no
 //     conditionals, no method calls, no arithmetic, no identifiers off the
-//     allowlist. Refused with a line number, never dropped — parse-drop plus
-//     emit-regenerate is a shredder (measured on the deleted drawing plugin).
+//     allowlist, no inline nodes in children, no orphan fields (an
+//     undeclared drop on the next save is the shredder this grammar exists
+//     to prevent). Refused with a line number, never dropped.
 //
 // Invariants the tests hold:
 //   - parse(emit(model)) succeeds and re-emits identically (model identity)
 //   - emit ∘ parse is the identity on canonical files
+//   - accepted non-canonical spellings (`final` for `late final`, forward
+//     references, `1024.0`, lowercase hex, a quoted Ext entry) converge to
+//     canonical in one emit
 //   - every hostile construct is refused with an offset and a name, and
 //     nothing ever throws.
 import 'package:analyzer/dart/analysis/utilities.dart';
@@ -32,7 +41,7 @@ import 'package:flutter/material.dart';
 
 import 'model.dart';
 
-const sceneFileMarker = '//@flutterware:scene=0.1';
+const sceneFileMarker = '//@flutterware:scene=0.2';
 
 /// One refused construct: where it is and what to do instead.
 class SceneRefusal {
@@ -74,85 +83,101 @@ final _formatter = DartFormatter(
 );
 
 String emitSceneFile(SceneDocument doc, {String className = 'SceneFile'}) {
+  if (doc.root.name != 'root') {
+    throw ArgumentError(
+      'the root node is the `root` field, so its name '
+      'must be "root" — got "${doc.root.name}"',
+    );
+  }
   var out = StringBuffer('''
 $sceneFileMarker
 // Owned by the flutterware scene editor, which reads and writes this whole
-// file. Hand edits are welcome inside the grammar; anything outside it is
-// refused with a line number rather than silently dropped.
-
-import 'package:flutter/material.dart';
+// file. Hand edits are welcome inside the grammar: every node is a
+// `late final` field (the field name is the node's identity), placed exactly
+// once in a children list. Anything outside the grammar is refused with a
+// line number rather than silently dropped.
 
 class $className {
-  final root = ''');
-  _emitNode(out, doc.root);
-  out.writeln(';');
+''');
+  var seen = <String>{};
+  void field(SceneNode n) {
+    for (var c in n.children) {
+      field(c);
+    }
+    if (!isValidNodeName(n.name) || !seen.add(n.name)) {
+      throw ArgumentError(
+        '"${n.name}" is not a usable node name — names are '
+        'field names: valid Dart identifiers, unique in the scene',
+      );
+    }
+    out.write('  late final ${n.name} = ');
+    _emitNode(out, n);
+    out.writeln(';');
+  }
+
+  field(doc.root);
   out.writeln('}');
   return _formatter.format(out.toString());
 }
 
 void _emitNode(StringBuffer out, SceneNode n) {
+  var props = <String>[];
+  void common() {
+    if (n.x != 0) props.add('x: ${_num(n.x)}');
+    if (n.y != 0) props.add('y: ${_num(n.y)}');
+    if (n.width case var w?) props.add('width: ${_num(w)}');
+    if (n.height case var h?) props.add('height: ${_num(h)}');
+    if (n.fill case var f?) props.add('fill: ${_color(f)}');
+    if (n.cornerRadius != 0) props.add('corner: ${_num(n.cornerRadius)}');
+    if (n.opacity != 1) props.add('opacity: ${_num(n.opacity)}');
+  }
+
   switch (n) {
     case FrameNode f:
-      out.write('Frame(${_str(f.name)}');
-      _common(out, f);
+      common();
       if (f.layout != NodeLayout.absolute) {
-        out.write(', layout: NodeLayout.${f.layout.name}');
+        props.add('layout: NodeLayout.${f.layout.name}');
       }
-      if (f.gap != 8) out.write(', gap: ${_num(f.gap)}');
-      if (f.padding != 0) out.write(', padding: ${_num(f.padding)}');
+      if (f.gap != 8) props.add('gap: ${_num(f.gap)}');
+      if (f.padding != 0) props.add('padding: ${_num(f.padding)}');
       if (f.mainAlign != MainAxisAlignment.start) {
-        out.write(', mainAlign: MainAxisAlignment.${f.mainAlign.name}');
+        props.add('mainAlign: MainAxisAlignment.${f.mainAlign.name}');
       }
       if (f.crossAlign != CrossAxisAlignment.center) {
-        out.write(', crossAlign: CrossAxisAlignment.${f.crossAlign.name}');
+        props.add('crossAlign: CrossAxisAlignment.${f.crossAlign.name}');
       }
       if (f.children.isNotEmpty) {
-        out.write(', children: [');
-        for (var c in f.children) {
-          _emitNode(out, c);
-          out.write(', ');
-        }
-        out.write(']');
+        props.add('children: [${f.children.map((c) => c.name).join(', ')}]');
       }
-      out.write(')');
+      out.write('Frame(${props.join(', ')})');
     case TextNode t:
-      out.write('Text(${_str(t.name)}, ${_str(t.text)}');
-      _common(out, t);
-      if (t.fontSize != 16) out.write(', fontSize: ${_num(t.fontSize)}');
+      props.add(_str(t.text));
+      common();
+      if (t.fontSize != 16) props.add('fontSize: ${_num(t.fontSize)}');
       if (t.weight != FontWeight.w400) {
-        out.write(', weight: FontWeight.w${t.weight.value}');
+        props.add('weight: FontWeight.w${t.weight.value}');
       }
       if (t.color != const Color(0xFF1A1A1A)) {
-        out.write(', color: ${_color(t.color)}');
+        props.add('color: ${_color(t.color)}');
       }
-      out.write(')');
+      out.write('Text(${props.join(', ')})');
     case ShapeNode s:
-      out.write('Shape(${_str(s.name)}');
-      _common(out, s);
-      if (s.circle) out.write(', circle: true');
-      out.write(')');
+      common();
+      if (s.circle) props.add('circle: true');
+      out.write('Shape(${props.join(', ')})');
     case ExternalNode e:
-      out.write('Ext(${_str(e.name)}, ${_str(e.entry)}');
-      _common(out, e);
-      if (e.args.isNotEmpty) {
-        out.write(', args: {');
-        for (var entry in e.args.entries) {
-          out.write('${_str(entry.key)}: ${_argValue(entry.value)}, ');
-        }
-        out.write('}');
+      if (!isValidNodeName(e.entry)) {
+        throw ArgumentError('"${e.entry}" is not a registration entry name');
       }
-      out.write(')');
+      props.add(e.entry);
+      common();
+      if (e.args.isNotEmpty) {
+        props.add(
+          'args: {${[for (var entry in e.args.entries) '${_str(entry.key)}: ${_argValue(entry.value)}'].join(', ')}}',
+        );
+      }
+      out.write('Ext(${props.join(', ')})');
   }
-}
-
-void _common(StringBuffer out, SceneNode n) {
-  if (n.x != 0) out.write(', x: ${_num(n.x)}');
-  if (n.y != 0) out.write(', y: ${_num(n.y)}');
-  if (n.width case var w?) out.write(', width: ${_num(w)}');
-  if (n.height case var h?) out.write(', height: ${_num(h)}');
-  if (n.fill case var f?) out.write(', fill: ${_color(f)}');
-  if (n.cornerRadius != 0) out.write(', corner: ${_num(n.cornerRadius)}');
-  if (n.opacity != 1) out.write(', opacity: ${_num(n.opacity)}');
 }
 
 /// Canonical number spelling: an integral double is an int literal, anything
@@ -210,7 +235,6 @@ class _Parser {
 
   final String source;
   final refusals = <SceneRefusal>[];
-  final _names = <String>{};
   String? className;
   late final _lines = source.split('\n');
 
@@ -266,34 +290,126 @@ class _Parser {
     className = found.namePart.typeName.lexeme;
     _refuseComments(found);
 
-    FrameNode? root;
+    // Phase 1: every member is a node field. The field name is the node's
+    // identity; children lists are collected as references and linked after
+    // every declaration is known, which is what makes forward references
+    // (ordinary under `late final`) free.
+    var nodes = <String, SceneNode>{};
+    var declared = <String, int>{};
+    var childRefs = <String, List<(String, int)>>{};
     for (var member in found.body.members) {
-      if (member is FieldDeclaration &&
-          member.fields.variables.length == 1 &&
-          member.fields.variables.single.name.lexeme == 'root') {
-        var initializer = member.fields.variables.single.initializer;
-        if (initializer == null) {
-          refuse(member.offset, 'no initializer', '`root` must be a Frame(…)');
-          continue;
-        }
-        var node = _node(initializer);
-        if (node is FrameNode) {
-          root = node;
-        } else if (node != null) {
-          refuse(initializer.offset, 'root kind', '`root` must be a Frame(…)');
-        }
-      } else {
+      if (member is! FieldDeclaration || member.fields.variables.length != 1) {
         refuse(
           member.offset,
           'member',
-          'the scene class holds exactly one field, `root`',
+          'the scene class holds only node fields — '
+              '`late final <name> = <Node>(…);`',
+        );
+        continue;
+      }
+      var variable = member.fields.variables.single;
+      var name = variable.name.lexeme;
+      var initializer = variable.initializer;
+      if (initializer == null) {
+        refuse(
+          member.offset,
+          'no initializer',
+          '`$name` must be initialized with a node',
+        );
+        continue;
+      }
+      if (declared.containsKey(name)) {
+        refuse(
+          variable.offset,
+          'duplicate name',
+          '"$name" is already declared — a field name is the node\'s '
+              'identity and must be unique',
+        );
+        continue;
+      }
+      declared[name] = variable.offset;
+      var node = _node(name, initializer, childRefs);
+      if (node != null) nodes[name] = node;
+    }
+
+    var root = nodes['root'];
+    if (root == null) {
+      if (refusals.isEmpty) {
+        refuse(
+          found.offset,
+          'no root',
+          'the scene class declares `late final root = Frame(…)`',
+        );
+      }
+      return null;
+    }
+    if (root is! FrameNode) {
+      refuse(declared['root']!, 'root kind', '`root` must be a Frame(…)');
+      return null;
+    }
+
+    // Phase 2: link. Every reference resolves, every node has one parent,
+    // and everything hangs off root — a placed-but-unreachable node (a
+    // cycle, or a child of an orphan) would be silently dropped by the next
+    // save, which is exactly the shredder this parser exists to refuse.
+    var placed = <String>{};
+    for (var entry in childRefs.entries) {
+      var frame = nodes[entry.key];
+      for (var (ref, offset) in entry.value) {
+        if (ref == 'root') {
+          refuse(
+            offset,
+            'root as child',
+            '`root` is the tree — it cannot be placed inside itself',
+          );
+          continue;
+        }
+        var child = nodes[ref];
+        if (child == null) {
+          refuse(
+            offset,
+            'unknown reference',
+            '"$ref" is not a node declared in this scene',
+          );
+          continue;
+        }
+        if (!placed.add(ref)) {
+          refuse(
+            offset,
+            'placed twice',
+            '"$ref" is already placed — a node has exactly one parent',
+          );
+          continue;
+        }
+        if (frame is FrameNode) frame.children.add(child);
+      }
+    }
+    var reachable = <SceneNode>{};
+    void reach(SceneNode n) {
+      if (!reachable.add(n)) return;
+      n.children.forEach(reach);
+    }
+
+    reach(root);
+    for (var entry in nodes.entries) {
+      if (entry.key == 'root') continue;
+      if (!placed.contains(entry.key)) {
+        refuse(
+          declared[entry.key]!,
+          'orphan node',
+          '"${entry.key}" is declared but never placed in a children list — '
+              'the next save would silently drop it',
+        );
+      } else if (!reachable.contains(entry.value)) {
+        refuse(
+          declared[entry.key]!,
+          'unreachable node',
+          '"${entry.key}" is placed, but its parent chain never reaches '
+              '`root` — the next save would silently drop it',
         );
       }
     }
-    if (root == null && refusals.isEmpty) {
-      refuse(found.offset, 'no root', 'the scene class declares `final root`');
-    }
-    return root == null ? null : SceneDocument(root);
+    return SceneDocument(root);
   }
 
   /// No comment survives an emit, so none may enter: a comment inside the
@@ -326,9 +442,13 @@ class _Parser {
     }
   }
 
-  SceneNode? _node(Expression expr) {
-    var (name, args) = _invocation(expr) ?? (null, null);
-    if (name == null || args == null) {
+  SceneNode? _node(
+    String name,
+    Expression expr,
+    Map<String, List<(String, int)>> childRefs,
+  ) {
+    var (kind, args) = _invocation(expr) ?? (null, null);
+    if (kind == null || args == null) {
       refuse(
         expr.offset,
         'expression',
@@ -345,9 +465,9 @@ class _Parser {
         positional.add(arg.argumentExpression);
       }
     }
-    switch (name) {
+    switch (kind) {
       case 'Frame':
-        var node = FrameNode(_positionalString(positional, 0, args) ?? '');
+        var node = FrameNode(name);
         _applyCommon(node, named);
         _take(named, 'layout', (e) {
           var v = _enum(e, 'NodeLayout', NodeLayout.values.map((v) => v.name));
@@ -378,27 +498,40 @@ class _Parser {
             refuse(e.offset, 'children', 'children takes a list literal');
             return;
           }
+          var refs = childRefs.putIfAbsent(name, () => []);
           for (var element in e.elements) {
-            if (element is! Expression) {
-              refuse(
-                element.offset,
-                _elementKind(element),
-                'a scene lists its children one by one — the editor cannot '
-                'read a computed list',
-              );
-              continue;
+            switch (element) {
+              case SimpleIdentifier id:
+                refs.add((id.name, id.offset));
+              case Expression x when _invocation(x) != null:
+                refuse(
+                  element.offset,
+                  'inline node',
+                  'a node is declared as its own field and placed here by '
+                      'name — `children: [headline]`, with '
+                      '`late final headline = …` beside it',
+                );
+              case Expression x:
+                refuse(
+                  x.offset,
+                  _kind(x),
+                  'children lists nodes by their field names',
+                );
+              default:
+                refuse(
+                  element.offset,
+                  _elementKind(element),
+                  'a scene lists its children one by one — the editor cannot '
+                  'read a computed list',
+                );
             }
-            var child = _node(element);
-            if (child != null) node.children.add(child);
           }
         });
         _refuseRest('Frame', named);
-        return _named(node, positional, args);
+        _checkPositionals(positional, 0);
+        return node;
       case 'Text':
-        var node = TextNode(
-          _positionalString(positional, 0, args) ?? '',
-          _positionalString(positional, 1, args) ?? '',
-        );
+        var node = TextNode(name, _positionalString(positional, 0, args) ?? '');
         _applyCommon(node, named);
         _take(
           named,
@@ -416,18 +549,17 @@ class _Parser {
         });
         _take(named, 'color', (e) => node.color = _colorOf(e) ?? node.color);
         _refuseRest('Text', named);
-        return _named(node, positional, args, positionalCount: 2);
+        _checkPositionals(positional, 1);
+        return node;
       case 'Shape':
-        var node = ShapeNode(_positionalString(positional, 0, args) ?? '');
+        var node = ShapeNode(name);
         _applyCommon(node, named);
         _take(named, 'circle', (e) => node.circle = _bool(e) ?? false);
         _refuseRest('Shape', named);
-        return _named(node, positional, args);
+        _checkPositionals(positional, 0);
+        return node;
       case 'Ext':
-        var node = ExternalNode(
-          _positionalString(positional, 0, args) ?? '',
-          _positionalString(positional, 1, args) ?? '',
-        );
+        var node = ExternalNode(name, _entryName(positional, args) ?? '');
         _applyCommon(node, named);
         _take(named, 'args', (e) {
           if (e is! SetOrMapLiteral) {
@@ -449,41 +581,26 @@ class _Parser {
           }
         });
         _refuseRest('Ext', named);
-        return _named(node, positional, args, positionalCount: 2);
+        _checkPositionals(positional, 1);
+        return node;
       default:
         refuse(
           expr.offset,
           'unknown node',
-          '"$name" is not a scene node — Frame, Text, Shape or Ext',
+          '"$kind" is not a scene node — Frame, Text, Shape or Ext',
         );
         return null;
     }
   }
 
-  /// Registers the node's name (identity must be unique) and refuses excess
-  /// positional arguments.
-  SceneNode _named(
-    SceneNode node,
-    List<Expression> positional,
-    ArgumentList args, {
-    int positionalCount = 1,
-  }) {
-    if (positional.length > positionalCount) {
+  void _checkPositionals(List<Expression> positional, int count) {
+    if (positional.length > count) {
       refuse(
-        positional[positionalCount].offset,
+        positional[count].offset,
         'positional argument',
-        'this node takes $positionalCount positional argument(s)',
+        'this node takes $count positional argument(s)',
       );
     }
-    if (node.name.isNotEmpty && !_names.add(node.name)) {
-      refuse(
-        args.offset,
-        'duplicate name',
-        '"${node.name}" is already the name of another node — a name is '
-            "the node's identity and must be unique",
-      );
-    }
-    return node;
   }
 
   void _applyCommon(SceneNode n, Map<String, Expression> named) {
@@ -521,10 +638,37 @@ class _Parser {
     ArgumentList args,
   ) {
     if (i >= positional.length) {
-      refuse(args.offset, 'missing argument', 'a name string is required here');
+      refuse(
+        args.offset,
+        'missing argument',
+        'a string literal is required here',
+      );
       return null;
     }
     return _string(positional[i]);
+  }
+
+  /// An Ext's entry is spelled as an identifier — `Ext(DrinkBadge)` — the
+  /// typed reference to a registration. A quoted spelling is accepted and
+  /// converges to the identifier on the next emit.
+  String? _entryName(List<Expression> positional, ArgumentList args) {
+    if (positional.isEmpty) {
+      refuse(
+        args.offset,
+        'missing argument',
+        'an Ext names its registration entry — Ext(DrinkBadge, …)',
+      );
+      return null;
+    }
+    var e = positional[0];
+    if (e is SimpleIdentifier) return e.name;
+    if (e is SimpleStringLiteral && isValidNodeName(e.value)) return e.value;
+    refuse(
+      e.offset,
+      _kind(e),
+      'expected a registration entry name, spelled as an identifier',
+    );
+    return null;
   }
 
   // -- value parsers, each refusing with the construct it actually found --

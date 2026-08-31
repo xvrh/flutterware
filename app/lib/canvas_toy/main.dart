@@ -72,11 +72,14 @@ class TreePanel extends StatelessWidget {
             spacing: 4,
             runSpacing: 4,
             children: [
-              _AddButton('Text', () => _add(TextNode('Text', 'Text'))),
+              _AddButton(
+                'Text',
+                () => _add(TextNode(doc.uniqueName('text'), 'Text')),
+              ),
               _AddButton(
                 'Shape',
                 () => _add(
-                  ShapeNode('Shape')
+                  ShapeNode(doc.uniqueName('shape'))
                     ..width = 80
                     ..height = 80
                     ..fill = const Color(0xFF888888),
@@ -85,7 +88,7 @@ class TreePanel extends StatelessWidget {
               _AddButton(
                 'Frame',
                 () => _add(
-                  FrameNode('Frame')
+                  FrameNode(doc.uniqueName('frame'))
                     ..width = 200
                     ..height = 120,
                 ),
@@ -160,8 +163,8 @@ class TreePanel extends StatelessWidget {
   /// Scale probe: each press adds a frame of 100 nodes (dots and tiny
   /// texts), so payload, sweep and both renderers grow together.
   void _stress() {
-    var k = doc.root.children.where((n) => n.name.startsWith('Stress')).length;
-    var frame = FrameNode('Stress$k')
+    var k = doc.root.children.where((n) => n.name.startsWith('stress')).length;
+    var frame = FrameNode('stress$k')
       ..x = 20
       ..y = 20.0 + 56 * k
       ..width = 984
@@ -170,12 +173,12 @@ class TreePanel extends StatelessWidget {
       var col = i % 25;
       var row = i ~/ 25;
       var node = i.isEven
-          ? (ShapeNode('s$k-$i', circle: true)
+          ? (ShapeNode('s${k}x$i', circle: true)
                   ..width = 8
                   ..height = 8
                   ..fill = Color.fromARGB(255, 90 + i, 130, 220 - i))
                 as SceneNode
-          : (TextNode('t$k-$i', '$i')
+          : (TextNode('t${k}x$i', '$i')
               ..fontSize = 9
               ..color = const Color(0xB3FFFFFF));
       node

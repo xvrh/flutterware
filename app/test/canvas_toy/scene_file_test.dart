@@ -17,6 +17,18 @@ void main() {
     expect(again, emitted);
   });
 
+  test('every node is a late final field, root last', () {
+    var emitted = emitSceneFile(coffeeBannerDraft());
+    expect(emitted, contains('late final headline = Text('));
+    expect(emitted, contains('late final badge = Ext('));
+    expect(emitted, contains('DrinkBadge,'));
+    expect(emitted, contains('children: [headline, subtitle, cta]'));
+    // Canonical order: a field is declared before the field that places it.
+    var root = emitted.indexOf('late final root');
+    expect(root, greaterThan(emitted.indexOf('late final headline')));
+    expect(root, greaterThan(emitted.indexOf('late final copy')));
+  });
+
   test('emit ∘ parse is the identity on canonical files', () {
     var canonical = emitSceneFile(coffeeBannerDraft());
     var once = emitSceneFile(parseSceneFile(canonical).doc!);
@@ -24,22 +36,32 @@ void main() {
   });
 
   test('accepted non-canonical spellings converge in one emit', () {
-    // 64.0 for 64, double quotes, lowercase hex: accepted, then canonical.
+    // `final` for `late final`, root first (forward references), 1024.0 for
+    // 1024, lowercase hex, double quotes, a quoted Ext entry: accepted, then
+    // canonical.
     var parsed = parseSceneFile('''
 $sceneFileMarker
 class S {
   final root = Frame(
-    "Banner",
     width: 1024.0,
     height: 500,
     fill: Color(0xff2b1b12),
+    children: [badge, caption],
   );
+  final badge = Ext('DrinkBadge');
+  final caption = Text("Banner");
 }
 ''');
     expect(parsed.refusals, isEmpty);
     var emitted = emitSceneFile(parsed.doc!, className: 'S');
     expect(emitted, contains('width: 1024,'));
     expect(emitted, contains('Color(0xFF2B1B12)'));
+    expect(emitted, contains('late final badge = Ext(DrinkBadge)'));
+    expect(emitted, contains("Text('Banner')"));
+    expect(
+      emitted.indexOf('late final badge'),
+      lessThan(emitted.indexOf('late final root')),
+    );
     var again = emitSceneFile(parseSceneFile(emitted).doc!, className: 'S');
     expect(again, emitted);
   });
@@ -63,9 +85,13 @@ class S {
   });
 
   group('hostile hand edits are refused with a name and a line', () {
-    void refuses(String description, String body, {required String construct}) {
+    void refuses(
+      String description,
+      String members, {
+      required String construct,
+    }) {
       test(description, () {
-        var source = '$sceneFileMarker\nclass S {\n  final root = $body;\n}\n';
+        var source = '$sceneFileMarker\nclass S {\n  $members\n}\n';
         late SceneParse parsed;
         expect(() => parsed = parseSceneFile(source), returnsNormally);
         expect(parsed.ok, isFalse, reason: 'accepted:\n$source');
@@ -83,54 +109,110 @@ class S {
 
     refuses(
       'a for element in children',
-      "Frame('a', children: [for (var i = 0; i < 3; i++) Text('t', 'x')])",
+      "late final t = Text('x');\n"
+          '  late final root = '
+          'Frame(children: [for (var i = 0; i < 3; i++) t]);',
       construct: 'for element',
     );
     refuses(
       'string interpolation',
-      r"Frame('a', children: [Text('t', 'hello $name')])",
+      "late final t = Text('hello \$name');\n"
+          '  late final root = Frame(children: [t]);',
       construct: 'interpolation',
     );
     refuses(
       'a method call as a value',
-      "Frame('a', padding: computePadding())",
+      'late final root = Frame(padding: computePadding());',
       construct: 'method call',
     );
     refuses(
       'a conditional',
-      "Frame('a', opacity: dark ? 1 : 0.5)",
+      'late final root = Frame(opacity: dark ? 1 : 0.5);',
       construct: 'conditional',
     );
     refuses(
       'an identifier off the allowlist',
-      "Frame('a', fill: brandColor)",
+      'late final root = Frame(fill: brandColor);',
       construct: 'identifier',
     );
     refuses(
       'a Colors.* alias',
-      "Frame('a', fill: Colors.white)",
+      'late final root = Frame(fill: Colors.white);',
       construct: 'identifier',
     );
-    refuses('arithmetic', "Frame('a', x: 2 + 3)", construct: 'arithmetic');
+    refuses(
+      'arithmetic',
+      'late final root = Frame(x: 2 + 3);',
+      construct: 'arithmetic',
+    );
     refuses(
       'an unknown property',
-      "Frame('a', flavor: 1)",
+      'late final root = Frame(flavor: 1);',
       construct: 'unknown property',
     );
     refuses(
       'an unknown node type',
-      "Frame('a', children: [Sparkle('s')])",
+      'late final s = Sparkle();\n'
+          '  late final root = Frame(children: [s]);',
       construct: 'unknown node',
     );
     refuses(
-      'a duplicate node name',
-      "Frame('a', children: [Shape('b'), Shape('b')])",
+      'a duplicate field name',
+      'late final a = Shape();\n'
+          '  late final a = Shape();\n'
+          '  late final root = Frame(children: [a]);',
       construct: 'duplicate name',
     );
     refuses(
       'adjacent strings',
-      "Frame('a', children: [Text('t', 'one' ' two')])",
+      "late final t = Text('one' ' two');\n"
+          '  late final root = Frame(children: [t]);',
       construct: 'adjacent strings',
+    );
+    refuses(
+      'an inline node in children',
+      "late final root = Frame(children: [Text('x')]);",
+      construct: 'inline node',
+    );
+    refuses(
+      'a reference to an undeclared node',
+      'late final root = Frame(children: [ghost]);',
+      construct: 'unknown reference',
+    );
+    refuses(
+      'a node placed twice',
+      'late final a = Shape();\n'
+          '  late final root = Frame(children: [a, a]);',
+      construct: 'placed twice',
+    );
+    refuses(
+      'an orphan field',
+      'late final a = Shape();\n'
+          '  late final root = Frame();',
+      construct: 'orphan node',
+    );
+    refuses(
+      'root placed as a child',
+      'late final root = Frame(children: [root]);',
+      construct: 'root as child',
+    );
+    refuses(
+      'a cycle off the root',
+      'late final a = Frame(children: [b]);\n'
+          '  late final b = Frame(children: [a]);\n'
+          '  late final root = Frame();',
+      construct: 'unreachable node',
+    );
+    refuses(
+      "the old grammar's positional name",
+      "late final root = Frame('banner');",
+      construct: 'positional argument',
+    );
+    refuses(
+      'a method member on the class',
+      'late final root = Frame();\n'
+          '  int f() => 1;',
+      construct: 'member',
     );
 
     test('a comment inside the scene', () {
@@ -138,27 +220,15 @@ class S {
 $sceneFileMarker
 class S {
   // tuned by hand, do not touch
-  final root = Frame('a');
+  late final root = Frame();
 }
 ''');
       expect(parsed.ok, isFalse);
       expect(parsed.refusals.map((r) => r.construct), contains('comment'));
     });
 
-    test('a second member on the class', () {
-      var parsed = parseSceneFile('''
-$sceneFileMarker
-class S {
-  final root = Frame('a');
-  final extra = 1;
-}
-''');
-      expect(parsed.ok, isFalse);
-      expect(parsed.refusals.map((r) => r.construct), contains('member'));
-    });
-
     test('a missing marker', () {
-      var parsed = parseSceneFile("class S { final root = Frame('a'); }");
+      var parsed = parseSceneFile('class S { late final root = Frame(); }');
       expect(parsed.ok, isFalse);
       expect(
         parsed.refusals.map((r) => r.construct),
@@ -170,11 +240,10 @@ class S {
       var parsed = parseSceneFile('''
 $sceneFileMarker
 class S {
-  final root = Frame(
-    'a',
+  late final root = Frame(
     x: 2 + 3,
     fill: brandColor,
-    children: [Sparkle('s')],
+    children: [ghost],
   );
 }
 ''');

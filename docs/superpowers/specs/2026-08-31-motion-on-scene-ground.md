@@ -245,6 +245,52 @@ document was written before it.
    already adopted.
 6. **The consumer call-site count** before the clean break.
 
+## Addendum — the owner's review, same day
+
+Four things moved when this document met the owner:
+
+- **The headline is signed.** Direction B is dissolved entirely — no escape
+  hatch, no transitional binding API. The clean break stands.
+- **Name targets are rejected; the answer is better.** *"We always prefer a
+  full strongly typed story and never magic strings"* — and chasing that led
+  somewhere that answers naming and addressing in one move: **nodes are
+  fields, and the field name is the identity.**
+  `late final headline = Text('…')`; `children: [headline, badge]`; the
+  motion is constructed over the scene instance and references
+  `scene.headline`, typed, compile-checked even outside the tool. The
+  string name disappears from the grammar entirely; uniqueness is Dart's own
+  duplicate-field rule plus the parse door. `late` is load-bearing — a plain
+  `final` field cannot reference a sibling field, a late one can — and the
+  parameter story needs the identical widening, so one grammar item pays for
+  both. Built the same day: the round-trip engine and the composited editor
+  now speak this grammar (save/load wired, refusals collected, hostile edits
+  verified live).
+- **A standing requirement, recorded early:** the argument system and
+  nesting must support heavy runtime copy/clone-and-tweak of a scene *and
+  its motion*. The fields direction makes the pair cheap — `late final`
+  node fields are per-instance, so a motion constructed over a cloned scene
+  attaches to the clone's nodes through ordinary references, no registry.
+  Precise use cases will come with real consumers; the parameter sketches
+  must be tested against this.
+- **The parameter seam stays open, deliberately** — the owner expects the
+  experiments to reach for something more powerful than either shape listed
+  above. Sketch rounds (motion v2's api-sketches format) before any grammar.
+
+And two findings from the build:
+
+- **Node-name collisions were overstated.** Dart imports are not transitive,
+  so a consumer importing a scene file sees only the scene class; inside the
+  file the tool owns the imports and a generated `show` combinator keeps
+  Flutter's `Text` out of scope. Only `Text` (and a future `Image`) collide
+  with anything at all. Single file, short names, no prefix — pending the
+  owner's final word.
+- **`fw scene check` needs a pure-core model.** `FwCli` is pure Dart by
+  guarded test, and the spike's model is Flutter-typed (`Color`,
+  `FontWeight`, `GlobalKey`). The CLI door therefore requires splitting the
+  scene model into a flutter-free core — the right shape for the real
+  implementation anyway (the headless twin wants it too), and the graduation
+  step at which the parser leaves `canvas_toy/`.
+
 ## What this unblocks
 
 - **Scene v1's step 1 (save/load + `fw scene check`) is untouched** — wire it
