@@ -1,4 +1,4 @@
-# Scene runtime — drive, notify, and the slot: sketches 8–14
+# Scene runtime — drive, notify, and the slot: sketches 8–15
 
 **Date:** 2026-08-31
 **Status:** round two of the parameter sketches, opened by three owner
@@ -501,6 +501,64 @@ Net: no impact on the model of motion, one rule for export (snapshot at
 resolve), one reporting duty for the applicator (unmounted targets), and
 one detail for animated params. The framework was designed against a
 changing ground before the ground was declared mutable.
+
+## Sketch 15 — direct-mutation animation, weighed against the fx plane
+
+The owner's proposal to weigh: modify the animation framework so a
+separate animator object tweens each property *directly in the tree* —
+`scene.glow.opacity = lerp(a, b, t)` per tick — instead of writing the
+`fx` plane. GSAP is the existence proof that this model works at scale
+against a mutable DOM, so it deserves a real weighing, not a reflex.
+
+First, the sharpest way to see the choice: **a seekable animator is forced
+to keep `evaluate(t)` internally anyway** (seek = set every property to
+its value at `t`, which requires values as a function of `t`). So both
+approaches contain the same pure core; the entire difference is **where
+the output lands** — the authored slot, or the `fx` slot composed over it.
+
+| | **direct mutation** | **fx plane** |
+|---|---|---|
+| mental model | one plane — simplest possible | two planes to learn |
+| coupling | zero: the animator is just another writer on the public API | the renderer must compose `base op fx` |
+| third-party / user animators | work out of the box (auto-notify makes any `AnimationController` a scene animator today) | must target `fx` to compose |
+| reading a property mid-animation | the tree is the visual truth | base; needs a `rendered.` getter for the composed value |
+| two animations on one property | last-writer-wins / undefined — GSAP grew additive animation late and painfully | the derived operator table, already decided |
+| app mutates the base mid-animation | a race on one slot; the mutation is lost under the next tick and on restore | composes next frame, by construction |
+| cancel / finish | restore bookkeeping against a possibly-stale captured base | drop the fx; the base was never touched |
+| editor scrub + Save | scrubbing dirties the document — Save after scrub writes frame state (the shredder class) unless masked | safe by construction |
+| golden frames, filmstrip, parallel video render | need restore discipline at every consumer | pure, seekable, parallel — unchanged from v1 |
+| the writer-stack panel ("3 writers → caption wins") | erased — contributions are destroyed on write | native — contributions exist separately |
+| precedent | GSAP | AE, Rive, game engines' additive layers (invented *because* direct writes could not compose), and Flutter itself — animations contribute at build; implicit animations lerp *toward* authored values, never overwrite them |
+
+**The weighing:** direct mutation buys one real thing — the simplest
+possible mental model and zero framework coupling — and pays for it at
+every place two writers meet: composition, mid-animation base changes,
+restore, editor scrub, the writer stack. The game industry ran this
+experiment at scale and invented additive layers to escape it; GSAP's own
+additive mode is its most notorious late addition. And half of direct
+mutation's simplicity is recoverable on the fx side for free: a
+`node.rendered.opacity` getter gives "the tree is the truth" reads without
+giving up the base.
+
+**The both/and that falls out:** the two models are not actually rivals,
+because they serve different layers —
+
+- **The Motion system** (files, timeline, machines, scrub, export) keeps
+  `evaluate(t)` + `fx`. Everything it owes the editor and the export
+  matrix — seek, Save-safety, composition, the writer stack — lives on the
+  preserved base.
+- **Direct-mutation tweening is user-space sugar, and it is already
+  free.** Auto-notify makes any `AnimationController` listener a working
+  scene animator with no framework at all (sketch 8a). A tiny optional
+  helper (`tween(scene.glow, opacity: to(1), 300.ms)`) can ship for the
+  GSAP-minded, documented with its honest caveats: it does not compose,
+  it races other writers on the same slot, and the editor must never
+  scrub through it.
+
+The question's real gift is a modularity fact worth recording: **the
+mutable tree makes the animation framework optional.** Third-party
+animation libraries need nothing from Motion to animate a scene — which
+is the correct relationship between a model and the systems above it.
 
 ## Round-2 scoreboard
 
