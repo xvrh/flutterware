@@ -109,11 +109,14 @@ class ComparedItem {
   /// The cheap question, kept apart from [deltas] because a list draws it on
   /// every row of every frame and [deltas] allocates. Nothing here builds a
   /// delta: it asks each channel whether it changed and takes its name.
+  /// Events answer with [EventChannel.significant] — a row chip saying
+  /// `events` over pure `system` chatter is the list restating the noise the
+  /// verdict just learned to ignore.
   List<String> get channelsFired => [
     if (pixels?.changed ?? false) 'pixels',
     if (tree?.changed ?? false) 'tree',
     if (texts?.changed ?? false) 'texts',
-    if (events?.changed ?? false) 'events',
+    if (events?.significant ?? false) 'events',
   ];
 
   /// Every difference this item found, on every channel, as one flat list.
@@ -222,11 +225,16 @@ class ComparedItem {
     var eventChannel = EventChannel.of(base: baseEvents, head: headEvents);
     var treeChannel = tree == null ? null : TreeChannel(tree);
     var pixelChannel = pixels == null ? null : PixelChannel(pixels);
+    // Events weigh in through [EventChannel.significant]: `system` chatter is
+    // compared and carried, but a step it is the whole of stays `same`. The
+    // channel is still stored below whenever it holds anything, which is what
+    // keeps the door open — the deltas ride `index.json`, they just do not
+    // decide the state.
     var changed =
         (pixelChannel?.changed ?? false) ||
         (treeChannel?.changed ?? false) ||
         textChannel.changed ||
-        eventChannel.changed;
+        eventChannel.significant;
 
     return ComparedItem(
       id: id,
@@ -476,15 +484,27 @@ class EventChannel {
       );
     }
 
+    // `system` after everything else before the cap bites. The doc on
+    // [maxEventDeltas] promised the allowance to the channels that earn it,
+    // and a plain `take` broke that promise *within* events: a step whose
+    // system chatter produced its deltas first evicted the one network delta
+    // the step was worth reading for. Order inside each half is preserved —
+    // this is a partition, not a sort.
+    var ranked = [
+      for (var delta in deltas)
+        if (delta.subchannel != systemSubchannel) delta,
+      for (var delta in deltas)
+        if (delta.subchannel == systemSubchannel) delta,
+    ];
     return EventChannel(
       added: [
         for (var entry in unpairedHead)
           if (!moved.contains(entry)) mask(entry.$2),
       ],
       removed: [for (var entry in stillBase) mask(entry.$2)],
-      deltas: deltas.take(maxEventDeltas).toList(),
-      deltasDropped: deltas.length > maxEventDeltas
-          ? deltas.length - maxEventDeltas
+      deltas: ranked.take(maxEventDeltas).toList(),
+      deltasDropped: ranked.length > maxEventDeltas
+          ? ranked.length - maxEventDeltas
           : 0,
     );
   }
@@ -509,6 +529,28 @@ class EventChannel {
 
   bool get changed =>
       added.isNotEmpty || removed.isNotEmpty || deltas.isNotEmpty;
+
+  /// The subchannel the framework's own chatter travels on — platform channel
+  /// traffic the app never wrote a line of.
+  static const systemSubchannel = 'system';
+
+  /// Whether anything outside the `system` subchannel differs.
+  ///
+  /// The verdict's half of a rule the read side already applies — *"`system`
+  /// is left out unless `channel` names it: it is most of the volume and none
+  /// of the signal."* The events design note §6 separated the comparison from
+  /// the display and gave the display that default; the verdict kept reading
+  /// [changed], so a step whose only difference was a router's per-process
+  /// `pageKey` still reported itself a finding. Measured on a consumer's
+  /// comment-only diff: 19 of 51 scenarios changed, every delta `system`.
+  ///
+  /// The chatter is still compared and still carried — [deltas] keeps it, so
+  /// a reader chasing a focus or keyboard bug has the door — it just cannot
+  /// make a finding on its own.
+  bool get significant =>
+      added.any((line) => subchannelOf(line) != systemSubchannel) ||
+      removed.any((line) => subchannelOf(line) != systemSubchannel) ||
+      deltas.any((delta) => delta.subchannel != systemSubchannel);
 
   /// The channel an `added`/`removed` line travelled on.
   ///

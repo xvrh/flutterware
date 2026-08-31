@@ -11,6 +11,8 @@ import '../../ui/theme.dart';
 import '../comparison_controller.dart';
 import '../rules.dart';
 import '../shot_store.dart';
+import 'channel_signature.dart';
+import 'index_filter.dart';
 import 'merged_tree.dart';
 import 'step_page.dart';
 import 'shot_image.dart';
@@ -68,6 +70,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
   // each frame is, and its head half carries the diff's boxes for where to
   // look.
   var _mode = StageMode.sideBySide;
+  var _filter = const IndexFilter();
 
   /// The merged tree's pan and zoom, owned here so that opening a step and
   /// coming back lands where the canvas was — the scenarios panel's flow keeps
@@ -206,6 +209,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
         mode: _mode,
         onMode: (mode) => setState(() => _mode = mode),
         onBack: () => widget.onSelect(scenario.scenario),
+        onRule: widget.half.toggleRule,
       );
     }
 
@@ -219,10 +223,28 @@ class _ScenariosTabState extends State<ScenariosTab> {
             decoration: BoxDecoration(
               border: Border(right: BorderSide(color: colors.line)),
             ),
-            child: _Index(
-              half: widget.half,
-              selected: scenario?.scenario,
-              onSelect: (id) => _select(scenario: id),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                IndexFilterBar(
+                  filter: _filter,
+                  onFilter: (filter) => setState(() => _filter = filter),
+                  changes: widget.half.scenarios
+                      .where((s) => s.state.isFinding)
+                      .length,
+                  all:
+                      widget.half.scenarios.length + widget.half.pending.length,
+                ),
+                Divider(height: 1, color: colors.line),
+                Expanded(
+                  child: _Index(
+                    half: widget.half,
+                    filter: _filter,
+                    selected: scenario?.scenario,
+                    onSelect: (id) => _select(scenario: id),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -286,11 +308,13 @@ class _ScenariosTabState extends State<ScenariosTab> {
 class _Index extends StatelessWidget {
   const _Index({
     required this.half,
+    required this.filter,
     required this.selected,
     required this.onSelect,
   });
 
   final ComparisonHalf half;
+  final IndexFilter filter;
   final String? selected;
   final ValueChanged<String> onSelect;
 
@@ -311,15 +335,22 @@ class _Index extends StatelessWidget {
 
     var findings = [
       for (var s in half.scenarios)
-        if (s.state.isFinding && !allHidden(s)) s,
+        if (s.state.isFinding && !allHidden(s) && filter.matches(s.scenario)) s,
     ];
     var hidden = [
       for (var s in half.scenarios)
-        if (s.state.isFinding && allHidden(s)) s,
+        if (s.state.isFinding && allHidden(s) && filter.matches(s.scenario)) s,
     ];
     var quiet = [
       for (var s in half.scenarios)
-        if (!s.state.isFinding) s,
+        if (filter.scope == IndexScope.all &&
+            !s.state.isFinding &&
+            filter.matches(s.scenario))
+          s,
+    ];
+    var pending = [
+      for (var id in half.pending)
+        if (filter.matches(id)) id,
     ];
 
     return ListView(
@@ -335,60 +366,30 @@ class _Index extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(FwSpacing.xl),
             child: Text(
-              'Nothing changed.',
+              filter.query.isEmpty ? 'No changes' : 'No matches',
               style: context.type.body.copyWith(color: context.colors.mut),
             ),
           ),
         // The flows still owed a verdict — the list draws its full shape from
         // the plan and only the answers arrive late.
-        if (half.pending.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.xl,
-              FwSpacing.lg,
-              FwSpacing.xl,
-              FwSpacing.sm,
-            ),
-            child: Text(
-              'STILL REPLAYING · ${half.pending.length}',
-              style: context.type.micro.copyWith(color: context.colors.mut),
-            ),
-          ),
-          for (var id in half.pending) _PendingRow(id),
+        if (pending.isNotEmpty) ...[
+          _SectionHeader('STILL REPLAYING', pending.length),
+          for (var id in pending) _PendingRow(id),
         ],
-        if (hidden.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.xl,
-              FwSpacing.lg,
-              FwSpacing.xl,
-              FwSpacing.sm,
-            ),
-            child: Text(
-              '${hidden.length} HIDDEN BY YOUR RULES',
-              style: context.type.micro.copyWith(color: context.colors.mut),
-            ),
+        if (hidden.isNotEmpty)
+          HiddenRows(
+            count: hidden.length,
+            children: [
+              for (var s in hidden)
+                _IndexRow(
+                  scenario: s,
+                  selected: s.scenario == selected,
+                  onTap: () => onSelect(s.scenario),
+                ),
+            ],
           ),
-          for (var s in hidden)
-            _IndexRow(
-              scenario: s,
-              selected: s.scenario == selected,
-              onTap: () => onSelect(s.scenario),
-            ),
-        ],
         if (quiet.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.xl,
-              FwSpacing.lg,
-              FwSpacing.xl,
-              FwSpacing.sm,
-            ),
-            child: Text(
-              '${quiet.length} UNCHANGED',
-              style: context.type.micro.copyWith(color: context.colors.mut),
-            ),
-          ),
+          _SectionHeader('UNCHANGED', quiet.length),
           for (var s in quiet)
             _IndexRow(
               scenario: s,
@@ -399,6 +400,27 @@ class _Index extends StatelessWidget {
       ],
     );
   }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.label, this.count);
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(
+      FwSpacing.xl,
+      FwSpacing.lg,
+      FwSpacing.xl,
+      FwSpacing.sm,
+    ),
+    child: Text(
+      '$label · $count',
+      style: context.type.micro.copyWith(color: context.colors.mut),
+    ),
+  );
 }
 
 /// A flow whose verdict has not landed yet. Not tappable — there is nothing
@@ -481,42 +503,48 @@ class _IndexRow extends StatelessWidget {
           vertical: FwSpacing.sm,
         ),
         color: selected ? colors.accent.withValues(alpha: 0.10) : null,
-        child: Row(
+        // The name owns its line and the signature owns the next — trailing
+        // both crushed a long name to `Coun…` in the one column where names
+        // are how a reader recognises anything.
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
                     name,
                     style: context.type.body,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (file.isNotEmpty)
-                    Text(
-                      file,
-                      style: context.type.micro.copyWith(color: colors.mut),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
-              ),
-            ),
-            const Gap(FwSpacing.sm),
-            // Which channels spoke, in words — a flow has none of its own, so
-            // it is the union of the steps inside it. Named rather than
-            // coloured: the row already carries a `StateChip`, and the events
-            // pane's channel palette collides with it on green and amber.
-            if (scenario.state.isFinding) ...[
-              if (_channels case var channels when channels.isNotEmpty) ...[
-                Text(
-                  channels.join(' · '),
-                  style: context.type.micro.copyWith(color: colors.mut),
                 ),
                 const Gap(FwSpacing.sm),
+                StateChip(scenario.state),
               ],
-              StateChip(scenario.state),
-            ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: file.isEmpty
+                      ? const SizedBox.shrink()
+                      : Text(
+                          file,
+                          style: context.type.micro.copyWith(color: colors.mut),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                ),
+                // Which channels spoke — a flow has none of its own, so it
+                // is the union of the steps inside it.
+                if (scenario.state.isFinding && _channels.isNotEmpty) ...[
+                  const Gap(FwSpacing.sm),
+                  ChannelSignature(
+                    channels: _channels,
+                    pixelFraction: _worstPixelFraction,
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
@@ -532,6 +560,18 @@ class _IndexRow extends StatelessWidget {
       for (var channel in const ['pixels', 'tree', 'texts', 'events'])
         if (fired.contains(channel)) channel,
     ];
+  }
+
+  /// The flow's worst step, because a flow-level fraction has no honest sum:
+  /// three steps at 1% are not one step at 3%.
+  double? get _worstPixelFraction {
+    double? worst;
+    for (var step in scenario.items) {
+      if (!(step.pixels?.changed ?? false)) continue;
+      var fraction = step.pixels?.diff.fraction;
+      if (fraction != null && fraction > (worst ?? 0)) worst = fraction;
+    }
+    return worst;
   }
 }
 
@@ -586,8 +626,7 @@ class _NotReplayed extends StatelessWidget {
         'The base has no scenario by this name, so there is no run to compare '
             'this one against.',
       ComparedState.removed =>
-        'This branch no longer declares it. The base still does, which is the '
-            'whole finding.',
+        'This branch no longer declares it; the base still does.',
       _ =>
         'Nothing that decides its pixels changed between the two sides — not '
             'a file in its import closure, not an asset, not a lockfile — so '

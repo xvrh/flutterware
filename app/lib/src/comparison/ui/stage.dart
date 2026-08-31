@@ -102,14 +102,11 @@ class _ComparisonStageState extends State<ComparisonStage> {
       key: stageKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ModeBar(
-          mode: widget.mode,
-          onMode: widget.onMode,
-          // A mode that needs two frames is not offered when there is one:
-          // sliding against nothing is a control that does something and
-          // means nothing.
-          enabled: base != null && head != null,
-        ),
+        // With one frame or none there is nothing to switch between, so the
+        // bar is not drawn at all — five disabled pills were furniture over
+        // a picture that has no modes.
+        if (base != null && head != null)
+          _ModeBar(mode: widget.mode, onMode: widget.onMode),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(FwSpacing.xl),
@@ -532,15 +529,10 @@ class _Framed extends StatelessWidget {
 }
 
 class _ModeBar extends StatelessWidget {
-  const _ModeBar({
-    required this.mode,
-    required this.onMode,
-    required this.enabled,
-  });
+  const _ModeBar({required this.mode, required this.onMode});
 
   final StageMode mode;
   final ValueChanged<StageMode> onMode;
-  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -560,7 +552,7 @@ class _ModeBar extends StatelessWidget {
               padding: const EdgeInsets.only(right: FwSpacing.xs),
               child: Tappable(
                 key: stageModeKey(option),
-                onTap: enabled && option != mode ? () => onMode(option) : null,
+                onTap: option != mode ? () => onMode(option) : null,
                 borderRadius: BorderRadius.circular(context.radii.radiusSmall),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -578,11 +570,7 @@ class _ModeBar extends StatelessWidget {
                   child: Text(
                     option.label,
                     style: context.type.micro.copyWith(
-                      color: option == mode
-                          ? colors.accent
-                          : enabled
-                          ? colors.mut
-                          : colors.mut3,
+                      color: option == mode ? colors.accent : colors.mut,
                     ),
                   ),
                 ),

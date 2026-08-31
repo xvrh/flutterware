@@ -38,18 +38,31 @@ class ComparisonRule {
       );
 }
 
+/// The rule that hides one folded shape: the same facets the fold groups on
+/// — channel, subchannel, subject, property — so what disappears is exactly
+/// what the shape line counted.
+ComparisonRule shapeRule(ChannelDelta delta) => ComparisonRule([
+  RuleConstraint('channel', delta.channel),
+  if (delta.subchannel case var value?) RuleConstraint('subchannel', value),
+  if (delta.subject case var value?) RuleConstraint('subject', value),
+  if (delta.property case var value?) RuleConstraint('property', value),
+]);
+
 /// One facet of a delta, pinned to one value.
 class RuleConstraint {
   const RuleConstraint(this.facet, this.value);
 
-  /// `channel`, `subchannel`, `property` or `origin` — the facets the model
-  /// records. See the events design note §9.
+  /// `channel`, `subchannel`, `subject`, `property` or `origin` — the facets
+  /// the model records. See the events design note §9. `subject` is what a
+  /// *shape*-level rule pins — the fold groups on subchannel, subject and
+  /// property, so hiding one shape is a three-constraint rule.
   final String facet;
   final String value;
 
   bool matches(ChannelDelta delta) => switch (facet) {
     'channel' => delta.channel == value,
     'subchannel' => delta.subchannel == value,
+    'subject' => delta.subject == value,
     'property' => delta.property == value,
     'origin' => delta.origin == value,
     _ => false,
@@ -81,6 +94,14 @@ extension type RuleSet(List<ComparisonRule> rules) {
   bool hidesAll(ComparedItem item) {
     var any = false;
     for (var delta in item.deltas) {
+      // What cannot make a finding cannot keep one visible. `system` chatter
+      // never decides a state (see [EventChannel.significant]), so when a rule
+      // has hidden everything that did, the row folds away rather than
+      // surviving to show only the chatter.
+      if (delta.channel == 'events' &&
+          delta.subchannel == EventChannel.systemSubchannel) {
+        continue;
+      }
       any = true;
       if (!hides(delta)) return false;
     }

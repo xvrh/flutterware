@@ -1,5 +1,57 @@
 ## Unreleased
 
+- **`system` chatter is compared, carried, and decides nothing.** The read
+  side has said it for a while — *"`system` is left out unless `channel` names
+  it: it is most of the volume and none of the signal"* — but the comparison's
+  verdict still counted it, so a step whose only difference was a router's
+  per-process `pageKey` reported itself `changed`. Measured on a consumer's
+  comment-only diff: 19 of 51 scenarios carried a finding, all 27 remaining
+  event deltas `system`, and that was the whole gap between the comparison and
+  gating a pull request.
+
+  The deltas are still computed and still in `index.json` — a reader chasing a
+  focus or keyboard bug has the door, and the Filter popover keeps a `system`
+  row with its own count — but they no longer flip a step to `changed`, put an
+  `events` token on its row, or hold a row visible after a rule hid its
+  signal. The delta cap spends its allowance on the other subchannels first,
+  too: fifty lines of focus chatter used to be able to evict the one status
+  flip worth reading.
+
+- **`fw compare` exits non-zero when a half produced no verdict.** A scenario
+  harness that will not build — pin skew is the everyday cause — lands as a
+  note on an empty half rather than as a refusal, deliberately, so the
+  artifact records what happened. But the exit code stayed 0, and a CI job
+  gating on it recorded "the tool never ran" as "nothing changed". A
+  consumer's workflow grew fifteen lines of guards around exactly this. The
+  artifact, the export and `--json` are all still written; the exit code now
+  says the verdict is incomplete, whatever prevents a half from running next.
+
+- **`.DS_Store` is not a pixel input.** Finder drops one into any asset
+  directory somebody has opened, and `.gitignore` hides it by convention — so
+  it exists in the worktree and never in a base checkout made from git, which
+  is exactly the pair the skip rule compares. Every entry rendered on every
+  comparison, forever, with slowness as the only symptom: deleting two of
+  them took a consumer's no-change comparison from 2m52s to 8s. The closure
+  now skips it by name.
+
+- **The comparison reads as a review.** A pass over both halves of the
+  Changes screen, built against a demo diff exercising every state at once:
+
+  - The index has a search box and two scopes — `Changes`, the findings, and
+    `All`, everything compared — so a long suite narrows instead of scrolling.
+    Rows hidden by a rule collapse to one expandable line rather than
+    restating themselves under a heading.
+  - Every changed row and flow node carries a channel signature — `pixels 2% ·
+    tree · events` — so whether a change is pixels or something quieter is
+    visible before opening it.
+  - A step's detail leads with what changed: identical frames fold to one
+    thumbnail with the finding under it, and every delta draws as a real
+    comparison — old value on red, new on green, the files tab's own grammar.
+  - Filtering is one model with several doors: the strip's channel chips, a
+    Filter popover holding the ledger of rules in force and the channel tree,
+    a Hide on the verdict's shape line, and a hide ladder on every delta row.
+    Rules are session-scoped and never reach the artifact.
+
 - **A preview renders at a date, not at whenever it was rendered.** The
   `flutter_tester` lane — the one the audit and the comparison both read —
   mounted every entry with `package:clock` unpinned, so `clock.now()` fell

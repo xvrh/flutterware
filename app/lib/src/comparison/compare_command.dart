@@ -261,6 +261,24 @@ Future<CompareOutcome> runComparison({
 
 String abbreviatedSha(String sha) => sha.length > 8 ? sha.substring(0, 8) : sha;
 
+/// Why [artifact]'s verdict is incomplete, or null when it is whole.
+///
+/// The exit-code question. A harness that will not build lands as a `note` on
+/// an empty half rather than as a refusal — deliberately, so the artifact
+/// records what happened — but an exit code that stays 0 turns that record
+/// into a pass on any CI job gating on `fw compare`. A consumer's workflow
+/// grew fifteen lines of guards around exactly this: a pin-skewed branch
+/// whose comparison could not run recorded itself as clean.
+///
+/// Keyed on the note rather than on any particular cause, so whatever next
+/// prevents a half from running is covered the day it appears.
+String? verdictGap(ComparisonArtifact artifact) {
+  if (artifact.scenarios?.note case var note?) {
+    return 'the scenario half produced no verdict — ${note.split('\n').first}';
+  }
+  return null;
+}
+
 /// The `compare` action, as the previews core invokes it.
 ///
 /// The core cannot run this itself — a comparison spans the previews and

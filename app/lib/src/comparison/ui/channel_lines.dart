@@ -1,7 +1,12 @@
+import 'package:flutterware/app_events.dart';
 import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 
+import '../../ui/menu.dart';
+import '../../ui/popover.dart';
+import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
+import '../rules.dart';
 
 /// What moved, on every channel that had something to say.
 ///
@@ -9,18 +14,22 @@ import '../../ui/theme.dart';
 /// and roughly how much of the screen; it never says that a padding went from
 /// 12 to 20, and that line is usually the whole finding.
 ///
-/// This was a footnote — a flat list of pre-formatted strings under the two
-/// frames — and on four of the seven shapes of finding it is now the subject
-/// of the page. Read as one it does not hold up: every delta was one opaque
-/// string, so `200 → 500` sat in the same grey as the address that merely
-/// located it, nothing aligned, and a double space had to work as a column
-/// separator. A delta has three parts and is drawn as three now: **what
-/// moved**, **from and to**, and **where** — in that order, because the first
-/// two are the news and the third is the address.
+/// The idiom is the diff's, because it is the one every reader already has:
+/// the value a step used to carry sits on the removed tint, the value it
+/// carries now sits on the added tint — the exact recipe the files tab uses
+/// one tab away. The subject leads the line in ink, because `POST /session`
+/// is what a reader recognises and `detail` is only which of its fields; the
+/// old order led with the field name, which filled the scan column with
+/// `detail`, `moved` and `cart.id` — words from the wire, not the app.
 class ChannelLines extends StatelessWidget {
-  const ChannelLines(this.item, {super.key});
+  const ChannelLines(this.item, {super.key, this.onRule});
 
   final ComparedItem item;
+
+  /// Lets a reader hide what a row shows, from the row — "remove this little
+  /// log call from the list" is asked while looking at the log call, not at a
+  /// category vocabulary. Null draws the rows without the affordance.
+  final ValueChanged<ComparisonRule>? onRule;
 
   /// How many rows one channel draws before it stops and says how many it cut.
   ///
@@ -66,54 +75,78 @@ class ChannelLines extends StatelessWidget {
         children: [
           if (tree.isNotEmpty) ...[
             _Header('TREE', dropped: tree.length - _max),
+            ..._folded([
+              for (var delta in tree.take(_max))
+                if (delta.kind == TreeDeltaKind.added)
+                  (_where(delta.path), true)
+                else if (delta.kind == TreeDeltaKind.removed)
+                  (_where(delta.path), false),
+            ]),
             for (var delta in tree.take(_max))
-              switch (delta.kind) {
-                TreeDeltaKind.added => _Gone(
-                  '+ ${_where(delta.path)}',
-                  added: true,
-                ),
-                TreeDeltaKind.removed => _Gone('- ${_where(delta.path)}'),
-                _ => _Moved(
-                  what: delta.property ?? '',
+              if (delta.kind != TreeDeltaKind.added &&
+                  delta.kind != TreeDeltaKind.removed)
+                _Moved(
+                  subject: _where(delta.path),
+                  property: delta.property ?? '',
                   base: delta.base,
                   head: delta.head,
-                  where: _where(delta.path),
                 ),
-              },
             const Gap(FwSpacing.lg),
           ],
           if (item.texts case var texts?) ...[
-            _Header('TEXT', dropped: 0),
-            for (var text in texts.removed) _Gone('- $text'),
-            for (var text in texts.added) _Gone('+ $text', added: true),
+            _Header('TEXTS', dropped: 0),
+            ..._folded([
+              for (var text in texts.removed) (text, false),
+              for (var text in texts.added) (text, true),
+            ]),
             const Gap(FwSpacing.lg),
           ],
           if (item.events case var found?) ...[
             _Header(
-              'ON THE WAY HERE',
+              'EVENTS',
               dropped: found.deltasDropped + (events.length - _max),
             ),
-            for (var event in found.removed) _Gone('- $event'),
-            for (var event in found.added) _Gone('+ $event', added: true),
+            ..._folded([
+              for (var event in found.removed) (event, false),
+              for (var event in found.added) (event, true),
+            ]),
             for (var row in events.take(_max))
               _Moved(
+                channel: row.delta.subchannel,
                 // When the title is what moved it is already the `base`
                 // column, and naming the event by it as well printed one long
                 // statement twice on one line.
-                what: row.delta.property == 'title'
+                subject: row.delta.property == 'title'
+                    ? null
+                    : row.delta.subject,
+                property: row.delta.property == 'title'
                     ? 'title'
                     : shortProperty(row.delta.property ?? ''),
                 base: row.delta.base,
                 head: row.delta.head,
-                where: row.delta.property == 'title'
-                    ? row.delta.subchannel ?? ''
-                    : '${row.delta.subchannel} ${row.delta.subject}',
                 times: row.repeated ? row.count : null,
+                delta: row.delta,
+                onRule: onRule,
               ),
           ],
         ],
       ),
     );
+  }
+
+  /// Identical came-and-went lines folded to one row with a count — the same
+  /// move `foldChannelDeltas` makes for moved fields. Seven `+ Padding › Row`
+  /// in a column is one fact and six lines of noise, and it was the first
+  /// thing this widget printed about its own redesign.
+  static List<Widget> _folded(List<(String, bool)> lines) {
+    var counts = <(String, bool), int>{};
+    for (var line in lines) {
+      counts[line] = (counts[line] ?? 0) + 1;
+    }
+    return [
+      for (var MapEntry(key: (text, added), value: count) in counts.entries)
+        _Gone(text, added: added, times: count == 1 ? null : count),
+    ];
   }
 
   /// A tree path trimmed to its last two names: the whole thing is every
@@ -154,52 +187,203 @@ class _Header extends StatelessWidget {
   );
 }
 
-/// One field that moved: what, from and to, and then where.
+/// One field that moved, drawn as a diff: subject, field, then the old value
+/// on the removed tint and the new one on the added tint.
 ///
-/// The values carry the page's ink and the address recedes, because
-/// `200 → 500` is the finding and `network POST /login` is only where to go
-/// and look for it. Everything used to be one grey.
-class _Moved extends StatelessWidget {
+/// The tint is what makes the row scannable without alignment — subjects and
+/// field names vary too much in length for the values to share an x, so the
+/// values share a colour instead, the one colour pair every developer already
+/// reads as *was → is*.
+class _Moved extends StatefulWidget {
   const _Moved({
-    required this.what,
+    this.channel,
+    this.subject,
+    required this.property,
     required this.base,
     required this.head,
-    required this.where,
     this.times,
+    this.delta,
+    this.onRule,
   });
 
-  final String what;
+  /// The event lane — `network`, `db`, `system` — drawn in the lane's own
+  /// colour in a fixed column, exactly as the events view draws a transition.
+  /// Null on the tree channel, where the section already names the lane.
+  final String? channel;
+  final String? subject;
+  final String property;
   final String? base;
   final String? head;
-  final String where;
+  final int? times;
+
+  /// The delta behind the row, for the hide ladder — and the ladder only
+  /// draws when both this and [onRule] are given.
+  final ChannelDelta? delta;
+  final ValueChanged<ComparisonRule>? onRule;
+
+  @override
+  State<_Moved> createState() => _MovedState();
+}
+
+class _MovedState extends State<_Moved> {
+  /// The ladder's trigger shows to a pointer, so a settled row costs no
+  /// width — but the slot is always reserved, or the line would reflow under
+  /// the mouse.
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var channel = widget.channel;
+    var subject = widget.subject;
+    var times = widget.times;
+    var line = SelectableText.rich(
+      TextSpan(
+        children: [
+          if (subject case var subject?) ...[
+            TextSpan(
+              text: subject,
+              style: TextStyle(color: colors.ink2),
+            ),
+            const TextSpan(text: '  '),
+          ],
+          TextSpan(
+            text: widget.property,
+            style: TextStyle(color: colors.mut),
+          ),
+          const TextSpan(text: '  '),
+          _value(widget.base, colors.red, colors),
+          TextSpan(
+            text: ' → ',
+            style: TextStyle(color: colors.mut2),
+          ),
+          _value(widget.head, colors.grn, colors),
+          if (times case var count?)
+            TextSpan(
+              text: '  × $count',
+              style: TextStyle(color: colors.mut3),
+            ),
+        ],
+      ),
+      style: context.type.caption,
+    );
+
+    var row = channel == null
+        ? line
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 74,
+                child: Text(
+                  channel,
+                  style: context.type.caption.copyWith(
+                    color: channelColor(context, channel),
+                  ),
+                ),
+              ),
+              Expanded(child: line),
+            ],
+          );
+
+    var body = Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: widget.delta == null || widget.onRule == null
+          ? row
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: row),
+                SizedBox(
+                  width: 20,
+                  height: 16,
+                  child: _hovered ? _ladder(context) : null,
+                ),
+              ],
+            ),
+    );
+    if (widget.delta == null || widget.onRule == null) return body;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: body,
+    );
+  }
+
+  /// The hide ladder: the same rule at two widths, each saying what it pins.
+  /// Authored by pointing — the reader is looking at the change they want
+  /// gone, so the menu never asks them to name it in category vocabulary.
+  Widget _ladder(BuildContext context) {
+    var delta = widget.delta!;
+    var onRule = widget.onRule!;
+    return Menu(
+      align: PopoverAlign.end,
+      entries: [
+        MenuItem(
+          'Hide this change',
+          onSelected: () => onRule(shapeRule(delta)),
+        ),
+        if (delta.subchannel case var subchannel?)
+          MenuItem(
+            'Hide every $subchannel event',
+            onSelected: () =>
+                onRule(ComparisonRule.on('subchannel', subchannel)),
+          ),
+      ],
+      builder: (context, controller) => Tappable(
+        onTap: controller.toggle,
+        child: Icon(
+          Icons.visibility_off_outlined,
+          size: 13,
+          color: context.colors.mut2,
+        ),
+      ),
+    );
+  }
+
+  TextSpan _value(String? value, Color tone, FwPalette colors) => TextSpan(
+    text: ' ${value ?? '∅'} ',
+    style: TextStyle(
+      color: colors.ink,
+      backgroundColor: tone.withValues(alpha: 0.12),
+    ),
+  );
+}
+
+/// Something that came or went, drawn as the diff line it is: the marker in
+/// the tone, the words on the tone's tint, the same recipe as the files tab.
+class _Gone extends StatelessWidget {
+  const _Gone(this.text, {this.added = false, this.times});
+
+  final String text;
+  final bool added;
   final int? times;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    var tone = added ? colors.grn : colors.red;
     return Padding(
       padding: const EdgeInsets.only(bottom: 3),
       child: SelectableText.rich(
         TextSpan(
           children: [
             TextSpan(
-              text: what,
-              style: TextStyle(color: colors.mut, fontWeight: FontWeight.w600),
+              text: added ? '+ ' : '- ',
+              style: TextStyle(color: tone, fontWeight: FontWeight.w600),
             ),
-            const TextSpan(text: '   '),
             TextSpan(
-              text: '$base → $head',
-              style: TextStyle(color: colors.ink),
+              text: ' $text ',
+              style: TextStyle(
+                color: colors.ink,
+                backgroundColor: tone.withValues(alpha: 0.12),
+              ),
             ),
             if (times case var count?)
               TextSpan(
                 text: '  × $count',
                 style: TextStyle(color: colors.mut3),
               ),
-            TextSpan(
-              text: '   ·   $where',
-              style: TextStyle(color: colors.mut3),
-            ),
           ],
         ),
         style: context.type.caption,
@@ -208,23 +392,18 @@ class _Moved extends StatelessWidget {
   }
 }
 
-/// Something that came or went, which has no *from and to* to show.
-class _Gone extends StatelessWidget {
-  const _Gone(this.text, {this.added = false});
-
-  final String text;
-  final bool added;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 3),
-    child: SelectableText(
-      text,
-      style: context.type.caption.copyWith(
-        color: added ? context.colors.grn : context.colors.red,
-      ),
-    ),
-  );
+/// One colour per event lane, so a delta can be skimmed for its shape before
+/// it is read — the same mapping the events view uses for a live transition,
+/// legitimate here because events are the only subject on these rows.
+Color channelColor(BuildContext context, String channel) {
+  var colors = context.colors;
+  return switch (channel) {
+    AppChannel.network => colors.accent,
+    AppChannel.analytics => colors.grn,
+    AppChannel.db => colors.amber,
+    AppChannel.system => colors.mut3,
+    _ => colors.mut,
+  };
 }
 
 /// A field path trimmed to its last two segments.

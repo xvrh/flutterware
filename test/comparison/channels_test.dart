@@ -405,6 +405,81 @@ void main() {
     test('an added line still says which channel it was on', () {
       expect(EventChannel.subchannelOf('network POST /verify'), 'network');
     });
+
+    // The read side's rule, arrived at the verdict: `system` is most of the
+    // volume and none of the signal. A router mints a fresh `pageKey` per
+    // process and no project can pin it — measured on a consumer's
+    // comment-only diff, 19 of 51 scenarios reported a finding and every
+    // delta was `system`.
+    group('system chatter is compared but decides nothing', () {
+      Map<String, Object?> system(String title, {String? detail}) => {
+        'channel': 'system',
+        'title': title,
+        'detail': ?detail,
+      };
+
+      test('a step whose only difference is system stays same', () {
+        var item = ComparedItem.of(
+          id: 'a#b',
+          baseEvents: [system('flutter/navigation', detail: 'yi_iit')],
+          headEvents: [system('flutter/navigation', detail: 'rhsu_hl')],
+        );
+
+        expect(item.state, ComparedState.same);
+        expect(item.channelsFired, isEmpty);
+        // Carried, not erased: the deltas are the door for whoever is
+        // chasing a focus or keyboard bug.
+        expect(item.events!.deltas, isNotEmpty);
+        expect(item.events!.significant, isFalse);
+      });
+
+      test('a system line that came or went decides nothing either', () {
+        var item = ComparedItem.of(
+          id: 'a#b',
+          headEvents: [system('flutter/assets')],
+        );
+
+        expect(item.state, ComparedState.same);
+        expect(item.events!.added, ['system flutter/assets']);
+      });
+
+      test('one real delta among the chatter is still a finding', () {
+        var item = ComparedItem.of(
+          id: 'a#b',
+          baseEvents: [
+            system('flutter/navigation', detail: 'yi_iit'),
+            request('/login', status: 200),
+          ],
+          headEvents: [
+            system('flutter/navigation', detail: 'rhsu_hl'),
+            request('/login', status: 500),
+          ],
+        );
+
+        expect(item.state, ComparedState.changed);
+        expect(item.channelsFired, ['events']);
+      });
+
+      // The doc on [maxEventDeltas] promised the allowance to the channels
+      // that earn it; a plain `take` let sixty focus changes evict the one
+      // status flip the step was worth reading for.
+      test('the cap spends its allowance on the other subchannels first', () {
+        var diff = EventChannel.of(
+          base: [
+            for (var i = 0; i < 60; i++) system('probe $i', detail: 'a'),
+            request('/login', status: 200),
+          ],
+          head: [
+            for (var i = 0; i < 60; i++) system('probe $i', detail: 'b'),
+            request('/login', status: 500),
+          ],
+        );
+
+        expect(diff.deltas.first.subchannel, 'network');
+        expect(diff.deltas, hasLength(maxEventDeltas));
+        expect(diff.deltasDropped, 61 - maxEventDeltas);
+      });
+    });
   });
 
   // The seam between the model and the UI pass: a filter can only ever select
