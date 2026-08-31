@@ -850,6 +850,7 @@ class ComparisonCompareResult implements PluginResult {
     this.export,
     this.report,
     this.scenariosNote,
+    this.verdictGap,
   });
 
   /// What the comparison was against — the ref's name, as a header shows it.
@@ -911,6 +912,14 @@ class ComparisonCompareResult implements PluginResult {
   /// a base harness that would not build reads differently from a project
   /// with no scenarios.
   final String? scenariosNote;
+
+  /// Why the verdict is incomplete, when it is — the sentence `fw compare`
+  /// exits 1 on, and the published reader's own `verdictGap`, so an agent and
+  /// a script over `index.json` read the same answer. When present, the
+  /// [findings] describe the gap rather than the branch: a half of nothing
+  /// but `failed` rows is near-always one environmental cause, not that many
+  /// regressions.
+  final String? verdictGap;
 
   @override
   Map<String, Object?> toJson() => _$ComparisonCompareResultToJson(this);

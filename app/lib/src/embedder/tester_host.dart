@@ -396,7 +396,19 @@ class TesterHost {
       // that deadlocks any `tester.runAsync` that itself loads an asset, and
       // is why `flutter test` hangs on a scenario that generates a PDF. The
       // program gives the boot a real-async turn instead.
-      environment: {'FLUTTER_TEST': 'true'},
+      environment: {
+        'FLUTTER_TEST': 'true',
+        // Windows resolves a loaded DLL's *own* dependencies through the
+        // executable's directory and PATH, not through the directory the DLL
+        // was loaded from — so a hook-built DLL that links a second one needs
+        // the bundle's native directory on PATH. The same line `flutter test`
+        // adds, for the same reason; everywhere else the loader searches
+        // beside the library and needs nothing.
+        if (Platform.isWindows)
+          'PATH':
+              '${p.join(_assetsDir!, nativeAssetsDirName)};'
+              '${Platform.environment['PATH'] ?? ''}',
+      },
       // `flutter test` runs the tester from the package root, so a fixture
       // read at a relative path resolves there. Inherited, this would be
       // wherever `fw` happened to be started from.

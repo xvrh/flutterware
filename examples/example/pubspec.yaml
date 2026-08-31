@@ -74,6 +74,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   lints:
+  # For test/scenarios/database_test.dart — the native-assets guard; the file
+  # says why it is the synchronous API and not `sqlite_async`.
+  sqlite3:
   test:
   vector_graphics_compiler: ^1.3.0
 # For information on the generic Dart part of this file, see the

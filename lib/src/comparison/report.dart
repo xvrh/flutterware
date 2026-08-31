@@ -185,6 +185,79 @@ List<ComparedFinding> rankComparedFindings({
           : a.state.index.compareTo(b.state.index),
     );
 
+/// Why a comparison's verdict is incomplete, or null when it is whole.
+///
+/// The exit-code question, and deliberately answered in the published reader
+/// rather than in `fw` alone: `fw compare` exits 1 on exactly this sentence,
+/// and a consumer's script reading `index.json` — or an agent reading the
+/// compare reply — has to reach the same conclusion from the same rule, not
+/// re-implement it. A consumer's workflow once grew fifteen lines of guards
+/// around a comparison that could not run recording itself as clean; the
+/// rule exists so nobody writes those lines again. [ComparisonIndex.verdictGap]
+/// asks it of a file.
+///
+/// Three gaps. A half that recorded a [scenariosNote] never produced a
+/// verdict — its harness would not build, say — and whatever next prevents a
+/// half from running is covered by the note the day it appears. A half whose
+/// rows **all** came out [ComparedState.failed] is the same gap wearing a
+/// different record: `failed` means neither side rendered, so a half made of
+/// nothing else answered no question about the branch — and it is near-always
+/// environmental, one missing native library rather than fifty-one
+/// simultaneous regressions. And a half of nothing but
+/// [ComparedState.wasBroken] is that gap's mirror: `wasBroken` means the base
+/// alone would not render, so not one pair of pictures was ever compared —
+/// and every row at once is near-always one base-side cause (a fresh base
+/// checkout whose native assets did not build, a pin the base cannot run
+/// under), which would otherwise read as "already broken before this branch"
+/// and exit 0. The genuine mass repair exists — a branch fixing a crash in
+/// `main` fixes every flow — and it pays one red check whose sentence names
+/// what to look at, then clears when it merges and the base moves on; the
+/// silent wrong verdict would be paid on every branch until someone noticed.
+///
+/// *All*, not *any*, for both: one pre-broken or one repaired flow among
+/// compared ones is a half that did its job, and its row is an ordinary
+/// finding. [ComparedState.broke] deliberately gets no such rule: mass
+/// breakage on the *head* side is the branch's problem either way —
+/// environmental or not, a dependency the branch added that will not build is
+/// the branch's to fix — and a verdict full of `broke` findings is already
+/// loud.
+///
+/// [narrowed] switches the all-one-state rules off — the note rule stands.
+/// Uniformity is evidence of environment only over the whole suite; a run
+/// narrowed to named entries compares the rows somebody picked, and picking
+/// the one pre-broken flow would otherwise turn its ordinary finding into a
+/// permanent gap no change on the branch can lift.
+String? verdictGapOf({
+  String? scenariosNote,
+  Iterable<ComparedState> scenarioStates = const [],
+  Iterable<ComparedState> previewStates = const [],
+  bool narrowed = false,
+}) {
+  if (scenariosNote case var note?) {
+    return 'the scenario half produced no verdict — ${note.split('\n').first}';
+  }
+  if (narrowed) return null;
+  return _uniformGap('scenario', 'scenarios', scenarioStates) ??
+      _uniformGap('previews', 'entries', previewStates);
+}
+
+/// The gap sentence for a half whose rows all carry one no-verdict state, or
+/// null for one that compared anything at all — one copy of both the
+/// predicates and the wording, so the two halves cannot drift apart.
+String? _uniformGap(String half, String unit, Iterable<ComparedState> s) {
+  var states = s.toList();
+  if (states.isEmpty) return null;
+  if (states.every((state) => state == ComparedState.failed)) {
+    return 'the $half half produced no verdict — all '
+        '${states.length} $unit failed on both sides';
+  }
+  if (states.every((state) => state == ComparedState.wasBroken)) {
+    return 'the $half half produced no verdict — all '
+        '${states.length} $unit failed on the base side alone';
+  }
+  return null;
+}
+
 /// A whole `index.json`, read back.
 ///
 /// Parses either file both writers produce, and the object `fw compare --json`
@@ -201,6 +274,7 @@ class ComparisonIndex {
     this.ms = 0,
     this.counts = const {},
     this.frames = ComparisonFrames.local,
+    this.narrowed = false,
     this.previewsHalf = const ComparedHalf(),
     this.scenariosHalf,
     this.export,
@@ -230,6 +304,13 @@ class ComparisonIndex {
 
   /// Whether the frames this file names can be opened from beside it.
   final ComparisonFrames frames;
+
+  /// Whether the run was narrowed to named entries (`--entry`).
+  ///
+  /// Recorded in the file so a reader applies the all-failed gap rule the way
+  /// the writer did — see [verdictGapOf]. Absent means false, which is what
+  /// every file written before the key existed is.
+  final bool narrowed;
 
   final ComparedHalf previewsHalf;
 
@@ -281,6 +362,7 @@ class ComparisonIndex {
       frames: json['frames'] == 'relative'
           ? ComparisonFrames.relative
           : ComparisonFrames.local,
+      narrowed: json['narrowed'] == true,
       previewsHalf: ComparedHalf.fromJson(previews),
       scenariosHalf: scenarios == null
           ? null
@@ -312,6 +394,22 @@ class ComparisonIndex {
   bool get ok =>
       !previewItems.any((item) => isComparedFinding(item.state)) &&
       !scenarios.any((scenario) => isComparedFinding(scenario.state));
+
+  /// Why this comparison's verdict is incomplete, or null when it is whole —
+  /// [verdictGapOf], asked of this file.
+  ///
+  /// The reader-side twin of the exit code: `fw compare` exits 1 exactly when
+  /// this is non-null, so a job gating on the file gates on the same rule.
+  /// [ok] answers a different question — whether anything got worse among what
+  /// was compared — and an all-failed half makes both speak: [ok] goes false
+  /// because `failed` rows are findings, and this names why none of them is a
+  /// verdict about the branch.
+  String? get verdictGap => verdictGapOf(
+    scenariosNote: scenariosNote,
+    scenarioStates: scenarios.map((scenario) => scenario.state),
+    previewStates: previewItems.map((item) => item.state),
+    narrowed: narrowed,
+  );
 
   /// Findings across both halves, worst first — the header's chips.
   ///

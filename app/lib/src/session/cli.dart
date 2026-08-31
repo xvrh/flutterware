@@ -241,6 +241,13 @@ const fwCommands = [
         'The verdict is written to `index.json` (the path prints last) and '
         'shown\non the changes panel of the GUI.\n'
         '\n'
+        'Exits 1 when a half produced no verdict: its harness would not '
+        'build,\nor — on an un-narrowed run — every one of its rows failed '
+        'on both\nsides, or every one failed on the base side alone. '
+        'Findings alone do\nnot change the exit code: a branch that changed '
+        'pictures still exits\n0, a run narrowed with `--entry` to a '
+        'pre-broken flow still exits 0,\nand a job gates on `index.json`.\n'
+        '\n'
         '`--base` compares against any ref git can name; the default is the '
         "project's\nconfigured base, then the default branch. `--entry` "
         'narrows to named\nentries and may repeat.\n'

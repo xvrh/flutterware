@@ -14,6 +14,10 @@
 /// * [ComparisonIndex.findings] is the verdict in the order a reader wants it:
 ///   worst first, both halves merged, the rows that are neither `same` nor
 ///   `skipped`. [ComparisonIndex.ok] is the gate.
+/// * [ComparisonIndex.verdictGap] says when there is no verdict to gate on —
+///   a harness that would not build, a half of nothing but both-sides
+///   failures — which `ok` alone cannot tell apart from real regressions.
+///   `fw compare` exits 1 on exactly this sentence.
 ///
 /// ```dart
 /// var report = await ComparisonReport.read('build/comparison/report/web');

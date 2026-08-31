@@ -44,7 +44,13 @@ class ShotKey {
   /// overscroll are drawn now where they were absent then. Neither shader is
   /// in an entry's closure, and neither moves with the SDK, so nothing else
   /// here would have noticed.
-  static const revision = 'v7';
+  /// v8 — the bundle carries a real `NativeAssetsManifest.json`, so a render
+  /// loads the hook-built native libraries where a v7 one took the VM's
+  /// process fallback — on macOS, the *system's* SQLite rather than the
+  /// bundled one. A picture whose pixels depend on the loaded library (a
+  /// version string, a behavior the versions disagree on) differs across that
+  /// line, and no library is in any entry's closure.
+  static const revision = 'v8';
 
   /// [closure] is a [SourceClosure.fingerprint]; [sdk] identifies the SDK both
   /// sides are rendered with; [axes] and [knobs] are whatever was applied.

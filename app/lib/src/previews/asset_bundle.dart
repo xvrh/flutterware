@@ -3,6 +3,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:hooks_runner/hooks_runner.dart'
+    show KernelAsset, KernelAssetAbsolutePath, KernelAssets;
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:standard_message_codec/standard_message_codec.dart';
 
@@ -58,6 +61,15 @@ final _stagesKey = sha1
 /// Distinguishes one in-process shader compile from another, so two that
 /// overlap do not write one scratch file. See `_compiledShader`.
 var _scratchSerial = 0;
+
+/// Where bundled native libraries land inside the bundle, flat.
+///
+/// One directory, plain basenames, mirroring `flutter test`'s
+/// `build/native_assets/<os>/` for the two properties that layout buys: a
+/// dylib that references a sibling through `@loader_path` finds it, and on
+/// Windows there is a single directory to put on the tester's `PATH` so a
+/// DLL's own dependencies resolve.
+const nativeAssetsDirName = 'native_assets';
 
 /// The framework's own fragment shaders in [cache]'s checkout — the M3
 /// ink-sparkle ripple and the stretch-overscroll effect — as they exist.
@@ -133,7 +145,9 @@ Future<void> compileShader({
 ///
 /// Two kinds of payload cannot be symlinked to their source, and both are the
 /// same shape: something compiles them, and the loader on the other side parses
-/// the compiled form.
+/// the compiled form. (A third is copied for a different reason entirely —
+/// see `_installNativeAssets`: a native library must be an inode nothing but
+/// this builder ever rewrites.)
 ///
 /// An asset the project declared with `transformers:` is the project's own
 /// case. A build runs the chain and ships the output under the declared key, so
@@ -178,9 +192,16 @@ class AssetBundleBuilder {
     required this.cache,
     required this.rootPackageRoot,
     required this.packageConfigPath,
+    this.nativeAssetsForTesting,
   });
 
   final FlutterCache cache;
+
+  /// Stands in for the hooks run's native assets, so a test can exercise the
+  /// install without a fixture that resolves and builds a real hook. Non-null
+  /// skips the hooks run entirely.
+  @visibleForTesting
+  final List<KernelAsset>? nativeAssetsForTesting;
 
   /// The package that owns the entrypoint being compiled. Its assets are
   /// keyed unprefixed; every other package's are keyed
@@ -194,16 +215,23 @@ class AssetBundleBuilder {
     // them into a directory its pubspec declares, and [AssetCatalog] lists that
     // directory's contents as it resolves. Run second and the catalog is a
     // faithful reading of an empty directory.
-    // The result is deliberately dropped: a hook is a program a *dependency*
-    // ships, so one that fails is closer to a compile error in that dependency
-    // than to a broken catalog, and every entry that did not need its output
-    // still builds. [BuildHooks] says so on stderr itself, because the logger
-    // is not listened to in the two processes that call this most.
-    await BuildHooks(
-      dartExecutable: cache.dart,
-      packageConfigPath: packageConfigPath,
-      rootPackageRoot: rootPackageRoot,
-    ).run();
+    // The failure is deliberately not acted on: a hook is a program a
+    // *dependency* ships, so one that fails is closer to a compile error in
+    // that dependency than to a broken catalog, and every entry that did not
+    // need its output still builds. [BuildHooks] says so on stderr itself,
+    // because the logger is not listened to in the two processes that call
+    // this most. What *is* consumed is the native-assets mapping, below.
+    List<KernelAsset> nativeAssets;
+    if (nativeAssetsForTesting case var overridden?) {
+      nativeAssets = overridden;
+    } else {
+      var hooks = await BuildHooks(
+        dartExecutable: cache.dart,
+        packageConfigPath: packageConfigPath,
+        rootPackageRoot: rootPackageRoot,
+      ).run();
+      nativeAssets = hooks.nativeAssets;
+    }
 
     var catalog = await AssetCatalog.resolve(
       rootPackageRoot: rootPackageRoot,
@@ -213,7 +241,8 @@ class AssetBundleBuilder {
     Directory(output).createSync(recursive: true);
 
     var sync = _Sync();
-    _writeManifests(output, catalog, sync);
+    var nativeAssetsManifest = _installNativeAssets(output, nativeAssets, sync);
+    _writeManifests(output, catalog, nativeAssetsManifest, sync);
     _linkPayloads(output, catalog, await _transformed(catalog), sync);
     await _linkCompiledShaders(output, sync);
     _prune(output, sync);
@@ -258,7 +287,12 @@ class AssetBundleBuilder {
     return transformed;
   }
 
-  void _writeManifests(String output, AssetCatalog catalog, _Sync sync) {
+  void _writeManifests(
+    String output,
+    AssetCatalog catalog,
+    String nativeAssetsManifest,
+    _Sync sync,
+  ) {
     var families = <Map<String, Object?>>[
       for (var family in catalog.fonts)
         {
@@ -306,20 +340,122 @@ class AssetBundleBuilder {
       sync,
     );
 
+    // The map the VM resolves `@Native` external functions through, produced
+    // by the hooks run above — where a scenario's `sqlite3` finds its dylib.
+    // Same channel `flutter test` uses: it copies this file into the test
+    // asset directory, and the engine reads it from `--flutter-assets-dir`.
     _write(
       output,
       'NativeAssetsManifest.json',
-      utf8.encode(
-        jsonEncode({
-          'format-version': [1, 0, 0],
-          'native-assets': <String, Object?>{},
-        }),
-      ),
+      utf8.encode(nativeAssetsManifest),
       sync,
     );
 
     // Empty in a JIT debug build, and the engine expects the file to exist.
     _write(output, 'vm_snapshot_data', Uint8List(0), sync);
+  }
+
+  /// Brings the hook-built native libraries into the bundle and returns the
+  /// `NativeAssetsManifest.json` content that names them there.
+  ///
+  /// A **copy**, where every other payload is a symlink, because the file a
+  /// guest `dlopen`s must be one nothing else rewrites: the hook's own output
+  /// under `.dart_tool/hooks_runner` is rewritten in place by any tool that
+  /// re-runs the hook on this checkout — `flutter test` in another terminal, a
+  /// package author editing their hook — and on macOS mutating a mapped,
+  /// signed dylib can kill the process holding it. The copy is replaced by
+  /// rename, never written in place, so a warm guest keeps its old inode
+  /// through a rebundle and dies only when the restart that follows kills it
+  /// on purpose.
+  ///
+  /// Only bundled libraries move; a `system`/`process`/`executable` entry has
+  /// no file to bring. A source that has gone missing keeps its original path
+  /// in the manifest — the load failure then names a real path, where dropping
+  /// the entry would fall back to process lookup and succeed wrongly on macOS.
+  String _installNativeAssets(
+    String output,
+    List<KernelAsset> assets,
+    _Sync sync,
+  ) {
+    var installed = <KernelAsset>[];
+    // Plain basenames share one namespace — the dynamic linker's own rule for
+    // bundled libraries, per `package:code_assets` — so a collision is a
+    // broken package graph, not something to paper over with renaming that
+    // would break `@loader_path` references. First claim wins; the loser keeps
+    // its original path.
+    var claimed = <String, String>{};
+    for (var asset in assets) {
+      var path = asset.path;
+      if (path is! KernelAssetAbsolutePath) {
+        installed.add(asset);
+        continue;
+      }
+      var source = path.uri.toFilePath();
+      var name = p.basename(source);
+      var owner = claimed[name] ??= source;
+      var copied = owner == source
+          ? _copiedNativeLibrary(output, source, name, sync)
+          : null;
+      installed.add(
+        copied == null
+            ? asset
+            : KernelAsset(
+                id: asset.id,
+                target: asset.target,
+                path: KernelAssetAbsolutePath(Uri.file(copied)),
+              ),
+      );
+    }
+    return KernelAssets(installed).toNativeAssetsFile();
+  }
+
+  /// The bundle's own copy of the library at [source], refreshed when the
+  /// source moved, and its path.
+  ///
+  /// Freshness rides a stamp file beside the copy — source path, mtime and
+  /// size — because a copy does not inherit its source's mtime and reading
+  /// megabytes back to byte-compare on every rebundle is the wrong price.
+  /// Same-name replace goes scratch-then-rename; on Windows a loaded DLL
+  /// refuses even the delete, so the old file is renamed aside instead and a
+  /// later [_prune] sweeps it once the guest that held it is gone.
+  String? _copiedNativeLibrary(
+    String output,
+    String source,
+    String name,
+    _Sync sync,
+  ) {
+    var file = File(source);
+    if (!file.existsSync()) return null;
+    var relative = '$nativeAssetsDirName/$name';
+    var stat = file.statSync();
+    var dest = File(p.join(output, relative));
+    // Before the stamp: `_write` writes where it is pointed and only `_link`
+    // makes directories.
+    dest.parent.createSync(recursive: true);
+    sync.desired.add(relative);
+    var stale = _write(
+      output,
+      '$relative.stamp',
+      utf8.encode(
+        '$source\n${stat.modified.microsecondsSinceEpoch}\n'
+        '${stat.size}',
+      ),
+      sync,
+    );
+    if (stale || !dest.existsSync()) {
+      var scratch = '${dest.path}.$pid.${_scratchSerial++}';
+      file.copySync(scratch);
+      if (dest.existsSync()) {
+        try {
+          dest.deleteSync();
+        } on FileSystemException {
+          dest.renameSync('${dest.path}.stale.$pid.${_scratchSerial++}');
+        }
+      }
+      File(scratch).renameSync(dest.path);
+      sync.changed = true;
+    }
+    return dest.path;
   }
 
   void _linkPayloads(
@@ -451,7 +587,14 @@ class AssetBundleBuilder {
       var relative = p.split(p.relative(entity.path, from: output)).join('/');
       if (relative == 'kernel_blob.bin') continue;
       if (sync.desired.contains(relative)) continue;
-      entity.deleteSync();
+      try {
+        entity.deleteSync();
+      } on FileSystemException {
+        // Windows will not delete a DLL a live guest still holds — the
+        // renamed-aside copy `_copiedNativeLibrary` leaves. It is unlocked the
+        // moment that guest is replaced, and the next build sweeps it.
+        continue;
+      }
       sync.changed = true;
     }
   }

@@ -214,7 +214,11 @@ Future<CompareOutcome> runComparison({
   // Written once both halves are in. The artifact is the whole verdict, so a
   // file holding only the previews would be a file that answers "did this
   // branch break anything" wrongly.
-  var artifact = ComparisonArtifact(previews: result, scenarios: scenarios);
+  var artifact = ComparisonArtifact(
+    previews: result,
+    scenarios: scenarios,
+    narrowed: options.entries.isNotEmpty,
+  );
   var index = artifact.writeTo(
     p.join(comparisonDirFor(flutterwareDir(), session.worktree), 'index.json'),
   );
@@ -262,23 +266,21 @@ Future<CompareOutcome> runComparison({
 
 String abbreviatedSha(String sha) => sha.length > 8 ? sha.substring(0, 8) : sha;
 
-/// Why [artifact]'s verdict is incomplete, or null when it is whole.
+/// Why [artifact]'s verdict is incomplete, or null when it is whole — the
+/// exit-code question, asked of the writer's shape.
 ///
-/// The exit-code question. A harness that will not build lands as a `note` on
-/// an empty half rather than as a refusal — deliberately, so the artifact
-/// records what happened — but an exit code that stays 0 turns that record
-/// into a pass on any CI job gating on `fw compare`. A consumer's workflow
-/// grew fifteen lines of guards around exactly this: a pin-skewed branch
-/// whose comparison could not run recorded itself as clean.
-///
-/// Keyed on the note rather than on any particular cause, so whatever next
-/// prevents a half from running is covered the day it appears.
-String? verdictGap(ComparisonArtifact artifact) {
-  if (artifact.scenarios?.note case var note?) {
-    return 'the scenario half produced no verdict — ${note.split('\n').first}';
-  }
-  return null;
-}
+/// The rule itself is the published [verdictGapOf], deliberately: `fw
+/// compare`'s exit code, the compare reply an agent reads and a consumer's
+/// script over `index.json` may not answer this question differently, which
+/// is the same argument `rankComparedFindings` already makes below. What is
+/// local here is only pulling the note and the states out of the artifact.
+String? verdictGap(ComparisonArtifact artifact) => verdictGapOf(
+  scenariosNote: artifact.scenarios?.note,
+  scenarioStates:
+      artifact.scenarios?.items.map((item) => item.state) ?? const [],
+  previewStates: artifact.previews.items.map((item) => item.state),
+  narrowed: artifact.narrowed,
+);
 
 /// The `compare` action, as the previews core invokes it.
 ///
@@ -361,6 +363,7 @@ Future<ComparisonCompareResult> runCompareAction({
     export: outcome.exported?.output,
     report: report == null ? null : p.dirname(report.commentPath),
     scenariosNote: artifact.scenarios?.note,
+    verdictGap: verdictGap(artifact),
   );
 }
 

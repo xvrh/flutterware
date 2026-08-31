@@ -171,4 +171,145 @@ void main() {
       },
     );
   });
+
+  // The reader-side twin of `fw compare`'s exit code: a job gating on the
+  // file has to reach the same conclusion the command did, from the same
+  // rule — `ok` alone cannot separate "51 environmental failures, no
+  // verdict" from "51 real regressions".
+  group('the verdict gap', () {
+    Map<String, Object?> allFailed({bool narrowed = false}) => {
+      'version': comparisonReportVersion,
+      'base': 'abc123def456',
+      if (narrowed) 'narrowed': true,
+      'previews': {'rendered': 0, 'items': <Object?>[]},
+      'scenarios': {
+        'ran': 2,
+        'items': [
+          {'scenario': 'test/a_test.dart#one', 'state': 'failed'},
+          {'scenario': 'test/a_test.dart#two', 'state': 'failed'},
+        ],
+      },
+    };
+
+    test('a half of nothing but failures is named, and ok is false too', () {
+      var index = ComparisonIndex.fromJson(allFailed());
+
+      expect(index.ok, isFalse);
+      expect(
+        index.verdictGap,
+        'the scenario half produced no verdict — '
+        'all 2 scenarios failed on both sides',
+      );
+    });
+
+    test('a narrowed file switches the all-failed rule off', () {
+      var index = ComparisonIndex.fromJson(allFailed(narrowed: true));
+
+      expect(index.narrowed, isTrue);
+      expect(index.verdictGap, isNull);
+      expect(index.ok, isFalse, reason: 'the failed rows stay findings');
+    });
+
+    test('a note is a gap however the run was narrowed', () {
+      var index = ComparisonIndex.fromJson({
+        'version': comparisonReportVersion,
+        'base': 'abc123def456',
+        'narrowed': true,
+        'previews': {'rendered': 0, 'items': <Object?>[]},
+        'scenarios': {
+          'ran': 0,
+          'note': 'The scenarios harness does not compile:\ndetails',
+          'items': <Object?>[],
+        },
+      });
+
+      expect(
+        index.verdictGap,
+        'the scenario half produced no verdict — '
+        'The scenarios harness does not compile:',
+      );
+    });
+
+    // The mirror: wasBroken means the base alone would not render, so a half
+    // of nothing else compared no pair of pictures — and every row at once is
+    // near-always one base-side cause (a cold base checkout whose native
+    // assets did not build), which would otherwise read as "already broken
+    // before this branch" and exit 0.
+    test('a half that failed on the base side alone is the same gap', () {
+      var index = ComparisonIndex.fromJson({
+        'version': comparisonReportVersion,
+        'base': 'abc123def456',
+        'previews': {'rendered': 0, 'items': <Object?>[]},
+        'scenarios': {
+          'ran': 2,
+          'items': [
+            {'scenario': 'test/a_test.dart#one', 'state': 'wasBroken'},
+            {'scenario': 'test/a_test.dart#two', 'state': 'wasBroken'},
+          ],
+        },
+      });
+
+      expect(
+        index.verdictGap,
+        'the scenario half produced no verdict — '
+        'all 2 scenarios failed on the base side alone',
+      );
+
+      // One row the branch genuinely repaired beside a compared one is a half
+      // that did its job.
+      var mixed = ComparisonIndex.fromJson({
+        'version': comparisonReportVersion,
+        'base': 'abc123def456',
+        'previews': {'rendered': 0, 'items': <Object?>[]},
+        'scenarios': {
+          'ran': 2,
+          'items': [
+            {'scenario': 'test/a_test.dart#one', 'state': 'wasBroken'},
+            {'scenario': 'test/a_test.dart#two', 'state': 'same'},
+          ],
+        },
+      });
+      expect(mixed.verdictGap, isNull);
+    });
+
+    // Deliberate asymmetry: mass breakage on the *head* side is the branch's
+    // problem either way — a dependency the branch added that will not build
+    // is the branch's to fix — and a verdict full of `broke` findings is
+    // already loud. No gap, so the red comment stands on its own.
+    test('a half the branch broke entirely is a verdict, not a gap', () {
+      var index = ComparisonIndex.fromJson({
+        'version': comparisonReportVersion,
+        'base': 'abc123def456',
+        'previews': {'rendered': 0, 'items': <Object?>[]},
+        'scenarios': {
+          'ran': 2,
+          'items': [
+            {'scenario': 'test/a_test.dart#one', 'state': 'broke'},
+            {'scenario': 'test/a_test.dart#two', 'state': 'broke'},
+          ],
+        },
+      });
+
+      expect(index.verdictGap, isNull);
+      expect(index.ok, isFalse);
+    });
+
+    test('a whole verdict has no gap, and neither does an old file', () {
+      // `narrowed` absent — every file written before the key existed.
+      var index = ComparisonIndex.fromJson({
+        'version': comparisonReportVersion,
+        'base': 'abc123def456',
+        'previews': {
+          'rendered': 2,
+          'items': [
+            {'id': 'a', 'state': 'changed'},
+            {'id': 'b', 'state': 'failed'},
+          ],
+        },
+      });
+
+      expect(index.narrowed, isFalse);
+      expect(index.verdictGap, isNull, reason: 'one compared row is a verdict');
+    });
+  });
 }

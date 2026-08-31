@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutterware_app/src/previews/asset_bundle.dart';
 import 'package:flutterware_app/src/previews/asset_transformer.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
+import 'package:hooks_runner/hooks_runner.dart'
+    show KernelAsset, KernelAssetAbsolutePath, Target;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -29,17 +32,19 @@ void main() {
     file.writeAsStringSync(content);
   }
 
-  AssetBundleBuilder builder() => AssetBundleBuilder(
-    // A cache directory that holds nothing: every SDK payload link is
-    // skipped, which keeps these tests about the project's own assets.
-    cache: FlutterCache(p.join(root.path, 'cache')),
-    rootPackageRoot: projectRoot(),
-    packageConfigPath: p.join(
-      projectRoot(),
-      '.dart_tool',
-      'package_config.json',
-    ),
-  );
+  AssetBundleBuilder builder({List<KernelAsset>? nativeAssets}) =>
+      AssetBundleBuilder(
+        // A cache directory that holds nothing: every SDK payload link is
+        // skipped, which keeps these tests about the project's own assets.
+        cache: FlutterCache(p.join(root.path, 'cache')),
+        rootPackageRoot: projectRoot(),
+        packageConfigPath: p.join(
+          projectRoot(),
+          '.dart_tool',
+          'package_config.json',
+        ),
+        nativeAssetsForTesting: nativeAssets,
+      );
 
   setUp(() {
     write('project/.dart_tool/package_config.json', '''
@@ -330,5 +335,85 @@ void main(List<String> args) {
         reason: 'every scratch was renamed in, none abandoned',
       );
     }, timeout: const Timeout(Duration(minutes: 2)));
+  });
+
+  group('native libraries', () {
+    late File lib;
+
+    setUp(() {
+      lib = File(p.join(root.path, 'hookout', 'libnative.dylib'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('machine code');
+    });
+
+    KernelAsset asset() => KernelAsset(
+      id: 'package:native/native.dart',
+      target: Target.current,
+      path: KernelAssetAbsolutePath(lib.absolute.uri),
+    );
+
+    File copy() =>
+        File(p.join(output(), nativeAssetsDirName, 'libnative.dylib'));
+
+    Object? manifestEntry() {
+      var manifest = jsonDecode(
+        File(p.join(output(), 'NativeAssetsManifest.json')).readAsStringSync(),
+      ) as Map;
+      return ((manifest['native-assets'] as Map)['${Target.current}']
+          as Map?)?['package:native/native.dart'];
+    }
+
+    // A copy where everything else is a link, because the file the guest maps
+    // must be one nothing but this builder rewrites — the hook's own output is
+    // rewritten in place by any tool that re-runs the hook on the checkout.
+    test(
+      'a bundled library is copied in and the manifest names the copy',
+      () async {
+        var sync = await builder(nativeAssets: [asset()]).build(output());
+
+        expect(sync.changed, isTrue);
+        expect(copy().readAsStringSync(), 'machine code');
+        expect(FileSystemEntity.isLinkSync(copy().path), isFalse);
+        expect(manifestEntry(), ['absolute', copy().path]);
+      },
+    );
+
+    test('an unchanged library is quiet; a changed one is replaced', () async {
+      await builder(nativeAssets: [asset()]).build(output());
+
+      var second = await builder(nativeAssets: [asset()]).build(output());
+      expect(second.changed, isFalse);
+
+      // Longer bytes, so the stamp moves on size alone — a same-second
+      // rewrite is not what this asserts.
+      lib.writeAsStringSync('newer machine code');
+      var third = await builder(nativeAssets: [asset()]).build(output());
+      expect(third.changed, isTrue);
+      expect(copy().readAsStringSync(), 'newer machine code');
+    });
+
+    test('a library the hooks no longer produce is pruned', () async {
+      await builder(nativeAssets: [asset()]).build(output());
+      expect(copy().existsSync(), isTrue);
+
+      var sync = await builder(nativeAssets: []).build(output());
+
+      expect(sync.changed, isTrue);
+      expect(copy().existsSync(), isFalse);
+      expect(File('${copy().path}.stamp').existsSync(), isFalse);
+      expect(manifestEntry(), isNull);
+    });
+
+    // The load failure then names a real path, where dropping the entry would
+    // fall back to process lookup — which succeeds wrongly on macOS.
+    test('a missing source keeps its original path in the manifest', () async {
+      lib.deleteSync();
+
+      var sync = await builder(nativeAssets: [asset()]).build(output());
+
+      expect(sync.changed, isTrue, reason: 'the manifest itself is new');
+      expect(copy().existsSync(), isFalse);
+      expect(manifestEntry(), ['absolute', lib.path]);
+    });
   });
 }
