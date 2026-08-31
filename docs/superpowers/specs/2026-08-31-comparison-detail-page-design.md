@@ -73,6 +73,33 @@ channel that has something to say.
 What they share: the layout assumes the picture is the subject. Where it is
 not, the page has no other plan.
 
+## The surfaces — the inventory that was missing
+
+Enumerating the *states of one widget* was the right idea applied one level too
+low. The states were of `StepPage`, and `StepPage` is one of **six** places a
+reader looks. Teaching it to lead with what changed therefore fixed one sixth
+of the feature and read, from outside, as nothing having been done.
+
+| surface | says *that* it changed | says *what* changed |
+|---|---|---|
+| the verdict strip | ✅ | ✅ |
+| previews list rows | ✅ | ✅ |
+| previews detail pane | ✅ | ✅ — via `FindingBody` |
+| scenarios list rows | ✅ | ✅ |
+| scenarios flow view (the merged tree) | ✅ | ✅ |
+| the pushed step page | ✅ | ✅ — via `FindingBody` |
+
+**The previews detail was a second copy of the step page's layout**, in
+`previews_tab.dart`, drifting independently — which is exactly the failure mode
+a second copy exists to produce. Both halves share `FindingBody` now, so the
+next change to either reaches both.
+
+**The flow view is the scenarios half's detail pane**, and it is what a reader
+meets when they click a scenario. Its nodes said `changed` and nothing else, so
+the answer to *what changed* was always one more click away. They name their
+channels now, and so do the scenario list rows, which had never been given the
+badges the previews rows got.
+
 ## The method, this time
 
 The last pass's failure was procedural, so the fix is procedural.
