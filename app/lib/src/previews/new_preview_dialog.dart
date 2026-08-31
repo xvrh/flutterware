@@ -117,7 +117,6 @@ class _NewPreviewDialogState extends State<_NewPreviewDialog> {
                 isDense: true,
                 labelText: 'Name',
                 hintText: 'Buttons',
-                border: OutlineInputBorder(),
               ),
               onSubmitted: (_) => unawaited(_create()),
             ),

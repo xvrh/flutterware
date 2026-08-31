@@ -113,6 +113,39 @@ cd app && fvm flutter run -t lib/main_dev.dart -d macos \
 
 `app/lib/main.dart` is the production entry point and **requires** the env vars above; it is not runnable standalone.
 
+## The studio's design system: tokens in, stock Material out
+
+The studio is drawn from its own design system, and every panel written against
+stock Material has had to be redone. The rules:
+
+- **Read the tokens, never invent values.** Colours are `context.colors`, the
+  type ramp is `context.type` (13px `body` is the working size — Material 3's
+  16px is *not on the ramp*), spacing is `FwSpacing`, corners `context.radii`,
+  icons `FwIconSize`. The whole system is on one page: the *Design system*
+  previews in `app/tool/catalog/demos/design_system.dart` answer "is there
+  already a size/grey for this" at a glance.
+- **Controls come from `app/lib/src/ui/`.** Buttons are `FwActionButton` /
+  `SplitButton`, a dropdown is `FwPicker` (never `DropdownButton` — it sets its
+  value in `titleMedium` with Material 3's own paddings), tap surfaces are
+  `Tappable`, menus/popovers are `Menu`/`Popover`, label–value rows are
+  `FieldRow`, empty/error/loading states have widgets too. Look there before
+  writing a control; if a panel needs one that does not exist, build it *there*
+  from tokens (the way `FwPicker` was extracted) rather than inline.
+- **A `TextField` stays bare.** `buildAppTheme` (`app/lib/src/ui/theme.dart`)
+  already dresses it in the house border, padding and body size — no `style:`
+  unless it is machine data (`context.type.mono`), and never
+  `border: OutlineInputBorder()`, which trades the themed border for Material's.
+  The theme also puts unstyled Material text slots on the ramp, so a stray
+  control degrades to house sizes — that is the safety net, not the pattern.
+- `app/test/material_drift_test.dart` enforces the two bans that keep coming
+  back (Material dropdowns, bare `OutlineInputBorder()`). It is in the
+  `ambient_sdk_test.dart` mould: add a rule there when a third drift pattern
+  ships twice.
+- **Look at what you built before shipping it.** A form column mixing two type
+  sizes is invisible in code and obvious in a picture: `previews screenshot` a
+  catalog demo (`app/tool/catalog/demos/` — add one for a new control, light
+  and dark), or drive the studio and observe the panel.
+
 ## Driving the running GUI (the agent inner loop)
 
 For GUI work, the fastest loop is not restart-and-look — it is *drive*: launch the GUI through the run plugin (which wraps the entry point in the run guest), then alternate code edits with `act`/`observe` transactions against the live window. Design: `docs/superpowers/specs/2026-08-11-run-drive-design.md`.

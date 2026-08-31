@@ -102,6 +102,18 @@ ThemeData buildAppTheme(FwTokens tokens) {
         fontWeight: type.spec.heading,
       ),
       titleLarge: textTheme.titleLarge!.copyWith(fontSize: type.sizeTitleLarge),
+      // The slots Material controls default to, set onto the ramp. An
+      // unstyled `TextField` reads bodyLarge, a `DropdownButton` titleMedium,
+      // a `TextButton` labelLarge, a bare `Text` bodyMedium — at Material 3's
+      // 16/16/14/14 those sat three sizes off the 13px everything styled
+      // beside them wears (the Render workbench mixed 11.5 to 16 in one form
+      // column). Taught here, a stray Material control degrades to the house
+      // sizes instead of to another design system's.
+      titleMedium: _onRamp(textTheme.titleMedium!, type.bodyStrong),
+      bodyLarge: _onRamp(textTheme.bodyLarge!, type.body),
+      bodyMedium: _onRamp(textTheme.bodyMedium!, type.body),
+      bodySmall: _onRamp(textTheme.bodySmall!, type.bodySmall),
+      labelLarge: _onRamp(textTheme.labelLarge!, type.button),
     ),
     scaffoldBackgroundColor: palette.scaffoldBackground,
     appBarTheme: base.appBarTheme.copyWith(
@@ -203,6 +215,15 @@ ThemeData buildAppTheme(FwTokens tokens) {
     ),
   );
 }
+
+/// A Material text slot, resized to a house token. Size, weight and tracking
+/// come from the token; family, colour and metrics stay the slot's own, so the
+/// result still composes the way Material expects.
+TextStyle _onRamp(TextStyle slot, TextStyle token) => slot.copyWith(
+  fontSize: token.fontSize,
+  fontWeight: token.fontWeight,
+  letterSpacing: token.letterSpacing,
+);
 
 /// Maps a plugin [Tone] to a palette colour. The single place tones become
 /// pixels — everywhere else they stay data.

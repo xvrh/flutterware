@@ -646,9 +646,6 @@ class _SqlViewState extends State<_SqlView> {
                     hintStyle: _mono(
                       context.type.body.copyWith(color: context.colors.mut3),
                     ),
-                    border: OutlineInputBorder(
-                      borderSide: BorderSide(color: context.colors.line),
-                    ),
                     contentPadding: const EdgeInsets.all(FwSpacing.lg),
                   ),
                 ),

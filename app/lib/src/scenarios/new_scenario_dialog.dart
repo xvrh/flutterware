@@ -116,7 +116,6 @@ class _NewScenarioDialogState extends State<_NewScenarioDialog> {
                 isDense: true,
                 labelText: 'Name',
                 hintText: 'Around the shop',
-                border: OutlineInputBorder(),
               ),
               onSubmitted: (_) => unawaited(_create()),
             ),
