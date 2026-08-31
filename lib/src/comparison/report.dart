@@ -196,19 +196,34 @@ List<ComparedFinding> rankComparedFindings({
 /// rule exists so nobody writes those lines again. [ComparisonIndex.verdictGap]
 /// asks it of a file.
 ///
-/// Two gaps. A half that recorded a [scenariosNote] never produced a verdict —
-/// its harness would not build, say — and whatever next prevents a half from
-/// running is covered by the note the day it appears. And a half whose rows
-/// **all** came out [ComparedState.failed] is the same gap wearing a different
-/// record: `failed` means neither side rendered, so a half made of nothing
-/// else answered no question about the branch — and it is near-always
+/// Three gaps. A half that recorded a [scenariosNote] never produced a
+/// verdict — its harness would not build, say — and whatever next prevents a
+/// half from running is covered by the note the day it appears. A half whose
+/// rows **all** came out [ComparedState.failed] is the same gap wearing a
+/// different record: `failed` means neither side rendered, so a half made of
+/// nothing else answered no question about the branch — and it is near-always
 /// environmental, one missing native library rather than fifty-one
-/// simultaneous regressions. *All*, not *any*: one pre-broken flow among
-/// compared ones is a half that did its job, and its row is an ordinary
-/// finding.
+/// simultaneous regressions. And a half of nothing but
+/// [ComparedState.wasBroken] is that gap's mirror: `wasBroken` means the base
+/// alone would not render, so not one pair of pictures was ever compared —
+/// and every row at once is near-always one base-side cause (a fresh base
+/// checkout whose native assets did not build, a pin the base cannot run
+/// under), which would otherwise read as "already broken before this branch"
+/// and exit 0. The genuine mass repair exists — a branch fixing a crash in
+/// `main` fixes every flow — and it pays one red check whose sentence names
+/// what to look at, then clears when it merges and the base moves on; the
+/// silent wrong verdict would be paid on every branch until someone noticed.
 ///
-/// [narrowed] switches the all-failed rule off — the note rule stands. "All
-/// of it failed" is evidence of environment only over the whole suite; a run
+/// *All*, not *any*, for both: one pre-broken or one repaired flow among
+/// compared ones is a half that did its job, and its row is an ordinary
+/// finding. [ComparedState.broke] deliberately gets no such rule: mass
+/// breakage on the *head* side is the branch's problem either way —
+/// environmental or not, a dependency the branch added that will not build is
+/// the branch's to fix — and a verdict full of `broke` findings is already
+/// loud.
+///
+/// [narrowed] switches the all-one-state rules off — the note rule stands.
+/// Uniformity is evidence of environment only over the whole suite; a run
 /// narrowed to named entries compares the rows somebody picked, and picking
 /// the one pre-broken flow would otherwise turn its ordinary finding into a
 /// permanent gap no change on the branch can lift.
@@ -222,19 +237,25 @@ String? verdictGapOf({
     return 'the scenario half produced no verdict — ${note.split('\n').first}';
   }
   if (narrowed) return null;
-  return _allFailedGap('scenario', 'scenarios', scenarioStates) ??
-      _allFailedGap('previews', 'entries', previewStates);
+  return _uniformGap('scenario', 'scenarios', scenarioStates) ??
+      _uniformGap('previews', 'entries', previewStates);
 }
 
-/// The gap sentence for a half of nothing but [ComparedState.failed], or null
-/// for one that compared anything at all — one copy of both the predicate and
-/// the wording, so the two halves cannot drift apart.
-String? _allFailedGap(String half, String unit, Iterable<ComparedState> s) {
+/// The gap sentence for a half whose rows all carry one no-verdict state, or
+/// null for one that compared anything at all — one copy of both the
+/// predicates and the wording, so the two halves cannot drift apart.
+String? _uniformGap(String half, String unit, Iterable<ComparedState> s) {
   var states = s.toList();
   if (states.isEmpty) return null;
-  if (!states.every((state) => state == ComparedState.failed)) return null;
-  return 'the $half half produced no verdict — all '
-      '${states.length} $unit failed on both sides';
+  if (states.every((state) => state == ComparedState.failed)) {
+    return 'the $half half produced no verdict — all '
+        '${states.length} $unit failed on both sides';
+  }
+  if (states.every((state) => state == ComparedState.wasBroken)) {
+    return 'the $half half produced no verdict — all '
+        '${states.length} $unit failed on the base side alone';
+  }
+  return null;
 }
 
 /// A whole `index.json`, read back.

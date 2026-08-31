@@ -230,6 +230,70 @@ void main() {
       );
     });
 
+    // The mirror: wasBroken means the base alone would not render, so a half
+    // of nothing else compared no pair of pictures — and every row at once is
+    // near-always one base-side cause (a cold base checkout whose native
+    // assets did not build), which would otherwise read as "already broken
+    // before this branch" and exit 0.
+    test('a half that failed on the base side alone is the same gap', () {
+      var index = ComparisonIndex.fromJson({
+        'version': comparisonReportVersion,
+        'base': 'abc123def456',
+        'previews': {'rendered': 0, 'items': <Object?>[]},
+        'scenarios': {
+          'ran': 2,
+          'items': [
+            {'scenario': 'test/a_test.dart#one', 'state': 'wasBroken'},
+            {'scenario': 'test/a_test.dart#two', 'state': 'wasBroken'},
+          ],
+        },
+      });
+
+      expect(
+        index.verdictGap,
+        'the scenario half produced no verdict — '
+        'all 2 scenarios failed on the base side alone',
+      );
+
+      // One row the branch genuinely repaired beside a compared one is a half
+      // that did its job.
+      var mixed = ComparisonIndex.fromJson({
+        'version': comparisonReportVersion,
+        'base': 'abc123def456',
+        'previews': {'rendered': 0, 'items': <Object?>[]},
+        'scenarios': {
+          'ran': 2,
+          'items': [
+            {'scenario': 'test/a_test.dart#one', 'state': 'wasBroken'},
+            {'scenario': 'test/a_test.dart#two', 'state': 'same'},
+          ],
+        },
+      });
+      expect(mixed.verdictGap, isNull);
+    });
+
+    // Deliberate asymmetry: mass breakage on the *head* side is the branch's
+    // problem either way — a dependency the branch added that will not build
+    // is the branch's to fix — and a verdict full of `broke` findings is
+    // already loud. No gap, so the red comment stands on its own.
+    test('a half the branch broke entirely is a verdict, not a gap', () {
+      var index = ComparisonIndex.fromJson({
+        'version': comparisonReportVersion,
+        'base': 'abc123def456',
+        'previews': {'rendered': 0, 'items': <Object?>[]},
+        'scenarios': {
+          'ran': 2,
+          'items': [
+            {'scenario': 'test/a_test.dart#one', 'state': 'broke'},
+            {'scenario': 'test/a_test.dart#two', 'state': 'broke'},
+          ],
+        },
+      });
+
+      expect(index.verdictGap, isNull);
+      expect(index.ok, isFalse);
+    });
+
     test('a whole verdict has no gap, and neither does an old file', () {
       // `narrowed` absent — every file written before the key existed.
       var index = ComparisonIndex.fromJson({
