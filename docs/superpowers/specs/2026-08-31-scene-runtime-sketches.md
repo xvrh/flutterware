@@ -743,7 +743,9 @@ should never persist.
   (no compile check), generic bundle (compile-checked, nested spelling) —
   identical to the parser, decided by ergonomics. **Decided by the owner,
   2026-08-31: the generic bundle**, with named constructors as the
-  fallback if inference proves finicky in real files.
+  fallback if inference proves finicky in real files. *The fallback fired
+  the same day — see the probes below: the compile check this option was
+  chosen for turns out not to exist.*
 
 ### The parameter spelling, settled by the owner's ear — three probes later
 
@@ -772,6 +774,46 @@ are refused with teaching messages). The one caveat carried over:
 `scene.title` is a real field answering *what was passed at construction*
 — a later `headline.text = …` mutation does not update it, documented
 rather than fought.
+
+## Round three — three probes for the motion rewrite
+
+Run after the rebase onto master, to de-risk the motion grammar work.
+
+**Probe: the generic bundle's compile check does not exist — the claim is
+withdrawn.** `Animate(shapeNode, content: TextTracks())` **compiles**, as
+`Animate<SceneNode>`: Dart's inference does not bind `N` from the target
+and then check the bundle — it unifies both constraints to their least
+upper bound. The "covariance pinhole" flagged earlier is not a corner
+case; it is the only behavior. What survives: correct pairings infer the
+precise type (`Animate<TextNode>`), and imposed-only works on any node.
+What follows: **the owner's pre-agreed fallback fires — named
+constructors** (`Animate.text/.shape/.ext`), whose per-kind signatures are
+real compile checks, at the known cost of re-declaring the imposed
+vocabulary per kind (paid once, in flutterware). A cosmetic variant worth
+a look at spelling time: per-kind extension methods
+(`scene.headline.animate(…)`) — statically dispatched on the receiver, so
+equally checked, and the target reads first.
+
+**Probe: the fx compose core, end to end.** A ~90-line miniature — Track/
+Key with the hold rule, contributions in an fx map, `base op fx` folds —
+confirmed every standing claim with numbers: the base is read live (the
+app halving `opacity` mid-flight halved the composed result at the same
+`t`), backwards seek needs no history, cancel is `fx.clear()` with the
+authored value untouched, and two writers on one property compose. And
+one finding nobody predicted: **two × writers do not bit-commute** —
+`(0.7·a)·b != (0.7·b)·a` in floating point (associativity, not
+commutativity). Semantically irrelevant; for golden frames and parallel
+video render, which need bit-stable pixels, it means **the writer stack's
+order is normative for every operator**, not just for `replace`. One
+sentence in the resolver's contract, caught for the price of a print.
+
+**Probe: the frame-aligned flush exists and is two lines.**
+`addPostFrameCallback` + `ensureVisualUpdate` in `markDirty`: 500 writes
+in a burst produced exactly one rebuild showing the last value, and a
+write *during another widget's build* neither threw nor was lost — it
+landed on the next frame. That closes this document's open question 2
+(writes during build: legal, deferred one frame) and hands the auto-notify
+implementation its exact scheduling shape.
 
 ## Round-2 scoreboard
 
