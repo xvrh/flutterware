@@ -11,11 +11,12 @@ import 'web_report.dart';
 
 /// Writes a run out as a browsable page.
 ///
-/// Two halves, and only the first is a compile. The **viewer** is ours and
-/// carries no data — `lib/main_scenarios_web.dart` fetches its report at run
-/// time — so it is built from the app package once and reused for every export
-/// after that. The **report** is the run the caller just did, with every
-/// artifact copied in beside it and every path rewritten to point at the copy.
+/// Two halves, and only the first is a compile. The **viewer** is the one
+/// shared [ViewerBundle] — data-free, it fetches its report at run time — so
+/// it is built from the app package once and reused for every export after
+/// that, comparison exports included. The **report** is the run the caller
+/// just did, with every artifact copied in beside it and every path rewritten
+/// to point at the copy.
 ///
 /// So an export is: build the viewer if the build system says it is stale, copy
 /// a few hundred kilobytes, and write one JSON file. The compile is the
@@ -35,9 +36,6 @@ class ScenarioWebExporter {
   }) : _bundle = ViewerBundle(
          flutterExecutable: flutterExecutable,
          appToolRoot: appToolRoot,
-         target: 'lib/main_scenarios_web.dart',
-         buildDirName: 'scenario_web_viewer',
-         label: 'scenario page viewer',
        );
 
   final ViewerBundle _bundle;

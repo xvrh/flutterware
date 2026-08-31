@@ -4,24 +4,23 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// One data-free viewer bundle: a `flutter build web` target in the app
-/// package, compiled once into a fixed directory and copied beside whatever
-/// data file an export just wrote.
+/// The one data-free viewer bundle: `lib/main_export_web.dart`, compiled once
+/// into a fixed directory and copied beside whatever data file an export just
+/// wrote.
 ///
-/// Both exporters — scenarios and comparison — are this plus their own data
-/// collection, and the half in here is the half that was identical twice:
-/// build the bundle if the build system says it is stale, copy it, and be
-/// killable, because a `flutter build web` is tens of seconds and a child
-/// started with `Process.start` is not killed when the Dart parent exits on
-/// macOS.
+/// One bundle for both exports, not one each. The page decides what it is at
+/// run time, from which file sits beside it — `index.json` is a comparison,
+/// `report.json` a scenario run — so the scenario and comparison exporters
+/// share the compile and its cache, and exporting the second kind after the
+/// first is a file copy rather than another minute of `flutter build web`.
+///
+/// Both exporters are this plus their own data collection, and the half in
+/// here is the half that was identical twice: build the bundle if the build
+/// system says it is stale, copy it, and be killable, because a
+/// `flutter build web` is tens of seconds and a child started with
+/// `Process.start` is not killed when the Dart parent exits on macOS.
 class ViewerBundle {
-  ViewerBundle({
-    required this.flutterExecutable,
-    required this.appToolRoot,
-    required this.target,
-    required this.buildDirName,
-    required this.label,
-  });
+  ViewerBundle({required this.flutterExecutable, required this.appToolRoot});
 
   final String flutterExecutable;
 
@@ -30,15 +29,8 @@ class ViewerBundle {
   /// runs here.
   final String appToolRoot;
 
-  /// The entry point, relative to [appToolRoot] — `lib/main_scenarios_web.dart`
-  /// or its comparison twin.
-  final String target;
-
-  /// The directory under `build/` the bundle compiles to.
-  final String buildDirName;
-
-  /// What the bundle is called in the error when it will not compile.
-  final String label;
+  /// The entry point, relative to [appToolRoot].
+  static const target = 'lib/main_export_web.dart';
 
   /// Where the viewer bundle is compiled to.
   ///
@@ -46,7 +38,12 @@ class ViewerBundle {
   /// incremental build decides whether a rebuild is needed. Hand-rolling that
   /// question — hashing a version, stamping a manifest — would be a second
   /// answer to it, and the one that goes stale is always the hand-rolled one.
-  String get viewerDir => p.join(appToolRoot, 'build', buildDirName);
+  ///
+  /// Fixed also means shared: two exports building at the very same moment
+  /// would race on it, exactly as they already race on the package's build
+  /// caches — a hazard that predates the shared bundle and has yet to be
+  /// observed outside this sentence.
+  String get viewerDir => p.join(appToolRoot, 'build', 'export_web_viewer');
 
   /// Stands in for the `flutter build web` that produces the viewer, so a test
   /// can exercise everything after it — which is where all the logic is —
@@ -77,7 +74,7 @@ class ViewerBundle {
     if (cancelled) return;
     if (exitCode != 0) {
       throw StateError(
-        'The $label did not compile (exit $exitCode). It is '
+        'The export page viewer did not compile (exit $exitCode). It is '
         "flutterware's own code in $appToolRoot — the error above is a bug in "
         'the tool, not in your project.',
       );

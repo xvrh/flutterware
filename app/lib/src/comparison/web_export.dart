@@ -14,9 +14,9 @@ import 'shot_png.dart';
 /// Writes a comparison out as a browsable page.
 ///
 /// The same two halves as `ScenarioWebExporter`, and only the first is a
-/// compile. The **viewer** is ours and carries no data —
-/// `lib/main_comparison_web.dart` fetches its `index.json` at run time — so it
-/// is built from the app package once and reused for every export after that.
+/// compile. The **viewer** is the one shared [ViewerBundle] — data-free, it
+/// fetches its `index.json` at run time — so it is built from the app package
+/// once and reused for every export after that, scenario exports included.
 /// The **index** is the comparison the caller just ran, with every frame it
 /// names encoded to PNG beside it and every reference rewritten to point at
 /// the copy.
@@ -36,9 +36,6 @@ class ComparisonWebExporter {
   }) : _bundle = ViewerBundle(
          flutterExecutable: flutterExecutable,
          appToolRoot: appToolRoot,
-         target: 'lib/main_comparison_web.dart',
-         buildDirName: 'comparison_web_viewer',
-         label: 'comparison page viewer',
        );
 
   final ViewerBundle _bundle;
