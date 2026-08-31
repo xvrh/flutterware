@@ -275,7 +275,7 @@ in-process, may use the full callback API directly.
 
 | Piece | State |
 | --- | --- |
-| Capture pipeline (canvas, text join, TTF+CFF outlines, policies, raster lane) | **Spike, green** — promote `test/vector_export/` to a library in the guest half |
+| Capture pipeline (canvas, text join, TTF+CFF outlines, policies, raster lane) | **Built** — `lib/src/render/`, public as `captureSvg`/`capturePdf` in `package:flutterware/render.dart`; effect layers route through the policy, warnings are typed |
 | Kernel compile, seed-kernel warm start, build isolation | **Exists** (`TesterHost`, scenarios/previews lanes) |
 | Spawn/drive `flutter_tester`, guest harness, real fonts | **Exists** (embedder + previews harness) |
 | Entry discovery, typed parameters | **Exists as precedent** (previews discovery, run knobs) — needs the render flavor |
@@ -339,11 +339,13 @@ couldn't express.*
   `RenderParagraph`, a known follow-up). The important negative finding:
   **layer-level effects drop silently.** `BackdropFilter` and `ShaderMask`
   ride `pushLayer`, which the capture inlines — the child paints, the
-  effect vanishes, and *nothing is flagged*. Before the library is public,
-  `pushLayer` must inspect the layer type and route non-trivial layers
-  (backdrop filter, shader mask, image filter, color filter) through the
-  unsupported-op policy, so they rasterize or at least warn instead of
-  lying by omission.
+  effect vanishes, and *nothing is flagged*. **Fixed at promotion time:**
+  `pushLayer` (and `pushColorFilter`, which previously lost its whole
+  subtree to `noSuchMethod`) now routes these layers through the
+  unsupported-op policy as effect spans — shader mask, image filter and
+  color filter replay their span into a raster patch with the effect
+  applied; a backdrop filter, whose input is everything painted before it,
+  keeps its child and warns.
 - Path curves are polyline-sampled (dart:ui hides path verbs) — visually
   fine, documented. PDF gradients want `PdfShading`; blend modes,
   `saveLayer` bounds and `drawVertices` land in the raster lane.

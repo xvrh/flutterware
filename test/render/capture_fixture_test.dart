@@ -7,17 +7,15 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'capture.dart';
-import 'model.dart';
-import 'pdf_writer.dart';
-import 'svg_writer.dart';
+import 'package:flutterware/src/render/capture.dart';
+import 'package:flutterware/src/render/model.dart';
+import 'package:flutterware/src/render/pdf_writer.dart';
+import 'package:flutterware/src/render/svg_writer.dart';
 
 final _boundaryKey = GlobalKey();
 
 void main() {
-  testWidgets('vector export spike: capture one screen to SVG and PDF', (
-    tester,
-  ) async {
+  testWidgets('render capture: one screen to SVG and PDF', (tester) async {
     tester.view.physicalSize = const Size(420, 640);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -55,15 +53,14 @@ void main() {
     var recording = captureVector(boundary);
 
     var fonts = [
-      VgFontFace(family: 'Roboto', bytes: robotoRegular),
-      VgFontFace(family: 'Roboto', bytes: robotoBold, bold: true),
-      VgFontFace(family: 'Roboto', bytes: robotoItalic, italic: true),
+      RenderFont(family: 'Roboto', bytes: robotoRegular),
+      RenderFont(family: 'Roboto', bytes: robotoBold, bold: true),
+      RenderFont(family: 'Roboto', bytes: robotoItalic, italic: true),
       if (materialIcons != null)
-        VgFontFace(family: 'MaterialIcons', bytes: materialIcons),
+        RenderFont(family: 'MaterialIcons', bytes: materialIcons),
     ];
 
-    var outDir = Directory('build/vector_export_spike')
-      ..createSync(recursive: true);
+    var outDir = Directory('build/render_capture')..createSync(recursive: true);
     await tester.runAsync(() async {
       await recording.rasterizeUnsupported();
       await recording.encodeImages();
@@ -76,7 +73,7 @@ void main() {
         recording,
         size,
         fonts,
-        options: VgExportOptions(textMode: (_) => VgTextMode.vectorize),
+        options: CaptureOptions(text: (_) => TextPolicy.vectorize),
       );
       File('${outDir.path}/spike_outline.svg').writeAsStringSync(outlineSvg);
 
@@ -86,10 +83,10 @@ void main() {
         recording,
         size,
         fonts,
-        options: VgExportOptions(
-          textMode: (run) => run.fontFamily == 'MaterialIcons'
-              ? VgTextMode.vectorize
-              : VgTextMode.systemFont,
+        options: CaptureOptions(
+          text: (run) => run.fontFamily == 'MaterialIcons'
+              ? TextPolicy.vectorize
+              : TextPolicy.systemFont,
         ),
       );
       File('${outDir.path}/spike_system.svg').writeAsStringSync(systemSvg);
@@ -99,16 +96,11 @@ void main() {
         'system fonts: ${systemSvg.length ~/ 1024}KB',
       );
 
-      var dropped = <String>[];
-      var pdf = await writePdf(
-        recording,
-        size,
-        fonts,
-        droppedTextRuns: dropped,
-      );
+      var pdfWarnings = <RenderWarning>[];
+      var pdf = await writePdf(recording, size, fonts, warnings: pdfWarnings);
       File('${outDir.path}/spike.pdf').writeAsBytesSync(pdf);
-      if (dropped.isNotEmpty) {
-        print('pdf dropped ${dropped.length} text runs: $dropped');
+      if (pdfWarnings.isNotEmpty) {
+        print('pdf warnings: $pdfWarnings');
       }
 
       var truth = await boundary.toImage(pixelRatio: 2);

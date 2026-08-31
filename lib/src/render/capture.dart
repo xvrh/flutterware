@@ -11,17 +11,20 @@ import 'text_extract.dart';
 /// Nothing composites: every layer the tree would push is inlined into one
 /// command stream, and the context keeps a stack of the render objects being
 /// painted so canvas calls can be joined back to the semantics that produced
-/// them (text content from [RenderParagraph], gradients from
-/// [RenderDecoratedBox]).
+/// them (text content from [RenderParagraph] and [RenderEditable], gradients
+/// from [RenderDecoratedBox]). Layer effects the stream cannot carry —
+/// backdrop filters, image filters, color filters, shader masks — become
+/// [VgBeginEffect]..[VgEndEffect] spans for the unsupported-op policy to
+/// decide over, instead of silently vanishing.
 VgRecording captureVector(RenderObject root) {
   var recording = VgRecording();
-  var context = ExportPaintingContext(recording);
+  var context = CapturePaintingContext(recording);
   context.paintChild(root, Offset.zero);
   return recording;
 }
 
-class ExportPaintingContext extends ClipContext implements PaintingContext {
-  ExportPaintingContext(this.recording) {
+class CapturePaintingContext extends ClipContext implements PaintingContext {
+  CapturePaintingContext(this.recording) {
     canvas = _RecordingCanvas(recording, this);
   }
 
@@ -144,13 +147,106 @@ class ExportPaintingContext extends ClipContext implements PaintingContext {
   }
 
   @override
+  ColorFilterLayer pushColorFilter(
+    Offset offset,
+    ColorFilter colorFilter,
+    PaintingContextCallback painter, {
+    ColorFilterLayer? oldLayer,
+  }) {
+    _pushEffect(
+      VgBeginEffect(
+        VgEffectKind.colorFilter,
+        _effectBounds(offset, null),
+        colorFilter: colorFilter,
+      ),
+      painter,
+      offset,
+    );
+    return ColorFilterLayer();
+  }
+
+  @override
   void pushLayer(
     Layer childLayer,
     PaintingContextCallback painter,
     Offset offset, {
     Rect? childPaintBounds,
   }) {
+    switch (childLayer) {
+      case OpacityLayer layer:
+        recording.ops.add(VgSaveLayer((layer.alpha ?? 255) / 255));
+        painter(this, offset);
+        recording.ops.add(VgRestore());
+      case BackdropFilterLayer():
+        _pushEffect(
+          VgBeginEffect(
+            VgEffectKind.backdropFilter,
+            _effectBounds(offset, childPaintBounds),
+          ),
+          painter,
+          offset,
+        );
+      case ImageFilterLayer layer:
+        _pushEffect(
+          VgBeginEffect(
+            VgEffectKind.imageFilter,
+            _effectBounds(offset, childPaintBounds),
+            imageFilter: layer.imageFilter,
+          ),
+          painter,
+          offset,
+        );
+      case ColorFilterLayer layer:
+        _pushEffect(
+          VgBeginEffect(
+            VgEffectKind.colorFilter,
+            _effectBounds(offset, childPaintBounds),
+            colorFilter: layer.colorFilter,
+          ),
+          painter,
+          offset,
+        );
+      case ShaderMaskLayer layer:
+        _pushEffect(
+          VgBeginEffect(
+            VgEffectKind.shaderMask,
+            _effectBounds(offset, childPaintBounds),
+            shader: layer.shader,
+            maskRect: layer.maskRect,
+            blendMode: layer.blendMode,
+          ),
+          painter,
+          offset,
+        );
+      default:
+        // Container/offset layers carry no effect of their own.
+        painter(this, offset);
+    }
+  }
+
+  void _pushEffect(
+    VgBeginEffect begin,
+    PaintingContextCallback painter,
+    Offset offset,
+  ) {
+    recording.ops.add(begin);
     painter(this, offset);
+    recording.ops.add(VgEndEffect());
+  }
+
+  /// The effect's coverage in the current canvas frame: the render object
+  /// pushing the layer knows its own size.
+  Rect _effectBounds(Offset offset, Rect? childPaintBounds) {
+    var ro = renderObjectStack.isEmpty ? null : renderObjectStack.last;
+    if (ro is RenderBox && ro.hasSize) return offset & ro.size;
+    return childPaintBounds ?? Rect.zero;
+  }
+
+  @override
+  void addLayer(Layer layer) {
+    // A leaf layer arrives whole (texture, platform view, performance
+    // overlay): there is no paint pass to capture behind it.
+    recording.unreplayableLayers.add(layer.runtimeType.toString());
   }
 
   @override
@@ -184,8 +280,17 @@ class ExportPaintingContext extends ClipContext implements PaintingContext {
 
   VgOp resolveParagraph(ui.Paragraph paragraph, Offset offset) {
     for (var ro in renderObjectStack.reversed) {
-      if (ro is RenderParagraph) {
-        return VgDrawText(extractTextRuns(paragraph, ro.text, offset));
+      var span = switch (ro) {
+        RenderParagraph p => p.text,
+        RenderEditable e => e.text,
+        _ => null,
+      };
+      if (span != null) {
+        return VgDrawText(
+          extractTextRuns(paragraph, span, offset),
+          paragraph: paragraph,
+          paragraphOffset: offset,
+        );
       }
     }
     // A paragraph laid out without a max width reports width = Infinity;
@@ -204,7 +309,7 @@ class _RecordingCanvas implements ui.Canvas {
   _RecordingCanvas(this.recording, this.context);
 
   final VgRecording recording;
-  final ExportPaintingContext context;
+  final CapturePaintingContext context;
   var _saveCount = 1;
 
   List<VgOp> get _ops => recording.ops;
@@ -288,7 +393,7 @@ class _RecordingCanvas implements ui.Canvas {
 
   @override
   void clipPath(ui.Path path, {bool doAntiAlias = true}) {
-    _ops.add(VgClipPath(VgPathData.fromPath(path)));
+    _ops.add(VgClipPath(VgPathData.fromPath(path), source: ui.Path.from(path)));
   }
 
   @override
@@ -320,6 +425,27 @@ class _RecordingCanvas implements ui.Canvas {
   @override
   void drawOval(Rect rect, ui.Paint paint) {
     _ops.add(VgDrawOval(rect, _paint(paint, rect)));
+  }
+
+  @override
+  void drawArc(
+    Rect rect,
+    double startAngle,
+    double sweepAngle,
+    bool useCenter,
+    ui.Paint paint,
+  ) {
+    // An arc is a path with better publicity; the path lane keeps the
+    // stroke's cap and the live paint for the raster fallback.
+    var path = ui.Path();
+    if (useCenter) {
+      path.moveTo(rect.center.dx, rect.center.dy);
+      path.arcTo(rect, startAngle, sweepAngle, false);
+      path.close();
+    } else {
+      path.addArc(rect, startAngle, sweepAngle);
+    }
+    drawPath(path, paint);
   }
 
   @override

@@ -10,9 +10,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
-import 'capture.dart';
-import 'model.dart';
-import 'svg_writer.dart';
+import 'package:flutterware/src/render/capture.dart';
+import 'package:flutterware/src/render/model.dart';
+import 'package:flutterware/src/render/svg_writer.dart';
 
 final _boundaryKey = GlobalKey();
 final _data = ValueNotifier<List<double>>([42, 55, 48, 70, 66, 88]);
@@ -32,8 +32,8 @@ Future<void> main() async {
         ..addFont(Future.value(robotoBold.buffer.asByteData())))
       .load();
   var fonts = [
-    VgFontFace(family: 'Roboto', bytes: roboto),
-    VgFontFace(family: 'Roboto', bytes: robotoBold, bold: true),
+    RenderFont(family: 'Roboto', bytes: roboto),
+    RenderFont(family: 'Roboto', bytes: robotoBold, bold: true),
   ];
 
   runApp(const _App());
@@ -50,7 +50,7 @@ Future<void> main() async {
   }
 
   const size = Size(436, 300);
-  var options = VgExportOptions(textMode: (_) => VgTextMode.vectorize);
+  var options = CaptureOptions(text: (_) => TextPolicy.vectorize);
 
   if (mode == 'once') {
     var watch = Stopwatch()..start();

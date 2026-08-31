@@ -8,9 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import 'capture.dart';
-import 'model.dart';
-import 'svg_writer.dart';
+import 'package:flutterware/src/render/capture.dart';
+import 'package:flutterware/src/render/model.dart';
+import 'package:flutterware/src/render/svg_writer.dart';
 
 /// The consumer story this proves: a report generated with package:pdf's
 /// widget library wants a chart that is the app's own Flutter widget, not a
@@ -46,12 +46,11 @@ void main() {
         tester.renderObject(find.byKey(_chartKey)) as RenderRepaintBoundary;
     var recording = captureVector(boundary);
     var fonts = [
-      VgFontFace(family: 'Roboto', bytes: roboto),
-      VgFontFace(family: 'Roboto', bytes: robotoBold, bold: true),
+      RenderFont(family: 'Roboto', bytes: roboto),
+      RenderFont(family: 'Roboto', bytes: robotoBold, bold: true),
     ];
 
-    var outDir = Directory('build/vector_export_spike')
-      ..createSync(recursive: true);
+    var outDir = Directory('build/render_capture')..createSync(recursive: true);
     await tester.runAsync(() async {
       await recording.rasterizeUnsupported();
       await recording.encodeImages();
@@ -61,7 +60,7 @@ void main() {
         recording,
         size,
         fonts,
-        options: VgExportOptions(textMode: (_) => VgTextMode.vectorize),
+        options: CaptureOptions(text: (_) => TextPolicy.vectorize),
       );
       File('${outDir.path}/chart.svg').writeAsStringSync(svg);
 

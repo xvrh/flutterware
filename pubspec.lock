@@ -947,7 +947,7 @@ packages:
     source: hosted
     version: "2.3.0"
   pdf:
-    dependency: "direct dev"
+    dependency: "direct main"
     description:
       name: pdf
       sha256: "517df47af468734a23c8b513c0c6a8a62357403ab1b8ab7fad1606576a9dbdd0"
@@ -1426,7 +1426,7 @@ packages:
     source: hosted
     version: "1.3.0"
   vector_math:
-    dependency: "direct dev"
+    dependency: "direct main"
     description:
       name: vector_math
       sha256: f36f9f3be64c6198714492bb455c11056e33e2f85d9a0b676a48301e44fdcf47

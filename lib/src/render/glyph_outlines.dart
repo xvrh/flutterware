@@ -130,11 +130,11 @@ class GlyphSource {
 
 /// Picks the closest declared face for a run and parses it once.
 GlyphSource? glyphSourceForRun(
-  List<VgFontFace> fonts,
-  VgTextRun run,
-  Map<VgFontFace, GlyphSource?> cache,
+  List<RenderFont> fonts,
+  TextRun run,
+  Map<RenderFont, GlyphSource?> cache,
 ) {
-  VgFontFace? best;
+  RenderFont? best;
   var wantBold = run.fontWeight.value >= FontWeight.w600.value;
   var wantItalic = run.fontStyle == FontStyle.italic;
   for (var face in fonts) {
@@ -145,20 +145,6 @@ GlyphSource? glyphSourceForRun(
   var face = best;
   if (face == null) return null;
   return cache.putIfAbsent(face, () => GlyphSource.tryParse(face.bytes));
-}
-
-class VgFontFace {
-  VgFontFace({
-    required this.family,
-    required this.bytes,
-    this.bold = false,
-    this.italic = false,
-  });
-
-  final String family;
-  final Uint8List bytes;
-  final bool bold;
-  final bool italic;
 }
 
 abstract class _OutlineTable {

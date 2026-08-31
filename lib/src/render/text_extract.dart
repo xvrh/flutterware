@@ -13,7 +13,7 @@ import 'model.dart';
 /// the span flattens to the same string the paragraph was built from
 /// (placeholders as U+FFFC), so every (line × style-run) intersection can ask
 /// the real paragraph where it sits.
-List<VgTextRun> extractTextRuns(
+List<TextRun> extractTextRuns(
   ui.Paragraph paragraph,
   InlineSpan span,
   Offset offset,
@@ -22,7 +22,7 @@ List<VgTextRun> extractTextRuns(
   var text = flat.map((r) => r.text).join();
   if (text.isEmpty) return [];
 
-  var runs = <VgTextRun>[];
+  var runs = <TextRun>[];
   var lines = paragraph.computeLineMetrics();
   var pos = 0;
   for (var line in lines) {
@@ -45,7 +45,7 @@ List<VgTextRun> extractTextRuns(
       if (content.contains('￼')) continue;
       var boxes = paragraph.getBoxesForRange(from, to);
       if (boxes.isEmpty) continue;
-      var clusters = <VgCluster>[];
+      var clusters = <TextCluster>[];
       for (var i = from; i < to; i++) {
         var next = i + 1;
         // Keep surrogate pairs whole.
@@ -53,7 +53,7 @@ List<VgTextRun> extractTextRuns(
         var charBoxes = paragraph.getBoxesForRange(i, next);
         if (charBoxes.isNotEmpty) {
           clusters.add(
-            VgCluster(
+            TextCluster(
               text.substring(i, next),
               charBoxes.first.left + offset.dx,
             ),
@@ -63,7 +63,7 @@ List<VgTextRun> extractTextRuns(
       }
       var style = piece.style ?? const TextStyle();
       runs.add(
-        VgTextRun(
+        TextRun(
           text: content.replaceAll('\n', ''),
           x: boxes.first.left + offset.dx,
           baseline: line.baseline + offset.dy,

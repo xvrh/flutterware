@@ -4,29 +4,27 @@ import 'dart:ui';
 import 'glyph_outlines.dart';
 import 'model.dart';
 
-export 'glyph_outlines.dart' show VgFontFace;
-
-/// [VgExportOptions.textMode] decides per run whether its glyphs become
+/// [CaptureOptions.text] decides per run whether its glyphs become
 /// paths read from the font file, real `<text>` with the font embedded, or
-/// real `<text>` resolved by the viewer. [VgExportOptions.unsupported]
+/// real `<text>` resolved by the viewer. [CaptureOptions.unsupported]
 /// decides what an inexpressible op (shadow, unresolvable shader,
 /// unrecoverable paragraph) turns into.
 String writeSvg(
   VgRecording rec,
   Size size,
-  List<VgFontFace> fonts, {
-  VgExportOptions? options,
+  List<RenderFont> fonts, {
+  CaptureOptions? options,
 }) {
-  var opts = options ?? VgExportOptions();
+  var opts = options ?? CaptureOptions();
   var defs = StringBuffer();
   var body = StringBuffer();
   var defId = 0;
 
-  var glyphSources = <VgFontFace, GlyphSource?>{};
-  GlyphSource? sourceFor(VgTextRun run) =>
+  var glyphSources = <RenderFont, GlyphSource?>{};
+  GlyphSource? sourceFor(TextRun run) =>
       glyphSourceForRun(fonts, run, glyphSources);
 
-  var embeddedFaces = <VgFontFace>{};
+  var embeddedFaces = <RenderFont>{};
   void embedFace(String? family) {
     for (var font in fonts) {
       if (family != null && font.family != family) continue;
@@ -61,9 +59,9 @@ String writeSvg(
     return switch (opts.unsupported) {
       // No raster available (the capture skipped rasterizeUnsupported):
       // degrade to the flat stand-in rather than losing the op.
-      VgUnsupportedMode.rasterize => emitRaster(rasterId),
-      VgUnsupportedMode.flatten => false,
-      VgUnsupportedMode.skip => true,
+      UnsupportedPolicy.rasterize => emitRaster(rasterId),
+      UnsupportedPolicy.flatten => false,
+      UnsupportedPolicy.skip => true,
     };
   }
 
@@ -142,8 +140,26 @@ String writeSvg(
     return d.toString();
   }
 
+  // An effect span whose patch is placed — or that the policy leaves out —
+  // must not also paint its child ops; skipDepth swallows the span.
+  var skipDepth = 0;
   for (var op in rec.ops) {
+    if (skipDepth > 0) {
+      if (op is VgBeginEffect) skipDepth++;
+      if (op is VgEndEffect) skipDepth--;
+      continue;
+    }
     switch (op) {
+      case VgBeginEffect begin:
+        if (opts.unsupported == UnsupportedPolicy.skip ||
+            (opts.unsupported == UnsupportedPolicy.rasterize &&
+                emitRaster(begin.rasterId))) {
+          skipDepth = 1;
+        }
+      // Otherwise the effect is dropped and its child paints plain,
+      // flagged by the warnings channel.
+      case VgEndEffect():
+        break;
       case VgSave():
         frames.add(0);
       case VgSaveLayer(:var opacity):
@@ -213,7 +229,7 @@ String writeSvg(
         var rule = path.evenOdd ? ' fill-rule="evenodd"' : '';
         body.write('<path d="${pathD(path)}"$rule ${fillAttrs(paint)}/>');
       case VgDrawShadow(:var rasterId):
-        if (opts.unsupported == VgUnsupportedMode.rasterize) {
+        if (opts.unsupported == UnsupportedPolicy.rasterize) {
           emitRaster(rasterId);
         }
       case VgDrawImageRect(:var imageId, :var dst):
@@ -226,8 +242,8 @@ String writeSvg(
         );
       case VgDrawText(:var runs):
         for (var run in runs) {
-          var mode = opts.textMode(run);
-          if (mode == VgTextMode.vectorize) {
+          var mode = opts.text(run);
+          if (mode == TextPolicy.vectorize) {
             var source = run.clusters == null ? null : sourceFor(run);
             if (source != null) {
               var scale = run.fontSize / source.unitsPerEm;
@@ -274,9 +290,9 @@ String writeSvg(
             // No outline source for this face: fall through to embedded
             // real text rather than losing the run.
           }
-          if (mode != VgTextMode.systemFont) embedFace(run.fontFamily);
+          if (mode != TextPolicy.systemFont) embedFace(run.fontFamily);
           var family = run.fontFamily ?? 'sans-serif';
-          if (mode == VgTextMode.systemFont) family = '$family, sans-serif';
+          if (mode == TextPolicy.systemFont) family = '$family, sans-serif';
           var spacing = run.letterSpacing != null
               ? ' letter-spacing="${run.letterSpacing}"'
               : '';
@@ -294,11 +310,11 @@ String writeSvg(
           );
         }
       case VgDrawUnknownParagraph(:var bounds, :var rasterId):
-        if (opts.unsupported == VgUnsupportedMode.rasterize &&
+        if (opts.unsupported == UnsupportedPolicy.rasterize &&
             emitRaster(rasterId)) {
           break;
         }
-        if (opts.unsupported == VgUnsupportedMode.skip) break;
+        if (opts.unsupported == UnsupportedPolicy.skip) break;
         body.write(
           '<rect x="${_n(bounds.left)}" y="${_n(bounds.top)}" '
           'width="${_n(bounds.width)}" height="${_n(bounds.height)}" '

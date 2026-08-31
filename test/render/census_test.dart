@@ -3,8 +3,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'capture.dart';
-import 'model.dart';
+import 'package:flutterware/src/render/capture.dart';
+import 'package:flutterware/src/render/model.dart';
 
 /// The capture census: run the recorder over a battery of everyday Material
 /// surfaces and count what falls outside the vector lanes — unhandled canvas
@@ -148,6 +148,12 @@ void main() {
           ),
         ),
       ),
+      'color filtered': Center(
+        child: ColorFiltered(
+          colorFilter: const ColorFilter.mode(Colors.red, BlendMode.srcIn),
+          child: Container(width: 120, height: 60, color: Colors.white),
+        ),
+      ),
       'data table': DataTable(
         columns: const [
           DataColumn(label: Text('Name')),
@@ -177,6 +183,8 @@ void main() {
     };
 
     var totalUnhandled = <String, int>{};
+    var unknownTotal = 0;
+    var effectsByScreen = <String, int>{};
     var report = StringBuffer();
     for (var entry in screens.entries) {
       await tester.pumpWidget(
@@ -216,6 +224,22 @@ void main() {
       var unknownParagraphs = recording.ops
           .whereType<VgDrawUnknownParagraph>()
           .length;
+      unknownTotal += unknownParagraphs;
+      var effects = recording.ops.whereType<VgBeginEffect>().length;
+      effectsByScreen[entry.key] = effects;
+      if (effects > 0) {
+        // A layer effect must reach the warnings channel — the census's
+        // reason to exist is that these used to vanish silently.
+        var warnings = recording.collectWarnings(CaptureOptions());
+        expect(
+          warnings.where(
+            (w) =>
+                w.kind == RenderWarningKind.effectRasterized ||
+                w.kind == RenderWarningKind.effectDropped,
+          ),
+          isNotEmpty,
+        );
+      }
       var textRuns = recording.ops.whereType<VgDrawText>().fold(
         0,
         (sum, op) => sum + op.runs.length,
@@ -227,14 +251,32 @@ void main() {
         '${entry.key.padRight(20)} ops=${recording.ops.length.toString().padLeft(3)} '
         'textRuns=${textRuns.toString().padLeft(2)} '
         'unknownParagraphs=$unknownParagraphs '
+        'effects=$effects '
         'unresolvedShaders=$unresolvedShaders '
         'unhandled=${recording.unhandled.isEmpty ? '-' : recording.unhandled.join(',')}',
       );
     }
     print(report);
-    print(
-      'unhandled ops across all screens: '
-      '${totalUnhandled.isEmpty ? 'none' : totalUnhandled}',
+    expect(
+      totalUnhandled,
+      isEmpty,
+      reason: 'every canvas op on these screens must be captured',
     );
+    expect(
+      unknownTotal,
+      0,
+      reason:
+          'all text on these screens joins back to the render tree '
+          '(RenderParagraph and RenderEditable)',
+    );
+    for (var screen in ['backdrop blur', 'shader mask', 'color filtered']) {
+      expect(
+        effectsByScreen[screen],
+        greaterThan(0),
+        reason:
+            '$screen must surface its layer effect instead of dropping it '
+            'silently',
+      );
+    }
   });
 }

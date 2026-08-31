@@ -17,17 +17,17 @@ import 'model.dart';
 Future<Uint8List> writePdf(
   VgRecording rec,
   Size size,
-  List<VgFontFace> fonts, {
-  VgExportOptions? options,
-  List<String>? droppedTextRuns,
+  List<RenderFont> fonts, {
+  CaptureOptions? options,
+  List<RenderWarning>? warnings,
 }) async {
-  var opts = options ?? VgExportOptions();
-  var droppedRuns = droppedTextRuns ?? [];
+  var opts = options ?? CaptureOptions();
+  var warningSink = warnings ?? [];
   var doc = PdfDocument();
   var page = PdfPage(doc, pageFormat: PdfPageFormat(size.width, size.height));
   var g = page.getGraphics();
 
-  var pdfFonts = <VgFontFace, PdfTtfFont>{};
+  var pdfFonts = <RenderFont, PdfTtfFont>{};
   for (var face in fonts) {
     try {
       pdfFonts[face] = PdfTtfFont(doc, face.bytes.buffer.asByteData());
@@ -37,8 +37,8 @@ Future<Uint8List> writePdf(
     }
   }
 
-  PdfTtfFont? fontFor(VgTextRun run) {
-    VgFontFace? best;
+  PdfTtfFont? fontFor(TextRun run) {
+    RenderFont? best;
     var wantBold = run.fontWeight.value >= FontWeight.w600.value;
     var wantItalic = run.fontStyle == FontStyle.italic;
     for (var face in pdfFonts.keys) {
@@ -56,10 +56,10 @@ Future<Uint8List> writePdf(
 
   PdfColor color(Color c) => PdfColor(c.r, c.g, c.b, c.a);
 
-  // Base-14 faces for VgTextMode.systemFont: nothing embedded, the viewer's
+  // Base-14 faces for TextPolicy.systemFont: nothing embedded, the viewer's
   // own Helvetica renders the string.
   var base14 = <String, PdfFont>{};
-  PdfFont helveticaFor(VgTextRun run) {
+  PdfFont helveticaFor(TextRun run) {
     var bold = run.fontWeight.value >= FontWeight.w600.value;
     var italic = run.fontStyle == FontStyle.italic;
     return base14.putIfAbsent('$bold-$italic', () {
@@ -98,20 +98,20 @@ Future<Uint8List> writePdf(
   bool tookUnsupported(VgPaint paint, int? rasterId) {
     if (!paint.hadUnresolvedShader) return false;
     return switch (opts.unsupported) {
-      VgUnsupportedMode.rasterize => drawRaster(rasterId),
-      VgUnsupportedMode.flatten => false,
-      VgUnsupportedMode.skip => true,
+      UnsupportedPolicy.rasterize => drawRaster(rasterId),
+      UnsupportedPolicy.flatten => false,
+      UnsupportedPolicy.skip => true,
     };
   }
 
-  var glyphSources = <VgFontFace, GlyphSource?>{};
+  var glyphSources = <RenderFont, GlyphSource?>{};
 
   /// Draws a run as glyph outlines read from the font file — the road for
   /// text the embedded-font machinery cannot take (CFF faces, unencodable
   /// code points). Geometry is in Flutter coordinates like every other op;
   /// the global flip maps it, so unlike drawString no local transform is
   /// needed.
-  bool drawRunAsOutlines(VgTextRun run) {
+  bool drawRunAsOutlines(TextRun run) {
     var clusters = run.clusters;
     if (clusters == null) return false;
     var source = glyphSourceForRun(fonts, run, glyphSources);
@@ -249,8 +249,26 @@ Future<Uint8List> writePdf(
       ..multiply(Matrix4.diagonal3Values(1, -1, 1)),
   );
 
+  // An effect span whose patch is placed — or that the policy leaves out —
+  // must not also paint its child ops; skipDepth swallows the span.
+  var skipDepth = 0;
   for (var op in rec.ops) {
+    if (skipDepth > 0) {
+      if (op is VgBeginEffect) skipDepth++;
+      if (op is VgEndEffect) skipDepth--;
+      continue;
+    }
     switch (op) {
+      case VgBeginEffect begin:
+        if (opts.unsupported == UnsupportedPolicy.skip ||
+            (opts.unsupported == UnsupportedPolicy.rasterize &&
+                drawRaster(begin.rasterId))) {
+          skipDepth = 1;
+        }
+      // Otherwise the effect is dropped and its child paints plain,
+      // flagged by the warnings channel.
+      case VgEndEffect():
+        break;
       case VgSave():
         g.saveContext();
       case VgSaveLayer(:var opacity):
@@ -318,7 +336,7 @@ Future<Uint8List> writePdf(
         emitPath(path);
         finish(paint, evenOdd: path.evenOdd);
       case VgDrawShadow(:var rasterId):
-        if (opts.unsupported == VgUnsupportedMode.rasterize) {
+        if (opts.unsupported == UnsupportedPolicy.rasterize) {
           drawRaster(rasterId);
         }
       case VgDrawImageRect(:var imageId, :var dst):
@@ -338,8 +356,8 @@ Future<Uint8List> writePdf(
         g.restoreContext();
       case VgDrawText(:var runs):
         for (var run in runs) {
-          var mode = opts.textMode(run);
-          if (mode == VgTextMode.vectorize && drawRunAsOutlines(run)) {
+          var mode = opts.text(run);
+          if (mode == TextPolicy.vectorize && drawRunAsOutlines(run)) {
             continue;
           }
           // A failed drawString leaves a half-written text object in the
@@ -347,7 +365,7 @@ Future<Uint8List> writePdf(
           // glyphs must exist, and a non-unicode font (base-14 or a
           // CFF-flavored OTF) can only take Latin-1.
           PdfFont? font;
-          if (mode == VgTextMode.systemFont) {
+          if (mode == TextPolicy.systemFont) {
             var helvetica = helveticaFor(run);
             if (run.text.runes.every((r) => r < 256)) font = helvetica;
           } else {
@@ -359,7 +377,15 @@ Future<Uint8List> writePdf(
             }
           }
           if (font == null) {
-            if (!drawRunAsOutlines(run)) droppedRuns.add(run.text);
+            if (!drawRunAsOutlines(run)) {
+              warningSink.add(
+                RenderWarning(
+                  RenderWarningKind.droppedText,
+                  'text run "${run.text}" dropped: no available font can '
+                  'write it',
+                ),
+              );
+            }
             continue;
           }
           g.saveContext();
@@ -379,11 +405,11 @@ Future<Uint8List> writePdf(
           g.restoreContext();
         }
       case VgDrawUnknownParagraph(:var bounds, :var rasterId):
-        if (opts.unsupported == VgUnsupportedMode.rasterize &&
+        if (opts.unsupported == UnsupportedPolicy.rasterize &&
             drawRaster(rasterId)) {
           break;
         }
-        if (opts.unsupported == VgUnsupportedMode.skip) break;
+        if (opts.unsupported == UnsupportedPolicy.skip) break;
         g.moveTo(bounds.left, bounds.top);
         g.lineTo(bounds.right, bounds.top);
         g.lineTo(bounds.right, bounds.bottom);
