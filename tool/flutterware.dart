@@ -364,7 +364,7 @@ void main() => Flutterware.configure((fw) {
                   "Disposable spike — renders the canvas toy's scene from "
                   'data pushed over a VM-service extension, with this '
                   "package's own widgets live",
-              platforms: [RunPlatform.desktop],
+              platforms: [RunPlatform.desktop, RunPlatform.ios],
             ),
             Entrypoint(
               'lib/ui_book.dart',

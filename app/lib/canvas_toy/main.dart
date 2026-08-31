@@ -90,6 +90,7 @@ class TreePanel extends StatelessWidget {
                     ..height = 120,
                 ),
               ),
+              _AddButton('100', _stress),
               IconButton(
                 tooltip: 'Move up',
                 icon: const Icon(Icons.arrow_upward, size: 16),
@@ -154,6 +155,35 @@ class TreePanel extends StatelessWidget {
     var node = doc.selected;
     if (node == null) return null;
     return doc.parentOf(node)?.children.indexOf(node);
+  }
+
+  /// Scale probe: each press adds a frame of 100 nodes (dots and tiny
+  /// texts), so payload, sweep and both renderers grow together.
+  void _stress() {
+    var k = doc.root.children.where((n) => n.name.startsWith('Stress')).length;
+    var frame = FrameNode('Stress$k')
+      ..x = 20
+      ..y = 20.0 + 56 * k
+      ..width = 984
+      ..height = 52;
+    for (var i = 0; i < 100; i++) {
+      var col = i % 25;
+      var row = i ~/ 25;
+      var node = i.isEven
+          ? (ShapeNode('s$k-$i', circle: true)
+                  ..width = 8
+                  ..height = 8
+                  ..fill = Color.fromARGB(255, 90 + i, 130, 220 - i))
+                as SceneNode
+          : (TextNode('t$k-$i', '$i')
+              ..fontSize = 9
+              ..color = const Color(0xB3FFFFFF));
+      node
+        ..x = col * 39.0
+        ..y = row * 13.0;
+      frame.children.add(node);
+    }
+    doc.edit(() => doc.root.children.add(frame));
   }
 
   void _add(SceneNode node) {

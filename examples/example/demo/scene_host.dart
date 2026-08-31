@@ -67,11 +67,16 @@ class _SceneHostAppState extends State<SceneHostApp> {
     var http = info.serverUri;
     if (http == null) return;
     var ws = 'ws${http.toString().substring(4)}ws';
-    var file = File(
-      '${Platform.environment['HOME']}/.flutterware/scene_host_uri.txt',
-    );
-    file.parent.createSync(recursive: true);
-    file.writeAsStringSync(ws);
+    try {
+      var file = File(
+        '${Platform.environment['HOME']}/.flutterware/scene_hosts/$pid.txt',
+      );
+      file.parent.createSync(recursive: true);
+      file.writeAsStringSync(ws);
+    } catch (_) {
+      // A sandboxed guest (a simulator) cannot reach the editor's home
+      // directory; something outside drops the announcement for it.
+    }
   }
 
   Future<dev.ServiceExtensionResponse> _apply(
@@ -147,11 +152,17 @@ class _SceneHostAppState extends State<SceneHostApp> {
                   'scene host — waiting for the editor',
                   style: TextStyle(color: Colors.white54),
                 )
-              : SizedBox(
-                  key: _artboardKey,
-                  width: (_scene!['w'] as num?)?.toDouble() ?? 1024,
-                  height: (_scene!['h'] as num?)?.toDouble() ?? 500,
-                  child: _node(_scene!, root: true),
+              // Scale-to-fit so a small guest (a phone) shows the whole
+              // artboard. Rects stay in artboard coordinates: the sweep
+              // measures against the artboard box, inside the scaling.
+              : FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: SizedBox(
+                    key: _artboardKey,
+                    width: (_scene!['w'] as num?)?.toDouble() ?? 1024,
+                    height: (_scene!['h'] as num?)?.toDouble() ?? 500,
+                    child: _node(_scene!, root: true),
+                  ),
                 ),
         ),
       ),

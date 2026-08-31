@@ -108,6 +108,60 @@ editor's inspector regrew the real widget live, selection border tracking.
 4. **The pipe is the run system's.** Launch by the run plugin, VM-service
    extension, forced frames, rects — every organ was already in the house.
 
+## Round two — scale, and many guests (same day)
+
+The owner pushed on two things: does it stay fast with many elements, and
+what else does the architecture buy. Both answered by extending the spike.
+
+### Multi-guest: one model, every screen
+
+The announce file became a directory (`~/.flutterware/scene_hosts/<name>.txt`)
+and the link connects to every URI it finds, pushing to all and reporting
+per-guest round trips. Anything may drop an announcement for a guest that
+cannot reach the editor's filesystem — which is how the second guest joined:
+
+**The same scene host, launched on the iPhone 16e simulator by the run
+plugin, renders the same scene as the desktop guest, live** — scaled to fit
+its screen (one `FittedBox`), selection border tracking, spinner animating at
+the sim's own 60fps, the mockup `Drink` and the app theme having crossed no
+wire. An edit in the editor lands on both guests from one push loop. This is
+the language×device export matrix's interactive twin, and it fell out of a
+directory listing. (The sim's own iOS project needed the same `free.xcscheme`
+copy as macOS — the default-flavor regression is platform-wide.)
+
+### Scale, measured with a 100-nodes-per-click stress button
+
+| nodes | payload | iPhone guest frame | RTT (both windows occluded) |
+|---|---|---|---|
+| 11 | 1.8KB | 14ms | ~240ms cold |
+| 112 | 16.1KB | 36ms | ~540ms first-at-size |
+| 314, under drag | 44.7KB | **28ms** | ~300ms |
+| 415 | 59.0KB | **28ms** | ~330ms |
+
+The split matters: **the guest's frame cost is flat** — ~28–36ms on a phone
+simulator from 11 to 415 nodes, measured inside the host — while the RTT
+inflation lives almost entirely on the *editor's* side: the occluded toy's
+throttled event loop, plus its own 400-widget mirror rebuild and 400-key
+sweep per edit. The mirror is exactly the part the real architecture deletes
+(the guest composites into the editor window instead), so the polluted number
+indicts the throwaway half, not the pipe. Payload grows ~14KB per 100 nodes;
+diff/patch remains the obvious lever if scenes grow past thousands.
+
+### The other advantages, observed rather than listed
+
+- **The guest is a driveable app**, so the whole screen grammar applies to
+  the *rendered scene*: one `styles` call against the phone returned the
+  banner's full type ramp — including `14/500 white · "Order now"`, a style
+  the editor never authored because it belongs to the app's button theme.
+  Design audit, agent verification, and screenshots of the truth are free.
+- **Hot reload is per-guest and cheap** — 136ms on the simulator — and the
+  scene survives it, because the scene is editor-owned data.
+- **Isolation**: a crashing user widget takes down a guest, never the editor;
+  the announce/reconnect loop already reattaches a relaunched guest.
+- Implied and unproven: a *physical* device guest (same pipe, the URI is in
+  the run ledger), a guest per theme/locale for side-by-side variants, and
+  the tester-lane guest as the headless twin for export.
+
 ## What remains before this is the editor (not tested here)
 
 Compositing the guest **into** the editor window instead of beside it — the

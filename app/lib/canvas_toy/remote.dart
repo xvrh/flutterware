@@ -1,7 +1,12 @@
 // Disposable spike: the editor half of the remote-canvas pipe. Pushes the
-// scene model (as data) to the scene host on every document change over a
-// VM-service extension, coalescing while a push is in flight, and reports
-// the measured round trip.
+// scene model (as data) to every announced scene host over a VM-service
+// extension, coalescing per guest while a push is in flight, and reports the
+// measured round trips.
+//
+// Guests announce by dropping their websocket URI into
+// ~/.flutterware/scene_hosts/<name>.txt — the host does it itself on
+// desktop; anything (a script, an agent) may drop one for a guest that
+// cannot reach this filesystem, like a simulator.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -19,81 +24,119 @@ class RemoteSceneLink {
   }
 
   final SceneDocument doc;
-  final status = ValueNotifier('guest: searching…');
+  final status = ValueNotifier('guests: searching…');
 
-  VmService? _svc;
-  String? _isolateId;
-  String? _uri;
+  final _conns = <String, _Conn>{};
   Timer? _timer;
-  var _inflight = false;
-  var _dirty = false;
+  var _payloadBytes = 0;
 
-  void _onDoc() => unawaited(_push());
+  void _onDoc() => _pushAll();
+
+  Directory get _dir =>
+      Directory('${Platform.environment['HOME']}/.flutterware/scene_hosts');
 
   Future<void> _tick() async {
-    if (_svc != null) return;
-    var file = File(
-      '${Platform.environment['HOME']}/.flutterware/scene_host_uri.txt',
-    );
-    if (!file.existsSync()) return;
-    var uri = file.readAsStringSync().trim();
-    if (uri.isEmpty || uri == _uri) return;
-    _uri = uri;
+    var dir = _dir;
+    if (!dir.existsSync()) return;
+    for (var file in dir.listSync().whereType<File>()) {
+      if (!file.path.endsWith('.txt')) continue;
+      var uri = file.readAsStringSync().trim();
+      if (uri.isEmpty || _conns.containsKey(uri)) continue;
+      unawaited(_connect(uri, file));
+    }
+    _report();
+  }
+
+  Future<void> _connect(String uri, File announce) async {
+    var conn = _Conn(uri);
+    _conns[uri] = conn;
     try {
       var svc = await vmServiceConnectUri(uri);
       var vm = await svc.getVM();
-      _isolateId = vm.isolates!.first.id;
-      _svc = svc;
+      conn.svc = svc;
+      conn.isolateId = vm.isolates!.first.id;
       unawaited(
         svc.onDone.then((_) {
-          _svc = null;
-          _uri = null;
-          status.value = 'guest: disconnected';
+          _conns.remove(uri);
+          _report();
         }),
       );
-      status.value = 'guest: connected';
-      unawaited(_push());
-    } catch (e) {
-      _uri = null;
-      status.value = 'guest: connect failed';
+      _report();
+      unawaited(_push(conn));
+    } catch (_) {
+      // Stale announcement — a guest that is gone. Remove both.
+      _conns.remove(uri);
+      try {
+        announce.deleteSync();
+      } catch (_) {}
     }
   }
 
-  Future<void> _push() async {
-    var svc = _svc;
-    if (svc == null) return;
-    if (_inflight) {
-      _dirty = true;
-      return;
+  void _pushAll() {
+    var scene = jsonEncode(doc.toJson());
+    _payloadBytes = scene.length;
+    for (var conn in _conns.values) {
+      conn.pending = scene;
+      unawaited(_push(conn));
     }
-    _inflight = true;
+  }
+
+  Future<void> _push(_Conn conn) async {
+    var svc = conn.svc;
+    if (svc == null || conn.inflight) return;
+    var scene = conn.pending ?? jsonEncode(doc.toJson());
+    conn.pending = null;
+    conn.inflight = true;
     var clock = Stopwatch()..start();
     try {
       var res = await svc.callServiceExtension(
         'ext.fw.scene.apply',
-        isolateId: _isolateId,
-        args: {'scene': jsonEncode(doc.toJson())},
+        isolateId: conn.isolateId,
+        args: {'scene': scene},
       );
-      var rtt = clock.elapsedMicroseconds / 1000;
-      var frameMs = (res.json?['frameMs'] as num?)?.toDouble();
-      var rects = (res.json?['rects'] as Map?)?.length ?? 0;
-      var error = res.json?['error'];
-      status.value = error != null
-          ? 'guest: $error'
-          : 'guest ✓ ${rtt.toStringAsFixed(1)}ms rtt'
-                ' · ${frameMs?.toStringAsFixed(1)}ms frame · $rects rects';
-    } catch (e) {
-      status.value = 'guest: push failed';
+      conn.rtt = clock.elapsedMicroseconds / 1000;
+      conn.frameMs = (res.json?['frameMs'] as num?)?.toDouble();
+      conn.rects = (res.json?['rects'] as Map?)?.length ?? 0;
+    } catch (_) {
+      conn.rtt = null;
     }
-    _inflight = false;
-    if (_dirty) {
-      _dirty = false;
-      unawaited(_push());
+    conn.inflight = false;
+    _report();
+    if (conn.pending != null) unawaited(_push(conn));
+  }
+
+  void _report() {
+    if (_conns.isEmpty) {
+      status.value = 'guests: none';
+      return;
     }
+    var parts = [
+      for (var c in _conns.values)
+        c.rtt == null
+            ? '…'
+            : '${c.rtt!.toStringAsFixed(0)}/${c.frameMs?.toStringAsFixed(0)}ms'
+                  ' ${c.rects}r',
+    ];
+    status.value =
+        'guests: ${_conns.length} · ${parts.join(' · ')}'
+        ' · ${(_payloadBytes / 1024).toStringAsFixed(1)}KB';
   }
 
   void dispose() {
     doc.removeListener(_onDoc);
     _timer?.cancel();
   }
+}
+
+class _Conn {
+  _Conn(this.uri);
+
+  final String uri;
+  VmService? svc;
+  String? isolateId;
+  var inflight = false;
+  String? pending;
+  double? rtt;
+  double? frameMs;
+  var rects = 0;
 }
