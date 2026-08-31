@@ -559,13 +559,20 @@ class EventChannel {
   /// auth call moving after a data fetch was invisible by construction.
   static List<((int, Map<String, Object?>)?, (int, Map<String, Object?>)?)>
   _align(List<Map<String, Object?>> base, List<Map<String, Object?>> head) {
+    // Keyed once, not once per cell. The table is `base.length` by
+    // `head.length` and `maxAppEventsPerStep` is 200, so rebuilding the key
+    // inside the loop is 80,000 string interpolations to compare 400 events —
+    // per step, on every comparison.
+    var baseKeys = [for (var event in base) _key(event)];
+    var headKeys = [for (var event in head) _key(event)];
+
     var lengths = List.generate(
       base.length + 1,
       (_) => List.filled(head.length + 1, 0),
     );
     for (var i = base.length - 1; i >= 0; i--) {
       for (var j = head.length - 1; j >= 0; j--) {
-        lengths[i][j] = _key(base[i]) == _key(head[j])
+        lengths[i][j] = baseKeys[i] == headKeys[j]
             ? lengths[i + 1][j + 1] + 1
             : (lengths[i + 1][j] > lengths[i][j + 1]
                   ? lengths[i + 1][j]
@@ -577,7 +584,7 @@ class EventChannel {
         <((int, Map<String, Object?>)?, (int, Map<String, Object?>)?)>[];
     var (i, j) = (0, 0);
     while (i < base.length && j < head.length) {
-      if (_key(base[i]) == _key(head[j])) {
+      if (baseKeys[i] == headKeys[j]) {
         pairs.add(((i, base[i]), (j, head[j])));
         i++;
         j++;
@@ -670,8 +677,13 @@ class EventChannel {
           // is the brittleness that made folding a payload into a comparison
           // key unthinkable; the neighbourhood of where they part is the
           // whole finding.
-          base: was == null || now == null ? was : firstDifference(was, now),
-          head: was == null || now == null ? now : firstDifference(now, was),
+          //
+          // A value with **nothing** to compare against is excerpted too, and
+          // that was the hole: a body added where there was none has a null
+          // on the other side, so it skipped this and went into `index.json`
+          // and the reply at its full four thousand characters.
+          base: was == null ? null : firstDifference(was, now ?? ''),
+          head: now == null ? null : firstDifference(now, was ?? ''),
           origin: origin,
         ),
       );
@@ -713,20 +725,25 @@ class EventChannel {
 /// list of something that was never noisy.
 const maxEventDeltas = 50;
 
-/// How many leaves of one event's payload are compared.
-const maxEventLeaves = 20;
-
 /// What an event's payload is made of, as `data.user.id` → value.
 ///
 /// Flattened rather than compared whole, because a delta saying "`data`
 /// changed" repeats one level down the failure this channel exists to fix. The
 /// dotted leaf is also the vocabulary a filter excludes by, and the one a
-/// reader already uses when talking about a payload.
+/// reader already uses when talking about a payload. `body` joins them when it
+/// parses as JSON, which is the common case for a response and the one where a
+/// whole-string diff is least readable.
 ///
-/// `body` joins them when it parses as JSON, which is the common case for a
-/// response and the one where a whole-string diff is least readable. When it
-/// does not, it stays one leaf — see [firstDifference] for what is printed
-/// then.
+/// **Uncapped, and that is deliberate.** A cap here would be a second one:
+/// `AppEvent.toJson` already bounds a payload per leaf against a total budget,
+/// at *write* time, before anything compares it. Capping again at read time
+/// put a `'…': 'N more fields'` marker into the compared set — so two payloads
+/// differing by one field reported `… 5 more fields → 6 more fields` instead
+/// of naming the field, and a field inserted early shifted which leaves
+/// survived and produced a screenful of phantom ones. That is the derived-count
+/// failure the design note §7 is about, reappearing one level above where it
+/// was fixed. What bounds the *output* is [maxEventDeltas], which cuts after
+/// the comparison rather than before it.
 Map<String, String> eventLeaves(Map<String, Object?> event) {
   var out = <String, String>{};
   _flatten('data', event['data'], out);
@@ -749,13 +766,7 @@ Map<String, String> eventLeaves(Map<String, Object?> event) {
       out['body'] = body;
     }
   }
-  if (out.length <= maxEventLeaves) return out;
-  var kept = <String, String>{};
-  for (var key in out.keys.take(maxEventLeaves)) {
-    kept[key] = out[key]!;
-  }
-  kept['…'] = '${out.length - maxEventLeaves} more fields';
-  return kept;
+  return out;
 }
 
 String _foldWhitespace(String value) =>

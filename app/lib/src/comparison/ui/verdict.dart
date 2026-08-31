@@ -79,6 +79,12 @@ class ComparisonVerdict extends StatelessWidget {
     var colors = context.colors;
 
     var set = RuleSet(rules);
+    // Built **once**. `deltas` allocates a `ChannelDelta` per difference, and
+    // this walked it three times over — for the counts, again inside
+    // `hidesAll`, and a third time inside `visible` — in a build that runs
+    // once per row as a comparison streams in. `ComparisonIndex.ok`'s own
+    // docstring is about this shape.
+    var perFinding = [for (var item in findings) item.deltas];
 
     // Counted twice on purpose. `fired` is what a reader can still see, and is
     // what the chips read; `total` ignores every rule, and is what an excluded
@@ -87,20 +93,28 @@ class ComparisonVerdict extends StatelessWidget {
     var fired = <String, int>{};
     var total = <String, int>{};
     var hidden = 0;
-    for (var item in findings) {
+    var visible = <List<ChannelDelta>>[];
+    for (var deltas in perFinding) {
       var seen = <String>{};
       var seenAll = <String>{};
-      for (var delta in item.deltas) {
+      var mine = <ChannelDelta>[];
+      for (var delta in deltas) {
         seenAll.addAll(_facetsOf(delta));
-        if (!set.hides(delta)) seen.addAll(_facetsOf(delta));
+        if (set.hides(delta)) continue;
+        mine.add(delta);
+        seen.addAll(_facetsOf(delta));
       }
+      visible.add(mine);
       for (var key in seenAll) {
         total[key] = (total[key] ?? 0) + 1;
       }
       for (var key in seen) {
         fired[key] = (fired[key] ?? 0) + 1;
       }
-      if (set.hidesAll(item)) hidden++;
+      // A finding with no deltas at all is never hidden: `added` and `broke`
+      // say something no channel does, and a rule about channels has no
+      // opinion about them.
+      if (deltas.isNotEmpty && mine.isEmpty) hidden++;
     }
 
     var quiet = [
@@ -113,9 +127,9 @@ class ComparisonVerdict extends StatelessWidget {
     // field moved in 6 of 6 entries · changed*, which is nonsense wearing a
     // number. The percentage on each row is what says how much moved.
     var shapes = foldChannelDeltas([
-      for (var item in findings)
+      for (var deltas in visible)
         [
-          for (var delta in set.visible(item))
+          for (var delta in deltas)
             if (delta.channel != 'pixels') delta,
         ],
     ]);

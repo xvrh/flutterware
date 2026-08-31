@@ -85,6 +85,19 @@ class ComparisonHalf extends ChangeNotifier {
   /// against, how long it took. Set on completion, and on restore from disk.
   LastComparison? lastRun;
 
+  /// Records what the previous comparison found, and says so.
+  ///
+  /// A setter rather than a bare field, because both callers reach it *after*
+  /// the notification that drew the rows: `_restore` notifies inside
+  /// `restoreFrom` and then awaits this, and a run notifies on `moveTo` first.
+  /// Assigned silently, the verdict rendered with no previous run to measure
+  /// against and never learned otherwise — and since `newCount` distinguishes
+  /// *no previous run* from *nothing new*, it went missing rather than wrong.
+  void knowPrevious(Set<String>? ids) {
+    previousFindingIds = ids;
+    notifyListeners();
+  }
+
   /// The finding ids the *previous* comparison reported, or null before there
   /// has ever been one.
   ///
@@ -366,7 +379,7 @@ class ComparisonController extends ChangeNotifier {
       // A run that started while the file was loading owns the half now.
       if (half.stage != HalfStage.idle || half.hasRun) continue;
       half.restoreFrom(last);
-      half.previousFindingIds = await _previousFindings(half.kind);
+      half.knowPrevious(await _previousFindings(half.kind));
     }
   }
 
@@ -524,7 +537,7 @@ class ComparisonController extends ChangeNotifier {
         // Read *before* saving, since saving rotates this run's predecessor
         // into the previous slot and would otherwise answer with the run that
         // just finished.
-        half.previousFindingIds = await _previousFindings(kind, current: true);
+        half.knowPrevious(await _previousFindings(kind, current: true));
         // Best effort: a run whose receipt cannot be written is still a run.
         try {
           await environment.saveLastRun(kind, last);

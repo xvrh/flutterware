@@ -63,7 +63,6 @@ export 'src/comparison/channels.dart'
         FoldedDelta,
         foldChannelDeltas,
         maxEventDeltas,
-        maxEventLeaves,
         PixelChannel,
         TextChannel,
         TreeChannel;

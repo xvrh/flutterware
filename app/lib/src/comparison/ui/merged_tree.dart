@@ -63,7 +63,7 @@ class MergedTree extends StatelessWidget {
     return DirectGraph(
       key: mergedTreeKey,
       list: graph.nodes,
-      cellSize: Size(nodeWidth + _gap, _thumbHeight + 70),
+      cellSize: Size(nodeWidth + _gap, _thumbHeight + _captionHeight),
       cellPadding: _gap,
       contactEdgesDistance: 0,
       tipLength: 14,
@@ -225,6 +225,15 @@ const _thumbHeight = 190.0;
 /// What separates two frames on the canvas, and all that separates them.
 const _gap = 40.0;
 
+/// Room under the thumbnail for everything the node says about the step.
+///
+/// Counted rather than guessed, because guessing is what broke it: the node
+/// grew a line naming the channels that fired and this stayed at 70, so a
+/// finding node overflowed its cell by a measured 10px. The budget is a gap
+/// (4), two lines of label (~28), a gap (2), a state chip (~18), a gap (2) and
+/// two lines of channel names (~24) — 78, plus slack for a larger text scale.
+const _captionHeight = 92.0;
+
 /// How wide a node is, from the shape of the frames it holds.
 ///
 /// It was a constant 132, which is a landscape figure — and a phone capture
@@ -238,12 +247,21 @@ const _gap = 40.0;
 /// Clamped because a desktop capture would otherwise make a node wider than
 /// most windows, and a flow of those is unreadable for the opposite reason.
 double _nodeWidthFor(ScenarioComparison scenario) {
+  // The **commonest** shape, not the first. A flow whose first step is a bare
+  // `pumpWidget` at the default 800×600 and whose remaining twenty are phone
+  // captures would otherwise size every node from that one landscape frame,
+  // and every phone in it goes back to being letterboxed in a box of the wrong
+  // shape — which is the whitespace this function exists to remove.
+  var seen = <double, int>{};
   for (var item in scenario.items) {
     var pixels = item.pixels?.diff;
     if (pixels == null || pixels.width <= 0 || pixels.height <= 0) continue;
-    return (_thumbHeight * pixels.width / pixels.height).clamp(96.0, 260.0);
+    var aspect = pixels.width / pixels.height;
+    seen[aspect] = (seen[aspect] ?? 0) + 1;
   }
-  return 132;
+  if (seen.isEmpty) return 132;
+  var common = seen.entries.reduce((a, b) => b.value > a.value ? b : a).key;
+  return (_thumbHeight * common).clamp(96.0, 260.0);
 }
 
 /// One step: its head frame, ringed by what the comparison said about it.

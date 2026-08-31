@@ -603,4 +603,68 @@ void main() {
       expect(foldChannelDeltas([<ChannelDelta>[]]), isEmpty);
     });
   });
+
+  // Two caps on one payload, the second applied *after* the write and so
+  // *before* the comparison, is the derived-count failure §7 is about
+  // reappearing one level up.
+  group('a payload is capped once, at write time', () {
+    Map<String, Object?> wide(int fields, {String tail = 'x'}) => {
+      'channel': 'analytics',
+      'title': 'checkout',
+      'data': {for (var i = 0; i < fields; i++) 'f$i': 'v$i', 'tail': tail},
+    };
+
+    test('a payload wider than any read-time cap still names its field', () {
+      var diff = EventChannel.of(
+        base: [wide(40)],
+        head: [wide(40, tail: 'y')],
+      );
+
+      expect(diff.deltas.single.property, 'data.tail');
+      expect(diff.deltas.single.base, 'x');
+      expect(diff.deltas.single.head, 'y');
+    });
+
+    // It reported `…  39 more fields → 40 more fields` and named nothing.
+    test('a field added to a wide payload is the field, not a count', () {
+      var diff = EventChannel.of(
+        base: [wide(40)],
+        head: [
+          {
+            'channel': 'analytics',
+            'title': 'checkout',
+            'data': {
+              for (var i = 0; i < 40; i++) 'f$i': 'v$i',
+              'tail': 'x',
+              'extra': 'new',
+            },
+          },
+        ],
+      );
+
+      expect(diff.deltas.single.property, 'data.extra');
+      expect(diff.deltas.map((d) => d.property), isNot(contains('…')));
+    });
+  });
+
+  // A value with nothing on the other side skipped the excerpt entirely, so a
+  // body added where there was none went into `index.json` and the MCP reply
+  // at its full four thousand characters.
+  test('a value added where there was none is excerpted too', () {
+    var long = 'z' * 3000;
+    var diff = EventChannel.of(
+      base: [
+        {'channel': 'network', 'title': 'GET /me'},
+      ],
+      head: [
+        {'channel': 'network', 'title': 'GET /me', 'body': long},
+      ],
+    );
+
+    var delta = diff.deltas.single;
+    expect(delta.property, 'body');
+    expect(delta.base, isNull);
+    expect(delta.head!.length, lessThan(200));
+    expect(delta.head, endsWith('…'));
+  });
 }
