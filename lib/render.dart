@@ -33,6 +33,7 @@ export 'package:flutterware_render/contract.dart'
         UnsupportedPolicy,
         WidgetRender;
 
+export 'src/render/driver.dart' show runRenderDriver;
 export 'src/render/host.dart'
     show
         BoundDocumentRender,

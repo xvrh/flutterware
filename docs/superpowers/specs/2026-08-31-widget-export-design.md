@@ -280,8 +280,8 @@ in-process, may use the full callback API directly.
 | Spawn/drive `flutter_tester`, guest harness, real fonts | **Exists** (embedder + previews harness) |
 | Entry discovery, typed parameters | **Exists as precedent** (previews discovery, run knobs) — needs the render flavor |
 | `WidgetRender`/`DocumentRender` contract + `flutterware_render` package | **Built** — workspace member `render/`; registrar (`@RenderRegistry` on a function receiving `RenderHost`) settled over per-entry annotations; `RenderContext.captureSvg` mounts widgets offscreen, so both entry kinds execute in-process |
-| `fw render bundle` | **Missing** — packaging of parts that all exist |
-| `RenderPool` + driver protocol | **Missing** — request loop over the existing host |
+| `fw render bundle` | **Built** — registrar scan, generated driver main, kernel via the embedder compiler, asset bundle with symlinks materialized, engine artifacts local or fetched per `--platform`, versions bound in `manifest.json` |
+| `RenderPool` + driver protocol | **Built** — `flutterware_render/client.dart` over marker-prefixed line JSON on the guest's stdio; guest mounts offscreen per request (no frame pacing), covered end to end by `app/integration_test/render_bundle_test.dart` |
 | Studio panel: render entries live, knobs for args, document viewer | **Missing** — previews panel is the template |
 | `fw render <entry>` one-shot CLI | **Missing** — thin |
 | Regression diffs of rendered documents | **Exists as organ** (comparison plugin) — point it at render entries |
@@ -361,16 +361,20 @@ couldn't express.*
 
 - **Intrinsic sizing** — `size:` is explicit in v1; "measure the widget
   under constraints" is a wanted follow-up with real layout questions.
-- **Driver protocol spelling** — stdin JSON-RPC (one guest per pool slot,
-  supervised by the pool) vs an in-guest HTTP listener. Leaning JSON-RPC:
-  the pool owns lifecycle either way, and stdio is what the tester lane
-  already speaks.
+- ~~**Driver protocol spelling**~~ — settled (2026-08-31): line-delimited
+  JSON over stdio, one guest per pool slot supervised by the pool. Guest →
+  server lines carry an `@fw-render ` marker so the app's own logging can
+  never corrupt a reply; the guest additionally redirects `print` to
+  stderr. One more finding: the driver mounts each request offscreen
+  (`OffscreenWidget`), so nothing waits on vsync — the 16.7ms warm-loop
+  figure was frame pacing, not a floor.
 - ~~**Discovery spelling**~~ — settled (2026-08-31): one annotated
   registrar, as shown above. It keeps the contract package free of magic,
   and the point names being runtime values means listing them was always
   going to run the registrar anyway.
-- **Result streaming** — large PDFs over the wire; likely file-path handoff
-  inside the container rather than bytes through the protocol.
+- **Result streaming** — bytes ride the protocol base64-encoded for now;
+  file-path handoff inside the container is the follow-up if a real
+  deployment's PDFs get big enough to care.
 - **Where the capture library lands** — the guest half is published API
   the moment consumers' bundles compile against it; the same publish
   discipline as `lib/src/scenarios/` applies.

@@ -7,6 +7,8 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../changes/changes_config_cache.dart';
+import '../embedder/flutter_cache.dart';
+import '../render_bundle/bundle_builder.dart';
 import '../changes/changes_probe.dart';
 import '../changes/changes_text.dart';
 import '../changes/review_agent.dart';
@@ -331,6 +333,28 @@ const fwCommands = [
         'architecture.',
   ),
   FwCommand(
+    'render',
+    usage:
+        'render bundle [--target=lib/renders.dart] [--out=build/render-bundle] '
+        '[--platform=<linux-x64|linux-arm64|…>] [--json]',
+    summary: "package the app's render points for a server",
+    details:
+        'Builds the one directory a Dart server needs to render this '
+        "app's\nwidgets as SVG, PNG or PDF with no Flutter SDK, no GPU and "
+        'no display:\nflutter_tester, the registrar compiled to a kernel, '
+        'the asset bundle\nwith its fonts, and a manifest binding the '
+        'versions together. Copy it\ninto a container and drive it with '
+        '`RenderPool` from\npackage:flutterware_render.\n\n'
+        'The target file declares the registrar — one function marked\n'
+        '`@RenderRegistry()` that binds each render point to its '
+        'implementation.\n\n'
+        '`--platform` crosses: a bundle built on this machine for the '
+        'platform\nthe server runs on, with engine artifacts fetched from '
+        "Flutter's own\nartifact storage. Default is this machine's "
+        'platform.\n\n'
+        'Design: docs/superpowers/specs/2026-08-31-widget-export-design.md.',
+  ),
+  FwCommand(
     'version',
     usage: 'version [--json]',
     summary: 'which flutterware this is, and where it came from',
@@ -538,6 +562,7 @@ class FwCli {
         'mcp' => await _mcp(),
         'capture' => await _capture(rest, json: json, verbose: verbose),
         'compare' => await _compare(rest, json: json),
+        'render' => await _render(rest, json: json),
         'help' || '--help' || '-h' => _help(rest.firstOrNull),
         _ => fail('unknown command "$command". Try `fw help`.'),
       };
@@ -1765,6 +1790,72 @@ class FwCli {
 
   void _printJson(Object? value) =>
       out.writeln(const JsonEncoder.withIndent('  ').convert(value));
+
+  /// `fw render <subcommand>` — today only `bundle`.
+  Future<int> _render(List<String> arguments, {required bool json}) async {
+    var words = arguments.where((a) => !a.startsWith('-')).toList();
+    return switch (words.firstOrNull) {
+      'bundle' => await _renderBundle(
+        arguments.where((a) => a != 'bundle').toList(),
+        json: json,
+      ),
+      _ => fail(
+        'render takes a subcommand: `fw render bundle`. Try `fw help render`.',
+      ),
+    };
+  }
+
+  Future<int> _renderBundle(
+    List<String> arguments, {
+    required bool json,
+  }) async {
+    var target = 'lib/renders.dart';
+    var output = 'build/render-bundle';
+    String? platform;
+    for (var argument in arguments) {
+      if (argument.startsWith('--target=')) {
+        target = argument.substring('--target='.length);
+      } else if (argument.startsWith('--out=')) {
+        output = argument.substring('--out='.length);
+      } else if (argument.startsWith('--platform=')) {
+        platform = argument.substring('--platform='.length);
+      } else if (argument.startsWith('-')) {
+        return fail('unknown option "$argument". Try `fw help render`.');
+      } else {
+        return fail('render bundle takes no positional, got "$argument".');
+      }
+    }
+    var sdk = await FlutterSdkPath.findSdk();
+    if (sdk == null) {
+      return fail(
+        'no Flutter SDK above this process.\n'
+        'Run flutterware with the `dart` from a Flutter SDK, not a '
+        'standalone one.',
+      );
+    }
+    try {
+      var manifest = await buildRenderBundle(
+        packageRoot: Directory.current.path,
+        target: target,
+        output: output,
+        cache: FlutterCache(p.join(sdk.root, 'bin', 'cache')),
+        platform: platform,
+        log: (line) => err.writeln('[render] $line'),
+      );
+      if (json) {
+        out.writeln(jsonEncode(manifest.toJson()));
+      } else {
+        out.writeln(
+          'render bundle written to $output '
+          '(${manifest.platform}, engine ${manifest.engineVersion}, '
+          '${manifest.fonts.length} font file(s))',
+        );
+      }
+      return 0;
+    } on StateError catch (e) {
+      return fail(e.message);
+    }
+  }
 
   int fail(String message) {
     err.writeln('fw: $message');

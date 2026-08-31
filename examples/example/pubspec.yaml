@@ -60,6 +60,8 @@ dependencies:
   package_info_plus:
   path:
   path_provider:
+  # For lib/renders.dart — the render-bundle example's document entry.
+  pdf:
   shared_preferences:
   # For bin/example_server.dart — the server-inspection example.
   shelf:

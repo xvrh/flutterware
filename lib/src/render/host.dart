@@ -49,27 +49,39 @@ class RenderContext {
   final CaptureOptions options;
   final List<RenderFont> fonts;
 
+  /// Every warning the captures made through this context produced — so a
+  /// document's result can carry the honesty of each block inside it.
+  final warnings = <RenderWarning>[];
+
   Future<SvgResult> captureSvg(
     Widget widget, {
     required Size size,
     CaptureOptions? options,
-  }) => captureWidgetSvg(
-    widget,
-    size: size,
-    fonts: fonts,
-    options: options ?? this.options,
-  );
+  }) async {
+    var result = await captureWidgetSvg(
+      widget,
+      size: size,
+      fonts: fonts,
+      options: options ?? this.options,
+    );
+    warnings.addAll(result.warnings);
+    return result;
+  }
 
   Future<PdfResult> capturePdf(
     Widget widget, {
     required Size size,
     CaptureOptions? options,
-  }) => captureWidgetPdf(
-    widget,
-    size: size,
-    fonts: fonts,
-    options: options ?? this.options,
-  );
+  }) async {
+    var result = await captureWidgetPdf(
+      widget,
+      size: size,
+      fonts: fonts,
+      options: options ?? this.options,
+    );
+    warnings.addAll(result.warnings);
+    return result;
+  }
 
   Future<PngResult> capturePng(
     Widget widget, {
