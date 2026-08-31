@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/render_bundle/bundle_builder.dart';
+import 'package:flutterware_app/src/render_bundle/one_shot.dart';
 import 'package:flutterware_render/client.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -35,14 +36,13 @@ void main() {
     'values': [30.0, 60.0, 45.0, 80.0],
   };
 
+  late String exampleRoot;
   late Directory outDir;
   late RenderPool pool;
   final logs = <String>[];
 
   setUpAll(() async {
-    var exampleRoot = p.normalize(
-      p.absolute(p.join('..', 'examples', 'example')),
-    );
+    exampleRoot = p.normalize(p.absolute(p.join('..', 'examples', 'example')));
     expect(Directory(exampleRoot).existsSync(), isTrue, reason: exampleRoot);
     outDir = Directory.systemTemp.createTempSync('fw_render_bundle_test');
     var manifest = await buildRenderBundle(
@@ -114,6 +114,24 @@ void main() {
     var report = await pool.pdf(chartReport, chartArgs);
     expect(String.fromCharCodes(report.bytes.take(5)), '%PDF-');
     expect(report.bytes.length, greaterThan(1000));
+  });
+
+  test('the one-shot form renders a point straight to a file', () async {
+    var result = await renderOneShot(
+      packageRoot: exampleRoot,
+      target: 'lib/renders.dart',
+      point: 'charts/monthly',
+      format: 'svg',
+      args: chartArgs,
+      size: const RenderSize(400, 200),
+      output: p.join(outDir.path, 'one_shot', 'chart.svg'),
+      cache: FlutterCache.fromRunningSdk(),
+      log: logs.add,
+    );
+    expect(
+      File(result.outputPath).readAsStringSync(),
+      contains('Devices over time'),
+    );
   });
 
   test('an unknown point fails with the catalogue in the message', () async {

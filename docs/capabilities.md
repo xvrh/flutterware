@@ -31,7 +31,7 @@ cd app && dart run bin/fw.dart <command>
 | `mcp` | serve this project to an agent, over stdio |
 | `compare [--base=<ref>] [--package=<path>] [--entry=<id>] [--export[=<dir>]] [--base-href=<path>] [--report=<dir>] [--json]` | what this worktree did to the pictures, against its base |
 | `capture [<address>] -o <file> [--size=WxH] [--theme=light\|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI window itself, at an address |
-| `render bundle [--target=lib/renders.dart] [--out=build/render-bundle] [--platform=<linux-x64\|linux-arm64\|…>] [--json]` | package the app's render points for a server |
+| `render <point> [--as=svg\|png\|pdf] [--args=<json>\|@file] [--size=<w>x<h>] [-o <file>] [--text=<policy>] [--unsupported=<policy>] \| render bundle [--target=lib/renders.dart] [--out=build/render-bundle] [--platform=<linux-x64\|…>] [--json]` | one of the app's render points as a file, or all of them bundled for a server |
 | `version [--json]` | which flutterware this is, and where it came from |
 | `help [<command>]` | this, or one command in detail |
 
