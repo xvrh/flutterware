@@ -1,0 +1,313 @@
+# Widget export — render a widget as SVG, PNG or PDF, server-side
+
+**Date:** 2026-08-31
+**Status:** Drafted from a green spike. The capture pipeline — recording
+canvas, render-tree text join, TTF *and* CFF glyph outlines, export policies,
+raster fallback, `pw.SvgImage` re-integration — lives in `test/vector_export/`
+(commits `f8ab2ae0`, `2ee452c6`) with two tests that regenerate every artifact
+next to a raster ground truth. Everything else in this document is design.
+
+**Lineage:** the spike's findings (this file cites its measurements),
+`2026-07-30-scenarios-design.md` (the guest harness and direct-spawn
+flutter_tester lane this rides), the previews plugin (the entry/discovery
+model this generalizes), the comparison plugin (the regression story),
+the run knobs design (the typed-parameter precedent).
+
+## The goal
+
+A Flutter team that renders documents — invoices, reports, charts — should
+write them **once, as widgets**, and get them anywhere: a PNG in a test, an
+SVG in an email, a PDF from a Dart server that has no Flutter SDK, no GPU
+and no display. Today that team either re-implements every visual in PDF
+primitives, or rasterizes a headless screenshot and ships blurry text.
+
+The one-sentence story this design must keep true:
+
+> Declare an export point, `fw bundle`, copy one directory into your Docker
+> image, and call it from your server **fully typed**.
+
+Flutterware is unusually close. The hard tenth of the problem — compiling a
+kernel, spawning and driving `flutter_tester`, discovering entries, loading
+real fonts, regression-diffing rendered output — already exists for the
+scenarios and previews lanes. The spike settled the other hard tenth: a
+widget's paint pass converts to real vectors in pure Dart, text included,
+with no engine fork. What remains is one contract, one command, one
+protocol and one panel.
+
+## What the spike settled (facts, not plans)
+
+- **No engine fork.** `dart:ui`'s `Canvas`, `Paragraph`, `ParagraphBuilder`
+  are implementable interfaces; a recording canvas plus a render-tree-aware
+  `PaintingContext` captures the full paint pass on stock `flutter_tester`.
+- **Text is a join.** The string and styles come from `RenderParagraph`; the
+  *same* laid-out `ui.Paragraph` answers for line breaks, per-run boxes and
+  baselines. Wrap points in the export match the app exactly.
+- **Glyphs are extractable.** A TrueType `glyf` reader and a CFF Type2
+  charstring interpreter turn any font Flutter renders (CID-keyed CFF
+  excepted) into path outlines, placed at the paragraph's own per-character
+  positions. Measured on the fixture screen: embed-fonts 2839KB,
+  vectorize-all 106KB, system-fonts 27KB.
+- **Unsupported ops rasterize faithfully** because ops keep their original
+  dart:ui objects (paint with live shader, path, paragraph) and replay onto
+  a real canvas into a patch.
+- **`package:pdf` closes the loop.** Its SVG renderer accepts the vectorized
+  output (`pw.SvgImage`), so a captured widget drops into an existing pw
+  layout as one more block. Two traps found and fixed: rgba() alpha is
+  dropped (transparency must ride `fill-opacity`/`stroke-opacity`
+  attributes), and a `TextPainter` laid out without maxWidth reports
+  infinite paragraph width.
+- **Painter-drawn labels are raster patches.** Chart libraries paint axis
+  labels via `TextPainter` inside a `CustomPainter`; there is no
+  `RenderParagraph` to join, so those paragraphs take the raster lane
+  (crisp at 3×). This is a documented property, not a bug to fix silently.
+
+## The shape: two entry kinds, one decision
+
+**A widget export** builds a widget; the *caller* chooses the output —
+SVG, PNG, or a single-page PDF — and the export options. One entry, three
+formats.
+
+**A document export** composes a `pw.Document` itself — multi-page, flowing
+text, captured widget blocks dropped in as SVG — and returns PDF bytes.
+
+The decision this split encodes, stated once so it never gets rebuilt:
+**pagination is composition, not capture.** One canvas maps to one page or
+one block. A "one tall widget, magically paginated" mode is rejected; the
+pw widget library already owns flowing layout, and the chart-in-a-report
+proof shows the seam is one `pw.SvgImage` call.
+
+## Fully typed, across two processes
+
+The server is pure Dart; the entry runs inside a Flutter guest. Types cross
+that boundary through a **shared contract**: the export *point* is a value —
+name plus codecs plus phantom types — declared in a pure-Dart package both
+sides import. No code generation is required; the descriptor is the
+contract.
+
+A new workspace member carries the API: **`flutterware_export`**, pure Dart
+(the `flutterware` package depends on the Flutter SDK, which a `dart`
+server cannot resolve — so the contract and client cannot live there).
+It ships three things: the descriptor types, the wire-safe options, and the
+`RenderPool` client.
+
+### 1. The app team's contract package (pure Dart, shared)
+
+```dart
+// package:acme_contract/exports.dart
+import 'package:flutterware_export/contract.dart';
+
+class ChartRequest {
+  ChartRequest({required this.title, required this.series});
+  final String title;
+  final List<Series> series;
+
+  Map<String, Object?> toJson() => {...};
+  static ChartRequest fromJson(Map<String, Object?> json) => ChartRequest(...);
+}
+
+/// The export point IS the contract: a name the guest registers under,
+/// codecs for the args, and the args type pinned in the type argument.
+final monthlyChart = WidgetExport<ChartRequest>(
+  'charts/monthly',
+  encodeArgs: (args) => args.toJson(),
+  decodeArgs: ChartRequest.fromJson,
+);
+
+final invoicePdf = DocumentExport<InvoiceRequest>(
+  'invoices/invoice',
+  encodeArgs: (args) => args.toJson(),
+  decodeArgs: InvoiceRequest.fromJson,
+);
+```
+
+### 2. The app binds implementations (Flutter package)
+
+```dart
+// lib/exports.dart in the Flutter app
+import 'package:acme_contract/exports.dart';
+import 'package:flutterware/export.dart';
+
+@ExportRegistry()
+void registerExports(ExportHost host) {
+  host.widget(monthlyChart, (context, args) {
+    return MonthlyChart(title: args.title, series: args.series);
+  });
+
+  host.document(invoicePdf, (context, args) async {
+    // Capture runs in-process: the chart becomes an SVG block inside the
+    // pw layout, exactly the seam the spike proved.
+    var chart = await context.captureSvg(
+      MonthlyChart.forInvoice(args),
+      size: const Size(412, 230),
+    );
+    return buildInvoiceDocument(args, chartSvg: chart.text);
+  });
+}
+```
+
+Discovery reuses the previews mechanism: the registrar is annotated, the
+scanner finds it, `fw bundle -t lib/exports.dart` compiles it as the guest
+program. Fonts and assets are declared where the app already declares them
+(pubspec fonts + assets ride the bundle the way they ride the tester lane
+today).
+
+### 3. Packaging
+
+```sh
+fw bundle --target lib/exports.dart --platform linux-x64 --out build/render-bundle
+```
+
+One directory: `flutter_tester`, `icudtl.dat`, the app dill, the asset
+bundle, the fonts, a driver executable, and a manifest binding engine hash
+to dill. The 2GB SDK stays on the build machine.
+
+```dockerfile
+FROM debian:stable-slim
+COPY build/render-bundle /opt/acme/render
+# the server binary is the team's own; the bundle is data to it
+```
+
+The driver refuses a mismatched tester/dill pair at startup. Version drift
+is impossible, not documented.
+
+### 4. The server (pure Dart — the code the question asked for)
+
+```dart
+import 'package:acme_contract/exports.dart';
+import 'package:flutterware_export/client.dart';
+import 'package:shelf/shelf.dart';
+
+late final RenderPool renders;
+
+Future<void> main() async {
+  renders = await RenderPool.start(
+    bundle: '/opt/acme/render',
+    warm: 2, // two resident guests; cold spawn ~2.5s, warm render ~0.3s
+  );
+  // ... serve ...
+}
+
+Future<Response> chartHandler(Request request) async {
+  // Fully typed: `monthlyChart` is WidgetExport<ChartRequest>, so `args`
+  // must be a ChartRequest and the compiler holds the line. The result is
+  // an SvgResult because .svg() was asked for.
+  var svg = await renders.svg(
+    monthlyChart,
+    ChartRequest(title: 'Monthly active devices', series: fetchSeries()),
+    size: const ExportSize(412, 230),
+    options: const ExportOptions(
+      text: TextExport.vectorize,
+      textByFamily: {'MaterialIcons': TextExport.vectorize},
+      unsupported: UnsupportedExport.rasterize,
+    ),
+  );
+
+  // The capture's honesty surfaces instead of vanishing:
+  for (var warning in svg.warnings) {
+    log.info('render warning: $warning'); // dropped runs, raster patches…
+  }
+
+  return Response.ok(svg.text, headers: {'content-type': 'image/svg+xml'});
+}
+
+Future<Response> invoiceHandler(Request request) async {
+  var pdf = await renders.pdf(invoicePdf, InvoiceRequest.fromJson(...));
+  return Response.ok(pdf.bytes, headers: {'content-type': 'application/pdf'});
+}
+
+// The same widget entry, other formats:
+//   renders.png(monthlyChart, args, size: ..., pixelRatio: 2)  → PngResult
+//   renders.pdfPage(monthlyChart, args, size: ...)             → PdfResult
+```
+
+Typing rules, precisely: `svg`/`png`/`pdfPage` accept a
+`WidgetExport<A>` and an `A`; `pdf` accepts a `DocumentExport<A>` and an
+`A`. Results are distinct types (`SvgResult.text`, `PngResult.bytes`,
+`PdfResult.bytes`), each carrying `warnings` and `timings`. Handing the
+wrong args type, or asking `.pdf()` of a widget entry, is a compile error
+on the server — the process boundary costs no type safety.
+
+### Wire-safe export options
+
+The spike's `VgExportOptions.textMode` is a per-run *callback* — expressive
+in-process, unserializable on a wire. The wire options are **data**:
+
+```dart
+class ExportOptions {
+  const ExportOptions({
+    this.text = TextExport.embedFont,     // vectorize | embedFont | systemFont
+    this.textByFamily = const {},          // per-family override — the real
+                                           // per-run need was icons vs body
+    this.unsupported = UnsupportedExport.rasterize, // | flatten | skip
+    this.rasterScale = 3,
+  });
+}
+```
+
+The guest compiles these to the callback form. Document entries, running
+in-process, may use the full callback API directly.
+
+## The pieces, mapped
+
+| Piece | State |
+| --- | --- |
+| Capture pipeline (canvas, text join, TTF+CFF outlines, policies, raster lane) | **Spike, green** — promote `test/vector_export/` to a library in the guest half |
+| Kernel compile, seed-kernel warm start, build isolation | **Exists** (`TesterHost`, scenarios/previews lanes) |
+| Spawn/drive `flutter_tester`, guest harness, real fonts | **Exists** (embedder + previews harness) |
+| Entry discovery, typed parameters | **Exists as precedent** (previews discovery, run knobs) — needs the export flavor |
+| `ExportPoint` contract + `flutterware_export` package | **Missing** — the one new API surface |
+| `fw bundle` | **Missing** — packaging of parts that all exist |
+| `RenderPool` + driver protocol | **Missing** — request loop over the existing host |
+| Studio panel: render entries live, knobs for args, document viewer | **Missing** — previews panel is the template |
+| `fw render` one-shot CLI | **Missing** — thin |
+| Regression diffs of rendered documents | **Exists as organ** (comparison plugin) — point it at export entries |
+| Reproducibility: pinned clock, locale, seeded random | **Exists as precedent** (scenario clock slot) |
+| Structured errors with stacks over the wire | **Exists as precedent** (scenario step events) |
+
+## The dev loop is the differentiator
+
+The same entry the server invokes headless renders live in the studio:
+knobs tab for its typed args, hot reload, a document viewer for PDF pages.
+A team develops the invoice *looking at it*, and production runs the
+identical function on the identical runtime. `fw render` gives CI and
+scripts the one-shot form; the comparison plugin answers "did this commit
+change the invoice" with a diff of rendered output.
+
+This panel is what makes the feature flutterware-shaped. Without it, the
+bundle and pool are a good Docker recipe; with it, the whole document
+pipeline lives where the app lives.
+
+## Constraints and the fidelity backlog
+
+- `flutter_tester` is per-OS/arch; the bundle targets linux-x64 first and
+  tracks what the SDK ships (arm64 when its artifacts do).
+- Pure Dart only in the guest: plugins with native code do not exist in the
+  tester. Charts, capture and `package:pdf` all satisfy this;
+  `path_provider`-style plugins do not.
+- Path curves are polyline-sampled (dart:ui hides path verbs) — visually
+  fine, documented. PDF gradients want `PdfShading`; blend modes,
+  `saveLayer` bounds and `drawVertices` land in the raster lane.
+- Painter-drawn text (TextPainter in a CustomPainter) is raster patches
+  unless the app renders labels as widgets or provides a
+  paragraph-to-string hook. Complex scripts and bidi need per-box splitting
+  before the text lanes are trustworthy beyond Latin.
+- `systemFont` mode: run positions are Flutter's, glyph widths are the
+  viewer's — inter-run spacing drifts at style boundaries. It trades
+  fidelity for size, and the docs must say so.
+
+## Open questions
+
+- **Intrinsic sizing** — `size:` is explicit in v1; "measure the widget
+  under constraints" is a wanted follow-up with real layout questions.
+- **Driver protocol spelling** — stdin JSON-RPC (one guest per pool slot,
+  supervised by the pool) vs an in-guest HTTP listener. Leaning JSON-RPC:
+  the pool owns lifecycle either way, and stdio is what the tester lane
+  already speaks.
+- **Discovery spelling** — one annotated registrar (shown above) vs
+  per-entry annotations like `@Preview`. The registrar keeps the contract
+  package free of magic; per-entry matches the previews muscle memory.
+- **Result streaming** — large PDFs over the wire; likely file-path handoff
+  inside the container rather than bytes through the protocol.
+- **Where the capture library lands** — the guest half is published API
+  the moment consumers' bundles compile against it; the same publish
+  discipline as `lib/src/scenarios/` applies.
