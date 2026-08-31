@@ -6,6 +6,7 @@ import 'package:flutterware_app/src/comparison/comparison_controller.dart';
 import 'package:flutterware_app/src/comparison/shot_store.dart';
 import 'package:flutterware_app/src/comparison/ui/merged_tree.dart';
 import 'package:flutterware_app/src/comparison/ui/scenarios_tab.dart';
+import 'package:flutterware_app/src/comparison/ui/step_page.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
 /// The three verdicts reached **without replaying anything**, which is the
@@ -36,6 +37,7 @@ void main() {
             settle: settle,
             selected: selected,
             onSelect: (_) {},
+            header: const Text('THE VERDICT'),
           ),
         ),
       ),
@@ -195,6 +197,31 @@ void main() {
     );
     expect(find.byKey(stepPageKey), findsOneWidget);
     expect(find.text('Cart'), findsOneWidget);
+  });
+
+  // The verdict is about the half. Drawn above the whole tab it stayed on
+  // screen over a pushed page about one step, so a header reading `11 steps`
+  // sat above a page describing one of them.
+  group("the half's verdict", () {
+    const one = ScenarioComparison(
+      scenario: 'test/cart_test.dart#cart',
+      state: ComparedState.changed,
+      items: [ComparedItem(id: 'Cart', state: ComparedState.changed)],
+      branches: [],
+    );
+
+    testWidgets('is drawn over the list', (tester) async {
+      await pump(tester, [one], selected: 'test/cart_test.dart#cart');
+
+      expect(find.text('THE VERDICT'), findsOne);
+    });
+
+    testWidgets('is not drawn over a pushed step', (tester) async {
+      await pump(tester, [one], selected: 'test/cart_test.dart#cart/Cart');
+
+      expect(find.byKey(stepPageKey), findsOne);
+      expect(find.text('THE VERDICT'), findsNothing);
+    });
   });
 }
 

@@ -842,8 +842,11 @@ class ComparisonCompareResult implements PluginResult {
     required this.against,
     required this.baseSha,
     required this.counts,
+    required this.channels,
     required this.findings,
     required this.index,
+    this.shapes = const [],
+    this.eventChannels = const {},
     this.export,
     this.report,
     this.scenariosNote,
@@ -860,6 +863,34 @@ class ComparisonCompareResult implements PluginResult {
   /// which half they came from is the second question, and the findings below
   /// answer it.
   final Map<String, int> counts;
+
+  /// How many findings each channel had something to say about:
+  /// `{"pixels": 5, "tree": 3, "events": 2}`.
+  ///
+  /// A finding is counted once per channel that fired on it, so the numbers
+  /// sum to more than [findings] and are meant to. The question they answer is
+  /// *what kind of change was this branch* — which is the first thing a reader
+  /// wants and the last thing a percentage can say.
+  final Map<String, int> channels;
+
+  /// Event deltas by the channel they travelled on: `{"system": 192, "db": 3}`.
+  ///
+  /// Counted separately from [channels] and kept even when a reader is hiding
+  /// a channel, because a hidden channel that says nothing about itself is
+  /// indistinguishable from an empty one. `system` is the case this exists
+  /// for: on a real suite it was 192 of 293 event differences, which nobody
+  /// wants by default and everybody wants when the bug is about focus.
+  final Map<String, int> eventChannels;
+
+  /// The distinct *shapes* of difference across the whole comparison, in
+  /// channel order, each with how many findings wore it.
+  ///
+  /// The line that says what a branch did in one read. Measured on this
+  /// repository, a comparison reporting eleven event deltas reported **one**
+  /// shape eleven times — the same subchannel, subject and property, differing
+  /// only in an identity hash. Eleven rows that are one fact, and no channel
+  /// filter can tell them apart because they are all on the same channel.
+  final List<ComparisonDelta> shapes;
 
   /// The rows worth attention, worst first. The `same` and `skipped` rows are
   /// in the artifact at [index], where a reader who needs proof of coverage
@@ -898,6 +929,8 @@ class ComparisonFinding {
     required this.state,
     this.note,
     this.delta,
+    this.deltas = const [],
+    this.deltasDropped = 0,
   });
 
   /// The entry id, or the scenario id for a flow.
@@ -917,5 +950,74 @@ class ComparisonFinding {
   /// moved for a flow.
   final String? delta;
 
+  /// What actually moved, on every channel — the facets a reader filters on.
+  ///
+  /// Capped, and [deltasDropped] says by how much: an agent asking what a
+  /// branch did should not be handed four hundred lines of `system` chatter to
+  /// get to the two that matter. The uncapped list of every row is in the
+  /// artifact at `index`.
+  final List<ComparisonDelta> deltas;
+
+  final int deltasDropped;
+
   Map<String, Object?> toJson() => _$ComparisonFindingToJson(this);
+}
+
+/// One difference a finding is made of.
+///
+/// The wire form of `ChannelDelta`, and deliberately the same five facets:
+/// `half` is the finding's, `channel` and the rest are here. See
+/// `docs/superpowers/specs/2026-08-29-comparison-events-channel-design.md` §9.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ComparisonDelta {
+  ComparisonDelta({
+    required this.channel,
+    this.subchannel,
+    this.subject,
+    this.property,
+    this.base,
+    this.head,
+    this.origin,
+    this.count,
+    this.items,
+  });
+
+  /// `pixels`, `tree`, `texts` or `events`.
+  final String channel;
+
+  /// For an event, the channel it travelled on: `network`, `db`, `log`,
+  /// `system`.
+  final String? subchannel;
+
+  /// A widget's path through the tree, or an event's one-line summary.
+  final String? subject;
+
+  /// Which field moved — `size`, `detail`, `data.cart.id` — or `added`,
+  /// `removed`, `moved` where something arrived, left or changed places.
+  final String? property;
+
+  final String? base;
+  final String? head;
+
+  /// Where the app made the event, when it said: a file and a symbol. Never
+  /// compared; it is there so a whole file's noise can be excluded at once.
+  final String? origin;
+
+  /// How many identical deltas this row stands for. Absent means one.
+  ///
+  /// [base] and [head] are then one example of [count], kept because a shape
+  /// with no value attached to it cannot be judged.
+  final int? count;
+
+  /// How many findings wore this shape. Absent means one.
+  ///
+  /// The more useful of the two in a verdict: four text fields on one screen
+  /// is one screen's problem, four screens with one each is the suite's.
+  final int? items;
+
+  Map<String, Object?> toJson() => _$ComparisonDeltaToJson(this);
 }

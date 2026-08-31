@@ -9,9 +9,10 @@ import '../../ui/empty_state.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../comparison_controller.dart';
+import '../rules.dart';
 import '../shot_store.dart';
-import 'channel_lines.dart';
 import 'merged_tree.dart';
+import 'step_page.dart';
 import 'shot_image.dart';
 import 'stage.dart';
 import 'state_chip.dart';
@@ -19,9 +20,6 @@ import 'state_chip.dart';
 const scenariosTabKey = Key('comparison.scenarios');
 
 Key scenarioRowKey(String id) => ValueKey('comparison.scenario.$id');
-
-const stepPageKey = Key('comparison.step-page');
-const stepBackKey = Key('comparison.step-back');
 
 /// The scenario half: every flow on the left, the picked flow's merged tree
 /// beside it, and a picked *step* pushed over both.
@@ -45,6 +43,7 @@ class ScenariosTab extends StatefulWidget {
     required this.settle,
     required this.selected,
     required this.onSelect,
+    this.header,
   });
 
   final ComparisonHalf half;
@@ -54,6 +53,10 @@ class ScenariosTab extends StatefulWidget {
   /// `<file>#<scenario>/<step path>` as the address names it, or null.
   final String? selected;
   final ValueChanged<String> onSelect;
+
+  /// The half's verdict, drawn above the list — and **not** above a pushed
+  /// page, which is about one step rather than about the half.
+  final Widget? header;
 
   @override
   State<ScenariosTab> createState() => _ScenariosTabState();
@@ -197,7 +200,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
     // a step as a full page with a back arrow — and the flow stays one tap
     // away, in the address as well as on screen.
     if (step != null && scenario != null) {
-      return _StepPage(
+      return StepPage(
         item: step,
         shots: _shots,
         mode: _mode,
@@ -206,7 +209,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
       );
     }
 
-    return Row(
+    var body = Row(
       key: scenariosTabKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -253,6 +256,19 @@ class _ScenariosTabState extends State<ScenariosTab> {
           ),
       ],
     );
+
+    // Above the list, not above the tab: a pushed step page replaces this
+    // whole subtree, and a header describing the half has no business over a
+    // page describing one step.
+    if (widget.header == null) return body;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        widget.header!,
+        Divider(height: 1, color: colors.line),
+        Expanded(child: body),
+      ],
+    );
   }
 
   @override
@@ -280,9 +296,26 @@ class _Index extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var rules = RuleSet(half.rules);
+    // A flow is hidden when every finding *step* inside it is, since a flow
+    // has no channels of its own — its verdict is a roll-up of the steps.
+    bool allHidden(ScenarioComparison s) {
+      var any = false;
+      for (var step in s.items) {
+        if (!step.state.isFinding) continue;
+        any = true;
+        if (!rules.hidesAll(step)) return false;
+      }
+      return any;
+    }
+
     var findings = [
       for (var s in half.scenarios)
-        if (s.state.isFinding) s,
+        if (s.state.isFinding && !allHidden(s)) s,
+    ];
+    var hidden = [
+      for (var s in half.scenarios)
+        if (s.state.isFinding && allHidden(s)) s,
     ];
     var quiet = [
       for (var s in half.scenarios)
@@ -298,7 +331,7 @@ class _Index extends StatelessWidget {
             selected: s.scenario == selected,
             onTap: () => onSelect(s.scenario),
           ),
-        if (findings.isEmpty && !half.isRunning)
+        if (findings.isEmpty && hidden.isEmpty && !half.isRunning)
           Padding(
             padding: const EdgeInsets.all(FwSpacing.xl),
             child: Text(
@@ -322,6 +355,26 @@ class _Index extends StatelessWidget {
             ),
           ),
           for (var id in half.pending) _PendingRow(id),
+        ],
+        if (hidden.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.xl,
+              FwSpacing.lg,
+              FwSpacing.xl,
+              FwSpacing.sm,
+            ),
+            child: Text(
+              '${hidden.length} HIDDEN BY YOUR RULES',
+              style: context.type.micro.copyWith(color: context.colors.mut),
+            ),
+          ),
+          for (var s in hidden)
+            _IndexRow(
+              scenario: s,
+              selected: s.scenario == selected,
+              onTap: () => onSelect(s.scenario),
+            ),
         ],
         if (quiet.isNotEmpty) ...[
           Padding(
@@ -450,11 +503,35 @@ class _IndexRow extends StatelessWidget {
               ),
             ),
             const Gap(FwSpacing.sm),
-            if (scenario.state.isFinding) StateChip(scenario.state),
+            // Which channels spoke, in words — a flow has none of its own, so
+            // it is the union of the steps inside it. Named rather than
+            // coloured: the row already carries a `StateChip`, and the events
+            // pane's channel palette collides with it on green and amber.
+            if (scenario.state.isFinding) ...[
+              if (_channels case var channels when channels.isNotEmpty) ...[
+                Text(
+                  channels.join(' · '),
+                  style: context.type.micro.copyWith(color: colors.mut),
+                ),
+                const Gap(FwSpacing.sm),
+              ],
+              StateChip(scenario.state),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  List<String> get _channels {
+    var fired = <String>{};
+    for (var step in scenario.items) {
+      if (step.state.isFinding) fired.addAll(step.channelsFired);
+    }
+    return [
+      for (var channel in const ['pixels', 'tree', 'texts', 'events'])
+        if (fired.contains(channel)) channel,
+    ];
   }
 }
 
@@ -520,88 +597,3 @@ class _NotReplayed extends StatelessWidget {
 }
 
 /// One step, over the flow: the two frames, and what the other channels found.
-class _StepPage extends StatelessWidget {
-  const _StepPage({
-    required this.item,
-    required this.shots,
-    required this.mode,
-    required this.onMode,
-    required this.onBack,
-  });
-
-  final ComparedItem item;
-  final ShotPair shots;
-  final StageMode mode;
-  final ValueChanged<StageMode> onMode;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var hasChannels =
-        (item.tree?.changed ?? false) ||
-        item.texts != null ||
-        item.events != null;
-
-    return Column(
-      key: stepPageKey,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            FwSpacing.lg,
-            FwSpacing.md,
-            FwSpacing.xl,
-            0,
-          ),
-          child: Row(
-            children: [
-              Tappable(
-                key: stepBackKey,
-                onTap: onBack,
-                child: Icon(
-                  Icons.arrow_back,
-                  size: FwIconSize.lg,
-                  color: colors.mut,
-                ),
-              ),
-              const Gap(FwSpacing.lg),
-              Expanded(child: Text(item.id, style: context.type.heading)),
-              StateChip(item.state),
-            ],
-          ),
-        ),
-        if (item.note case var note?)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.xl,
-              FwSpacing.xs,
-              FwSpacing.xl,
-              0,
-            ),
-            child: Text(
-              note,
-              style: context.type.caption.copyWith(color: colors.red),
-            ),
-          ),
-        Expanded(
-          flex: 5,
-          child: shots.settled
-              ? ComparisonStage(
-                  shots: shots,
-                  mode: mode,
-                  onMode: onMode,
-                  diff: item.pixels?.diff,
-                )
-              : Center(
-                  child: Text(
-                    'Loading…',
-                    style: context.type.body.copyWith(color: colors.mut),
-                  ),
-                ),
-        ),
-        if (hasChannels) Expanded(flex: 2, child: ChannelLines(item)),
-      ],
-    );
-  }
-}

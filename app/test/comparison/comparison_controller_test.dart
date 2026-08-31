@@ -333,6 +333,48 @@ void main() {
     expect(controller.artifact, isA<ComparisonArtifact>());
     expect(controller.artifact!.scenarios, isNotNull);
   });
+
+  // Both callers reach this *after* the notification that drew the rows, so a
+  // silent assignment left the verdict with no previous run to measure against
+  // and no way to learn otherwise — and since `newCount` distinguishes *no
+  // previous run* from *nothing new*, it went missing rather than wrong.
+  group('what the comparison before this one found', () {
+    LastComparison run(DateTime at, List<String> ids) => LastComparison(
+      at: at,
+      baseSha: 'abc123',
+      against: 'master',
+      elapsed: Duration.zero,
+      items: [
+        for (var id in ids) ComparedItem(id: id, state: ComparedState.changed),
+      ],
+    );
+
+    test('learning it reaches the panel', () {
+      var half = ComparisonHalf(ComparisonHalfKind.previews);
+      var notified = 0;
+      half.addListener(() => notified++);
+
+      half.knowPrevious({'demo/a.dart#a'});
+
+      expect(half.previousFindingIds, {'demo/a.dart#a'});
+      expect(notified, 1);
+    });
+
+    test('a restored half knows what the run before it found', () async {
+      environment
+        ..keptPreviews = run(DateTime(2026, 8, 31), [
+          'demo/a.dart#a',
+          'demo/b.dart#b',
+        ])
+        ..previousPreviews = run(DateTime(2026, 8, 30), ['demo/a.dart#a']);
+      var restored = ComparisonController(environment);
+      addTearDown(restored.dispose);
+
+      await restored.restored;
+
+      expect(restored.previews.previousFindingIds, {'demo/a.dart#a'});
+    });
+  });
 }
 
 ScenarioComparison _scenario(String id, ComparedState state) =>
@@ -399,6 +441,16 @@ class _FakeEnvironment implements ComparisonEnvironment {
   @override
   Future<LastComparison?> lastRun(ComparisonHalfKind kind) async =>
       kind == ComparisonHalfKind.previews ? keptPreviews : keptScenarios;
+
+  /// What the run before the kept one found, for *new since you last looked*.
+  LastComparison? previousPreviews;
+  LastComparison? previousScenarios;
+
+  @override
+  Future<LastComparison?> previousRun(ComparisonHalfKind kind) async =>
+      kind == ComparisonHalfKind.previews
+      ? previousPreviews
+      : previousScenarios;
 
   @override
   Future<void> saveLastRun(ComparisonHalfKind kind, LastComparison last) async {

@@ -7,8 +7,9 @@ import '../../capture/settle.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../comparison_controller.dart';
+import '../rules.dart';
 import '../shot_store.dart';
-import 'channel_lines.dart';
+import 'finding_body.dart';
 import 'shot_image.dart';
 import 'stage.dart';
 import 'state_chip.dart';
@@ -31,6 +32,7 @@ class PreviewsTab extends StatefulWidget {
     required this.settle,
     required this.selected,
     required this.onSelect,
+    this.header,
   });
 
   final ComparisonHalf half;
@@ -42,6 +44,10 @@ class PreviewsTab extends StatefulWidget {
   /// The entry id the address names, or null.
   final String? selected;
   final ValueChanged<String> onSelect;
+
+  /// The half's verdict, drawn above the list — and **not** above a pushed
+  /// page, which is about one step rather than about the half.
+  final Widget? header;
 
   @override
   State<PreviewsTab> createState() => _PreviewsTabState();
@@ -111,7 +117,7 @@ class _PreviewsTabState extends State<PreviewsTab> {
     var colors = context.colors;
     var current = _current;
 
-    return Row(
+    var body = Row(
       key: previewsTabKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -138,6 +144,19 @@ class _PreviewsTabState extends State<PreviewsTab> {
                   onMode: (mode) => setState(() => _mode = mode),
                 ),
         ),
+      ],
+    );
+
+    // Above the list, not above the tab: a pushed step page replaces this
+    // whole subtree, and a header describing the half has no business over a
+    // page describing one step.
+    if (widget.header == null) return body;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        widget.header!,
+        Divider(height: 1, color: colors.line),
+        Expanded(child: body),
       ],
     );
   }
@@ -171,9 +190,18 @@ class _Index extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var rules = RuleSet(half.rules);
     var findings = [
       for (var row in half.rows)
-        if (row.state.isFinding) row,
+        if (row.state.isFinding && !rules.hidesAll(row)) row,
+    ];
+    // Demoted, not deleted. The comparison design already settled this shape
+    // for `skipped` rows — a row that is missing tells a reader nothing — and
+    // a row a *rule* removed is the same claim made about the reader instead
+    // of about the tool.
+    var hidden = [
+      for (var row in half.rows)
+        if (row.state.isFinding && rules.hidesAll(row)) row,
     ];
     var quiet = [
       for (var row in half.rows)
@@ -189,7 +217,7 @@ class _Index extends StatelessWidget {
             selected: row.id == selected,
             onTap: () => onSelect(row.id),
           ),
-        if (findings.isEmpty && !half.isRunning)
+        if (findings.isEmpty && hidden.isEmpty && !half.isRunning)
           Padding(
             padding: const EdgeInsets.all(FwSpacing.xl),
             child: Text(
@@ -213,6 +241,26 @@ class _Index extends StatelessWidget {
             ),
           ),
           for (var id in half.pending) _PendingRow(id),
+        ],
+        if (hidden.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.xl,
+              FwSpacing.lg,
+              FwSpacing.xl,
+              FwSpacing.sm,
+            ),
+            child: Text(
+              '${hidden.length} HIDDEN BY YOUR RULES',
+              style: context.type.micro.copyWith(color: context.colors.mut),
+            ),
+          ),
+          for (var row in hidden)
+            _IndexRow(
+              item: row,
+              selected: row.id == selected,
+              onTap: () => onSelect(row.id),
+            ),
         ],
         if (quiet.isNotEmpty) ...[
           Padding(
@@ -339,7 +387,18 @@ class _IndexRow extends StatelessWidget {
               ),
             ),
             const Gap(FwSpacing.sm),
-            if (item.state.isFinding) StateChip(item.state),
+            // Named, not coloured. The row already carries a `StateChip`, and
+            // the events pane's channel palette collides with it on the two
+            // colours that carry meaning — green is `added` and `analytics`,
+            // amber is `changed` and `db`. Colour stays for state.
+            if (item.state.isFinding) ...[
+              Text(
+                item.channelsFired.join(' · '),
+                style: context.type.micro.copyWith(color: colors.mut),
+              ),
+              const Gap(FwSpacing.sm),
+              StateChip(item.state),
+            ],
           ],
         ),
       ),
@@ -394,37 +453,21 @@ class _Detail extends StatelessWidget {
               style: context.type.caption.copyWith(color: colors.red),
             ),
           ),
-        Expanded(
-          flex: 3,
-          // The stage draws whatever there is — except a skipped entry with
-          // nothing in the cache, which is not a loading failure: nothing was
-          // rendered *on purpose*, and the pane owes the reader that sentence.
-          // "Loading…" belongs only to the moment before a decode answered.
-          child: !shots.settled
-              ? Center(
-                  child: Text(
-                    'Loading…',
-                    style: context.type.body.copyWith(color: colors.mut),
-                  ),
-                )
-              : item.state == ComparedState.skipped && !shots.hasFrames
+        FindingBody(
+          item: item,
+          shots: shots,
+          mode: mode,
+          onMode: onMode,
+          // A skipped entry has no pictures and never will: nothing was
+          // rendered *on purpose*, which is not a failed decode and owes the
+          // reader a sentence rather than a spinner.
+          whenNotRendered: item.state == ComparedState.skipped
               ? const _NotRendered()
-              : ComparisonStage(
-                  shots: shots,
-                  mode: mode,
-                  onMode: onMode,
-                  diff: item.pixels?.diff,
-                ),
+              : null,
         ),
-        if (_hasChannels) Expanded(flex: 2, child: ChannelLines(item)),
       ],
     );
   }
-
-  bool get _hasChannels =>
-      (item.tree?.changed ?? false) ||
-      item.texts != null ||
-      item.events != null;
 }
 
 /// The skipped entry's pane — the same sentence the scenarios half earned for

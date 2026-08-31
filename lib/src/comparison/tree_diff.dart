@@ -54,6 +54,23 @@ class TreeDiff {
       );
     }
 
+    // A pair's keys usually agree by construction — [_signature] refuses to
+    // align two children across a differing key, and [_fuse] refuses to fuse
+    // across one — so this fires exactly where neither of those ran: the
+    // **root**, which is handed to this walk as a pair whatever its key says.
+    // Without it, an entry whose whole widget gained a key reported `same`.
+    if (base.widgetKey != head.widgetKey) {
+      deltas.add(
+        TreeDelta(
+          kind: TreeDeltaKind.changed,
+          path: here,
+          property: 'key',
+          base: base.widgetKey,
+          head: head.widgetKey,
+        ),
+      );
+    }
+
     var (a, b) = (base.layout, head.layout);
     if (a != null && b != null) {
       if (a.width != b.width || a.height != b.height) {
@@ -254,19 +271,29 @@ class TreeDiff {
   /// diff made *worse* by keys than it was without them.
   static bool _names(String key) => !key.endsWith('#]');
 
-  /// `Text("Save")`, or `Form-[<'draft'>]`, or `Padding`.
+  /// `Text("Save")`, `Form-[<'draft'>]`, `Text("Save")-[<'total'>]`, `Padding`.
   ///
   /// The key is spelled back on the way out — the framework's own `type-key`
   /// — because it is the name a reader would use for that node, and because
   /// two sibling `Form`s in a path are otherwise indistinguishable.
-  static String _label(InspectNode node) =>
-      node.description ??
-      switch (node.widgetKey) {
-        // A key that distinguishes nothing is a string the path would repeat
-        // on every line of the report — see [_names].
-        var key? when _names(key) => '${node.type}-$key',
-        _ => node.type,
-      };
+  ///
+  /// **Beside the description, not instead of it**, and the difference is a
+  /// bug this docstring described correctly for months while the code did the
+  /// other thing. A key that a description displaced was a key that never
+  /// reached the report, and since a `Text` always has a description, adding
+  /// a key to one produced `+ … › Text("…")` over `- … › Text("…")` — two
+  /// byte-identical rows, telling a reader something moved and giving them
+  /// nothing to look at. A consumer reported exactly that, and the key is the
+  /// one fact that would have explained it.
+  static String _label(InspectNode node) {
+    var name = node.description ?? node.type;
+    // A key that distinguishes nothing is a string the path would repeat on
+    // every line of the report — see [_names].
+    return switch (node.widgetKey) {
+      var key? when _names(key) => '$name-$key',
+      _ => name,
+    };
+  }
 
   static String _size(InspectLayout layout) =>
       '${_number(layout.width)}×${_number(layout.height)}';

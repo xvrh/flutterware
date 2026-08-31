@@ -5,6 +5,8 @@
 /// tree lives in `guest_inspect.dart` and is the only Flutter in here.
 library;
 
+import '../utils/identity_hash.dart';
+
 /// Where a widget's constructor was called.
 ///
 /// Only ever present when the program was compiled with
@@ -1125,49 +1127,6 @@ String shortenPropertyValue(String value) {
 }
 
 final _quotedValue = RegExp(r'^".*"$', dotAll: true);
-
-/// `ScrollController#cf895(offset 0.0)` → `ScrollController#(offset 0.0)`,
-/// and `[#a1b2c]` → `[#]`.
-///
-/// `describeIdentity` and `shortHash` render an object as its type followed by
-/// five hex characters of `hashCode`, which the VM assigns per allocation. The
-/// same controller therefore spells itself differently in every process and
-/// after every rebuild, and [InspectNode] exists to be *carried between*
-/// processes — so a value that means nothing outside the one that minted it
-/// cannot travel in it. Left in, it cost a previews comparison 21 entries
-/// reported as changed with nothing changed about them.
-///
-/// Anchored on a **type-shaped** token — uppercase or `_` initial, generics
-/// allowed — or on the `[` of a bare `UniqueKey`, because that is precisely
-/// what `describeIdentity` emits. A lower-case word before the `#` is nobody's
-/// hash: `ValueKey('build#a1b2c')` is the author's own value, and the only
-/// thing telling two of those apart, so it keeps every character.
-///
-/// **Unless the bracket already opened with a type.** `GlobalObjectKey` and
-/// `ObjectKey` spell themselves as their own type, a space, and
-/// `describeIdentity` of the object they identify — so the token before the
-/// `#` is the *value's* runtime type and may be anything at all, lower-case
-/// included: `[GlobalObjectKey int#8cc0b]`. That one slipped through
-/// the rule above and cost a consumer every scenario of a `go_router` app
-/// reported as changed, forever: `_CustomNavigator` keys itself with a
-/// `GlobalObjectKey` over an `int`, so it is in the tree of every routed
-/// screen and in none of the previews, which mount a widget directly. The
-/// first alternative below admits a lower-case type token, and only where a
-/// type-shaped one has already opened the bracket — which is what keeps
-/// `ValueKey`'s `[<'build#a1b2c'>]` out of it.
-///
-/// Both the fields that carry a rendered object go through here — a widget's
-/// [InspectNode.properties] and its resolved [InspectNode.textStyle] — which
-/// is the point of doing it beside [shortenPropertyValue] rather than at each
-/// call site. [InspectNode.splitKey] uses it for the same reason on keys.
-String withoutIdentityHash(String value) =>
-    value.replaceAllMapped(_identityHash, (match) => '${match[1]}#');
-
-final _identityHash = RegExp(
-  r'(\[[_A-Z][A-Za-z0-9_]*(?:<[^#\]]*>)? [^#\]]*'
-  r'|\['
-  r'|[_A-Z][A-Za-z0-9_]*(?:<[^#]*>)?)#[0-9a-f]{5}(?![0-9a-f])',
-);
 
 const _maxPropertyLength = 96;
 

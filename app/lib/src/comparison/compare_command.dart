@@ -309,22 +309,110 @@ Future<ComparisonCompareResult> runCompareAction({
     counts: {
       for (var entry in artifact.counts.entries) entry.key.name: entry.value,
     },
+    channels: _channelCounts(ranked),
+    eventChannels: _eventChannelCounts(ranked),
+    shapes: [
+      for (var row in foldChannelDeltas(ranked.map(_deltasOf)).take(_maxShapes))
+        _wireDelta(row),
+    ],
     findings: [
       for (var finding in ranked)
-        ComparisonFinding(
-          id: finding.id,
-          half: finding.half.name,
-          state: finding.state.name,
-          note: finding.note,
-          delta: finding.preview == null
-              ? _scenarioDelta(finding.scenario!)
-              : _pixelsDelta(finding.preview!),
-        ),
+        () {
+          var deltas = foldChannelDeltas([_deltasOf(finding)]);
+          return ComparisonFinding(
+            id: finding.id,
+            half: finding.half.name,
+            state: finding.state.name,
+            note: finding.note,
+            delta: finding.preview == null
+                ? _scenarioDelta(finding.scenario!)
+                : _pixelsDelta(finding.preview!),
+            deltas: [
+              for (var row in deltas.take(_maxDeltasPerFinding))
+                _wireDelta(row),
+            ],
+            deltasDropped: deltas.length > _maxDeltasPerFinding
+                ? deltas.length - _maxDeltasPerFinding
+                : 0,
+          );
+        }(),
     ],
     index: outcome.indexPath,
     export: outcome.exported?.output,
     report: report == null ? null : p.dirname(report.commentPath),
     scenariosNote: artifact.scenarios?.note,
+  );
+}
+
+/// How much of a finding's detail rides in the reply.
+///
+/// A cap, because the artifact is the record and this is the summary: an agent
+/// asking what a branch did should not be handed four hundred lines of system
+/// chatter to reach the two that matter, and `index` has every one of them.
+const _maxDeltasPerFinding = 8;
+
+/// How many distinct shapes the verdict names before it stops.
+///
+/// Larger than the per-finding cap because this is the summary a reader
+/// actually reads, and folding has already collapsed the repetition that made
+/// a cap necessary in the first place.
+const _maxShapes = 12;
+
+/// A folded row on the wire. `count` and `items` are omitted at one, the way
+/// `deltasDropped` is omitted at zero.
+ComparisonDelta _wireDelta(FoldedDelta row) => ComparisonDelta(
+  channel: row.delta.channel,
+  subchannel: row.delta.subchannel,
+  subject: row.delta.subject,
+  property: row.delta.property,
+  base: row.delta.base,
+  head: row.delta.head,
+  origin: row.delta.origin,
+  count: row.count > 1 ? row.count : null,
+  items: row.items > 1 ? row.items : null,
+);
+
+/// A finding's differences, whichever half it came from.
+///
+/// A preview is one item; a scenario is a tree of them, and its steps carry
+/// the channels. Flattening both to the same faceted list is what lets a
+/// reader filter a comparison without first asking which half a row is in.
+List<ChannelDelta> _deltasOf(ComparedFinding finding) {
+  if (finding.preview case var preview?) return preview.deltas;
+  return [
+    for (var step in finding.scenario?.items ?? const <ComparedItem>[])
+      if (isComparedFinding(step.state)) ...step.deltas,
+  ];
+}
+
+/// How many findings each channel had something to say about.
+///
+/// Per finding, not per delta: a step whose `system` chatter moved four
+/// hundred times is one finding with something to say about events, and
+/// counting the deltas here would make the events channel look like the whole
+/// branch. The per-delta breakdown that *is* worth having is
+/// [_eventChannelCounts], where the volume is the point.
+Map<String, int> _channelCounts(List<ComparedFinding> findings) {
+  var counts = <String, int>{};
+  for (var finding in findings) {
+    for (var channel in {for (var delta in _deltasOf(finding)) delta.channel}) {
+      counts[channel] = (counts[channel] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+Map<String, int> _eventChannelCounts(List<ComparedFinding> findings) {
+  var counts = <String, int>{};
+  for (var finding in findings) {
+    for (var delta in _deltasOf(finding)) {
+      if (delta.channel != 'events') continue;
+      var key = delta.subchannel ?? 'unknown';
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+  }
+  return Map.fromEntries(
+    counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value)),
   );
 }
 

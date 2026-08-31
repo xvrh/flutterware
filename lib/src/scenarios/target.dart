@@ -1,8 +1,8 @@
+import '../utils/identity_hash.dart';
+
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import '../inspect/node.dart';
 
 /// Resolves a verb's polymorphic target to a `Finder`.
 ///

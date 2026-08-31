@@ -198,9 +198,15 @@ void main() {
     });
 
     test('an N+1 sibling still meets its twin, because digits fold', () {
-      // Folding whitespace keeps the literals, so grouping leans on `mask`'s
-      // digits-to-`#` rule exactly as it did before — the queries of an N+1
-      // differ precisely in an id, and must not read as a change.
+      // Folding whitespace keeps the literals, so pairing leans on `mask`'s
+      // digits-to-`#` rule exactly as it did before: the two meet, and neither
+      // is reported as having come or gone.
+      //
+      // What they no longer do is meet *silently*. The id is the whole
+      // difference between them, and under the multiset it vanished into the
+      // key — which is the same hole that let a flow start hitting a different
+      // record and report nothing. Paired and then diffed, the pairing is kept
+      // and the difference is named.
       var diff = EventChannel.of(
         base: [AppEvent.query(sql: 'select * from t\nwhere id = 1').toJson()],
         head: [AppEvent.query(sql: 'select * from t\nwhere id = 2').toJson()],
@@ -208,6 +214,457 @@ void main() {
 
       expect(diff.added, isEmpty);
       expect(diff.removed, isEmpty);
+      expect(diff.deltas.single.property, 'title');
+      expect(diff.deltas.single.base, contains('id = 1'));
+      expect(diff.deltas.single.head, contains('id = 2'));
     });
+  });
+
+  group('the events channel says which field moved', () {
+    Map<String, Object?> log(String message, {String? level}) =>
+        AppEvent.log(message, level: level).toJson();
+
+    Map<String, Object?> request(String url, {int? status}) =>
+        AppEvent.request(method: 'POST', url: url, status: status).toJson();
+
+    // The finding a consumer's branch actually contained, and the one the
+    // masked multiset reported as no change at all: two `_logger.info` calls
+    // became `_logger.warning`, on steps whose pixels were byte-identical.
+    test('a log level moving is the finding, not silence', () {
+      var diff = EventChannel.of(
+        base: [log('card declined', level: 'INFO')],
+        head: [log('card declined', level: 'WARNING')],
+      );
+
+      expect(diff.added, isEmpty);
+      expect(diff.removed, isEmpty);
+      expect(diff.changed, isTrue);
+      var delta = diff.deltas.single;
+      expect(delta.subchannel, 'log');
+      expect(delta.property, 'level');
+      expect(delta.base, 'INFO');
+      expect(delta.head, 'WARNING');
+    });
+
+    test('a status flip on one endpoint is one line, not two events', () {
+      var diff = EventChannel.of(
+        base: [request('/login', status: 200)],
+        head: [request('/login', status: 500)],
+      );
+
+      expect(diff.added, isEmpty);
+      expect(diff.removed, isEmpty);
+      expect(diff.deltas.single.property, 'detail');
+      expect(diff.deltas.single.base, '200');
+      expect(diff.deltas.single.head, '500');
+    });
+
+    test('a payload is compared leaf by leaf, not as one blob', () {
+      var diff = EventChannel.of(
+        base: [
+          AppEvent.analytics(
+            'checkout',
+            params: {
+              'cart': {'id': 'a1', 'items': 2},
+            },
+          ).toJson(),
+        ],
+        head: [
+          AppEvent.analytics(
+            'checkout',
+            params: {
+              'cart': {'id': 'b7', 'items': 2},
+            },
+          ).toJson(),
+        ],
+      );
+
+      expect(diff.deltas.single.property, 'data.cart.id');
+      expect(diff.deltas.single.base, 'a1');
+      expect(diff.deltas.single.head, 'b7');
+    });
+
+    test('a JSON body is leaves too, so one field reads as one line', () {
+      var diff = EventChannel.of(
+        base: [
+          AppEvent.custom(
+            channel: AppChannel.network,
+            title: 'GET /me',
+            body: '{"user":{"role":"member","id":7}}',
+          ).toJson(),
+        ],
+        head: [
+          AppEvent.custom(
+            channel: AppChannel.network,
+            title: 'GET /me',
+            body: '{"user":{"role":"admin","id":7}}',
+          ).toJson(),
+        ],
+      );
+
+      expect(diff.deltas.single.property, 'body.user.role');
+      expect(diff.deltas.single.base, 'member');
+      expect(diff.deltas.single.head, 'admin');
+    });
+
+    // The brittleness that made folding the payload into a key unthinkable:
+    // two long bodies differing in one word, printed twice in full.
+    test('a body that is not JSON reports where it parts, not all of it', () {
+      var base = '${'x' * 200}ALPHA${'y' * 200}';
+      var head = '${'x' * 200}OMEGA${'y' * 200}';
+      var diff = EventChannel.of(
+        base: [
+          AppEvent.custom(channel: 'wire', title: 'frame', body: base).toJson(),
+        ],
+        head: [
+          AppEvent.custom(channel: 'wire', title: 'frame', body: head).toJson(),
+        ],
+      );
+
+      var delta = diff.deltas.single;
+      expect(delta.property, 'body');
+      expect(delta.base, contains('ALPHA'));
+      expect(delta.head, contains('OMEGA'));
+      expect(delta.base!.length, lessThan(base.length));
+      expect(delta.base, startsWith('…'));
+    });
+
+    // A multiset compares counts and never order, so this was invisible by
+    // construction. FakeAsync makes a transition's ordering deterministic,
+    // which is what makes it a finding rather than a flake.
+    test('an auth call moving after a data fetch is reported as moved', () {
+      var diff = EventChannel.of(
+        base: [request('/auth'), request('/items')],
+        head: [request('/items'), request('/auth')],
+      );
+
+      expect(diff.added, isEmpty);
+      expect(diff.removed, isEmpty);
+      expect(diff.deltas.single.kind, EventDeltaKind.moved);
+      expect(diff.deltas.single.property, 'order');
+    });
+
+    // Aligning straight on the masked key is the cascade `#297` removed from
+    // drift: five events share one masked key, so a sixth pairs them all off
+    // by one and reports five title deltas for one insertion.
+    test('one inserted request is one addition, not a renumbering', () {
+      var diff = EventChannel.of(
+        base: [for (var i = 1; i <= 5; i++) request('/orders/$i')],
+        head: [for (var i = 1; i <= 6; i++) request('/orders/$i')],
+      );
+
+      expect(diff.added, ['network POST /orders/#']);
+      expect(diff.removed, isEmpty);
+      expect(diff.deltas, isEmpty);
+    });
+
+    test('identical events on both sides say nothing at all', () {
+      var events = [request('/login', status: 200), log('ready')];
+      var diff = EventChannel.of(base: events, head: events);
+
+      expect(diff.changed, isFalse);
+      expect(diff.deltas, isEmpty);
+    });
+
+    // Per channel, never shared: a step whose system chatter moved four
+    // hundred times would otherwise eat the allowance pixels and tree needed.
+    test('the delta list is capped and says how much it cut', () {
+      var diff = EventChannel.of(
+        base: [for (var i = 0; i < 80; i++) log('line $i', level: 'INFO')],
+        head: [for (var i = 0; i < 80; i++) log('line $i', level: 'WARNING')],
+      );
+
+      expect(diff.deltas, hasLength(maxEventDeltas));
+      expect(diff.deltasDropped, 80 - maxEventDeltas);
+    });
+
+    // A line number moves when anything above it moves, so an origin inside
+    // the compared set would report every event as changed on any edit.
+    test('the origin rides along and is never itself compared', () {
+      var diff = EventChannel.of(
+        base: [
+          {
+            'channel': 'db',
+            'title': 'select * from t',
+            'origin': 'package:app/src/cache.dart Cache.read',
+          },
+        ],
+        head: [
+          {
+            'channel': 'db',
+            'title': 'select * from t',
+            'origin': 'package:app/src/store.dart Store.read',
+          },
+        ],
+      );
+
+      expect(diff.changed, isFalse);
+      expect(diff.deltas, isEmpty);
+    });
+
+    test('an added line still says which channel it was on', () {
+      expect(EventChannel.subchannelOf('network POST /verify'), 'network');
+    });
+  });
+
+  // The seam between the model and the UI pass: a filter can only ever select
+  // on facets the comparison recorded. Design note §9.
+  group('the facet contract', () {
+    ComparedItem item() => ComparedItem.of(
+      id: 'a#b',
+      pixels: pixels(head: 255),
+      tree: TreeDiff.of(
+        node('Text', description: 'Text("Save")'),
+        node('Text', description: 'Text("Pay")'),
+      ),
+      baseTexts: ['Save'],
+      headTexts: ['Pay'],
+      baseEvents: [
+        AppEvent.log('card declined', level: 'INFO').toJson(),
+        AppEvent.request(method: 'GET', url: '/gone').toJson(),
+      ],
+      headEvents: [
+        AppEvent.log('card declined', level: 'WARNING').toJson(),
+        AppEvent.request(method: 'GET', url: '/new').toJson(),
+      ],
+    );
+
+    test('every channel reaches the flat list, pixels included', () {
+      expect(
+        {for (var delta in item().deltas) delta.channel},
+        {'pixels', 'tree', 'texts', 'events'},
+      );
+    });
+
+    // Without a line of its own the channel that fires most often would be
+    // invisible to a per-channel count.
+    test('the pixel channel contributes one line carrying its size', () {
+      var pixel = item().deltas.firstWhere((d) => d.channel == 'pixels');
+
+      expect(pixel.property, 'changed');
+      expect(pixel.head, contains('%'));
+    });
+
+    test('an event delta keeps its subchannel and what moved', () {
+      var level = item().deltas.firstWhere((d) => d.property == 'level');
+
+      expect(level.channel, 'events');
+      expect(level.subchannel, 'log');
+      expect(level.base, 'INFO');
+      expect(level.head, 'WARNING');
+    });
+
+    // An added or removed event is a finding too, and a reader excluding a
+    // channel has to be able to exclude those with it.
+    test('an added event says which channel it arrived on', () {
+      var added = item().deltas.firstWhere(
+        (d) => d.channel == 'events' && d.property == 'added',
+      );
+
+      expect(added.subchannel, 'network');
+      expect(added.subject, contains('/new'));
+    });
+
+    test('a text that came or went is a delta like any other', () {
+      var texts = item().deltas.where((d) => d.channel == 'texts');
+
+      expect(texts.map((d) => d.property), containsAll(['added', 'removed']));
+      expect(texts.map((d) => d.head ?? d.base), containsAll(['Pay', 'Save']));
+    });
+
+    // A tree that moved only because something above it grew has not changed,
+    // and a count built off this list must not think it has.
+    test('a shifted tree node is not in the list', () {
+      var shifted = ComparedItem(
+        id: 'a#b',
+        state: ComparedState.same,
+        tree: TreeChannel(
+          const TreeDiff([
+            TreeDelta(
+              kind: TreeDeltaKind.shifted,
+              path: 'Column › Text',
+              property: 'offset',
+              base: '0,20',
+              head: '0,44',
+            ),
+          ]),
+        ),
+      );
+
+      expect(shifted.deltas, isEmpty);
+    });
+
+    test('an item with nothing to say has an empty list, not a null one', () {
+      expect(ComparedItem.of(id: 'a#b', pixels: pixels()).deltas, isEmpty);
+    });
+
+    test('a delta round-trips through its json', () {
+      var delta = item().deltas.firstWhere((d) => d.property == 'level');
+      var back = ChannelDelta.fromJson(delta.toJson());
+
+      expect(back.channel, delta.channel);
+      expect(back.subchannel, delta.subchannel);
+      expect(back.property, delta.property);
+      expect(back.base, delta.base);
+      expect(back.head, delta.head);
+    });
+  });
+
+  // Measured on this repository: a comparison whose events channel reported
+  // eleven deltas reported one *shape*, eleven times over. Eleven lines that
+  // are one fact. Design note `2026-08-30-comparison-ui-pass-design.md` §4a.
+  group('folding', () {
+    ChannelDelta autofill(String hash) => ChannelDelta(
+      channel: 'events',
+      subchannel: 'system',
+      subject: 'flutter/textinput TextInput.setClient',
+      property: 'data.arguments[1].autofill.uniqueIdentifier',
+      base: 'EditableText-$hash',
+      head: 'EditableText-',
+    );
+
+    test('one shape across many items is one row that counts both', () {
+      var folded = foldChannelDeltas([
+        [autofill('1047800503')],
+        [autofill('14348167')],
+        [autofill('936512157'), autofill('220435757')],
+      ]);
+
+      expect(folded, hasLength(1));
+      expect(folded.single.count, 4);
+      expect(folded.single.items, 3);
+      expect(folded.single.repeated, isTrue);
+    });
+
+    // The value differing on every occurrence is the case this exists for, so
+    // grouping on it would put each one in a group of its own.
+    test('the differing value is not part of the shape', () {
+      var folded = foldChannelDeltas([
+        [autofill('1'), autofill('2'), autofill('3')],
+      ]);
+
+      expect(folded.single.count, 3);
+      expect(folded.single.items, 1);
+    });
+
+    // A shape with no value attached to it cannot be judged.
+    test('the row keeps one example of the values it folded', () {
+      var folded = foldChannelDeltas([
+        [autofill('1047800503'), autofill('14348167')],
+      ]);
+
+      expect(folded.single.delta.base, 'EditableText-1047800503');
+      expect(folded.single.delta.head, 'EditableText-');
+    });
+
+    test('different properties on one subject stay apart', () {
+      var folded = foldChannelDeltas([
+        [
+          const ChannelDelta(
+            channel: 'events',
+            subchannel: 'network',
+            subject: 'POST /login',
+            property: 'detail',
+            base: '200',
+            head: '500',
+          ),
+          const ChannelDelta(
+            channel: 'events',
+            subchannel: 'network',
+            subject: 'POST /login',
+            property: 'data.token',
+            base: 'a',
+            head: 'b',
+          ),
+        ],
+      ]);
+
+      expect(folded, hasLength(2));
+      expect(folded.every((row) => row.count == 1), isTrue);
+    });
+
+    // Ranking by count would put the noisiest shape at the top of every
+    // report, which is the opposite of what a reader wants.
+    test('input order is kept, not count order', () {
+      var folded = foldChannelDeltas([
+        [
+          const ChannelDelta(channel: 'pixels', property: 'changed'),
+          autofill('1'),
+          autofill('2'),
+        ],
+      ]);
+
+      expect(folded.map((row) => row.delta.channel), ['pixels', 'events']);
+      expect(folded.map((row) => row.count), [1, 2]);
+    });
+
+    test('nothing folds to nothing', () {
+      expect(foldChannelDeltas(const []), isEmpty);
+      expect(foldChannelDeltas([<ChannelDelta>[]]), isEmpty);
+    });
+  });
+
+  // Two caps on one payload, the second applied *after* the write and so
+  // *before* the comparison, is the derived-count failure §7 is about
+  // reappearing one level up.
+  group('a payload is capped once, at write time', () {
+    Map<String, Object?> wide(int fields, {String tail = 'x'}) => {
+      'channel': 'analytics',
+      'title': 'checkout',
+      'data': {for (var i = 0; i < fields; i++) 'f$i': 'v$i', 'tail': tail},
+    };
+
+    test('a payload wider than any read-time cap still names its field', () {
+      var diff = EventChannel.of(
+        base: [wide(40)],
+        head: [wide(40, tail: 'y')],
+      );
+
+      expect(diff.deltas.single.property, 'data.tail');
+      expect(diff.deltas.single.base, 'x');
+      expect(diff.deltas.single.head, 'y');
+    });
+
+    // It reported `…  39 more fields → 40 more fields` and named nothing.
+    test('a field added to a wide payload is the field, not a count', () {
+      var diff = EventChannel.of(
+        base: [wide(40)],
+        head: [
+          {
+            'channel': 'analytics',
+            'title': 'checkout',
+            'data': {
+              for (var i = 0; i < 40; i++) 'f$i': 'v$i',
+              'tail': 'x',
+              'extra': 'new',
+            },
+          },
+        ],
+      );
+
+      expect(diff.deltas.single.property, 'data.extra');
+      expect(diff.deltas.map((d) => d.property), isNot(contains('…')));
+    });
+  });
+
+  // A value with nothing on the other side skipped the excerpt entirely, so a
+  // body added where there was none went into `index.json` and the MCP reply
+  // at its full four thousand characters.
+  test('a value added where there was none is excerpted too', () {
+    var long = 'z' * 3000;
+    var diff = EventChannel.of(
+      base: [
+        {'channel': 'network', 'title': 'GET /me'},
+      ],
+      head: [
+        {'channel': 'network', 'title': 'GET /me', 'body': long},
+      ],
+    );
+
+    var delta = diff.deltas.single;
+    expect(delta.property, 'body');
+    expect(delta.base, isNull);
+    expect(delta.head!.length, lessThan(200));
+    expect(delta.head, endsWith('…'));
   });
 }

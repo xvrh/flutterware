@@ -108,6 +108,10 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
       _lastRuns.read(kind);
 
   @override
+  Future<LastComparison?> previousRun(ComparisonHalfKind kind) async =>
+      _lastRuns.readPrevious(kind);
+
+  @override
   Future<void> saveLastRun(ComparisonHalfKind kind, LastComparison last) async {
     _lastRuns.write(kind, last);
   }

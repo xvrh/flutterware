@@ -53,6 +53,7 @@ class MergedTree extends StatelessWidget {
   Widget build(BuildContext context) {
     var graph = _MergedGraph.of(scenario);
     if (graph.nodes.isEmpty) return const SizedBox.shrink();
+    var nodeWidth = _nodeWidthFor(scenario);
 
     // **The scenarios panel's own flow, with a comparison on it.** That panel
     // draws a run as a horizontal graph of device-framed shots, and a reader
@@ -62,8 +63,8 @@ class MergedTree extends StatelessWidget {
     return DirectGraph(
       key: mergedTreeKey,
       list: graph.nodes,
-      cellSize: const Size(_nodeWidth + 40, _thumbHeight + 70),
-      cellPadding: 40,
+      cellSize: Size(nodeWidth + _gap, _thumbHeight + _captionHeight),
+      cellPadding: _gap,
       contactEdgesDistance: 0,
       tipLength: 14,
       orientation: MatrixOrientation.horizontal,
@@ -78,13 +79,14 @@ class MergedTree extends StatelessWidget {
         var cell = graph.cells[node.id]!;
         return switch (cell) {
           _StepCell(:var item) => _StepNode(
+            width: nodeWidth,
             item: item,
             frames: scenario.frames[item.id],
             store: store,
             selected: item.id == selected,
             onTap: () => onSelect(item.id),
           ),
-          _BranchCell(:var branch) => _OneSidedBranch(branch),
+          _BranchCell(:var branch) => _OneSidedBranch(branch, width: nodeWidth),
         };
       },
     );
@@ -186,16 +188,17 @@ class _MergedGraph {
 
 /// A branch only one run has.
 class _OneSidedBranch extends StatelessWidget {
-  const _OneSidedBranch(this.branch);
+  const _OneSidedBranch(this.branch, {required this.width});
 
   final BranchDelta branch;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
     var state = branch.added ? ComparedState.added : ComparedState.removed;
     var color = state.colorIn(context);
     return Container(
-      width: _nodeWidth,
+      width: width,
       padding: const EdgeInsets.all(FwSpacing.md),
       decoration: BoxDecoration(
         border: Border.all(color: color.withValues(alpha: 0.5)),
@@ -217,12 +220,54 @@ class _OneSidedBranch extends StatelessWidget {
   }
 }
 
-const _nodeWidth = 132.0;
 const _thumbHeight = 190.0;
+
+/// What separates two frames on the canvas, and all that separates them.
+const _gap = 40.0;
+
+/// Room under the thumbnail for everything the node says about the step.
+///
+/// Counted rather than guessed, because guessing is what broke it: the node
+/// grew a line naming the channels that fired and this stayed at 70, so a
+/// finding node overflowed its cell by a measured 10px. The budget is a gap
+/// (4), two lines of label (~28), a gap (2), a state chip (~18), a gap (2) and
+/// two lines of channel names (~24) — 78, plus slack for a larger text scale.
+const _captionHeight = 92.0;
+
+/// How wide a node is, from the shape of the frames it holds.
+///
+/// It was a constant 132, which is a landscape figure — and a phone capture
+/// fitted to [_thumbHeight] is about **88** wide. That left ~44px dead inside
+/// every node, on both sides, *plus* the gap between cells: two 88px pictures
+/// ended up about 128px apart, so the space between the frames was wider than
+/// the frames. The arrow drawn in that space looked marooned because it was.
+///
+/// Taken from the pixel channel, which already carries each frame's size and
+/// costs nothing to read — no image has to be decoded to lay the graph out.
+/// Clamped because a desktop capture would otherwise make a node wider than
+/// most windows, and a flow of those is unreadable for the opposite reason.
+double _nodeWidthFor(ScenarioComparison scenario) {
+  // The **commonest** shape, not the first. A flow whose first step is a bare
+  // `pumpWidget` at the default 800×600 and whose remaining twenty are phone
+  // captures would otherwise size every node from that one landscape frame,
+  // and every phone in it goes back to being letterboxed in a box of the wrong
+  // shape — which is the whitespace this function exists to remove.
+  var seen = <double, int>{};
+  for (var item in scenario.items) {
+    var pixels = item.pixels?.diff;
+    if (pixels == null || pixels.width <= 0 || pixels.height <= 0) continue;
+    var aspect = pixels.width / pixels.height;
+    seen[aspect] = (seen[aspect] ?? 0) + 1;
+  }
+  if (seen.isEmpty) return 132;
+  var common = seen.entries.reduce((a, b) => b.value > a.value ? b : a).key;
+  return (_thumbHeight * common).clamp(96.0, 260.0);
+}
 
 /// One step: its head frame, ringed by what the comparison said about it.
 class _StepNode extends StatelessWidget {
   const _StepNode({
+    required this.width,
     required this.item,
     required this.frames,
     required this.store,
@@ -230,6 +275,8 @@ class _StepNode extends StatelessWidget {
     required this.onTap,
   });
 
+  /// Sized from the frames rather than fixed — see [_nodeWidthFor].
+  final double width;
   final ComparedItem item;
   final ({FrameRef? base, FrameRef? head})? frames;
   final ShotStore store;
@@ -252,7 +299,7 @@ class _StepNode extends StatelessWidget {
         // the frame a reader is here to judge. The tint goes behind it instead,
         // which is what the ring note below is about.
         builder: (context, hovered) => SizedBox(
-          width: _nodeWidth,
+          width: width,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -284,6 +331,20 @@ class _StepNode extends StatelessWidget {
               if (item.state.isFinding) ...[
                 const Gap(2),
                 StateChip(item.state),
+                // *That* it changed was all a node ever said. Which channel
+                // saw it is the difference between a screenshot worth opening
+                // and a request that moved behind one — and the flow is where
+                // a reader decides which step to open.
+                if (item.channelsFired case var channels
+                    when channels.isNotEmpty) ...[
+                  const Gap(2),
+                  Text(
+                    channels.join(' · '),
+                    style: context.type.micro.copyWith(color: colors.mut),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ],
           ),
