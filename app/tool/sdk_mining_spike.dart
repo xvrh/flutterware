@@ -251,7 +251,7 @@ void main(List<String> args) {
       var params = <Map<String, dynamic>>[];
       for (var p in ctor.parameters.parameters) {
         var pname = p.name?.lexeme ?? '?';
-        String? type = p.type?.toSource();
+        var type = p.type?.toSource();
         if (type == null && p is FieldFormalParameter) {
           type = fieldType(name, pname);
         } else if (type == null && p is SuperFormalParameter) {

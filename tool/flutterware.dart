@@ -268,6 +268,14 @@ void main() => Flutterware.configure((fw) {
                 ),
               ],
             ),
+            Entrypoint(
+              'lib/canvas_toy/main.dart',
+              name: 'Canvas toy',
+              description:
+                  'Disposable scene-canvas experiment — uniform-node model, '
+                  'selection, drag, inspector',
+              platforms: [RunPlatform.desktop],
+            ),
           ],
         ),
         .new(
