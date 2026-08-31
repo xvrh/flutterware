@@ -273,11 +273,39 @@ String abbreviatedSha(String sha) => sha.length > 8 ? sha.substring(0, 8) : sha;
 ///
 /// Keyed on the note rather than on any particular cause, so whatever next
 /// prevents a half from running is covered the day it appears.
+///
+/// A half whose rows **all** came out [ComparedState.failed] is the same kind
+/// of gap wearing a different record: `failed` means neither side rendered, so
+/// a half made of nothing else answered no question about the branch — and it
+/// is near-always environmental, not fifty-one simultaneous regressions. A
+/// consumer met exactly this as a green check over a `51 failed` comment, when
+/// their whole suite hit one missing native library on both sides. *All*, not
+/// *any*: a half with one pre-broken flow and fifty compared ones did its job,
+/// and the failed row is already a finding every reader of the artifact sees.
 String? verdictGap(ComparisonArtifact artifact) {
   if (artifact.scenarios?.note case var note?) {
     return 'the scenario half produced no verdict — ${note.split('\n').first}';
   }
+  if (artifact.scenarios case var scenarios?
+      when _allFailed(scenarios.items.map((item) => item.state))) {
+    return 'the scenario half produced no verdict — all '
+        '${scenarios.items.length} scenarios failed on both sides';
+  }
+  if (_allFailed(artifact.previews.items.map((item) => item.state))) {
+    return 'the previews half produced no verdict — all '
+        '${artifact.previews.items.length} entries failed on both sides';
+  }
   return null;
+}
+
+/// Whether [states] is non-empty and holds nothing but [ComparedState.failed].
+bool _allFailed(Iterable<ComparedState> states) {
+  var any = false;
+  for (var state in states) {
+    if (state != ComparedState.failed) return false;
+    any = true;
+  }
+  return any;
 }
 
 /// The `compare` action, as the previews core invokes it.
