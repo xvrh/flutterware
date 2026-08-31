@@ -180,7 +180,9 @@ class _SceneHostAppState extends State<SceneHostApp> {
         title: 'Scene host',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
-        home: ColoredBox(
+        // Material, not ColoredBox: without a Material ancestor every Text
+        // falls back to the debug style — the yellow double underline.
+        home: Material(
           color: const Color(0xFF26282C),
           child: artboard == null
               ? const SizedBox()
