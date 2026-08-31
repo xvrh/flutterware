@@ -207,6 +207,45 @@ screenshots of the spike show a hole where the texture is), and the
 makes coordinates line up — zoom still scales the texture in the editor, with
 the known blur-at->1× to solve later via resolution-tracking resizes.
 
+## Round four — what the first hour of human use surfaced (same day)
+
+The owner used the composited canvas by hand. Three findings, each fixed the
+same hour, and each worth more than its diff:
+
+- **A one-frame blink of the canvas ~1s after every click.** The chain: any
+  human tap in a run-guest app opens a ~300ms burst; when it closes, the
+  human-beats journal settles and photographs the window; `toImage` cannot
+  rasterize an external texture, so the capture raises `OffscreenRaster`,
+  during which `GuestTexture` withholds the texture for exactly one frame.
+  The withhold exists for a Linux segfault — on macOS the captured picture
+  has a hole either way — so macOS now keeps the texture painted through
+  rasters and pays nothing. This also cures the same blink in the previews
+  live stage, where the stage ground had been masking it.
+- **Which raised the better question: why was the app photographing every
+  human tap at all?** The capture was armed at guest startup for every
+  launched app, while the beats design itself says unpolled beats age out of
+  the ring unseen — cost paid in the user's app, value dropped. Split along
+  the cost line: the gesture *list* stays always-on (a pointer route, no
+  frames, and it must predate the first agent step to fill its `human`
+  field), and the *capture* now arms on first consumer contact
+  (`ext.flutterware.act` or `ext.flutterware.beats`) and stays armed. Opt-in
+  by use, no knob: an app nobody drives and nobody polls never captures.
+- **Yellow double underlines on every text node** — bare mode had swapped the
+  standalone host's `Scaffold` for a `ColoredBox`, so `Text` inherited the
+  no-`Material` debug fallback. Now a `Material`. The lesson outlives the
+  typo: this is the two-renderers-diverge failure in miniature — the toy's
+  mirror always looked right inside the editor's own ambient stack while the
+  real render was wrong, and only showing the real render surfaced it. It
+  also names a contract: **a scene guest's ambient stack (`Material`, theme,
+  directionality, `MediaQuery`) is part of the scene runtime's job**, and it
+  is the same mechanism as the previews `wrapper:` — the registration story's
+  wrapper and the canvas's ambient story are one thing.
+
+The meta-finding: all three appeared only because a human used the real
+composited pipeline. None was reachable from the toy, from the specs, or from
+agent-driven verification alone — the drive layer's own captures were the
+*cause* of the first one.
+
 ## What remains before this is the editor (not tested here)
 
 Compositing the guest **into** the editor window instead of beside it — the
