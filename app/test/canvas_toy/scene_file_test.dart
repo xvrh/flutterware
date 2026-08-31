@@ -88,8 +88,7 @@ class S {
     );
     refuses(
       'string interpolation',
-      // ignore: unnecessary_string_escapes
-      "Frame('a', children: [Text('t', 'hello \$name')])",
+      r"Frame('a', children: [Text('t', 'hello $name')])",
       construct: 'interpolation',
     );
     refuses(
@@ -159,7 +158,7 @@ class S {
     });
 
     test('a missing marker', () {
-      var parsed = parseSceneFile('class S { final root = Frame(\'a\'); }');
+      var parsed = parseSceneFile("class S { final root = Frame('a'); }");
       expect(parsed.ok, isFalse);
       expect(
         parsed.refusals.map((r) => r.construct),
@@ -211,7 +210,7 @@ const _chars = [
   "'",
   '"',
   r'$',
-  '\\',
+  r'\',
   '\n',
   '\t',
   '☕',
@@ -229,7 +228,7 @@ String _randomString(Random r) =>
         .join();
 
 double _randomDouble(Random r) {
-  var v = (r.nextDouble() * 2000 - 400);
+  var v = r.nextDouble() * 2000 - 400;
   // Limited precision keeps the generator away from float-format noise the
   // canonical spelling already handles; the spelling is tested either way.
   v = (v * 10).roundToDouble() / 10;
