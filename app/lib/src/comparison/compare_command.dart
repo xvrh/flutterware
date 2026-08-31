@@ -282,30 +282,38 @@ String abbreviatedSha(String sha) => sha.length > 8 ? sha.substring(0, 8) : sha;
 /// their whole suite hit one missing native library on both sides. *All*, not
 /// *any*: a half with one pre-broken flow and fifty compared ones did its job,
 /// and the failed row is already a finding every reader of the artifact sees.
-String? verdictGap(ComparisonArtifact artifact) {
+///
+/// [narrowed] switches the all-failed rule off — the note rule stands. "All of
+/// it failed" is evidence of environment only over the whole suite; a run
+/// narrowed with `--entry` compares the rows somebody picked, and picking the
+/// one pre-broken flow would otherwise turn its ordinary finding into a
+/// permanent exit 1 that no change on the branch can lift.
+String? verdictGap(ComparisonArtifact artifact, {bool narrowed = false}) {
   if (artifact.scenarios?.note case var note?) {
     return 'the scenario half produced no verdict — ${note.split('\n').first}';
   }
-  if (artifact.scenarios case var scenarios?
-      when _allFailed(scenarios.items.map((item) => item.state))) {
-    return 'the scenario half produced no verdict — all '
-        '${scenarios.items.length} scenarios failed on both sides';
-  }
-  if (_allFailed(artifact.previews.items.map((item) => item.state))) {
-    return 'the previews half produced no verdict — all '
-        '${artifact.previews.items.length} entries failed on both sides';
-  }
-  return null;
+  if (narrowed) return null;
+  return _allFailedGap(
+        'scenario',
+        'scenarios',
+        artifact.scenarios?.items.map((item) => item.state),
+      ) ??
+      _allFailedGap(
+        'previews',
+        'entries',
+        artifact.previews.items.map((item) => item.state),
+      );
 }
 
-/// Whether [states] is non-empty and holds nothing but [ComparedState.failed].
-bool _allFailed(Iterable<ComparedState> states) {
-  var any = false;
-  for (var state in states) {
-    if (state != ComparedState.failed) return false;
-    any = true;
-  }
-  return any;
+/// The gap sentence for a half of nothing but [ComparedState.failed], or null
+/// for one that compared anything at all — one copy of both the predicate and
+/// the wording, so the two halves cannot drift apart.
+String? _allFailedGap(String half, String unit, Iterable<ComparedState>? s) {
+  var states = s?.toList();
+  if (states == null || states.isEmpty) return null;
+  if (!states.every((state) => state == ComparedState.failed)) return null;
+  return 'the $half half produced no verdict — all '
+      '${states.length} $unit failed on both sides';
 }
 
 /// The `compare` action, as the previews core invokes it.

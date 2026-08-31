@@ -242,9 +242,11 @@ const fwCommands = [
         'shown\non the changes panel of the GUI.\n'
         '\n'
         'Exits 1 when a half produced no verdict: its harness would not '
-        'build,\nor every one of its rows failed on both sides. Findings '
-        'alone do not\nchange the exit code — a branch that changed pictures '
-        'still exits 0,\nand a job gates on `index.json`.\n'
+        'build,\nor — on an un-narrowed run — every one of its rows failed '
+        'on both\nsides. Findings alone do not change the exit code: a '
+        'branch that\nchanged pictures still exits 0, a run narrowed with '
+        '`--entry` to a\npre-broken flow still exits 0, and a job gates on '
+        '`index.json`.\n'
         '\n'
         '`--base` compares against any ref git can name; the default is the '
         "project's\nconfigured base, then the default branch. `--entry` "
@@ -652,7 +654,8 @@ class FwCli {
       // export and the `--json` document are all written and printed above —
       // the record is whole — and only the exit code is left to say the
       // verdict is not. See [verdictGap].
-      if (verdictGap(outcome.artifact) case var gap?) {
+      if (verdictGap(outcome.artifact, narrowed: only.isNotEmpty)
+          case var gap?) {
         err.writeln('fw: $gap');
         return 1;
       }

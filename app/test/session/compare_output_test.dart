@@ -241,6 +241,43 @@ void main() {
       );
     });
 
+    // "All of it failed" is evidence of environment only over the whole
+    // suite. A run narrowed with --entry compares the rows somebody picked,
+    // and picking the one pre-broken flow must stay an ordinary finding —
+    // not a permanent exit 1 no change on the branch can lift.
+    test('narrowing switches the all-failed rule off, and not the note', () {
+      var allFailed = ComparisonArtifact(
+        previews: previews(),
+        scenarios: ScenarioResults.of(
+          items: [
+            ScenarioComparison.notRun(
+              scenario: 'test/scenarios/a_test.dart#pre-broken',
+              state: ComparedState.failed,
+            ),
+          ],
+          ran: 1,
+          skipped: 0,
+          elapsed: Duration.zero,
+        ),
+      );
+      expect(verdictGap(allFailed), isNotNull);
+      expect(verdictGap(allFailed, narrowed: true), isNull);
+
+      // A harness that would not build produced no verdict however the run
+      // was narrowed; that rule stands.
+      var broken = ComparisonArtifact(
+        previews: previews(),
+        scenarios: ScenarioResults.of(
+          items: const [],
+          ran: 0,
+          skipped: 0,
+          elapsed: Duration.zero,
+          note: 'The scenarios harness does not compile:',
+        ),
+      );
+      expect(verdictGap(broken, narrowed: true), isNotNull);
+    });
+
     test('the previews half is held to the same rule', () {
       var allFailed = ComparisonArtifact(
         previews: ComparisonResult(
