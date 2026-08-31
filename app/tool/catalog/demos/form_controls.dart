@@ -34,6 +34,7 @@ class _FormControls extends StatefulWidget {
 class _FormControlsState extends State<_FormControls> {
   String? _device = 'iphone';
   String? _policy = 'embedFont';
+  var _checked = true;
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +111,23 @@ class _FormControlsState extends State<_FormControls> {
               hintText: '{"title": "…"}',
             ),
           ),
+        ),
+      ),
+      (
+        'Checkbox, bare',
+        'The theme dresses a bare Checkbox too — house corner, muted side, '
+            'accent fill, no hover halo.',
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Checkbox(
+              value: _checked,
+              visualDensity: VisualDensity.compact,
+              onChanged: (value) => setState(() => _checked = value ?? false),
+            ),
+            const Gap(FwSpacing.sm),
+            Text('Keep the branch', style: context.type.body),
+          ],
         ),
       ),
     ];

@@ -640,11 +640,14 @@ class _SqlViewState extends State<_SqlView> {
                   controller: _sql,
                   maxLines: 4,
                   minLines: 2,
-                  style: _mono(context.type.body),
+                  style: context.type.mono.copyWith(
+                    fontSize: context.type.body.fontSize,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'SELECT * FROM …',
-                    hintStyle: _mono(
-                      context.type.body.copyWith(color: context.colors.mut3),
+                    hintStyle: context.type.mono.copyWith(
+                      fontSize: context.type.body.fontSize,
+                      color: context.colors.mut3,
                     ),
                     contentPadding: const EdgeInsets.all(FwSpacing.lg),
                   ),
@@ -911,7 +914,7 @@ class _SnapshotRowState extends State<_SnapshotRow> {
                 Expanded(
                   child: Text(
                     '${payload['sql']}',
-                    style: _mono(context.type.bodySmall),
+                    style: context.type.mono,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -1083,7 +1086,7 @@ class _ResultGrid extends StatelessWidget {
     Object? value, {
     required bool alignRight,
   }) {
-    var style = _mono(context.type.bodySmall);
+    var style = context.type.mono;
     if (value == null) {
       style = style.copyWith(
         color: context.colors.mut3,
@@ -1127,19 +1130,12 @@ class _ErrorPane extends StatelessWidget {
         ),
         child: Text(
           message,
-          style: _mono(
-            context.type.bodySmall.copyWith(color: context.colors.red),
-          ),
+          style: context.type.mono.copyWith(color: context.colors.red),
         ),
       ),
     );
   }
 }
-
-TextStyle _mono(TextStyle base) => base.copyWith(
-  fontFamily: 'monospace',
-  fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
-);
 
 String _ago(DateTime time) {
   var delta = DateTime.now().difference(time);

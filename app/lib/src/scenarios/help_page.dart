@@ -134,12 +134,8 @@ List<InlineSpan> inlineCodeSpans(BuildContext context, String text) => [
       TextSpan(text: run, style: index.isOdd ? _codeStyle(context) : null),
 ];
 
-TextStyle _codeStyle(BuildContext context) => TextStyle(
-  fontFamily: 'monospace',
-  fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
-  fontSize: 12,
-  color: context.colors.ink2,
-);
+TextStyle _codeStyle(BuildContext context) =>
+    context.type.mono.copyWith(color: context.colors.ink2);
 
 /// The example, highlighted.
 ///
@@ -166,12 +162,8 @@ class _CodeBlock extends StatelessWidget {
           padding: const EdgeInsets.all(FwSpacing.lg),
           child: SelectableText.rich(
             TextSpan(children: codeSpans(context, source)),
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontFamilyFallback: ['Menlo', 'Consolas', 'Courier New'],
-              fontSize: 12,
-              height: 1.5,
-            ),
+            // A code block breathes wider than a data column.
+            style: context.type.mono.copyWith(height: 1.5),
           ),
         ),
       ),

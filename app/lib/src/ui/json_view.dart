@@ -268,7 +268,6 @@ class JsonView extends StatefulWidget {
 
 const _rowH = 22.0;
 const _indent = 16.0;
-const _fontSize = 13.0;
 const _listPadV = 8.0;
 
 class _JsonViewState extends State<JsonView> {
@@ -462,7 +461,7 @@ class _JsonViewState extends State<JsonView> {
           if (root != null)
             Text(
               _rootSummary(root),
-              style: _mono(colors.mut2).copyWith(fontSize: 12),
+              style: _mono(context, colors.mut2).copyWith(fontSize: 12),
             ),
           const Spacer(),
           if (widget.searchable && root != null) ...[
@@ -565,7 +564,7 @@ class _JsonViewState extends State<JsonView> {
           Expanded(
             child: Text(
               'Invalid JSON — $_parseError',
-              style: _mono(colors.red).copyWith(fontSize: 12),
+              style: _mono(context, colors.red).copyWith(fontSize: 12),
             ),
           ),
         ],
@@ -703,37 +702,37 @@ class _JsonRowView extends StatelessWidget {
     final close = node.kind == JsonNodeKind.array ? ']' : '}';
 
     if (row.closing) {
-      spans.add(_span(close, colors.mut));
-      if (!row.last) spans.add(_span(',', colors.mut));
+      spans.add(_span(context, close, colors.mut));
+      if (!row.last) spans.add(_span(context, ',', colors.mut));
       return _text(context, spans);
     }
 
     if (node.key != null) {
       spans
-        ..add(_span(jsonEncode(node.key), colors.accent))
-        ..add(_span(': ', colors.mut));
+        ..add(_span(context, jsonEncode(node.key), colors.accent))
+        ..add(_span(context, ': ', colors.mut));
     }
 
     if (node.isContainer) {
       if (node.isEmpty) {
-        spans.add(_span('$open$close', colors.mut));
-        if (!row.last) spans.add(_span(',', colors.mut));
+        spans.add(_span(context, '$open$close', colors.mut));
+        if (!row.last) spans.add(_span(context, ',', colors.mut));
       } else if (row.collapsed) {
         final n = node.childCount;
         final unit = node.kind == JsonNodeKind.array ? 'item' : 'key';
         spans
-          ..add(_span('$open ', colors.mut))
-          ..add(_span('$n ${plural(n, unit)}', colors.mut3))
-          ..add(_span(' $close', colors.mut));
-        if (!row.last) spans.add(_span(',', colors.mut));
+          ..add(_span(context, '$open ', colors.mut))
+          ..add(_span(context, '$n ${plural(n, unit)}', colors.mut3))
+          ..add(_span(context, ' $close', colors.mut));
+        if (!row.last) spans.add(_span(context, ',', colors.mut));
       } else {
-        spans.add(_span(open, colors.mut));
+        spans.add(_span(context, open, colors.mut));
       }
       return _text(context, spans);
     }
 
-    spans.add(_span(node.encoded, _leafColor(node.kind, colors)));
-    if (!row.last) spans.add(_span(',', colors.mut));
+    spans.add(_span(context, node.encoded, _leafColor(node.kind, colors)));
+    if (!row.last) spans.add(_span(context, ',', colors.mut));
     return _text(context, spans);
   }
 
@@ -745,8 +744,8 @@ class _JsonRowView extends StatelessWidget {
     );
   }
 
-  InlineSpan _span(String text, Color color) =>
-      TextSpan(text: text, style: _mono(color));
+  InlineSpan _span(BuildContext context, String text, Color color) =>
+      TextSpan(text: text, style: _mono(context, color));
 }
 
 Color _leafColor(JsonNodeKind kind, FwPalette colors) => switch (kind) {
@@ -757,11 +756,7 @@ Color _leafColor(JsonNodeKind kind, FwPalette colors) => switch (kind) {
   _ => colors.ink,
 };
 
-TextStyle _mono(Color color) => TextStyle(
-  color: color,
-  fontSize: _fontSize,
-  height: 1.2,
-  fontFamily: 'monospace',
-  fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
-  letterSpacing: 0,
-);
+/// [FwTypography.mono] with the tree's own line height — rows this dense read
+/// better a notch tighter than the token's default.
+TextStyle _mono(BuildContext context, Color color) =>
+    context.type.mono.copyWith(color: color, height: 1.2);

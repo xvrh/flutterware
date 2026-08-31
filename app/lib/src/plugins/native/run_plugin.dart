@@ -1655,7 +1655,7 @@ class _StepDetailState extends State<_StepDetail> {
                   children: [
                     for (var text in _texts!)
                       if (text.isNotEmpty)
-                        SelectableText(text, style: _mono(context)),
+                        SelectableText(text, style: context.type.mono),
                   ],
                 ),
         ),
@@ -2726,7 +2726,7 @@ class _FailedRunPage extends StatelessWidget {
             padding: const EdgeInsets.all(FwSpacing.md),
             child: SelectableText(
               failure.message,
-              style: _mono(context, color: colors.mut),
+              style: context.type.mono.copyWith(color: colors.mut),
             ),
           ),
         ),
@@ -2857,14 +2857,3 @@ class _Tag extends StatelessWidget {
     );
   }
 }
-
-/// The panel's one mono style, matching the server panel's: machine data —
-/// log lines, paths — wears it, prose stays in the UI face.
-TextStyle _mono(BuildContext context, {Color? color}) =>
-    Theme.of(context).textTheme.bodySmall!.copyWith(
-      fontFamily: 'monospace',
-      fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
-      letterSpacing: 0,
-      fontFeatures: const [FontFeature.tabularFigures()],
-      color: color,
-    );

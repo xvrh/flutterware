@@ -63,6 +63,29 @@ void main() {
     );
   });
 
+  test('no private mono styles — the token is context.type.mono', () {
+    // The fallback list is the drift signature: every hand-rolled mono spells
+    // it out, and the copies had already drifted to 12, 12.5 and 13px when
+    // this rule landed. FwTypography.mono exists precisely because this was
+    // six copies once before. A deliberate deviation is a copyWith on the
+    // token — size, height, colour — never a new TextStyle.
+    var fallback = RegExp(r"'Menlo'");
+    var offenders = [
+      for (var file in sources())
+        if (!file.path.endsWith(p.join('design', 'typography.dart')) &&
+            fallback.hasMatch(code(file)))
+          p.relative(file.path, from: root),
+    ];
+
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'Machine data wears context.type.mono; deviate on one axis with '
+          'copyWith rather than respelling the family.',
+    );
+  });
+
   test('no bare OutlineInputBorder() — the themed border already exists', () {
     var bare = RegExp(r'OutlineInputBorder\(\s*\)');
     var offenders = [

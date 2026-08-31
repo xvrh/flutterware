@@ -421,12 +421,12 @@ class _RequestDetailState extends State<_RequestDetail> {
                   '${status == null ? '' : ' → $status'}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _mono(context, fontSize: 15),
+                  style: context.type.mono.copyWith(fontSize: 14),
                 ),
               ),
               Text(
                 _ms(networkDurationOf(request)),
-                style: _mono(context, fontSize: 15),
+                style: context.type.mono.copyWith(fontSize: 14),
               ),
               const SizedBox(width: 8),
               _CopyAsCurlButton(detail: _detail),
@@ -510,7 +510,7 @@ class _HttpMessageTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    var mono = _mono(context);
+    var mono = context.type.mono;
     var headers = _headersOf(detail, response: response);
     var body = response ? detail.responseBody : detail.requestBody;
     if (headers == null && (body == null || body.isEmpty)) {
@@ -602,10 +602,10 @@ class _TimingTab extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
               children: [
-                Expanded(child: Text(label, style: _mono(context))),
+                Expanded(child: Text(label, style: context.type.mono)),
                 Text(
                   '+${_ms(gap.inMicroseconds / 1000)}',
-                  style: _mono(context, color: theme.hintColor),
+                  style: context.type.mono.copyWith(color: theme.hintColor),
                 ),
               ],
             ),
@@ -688,18 +688,6 @@ String _pathOf(Uri uri) {
 
 String _ms(Object? value) =>
     value is num ? '${value.toStringAsFixed(1)}ms' : '';
-
-/// The server panel's mono style, copied on purpose — the two request lists
-/// should read as siblings.
-TextStyle _mono(BuildContext context, {Color? color, double? fontSize}) =>
-    Theme.of(context).textTheme.bodySmall!.copyWith(
-      fontFamily: 'monospace',
-      fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
-      letterSpacing: 0,
-      fontFeatures: const [FontFeature.tabularFigures()],
-      color: color,
-      fontSize: fontSize,
-    );
 
 /// `hh:mm:ss`, for a row with no width for the milliseconds.
 String _clock(DateTime time) =>

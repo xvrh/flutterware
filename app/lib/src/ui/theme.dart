@@ -203,6 +203,23 @@ ThemeData buildAppTheme(FwTokens tokens) {
       headingRowColor: WidgetStateProperty.all(palette.tableHeader),
       headingTextStyle: type.micro.copyWith(color: palette.mut),
     ),
+    // The two raw `Checkbox`es (scenario params, the teardown dialog) rendered
+    // Material 3's own control — its shape, its hover halo — beside rows drawn
+    // from the tokens. Same move as the buttons above: taught once here rather
+    // than styled per call site.
+    checkboxTheme: base.checkboxTheme.copyWith(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radii.radiusSmall),
+      ),
+      side: BorderSide(color: palette.mut3, width: 1.5),
+      fillColor: WidgetStateProperty.resolveWith(
+        (states) =>
+            states.contains(WidgetState.selected) ? palette.primary : null,
+      ),
+      checkColor: WidgetStatePropertyAll(palette.onPrimary),
+      overlayColor: overlay,
+      splashRadius: 0,
+    ),
     dividerTheme: base.dividerTheme.copyWith(color: palette.line, thickness: 1),
     tooltipTheme: TooltipThemeData(
       waitDuration: const Duration(milliseconds: 400),
