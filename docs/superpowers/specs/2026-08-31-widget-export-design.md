@@ -7,6 +7,19 @@ raster fallback, `pw.SvgImage` re-integration — lives in `test/vector_export/`
 (commits `f8ab2ae0`, `2ee452c6`) with two tests that regenerate every artifact
 next to a raster ground truth. Everything else in this document is design.
 
+**Amended by the de-risk experiments (same day, both green).** A hand-rolled
+bundle — linux-arm64 `flutter_tester` + `icudtl.dat` + dill + fonts — rendered
+SVG and PNG in a **bare `debian:stable-slim` container on the first try**: no
+extra packages, no fontconfig, no display, 91ms. A 1000-render warm loop on
+one tester process held **16.7ms per render, flat, RSS flat at ~200MB** — the
+cadence is exactly 60Hz vsync, so a naive `endOfFrame` loop is frame-paced,
+not capture-bound. Two guest facts for the driver: the tester exits when
+`main`'s synchronous half returns, so **`--run-forever` is mandatory** for an
+async guest, and `exit(0)` ends the run cleanly. The capture census (ten
+everyday Material screens) is folded into the fidelity section below. The
+guest program and census live in `test/vector_export/export_guest_main.dart`
+and `census_test.dart`.
+
 **Lineage:** the spike's findings (this file cites its measurements),
 `2026-07-30-scenarios-design.md` (the guest harness and direct-spawn
 flutter_tester lane this rides), the previews plugin (the entry/discovery
@@ -277,6 +290,28 @@ This panel is what makes the feature flutterware-shaped. Without it, the
 bundle and pool are a good Docker recipe; with it, the whole document
 pipeline lives where the app lives.
 
+## Export is not screenshot
+
+A `@Preview` entry is a degenerate export point — named, discoverable,
+argumentless — so `fw export <entry> --as=svg|pdf|png` accepts preview
+entries as targets alongside export points: everything previewable is
+exportable. But the verbs never merge, because they make different
+promises:
+
+- **`previews screenshot` is a camera.** It returns what the engine
+  actually rasterized — evidence. The agent loop and the human trust it to
+  answer "does this border survive its corner", so it must never need a
+  warnings channel.
+- **`fw export` is an illustrator.** It returns a document reconstructed
+  under stated policies — a deliverable — and its contract *includes*
+  warnings: dropped runs, raster patches, effects it could not express.
+
+`fw export --as=png` is fine (the camera at a deliverable's doorstep). The
+reverse — screenshot growing vector formats — stays off the table
+permanently. The rule to teach: *screenshot tells you the truth about
+pixels; export gives you a document and tells you the truth about what it
+couldn't express.*
+
 ## Constraints and the fidelity backlog
 
 - `flutter_tester` is per-OS/arch; the bundle targets linux-x64 first and
@@ -284,6 +319,20 @@ pipeline lives where the app lives.
 - Pure Dart only in the guest: plugins with native code do not exist in the
   tester. Charts, capture and `package:pdf` all satisfy this;
   `path_provider`-style plugins do not.
+- **Census over ten everyday Material screens** (buttons, text fields,
+  dialogs, selection controls, cards/lists, navigation, backdrop blur,
+  shader mask, data table, tab bar): geometry and text coverage is nearly
+  total — one unhandled op in the lot (`drawArc`, from
+  `CircularProgressIndicator`; trivial to add), and two unrecovered
+  paragraphs per text field (`RenderEditable` — joinable exactly like
+  `RenderParagraph`, a known follow-up). The important negative finding:
+  **layer-level effects drop silently.** `BackdropFilter` and `ShaderMask`
+  ride `pushLayer`, which the capture inlines — the child paints, the
+  effect vanishes, and *nothing is flagged*. Before the library is public,
+  `pushLayer` must inspect the layer type and route non-trivial layers
+  (backdrop filter, shader mask, image filter, color filter) through the
+  unsupported-op policy, so they rasterize or at least warn instead of
+  lying by omission.
 - Path curves are polyline-sampled (dart:ui hides path verbs) — visually
   fine, documented. PDF gradients want `PdfShading`; blend modes,
   `saveLayer` bounds and `drawVertices` land in the raster lane.
