@@ -159,11 +159,24 @@ tester target and `flutter_tester` is a host binary. No `cCompiler` is named:
 `flutter test` itself tolerates not finding one for this target
 (`mustMatchAppBuild: false`), a compiling hook discovers the host toolchain
 the way it does under plain `dart test`, and `sqlite3`'s hook turns out to
-*download* its library rather than compile it at all. The manifest points a
-bundled library at the hook's own output under `.dart_tool/hooks_runner` —
-no copy step, unlike `flutter_tools`, whose tester manifest is absolute host
-paths anyway. Link hooks stay off (`linkingEnabled: false`), as `flutter
-test` decides for a JIT build.
+*download* its library rather than compile it at all. Link hooks stay off
+(`linkingEnabled: false`), as `flutter test` decides for a JIT build.
+
+Bundled libraries are **copied** into the bundle
+(`<assets>/native_assets/`, flat, plain basenames — the layout `flutter
+test` uses) and the manifest names the copies. The first cut pointed the
+manifest at the hook's own output in place; review killed that: the file a
+warm guest has `dlopen`ed must be one nothing else rewrites, and
+`.dart_tool/hooks_runner` is rewritten in place by any tool that re-runs the
+hook on the checkout — on macOS, mutating a mapped signed dylib can kill the
+process holding it. The copy is replaced by rename, never written in place,
+so a rebundle leaves a live guest on its old inode; freshness rides a stamp
+file (source path, mtime, size) so an unchanged library costs a stat, not a
+byte-compare of megabytes. The flat directory also restores the two
+properties the scattered layout lost — `@loader_path` references between
+sibling dylibs resolve, and on Windows the tester is spawned with this one
+directory prepended to `PATH`, the same line `flutter test` adds, so a hook
+DLL's own dependencies resolve.
 
 Open question 1 below is thereby half-settled: the target asked for is the
 host's. What a hook emits for a *device* target is still nobody's question

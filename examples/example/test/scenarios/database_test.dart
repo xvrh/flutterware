@@ -3,27 +3,17 @@ import 'package:flutterware/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// The scenario that must load a native library, and the guard that keeps it
-/// loading.
+/// loading — nothing else in this suite reaches the bundle's native-assets
+/// manifest, and previews never will. The platform story (why a missing
+/// mapping is masked on macOS and honest on Linux and Windows) is the
+/// 2026-08-26 build-hooks design doc, piece 3.
 ///
-/// `sqlite3` resolves its C functions through `@Native` and the native-assets
-/// manifest — there is no runtime override any more — so a harness that spawns
-/// `flutter_tester` itself has to build the library and write the mapping, the
-/// way `flutter test` does. Nothing else here exercises that: previews mount
-/// widgets and touch no database, which is how a suite whose scenarios all
-/// open one can be red while its previews half is perfect.
-///
-/// The platform matters more than it should. A missing mapping does not fail
-/// on macOS: the VM falls back to looking the symbols up in the running
-/// process, and macOS `flutter_tester` happens to satisfy them — with the
-/// *system's* SQLite, not the one the build hook compiled. Linux and Windows
-/// testers export nothing, and fail on the first call. So this scenario is
-/// green-by-accident on a Mac and honest everywhere else, which is exactly why
-/// it shows the version it loaded: a bundled library is years newer than the
-/// system's.
-///
-/// Deliberately the synchronous `package:sqlite3` API. `sqlite_async` runs the
-/// database on its own isolate, and a scenario body may not await a future
-/// another zone completes.
+/// Two choices are this file's own. The screen shows the version it loaded,
+/// because on macOS the fallback would serve the *system's* SQLite and the
+/// bundled one is newer — the difference is what makes the manifest lane
+/// visible in a picture. And it is the synchronous `package:sqlite3` API,
+/// because `sqlite_async` answers from its own isolate and a scenario body
+/// may not await a future another zone completes.
 void main() {
   scenario('Drinks ledger', (s) async {
     var db = sqlite3.openInMemory();

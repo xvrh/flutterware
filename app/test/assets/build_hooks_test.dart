@@ -57,24 +57,46 @@ void main() {
     expect(result.failure, isNull, reason: 'ran ${result.packages}');
     // Which packages ship a hook is the resolution's business and differs by
     // host — `objective_c` is here on macOS and not on Linux — so what the
-    // manifest *names* cannot be asserted. That it is the engine's shape can:
-    // whatever the run produced, this is the file a `flutter_tester` will
-    // parse before its first frame.
-    var manifest = jsonDecode(result.nativeAssetsManifest) as Map;
-    expect(manifest['format-version'], [1, 0, 0]);
-    var assets = (manifest['native-assets'] as Map).map(
-      (target, ids) => MapEntry('$target', (ids as Map).keys),
-    );
-    // Every mapped asset is for this machine: the tester is a host binary, and
-    // an entry under any other target would never be read.
-    for (var target in assets.keys) {
-      expect(target, '${Target.current}');
+    // run *names* cannot be asserted. That every asset is for this machine
+    // can: the tester is a host binary, and an entry under any other target
+    // would never be read.
+    for (var asset in result.nativeAssets) {
+      expect('${asset.target}', '${Target.current}');
     }
-    // No timing bound any more, deliberately: a hook that compiles native code
-    // now genuinely compiles, once per machine per resolution, and the first
-    // run on a cold `.dart_tool/hooks_runner` is a real build. The warm path
+    // No timing bound, deliberately: a hook that compiles native code now
+    // genuinely compiles, once per checkout per resolution, and the first run
+    // on a cold `.dart_tool/hooks_runner` is a real build. The warm path
     // stays memoised — the test below pins that.
   }, timeout: const Timeout(Duration(minutes: 5)));
+
+  test('the macOS deployment floor is the one flutter_tools builds with', () {
+    // Same shape as the hooks_runner pin below, same reason spelled at the
+    // constant: the SDK does not export `targetMacOSVersion`, so the copy has
+    // to be caught the day a pin bump moves the original — otherwise `fw` and
+    // `flutter test` compile the same hook for two different floors on one
+    // machine, cached apart, diverging silently.
+    var source = File(
+      p.join(
+        sdk.root,
+        'packages',
+        'flutter_tools',
+        'lib',
+        'src',
+        'isolated',
+        'native_assets',
+        'macos',
+        'native_assets.dart',
+      ),
+    );
+    if (!source.existsSync()) {
+      fail('flutter_tools moved its macOS native-assets file: ${source.path}');
+    }
+    var match = RegExp(r'targetMacOSVersion\s*=\s*(\d+)')
+        .firstMatch(source.readAsStringSync());
+    expect(match, isNotNull, reason: 'no targetMacOSVersion in ${source.path}');
+
+    expect(BuildHooks.targetMacOSVersion, int.parse(match!.group(1)!));
+  });
 
   test('the manifest speaks each link mode the way the engine reads it', () {
     var libPath = p.join(Directory.systemTemp.path, 'libsqlite3.dylib');
@@ -114,8 +136,9 @@ void main() {
         ((jsonDecode(manifest) as Map)['native-assets']
                 as Map)['${Target.current}']
             as Map;
-    // A bundled library is an absolute host path — pointed at where the hook
-    // left it, since nothing here copies. The rest carry no file at all.
+    // A bundled library is an absolute host path — still the hook's own
+    // output at this layer; `AssetBundleBuilder` is what copies it into the
+    // bundle and rewrites the path. The rest carry no file at all.
     expect(byId['package:sqlite3/src/ffi/libsqlite3.g.dart'], [
       'absolute',
       libPath,

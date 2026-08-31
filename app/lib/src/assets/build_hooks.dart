@@ -20,16 +20,18 @@ final _log = logging.Logger('flutterware.buildHooks');
 /// still works, so the bundle is built either way and this is reported beside
 /// it.
 ///
-/// [nativeAssetsManifest] is the content of the `NativeAssetsManifest.json`
-/// the engine reads from the asset directory — the map the VM resolves
-/// `@Native` external functions through. The empty map when nothing shipped
-/// native code, and always the empty map after a [failure], because a mapping
-/// that names libraries a failed build may not have produced is worse than one
-/// that says to look in the process.
+/// [nativeAssets] is what the `NativeAssetsManifest.json` the engine reads is
+/// made of — the map the VM resolves `@Native` external functions through,
+/// with a bundled library still pointing at the hook's own output file.
+/// [AssetBundleBuilder] copies those into the bundle and writes the manifest
+/// against the copies, so what a guest maps is never a file another tool
+/// rewrites. Empty when nothing shipped native code, and always empty after a
+/// [failure], because a mapping that names libraries a failed build may not
+/// have produced is worse than one that says to look in the process.
 typedef BuildHooksResult = ({
   List<String> packages,
   String? failure,
-  String nativeAssetsManifest,
+  List<KernelAsset> nativeAssets,
 });
 
 /// Runs the `hook/build.dart` a project's dependencies ship, so the files they
@@ -49,14 +51,13 @@ typedef BuildHooksResult = ({
 /// - Code assets are what a scenario's own dependencies load —
 ///   `package:sqlite3` resolves `@Native` functions through the mapping this
 ///   run produces — and the tester lane is the one lane where nobody else
-///   builds them. `flutter test` builds them before it spawns a tester;
-///   spawning the tester ourselves means doing the same or shipping the empty
-///   map, and the empty map does not fail honestly: the VM falls back to
-///   looking the symbol up in the running process, which happens to succeed on
-///   macOS `flutter_tester` and fail on Linux. A consumer's suite was green on
-///   every laptop and red on CI, identically, on step 1 of all 51 scenarios.
-///   The target is the host, the way `flutter test` builds for
-///   `TargetPlatform.tester`, because `flutter_tester` *is* a host binary.
+///   builds them: `flutter test` builds them before it spawns a tester, and
+///   spawning the tester ourselves means doing the same. Shipping the empty
+///   map instead does not even fail honestly, because the VM's process-lookup
+///   fallback masks the gap on macOS and only there — the whole story is in
+///   the design doc's piece 3. The target is the host, the way `flutter test`
+///   builds for `TargetPlatform.tester`, because `flutter_tester` *is* a host
+///   binary.
 /// - No data assets is what `flutter_tools` does on beta and stable, where
 ///   `dartDataAssets` is not yet a feature. A well-behaved hook answers by
 ///   writing into its own package directory, which its pubspec declares as an
@@ -182,17 +183,20 @@ class BuildHooks {
     stderr.writeln('[flutterware] $failure');
   }
 
-  /// The manifest that maps nothing — what every bundle shipped before hooks
-  /// ran at all, and what a failed or hookless run still ships.
-  static final String emptyNativeAssetsManifest = KernelAssets()
-      .toNativeAssetsFile();
-
   /// Nothing to run, said in the shape a caller expects.
-  static final BuildHooksResult _nothing = (
-    packages: const <String>[],
+  static const BuildHooksResult _nothing = (
+    packages: <String>[],
     failure: null,
-    nativeAssetsManifest: emptyNativeAssetsManifest,
+    nativeAssets: <KernelAsset>[],
   );
+
+  /// The one shape a failure takes — the sentence, and no native assets. The
+  /// invariant [BuildHooksResult] documents, stated once instead of at every
+  /// return.
+  static BuildHooksResult _failed(
+    String failure, {
+    List<String> packages = const [],
+  }) => (packages: packages, failure: failure, nativeAssets: const []);
 
   Future<BuildHooksResult> _run() async {
     var fileSystem = const LocalFileSystem();
@@ -206,14 +210,11 @@ class BuildHooks {
       // ever asked — and reported as silence that is indistinguishable from a
       // project that genuinely has none. The whole feature would switch itself
       // off and every test would stay green.
-      return (
-        packages: const <String>[],
-        failure:
-            'The resolution at $packageConfigPath does not name a package '
-            'rooted at $rootPackageRoot, so no build hook could be run for it. '
-            'Anything a dependency generates at build time will be missing '
-            'from the bundle.',
-        nativeAssetsManifest: emptyNativeAssetsManifest,
+      return _failed(
+        'The resolution at $packageConfigPath does not name a package '
+        'rooted at $rootPackageRoot, so no build hook could be run for it. '
+        'Anything a dependency generates at build time will be missing '
+        'from the bundle.',
       );
     }
 
@@ -239,11 +240,7 @@ class BuildHooks {
     try {
       packages = await runner.packagesWithBuildHooks();
     } on Object catch (e) {
-      return (
-        packages: const <String>[],
-        failure: 'Could not read the package graph: $e',
-        nativeAssetsManifest: emptyNativeAssetsManifest,
-      );
+      return _failed('Could not read the package graph: $e');
     }
     if (packages.isEmpty) return _nothing;
 
@@ -251,66 +248,76 @@ class BuildHooks {
     Result<BuildResult, HooksRunnerFailure> result;
     try {
       result = await runner.build(
-        extensions: hostCodeAssets(),
+        extensions: _hostCodeAssets(),
         // What `flutter test` decides for a debug build: link hooks are an
         // AOT concern, and this lane is JIT by construction.
         linkingEnabled: false,
       );
     } on Object catch (e) {
-      return (
-        packages: packages,
-        failure: 'Build hooks failed: $e',
-        nativeAssetsManifest: emptyNativeAssetsManifest,
-      );
+      return _failed('Build hooks failed: $e', packages: packages);
     }
     if (!result.isSuccess) {
-      return (
+      return _failed(
+        'The build hooks of ${packages.join(', ')} did not finish '
+        '(${result.asFailure.failure.name}). Anything that needed the '
+        'files they generate will be missing from the bundle.',
         packages: packages,
-        failure:
-            'The build hooks of ${packages.join(', ')} did not finish '
-            '(${result.asFailure.failure.name}). Anything that needed the '
-            'files they generate will be missing from the bundle.',
-        nativeAssetsManifest: emptyNativeAssetsManifest,
       );
     }
     _log.fine(
       'ran the build hooks of ${packages.join(', ')} in '
       '${watch.elapsedMilliseconds}ms',
     );
-    return (
-      packages: packages,
-      failure: null,
-      nativeAssetsManifest: KernelAssets([
+    List<KernelAsset> assets;
+    try {
+      assets = [
         for (var encoded in result.success.encodedAssets)
           if (encoded.isCodeAsset) kernelAssetOf(encoded.asCodeAsset),
-      ]).toNativeAssetsFile(),
-    );
+      ];
+    } on Object catch (e) {
+      // An asset the mapping cannot place — a link mode a future resolution
+      // introduces, say. The contract is that a hook problem degrades, never
+      // crashes the bundle, and the success path has to keep that promise too.
+      return _failed(
+        'Could not map the built native assets: $e',
+        packages: packages,
+      );
+    }
+    return (packages: packages, failure: null, nativeAssets: assets);
   }
+
+  /// The macOS deployment floor hooks compile against — flutter_tools'
+  /// `targetMacOSVersion`, which the SDK does not export, so it is copied and
+  /// `build_hooks_test.dart` reads the SDK's own source to fail on drift. Let
+  /// it drift and the two lanes' builds diverge silently: `hooks_runner` keys
+  /// its cache on the config, so `fw` and `flutter test` would each compile a
+  /// hook for a different floor on the same machine.
+  static const targetMacOSVersion = 13;
 
   /// What the hooks are asked to produce: dynamic libraries for the machine we
   /// are on, which is the machine `flutter_tester` runs on.
   ///
   /// No `cCompiler` — see the class doc — and the macOS config is required
-  /// whenever the target is macOS; the floor is flutter_tools' own
-  /// `targetMacOSVersion`.
-  static List<CodeAssetExtension> hostCodeAssets() => [
+  /// whenever the target is macOS.
+  static List<CodeAssetExtension> _hostCodeAssets() => [
     CodeAssetExtension(
       targetArchitecture: Architecture.current,
       targetOS: OS.current,
       linkModePreference: LinkModePreference.dynamic,
-      macOS: OS.current == OS.macOS ? MacOSCodeConfig(targetVersion: 13) : null,
+      macOS: OS.current == OS.macOS
+          ? MacOSCodeConfig(targetVersion: targetMacOSVersion)
+          : null,
     ),
   ];
 
   /// Where the VM will find [asset], in the wording the engine's
   /// `native_assets.cc` expects.
   ///
-  /// The mapping is flutter_tools' `_targetLocationSingleArchitecture`, minus
-  /// the copy: a bundled library is pointed at where the hook left it, under
-  /// the project's own `.dart_tool/hooks_runner`. `flutter test` copies its
-  /// dylibs into `build/native_assets/` first, but what it writes for the
-  /// tester are absolute host paths either way, and the hook's output is as
-  /// stable as the copy — per checkout, invalidated with the resolution.
+  /// The mapping is flutter_tools' `_targetLocationSingleArchitecture`. A
+  /// bundled library still points at the hook's own output here;
+  /// [AssetBundleBuilder] copies it into the bundle and rewrites the path, so
+  /// the file a guest maps is one nothing else rewrites — `flutter test` copies
+  /// for the same reason.
   @visibleForTesting
   static KernelAsset kernelAssetOf(CodeAsset asset) {
     var linkMode = asset.linkMode;
