@@ -313,6 +313,20 @@ class _StepNode extends StatelessWidget {
               if (item.state.isFinding) ...[
                 const Gap(2),
                 StateChip(item.state),
+                // *That* it changed was all a node ever said. Which channel
+                // saw it is the difference between a screenshot worth opening
+                // and a request that moved behind one — and the flow is where
+                // a reader decides which step to open.
+                if (item.channelsFired case var channels
+                    when channels.isNotEmpty) ...[
+                  const Gap(2),
+                  Text(
+                    channels.join(' · '),
+                    style: context.type.micro.copyWith(color: colors.mut),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ],
           ),

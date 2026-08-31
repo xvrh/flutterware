@@ -503,11 +503,35 @@ class _IndexRow extends StatelessWidget {
               ),
             ),
             const Gap(FwSpacing.sm),
-            if (scenario.state.isFinding) StateChip(scenario.state),
+            // Which channels spoke, in words — a flow has none of its own, so
+            // it is the union of the steps inside it. Named rather than
+            // coloured: the row already carries a `StateChip`, and the events
+            // pane's channel palette collides with it on green and amber.
+            if (scenario.state.isFinding) ...[
+              if (_channels case var channels when channels.isNotEmpty) ...[
+                Text(
+                  channels.join(' · '),
+                  style: context.type.micro.copyWith(color: colors.mut),
+                ),
+                const Gap(FwSpacing.sm),
+              ],
+              StateChip(scenario.state),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  List<String> get _channels {
+    var fired = <String>{};
+    for (var step in scenario.items) {
+      if (step.state.isFinding) fired.addAll(step.channelsFired);
+    }
+    return [
+      for (var channel in const ['pixels', 'tree', 'texts', 'events'])
+        if (fired.contains(channel)) channel,
+    ];
   }
 }
 

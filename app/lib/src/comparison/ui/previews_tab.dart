@@ -9,7 +9,7 @@ import '../../ui/theme.dart';
 import '../comparison_controller.dart';
 import '../rules.dart';
 import '../shot_store.dart';
-import 'channel_lines.dart';
+import 'finding_body.dart';
 import 'shot_image.dart';
 import 'stage.dart';
 import 'state_chip.dart';
@@ -453,37 +453,21 @@ class _Detail extends StatelessWidget {
               style: context.type.caption.copyWith(color: colors.red),
             ),
           ),
-        Expanded(
-          flex: 3,
-          // The stage draws whatever there is — except a skipped entry with
-          // nothing in the cache, which is not a loading failure: nothing was
-          // rendered *on purpose*, and the pane owes the reader that sentence.
-          // "Loading…" belongs only to the moment before a decode answered.
-          child: !shots.settled
-              ? Center(
-                  child: Text(
-                    'Loading…',
-                    style: context.type.body.copyWith(color: colors.mut),
-                  ),
-                )
-              : item.state == ComparedState.skipped && !shots.hasFrames
+        FindingBody(
+          item: item,
+          shots: shots,
+          mode: mode,
+          onMode: onMode,
+          // A skipped entry has no pictures and never will: nothing was
+          // rendered *on purpose*, which is not a failed decode and owes the
+          // reader a sentence rather than a spinner.
+          whenNotRendered: item.state == ComparedState.skipped
               ? const _NotRendered()
-              : ComparisonStage(
-                  shots: shots,
-                  mode: mode,
-                  onMode: onMode,
-                  diff: item.pixels?.diff,
-                ),
+              : null,
         ),
-        if (_hasChannels) Expanded(flex: 2, child: ChannelLines(item)),
       ],
     );
   }
-
-  bool get _hasChannels =>
-      (item.tree?.changed ?? false) ||
-      item.texts != null ||
-      item.events != null;
 }
 
 /// The skipped entry's pane — the same sentence the scenarios half earned for
