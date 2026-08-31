@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 // ignore: implementation_imports
@@ -57,18 +59,29 @@ class _WithheldWhileRastering extends SingleChildRenderObjectWidget {
 
 class _RenderWithheld extends RenderProxyBox {
   _RenderWithheld() {
-    OffscreenRaster.notice.addListener(markNeedsPaint);
+    if (_withholds) OffscreenRaster.notice.addListener(markNeedsPaint);
   }
+
+  /// Whether a raster needs the texture out of the tree at all.
+  ///
+  /// The withhold exists for the Linux segfault. On macOS `toImage` renders
+  /// the texture as a transparent hole *either way* — the composited picture
+  /// is identical — while the withhold costs a visible one-frame blink of
+  /// every guest on screen each time anything rasters (a human beat's
+  /// screenshot, a window capture). So macOS keeps the texture painted and
+  /// pays nothing; the platforms where the engine bug is a crash keep the
+  /// protection.
+  static final _withholds = !Platform.isMacOS;
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    if (OffscreenRaster.notice.value) return;
+    if (_withholds && OffscreenRaster.notice.value) return;
     super.paint(context, offset);
   }
 
   @override
   void dispose() {
-    OffscreenRaster.notice.removeListener(markNeedsPaint);
+    if (_withholds) OffscreenRaster.notice.removeListener(markNeedsPaint);
     super.dispose();
   }
 }
