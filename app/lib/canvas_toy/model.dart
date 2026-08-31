@@ -72,6 +72,20 @@ class ShapeNode extends SceneNode {
   String get typeName => 'Shape';
 }
 
+/// A widget the editor has never compiled against. The editor knows its
+/// entry name and its wire-able args; the guest holds the real builder and
+/// the mockups.
+class ExternalNode extends SceneNode {
+  ExternalNode(super.name, this.entry, {Map<String, Object?>? args})
+    : args = args ?? {};
+
+  final String entry;
+  final Map<String, Object?> args;
+
+  @override
+  String get typeName => 'Ext';
+}
+
 class SceneDocument extends ChangeNotifier {
   SceneDocument(this.root);
 
@@ -86,6 +100,42 @@ class SceneDocument extends ChangeNotifier {
     fn();
     notifyListeners();
   }
+
+  /// The wire format the scene host renders from — data, never code.
+  Map<String, dynamic> toJson() => {
+    'root': _json(root),
+    'selected': selected?.name,
+  };
+
+  Map<String, dynamic> _json(SceneNode n) => {
+    'name': n.name,
+    'x': n.x,
+    'y': n.y,
+    'w': n.width,
+    'h': n.height,
+    'fill': n.fill?.toARGB32(),
+    'corner': n.cornerRadius,
+    'opacity': n.opacity,
+    ...switch (n) {
+      FrameNode f => {
+        'kind': 'frame',
+        'layout': f.layout.name,
+        'gap': f.gap,
+        'padding': f.padding,
+        'crossAlign': f.crossAlign.index,
+        'children': [for (var c in f.children) _json(c)],
+      },
+      TextNode t => {
+        'kind': 'text',
+        'text': t.text,
+        'fontSize': t.fontSize,
+        'weight': FontWeight.values.indexOf(t.weight),
+        'color': t.color.toARGB32(),
+      },
+      ShapeNode s => {'kind': 'shape', 'circle': s.circle},
+      ExternalNode e => {'kind': 'ext', 'entry': e.entry, 'args': e.args},
+    },
+  };
 
   void select(SceneNode? node) {
     if (selected != node) {
@@ -243,6 +293,23 @@ SceneDocument coffeeBannerDraft() {
     ..crossAlign = CrossAxisAlignment.start;
   copy.children.addAll([headline, sub, cta]);
 
-  root.children.addAll([glow, cup, copy]);
+  // External widgets — rendered as placeholders here, natively in the guest.
+  var badge = ExternalNode('Badge', 'DrinkBadge', args: {'size': 140.0})
+    ..x = 560
+    ..y = 290
+    ..width = 140
+    ..height = 140;
+  var spinner = ExternalNode('Loading', 'Spinner', args: {'size': 40.0})
+    ..x = 950
+    ..y = 430
+    ..width = 40
+    ..height = 40;
+  var order = ExternalNode('Order', 'OrderButton', args: {'label': 'Order now'})
+    ..x = 830
+    ..y = 400
+    ..width = 150
+    ..height = 44;
+
+  root.children.addAll([glow, cup, copy, badge, spinner, order]);
   return SceneDocument(root);
 }

@@ -358,6 +358,15 @@ void main() => Flutterware.configure((fw) {
               ],
             ),
             Entrypoint(
+              'demo/scene_host.dart',
+              name: 'Scene host',
+              description:
+                  "Disposable spike — renders the canvas toy's scene from "
+                  'data pushed over a VM-service extension, with this '
+                  "package's own widgets live",
+              platforms: [RunPlatform.desktop],
+            ),
+            Entrypoint(
               'lib/ui_book.dart',
               name: 'UI book',
               description: 'The component gallery, no backend',

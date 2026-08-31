@@ -1,10 +1,12 @@
 // Disposable spike: an interactive scene canvas over the uniform-node model.
 // Tree panel + zoomable canvas (select, drag, resize) + inspector. Exists to
 // produce findings about the model, not to be shipped.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'model.dart';
+import 'remote.dart';
 
 void main() {
   runApp(const CanvasToyApp());
@@ -19,6 +21,7 @@ class CanvasToyApp extends StatefulWidget {
 
 class _CanvasToyAppState extends State<CanvasToyApp> {
   final doc = coffeeBannerDraft();
+  late final link = RemoteSceneLink(doc);
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +40,7 @@ class _CanvasToyAppState extends State<CanvasToyApp> {
             children: [
               SizedBox(width: 230, child: TreePanel(doc)),
               const VerticalDivider(width: 1),
-              Expanded(child: CanvasArea(doc)),
+              Expanded(child: CanvasArea(doc, status: link.status)),
               const VerticalDivider(width: 1),
               SizedBox(width: 290, child: InspectorPanel(doc)),
             ],
@@ -167,6 +170,7 @@ class TreePanel extends StatelessWidget {
     FrameNode() => Icons.crop_square,
     TextNode() => Icons.text_fields,
     ShapeNode() => Icons.circle_outlined,
+    ExternalNode() => Icons.extension_outlined,
   };
 }
 
@@ -194,9 +198,10 @@ class _AddButton extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class CanvasArea extends StatefulWidget {
-  const CanvasArea(this.doc, {super.key});
+  const CanvasArea(this.doc, {super.key, this.status});
 
   final SceneDocument doc;
+  final ValueListenable<String>? status;
 
   @override
   State<CanvasArea> createState() => _CanvasAreaState();
@@ -254,6 +259,15 @@ class _CanvasAreaState extends State<CanvasArea> {
             '${doc.root.width!.round()} × ${doc.root.height!.round()}',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
+          const SizedBox(width: 16),
+          if (widget.status != null)
+            ValueListenableBuilder<String>(
+              valueListenable: widget.status!,
+              builder: (context, value, _) => Text(
+                value,
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ),
           const Spacer(),
           TextButton(
             onPressed: _fit,
@@ -374,6 +388,20 @@ class NodeView extends StatelessWidget {
         );
       case ShapeNode _:
         inner = null;
+      case ExternalNode e:
+        // The editor's mirror cannot render a widget it never compiled
+        // against — the guest does. Here, a labeled placeholder.
+        inner = Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0x224A64D0),
+            border: Border.all(color: const Color(0x664A64D0)),
+          ),
+          child: Text(
+            '⟪${e.entry}⟫',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF8FA0E8)),
+          ),
+        );
       case FrameNode f:
         var children = [for (var c in f.children) _positioned(c)];
         inner = switch (f.layout) {
@@ -720,6 +748,7 @@ class InspectorPanel extends StatelessWidget {
           TextNode t => _textProps(t),
           FrameNode f => _frameProps(f),
           ShapeNode s => _shapeProps(s),
+          ExternalNode e => _extProps(e),
         },
       ],
     );
@@ -863,6 +892,31 @@ class InspectorPanel extends StatelessWidget {
           onChanged: (v) =>
               doc.edit(() => f.crossAlign = v ?? CrossAxisAlignment.center),
         ),
+    ];
+  }
+
+  List<Widget> _extProps(ExternalNode e) {
+    return [
+      _label('Entry'),
+      Text(e.entry, style: const TextStyle(fontSize: 12)),
+      const SizedBox(height: 12),
+      for (var arg in e.args.entries) ...[
+        if (arg.value case num number)
+          NumField(
+            arg.key,
+            number.toDouble(),
+            onChanged: (v) => doc.edit(() => e.args[arg.key] = v),
+          )
+        else
+          TextFormField(
+            key: ValueKey('${e.name}:${arg.key}'),
+            initialValue: '${arg.value}',
+            style: const TextStyle(fontSize: 12),
+            decoration: InputDecoration(labelText: arg.key, isDense: true),
+            onChanged: (v) => doc.edit(() => e.args[arg.key] = v),
+          ),
+        const SizedBox(height: 8),
+      ],
     ];
   }
 
