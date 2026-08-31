@@ -7,6 +7,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/base_href.dart';
+import '../utils/viewer_bundle.dart';
 import 'shot_cache.dart';
 import 'shot_png.dart';
 
@@ -30,23 +31,20 @@ import 'shot_png.dart';
 /// business: a page under a CI prefix is the common case, not the exception.
 class ComparisonWebExporter {
   ComparisonWebExporter({
-    required this.flutterExecutable,
-    required this.appToolRoot,
-  });
+    required String flutterExecutable,
+    required String appToolRoot,
+  }) : _bundle = ViewerBundle(
+         flutterExecutable: flutterExecutable,
+         appToolRoot: appToolRoot,
+         target: 'lib/main_comparison_web.dart',
+         buildDirName: 'comparison_web_viewer',
+         label: 'comparison page viewer',
+       );
 
-  final String flutterExecutable;
+  final ViewerBundle _bundle;
 
-  /// Where `flutterware_app` lives — this checkout's `app/`, or the unpacked
-  /// copy under `~/.flutterware/` for a hosted install. `flutter build web`
-  /// runs here.
-  final String appToolRoot;
-
-  /// Where the viewer bundle is compiled to.
-  ///
-  /// A fixed directory under the app package, so `flutter build web`'s own
-  /// incremental build decides whether a rebuild is needed — the same
-  /// one-answer rule the scenario exporter wrote down first.
-  String get viewerDir => p.join(appToolRoot, 'build', 'comparison_web_viewer');
+  /// Where the viewer bundle is compiled to. See [ViewerBundle.viewerDir].
+  String get viewerDir => _bundle.viewerDir;
 
   /// Preview frames inside a page, relative to it.
   static const shotsDir = 'shots';
@@ -58,7 +56,12 @@ class ComparisonWebExporter {
   /// can exercise everything after it — which is where all the logic is —
   /// without a toolchain and a minute of compiling.
   @visibleForTesting
-  Future<int> Function(List<String> arguments)? debugCompile;
+  Future<int> Function(List<String> arguments)? get debugCompile =>
+      _bundle.debugCompile;
+
+  @visibleForTesting
+  set debugCompile(Future<int> Function(List<String> arguments)? compile) =>
+      _bundle.debugCompile = compile;
 
   /// Writes the page: the viewer bundle, the rewritten `index.json`, and a
   /// PNG per frame the index names.
@@ -77,8 +80,8 @@ class ComparisonWebExporter {
     void Function(String line)? onOutput,
   }) async {
     var stopwatch = Stopwatch()..start();
-    await _buildViewer(offline: offline, onOutput: onOutput);
-    if (_cancelled) throw StateError('The export was cancelled.');
+    await _bundle.build(offline: offline, onOutput: onOutput);
+    if (_bundle.cancelled) throw StateError('The export was cancelled.');
 
     var outputDir = Directory(output);
     // Cleared rather than merged into: an entry renamed since the last export
@@ -88,7 +91,7 @@ class ComparisonWebExporter {
     outputDir.createSync(recursive: true);
 
     onOutput?.call('[export] copying the viewer');
-    _copyDirectory(Directory(viewerDir), outputDir);
+    _bundle.copyTo(output);
     setBaseHrefIn(p.join(output, 'index.html'), baseHref);
 
     onOutput?.call('[export] encoding the frames');
@@ -199,84 +202,8 @@ class ComparisonWebExporter {
     return encoded;
   }
 
-  /// Compiles the viewer, or lets the build system decide it need not.
-  Future<void> _buildViewer({
-    required bool offline,
-    void Function(String line)? onOutput,
-  }) async {
-    onOutput?.call('[export] building the viewer (this is cached after once)');
-    var exitCode = await _run([
-      'build',
-      'web',
-      '--release',
-      '--target',
-      'lib/main_comparison_web.dart',
-      '--output',
-      viewerDir,
-      // The page carries its own CanvasKit rather than fetching it from
-      // Google's CDN — for a CI artifact read behind a firewall, or after the
-      // engine revision it was built against stops being hosted.
-      if (offline) '--no-web-resources-cdn',
-    ], onOutput);
-    if (_cancelled) return;
-    if (exitCode != 0) {
-      throw StateError(
-        'The comparison page viewer did not compile (exit $exitCode). It is '
-        "flutterware's own code in $appToolRoot — the error above is a bug in "
-        'the tool, not in your project.',
-      );
-    }
-  }
-
-  static void _copyDirectory(Directory source, Directory destination) {
-    for (var entity in source.listSync()) {
-      var target = p.join(destination.path, p.basename(entity.path));
-      if (entity is Directory) {
-        Directory(target).createSync(recursive: true);
-        _copyDirectory(entity, Directory(target));
-      } else if (entity is File) {
-        Directory(p.dirname(target)).createSync(recursive: true);
-        entity.copySync(target);
-      }
-    }
-  }
-
-  Process? _process;
-  var _cancelled = false;
-
   /// Ends the export, if one is running.
-  ///
-  /// A `flutter build web` is tens of seconds, and a child started with
-  /// `Process.start` is not killed when the Dart parent exits on macOS.
-  Future<void> cancel() async {
-    _cancelled = true;
-    _process?.kill();
-    _process = null;
-  }
-
-  Future<int> _run(
-    List<String> arguments,
-    void Function(String)? onOutput,
-  ) async {
-    if (debugCompile case var compile?) return compile(arguments);
-    var process = _process = await Process.start(
-      flutterExecutable,
-      arguments,
-      workingDirectory: appToolRoot,
-    );
-    if (_cancelled) process.kill();
-    var lines = <Future<void>>[
-      for (var stream in [process.stdout, process.stderr])
-        stream
-            .transform(const Utf8Decoder(allowMalformed: true))
-            .transform(const LineSplitter())
-            .forEach((line) => onOutput?.call(line)),
-    ];
-    var exitCode = await process.exitCode;
-    await Future.wait(lines);
-    _process = null;
-    return exitCode;
-  }
+  Future<void> cancel() => _bundle.cancel();
 }
 
 /// What a finished export produced.

@@ -93,16 +93,61 @@ void main() {
     );
 
     var comment = File(report.commentPath).readAsStringSync();
-    expect(comment, contains('against `master`'));
-    expect(comment, contains('1 changed'));
+    expect(comment, contains('against `master` — **1 changed**'));
     expect(comment, contains('| `demo/card.dart#card` | changed |'));
     expect(comment, contains('100.00% · 1 region'));
     expect(comment, contains(mosaicUrlPlaceholder));
     expect(comment, contains(viewerUrlPlaceholder));
 
+    // The comment is a teaser: the page link is the first line under the
+    // heading, above the mosaic, and the table — the only part that grows per
+    // finding — is folded shut.
+    expect(
+      comment.indexOf(viewerUrlPlaceholder),
+      lessThan(comment.indexOf(mosaicUrlPlaceholder)),
+    );
+    expect(comment, contains('<details><summary>1 finding</summary>'));
+    expect(
+      comment.indexOf('<details>'),
+      lessThan(comment.indexOf('| entry |')),
+    );
+    expect(comment, contains('</details>'));
+
     var mosaic = img.decodePng(File(report.mosaicPath!).readAsBytesSync())!;
     expect(mosaic.width, greaterThan(0));
     expect(mosaic.height, greaterThan(0));
+  });
+
+  test('the folded summary says when the mosaic is a cap', () {
+    var items = <ComparedItem>[];
+    for (var index = 0; index < mosaicRowCap + 4; index++) {
+      file('base$index', 40);
+      file('head$index', 180);
+      items.add(
+        ComparedItem(
+          id: 'demo/card$index.dart#card',
+          state: ComparedState.changed,
+          shots: (base: 'base$index', head: 'head$index'),
+        ),
+      );
+    }
+    var report = writePrReport(
+      artifact: ComparisonArtifact(previews: previews(items)),
+      cache: cache,
+      against: 'master',
+      directory: p.join(temp.path, 'report'),
+    );
+
+    var comment = File(report.commentPath).readAsStringSync();
+    expect(
+      comment,
+      contains(
+        '<summary>${mosaicRowCap + 4} findings '
+        '(the picture shows the worst $mosaicRowCap)</summary>',
+      ),
+    );
+    // Folded, but complete: every finding is a table row.
+    expect('| changed |'.allMatches(comment).length, mosaicRowCap + 4);
   });
 
   test("a scenario's face in the mosaic is its worst step with frames", () {

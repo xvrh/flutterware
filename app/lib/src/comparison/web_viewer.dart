@@ -13,6 +13,7 @@ import 'shot_store_http.dart';
 import 'ui/previews_tab.dart';
 import 'ui/scenarios_tab.dart';
 import 'ui/state_chip.dart';
+import 'ui/verdict.dart';
 import '../ui/loading_state.dart';
 
 /// The exported comparison page.
@@ -180,6 +181,9 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
         message: index.scenariosNote ?? 'No scenarios were compared.',
       );
     }
+    // The same verdict the panel draws over its list, minus the controls: an
+    // exported page has no session to hold a rule, so the chips are labels —
+    // which is exactly what `onToggle: null` is for.
     return tab == 'previews'
         ? PreviewsTab(
             half: _previews!,
@@ -187,6 +191,7 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
             settle: _settle,
             selected: _selected,
             onSelect: (id) => setState(() => _selected = id),
+            header: ComparisonVerdict.ofHalf(_previews!),
           )
         : ScenariosTab(
             half: _scenarios!,
@@ -194,6 +199,7 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
             settle: _settle,
             selected: _selected,
             onSelect: (id) => setState(() => _selected = id),
+            header: ComparisonVerdict.ofHalf(_scenarios!),
           );
   }
 
