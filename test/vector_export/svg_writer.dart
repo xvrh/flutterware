@@ -76,12 +76,20 @@ String writeSvg(
     frames[frames.length - 1]++;
   }
 
-  String css(Color c) =>
-      'rgba(${(c.r * 255).round()},${(c.g * 255).round()},'
-      '${(c.b * 255).round()},${c.a.toStringAsFixed(3)})';
+  // Alpha rides in fill-opacity/stroke-opacity attributes, never inside an
+  // rgba() color: package:pdf's SVG renderer (and other strict consumers)
+  // honors the attributes and drops rgba's alpha channel.
+  String hex(Color c) {
+    String h(double v) => (v * 255).round().toRadixString(16).padLeft(2, '0');
+    return '#${h(c.r)}${h(c.g)}${h(c.b)}';
+  }
+
+  String opacityAttr(String attribute, Color c) =>
+      c.a < 1 ? ' $attribute="${c.a.toStringAsFixed(3)}"' : '';
 
   String fillAttrs(VgPaint p) {
     String fill;
+    var opacity = '';
     if (p.gradient != null) {
       var g = p.gradient!;
       var id = 'grad${defId++}';
@@ -92,22 +100,32 @@ String writeSvg(
       );
       for (var i = 0; i < g.colors.length; i++) {
         var offset = g.stops?[i] ?? i / (g.colors.length - 1);
-        defs.write('<stop offset="$offset" stop-color="${css(g.colors[i])}"/>');
+        defs.write(
+          '<stop offset="$offset" stop-color="${hex(g.colors[i])}"'
+          '${opacityAttr('stop-opacity', g.colors[i])}/>',
+        );
       }
       defs.write('</linearGradient>');
       fill = 'url(#$id)';
     } else {
-      fill = css(p.color);
+      fill = hex(p.color);
+      opacity = p.color.a.toStringAsFixed(3);
     }
     if (p.style == PaintingStyle.fill) {
-      return 'fill="$fill"';
+      var alpha = opacity.isEmpty || p.color.a >= 1
+          ? ''
+          : ' fill-opacity="$opacity"';
+      return 'fill="$fill"$alpha';
     }
     var cap = switch (p.strokeCap) {
       StrokeCap.butt => 'butt',
       StrokeCap.round => 'round',
       StrokeCap.square => 'square',
     };
-    return 'fill="none" stroke="$fill" stroke-width="${p.strokeWidth}" '
+    var alpha = opacity.isEmpty || p.color.a >= 1
+        ? ''
+        : ' stroke-opacity="$opacity"';
+    return 'fill="none" stroke="$fill"$alpha stroke-width="${p.strokeWidth}" '
         'stroke-linecap="$cap"';
   }
 
@@ -246,7 +264,10 @@ String writeSvg(
                 }
               }
               if (!missingGlyph) {
-                body.write('<path d="$d" fill="${css(run.color)}"/>');
+                body.write(
+                  '<path d="$d" fill="${hex(run.color)}"'
+                  '${opacityAttr('fill-opacity', run.color)}/>',
+                );
                 continue;
               }
             }
@@ -267,7 +288,8 @@ String writeSvg(
             'font-family="$family" '
             'font-size="${run.fontSize}" '
             'font-weight="${run.fontWeight.value}"$style$spacing '
-            'fill="${css(run.color)}" '
+            'fill="${hex(run.color)}"'
+            '${opacityAttr('fill-opacity', run.color)} '
             'xml:space="preserve">${_escape(run.text)}</text>',
           );
         }
@@ -280,7 +302,7 @@ String writeSvg(
         body.write(
           '<rect x="${_n(bounds.left)}" y="${_n(bounds.top)}" '
           'width="${_n(bounds.width)}" height="${_n(bounds.height)}" '
-          'fill="rgba(255,0,255,0.3)"/>',
+          'fill="#ff00ff" fill-opacity="0.3"/>',
         );
     }
   }

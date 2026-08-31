@@ -103,7 +103,7 @@ class VgRecording {
       };
       if (plan == null) continue;
       var (bounds, draw, assign) = plan;
-      if (bounds.isEmpty) continue;
+      if (bounds.isEmpty || !bounds.isFinite) continue;
       var recorder = ui.PictureRecorder();
       var canvas = ui.Canvas(recorder);
       canvas.scale(pixelRatio);

@@ -188,8 +188,13 @@ class ExportPaintingContext extends ClipContext implements PaintingContext {
         return VgDrawText(extractTextRuns(paragraph, ro.text, offset));
       }
     }
+    // A paragraph laid out without a max width reports width = Infinity;
+    // the ink is bounded by its longest line.
+    var width = paragraph.width.isFinite
+        ? paragraph.width
+        : paragraph.longestLine;
     return VgDrawUnknownParagraph(
-      Rect.fromLTWH(offset.dx, offset.dy, paragraph.width, paragraph.height),
+      Rect.fromLTWH(offset.dx, offset.dy, width, paragraph.height),
       paragraph,
     );
   }
