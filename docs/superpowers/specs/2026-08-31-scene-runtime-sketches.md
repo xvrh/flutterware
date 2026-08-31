@@ -1,4 +1,4 @@
-# Scene runtime — drive, notify, and the slot: sketches 8–12
+# Scene runtime — drive, notify, and the slot: sketches 8–13
 
 **Date:** 2026-08-31
 **Status:** round two of the parameter sketches, opened by three owner
@@ -389,6 +389,68 @@ Flutter's own render tree lives with 1 and 3 for the same reasons; the
 editor keeps derivability where it is load-bearing (files, documents); and
 4 is the domain's natural habitat. These are the honest prices of the
 all-in, and they are prices, not blockers.
+
+## Sketch 13 — the alternatives to mutability, surveyed
+
+The owner's closing question: if the goal is full flexibility for the
+scene's user, and everything animatable, what alternatives exist to
+all-mutable? First, a decomposition the question deserves: **the two
+goals have different answers.** "Animate everything" is satisfied on
+*every* design below, because the `fx` plane (sketch 8) animates each
+property as `base op fx` without ever writing the authored model — motion
+needs a complete overlay, not a mutable model. What forces the choice is
+the *user's* runtime flexibility. Three families exist:
+
+**(A) Immutable value + rebuild** — the React/Flutter-widget answer.
+A scene is a value; a change constructs a new one; `SceneView` reconciles.
+Construction is measured free (10µs), so performance is *not* the
+objection. What it buys: value semantics — derivability, no aliasing,
+snapshots and time-travel free, isolate-crossable. What it costs, and why
+it loses here:
+
+- **Deep update is Dart's weakest ergonomic.** No lenses, no spread-deep,
+  codegen refused — so a color change three levels down is
+  `scene.copyWith(copy: scene.copy.copyWith(headline: …))`. The
+  flexibility being asked for dies in the spelling.
+- **Live handles die.** A held reference is a stale frame; binding
+  (`title: cart.headline`) has no meaning; every change routes through the
+  owner. The no-aliasing virtue and the no-binding cost are the same fact.
+- **Cross-frame identity returns as a problem.** New objects every frame
+  mean motion's typed references cannot be held; targeting falls back to
+  names/paths/diffing — reopening exactly what object identity solved.
+
+**(B) Operations/dispatch** — Elm/Redux: consumers never touch fields,
+every change is an op on the document. Buys a free journal (undo, replay,
+sync — edition's dream). Costs the direct spelling entirely: 60fps of
+`dispatch(SetOpacity('glow', x))` is ceremony where `glow.opacity = x`
+was the point, and "everything flexible" means an op vocabulary mirroring
+the whole surface — a parallel API. It is the *editor's door* promoted to
+the only API: right for the one consumer that needs invariants and
+history, hostile to the one that wants feel.
+
+**(C) Mutable** — raw fields or boxes (sketch 11's `Param` generalized is
+this family in different spelling: final fields, live values, aliasing
+unchanged). The ergonomics and the binding; the irreducible prices
+already sorted above.
+
+**The finding: the layered hybrid already on the table is the answer this
+survey converges on** — and it is the same convergence Flutter itself
+made (immutable widget configuration over a mutable retained render tree):
+
+| consumer | plane | family |
+|---|---|---|
+| the app at runtime | authored, via fields/boxes | (C) |
+| the motion evaluator | `fx` overlay, pure | none needed |
+| the editor | operations over the same class | (B) as *its* door |
+| repro/persistence/tests | `copy()` snapshots | (A)'s one gift, recovered |
+
+No single family serves all four consumers; each is strong exactly where
+one consumer lives. The genuine alternative — (A) throughout — trades the
+asked-for flexibility for value semantics, and Dart's missing deep-update
+ergonomics make that trade worse here than in the ecosystems where it
+works. If aliasing ever bites in practice, the in-family mitigation is a
+read-only projection type (`SceneReader`) handed to consumers who should
+not write — discipline in types, not a different architecture.
 
 ## Round-2 scoreboard
 
