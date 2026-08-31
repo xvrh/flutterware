@@ -717,6 +717,32 @@ authored mutation composes with the running motion; the **fx plane** is
 where evaluated values live — motion's always, the app's when an effect
 should never persist.
 
+### Sketch 16 addendum — the owner's four notes
+
+- **Animation naming = the field-name story, again.** `headlineIn` is a
+  field; the timeline shows one group per `Animate` field; the editor
+  *mints* the name from the target node (default: the node's own name;
+  `headlineIn`/`headlineOut` only when two animations share a target) and
+  the user renames in the panel — never asked upfront, exactly like a
+  minted `text1` on the canvas. App code may reference
+  `intro.headlineIn`, so a rename breaks those call sites at compile time
+  — the deliberate loud failure, third appearance.
+- **The scene takes no motion and no drive** — the sketch's call was
+  `SceneView(scene, motion:, drive:)`, and the misreading is worth
+  guarding in the real API docs: the scene class is model only; the view
+  is where the three meet. Dependency direction (motion imports scene,
+  never reverse) and several-motions-per-scene both depend on it.
+- **A third spelling for the intrinsic-vocabulary alternative, found
+  while explaining it:** `Animate<N extends SceneNode>(N target,
+  {ContentTracks<N>? content, …imposed})` — a single constructor whose
+  bundle/target pairing Dart itself checks (`TextTracks implements
+  ContentTracks<TextNode>`, so a `TextTracks` on `scene.glow` refuses to
+  compile). One pinhole: covariance lets an *upcast* target defeat the
+  check; `fw scene check` closes it. The choice is now three-way — named
+  constructors (flat, N×M declaration tax on the framework), plain bundle
+  (no compile check), generic bundle (compile-checked, nested spelling) —
+  identical to the parser, decided by ergonomics.
+
 ## Round-2 scoreboard
 
 - **The edit API can drive animation** as the app's escape hatch (measured
