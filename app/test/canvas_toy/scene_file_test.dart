@@ -88,16 +88,11 @@ class S {
     const banner =
         '''
 $sceneFileMarker
-class BannerScene {
-  BannerScene({
-    this.title = 'Fresh coffee, faster',
-    this.accent = const Color(0xFFE8632B),
-    this.slide = 24,
-  });
-  final String title;
-  final Color accent;
-  final double slide;
-
+class BannerScene({
+  final String title = 'Fresh coffee, faster',
+  final Color accent = const Color(0xFFE8632B),
+  final double slide = 24,
+}) {
   late final headline = Text(title, fontSize: 54);
   late final cta = Frame(x: slide, fill: accent, children: [label]);
   late final label = Text('Get the app');
@@ -119,8 +114,8 @@ class BannerScene {
       expect(cta.fill, const Color(0xFFE8632B));
 
       var emitted = emitSceneFile(doc, className: 'BannerScene');
-      expect(emitted, contains("this.title = 'Fresh coffee, faster'"));
-      expect(emitted, contains('final String title;'));
+      expect(emitted, contains('class BannerScene({'));
+      expect(emitted, contains("final String title = 'Fresh coffee, faster'"));
       expect(emitted, contains('const Color(0xFFE8632B)'));
       var again = emitSceneFile(
         parseSceneFile(emitted).doc!,
@@ -176,50 +171,38 @@ class BannerScene {
     }
 
     refusesParam('a String parameter where a color is expected', '''
-class S {
-  S({this.title = 'x'});
-  final String title;
+class S({final String title = 'x'}) {
   late final root = Frame(fill: title);
 }''', 'parameter type');
-    refusesParam('a parameter field with the wrong type', '''
-class S {
-  S({this.title = 'x'});
-  final double title;
+    refusesParam('a header type disagreeing with its default', '''
+class S({final double title = 'x'}) {
   late final root = Frame();
 }''', 'parameter type');
-    refusesParam('a parameter without its field', '''
-class S {
-  S({this.title = 'x'});
-  late final root = Frame();
-}''', 'missing field');
     refusesParam('a non-literal default', '''
-class S {
-  S({this.title = compute()});
-  final String title;
+class S({final String title = compute()}) {
   late final root = Frame();
 }''', 'parameter default');
     refusesParam('a parameter without a default', '''
-class S {
-  S({required this.title});
-  final String title;
+class S({required final String title}) {
   late final root = Frame();
 }''', 'no default');
     refusesParam('a parameter name colliding with a node name', '''
-class S {
-  S({this.glow = 1});
-  final double glow;
+class S({final double glow = 1}) {
   late final glow = Shape();
   late final root = Frame(children: [glow]);
 }''', 'duplicate name');
-    refusesParam('a plain (non-this) constructor parameter', '''
-class S {
-  S({String title = 'x'});
+    refusesParam('a this. formal in the header', '''
+class S({this.x = 2}) {
   late final root = Frame();
 }''', 'parameter');
-    refusesParam('a parameter placed as a child', '''
+    refusesParam("the old grammar's body constructor", '''
 class S {
   S({this.title = 'x'});
   final String title;
+  late final root = Frame();
+}''', 'constructor');
+    refusesParam('a parameter placed as a child', '''
+class S({final String title = 'x'}) {
   late final root = Frame(children: [title]);
 }''', 'parameter as child');
   });

@@ -745,6 +745,34 @@ should never persist.
   2026-08-31: the generic bundle**, with named constructors as the
   fallback if inference proves finicky in real files.
 
+### The parameter spelling, settled by the owner's ear — three probes later
+
+The owner pushed on sketch 1's spelling twice: first *"do we need to keep
+the parameter's field? pipe it in the constructor"*, then *"reach for
+Dart's primary constructors if it reads better."* Probed in order:
+
+1. His initializer-list form (`: headline = Text(title)` + `final Text
+   headline;`) dies on a Dart rule: an initializer list cannot see sibling
+   fields, and every scene has `children: [headline]`.
+2. The constructor-body form works (probed: sibling refs legal, a forward
+   read throws `LateError`, so ordering becomes load-bearing) — buildable,
+   but statements enter the grammar and the mock placement gets awkward.
+3. **Primary constructors win.** On the pinned SDK,
+   `class BannerScene({final String title = 'Fresh coffee, faster'}) {…}`
+   compiles, the header-declared field is in scope for every node
+   initializer, analyzer 13.3 parses it (`ClassDeclaration.namePart` is a
+   `PrimaryConstructorDeclaration`), and dart_style formats it. One header
+   line is the formal, the field and the default at once — the
+   two-lines-per-parameter tax is gone, nodes stay field initializers,
+   no body, no ordering constraint, forward references stay legal.
+
+Grammar 0.4 is this form, built and green (the plain non-`final` header
+spelling is accepted and converges; `this.` formals and body constructors
+are refused with teaching messages). The one caveat carried over:
+`scene.title` is a real field answering *what was passed at construction*
+— a later `headline.text = …` mutation does not update it, documented
+rather than fought.
+
 ## Round-2 scoreboard
 
 - **The edit API can drive animation** as the app's escape hatch (measured

@@ -4,16 +4,16 @@
 //
 // THE GRAMMAR, on a page. A scene file is:
 //   - a `//@flutterware:scene=…` marker in its first line
-//   - file-level comments and imports (before the class body; not parsed)
-//   - exactly one class declaration, whose members are:
-//     - optionally ONE unnamed constructor whose parameters are all named
-//       `this.` formals with literal defaults — THE PARAMETERS, typed holes
-//       whose default is the mockup: `this.title = 'Fresh coffee'`,
-//       `this.accent = const Color(0xFFE8632B)` — each paired with its
-//       plain `final <Type> <name>;` field (String, double or Color)
-//     - node fields: `late final <name> = <Node>(…);` — THE FIELD NAME IS
-//       THE NODE'S IDENTITY (unique by Dart's own rules, shared namespace
-//       with the parameters), and one field must be `root`, a Frame
+//   - file-level comments and imports (before the class; not parsed)
+//   - exactly one class declaration. Its parameters — typed holes whose
+//     default is the mockup — are the class's PRIMARY CONSTRUCTOR: each is
+//     `final <String|double|Color> <name> = <literal>` in the class header,
+//     which is one spelling for the formal, the field and the default at
+//     once, and puts the name in scope for every node below
+//   - the class members are node fields: `late final <name> = <Node>(…);`
+//     — THE FIELD NAME IS THE NODE'S IDENTITY (unique by Dart's own rules,
+//     shared namespace with the parameters), and one field must be `root`,
+//     a Frame
 //   - a node is a constructor invocation: Frame, Text, Shape or Ext, with
 //     named arguments from that node's fixed vocabulary; Text takes its
 //     content as one positional string, Ext takes its registration entry as
@@ -37,7 +37,8 @@
 //   - emit ∘ parse is the identity on canonical files
 //   - accepted non-canonical spellings (`final` for `late final`, forward
 //     references, `1024.0`, lowercase hex, a quoted Ext entry, a
-//     const-less default) converge to canonical in one emit
+//     `final`-less or type-less header formal) converge to canonical in
+//     one emit
 //   - every hostile construct is refused with an offset and a name, and
 //     nothing ever throws.
 import 'package:analyzer/dart/analysis/utilities.dart';
@@ -48,7 +49,7 @@ import 'package:flutter/material.dart';
 
 import 'model.dart';
 
-const sceneFileMarker = '//@flutterware:scene=0.3';
+const sceneFileMarker = '//@flutterware:scene=0.4';
 
 /// One refused construct: where it is and what to do instead.
 class SceneRefusal {
@@ -101,27 +102,29 @@ $sceneFileMarker
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. Hand edits are welcome inside the grammar: every node is a
 // `late final` field (the field name is the node's identity), placed exactly
-// once in a children list; a parameter is a `this.` formal whose default is
-// the mockup. Anything outside the grammar is refused with a line number
-// rather than silently dropped.
+// once in a children list; a parameter is a `final` in the class header
+// whose default is the mockup. Anything outside the grammar is refused with
+// a line number rather than silently dropped.
 
-class $className {
 ''');
   var seen = <String>{};
   var params = <String, SceneParamDecl>{};
-  if (doc.params.isNotEmpty) {
-    out.write('  $className({');
-    for (var p in doc.params) {
-      if (!isValidNodeName(p.name) || !seen.add(p.name)) {
-        throw ArgumentError('"${p.name}" is not a usable parameter name');
-      }
-      params[p.name] = p;
-      out.write('this.${p.name} = ${_paramDefault(p)}, ');
+  for (var p in doc.params) {
+    if (!isValidNodeName(p.name) || !seen.add(p.name)) {
+      throw ArgumentError('"${p.name}" is not a usable parameter name');
     }
-    out.writeln('});');
+    params[p.name] = p;
+  }
+  if (doc.params.isEmpty) {
+    out.writeln('class $className {');
+  } else {
+    // The primary constructor: formal, field and default in one spelling,
+    // in scope for every node initializer below.
+    out.write('class $className({');
     for (var p in doc.params) {
-      out.writeln('  final ${p.typeName} ${p.name};');
+      out.write('final ${p.typeName} ${p.name} = ${_paramDefault(p)}, ');
     }
+    out.writeln('}) {');
   }
   void field(SceneNode n) {
     for (var c in n.children) {
@@ -289,7 +292,8 @@ class _Parser {
   String? className;
   late final _lines = source.split('\n');
 
-  /// Declared parameters, filled before any field is parsed.
+  /// Declared parameters, filled from the class header before any field is
+  /// parsed.
   final _params = <String, SceneParamDecl>{};
 
   void refuse(int offset, String construct, String message) {
@@ -344,34 +348,30 @@ class _Parser {
     className = found.namePart.typeName.lexeme;
     _refuseComments(found);
 
-    // Phase 0: the constructor, if any, declares the parameters — before
-    // any field is read, so a field initializer may reference them
-    // regardless of member order.
+    // Phase 0: the class header's primary constructor, if any, declares
+    // the parameters — read before any field, so every node initializer
+    // may reference them.
     var declared = <String, int>{};
-    ConstructorDeclaration? ctor;
-    for (var member in found.body.members) {
-      if (member is ConstructorDeclaration) {
-        if (ctor != null) {
-          refuse(
-            member.offset,
-            'second constructor',
-            'a scene class has at most one constructor',
-          );
-          continue;
-        }
-        ctor = member;
-        _readParams(member, declared);
-      }
+    if (found.namePart case PrimaryConstructorDeclaration pc) {
+      _readParams(pc, declared);
     }
 
-    // Phase 1: every other member is a node field or a parameter's field.
-    // The field name is the node's identity; children lists are collected
-    // as references and linked after every declaration is known.
+    // Phase 1: every member is a node field. The field name is the node's
+    // identity; children lists are collected as references and linked
+    // after every declaration is known, which is what makes forward
+    // references (ordinary under `late final`) free.
     var nodes = <String, SceneNode>{};
     var childRefs = <String, List<(String, int)>>{};
-    var paramFields = <String>{};
     for (var member in found.body.members) {
-      if (member is ConstructorDeclaration) continue;
+      if (member is ConstructorDeclaration) {
+        refuse(
+          member.offset,
+          'constructor',
+          'parameters live in the class header — '
+              "`class ${className!}({final String title = '…'})`",
+        );
+        continue;
+      }
       if (member is! FieldDeclaration || member.fields.variables.length != 1) {
         refuse(
           member.offset,
@@ -385,33 +385,14 @@ class _Parser {
       var name = variable.name.lexeme;
       var initializer = variable.initializer;
       if (initializer == null) {
-        // A parameter's `final <Type> <name>;` field.
-        var decl = _params[name];
-        if (decl == null) {
-          refuse(
-            member.offset,
-            'no initializer',
-            '`$name` must be initialized with a node, or declared as a '
-                'constructor parameter',
-          );
-          continue;
-        }
-        if (!paramFields.add(name)) {
-          refuse(
-            variable.offset,
-            'duplicate name',
-            '"$name" is declared twice',
-          );
-          continue;
-        }
-        var type = member.fields.type;
-        if (type == null || '$type' != decl.typeName) {
-          refuse(
-            member.offset,
-            'parameter type',
-            'the parameter field is spelled `final ${decl.typeName} $name;`',
-          );
-        }
+        refuse(
+          member.offset,
+          'no initializer',
+          _params.containsKey(name)
+              ? '"$name" is a parameter — the header already declares its '
+                    'field; there is nothing to add below'
+              : '`$name` must be initialized with a node',
+        );
         continue;
       }
       if (declared.containsKey(name)) {
@@ -426,16 +407,6 @@ class _Parser {
       declared[name] = variable.offset;
       var node = _node(name, initializer, childRefs);
       if (node != null) nodes[name] = node;
-    }
-    for (var entry in _params.entries) {
-      if (!paramFields.contains(entry.key)) {
-        refuse(
-          declared[entry.key] ?? 0,
-          'missing field',
-          'parameter "${entry.key}" needs its '
-              '`final ${entry.value.typeName} ${entry.key};` field',
-        );
-      }
     }
 
     var root = nodes['root'];
@@ -520,24 +491,37 @@ class _Parser {
     return doc;
   }
 
-  /// The constructor's formals become the parameter table: each is a named
-  /// `this.` formal with a literal default — the default IS the mockup.
-  void _readParams(ConstructorDeclaration ctor, Map<String, int> declared) {
-    if (ctor.name != null) {
+  /// The header's formals are the parameter table: each is a named
+  /// `final <Type> <name> = <literal>` — one spelling for the formal, the
+  /// field and the default, and the default IS the mockup.
+  void _readParams(
+    PrimaryConstructorDeclaration pc,
+    Map<String, int> declared,
+  ) {
+    if (pc.constKeyword != null) {
       refuse(
-        ctor.offset,
-        'named constructor',
-        'the scene constructor is unnamed',
+        pc.constKeyword!.offset,
+        'const',
+        'a scene is never const — its nodes are late finals',
       );
     }
-    for (var p in ctor.parameters.parameters) {
+    for (var p in pc.formalParameters.parameters) {
       var name = p.name?.lexeme;
-      if (p is! FieldFormalParameter || !p.isNamed || name == null) {
+      if (p is FieldFormalParameter) {
         refuse(
           p.offset,
           'parameter',
-          'a scene parameter is a named `this.` formal with a default — '
-              "`this.title = '…'`",
+          'a scene parameter is spelled in full in the header — '
+              "`final String $name = '…'` — never `this.`",
+        );
+        continue;
+      }
+      if (!p.isNamed || name == null) {
+        refuse(
+          p.offset,
+          'parameter',
+          'a scene parameter is a named header formal with a default — '
+              "`final String title = '…'`",
         );
         continue;
       }
@@ -563,7 +547,19 @@ class _Parser {
         );
         continue;
       }
-      _params[name] = SceneParamDecl(name, parsed.$1, parsed.$2);
+      var decl = SceneParamDecl(name, parsed.$1, parsed.$2);
+      if (p is RegularFormalParameter &&
+          p.type != null &&
+          '${p.type}' != decl.typeName) {
+        refuse(
+          p.type!.offset,
+          'parameter type',
+          'this default makes "$name" a ${decl.typeName} — spell it '
+              '`final ${decl.typeName} $name`',
+        );
+        continue;
+      }
+      _params[name] = decl;
       declared[name] = p.offset;
     }
   }
