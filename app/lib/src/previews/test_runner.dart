@@ -255,6 +255,7 @@ class PreviewTestRunner {
     List<String>? entryIds,
     String? device,
     String? orientation,
+    DateTime? clock,
   }) => _host.exclusive(() async {
     _program.quarantined.clear();
     await _bringUp();
@@ -265,6 +266,7 @@ class PreviewTestRunner {
         'entries': ?entryIds?.join(','),
         'device': ?device,
         'orientation': ?orientation,
+        'clock': ?clock?.toIso8601String(),
       },
     );
     if (response!['error'] case String error) {
@@ -349,6 +351,7 @@ class PreviewTestRunner {
     bool tree = true,
     bool timings = false,
     String format = 'raw',
+    DateTime? clock,
   }) => _host.exclusive(() async {
     // Only when syncing. The quarantine is filled by the blame rounds inside
     // [_bringUp], so clearing it without one would throw away what the last
@@ -370,6 +373,12 @@ class PreviewTestRunner {
           if (!tree) 'tree': 'false',
           if (timings) 'timings': 'true',
           if (format != 'raw') 'format': format,
+          // Silently ignored by a `package:flutterware` from before the
+          // preview clock was pinned, which is a base checkout rendering at
+          // its wall clock against a head that does not. That is a one-time
+          // re-baseline rather than a wrong picture, and `ShotKey.revision`
+          // is what stops the two being served from one cache.
+          'clock': ?clock?.toIso8601String(),
         },
       );
       if (response!['error'] case String error) {

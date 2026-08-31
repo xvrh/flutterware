@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:clock/clock.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +25,7 @@ import 'package:test_api/src/backend/suite_platform.dart';
 import 'package:test_api/src/backend/test.dart' as backend;
 
 import '../canvases.dart';
+import '../clock.dart';
 import '../flutter_gpu_diagnosis.dart';
 import '../devices.dart';
 import '../ui_catalog/fake_keyboard.dart';
@@ -203,6 +205,13 @@ Future<void> _serve(
         // measurement nobody asked for is noise in somebody's console.
         timings: args['timings'] == 'true',
         format: args['format'] ?? 'raw',
+        // Absent is the pin, not the wall clock — the host only says this when
+        // the project set `fw.clock(...)`, and a lane that fell back to `now`
+        // on silence is the drift this parameter exists to end.
+        clock: switch (args['clock']) {
+          null => null,
+          var iso => DateTime.parse(iso),
+        },
       );
       return developer.ServiceExtensionResponse.result(jsonEncode(report));
     } catch (error, stack) {
@@ -277,6 +286,10 @@ Future<void> _serve(
           num t => t.toDouble(),
           _ => null,
         },
+        clock: switch (request['clock']) {
+          String iso => DateTime.parse(iso),
+          _ => null,
+        },
         viewport: switch (request['viewport']) {
           Map json => StagedViewport.fromJson(json.cast<String, Object?>()),
           _ => null,
@@ -327,6 +340,10 @@ Future<Map<String, Object?>> _audit(
   StagedViewport? viewport,
   _Walk? walk,
   double? motionT,
+
+  /// What `clock.now()` reads while an entry builds, or null for
+  /// [pinnedClockOrigin].
+  DateTime? clock,
 }) async {
   var wanted = [
     for (var entry in entries)
@@ -361,6 +378,7 @@ Future<Map<String, Object?>> _audit(
       viewport: viewport,
       walk: walk,
       motionT: motionT,
+      clock: clock,
     ),
   );
   // Flat by construction — one `testWidgets` per entry, no groups — so the
@@ -511,6 +529,10 @@ Future<Map<String, Object?>> _render(
   /// Where to park the playhead for the one picture. Ignored when [walk] says
   /// to take many.
   double? motionT,
+
+  /// What `clock.now()` reads while the entry builds, or null for
+  /// [pinnedClockOrigin].
+  DateTime? clock,
 }) async {
   var entry = entries.where((entry) => entry.id == entryId).toList();
   if (entry.isEmpty) {
@@ -537,6 +559,7 @@ Future<Map<String, Object?>> _render(
     format: format,
     walk: walk,
     motionT: motionT,
+    clock: clock,
     // The `tree.json` beside the frame is the catalog-wide lane's; here the
     // tree travels inline and writing a second copy would be 9ms for nothing.
     tree: false,
@@ -602,248 +625,266 @@ void _declare(
   StagedViewport? viewport,
   _Walk? walk,
   double? motionT,
+
+  /// What `clock.now()` reads while the entry builds, or null for
+  /// [pinnedClockOrigin] — the project's own `fw.clock(...)`.
+  DateTime? clock,
 }) {
   for (var (index, entry) in entries.indexed) {
     testWidgets(entry.id, (tester) async {
-      // Not `install()`: the binding owns `FlutterError.onError` for the length
-      // of a test, and that ownership is what makes a reported error fail it.
-      // Chaining collects everything — including the first, which the binding
-      // stashes rather than reports — and hands it on unchanged.
-      var previous = FlutterError.onError;
-      FlutterError.onError = (details) {
-        GuestErrors.instance.report(details);
-        previous?.call(details);
-      };
-      // `CatalogGuest` resets on a *change* of entry, so re-running the same one
-      // would otherwise still be holding the last run's errors.
-      GuestErrors.instance.clear();
-      // The other buffer nothing empties between bodies, and the expensive
-      // one: an entry left holding a pending decode makes every entry after
-      // it wait out the whole real-work allowance on it.
-      resetAnnouncedWork();
-      // A device named for the whole run wins over every canvas; absent, each
-      // entry is framed as its own subtree declared. `canvasFor` rather than a
-      // prefix match written out again here, because a rule applied twice is a
-      // rule that eventually differs.
-      var canvas = canvasFor(canvases, entry.path);
-      var reset = switch ((device, canvas?.defaultDevice)) {
-        // A viewport named for *this* render wins over everything: it is
-        // already the answer the host worked out — the entry's declared
-        // canvas, a device the call named, a `--width` override on top — and
-        // re-deriving any of that here would be a second opinion about one
-        // screen.
-        _ when viewport != null => _stageViewport(tester, viewport),
-        (var named?, _) => tester.applyDevice(
-          named,
-          orientation: orientation,
-          // The device is the run's; the keyboard is still the entry's own
-          // canvas talking, because *which entries are worth seeing with a
-          // keyboard over them* is a fact about the entries and not about
-          // which phone somebody asked for.
-          keyboard: canvas?.defaultKeyboard,
-        ),
-        (_, _?) => tester.applyCanvas(canvas),
-        // Neither: the plain rectangle, staged rather than left alone. The
-        // default test surface is 800×600 and the guest's is 900×700, and an
-        // entry judged on the narrower one overflows where the guest says it
-        // does not.
-        _ => applyScenarioRunArgs(
-          tester,
-          ScenarioRunArgs(
-            size: Size(
-              previewPanelWidth.toDouble(),
-              previewPanelHeight.toDouble(),
-            ),
-            pixelRatio: 1,
+      // **Pinned here, in the body, rather than around the harness.** A
+      // preview exists to be looked at more than once — beside yesterday's
+      // screenshot, on the other side of a branch — and an entry that renders
+      // the wall clock differs at every reading for a reason that has nothing
+      // to do with the code. This is the lane the audit and the comparison
+      // read, so it is the one that had to stop drifting.
+      //
+      // Fixed rather than ticking from the origin, which is what the scenario
+      // lane mounts: the embedder guest and the web build both pin
+      // `Clock.fixed`, and three preview lanes disagreeing about whether time
+      // passes is three different pictures of one entry.
+      return withClock(Clock.fixed(clock ?? pinnedClockOrigin), () async {
+        // Not `install()`: the binding owns `FlutterError.onError` for the length
+        // of a test, and that ownership is what makes a reported error fail it.
+        // Chaining collects everything — including the first, which the binding
+        // stashes rather than reports — and hands it on unchanged.
+        var previous = FlutterError.onError;
+        FlutterError.onError = (details) {
+          GuestErrors.instance.report(details);
+          previous?.call(details);
+        };
+        // `CatalogGuest` resets on a *change* of entry, so re-running the same one
+        // would otherwise still be holding the last run's errors.
+        GuestErrors.instance.clear();
+        // The other buffer nothing empties between bodies, and the expensive
+        // one: an entry left holding a pending decode makes every entry after
+        // it wait out the whole real-work allowance on it.
+        resetAnnouncedWork();
+        // A device named for the whole run wins over every canvas; absent, each
+        // entry is framed as its own subtree declared. `canvasFor` rather than a
+        // prefix match written out again here, because a rule applied twice is a
+        // rule that eventually differs.
+        var canvas = canvasFor(canvases, entry.path);
+        var reset = switch ((device, canvas?.defaultDevice)) {
+          // A viewport named for *this* render wins over everything: it is
+          // already the answer the host worked out — the entry's declared
+          // canvas, a device the call named, a `--width` override on top — and
+          // re-deriving any of that here would be a second opinion about one
+          // screen.
+          _ when viewport != null => _stageViewport(tester, viewport),
+          (var named?, _) => tester.applyDevice(
+            named,
+            orientation: orientation,
+            // The device is the run's; the keyboard is still the entry's own
+            // canvas talking, because *which entries are worth seeing with a
+            // keyboard over them* is a fact about the entries and not about
+            // which phone somebody asked for.
+            keyboard: canvas?.defaultKeyboard,
           ),
-        ),
-      };
-      // Held rather than built inline: `landRealWork` reads its in-flight count
-      // to know an asset the entry asked for is genuinely still on the way.
-      var assets = ScenarioAssetBundle();
-      try {
-        // The harness read the app's fonts through `rootBundle` at startup, and
-        // that cached a future belonging to a zone this test is not in.
-        rootBundle.clear();
-        await tester.pumpWidget(
-          // Caches values where `rootBundle` caches futures, which is what makes
-          // an asset the app has already read safe to read again from inside
-          // `runAsync`. An app installing its own still wins — it is nearer.
-          DefaultAssetBundle(
-            bundle: assets,
-            // The same two wrappers the embedder guest's entrypoint mounts, in
-            // the same order, so what differs between the backends is the
-            // engine and not the tree. `CatalogGuest` is what makes knobs
-            // answer and what resets the axes, errors and logs per entry.
-            // And the keyboard, if the canvas staged one — as tall as the
-            // view says, so the picture and the layout are the same number.
-            //
-            // **Always the letters one, and that is a limit of this lane.**
-            // The canvas stages its keyboard *before* the pump, so there is
-            // nothing focused yet to read a variant off; an entry that
-            // autofocuses a `phone` field is drawn here with the keyboard the
-            // canvas asked for rather than the one the field did. Following
-            // it would need a driver sampling between frames, which is the
-            // scenario lane's `ScenarioKeyboard` — and this lane renders one
-            // cold frame.
-            child: ViewKeyboardSlab(
-              child: CatalogGuest(
-                entryId: entry.id,
-                // **The same three widgets the guest entrypoint mounts, in the
-                // same order**, and this one is easy to think unnecessary: the
-                // guest keys per entry so that *switching* remounts rather
-                // than reusing the last demo's State, and a body here renders
-                // one entry and throws the tree away.
-                //
-                // It is not about remounting. A node id is a *position in the
-                // summary tree*, so a widget the two lanes do not both mount
-                // shifts every id below it by one — `--node=0/1/2` would name
-                // different widgets depending on which engine answered, and an
-                // annotated screenshot's labels would not match a tree read
-                // from the other lane. Found by `lane_parity_test.dart` on its
-                // first run, which is what it is for.
-                child: KeyedSubtree(
-                  key: ValueKey<String>(entry.id),
-                  child: entry.build(),
+          (_, _?) => tester.applyCanvas(canvas),
+          // Neither: the plain rectangle, staged rather than left alone. The
+          // default test surface is 800×600 and the guest's is 900×700, and an
+          // entry judged on the narrower one overflows where the guest says it
+          // does not.
+          _ => applyScenarioRunArgs(
+            tester,
+            ScenarioRunArgs(
+              size: Size(
+                previewPanelWidth.toDouble(),
+                previewPanelHeight.toDouble(),
+              ),
+              pixelRatio: 1,
+            ),
+          ),
+        };
+        // Held rather than built inline: `landRealWork` reads its in-flight count
+        // to know an asset the entry asked for is genuinely still on the way.
+        var assets = ScenarioAssetBundle();
+        try {
+          // The harness read the app's fonts through `rootBundle` at startup, and
+          // that cached a future belonging to a zone this test is not in.
+          rootBundle.clear();
+          await tester.pumpWidget(
+            // Caches values where `rootBundle` caches futures, which is what makes
+            // an asset the app has already read safe to read again from inside
+            // `runAsync`. An app installing its own still wins — it is nearer.
+            DefaultAssetBundle(
+              bundle: assets,
+              // The same two wrappers the embedder guest's entrypoint mounts, in
+              // the same order, so what differs between the backends is the
+              // engine and not the tree. `CatalogGuest` is what makes knobs
+              // answer and what resets the axes, errors and logs per entry.
+              // And the keyboard, if the canvas staged one — as tall as the
+              // view says, so the picture and the layout are the same number.
+              //
+              // **Always the letters one, and that is a limit of this lane.**
+              // The canvas stages its keyboard *before* the pump, so there is
+              // nothing focused yet to read a variant off; an entry that
+              // autofocuses a `phone` field is drawn here with the keyboard the
+              // canvas asked for rather than the one the field did. Following
+              // it would need a driver sampling between frames, which is the
+              // scenario lane's `ScenarioKeyboard` — and this lane renders one
+              // cold frame.
+              child: ViewKeyboardSlab(
+                child: CatalogGuest(
+                  entryId: entry.id,
+                  // **The same three widgets the guest entrypoint mounts, in the
+                  // same order**, and this one is easy to think unnecessary: the
+                  // guest keys per entry so that *switching* remounts rather
+                  // than reusing the last demo's State, and a body here renders
+                  // one entry and throws the tree away.
+                  //
+                  // It is not about remounting. A node id is a *position in the
+                  // summary tree*, so a widget the two lanes do not both mount
+                  // shifts every id below it by one — `--node=0/1/2` would name
+                  // different widgets depending on which engine answered, and an
+                  // annotated screenshot's labels would not match a tree read
+                  // from the other lane. Found by `lane_parity_test.dart` on its
+                  // first run, which is what it is for.
+                  child: KeyedSubtree(
+                    key: ValueKey<String>(entry.id),
+                    child: entry.build(),
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-        // A turn of the *real* event loop, which is what lets an asset read
-        // complete — the boot turn that replaces `UNIT_TEST_ASSETS`, whose
-        // handler deadlocks any `runAsync` that reads an asset itself.
-        await tester.runAsync(() async {
-          for (var i = 0; i < 5; i++) {
-            await Future<void>.delayed(const Duration(milliseconds: 1));
-          }
-        });
-        // The boot turn above lands what the *first* frame asked for, and
-        // nothing after that: a demo that holds a placeholder for half a second
-        // starts its load inside the settle, on fake time the real loop never
-        // sees, and is judged with the load still in flight. Measured on
-        // `demo/vector_smoke.dart` — the entry pointing at an asset that does
-        // not exist was reported clean, because the read that would have thrown
-        // never completed. So the settle lands announced work as it goes, out
-        // of the same purse as the landing after it.
-        Future<void> settle() async {
-          var budget = RealWorkBudget();
-          var settled = await auditSettle.apply(
-            tester,
-            land: () => budget.land(tester, assets),
           );
-          await landRealWork(
-            tester,
-            auditSettle,
-            settled: settled,
-            budget: budget,
-            assets: assets,
-          );
-        }
-
-        await settle();
-
-        // Axes before knobs, exactly as the guest applies them: an axis
-        // rebuilds the *shell*, which changes what the demo is handed, so a
-        // knob turned first would be read back against the wrong build.
-        //
-        // And both after the first settle rather than before the pump: a knob
-        // does not exist until the demo has asked for it, and an axis until
-        // the shell has declared it. There is nothing to apply to a tree that
-        // has not built.
-        if (axisValues != null && CatalogAxes.instance.apply(axisValues)) {
-          await settle();
-        }
-        if (knobValues != null && CatalogKnobs.instance.applyAll(knobValues)) {
-          await settle();
-        }
-        if (declared != null) {
-          var view = tester.view;
-          declared[entry.id] = {
-            // **What it actually rendered on**, read off the binding rather
-            // than echoed back from the request. A staging that silently did
-            // not land is the one failure a caller cannot otherwise see: every
-            // other answer — the knobs, the errors, even a picture — looks
-            // exactly the same on the wrong surface as on the right one.
-            'viewport': {
-              'width': view.physicalSize.width,
-              'height': view.physicalSize.height,
-              'pixelRatio': view.devicePixelRatio,
-            },
-            // What the *settled* build declares, which is not what it started
-            // with: turning one knob can reveal or retire another, and only
-            // the set that survived is worth reporting.
-            if (wantKnobs) 'knobs': CatalogKnobs.instance.describe().toJson(),
-            if (wantAxes) 'axes': CatalogAxes.instance.describe().toJson(),
-          };
-          // **Inline, and the same walk the guest answers with.** A tree is
-          // tens of kilobytes for one entry and the guest's own
-          // `ext.flutterware.tree` hands one back over the service too, so
-          // this is the established size rather than a new one. The
-          // catalog-wide lane still writes to disk beside the frame, because
-          // there it is a tree per entry.
-          if (wantTree || at != null) {
-            var read = GuestInspector(
-              rootOf: () => CatalogGuest.demoRoot,
-              entryIdOf: () => entry.id,
+          // A turn of the *real* event loop, which is what lets an asset read
+          // complete — the boot turn that replaces `UNIT_TEST_ASSETS`, whose
+          // handler deadlocks any `runAsync` that reads an asset itself.
+          await tester.runAsync(() async {
+            for (var i = 0; i < 5; i++) {
+              await Future<void>.delayed(const Duration(milliseconds: 1));
+            }
+          });
+          // The boot turn above lands what the *first* frame asked for, and
+          // nothing after that: a demo that holds a placeholder for half a second
+          // starts its load inside the settle, on fake time the real loop never
+          // sees, and is judged with the load still in flight. Measured on
+          // `demo/vector_smoke.dart` — the entry pointing at an asset that does
+          // not exist was reported clean, because the read that would have thrown
+          // never completed. So the settle lands announced work as it goes, out
+          // of the same purse as the landing after it.
+          Future<void> settle() async {
+            var budget = RealWorkBudget();
+            var settled = await auditSettle.apply(
+              tester,
+              land: () => budget.land(tester, assets),
             );
-            if (wantTree) declared[entry.id]!['tree'] = read.read().toJson();
-            // Against the tree above, by construction: a hit resolved against
-            // a second read would be ids from one build reported beside boxes
-            // from another.
-            if (at case (var x, var y)?) {
-              declared[entry.id]!['hits'] = read.hitTest(x, y);
+            await landRealWork(
+              tester,
+              auditSettle,
+              settled: settled,
+              budget: budget,
+              assets: assets,
+            );
+          }
+
+          await settle();
+
+          // Axes before knobs, exactly as the guest applies them: an axis
+          // rebuilds the *shell*, which changes what the demo is handed, so a
+          // knob turned first would be read back against the wrong build.
+          //
+          // And both after the first settle rather than before the pump: a knob
+          // does not exist until the demo has asked for it, and an axis until
+          // the shell has declared it. There is nothing to apply to a tree that
+          // has not built.
+          if (axisValues != null && CatalogAxes.instance.apply(axisValues)) {
+            await settle();
+          }
+          if (knobValues != null &&
+              CatalogKnobs.instance.applyAll(knobValues)) {
+            await settle();
+          }
+          if (declared != null) {
+            var view = tester.view;
+            declared[entry.id] = {
+              // **What it actually rendered on**, read off the binding rather
+              // than echoed back from the request. A staging that silently did
+              // not land is the one failure a caller cannot otherwise see: every
+              // other answer — the knobs, the errors, even a picture — looks
+              // exactly the same on the wrong surface as on the right one.
+              'viewport': {
+                'width': view.physicalSize.width,
+                'height': view.physicalSize.height,
+                'pixelRatio': view.devicePixelRatio,
+              },
+              // What the *settled* build declares, which is not what it started
+              // with: turning one knob can reveal or retire another, and only
+              // the set that survived is worth reporting.
+              if (wantKnobs) 'knobs': CatalogKnobs.instance.describe().toJson(),
+              if (wantAxes) 'axes': CatalogAxes.instance.describe().toJson(),
+            };
+            // **Inline, and the same walk the guest answers with.** A tree is
+            // tens of kilobytes for one entry and the guest's own
+            // `ext.flutterware.tree` hands one back over the service too, so
+            // this is the established size rather than a new one. The
+            // catalog-wide lane still writes to disk beside the frame, because
+            // there it is a tree per entry.
+            if (wantTree || at != null) {
+              var read = GuestInspector(
+                rootOf: () => CatalogGuest.demoRoot,
+                entryIdOf: () => entry.id,
+              );
+              if (wantTree) declared[entry.id]!['tree'] = read.read().toJson();
+              // Against the tree above, by construction: a hit resolved against
+              // a second read would be ids from one build reported beside boxes
+              // from another.
+              if (at case (var x, var y)?) {
+                declared[entry.id]!['hits'] = read.hitTest(x, y);
+              }
             }
           }
-        }
 
-        // After the settle, so the picture is of the same screen the errors
-        // are about. An entry whose build threw is photographed anyway — the
-        // ErrorWidget is what is there — and the host decides whether that
-        // picture is worth comparing.
-        // Parks the playhead before the one picture is taken. A screenshot
-        // asked for at `t` and rendered at zero is wrong in the one way
-        // nothing catches, which is what this lane did until now.
-        if (walk == null && motionT != null) {
-          await tester.seekMotion(motionT, scope: _defaultScope());
-        }
-        if (output != null && walk != null) {
-          captured?[entry.id] = {
-            ...await _walk(
+          // After the settle, so the picture is of the same screen the errors
+          // are about. An entry whose build threw is photographed anyway — the
+          // ErrorWidget is what is there — and the host decides whether that
+          // picture is worth comparing.
+          // Parks the playhead before the one picture is taken. A screenshot
+          // asked for at `t` and rendered at zero is wrong in the one way
+          // nothing catches, which is what this lane did until now.
+          if (walk == null && motionT != null) {
+            await tester.seekMotion(motionT, scope: _defaultScope());
+          }
+          if (output != null && walk != null) {
+            captured?[entry.id] = {
+              ...await _walk(
+                tester,
+                entry,
+                walk,
+                output,
+                assets: assets,
+                pixelRatio: pixelRatio,
+                timings: timings,
+                format: format,
+              ),
+            };
+          } else if (output != null) {
+            captured?[entry.id] = await _capture(
               tester,
               entry,
-              walk,
               output,
-              assets: assets,
+              index,
               pixelRatio: pixelRatio,
+              tree: tree,
               timings: timings,
               format: format,
-            ),
-          };
-        } else if (output != null) {
-          captured?[entry.id] = await _capture(
-            tester,
-            entry,
-            output,
-            index,
-            pixelRatio: pixelRatio,
-            tree: tree,
-            timings: timings,
-            format: format,
-          );
+            );
+          }
+        } finally {
+          FlutterError.onError = previous;
+          // Inside the body, never a tearDown: the binding verifies its debug
+          // variables at the end of the body, and a reset filed as a tearDown
+          // fails the test it was meant to clean up after.
+          reset();
+          collect?[entry.id] = GuestErrors.instance.describe();
         }
-      } finally {
-        FlutterError.onError = previous;
-        // Inside the body, never a tearDown: the binding verifies its debug
-        // variables at the end of the body, and a reset filed as a tearDown
-        // fails the test it was meant to clean up after.
-        reset();
-        collect?[entry.id] = GuestErrors.instance.describe();
-      }
-      // Nothing is taken from the binding on purpose. An entry that reported
-      // anything leaves it pending, and a pending exception is what fails this
-      // test — which is the whole answer in the `flutter test` lane, and one
-      // more way of saying it in the driven one.
+        // Nothing is taken from the binding on purpose. An entry that reported
+        // anything leaves it pending, and a pending exception is what fails this
+        // test — which is the whole answer in the `flutter test` lane, and one
+        // more way of saying it in the driven one.
+      });
     });
   }
 }

@@ -2268,6 +2268,7 @@ class PreviewsCore extends PluginCore {
           // against the device table the *project* pins rather than this one.
           device: arguments['device'] as String?,
           orientation: arguments['orientation'] as String?,
+          clock: host.projectClock,
         );
       } catch (e) {
         // Per package, exactly as `check` does it: one package that cannot host

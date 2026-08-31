@@ -1,5 +1,33 @@
 ## Unreleased
 
+- **A preview renders at a date, not at whenever it was rendered.** The
+  `flutter_tester` lane — the one the audit and the comparison both read —
+  mounted every entry with `package:clock` unpinned, so `clock.now()` fell
+  through to the wall clock. `withPreviewClock` had existed for exactly this
+  since the scenario pin landed, and had no call sites: the embedder guest and
+  the web build pin themselves in their generated entrypoints, and the lane
+  that renders a catalog on demand was reading `DateTime.now()` all along.
+
+  What it cost is the thing a comparison is for. Measured on a consumer's
+  139-entry catalog, against a base the branch changed nothing in: four entries
+  reported `changed` when the two sides were rendered a minute apart —
+  `Text("UPDATED · 12:36")` against `Text("UPDATED · 12:35")` — and seven once
+  they straddled a midnight, since an entry showing a date rather than a time
+  only separates then. A branch that touched no widget could not come back
+  clean, which is the noise that teaches somebody to stop reading the tool.
+
+  The pin is `Clock.fixed`, mounted per entry inside the body the harness
+  declares, and deliberately not a fourth opinion about the instant: it is
+  `pinnedClockOrigin`, or the project's own `fw.clock(...)` where it says one,
+  which now reaches this lane too. Fixed rather than ticking from the origin —
+  the scenario lane's shape — because the other two preview lanes mount
+  `Clock.fixed`, and three lanes disagreeing about whether time passes is three
+  pictures of one entry.
+
+  **Breaking, quietly:** `ShotKey.revision` is `v7`. An entry that renders a
+  date produces a different picture once, and every v6 picture of one is a
+  picture of the afternoon it was taken.
+
 - **A comparison's `index.json` is published API.**
   `package:flutterware/comparison_report.dart` reads back what `fw compare`
   wrote: every preview entry and every scenario step, what the four channels
